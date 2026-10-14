@@ -22,7 +22,8 @@ export interface TeardownEntry {
     | "remove-policy"
     | "delete-objects"
     | "delete-bucket"
-    | "inventory";
+    | "inventory"
+    | "remove-scratch";
   outcome: "ok" | "failed" | "skipped";
   count?: number;
   errorName?: string;
@@ -135,8 +136,15 @@ const TEARDOWN_STEPS = [
   "delete-objects",
   "delete-bucket",
   "inventory",
+  "remove-scratch",
 ] as const;
-const OWNED_TEARDOWN_STEPS = TEARDOWN_STEPS.filter((step) => step !== "inventory");
+const OWNED_TEARDOWN_STEPS = {
+  run: TEARDOWN_STEPS.filter((step) => step !== "inventory"),
+  // A cleanup runs later, from another process, and never removes the run's scratch.
+  cleanup: TEARDOWN_STEPS.filter((step) => step !== "inventory" && step !== "remove-scratch"),
+  // A keeper removes scratch only when the journal names a scratch folder.
+  interrupted: TEARDOWN_STEPS.filter((step) => step !== "inventory" && step !== "remove-scratch"),
+} as const;
 const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
 
 /** The receipt's shape rule for an upload id; the key-pair check is separate. */
@@ -407,6 +415,7 @@ export function actionTable(
 export function createReceiptLog(
   header: Omit<AwsReceiptHeader, "finishedAt">,
   keys: ReceiptKeyPair,
+  kind: "run" | "cleanup" | "interrupted" = "run",
 ): ReceiptLog {
   const forbidden = forbiddenFrom(keys);
   const cleanHeader = sanitizeHeader(header, forbidden);
@@ -432,7 +441,7 @@ export function createReceiptLog(
       const remaining = sanitizeRemaining(parts.remaining, forbidden);
       if (
         ownership.state === "owned" &&
-        !OWNED_TEARDOWN_STEPS.every((step) => teardown.some((entry) => entry.step === step))
+        !OWNED_TEARDOWN_STEPS[kind].every((step) => teardown.some((entry) => entry.step === step))
       ) {
         throw refused("teardown");
       }
@@ -449,21 +458,25 @@ export function createReceiptLog(
   };
 }
 
-/** The file name a run's receipt, or a cleanup's, takes in its folder. */
-export function receiptFileName(runId: string, kind: "run" | "cleanup" = "run"): string {
-  return `aws-rehearsal-${token(runId, "header.runId")}${kind === "cleanup" ? "-cleanup" : ""}.json`;
+/** The file name a run's receipt, a cleanup's or a keeper's after an interrupt, takes in its folder. */
+export function receiptFileName(
+  runId: string,
+  kind: "run" | "cleanup" | "interrupted" = "run",
+): string {
+  return `aws-rehearsal-${token(runId, "header.runId")}${kind === "run" ? "" : `-${kind}`}.json`;
 }
 
 export async function writeReceipt(
   dir: string,
   receipt: AwsReceipt,
   keys: ReceiptKeyPair,
-  kind: "run" | "cleanup" = "run",
+  kind: "run" | "cleanup" | "interrupted" = "run",
 ): Promise<string> {
   const text = `${JSON.stringify(receipt, null, 2)}\n`;
   if (carriesKeyPair(text, keys)) throw refused("receipt");
   const path = join(dir, receiptFileName(receipt.header.runId, kind));
   await mkdir(dir, { recursive: true });
-  await writeFile(path, text);
+  // A keeper's receipt never replaces one already there, whoever wrote it.
+  await writeFile(path, text, kind === "interrupted" ? { flag: "wx" } : undefined);
   return path;
 }

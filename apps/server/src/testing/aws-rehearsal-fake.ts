@@ -4,13 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
 import type { AdminClient, AwsRehearsalDeps } from "./aws-rehearsal.js";
+import type { RehearsalJournal } from "./aws-rehearsal-journal.js";
+import { AWS_REHEARSAL_NONCE_KEY } from "./aws-request-plan.js";
 
 export const KEY_ID = "AKIAFIXTUREKEYID0001";
 export const SECRET = "fixtureSecretValueNotReal0123456789abcd";
 export const SUFFIX = "abc123def456";
 export const BUCKET = `waitron-rehearsal-waitron-${SUFFIX}`;
 export const RUN_ID = "run-0001";
-export const NONCE = ".waitron-rehearsal-owner";
+export const NONCE = AWS_REHEARSAL_NONCE_KEY;
+export const START_TIME = "Wed Oct 14 10:00:00 2026";
 
 export const CREDENTIALS = `[waitron-rehearsal]\naws_access_key_id = ${KEY_ID}\naws_secret_access_key = ${SECRET}\n`;
 export const CONFIG = "[profile waitron-rehearsal]\nregion = eu-north-1\n";
@@ -191,23 +194,27 @@ export interface FakeHarness {
   fake: FakeAdmin;
   deps: Partial<AwsRehearsalDeps>;
   printed: string[];
+  /** A copy of every journal the run wrote, in order. */
+  journals: RehearsalJournal[];
   readFile: ReturnType<typeof vi.fn>;
   createAdminClient: ReturnType<typeof vi.fn>;
 }
 
-/** Dependencies that read real files, hand out `fake`, tick a clock 5 ms a call and record prints. */
+/** Dependencies that read real files, hand out `fake`, tick a clock 5 ms a call and record prints and journals. */
 export function fakeHarness(
   fake: FakeAdmin,
   env: NodeJS.ProcessEnv,
   startsAt: string,
 ): FakeHarness {
   const printed: string[] = [];
+  const journals: RehearsalJournal[] = [];
   const readFileSpy = vi.fn((path: string) => readFile(path, "utf8"));
   const createAdminClient = vi.fn(() => fake);
   let clock = Date.parse(startsAt);
   return {
     fake,
     printed,
+    journals,
     readFile: readFileSpy,
     createAdminClient,
     deps: {
@@ -218,6 +225,14 @@ export function fakeHarness(
       commit: () => "0123456789abcdef",
       sleep: async () => {},
       print: (line) => printed.push(line),
+      journal: (_dir, journal) => {
+        journals.push(structuredClone(journal));
+      },
+      processStartTime: () => START_TIME,
+      // No keeper process: these suites start none.
+      startKeeper: async () => ({ keeperPid: null, end: () => {} }),
+      // These suites' scenarios send only through the runner's own admin client.
+      apis: [],
     },
   };
 }

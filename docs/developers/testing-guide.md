@@ -618,7 +618,9 @@ cases that start versitygw skip and fail the same way; its other cases start a s
 versitygw's place and always run (`.github/workflows/ci.yml`; see
 [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause tests run in a job of their own").
 The same job runs `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`, the Amazon S3 rehearsal's
-scenarios against versitygw alone, which skips and fails the same way.
+scenarios against versitygw alone, and the rehearsal's send gate and interrupt suites,
+`apps/server/src/aws-send-gate.e2e.test.ts` and `apps/server/src/aws-rehearsal-interrupt.e2e.test.ts`,
+also against versitygw alone; each skips and fails the same way.
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
@@ -744,13 +746,15 @@ file back and the next two stopped at mark 0.
 | [SQLite WAL](https://www.sqlite.org/wal.html), "Checkpointing"; [`sqlite3_wal_checkpoint_v2`](https://www.sqlite.org/c3ref/wal_checkpoint_v2.html) | "the checkpoint must stop when it reaches a page in the WAL that is past the end mark of any current reader"; PASSIVE: "Checkpoint as many frames as possible without waiting for any database readers or writers to finish" | `pragma wal_checkpoint(passive)`'s `checkpointed` column as the point where the probe stopped (`holdProven`). |
 
 **In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
-the S3 rehearsal scenarios and the S3 test server's own suite with `TMPDIR=/dev/shm`, pinned by
+the S3 rehearsal scenarios, the rehearsal's send gate and interrupt suites and the S3 test server's
+own suite with `TMPDIR=/dev/shm`, pinned by
 `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It is the CI step's environment, not
 `scratchParent()`, so a local run still uses the system temporary directory. The loop and pause
 tests each make their scratch directory under `tmpdir()`, and that directory holds the server's
 database, Litestream's files and versitygw's bucket, so all of them move; the S3 test server's suite
 keeps its scratch and its stub programs under `tmpdir()` too, and the scenarios their versitygw
-bucket. Main run 36559470238 (2026-09-29)
+bucket, and the send gate and interrupt suites their versitygw bucket and, for the interrupt suite,
+each run's receipts and scratch. Main run 36559470238 (2026-09-29)
 failed with the slowest frozen sale at 1,228 ms. A probe with per-sale timing reproduced it on one
 runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage): that sale's commit took 1,017
 ms. The next write waited 1,029 ms to begin, which A130 inferred was Litestream's

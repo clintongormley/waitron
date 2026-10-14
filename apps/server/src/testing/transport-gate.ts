@@ -321,11 +321,19 @@ export function gatedRequestHandler(
 
 /** `spawnLitestream` with `HTTPS_PROXY` pointed at `gate` and nothing else added. */
 export function gatedSpawn(gate: TransportGate, onChild?: (pid: number) => void): SpawnFn {
+  return trackedSpawn(onChild, { HTTPS_PROXY: gate.url });
+}
+
+/** `spawnLitestream`, with `extraEnv` added, telling `onChild` of each child it starts. */
+export function trackedSpawn(
+  onChild?: (pid: number, args: readonly string[]) => void,
+  extraEnv: Readonly<Record<string, string>> = {},
+): SpawnFn {
   return (bin, args, env) => {
-    const child = spawnLitestream(bin, args, { ...env, HTTPS_PROXY: gate.url });
+    const child = spawnLitestream(bin, args, { ...env, ...extraEnv });
     if (onChild && child.pid !== undefined) {
       try {
-        onChild(child.pid);
+        onChild(child.pid, args);
       } catch (error) {
         // Nothing else holds the handle, so nothing else could stop the child.
         child.kill();

@@ -7,6 +7,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, it } from "vitest";
+import { PAUSE_APIS } from "./testing/aws-rehearsal-plans.js";
+import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -49,6 +51,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
+      endLocalPlans,
     ]) {
       try {
         await cleanup();
@@ -71,23 +74,26 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         return ctx.skip(`${missing.join("; ")} — install with: ${INSTALL}`);
       }
 
-      scratch = await mkdtemp(join(tmpdir(), "waitron-stream-pause-"));
-      const server = await startS3TestServer({ bin: versitygw.bin, root: join(scratch, "s3") });
+      const folder = await mkdtemp(join(tmpdir(), "waitron-stream-pause-"));
+      scratch = folder;
+      const server = await startS3TestServer({ bin: versitygw.bin, root: join(folder, "s3") });
       s3 = server;
-      await runStreamPauseScenario({
-        bucket: {
-          endpoint: server.endpoint,
-          region: server.region,
-          bucket: server.bucket,
-          prefix: "pause/",
-          accessKeyId: server.accessKeyId,
-          secretAccessKey: server.secretAccessKey,
-        },
-        scratch,
-        litestreamBin: litestream.bin,
-        describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
-        freeze: { pause: () => server.pause(), resume: () => server.resume() },
-      });
+      await runUnderPlan({ bucket: server.bucket, apis: PAUSE_APIS, prefixes: ["pause/"] }, () =>
+        runStreamPauseScenario({
+          bucket: {
+            endpoint: server.endpoint,
+            region: server.region,
+            bucket: server.bucket,
+            prefix: "pause/",
+            accessKeyId: server.accessKeyId,
+            secretAccessKey: server.secretAccessKey,
+          },
+          scratch: folder,
+          litestreamBin: litestream.bin,
+          describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
+          freeze: { pause: () => server.pause(), resume: () => server.resume() },
+        }),
+      );
     },
     PAUSE_TIMEOUT_MS,
   );

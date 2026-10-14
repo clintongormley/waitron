@@ -7,7 +7,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, describe, expect, it } from "vitest";
+import { processStartTime } from "./testing/aws-rehearsal-journal.js";
+import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
+import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -17,6 +21,7 @@ import {
   type S3TestServer,
 } from "./testing/s3-test-server.js";
 import { settleWithin } from "./testing/settle-within.js";
+import { trackedSpawn } from "./testing/transport-gate.js";
 import {
   STREAM_LOOP_PHASES,
   STREAM_LOOP_SCENARIO_MS,
@@ -31,6 +36,23 @@ const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM
 const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;
 // After an abort the scenario may still be inside one restore, which its abort cannot cut short.
 const ABORT_SETTLE_MS = 60_000;
+
+// A Litestream stopped with SIGKILL is listed by `ps` until this process reaps it.
+const REAP_MS = 5_000;
+
+/** The reported children still listed as the process each was when reported, after up to REAP_MS. */
+async function stillRunning<T extends { pid: number; startTime: string | null }>(
+  children: readonly T[],
+): Promise<T[]> {
+  const until = Date.now() + REAP_MS;
+  for (;;) {
+    const left = children.filter(
+      ({ pid, startTime }) => startTime !== null && processStartTime(pid) === startTime,
+    );
+    if (left.length === 0 || Date.now() > until) return left;
+    await delay(100);
+  }
+}
 
 const litestream = await resolveLitestream(process.env);
 const versitygw = await resolveVersitygw(process.env);
@@ -60,6 +82,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
+      endLocalPlans,
     ]) {
       try {
         await cleanup();
@@ -82,30 +105,46 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         // `return` so TypeScript narrows both lookups below; `ctx.skip` throws either way.
         return ctx.skip(`${missing.join("; ")} — install with: ${INSTALL}`);
       }
-      scratch = await mkdtemp(join(tmpdir(), "waitron-stream-loop-"));
-      const server = await startS3TestServer({ bin: versitygw.bin, root: join(scratch, "s3") });
+      const folder = await mkdtemp(join(tmpdir(), "waitron-stream-loop-"));
+      scratch = folder;
+      const server = await startS3TestServer({ bin: versitygw.bin, root: join(folder, "s3") });
       s3 = server;
       const events: StreamLoopEvent[] = [];
-      running = runStreamLoopScenario({
-        bucket: {
-          endpoint: server.endpoint,
-          region: server.region,
-          bucket: server.bucket,
-          prefix: "loop/",
-          accessKeyId: server.accessKeyId,
-          secretAccessKey: server.secretAccessKey,
-        },
-        scratch,
-        litestreamBin: litestream.bin,
-        describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
-        freeze: { pause: () => server.pause(), resume: () => server.resume() },
-        signal: stop.signal,
-        record: (event) => events.push(event),
-      });
+      // Which box's `replicate` children the seam was told of.
+      const replicating: Array<{ box: string; pid: number; startTime: string | null }> = [];
+      running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
+        runStreamLoopScenario({
+          bucket: {
+            endpoint: server.endpoint,
+            region: server.region,
+            bucket: server.bucket,
+            prefix: "loop/",
+            accessKeyId: server.accessKeyId,
+            secretAccessKey: server.secretAccessKey,
+          },
+          scratch: folder,
+          litestreamBin: litestream.bin,
+          describeTransport: () => `versitygw ${VERSITYGW_VERSION}. Server log: ${server.log()}`,
+          freeze: { pause: () => server.pause(), resume: () => server.resume() },
+          signal: stop.signal,
+          record: (event) => events.push(event),
+          serverSeams: {
+            spawn: trackedSpawn((pid, args) => {
+              if (args[0] !== "replicate") return;
+              const box = /[/\\](box-[ab])[/\\]/.exec(args.at(-1) ?? "")?.[1] ?? "unknown";
+              replicating.push({ box, pid, startTime: processStartTime(pid) });
+            }),
+          },
+        }),
+      );
       await running;
       expect(events.map(({ phase, outcome }) => [phase, outcome])).toEqual(
         STREAM_LOOP_PHASES.map((phase) => [phase, "ok"]),
       );
+      expect([...new Set(replicating.map(({ box }) => box))].sort()).toEqual(["box-a", "box-b"]);
+      // The scenario's closes stopped every Litestream it started.
+      expect(replicating.every(({ startTime }) => startTime !== null)).toBe(true);
+      expect(await stillRunning(replicating)).toEqual([]);
     },
     LOOP_TIMEOUT_MS,
   );

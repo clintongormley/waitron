@@ -11,6 +11,7 @@ import {
   NONCE,
   RUN_ID,
   SECRET,
+  START_TIME,
   SUFFIX,
   fakeHarness,
   ok,
@@ -28,6 +29,7 @@ import {
 } from "./aws-rehearsal-receipt.js";
 import {
   AwsRehearsalRefused,
+  cleanupFromReceipt,
   rehearsalLifecycle,
   type AwsRehearsal,
   type AwsRehearsalDeps,
@@ -403,6 +405,47 @@ describe("withAwsRehearsal — fixture limits", () => {
 });
 
 describe("withAwsRehearsal — teardown after a failure", () => {
+  it("never signals a tracked child's pid once another process holds it", async () => {
+    let startTime = START_TIME;
+    const h = harness(
+      {},
+      {
+        isAlive: (pid) => pid === 4242,
+        processStartTime: () => startTime,
+        kill: (pid, signal) => {
+          h.killed.push([pid, signal]);
+          startTime = "Thu Oct 15 10:00:00 2026";
+        },
+      },
+    );
+    await withAwsRehearsal(async (ctx) => {
+      ctx.trackChild(4242);
+    }, h.deps);
+    expect(h.killed).toEqual([[4242, "SIGTERM"]]);
+  });
+
+  it("still signals a tracked child whose start time cannot be read again, and does not call it stopped", async () => {
+    const h = harness(
+      {},
+      {
+        isAlive: (pid) => pid === 4242,
+        processStartTime: vi.fn().mockReturnValueOnce(START_TIME).mockReturnValue(null),
+      },
+    );
+    await withAwsRehearsal(async (ctx) => {
+      ctx.trackChild(4242);
+    }, h.deps).catch(() => {});
+    expect(h.killed).toEqual([
+      [4242, "SIGTERM"],
+      [4242, "SIGKILL"],
+    ]);
+    expect((await receipt()).parsed.teardown).toContainEqual({
+      step: "stop-child",
+      outcome: "failed",
+      count: 1,
+    });
+  });
+
   it("stops only live tracked children and aborts tracked and listed uploads", async () => {
     const alive = new Set([4242, 999]);
     const h = harness(
@@ -787,18 +830,22 @@ describe("fix round 1", () => {
     },
   );
 
-  it("refuses a bad child pid with its own reason", async () => {
-    const h = harness();
-    let refusal: unknown;
-    await withAwsRehearsal(async (ctx) => {
-      try {
-        ctx.trackChild(0);
-      } catch (error) {
-        refusal = error;
-      }
-    }, h.deps);
-    expect((refusal as AwsRehearsalRefused).reason).toBe("child-pid-refused");
-  });
+  it.each([0, 1, -1, 1.5])(
+    "refuses child pid %s, which the journal could not carry",
+    async (pid) => {
+      const h = harness();
+      let refusal: unknown;
+      await withAwsRehearsal(async (ctx) => {
+        try {
+          ctx.trackChild(pid);
+        } catch (error) {
+          refusal = error;
+        }
+      }, h.deps);
+      expect((refusal as AwsRehearsalRefused).reason).toBe("child-pid-refused");
+      expect(h.journals.flatMap((journal) => journal.pids)).toEqual([]);
+    },
+  );
 
   it("refuses tracking once teardown has started", async () => {
     const h = harness({}, { deadlineMs: 20 });
@@ -917,6 +964,37 @@ describe("fix round 1", () => {
     await rejection(withAwsRehearsal(async () => undefined, h.deps));
     const { parsed } = await receipt();
     expect(parsed.events.at(-1)).toMatchObject({ phase: "restore-nonce", outcome: "failed" });
+  });
+
+  it("puts the marker back when its first write failed and the bucket outlives teardown, so the cleanup command works", async () => {
+    let puts = 0;
+    const failing = () => {
+      throw sdkError("InternalError", 500, 3);
+    };
+    const h = harness({
+      PutObject: (input, fake) => {
+        puts += 1;
+        if (puts === 1) throw sdkError("InternalError", 500, 3);
+        fake.objects.set(input.Key as string, String(input.Body));
+        return ok();
+      },
+      ListObjectsV2: failing,
+      DeleteBucket: failing,
+    });
+    await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    const { parsed } = await receipt();
+    expect(parsed.remaining.bucket).toBe(BUCKET);
+    const receiptPath = join(receiptDir, `aws-rehearsal-${RUN_ID}.json`);
+    expect(parsed.cleanupCommand).toBe(cleanupCommandFor("eu-north-1", receiptPath));
+
+    const after = new FakeAdmin({ objects: h.fake.objects });
+    const cleaned = await cleanupFromReceipt(receiptPath, {
+      env: env(),
+      createAdminClient: () => after,
+      print: () => {},
+    });
+    expect(cleaned.ok).toBe(true);
+    expect(after.names()).toContain("DeleteBucket");
   });
 
   it("does not put the marker back when the bucket is already gone", async () => {

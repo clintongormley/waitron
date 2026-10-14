@@ -4571,16 +4571,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`:
-  (1) a request to an S3 API outside the receipt's list is caught only once Amazon S3 has answered
-  it (the observer runs after the call, and the store may retry it), so it is detected, not
-  prevented; the simplify review proposed refusing it before it is sent. Open owner question,
-  asked 2026-10-14 (default: leave as is);
-  (2) the archive round trip proves download and decryption from the pack alone
+  (1) the archive round trip proves download and decryption from the pack alone
   (`downloadArchive`, `decryptArtifactFile`), not a full `waitron-restore restore --from-archive`
-  placement against Amazon S3; (3) the delete scenario's "a failing listing is recorded" case uses
-  a stand-in backend, so that failure no longer runs through the real S3 storage code; (4) the
+  placement against Amazon S3; (2) the delete scenario's "a failing listing is recorded" case uses
+  a stand-in backend, so that failure no longer runs through the real S3 storage code; (3) the
   step-name checks compare against hand-written lists, so a step added later is not caught;
-  (5) the bucket-settings setup and the setup/teardown block are repeated across the four
+  (4) the bucket-settings setup and the setup/teardown block are repeated across the four
   `*.aws-rehearsal.test.ts` files and the local loop and pause tests — share them.
 
 - **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
@@ -4596,15 +4592,34 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **The Amazon S3 rehearsal runner's open edges (A538-7).** Left open by #1648, all in
   `apps/server/src/testing/aws-rehearsal.ts` and its runbook `docs/developers/aws-backup-rehearsal.md`:
-  (1) Ctrl-C or a killed process skips teardown — no signal handler — so the owned bucket stays and
-  no receipt names it, and the scratch folder `$TMPDIR/waitron-aws-stream-loop-*` keeps a
-  `secrets.env` and, once written, `recovery-kit.txt` (the rehearsal key pair, not encrypted), and
-  the pause scenario's `$TMPDIR/waitron-aws-stream-pause-*` keeps its box's `secrets.env`; a run
-  interrupted inside the listing-denial step also leaves that rule on the bucket;
-  (2) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
-  no stop signal (a restore); (3) running the cleanup command again overwrites the previous cleanup
-  receipt, losing the earlier attempt's teardown ledger; (4) the receipt reader the cleanup uses is
-  more lenient than the writer. (1) is an open owner question, asked 2026-10-14.
+  (1) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
+  no stop signal (a restore); (2) running the cleanup command again overwrites the previous cleanup
+  receipt, losing the earlier attempt's teardown ledger; (3) the receipt reader the cleanup uses is
+  more lenient than the writer.
+
+- **Litestream's own requests are outside the Amazon S3 rehearsal's request check.** No Node code
+  sends them, so the check in `apps/server/src/testing/aws-send-gate.ts` never sees them; in the
+  pause scenario a proxy admits only the run's bucket host, in the loop scenario nothing limits
+  them. Open owner question, asked 2026-10-14 (default: leave as is). Left open by A641.
+
+- **The Amazon S3 rehearsal does not track the Litestream processes a restore starts**
+  (`packages/stream/src/restore.ts`), so neither its teardown nor its keeper can stop one still
+  running. Left open by A641.
+
+- **A rehearsal bucket whose ownership marker could not be written back is left to a person.**
+  When teardown fails to delete the bucket and then fails to write the marker again, the cleanup
+  command refuses (`ownership-unproven`); the runbook says to delete it by hand. Left open by A641.
+
+- **A rehearsal keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no
+  cleanup command.** Its ownership-marker read fails, so it reports a bucket the journal says the
+  run owned as of unknown ownership and deletes nothing
+  (`apps/server/src/testing/aws-rehearsal-keeper.ts`). Left open by A641.
+
+- **A journal the rehearsal keeper refuses leaves the run's scratch folder, secrets included.** A
+  journal it cannot read, or one outside its bounds, makes it delete nothing, the scratch folder
+  too, so a box's `secrets.env` and `recovery-kit.txt` stay on disk until a person deletes them
+  (`readJournalAt` in `apps/server/src/testing/aws-rehearsal-keeper.ts`). The refusal is by
+  design; the folder it leaves is the open part. Left open by A641.
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.

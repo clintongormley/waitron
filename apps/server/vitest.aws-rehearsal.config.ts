@@ -14,7 +14,7 @@ export default defineConfig({
     globals: true,
     include: ["src/**/*.aws-rehearsal.test.ts"],
     globalSetup: ["src/testing/aws-rehearsal-global-setup.ts"],
-    setupFiles: ["src/testing/byte-equality-setup.ts"],
+    setupFiles: ["src/testing/byte-equality-setup.ts", "src/testing/aws-rehearsal-strict-setup.ts"],
     maxWorkers: 1,
     testTimeout:
       AWS_REHEARSAL_SCENARIO_DEADLINE_MS +

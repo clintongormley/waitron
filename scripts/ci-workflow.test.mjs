@@ -60,6 +60,8 @@ const STREAM_TEST_FILES = [
   "src/stream-loop.e2e.test.ts",
   "src/stream-pause.e2e.test.ts",
   "src/s3-rehearsal-scenarios.e2e.test.ts",
+  "src/aws-send-gate.e2e.test.ts",
+  "src/aws-rehearsal-interrupt.e2e.test.ts",
   "src/testing/s3-test-server.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
@@ -1172,7 +1174,11 @@ describe("the test shards", () => {
       ...jobs.map(({ id, body }) => ({ id, step: shardStep(body) })),
       {
         id: STREAM_JOB,
-        step: streamStep.slice(streamStep.findIndex((l) => /- name: Run the stream/.test(l))),
+        step: streamStep.slice(
+          streamStep.findIndex((l) =>
+            /- name: Run the tests that need Litestream or versitygw$/.test(l),
+          ),
+        ),
       },
     ].filter(({ step }) => step !== undefined);
 
@@ -1573,12 +1579,12 @@ describe("the venue-service shards' browser start-up record", () => {
 });
 
 /**
- * The stream loop and pause tests, the S3 rehearsal scenarios and the S3 test server's own suite run
- * in a job of their own, beside the apps/server shards: between them they need two downloaded
- * binaries. Their blob joins the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
+ * The tests that need Litestream or versitygw (`STREAM_TEST_FILES`) run in a job of their own,
+ * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
+ * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
  * passes.
  */
-describe("the job of the stream tests, the S3 rehearsal scenarios and the S3 test server's suite", () => {
+describe("the job of the tests that need Litestream or versitygw", () => {
   const stream = () => job(STREAM_JOB);
   const streamText = () => stream().body.join("\n");
 

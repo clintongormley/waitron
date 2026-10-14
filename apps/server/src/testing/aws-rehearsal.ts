@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { access, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -55,6 +56,7 @@ import {
   isReceiptToken,
   isReceiptUploadId,
   receiptErrorName,
+  RECEIPT_APIS,
   receiptFileName,
   REHEARSAL_BUCKET_PATTERN,
   type ReceiptLog,
@@ -64,45 +66,32 @@ import {
 import { fixtureBudget } from "./fixture-budget.js";
 import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
+import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
+import {
+  isJournalChildPid,
+  isJournalUploadKey,
+  JOURNAL_VERSION,
+  journalFileName,
+  type JournalPid,
+  type JournalState,
+  processStartTime,
+  type RehearsalJournal,
+  writeJournal,
+} from "./aws-rehearsal-journal.js";
+import { type KeeperHandle, keeperEnv, startKeeper } from "./aws-rehearsal-keeper-start.js";
+import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
+import {
+  apiOf,
+  currentRequestScope,
+  installSendGate,
+  markRunnerClient,
+  openRequestScope,
+  refusalsSummary,
+  type RequestScope,
+} from "./aws-send-gate.js";
 
-export type AwsRehearsalRefusalReason =
-  | "opt-in-missing"
-  | "profile-mismatch"
-  | "variable-unset"
-  | "file-not-absolute"
-  | "file-inside-repository"
-  | "file-unreadable"
-  | "profile-section-missing"
-  | "credentials-missing"
-  | "session-token-unsupported"
-  | "provider-unsupported"
-  | "region-mismatch"
-  | "supplied-bucket"
-  | "receipt-dir-unsupported"
-  | "fixture-limit"
-  | "label-refused"
-  | "prefix-not-issued"
-  | "encryption-not-sse-s3"
-  | "versioning-not-off"
-  | "upload-id-refused"
-  | "child-pid-refused"
-  | "teardown-started"
-  | "receipt-refused"
-  | "ownership-unproven"
-  | "region-unsupported"
-  | "run-id-unsupported"
-  | "policy-refused";
-
-/** Its message names a rule and a variable or key, or a rehearsal bucket's name; never another value read from the environment or a file. */
-export class AwsRehearsalRefused extends Error {
-  constructor(
-    readonly reason: AwsRehearsalRefusalReason,
-    detail: string,
-  ) {
-    super(`AWS rehearsal refused (${reason}): ${detail}`);
-    this.name = "AwsRehearsalRefused";
-  }
-}
+export { AwsRehearsalRefused, type AwsRehearsalRefusalReason } from "./aws-rehearsal-refused.js";
+export { type KeeperHandle, keeperEnv } from "./aws-rehearsal-keeper-start.js";
 
 export interface RehearsalProfile {
   region: string;
@@ -123,6 +112,9 @@ const UNSUPPORTED_PROVIDER_KEYS = [
   "sso_session",
   "sso_start_url",
 ];
+
+const ENDPOINT_KEYS = ["endpoint_url", "services"];
+const ENDPOINT_VARIABLES = ["AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"];
 
 export function assertRehearsalOptIn(env: Env): void {
   if (env.WAITRON_RUN_AWS_REHEARSAL !== "1") {
@@ -204,6 +196,17 @@ function section(text: string, name: string, variable: string): Map<string, stri
         `${key} in ${variable} is not supported`,
       );
   }
+  // The SDK sends to these instead of Amazon. This parser does not read every header spelling the
+  // SDK does, so unless `deps.endpoint` is set the send gate also refuses any resolved host other
+  // than S3's own hosts for the run's bucket and region (`hosts` in `aws-send-gate.ts`).
+  for (const key of ENDPOINT_KEYS) {
+    if (found.has(key)) {
+      throw new AwsRehearsalRefused(
+        "endpoint-unsupported",
+        `${key} in ${variable} is not supported: a rehearsal sends only to Amazon S3`,
+      );
+    }
+  }
   if (found.has("aws_session_token")) {
     throw new AwsRehearsalRefused(
       "session-token-unsupported",
@@ -223,6 +226,14 @@ export async function loadRehearsalProfile(
       "profile-mismatch",
       `AWS_PROFILE must be ${AWS_REHEARSAL_PROFILE}`,
     );
+  }
+  for (const name of ENDPOINT_VARIABLES) {
+    if (!isUnset(env[name])) {
+      throw new AwsRehearsalRefused(
+        "endpoint-unsupported",
+        `${name} must be unset: a rehearsal sends only to Amazon S3`,
+      );
+    }
   }
   const region = required(env, "AWS_REGION");
   const credentialsPath = absolutePath(env, "AWS_SHARED_CREDENTIALS_FILE");
@@ -258,13 +269,10 @@ export async function loadRehearsalProfile(
   return { region, accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! };
 }
 
-/** The ownership nonce, at the bucket root; deleted only just before the bucket itself. */
-const AWS_REHEARSAL_NONCE_KEY = ".waitron-rehearsal-owner";
-
 /** A run that went wrong after the bucket was named; its message carries no SDK text or value. */
 class AwsRehearsalFailed extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "AwsRehearsalFailed";
   }
 }
@@ -281,6 +289,8 @@ export interface AwsRehearsal {
   region: string;
   signal: AbortSignal;
   prefix(label: string): string;
+  /** Makes and returns `<scratchBase>/waitron-aws-rehearsal-<runId>/<label>/`; teardown removes the root. */
+  scratch(label: string): Promise<string>;
   bucketConfig(prefix: string): BucketConfig;
   reserveUpload(bytes: number, role: string): void;
   reserveObjects(count: number): void;
@@ -304,12 +314,14 @@ export interface TeardownDeps {
   teardownMs: number;
   /** How long the runner waits for tracked children after SIGTERM, and again after SIGKILL; 5 s when unset. */
   childGraceMs?: number;
+  /** Answering false makes `stopChildren` neither signal `pid` nor count it as still running. */
+  sameProcess?(pid: number): boolean;
   record?(event: unknown): void;
 }
 
 export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   env: Env;
-  createAdminClient(profile: RehearsalProfile): AdminClient;
+  createAdminClient(profile: RehearsalProfile, endpoint: string | undefined): AdminClient;
   randomSuffix(): string;
   runId(): string;
   commit(): string;
@@ -319,6 +331,19 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   /** Aborting it ends the run as its deadline does: the scenario is told to stop, then teardown runs. */
   signal?: AbortSignal;
   print(line: string): void;
+  /** The S3 APIs the scenario's own clients send; a run without this list is refused. */
+  apis?: readonly string[];
+  /** The folder a run's scratch root is made in. */
+  scratchBase: string;
+  removeDir(path: string): Promise<void>;
+  /** Writes the journal synchronously; it is in the file when this returns. */
+  journal(receiptDir: string, journal: RehearsalJournal): void;
+  /** A pid's start time as `processStartTime` reads it, or null when it cannot be read. */
+  processStartTime(pid: number): string | null;
+  /** A local S3 endpoint, for proofs only; never read from the environment. With one, the preflight is skipped. */
+  endpoint?: string;
+  /** Starts the keeper on the journal at `journalPath` with `env` (the runner passes `keeperEnv`); resolves once it is ready. */
+  startKeeper(journalPath: string, env: Env): Promise<KeeperHandle>;
 }
 
 export interface TeardownTarget {
@@ -327,6 +352,8 @@ export interface TeardownTarget {
   runId: string;
   uploads: readonly TrackedUpload[];
   pids: readonly number[];
+  /** The marker was never written; a bucket that survives teardown gets one, objects left or not. */
+  markerMissing?: boolean;
 }
 
 export interface TeardownResult {
@@ -358,8 +385,11 @@ function attemptsOf(value: unknown): number | undefined {
   return typeof attempts === "number" && attempts >= 1 ? attempts : undefined;
 }
 
-/** Sends one command and records it as a vetted event; never throws the SDK's error. */
-async function call<T>(
+/**
+ * Sends one command and records it as a vetted event; never throws the SDK's error. Inside a run's
+ * request scope a command the plan refuses is answered with the refusal and never sent.
+ */
+export async function call<T>(
   client: AdminClient,
   command: object & { input: object },
   api: string,
@@ -368,6 +398,14 @@ async function call<T>(
   extra: CallExtra = {},
   abortSignal?: AbortSignal,
 ): Promise<Outcome<T>> {
+  const scope = currentRequestScope();
+  if (scope !== undefined) {
+    try {
+      scope.check("runner", apiOf(command), command.input as Record<string, unknown>);
+    } catch (refusal) {
+      return { error: refusal };
+    }
+  }
   const started = deps.now();
   let outcome: Outcome<T>;
   try {
@@ -434,16 +472,19 @@ function untilAborted(wait: Promise<unknown>, signal: AbortSignal): Promise<void
   });
 }
 
-async function stopChildren(
+export async function stopChildren(
   pids: readonly number[],
   deps: TeardownDeps,
   signal: AbortSignal,
 ): Promise<TeardownEntry> {
-  const live = [...new Set(pids)].filter((pid) => deps.isAlive(pid));
+  // Checked again before each signal: a pid freed during the grace wait can be handed to another process.
+  const ours = (pid: number): boolean => deps.isAlive(pid) && deps.sameProcess?.(pid) !== false;
+  const live = [...new Set(pids)].filter(ours);
   if (live.length === 0) return { step: "stop-child", outcome: "skipped", count: 0 };
-  const running = (): number[] => live.filter((pid) => deps.isAlive(pid));
+  const running = (): number[] => live.filter(ours);
   const send = (kill: NodeJS.Signals): void => {
-    for (const pid of running()) {
+    for (const pid of live) {
+      if (!ours(pid)) continue;
       try {
         deps.kill(pid, kill);
       } catch {
@@ -647,6 +688,7 @@ async function deleteBucket(
   bucket: string,
   runId: string,
   objectsDeleted: boolean,
+  markerMissing: boolean,
 ): Promise<TeardownEntry> {
   // The nonce stays while any other object may remain: it is the proof the cleanup command reads.
   if (objectsDeleted) {
@@ -661,7 +703,7 @@ async function deleteBucket(
   if (result.error === undefined || nameOf(result.error) === "NoSuchBucket") {
     return { step: "delete-bucket", outcome: "ok" };
   }
-  if (objectsDeleted) {
+  if (objectsDeleted || markerMissing) {
     // The bucket outlived its marker; put the marker back so the cleanup command can prove ownership.
     const body = ownershipNonce(runId);
     await restoreNonce(
@@ -703,6 +745,7 @@ export async function teardownOwnedBucket(
       bucket,
       target.runId,
       objects.outcome === "ok",
+      target.markerMissing === true,
     ),
   );
   const clean = entries.every((entry) => entry.outcome !== "failed");
@@ -713,23 +756,23 @@ export async function teardownOwnedBucket(
 }
 
 /**
- * Refuses, before any command, a run whose receipt or cleanup receipt could not carry a cleanup
- * command; the cleanup receipt's name is the longer of the two.
+ * Refuses, before any command, a run whose run, cleanup or interrupted receipt could not carry a
+ * cleanup command; the interrupted receipt's name is the longest.
  */
-function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
+export function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
   if (!isReceiptRegion(region)) {
     throw new AwsRehearsalRefused(
       "region-unsupported",
       "AWS_REGION must look like eu-north-1 for the cleanup command to carry it",
     );
   }
-  if (!isReceiptToken(runId) || !isReceiptToken(`${runId}-cleanup`)) {
+  if (!isReceiptToken(runId) || !isReceiptToken(`${runId}-interrupted`)) {
     throw new AwsRehearsalRefused(
       "run-id-unsupported",
-      "the run id must be a token of at most 56 characters for the cleanup receipt's name",
+      "the run id must be a token of at most 52 characters for the interrupted receipt's name",
     );
   }
-  for (const kind of ["run", "cleanup"] as const) {
+  for (const kind of ["run", "cleanup", "interrupted"] as const) {
     const command = cleanupCommandFor(region, join(receiptDir, receiptFileName(runId, kind)));
     const tooLong = command.length > CLEANUP_COMMAND_MAX;
     if (!isReceiptCleanupCommand(command)) {
@@ -768,32 +811,43 @@ function processAlive(pid: number): boolean {
   }
 }
 
+/** The defaults the runner and the keeper both use. */
+export const SHARED_DEFAULT_DEPS = {
+  readFile: (path) => readFile(path, "utf8"),
+  createAdminClient: (profile, endpoint) =>
+    createBucketClient({
+      region: profile.region,
+      bucket: "",
+      prefix: "",
+      accessKeyId: profile.accessKeyId,
+      secretAccessKey: profile.secretAccessKey,
+      ...(endpoint === undefined ? {} : { endpoint }),
+    }),
+  now: Date.now,
+  isAlive: processAlive,
+  kill: (pid, signal) => process.kill(pid, signal),
+  sleep: (ms) => delay(ms),
+  print: (line) => process.stdout.write(`${line}\n`),
+  removeDir: (path) => rm(path, { recursive: true, force: true }),
+  processStartTime,
+} satisfies Partial<AwsRehearsalDeps>;
+
 function defaultDeps(env: Env): AwsRehearsalDeps {
   return {
+    ...SHARED_DEFAULT_DEPS,
     env,
-    readFile: (path) => readFile(path, "utf8"),
-    createAdminClient: (profile) =>
-      createBucketClient({
-        region: profile.region,
-        bucket: "",
-        prefix: "",
-        accessKeyId: profile.accessKeyId,
-        secretAccessKey: profile.secretAccessKey,
-      }),
     randomSuffix: randomBucketSuffix,
     runId: randomUUID,
-    now: Date.now,
     commit: gitCommit,
     receiptDir: isUnset(env.WAITRON_AWS_REHEARSAL_RECEIPT_DIR)
       ? join(tmpdir(), "waitron-aws-rehearsal")
       : env.WAITRON_AWS_REHEARSAL_RECEIPT_DIR,
-    isAlive: processAlive,
-    kill: (pid, signal) => process.kill(pid, signal),
-    sleep: (ms) => delay(ms),
     deadlineMs: AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
     settleMs: AWS_REHEARSAL_SETTLE_MS,
     teardownMs: AWS_REHEARSAL_LIMITS.teardownMs,
-    print: (line) => process.stdout.write(`${line}\n`),
+    scratchBase: tmpdir(),
+    journal: writeJournal,
+    startKeeper,
   };
 }
 
@@ -916,6 +970,12 @@ export async function withAwsRehearsal<T>(
   const env = overrides.env ?? process.env;
   const deps: AwsRehearsalDeps = { ...defaultDeps(env), ...overrides };
   assertRehearsalOptIn(env);
+  if (deps.apis === undefined) {
+    throw new AwsRehearsalRefused(
+      "plan-refused",
+      "a rehearsal declares the S3 APIs its scenario sends",
+    );
+  }
   if (!isUnset(env.WAITRON_AWS_REHEARSAL_BUCKET)) {
     throw new AwsRehearsalRefused(
       "supplied-bucket",
@@ -939,16 +999,18 @@ export async function withAwsRehearsal<T>(
   if (deps.signal?.aborted === true) {
     throw new AwsRehearsalFailed("the rehearsal was stopped before it started");
   }
-  const client = deps.createAdminClient(profile);
+  installSendGate();
+  const client = deps.createAdminClient(profile, deps.endpoint);
+  markRunnerClient(client);
   try {
-    return await runOwned(scenario, deps, profile, client, receiptDir);
+    return await runOwned(scenario, deps, deps.apis, profile, client, receiptDir);
   } finally {
     client.destroy?.();
   }
 }
 
 /** Names only a refused field or an error code, never a value. */
-function receiptFailureCause(error: unknown): string {
+export function receiptFailureCause(error: unknown): string {
   if (error instanceof Error && error.message.startsWith("receipt field refused: ")) {
     return error.message;
   }
@@ -960,7 +1022,7 @@ function receiptFailureCause(error: unknown): string {
  * Records into `log`, and in place of an entry the receipt refuses writes a fixed note and counts
  * it, so a refused entry never stops teardown or loses the receipt.
  */
-function containedLog(log: ReceiptLog): {
+export function containedLog(log: ReceiptLog): {
   record(event: unknown): void;
   teardown(entry: TeardownEntry): void;
   /** Notes and counts a value left out of the receipt by the caller. */
@@ -1005,7 +1067,7 @@ function containedLog(log: ReceiptLog): {
  * Leaves out, as a refused entry, a listed upload id the receipt could not carry; the cleanup
  * command lists the bucket's uploads itself, so `bucket` alone is enough to finish the job.
  */
-function carriedRemaining(
+export function carriedRemaining(
   remaining: AwsReceiptRemaining,
   profile: RehearsalProfile,
   contained: { refuse(): void },
@@ -1016,6 +1078,68 @@ function carriedRemaining(
     return carried;
   });
   return { bucket: remaining.bucket, uploadIds };
+}
+
+export function unplannedFailure(refusals: {
+  count: number;
+  first: string | undefined;
+}): AwsRehearsalFailed | undefined {
+  return refusals.count === 0 ? undefined : new AwsRehearsalFailed(refusalsSummary(refusals));
+}
+
+/**
+ * A scope for `plan` that records each refusal in the receipt until `finished()` (the receipt is about
+ * to be built), and prints it after; `close()` stops the counting the run's failure reads.
+ */
+export function runScope(
+  plan: Parameters<typeof openRequestScope>[0]["plan"],
+  record: (event: unknown) => void,
+  print: (line: string) => void,
+  endpoint: string | undefined,
+  region: string,
+): {
+  scope: RequestScope;
+  finished(): void;
+  close(): { count: number; first: string | undefined };
+} {
+  let state: "open" | "finished" | "closed" = "open";
+  const scope = openRequestScope({
+    plan,
+    mode: "enforce",
+    hosts: endpoint === undefined ? { s3Region: region } : "any",
+    onRefused(detail, api) {
+      if (state !== "open") {
+        try {
+          print(
+            state === "finished"
+              ? `refused after the receipt was written: ${detail}`
+              : `refused after the run ended: ${detail}`,
+          );
+        } catch {
+          // The refusal still rejects the send.
+        }
+        return;
+      }
+      record({
+        scenario: "lifecycle",
+        phase: "request-refused",
+        ...((RECEIPT_APIS as readonly string[]).includes(api) ? { api } : {}),
+        outcome: "refused",
+      });
+    },
+  });
+  return {
+    scope,
+    finished() {
+      if (state === "open") state = "finished";
+    },
+    close() {
+      const refusals = scope.refusals();
+      state = "closed";
+      scope.close();
+      return refusals;
+    },
+  };
 }
 
 function refusedEntriesFailure(refused: number): AwsRehearsalFailed | undefined {
@@ -1033,6 +1157,8 @@ interface DeadlineOptions {
   outside: AbortSignal | undefined;
   now(): number;
   record(event: unknown): void;
+  /** Called when `body` was still running at the end of the settle wait. */
+  unsettled?(): void;
 }
 
 /**
@@ -1086,6 +1212,7 @@ async function runWithDeadline<T>(body: () => Promise<T>, options: DeadlineOptio
         elapsedMs: Math.max(0, now() - settleStarted),
         outcome: settled ? "ok" : "failed",
       });
+      if (!settled) options.unsettled?.();
     }
   }
 }
@@ -1093,6 +1220,7 @@ async function runWithDeadline<T>(body: () => Promise<T>, options: DeadlineOptio
 async function runOwned<T>(
   scenario: (ctx: AwsRehearsal) => Promise<T>,
   deps: AwsRehearsalDeps,
+  apis: readonly string[],
   profile: RehearsalProfile,
   client: AdminClient,
   receiptDir: string,
@@ -1105,14 +1233,12 @@ async function runOwned<T>(
   }
   assertCleanupCommandFits(region, runId, receiptDir);
   const receiptPath = join(receiptDir, receiptFileName(runId));
-  const log = createReceiptLog(
-    receiptHeader(deps, runId, region, {
-      ...AWS_REHEARSAL_LIMITS,
-      deadlineMs: deps.deadlineMs,
-      teardownMs: deps.teardownMs,
-    }),
-    profile,
-  );
+  const header = receiptHeader(deps, runId, region, {
+    ...AWS_REHEARSAL_LIMITS,
+    deadlineMs: deps.deadlineMs,
+    teardownMs: deps.teardownMs,
+  });
+  const log = createReceiptLog(header, profile);
   const contained = containedLog(log);
   const { record } = contained;
   const callDeps = { now: deps.now, record };
@@ -1136,6 +1262,68 @@ async function runOwned<T>(
   );
   const issued = new Set<string>();
   const labels = new Set<string>();
+  let markerMissing = false;
+  const scratchRoot = join(deps.scratchBase, `waitron-aws-rehearsal-${runId}`);
+  const scratchLabels = new Set<string>();
+  const scratchMaking: Promise<unknown>[] = [];
+  let scratchMade = false;
+
+  const journalPids: JournalPid[] = [];
+  let journalState: JournalState = "creating";
+  let journalScratch: string | null = null;
+  let journalFailures = 0;
+  let keeperPid: number | null = null;
+  const journalNow = (): RehearsalJournal => ({
+    version: JOURNAL_VERSION,
+    runId,
+    region,
+    bucket,
+    state: journalState,
+    uploads: uploads.map((upload) => ({ ...upload })),
+    pids: journalPids.map((entry) => ({ ...entry })),
+    scratchRoot: journalScratch,
+    receiptDir,
+    header: {
+      commit: header.commit,
+      node: header.node,
+      sdkVersion: header.sdkVersion,
+      litestreamVersion: header.litestreamVersion,
+      startedAt: header.startedAt,
+      limits: header.limits,
+    },
+    teardownMs: deps.teardownMs,
+    keeperCeilingMs: 2 * (deps.deadlineMs + deps.settleMs + deps.teardownMs),
+    ...(deps.endpoint === undefined ? {} : { endpoint: deps.endpoint }),
+    keeperPid,
+    ready: keeperPid === null ? null : true,
+  });
+  // Once a bucket may exist a failed write fails the run, but never stops it or its teardown.
+  // The whole serialised journal, as writeReceipt checks the receipt's text.
+  const writeChecked = (): void => {
+    const body = journalNow();
+    if (carriesKeyPair(JSON.stringify(body), profile)) {
+      throw new AwsRehearsalRefused("journal-refused", "the journal would hold the key pair");
+    }
+    deps.journal(receiptDir, body);
+  };
+  const journal = (state: JournalState = journalState): boolean => {
+    journalState = state;
+    try {
+      writeChecked();
+      return true;
+    } catch {
+      journalFailures += 1;
+      record({ scenario: "lifecycle", phase: "journal", outcome: "failed" });
+      return false;
+    }
+  };
+  const requests = runScope(
+    createRequestPlan({ bucket, apis, prefixes: () => issued }),
+    record,
+    deps.print,
+    deps.endpoint,
+    region,
+  );
   const ctx: AwsRehearsal = {
     runId,
     bucket,
@@ -1150,11 +1338,35 @@ async function runOwned<T>(
       issued.add(prefix);
       return prefix;
     },
+    async scratch(label) {
+      refuseOnceTearingDown();
+      if (!LABEL.test(label) || scratchLabels.has(label)) {
+        throw new AwsRehearsalRefused("label-refused", "a scratch label is new and a token");
+      }
+      scratchLabels.add(label);
+      if (journalScratch === null) {
+        journalScratch = scratchRoot;
+        // A folder the journal does not name is one a keeper would never remove.
+        if (!journal()) {
+          journalScratch = null;
+          throw new AwsRehearsalFailed(
+            "the journal naming the scratch folder could not be written, so no folder was made",
+          );
+        }
+      }
+      scratchMade = true;
+      const folder = join(scratchRoot, label);
+      const making = mkdir(scratchRoot, { recursive: true }).then(() => mkdir(folder));
+      scratchMaking.push(making.catch(() => undefined));
+      await making;
+      return folder;
+    },
     bucketConfig(prefix) {
       if (!issued.has(prefix)) {
         throw new AwsRehearsalRefused("prefix-not-issued", "use a prefix from prefix(label)");
       }
       return {
+        ...(deps.endpoint === undefined ? {} : { endpoint: deps.endpoint }),
         region,
         bucket,
         prefix,
@@ -1166,10 +1378,12 @@ async function runOwned<T>(
     reserveObjects,
     trackChild(pid) {
       refuseOnceTearingDown();
-      if (!Number.isSafeInteger(pid) || pid <= 0) {
-        throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
+      if (!isJournalChildPid(pid)) {
+        throw new AwsRehearsalRefused("child-pid-refused", "a child pid is an integer above 1");
       }
+      journalPids.push({ pid, startTime: deps.processStartTime(pid) });
       pids.push(pid);
+      journal();
     },
     trackUpload(key, uploadId) {
       refuseOnceTearingDown();
@@ -1179,7 +1393,14 @@ async function runOwned<T>(
           "an upload id the receipt could not carry is not tracked",
         );
       }
+      if (!isJournalUploadKey(key) || carriesKeyPair(key, profile)) {
+        throw new AwsRehearsalRefused(
+          "upload-id-refused",
+          "an upload key the journal could not carry is not tracked",
+        );
+      }
       uploads.push({ key, uploadId });
+      journal();
     },
     async ownedUploads(prefix) {
       refuseOnceTearingDown();
@@ -1249,6 +1470,7 @@ async function runOwned<T>(
   const setUpAndRun = async (): Promise<T> => {
     if (signal.aborted) {
       created = { state: "not-created", bucket: null };
+      journal("not-created");
       throw new AwsRehearsalFailed("the rehearsal was stopped before it created a bucket");
     }
     const answer = await call(
@@ -1264,6 +1486,8 @@ async function runOwned<T>(
       signal,
     );
     created = classifyCreate(bucket, answer.error);
+    // An unanswered create stays `creating`: the bucket may exist.
+    if (created.state !== "unowned-candidate") journal(created.state);
     if (created.state !== "owned") throw createFailure(created, bucket);
     stopIfStopped();
     const nonce = ownershipNonce(runId);
@@ -1284,117 +1508,264 @@ async function runOwned<T>(
       signal,
     );
     if (put.error !== undefined) {
+      markerMissing = true;
       throw new AwsRehearsalFailed(`writing the ownership nonce to ${bucket} failed`);
     }
     stopIfStopped();
-    await preflight(client, bucket, callDeps, signal);
+    if (deps.endpoint === undefined) {
+      await preflight(client, bucket, callDeps, signal);
+    } else {
+      // A local S3 server: versitygw answers GetBucketEncryption 501 NotImplemented.
+      for (const api of ["GetBucketEncryption", "GetBucketVersioning"]) {
+        record({ scenario: "lifecycle", phase: "preflight", api, outcome: "skipped" });
+      }
+    }
     stopIfStopped();
     return scenario(ctx);
   };
 
   let failure: unknown;
   let result: T | undefined;
-  try {
-    result = await runWithDeadline(setUpAndRun, {
-      controller,
-      deadlineMs: deps.deadlineMs,
-      settleMs: deps.settleMs,
-      outside: deps.signal,
-      now: deps.now,
-      record,
-    });
-  } catch (error) {
-    failure = error;
-  }
-  const ownership: CreateOutcome = created ?? {
-    state: "unowned-candidate",
-    bucket: null,
-    candidate: bucket,
-  };
-
   let teardown: TeardownResult | undefined;
-  if (ownership.state === "owned") {
-    tearingDown = true;
-    teardown = await teardownOwnedBucket(
-      client,
-      { bucket, runId, uploads, pids },
-      {
-        ...deps,
-        record,
-      },
-    );
-    for (const entry of teardown.entries) contained.teardown(entry);
-  }
-
-  const remaining = carriedRemaining(
-    teardown?.remaining ?? { bucket: null, uploadIds: [] },
-    profile,
-    contained,
-  );
-  const failed = failedSteps(teardown?.entries ?? []);
-  let receiptFailure: AwsRehearsalFailed | undefined;
+  let scenarioStillRunning = false;
+  // After every refusal that can come before CreateBucket, so a refused run leaves no journal.
   try {
-    const receipt = log.finish({
-      finishedAt: new Date(deps.now()).toISOString(),
-      ownership,
-      remaining,
-      cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
-      sourceOnly: SOURCE_ONLY_APIS,
-    });
-    await writeReceipt(receiptDir, receipt, profile);
+    writeChecked();
   } catch (error) {
-    receiptFailure = new AwsRehearsalFailed(
-      `the receipt was not written (${receiptFailureCause(error)})`,
+    const keyPair = error instanceof AwsRehearsalRefused && error.reason === "journal-refused";
+    throw new AwsRehearsalRefused(
+      "journal-unwritable",
+      keyPair
+        ? "the journal would hold the key pair; nothing was created"
+        : "the journal could not be written in the receipt folder; nothing was created",
     );
   }
-  let printFailure: unknown;
-  if (receiptFailure === undefined) {
-    try {
-      deps.print(receiptPath);
-    } catch (error) {
-      printFailure = error;
-    }
+  const journalPath = join(receiptDir, journalFileName(runId));
+  let keeper: KeeperHandle;
+  try {
+    keeper = await deps.startKeeper(journalPath, keeperEnv(deps.env));
+  } catch (error) {
+    rmSync(journalPath, { force: true });
+    throw error instanceof AwsRehearsalRefused && error.reason === "keeper-unavailable"
+      ? error
+      : new AwsRehearsalRefused(
+          "keeper-unavailable",
+          "the keeper could not be started; nothing was created",
+        );
+  }
+  keeperPid = keeper.keeperPid;
+  try {
+    return await runStarted();
+  } finally {
+    // After `finished`, so a keeper that reads end-of-file finds the run done.
+    keeper.end();
   }
 
-  const teardownFailure =
-    failed === "none"
-      ? undefined
-      : new AwsRehearsalFailed(
-          `teardown failed at ${failed}` +
-            (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
+  async function runStarted(): Promise<T> {
+    await requests.scope.run(async () => {
+      try {
+        result = await runWithDeadline(setUpAndRun, {
+          controller,
+          deadlineMs: deps.deadlineMs,
+          settleMs: deps.settleMs,
+          outside: deps.signal,
+          now: deps.now,
+          record,
+          unsettled: () => {
+            scenarioStillRunning = true;
+          },
+        });
+      } catch (error) {
+        failure = error;
+      }
+      if (created?.state === "owned") {
+        tearingDown = true;
+        teardown = await teardownOwnedBucket(
+          client,
+          { bucket, runId, uploads, pids, markerMissing },
+          {
+            ...deps,
+            record,
+            sameProcess: (pid) => {
+              const tracked = journalPids.find((entry) => entry.pid === pid);
+              // Only a different, readable start time shows another process; one unreadable when
+              // tracked or now cannot be told from ours, so the pid is still signalled while alive.
+              if (tracked?.startTime == null) return true;
+              const now = deps.processStartTime(pid);
+              return now === null || now === tracked.startTime;
+            },
+          },
         );
-  const problems = [failure, refusedEntriesFailure(contained.refused()), teardownFailure].filter(
-    (error) => error !== undefined,
+        for (const entry of teardown.entries) contained.teardown(entry);
+        if (
+          teardown.entries.some((entry) => entry.step === "delete-bucket" && entry.outcome === "ok")
+        ) {
+          journal("deleted");
+        }
+      }
+    });
+    tearingDown = true;
+    // A run that never owned a bucket records this step only if it made scratch.
+    const scratchEntries: TeardownEntry[] = [];
+    let scratchRemovalError: unknown;
+    if (created?.state === "owned" || scratchMade) {
+      await Promise.all(scratchMaking);
+      const { entry, removalError } = await removeScratch(
+        scratchMade,
+        scratchRoot,
+        deps.removeDir,
+        scenarioStillRunning,
+      );
+      contained.teardown(entry);
+      scratchEntries.push(entry);
+      scratchRemovalError = removalError;
+    }
+    const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed")
+      ? `; scratch folder not removed: ${scratchRoot}`
+      : "";
+    const ownership: CreateOutcome = created ?? {
+      state: "unowned-candidate",
+      bucket: null,
+      candidate: bucket,
+    };
+
+    const remaining = carriedRemaining(
+      teardown?.remaining ?? { bucket: null, uploadIds: [] },
+      profile,
+      contained,
+    );
+    const failed = failedSteps([...(teardown?.entries ?? []), ...scratchEntries]);
+    let receiptFailure: AwsRehearsalFailed | undefined;
+    requests.finished();
+    try {
+      const receipt = log.finish({
+        finishedAt: new Date(deps.now()).toISOString(),
+        ownership,
+        remaining,
+        cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
+        sourceOnly: SOURCE_ONLY_APIS,
+      });
+      await writeReceipt(receiptDir, receipt, profile);
+    } catch (error) {
+      receiptFailure = new AwsRehearsalFailed(
+        `the receipt was not written (${receiptFailureCause(error)})`,
+      );
+    }
+    let printFailure: unknown;
+    if (receiptFailure === undefined) {
+      try {
+        deps.print(receiptPath);
+      } catch (error) {
+        printFailure = error;
+      }
+    }
+    let finishFailure: AwsRehearsalFailed | undefined;
+    if (receiptFailure === undefined) {
+      // Written last, so a keeper that reads it knows the receipt exists.
+      journalState = "finished";
+      try {
+        writeChecked();
+      } catch {
+        finishFailure = new AwsRehearsalFailed("the journal was not marked finished");
+      }
+    }
+    const refusals = requests.close();
+
+    const teardownFailure =
+      failed === "none"
+        ? undefined
+        : new AwsRehearsalFailed(
+            `teardown failed at ${failed}` +
+              scratchLeft +
+              (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
+            scratchRemovalError === undefined ? undefined : { cause: scratchRemovalError },
+          );
+    const problems = [
+      failure,
+      unplannedFailure(refusals),
+      refusedEntriesFailure(contained.refused()),
+      journalFailures === 0
+        ? undefined
+        : new AwsRehearsalFailed(
+            `${journalFailures} journal write${journalFailures === 1 ? "" : "s"} failed, so the journal may not have named everything this run made`,
+          ),
+      teardownFailure,
+      finishFailure,
+    ].filter((error) => error !== undefined);
+    if (receiptFailure !== undefined) {
+      const left =
+        remaining.bucket ??
+        (ownership.state === "unowned-candidate"
+          ? `${ownership.candidate} (ownership unknown)`
+          : "none");
+      throw new AggregateError(
+        [...problems, receiptFailure],
+        `the rehearsal's receipt was not written; bucket left: ${left}; ` +
+          `failed teardown steps: ${failed}${scratchLeft}`,
+      );
+    }
+    if (printFailure !== undefined) {
+      if (problems.length === 0) throw printFailure;
+      throw new AggregateError(
+        [...problems, printFailure],
+        `the rehearsal failed${scratchLeft}; receipt: ${receiptPath}`,
+      );
+    }
+    if (problems.length === 1) throw problems[0];
+    if (problems.length > 1) {
+      throw new AggregateError(
+        problems,
+        teardownFailure === undefined
+          ? `the rehearsal failed; receipt: ${receiptPath}`
+          : `the rehearsal failed and so did its teardown${scratchLeft}; receipt: ${receiptPath}`,
+      );
+    }
+    return result as T;
+  }
+}
+
+/**
+ * `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this,
+ * and can make the removal itself throw; the entry names the scenario either way, so its name does
+ * not depend on which won the race. `removalError` is what the removal threw, if it did.
+ */
+export async function removeScratch(
+  made: boolean,
+  root: string,
+  removeDir: AwsRehearsalDeps["removeDir"],
+  stillRunning: boolean,
+): Promise<{ entry: TeardownEntry; removalError?: unknown }> {
+  if (!made) return { entry: { step: "remove-scratch", outcome: "skipped" } };
+  const stillRunningEntry: TeardownEntry = {
+    step: "remove-scratch",
+    outcome: "failed",
+    errorName: "ScenarioStillRunning",
+    httpStatus: null,
+  };
+  try {
+    await removeDir(root);
+  } catch (error) {
+    return {
+      entry: stillRunning ? stillRunningEntry : failedEntry("remove-scratch", error),
+      removalError: error,
+    };
+  }
+  if (stillRunning) return { entry: stillRunningEntry };
+  const back = await access(root).then(
+    () => true,
+    () => false,
   );
-  if (receiptFailure !== undefined) {
-    const left =
-      remaining.bucket ??
-      (ownership.state === "unowned-candidate"
-        ? `${ownership.candidate} (ownership unknown)`
-        : "none");
-    throw new AggregateError(
-      [...problems, receiptFailure],
-      `the rehearsal's receipt was not written; bucket left: ${left}; ` +
-        `failed teardown steps: ${failed}`,
-    );
+  if (back) {
+    return {
+      entry: {
+        step: "remove-scratch",
+        outcome: "failed",
+        errorName: "ScratchRecreated",
+        httpStatus: null,
+      },
+    };
   }
-  if (printFailure !== undefined) {
-    if (problems.length === 0) throw printFailure;
-    throw new AggregateError(
-      [...problems, printFailure],
-      `the rehearsal failed; receipt: ${receiptPath}`,
-    );
-  }
-  if (problems.length === 1) throw problems[0];
-  if (problems.length > 1) {
-    throw new AggregateError(
-      problems,
-      teardownFailure === undefined
-        ? `the rehearsal failed; receipt: ${receiptPath}`
-        : `the rehearsal failed and so did its teardown; receipt: ${receiptPath}`,
-    );
-  }
-  return result as T;
+  return { entry: { step: "remove-scratch", outcome: "ok" } };
 }
 
 /**
@@ -1508,7 +1879,7 @@ function ownedBucketOf(left: LeftReceipt): string | null {
   return left.bucket;
 }
 
-function namesRun(text: string, runId: string): boolean {
+export function namesRun(text: string, runId: string): boolean {
   try {
     const marker: unknown = JSON.parse(text);
     return isPlainObject(marker) && Object.keys(marker).length === 1 && marker.runId === runId;
@@ -1550,48 +1921,62 @@ export async function cleanupFromReceipt(
   assertCleanupCommandFits(region, runId, dirname(path));
   const cleanupPath = join(dirname(path), receiptFileName(runId, "cleanup"));
 
-  const client = deps.createAdminClient(profile);
+  const log = createReceiptLog(
+    receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
+    profile,
+    "cleanup",
+  );
+  const contained = containedLog(log);
+  const { record } = contained;
+  installSendGate();
+  const client = deps.createAdminClient(profile, deps.endpoint);
+  markRunnerClient(client);
+  const requests = runScope(
+    createRequestPlan({ bucket, apis: [], prefixes: () => new Set() }),
+    record,
+    deps.print,
+    deps.endpoint,
+    region,
+  );
   try {
-    const log = createReceiptLog(
-      receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
-      profile,
-    );
-    const contained = containedLog(log);
-    const { record } = contained;
-    const marker = await call<GetObjectCommandOutput>(
-      client,
-      new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
-      "GetObject",
-      "ownership",
-      { now: deps.now, record },
-      { objectRole: "ownership-nonce" },
-      AbortSignal.timeout(deps.teardownMs),
-    );
-    if (marker.error !== undefined && nameOf(marker.error) === "NoSuchBucket") {
+    const removed = await requests.scope.run(async () => {
+      const marker = await call<GetObjectCommandOutput>(
+        client,
+        new GetObjectCommand({ Bucket: bucket, Key: AWS_REHEARSAL_NONCE_KEY }),
+        "GetObject",
+        "ownership",
+        { now: deps.now, record },
+        { objectRole: "ownership-nonce" },
+        AbortSignal.timeout(deps.teardownMs),
+      );
+      if (marker.error !== undefined && nameOf(marker.error) === "NoSuchBucket") return null;
+      let markerText: string | undefined;
+      try {
+        markerText = await marker.output?.Body?.transformToString();
+      } catch {
+        markerText = undefined;
+      }
+      if (markerText === undefined || !namesRun(markerText, runId)) {
+        throw new AwsRehearsalRefused(
+          "ownership-unproven",
+          `${bucket}'s ownership marker is missing, unreadable or names another run; nothing deleted — ` +
+            "a person must check who owns it before deleting it",
+        );
+      }
+      const teardown = await teardownOwnedBucket(
+        client,
+        { bucket, runId, uploads: [], pids: [] },
+        { ...deps, record },
+      );
+      for (const entry of teardown.entries) contained.teardown(entry);
+      return teardown;
+    });
+    if (removed === null) {
       deps.print("bucket not found; nothing deleted");
       return { ok: true, receiptPath: null };
     }
-    let markerText: string | undefined;
-    try {
-      markerText = await marker.output?.Body?.transformToString();
-    } catch {
-      markerText = undefined;
-    }
-    if (markerText === undefined || !namesRun(markerText, runId)) {
-      throw new AwsRehearsalRefused(
-        "ownership-unproven",
-        `${bucket}'s ownership marker is missing, unreadable or names another run; nothing deleted — ` +
-          "a person must check who owns it before deleting it",
-      );
-    }
-
-    const teardown = await teardownOwnedBucket(
-      client,
-      { bucket, runId, uploads: [], pids: [] },
-      { ...deps, record },
-    );
-    for (const entry of teardown.entries) contained.teardown(entry);
-    const remaining = carriedRemaining(teardown.remaining, profile, contained);
+    const remaining = carriedRemaining(removed.remaining, profile, contained);
+    requests.finished();
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
       ownership: { state: "owned", bucket },
@@ -1602,18 +1987,23 @@ export async function cleanupFromReceipt(
     try {
       written = await writeReceipt(dirname(path), receipt, profile, "cleanup");
     } catch (error) {
+      const refused = unplannedFailure(requests.close());
       throw new AwsRehearsalFailed(
         `cleanup receipt not written (${receiptFailureCause(error)}); ` +
           `bucket left: ${remaining.bucket ?? "none"}; ` +
-          `failed teardown steps: ${failedSteps(teardown.entries)}`,
+          `failed teardown steps: ${failedSteps(removed.entries)}` +
+          (refused === undefined ? "" : `; ${refused.message}`),
       );
     }
     deps.print(written);
+    const unplanned = unplannedFailure(requests.close());
+    if (unplanned !== undefined) throw unplanned;
     return {
       ok: remaining.bucket === null && contained.refused() === 0,
       receiptPath: written,
     };
   } finally {
+    requests.close();
     client.destroy?.();
   }
 }

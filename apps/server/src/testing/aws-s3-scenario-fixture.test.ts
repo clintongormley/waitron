@@ -17,6 +17,10 @@ function standIn() {
       labels.add(label);
       return `rehearsal-run/${label}/`;
     },
+    scratch: async (label) => {
+      calls.push(["scratch", label]);
+      return `/scratch/${label}`;
+    },
     bucketConfig(prefix) {
       calls.push(["bucketConfig", prefix]);
       return {

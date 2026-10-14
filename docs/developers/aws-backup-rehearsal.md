@@ -6,10 +6,15 @@ The rehearsal is the one place that asks the real service: it runs the same scen
 S3, in a bucket it creates for the run and then tries to delete. Teardown can fail to delete it: an
 error from AWS, the teardown's two-minute limit running out, or a Litestream upload still running
 when teardown starts. Any failed teardown step fails the run, and when the bucket is left the
-receipt names it and gives a cleanup command. Pressing Ctrl-C also leaves the bucket, with no receipt; that is described
-under the limits below. If the deadline passes before AWS answers the create, the run cannot know
-whether the bucket exists: the receipt records it as `unowned-candidate` with no cleanup command,
-and a person checks it.
+receipt names it and gives a cleanup command. A run whose process dies before it can tear down
+(Ctrl-C, a SIGTERM, an uncaught error) is cleaned up by a second process it started for that, the
+keeper, within the limits listed in "When a run is killed: the keeper". If the deadline passes before AWS answers the
+create, the run cannot know whether the bucket exists: the receipt records it as
+`unowned-candidate` with no cleanup command, and a person checks it.
+
+Every request the rehearsal's own Node code would send to S3 is checked against the run's plan
+before it leaves the process, and one off the plan is refused there; see "Requests are checked
+before they are sent". Litestream's requests are not checked that way.
 
 The loop, pause, delete-many, archive round trip and archive abort scenarios first ran against
 Amazon S3 on 2026-10-14 (A538 plan Task 10, `eu-north-1`), and all passed. Their receipts, and what
@@ -26,6 +31,7 @@ they do and do not show, are in [docs/receipts/a538/](../receipts/a538/README.md
   `waitron-rehearsal-waitron-<12 random characters>` in your region, writes an ownership marker
   object into it (`.waitron-rehearsal-owner`, naming the run), and never touches any other bucket. If
   `WAITRON_AWS_REHEARSAL_BUCKET` is set to anything but an empty value, the run refuses: it never reuses a bucket you name.
+  A request from the rehearsal's Node code to any other bucket is refused before it is sent.
   Before any scenario starts it checks that the new bucket uses Amazon's own encryption (SSE-S3) and
   has versioning off.
 - **Synthetic data only.** The loop and pause scenarios each provision a made-up venue ("Stream Loop
@@ -49,24 +55,20 @@ Two limits matter if something goes wrong:
   and receipt; a scenario still running then is stopped as at its deadline, and the receipt records
   that stop as the `interrupt` step. A scenario still running after
   that minute, for example one inside a restore that cannot be cut short, races the teardown, and a
-  late Litestream upload can leave the bucket behind. In the loop scenario the runner never learns
-  the Litestream child's process id, so it has no child of its own to stop; the AWS pause test hands
-  the server the function that starts Litestream, so the runner learns each child's id and stops it
-  at teardown (see "The pause scenario"). The delete and archive scenarios pass the run's stop
+  late Litestream upload can leave the bucket behind. The AWS loop and pause tests hand the server
+  the function that starts Litestream, so the runner learns each child's process id and stops it at
+  teardown. The Litestream processes a restore starts (`packages/stream/src/restore.ts`) are not
+  started through that function, so neither the runner nor the keeper knows them or stops them. The delete and archive scenarios pass the run's stop
   signal to every bucket request. Decrypting an archive on your machine takes no signal. When the bucket is
   left, the run fails and the receipt gives the cleanup command.
-- **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
-  receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
-  `waitron-rehearsal-waitron-` prefix, or list the account's buckets with `aws s3api list-buckets`
-  under the same profile variables (which worked with the rehearsal profile on 2026-10-14), and
-  delete it by hand, after checking that its `.waitron-rehearsal-owner` object is from your run. The loop scenario's working folder,
-  `waitron-aws-stream-loop-<random>` under your temporary folder (`$TMPDIR` on a Mac), is left
-  behind too. It holds a box's `secrets.env` (box A's until the loop removes it, then the rebuilt
-  box's) and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
-  base64url, not encrypted.
-  Delete that folder as well, and the pause scenario's `waitron-aws-stream-pause-<random>`, which
-  holds its box's `secrets.env`, and any `waitron-aws-delete-<random>` or
-  `waitron-aws-archive-<random>`.
+- **A killed run is cleaned up by the keeper, within limits.** Interrupting the run skips its own
+  teardown, and the keeper does it instead; what the keeper cannot do is listed in "When a run is
+  killed: the keeper". A bucket it reports as left, or of unknown ownership, is found in the S3
+  console by its `waitron-rehearsal-waitron-` prefix, or by listing the account's buckets with
+  `aws s3api list-buckets` under the same profile variables (which worked with the rehearsal profile
+  on 2026-10-14). A folder it reports as left holds secrets: the loop scenario's holds a box's
+  `secrets.env` and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair
+  encoded as base64url, not encrypted. Delete it by hand.
 
 ## Running it
 
@@ -95,8 +97,9 @@ The variables the rehearsal's own code reads:
 | `AWS_SHARED_CREDENTIALS_FILE`        | Absolute path to the credentials file, outside the repository. The runner reads the `waitron-rehearsal` profile's static key pair from it. A session token is refused.                                                            |
 | `AWS_CONFIG_FILE`                    | Absolute path to the config file, outside the repository. The profile's region is read from it.                                                                                                                                   |
 | `AWS_PROFILE`                        | Must be `waitron-rehearsal`.                                                                                                                                                                                                       |
+| `AWS_ENDPOINT_URL`, `AWS_ENDPOINT_URL_S3` | Must be unset or empty. Either one set refuses the run (`endpoint-unsupported`), and so does an `endpoint_url` or `services` setting in the profile's section of either file: a rehearsal sends only to Amazon S3. |
 | `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there, AWS's CreateBucket reference says, "if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK", so the run could not tell a fresh bucket from one the account already owns, such as another run's (read 2026-10-14). |
-| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
+| `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (151 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
 | `WAITRON_LITESTREAM_BIN`             | The Litestream binary the scenarios run. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop and pause scenarios fail.                   |
 
@@ -111,13 +114,22 @@ run, or the cleanup, fails. A scenario's own such row fails the scenario where i
 Whatever the scenario does, pass or fail, the runner tears down what it owns, in this order: it stops
 the child processes it was told about, cancels the multipart uploads it was told about and then
 every unfinished upload the bucket lists, removes the bucket's policy, deletes every object in the
-bucket, and deletes the bucket.
+bucket, and deletes the bucket. Last, it removes the run's scratch folder (the `remove-scratch`
+step), whether or not it owned a bucket, whenever a scenario asked for one.
+
+**Scratch.** A scenario's working files go in a folder the runner makes for it,
+`waitron-aws-rehearsal-<run id>/<label>/` under your temporary folder (`$TMPDIR` on a Mac); the
+loop's holds a box's `secrets.env` and, once written, its `recovery-kit.txt`, and the pause scenario's its box's
+`secrets.env`. The runner names the folder in the journal before making it, so the keeper can remove
+it too. The step, and the run, fail when the folder cannot be removed, when it is back after
+removal, or when the scenario was still running after its one-minute settle wait and could write there again; the run's
+failure message then names the folder, so you can delete it by hand.
 
 It then writes a receipt, `aws-rehearsal-<run id>.json`, and prints its path. A receipt holds the
 commit, versions, region, times and limits, one row per recorded step (a stage name, an outcome, a
 duration, and where relevant an API name, HTTP status and AWS error name), the teardown steps and
-their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the five
-teardown steps is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
+their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the teardown
+steps above, `remove-scratch` included, is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
 message. For the loop scenario, the recorded steps are `probe`, `pointer-a`, `sale-a`, `rebuild`,
 `pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. The rehearsal passes the loop no way
 to freeze the transport, so `frozen-transport` always reads `skipped` here: the stage's sales
@@ -126,6 +138,61 @@ still run, but their timing is not checked.
 An upload the runner could not cancel, whose id the receipt cannot carry, is left out of what is left
 and recorded as a `record-refused` row, and the run fails; the cleanup command still finds that
 upload, because it lists the bucket's uploads itself.
+
+## Requests are checked before they are sent
+
+Every request the rehearsal's Node code sends through the AWS SDK, whoever sends it (the runner, a
+scenario's own store, or the server the loop and pause scenarios start inside the test process), is
+checked against the run's plan before it leaves the process
+(`apps/server/src/testing/aws-send-gate.ts`, which wraps the SDK's shared `send`). A request that
+fails the check is refused locally and never reaches Amazon S3. The plan:
+
+- **The runner's own requests** may be only the ones it needs to create, check and tear down the
+  bucket (CreateBucket, the encryption and versioning reads, the policy calls, listing and cancelling
+  uploads, listing and deleting objects, DeleteBucket), only on the run's bucket; it may put and read
+  only the ownership marker.
+- **Every other request** may use only the APIs its scenario declares
+  (`apps/server/src/testing/aws-rehearsal-plans.ts`), only on the run's bucket, and every object key
+  and listing prefix must sit under a prefix the run handed out, with no `.` or `..` path segment. A
+  scenario cannot declare a bucket-level API such as CreateBucket or a policy call.
+- **Any API outside the receipt's list** is refused.
+- **The host.** Just before a request is sent, the host the SDK worked out for it must be one of
+  Amazon S3's own names for the run's bucket in the run's region (`<bucket>.s3.<region>.amazonaws.com`,
+  the path-style `s3.<region>.amazonaws.com`, and their FIPS and dual-stack forms). That catches an
+  endpoint set some way the profile checks above do not read.
+
+A refusal fails the run even when the code that sent it catches the error, as the server's stream
+code does with bucket errors: the receipt gets a `request-refused` row (naming the API when it is on
+the receipt's list), and the run fails with `N unplanned request(s) refused before sending; the
+first: <detail>`. The detail names the API and the rule it broke; it names a bucket only when the
+name is a rehearsal bucket's, and never a key or a prefix.
+
+In the rehearsal's own test processes, a request sent outside any run is refused too
+(`<API> was sent outside a rehearsal run`). A request sent after the run's receipt is built is not
+in the receipt; it is printed as `refused after the receipt was written: <detail>` and still fails
+the run. One sent after the run has returned is printed as `refused after the run ended: <detail>`
+and fails nothing, because the run's result is already settled. The keeper and the cleanup command
+check their own requests the same way, with a plan that holds the run's bucket and nothing else.
+
+What is not checked:
+
+- **Litestream's requests.** Litestream is a separate program, and no Node code sends its requests.
+  In the pause scenario its connections pass through a proxy that admits only the run's bucket host
+  (see "The pause scenario"); in the loop scenario nothing limits them. Whether to close that gap is
+  an open owner question, asked 2026-10-14.
+- **The listing-denial step, locally.** The local loop, pause and
+  rehearsal-scenario tests run under the same plans as the AWS runs, so a request a plan lacks fails
+  there first; but the local pause test does not run the listing-denial step, which needs Amazon's
+  bucket policies, so that step's listings are first checked against the plan on Amazon S3.
+- **A request rewritten after it is built.** A middleware that changes the request after the SDK has
+  serialised it is not checked again.
+
+**Proving it without Amazon.** The rehearsal's own tests run the runner against versitygw by giving
+it a local endpoint, which only a test can set. With one
+set, the encryption and versioning check is skipped and recorded as two `skipped` rows (versitygw
+answers the encryption read with 501 `NotImplemented`), and the host check lets any host through.
+The four AWS test files never set one. `apps/server/src/aws-send-gate.e2e.test.ts` shows a request
+off the plan never reaches versitygw, whose access log records nothing for it.
 
 ## The pause scenario
 
@@ -153,9 +220,9 @@ order. Each proxy lets through only port 443 of the owned bucket's own name in t
 `<bucket>.s3.<region>.amazonaws.com`, and refuses every other host, including the shared
 `s3.<region>.amazonaws.com`; the run fails if anything asked for a refused host (the `gate-refused`
 steps, one per proxy, each naming its client in `objectRole`: `server`, `scenario` or `litestream`, recorded whether the scenario passed or failed). Not everything goes through a proxy: the runner's own calls, the rule's control listings
-and the final restore check reach AWS directly, with the same key pair. Unlike the loop scenario's,
-this test hands the server the function that starts Litestream, so it learns each process id and
-the runner stops those processes at teardown.
+and the final restore check reach AWS directly, with the same key pair. As in the loop scenario, the test hands the server the
+function that starts Litestream, so the runner learns each process id and stops those processes at
+teardown.
 
 On 2026-10-14, a local experiment while building the proxy (A538 plan Task 8) held a real Litestream 0.5.17 this way on a Mac, against a made-up bucket
 name with dummy keys and no AWS packet sent: for 240 seconds Litestream stayed alive and kept
@@ -233,7 +300,6 @@ and how long the wait took; no held connection fails the run. It shows that a se
 waiting at the proxy, not which call: the connection is encrypted end to end, so the proxy cannot
 see that it is the pause check. What ties the refusal to the pause check is the later logged
 `stream.pause_check_failed` with a 403 (`pause-check-denied`).
-Its working folder is `waitron-aws-stream-pause-<random>` under your temporary folder.
 
 ## The delete and archive scenarios
 
@@ -268,9 +334,9 @@ passed is recorded `ok`.
 the number of keys sent, for PutObject and UploadPart the bytes sent. A DeleteObjects answer that
 lists per-key errors adds a `delete-key-errors` row with their count. A row never holds a key, a
 body or a URL. A request to an API outside the receipt's list (`RECEIPT_APIS`,
-`apps/server/src/testing/aws-rehearsal-receipt.ts`) makes the recorder throw, but only once Amazon
-S3 has answered: the request has already been sent, and the store may send it again. The store then
-fails the request and the scenario fails.
+`apps/server/src/testing/aws-rehearsal-receipt.ts`) is refused before it is sent (see "Requests are
+checked before they are sent"). The recorder keeps its own check behind that one: it throws on such
+an API once Amazon S3 has answered, and the scenario fails.
 
 **Observed or source-only.** The receipt's action table lists each API on that list once. An API is
 `observed` when some recorded step names it with an HTTP status; otherwise it is `source-only`
@@ -330,3 +396,88 @@ The receipt keeps the ids of uploads that could not be cancelled, but the cleanu
 cancelling an upload needs its object key, which the receipt does not store. Instead it cancels every
 unfinished upload the owned bucket lists, which covers the same uploads because the bucket is the
 run's alone.
+
+When teardown fails to delete the bucket after it has deleted the marker, just before the bucket,
+or the run never wrote a marker, teardown writes the marker again so this command can prove
+ownership. If that write fails too, the receipt has a failed `restore-nonce` row and the
+command refuses with `ownership-unproven`. The bucket is still the one the receipt names, created by
+that run: check in the S3 console that it holds nothing but this run's objects, then empty and
+delete it by hand.
+
+## When a run is killed: the keeper
+
+A killed run cannot be relied on to tear down itself. So before it creates its bucket, each run writes a
+**journal**, `aws-rehearsal-<run id>-journal.json` in the receipt folder, and starts a **keeper**, a
+separate Node process (`apps/server/scripts/aws-rehearsal-keeper.ts`) that outlives the run. A
+person never starts the keeper.
+
+**How it stays alive.** The keeper is started through a short-lived launcher in a session of its
+own, so it is not the run's child and is outside its process group: a Ctrl-C to the terminal's process group, or a watchdog stopping
+the run's process tree, does not reach it. It ignores the hang-up signal a closing terminal sends,
+and stops on a SIGTERM sent to it directly. It learns that the run has ended from a pipe whose other
+end only the run holds, so the run ending in any way, a kill included, ends the pipe. The run
+creates nothing until the journal shows the keeper ready; a keeper not ready within 10 seconds
+refuses the run (`keeper-unavailable`) before any bucket exists.
+
+**The journal** records, as the run goes: the bucket name and its state (`creating` before the
+create is sent, `owned` once Amazon answers it as created, `deleted` once teardown deletes it,
+`finished` once the receipt is written), the multipart uploads and child processes the run was told
+about (each process with its start time), the scratch folder, and the run's limits. Each write is
+whole or not at all, so a kill finds the last complete journal.
+
+**What it does.** When the run has ended, the keeper reads the journal. If it says `finished`, the
+keeper does nothing and exits 0. Otherwise it stops each tracked process whose start time still
+matches the journal's (a process id since reused by another program is left alone), then acts on
+the bucket's state:
+
+- `owned`: it reads the ownership marker. If the bucket is gone, nothing is left to delete. If the
+  marker names the run, or there is no marker (a run killed between its create and its marker), it
+  runs the same teardown as the run, within the same two-minute limit: cancel uploads, remove the
+  bucket's policy (so a listing-denial rule left by a run killed mid-pause goes too), delete the
+  objects, delete the bucket. If the marker names another run or cannot be read, or the read fails
+  in any other way (Amazon S3 cannot be reached, for example), it deletes nothing and reports the
+  bucket as of unknown ownership.
+- `creating`: the create may have been sent and never answered, so it waits 30 seconds for it to
+  land, then reads the marker. If the bucket does not exist, nothing was created; otherwise it
+  deletes nothing and reports the bucket as of unknown ownership.
+- `deleted`, `not-created`, `collision`: there is no bucket to delete.
+
+In every state it then removes the scratch folder, writes its own receipt,
+`aws-rehearsal-<run id>-interrupted.json` (never overwriting one already there) with an
+`interrupted` row, and prints its lines.
+
+**What it prints.** Every line goes to `aws-rehearsal-<run id>-keeper.log` beside the receipt, and to
+the terminal the run was started from, when there was one, for as long as it stays open. The lines are the receipt's path, then
+either `nothing left behind` or `left behind:` followed by one line per thing left: `bucket <name>`,
+`bucket <name> (ownership unknown)`, `upload <id>`, `process <pid>`, `folder <path>`. It exits 0
+when nothing is left and nothing else went wrong, and 1 otherwise. A bucket left behind after the
+keeper's teardown gets a cleanup command in the interrupted receipt, run as above. A bucket of unknown ownership gets none: a
+person checks who owns it before deleting it, as for `unowned-candidate`.
+
+**Its limits.**
+
+- **It trusts the journal only within bounds.** The scratch folder must be exactly
+  `waitron-aws-rehearsal-<run id>` directly in the keeper's temporary folder, the bucket must have a
+  rehearsal bucket's name, and an endpoint (set only by the rehearsal's own tests) must be on this
+  machine. A journal outside those bounds, or one it cannot read, is refused: the keeper deletes
+  nothing, not even the scratch folder, prints why and exits 1, naming nothing as left. Clean up
+  by hand: the bucket's name is in the journal, `aws-rehearsal-<run id>-journal.json` in the
+  receipt folder; the scratch folder is `waitron-aws-rehearsal-<run id>` in your temporary folder,
+  and holds secrets; the bucket goes as described under the limits near the top.
+- **If its own checks fail** (the opt-in, the profile, `AWS_REGION` differing from the journal's),
+  it sends nothing, but still stops the tracked processes and removes the scratch folder, and lists
+  an `owned` bucket as left and a `creating` one as of unknown ownership. It writes no receipt, so
+  a bucket it lists has no cleanup command; delete it by hand, as described under the limits near
+  the top.
+- **It waits at most twice the run's whole budget**: the 15-minute deadline, the one-minute settle
+  wait and the two-minute teardown, doubled, so 36 minutes. A run still going then is left to finish
+  alone: the keeper prints `gave up waiting`, lists what may be left, does nothing and exits 1.
+- **It cannot stop the Litestream processes a restore starts**, because the journal never names them.
+- **A bucket in state `creating` is reported, never deleted**, and so is an owned bucket whose marker
+  it could not read; neither gets a cleanup command.
+
+`apps/server/src/aws-rehearsal-interrupt.e2e.test.ts` (CI's `test-server-stream` job) kills a run
+against versitygw at several points, by SIGINT and SIGTERM, by an uncaught error, during a teardown
+held by a paused server, and under Vitest itself, and checks that no bucket and no scratch folder is
+left and that the keeper prints `nothing left behind`; one more case runs out the keeper's teardown limit and checks that the interrupted
+receipt's cleanup command removes what was left.
