@@ -132,13 +132,14 @@ async function paintedIn(
   return painted;
 }
 
-/** Where each of the venue's periods is painted, keyed by period id. */
+/** Where each of the venue's periods, or only `periodId`, is painted, keyed by period id. */
 export async function readPaintedIn(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
+  periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
-  return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at));
+  return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at), periodId);
 }
 
 /**

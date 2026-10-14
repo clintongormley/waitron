@@ -49,15 +49,15 @@ describe("OpeningHoursApi", () => {
       replacements: [{ id: "p/2", name: "Dinner" }],
     };
     const request = vi.fn(async (path: string, method: string) =>
-      method === "POST" ? undefined : path.endsWith("/painted-in") ? painted : impact,
+      method === "POST" ? undefined : path.includes("/painted-in") ? painted : impact,
     );
     const api = new OpeningHoursApi(request as DashboardRequest);
-    expect(await api.readPaintedIn()).toEqual(painted);
+    expect(await api.readPaintedIn("p/1")).toEqual(painted);
     expect(await api.readPeriodDeleteImpact("p/1")).toEqual(impact);
     expect(await api.deletePeriod("p/1", "p/2", 4)).toBeUndefined();
     await api.deletePeriod("p/1", null, 4);
     expect(request.mock.calls).toEqual([
-      [`${base}/menu-periods/painted-in`, "GET"],
+      [`${base}/menu-periods/painted-in?periodId=p%2F1`, "GET"],
       [`${base}/menu-periods/p%2F1/delete-impact`, "GET"],
       [
         `${base}/menu-periods/p%2F1/delete`,

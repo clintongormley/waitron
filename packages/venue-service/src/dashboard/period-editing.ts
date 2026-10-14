@@ -120,7 +120,7 @@ export class PeriodEditing implements ReactiveController {
   private async readPaintedIn(editor: NonNullable<PeriodEditing["editor"]>, periodId: string) {
     let row;
     try {
-      const rows = await this.options.api().readPaintedIn();
+      const rows = await this.options.api().readPaintedIn(periodId);
       row = rows.find((candidate) => candidate.periodId === periodId);
     } catch {
       return;

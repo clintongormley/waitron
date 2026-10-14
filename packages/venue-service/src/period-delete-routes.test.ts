@@ -307,6 +307,28 @@ describe("the period-delete routes", () => {
     ]);
   });
 
+  it("GET painted-in with a periodId lists only that period, and refuses a malformed id", async () => {
+    const r = await routed();
+
+    const response = await r.send("GET", `/painted-in?periodId=${r.dinner}`, r.supervisor);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        periodId: r.dinner,
+        seasons: [
+          { id: r.seasons.summer, name: "Summer" },
+          { id: r.seasons.autumn, name: "Autumn" },
+        ],
+        specialDays: [],
+      },
+    ]);
+    await answers(await r.send("GET", "/painted-in?periodId=not-a-uuid", r.manager), 400, {
+      code: "shared.invalid_id",
+      params: { kind: "MenuPeriodId", value: "not-a-uuid" },
+    });
+  });
+
   it("GET delete-impact says what deleting a period would change, for a venue viewer", async () => {
     const r = await routed();
 

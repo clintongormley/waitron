@@ -88,7 +88,7 @@ export function painterModel(): OpeningHoursModel {
 export type Write = { url: string; method: string; body: unknown };
 export function painterApi(writes: Write[] = [], answer: (write: Write) => unknown = () => ({})) {
   return new OpeningHoursApi((async (url, method, body) => {
-    if (method === "GET") return url.endsWith("/menu-periods/painted-in") ? [] : painterModel();
+    if (method === "GET") return url.includes("/menu-periods/painted-in") ? [] : painterModel();
     const write = { url, method, body };
     writes.push(write);
     return answer(write);

@@ -78,8 +78,12 @@ export class OpeningHoursApi {
       recovered,
     );
   }
-  readPaintedIn(): Promise<PaintedInRow[]> {
-    return this.request(`${BASE}/menu-periods/painted-in`, "GET");
+  /** Where one period is painted: a list of that period's row, or none once it is gone. */
+  readPaintedIn(periodId: string): Promise<PaintedInRow[]> {
+    return this.request(
+      `${BASE}/menu-periods/painted-in?periodId=${encodeURIComponent(periodId)}`,
+      "GET",
+    );
   }
   /** On the special-day calendar's dependencies, so a special-day or holiday-area write re-reads it. */
   watchYear(

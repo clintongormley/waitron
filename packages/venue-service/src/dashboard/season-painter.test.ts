@@ -254,18 +254,26 @@ it("✎ opens the period dialog with that period, and a refusal shows in it", as
 });
 
 const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
-/** An api whose Painted-in read waits on the returned `answer`, counting each read. */
+const paintedInFor = (url: string) =>
+  url.startsWith(`${PAINTED_IN}?`)
+    ? new URL(url, location.origin).searchParams.get("periodId")
+    : undefined;
+/** An api whose Painted-in read waits on the returned `answer`, counting each read and the
+ *  period it asks about. */
 function paintedInApi() {
   const reads: string[] = [];
+  const asked: (string | null)[] = [];
   let answer!: (rows: unknown) => void;
   const api = new OpeningHoursApi((async (url: string, method: string) => {
-    if (url === PAINTED_IN) {
+    const periodId = paintedInFor(url);
+    if (periodId !== undefined) {
       reads.push(method);
+      asked.push(periodId);
       return new Promise<unknown>((resolve) => (answer = resolve));
     }
     return painterModel();
   }) as DashboardRequest);
-  return { api, reads, answer: (rows: unknown) => answer(rows) };
+  return { api, reads, asked, answer: (rows: unknown) => answer(rows) };
 }
 const paintedRows = [
   {
@@ -290,7 +298,7 @@ const paintedChips = (dialog: HTMLElementTagNameMap["period-dialog"]) =>
 
 it("✎ opens the period dialog with where the period is painted, read once, as plain chips", async () => {
   const { painter } = await mount();
-  const { api, reads, answer } = paintedInApi();
+  const { api, reads, asked, answer } = paintedInApi();
   painter.api = api;
   chip(painter, "edit-p1")!.click();
   await settle(painter);
@@ -298,6 +306,7 @@ it("✎ opens the period dialog with where the period is painted, read once, as 
   await dialog.updateComplete;
   expect(dialog.period?.id).toBe("p1");
   expect(reads).toEqual(["GET"]);
+  expect(asked).toEqual(["p1"]);
   expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
   answer(paintedRows);
   await expect
@@ -334,9 +343,10 @@ it("+ New period reads nothing and draws no Painted in; a failed or malformed re
   async function editOnceReadSettles(answer: () => Promise<unknown>) {
     let read: Promise<unknown> | undefined;
     const api = new OpeningHoursApi((async (url: string) =>
-      url === PAINTED_IN ? answer() : painterModel()) as DashboardRequest);
+      paintedInFor(url) !== undefined ? answer() : painterModel()) as DashboardRequest);
     const readPaintedIn = api.readPaintedIn.bind(api);
-    api.readPaintedIn = () => (read = readPaintedIn()) as ReturnType<typeof readPaintedIn>;
+    api.readPaintedIn = (periodId) =>
+      (read = readPaintedIn(periodId)) as ReturnType<typeof readPaintedIn>;
     painter.api = api;
     chip(painter, "edit-p1")!.click();
     await settle(painter);
@@ -377,6 +387,7 @@ it("a Painted-in read that answers after the dialog closed changes nothing", asy
   const reopened = painter.shadowRoot!.querySelector("period-dialog")!;
   await reopened.updateComplete;
   expect(reopened.period?.id).toBe("p2");
+  expect(second.asked).toEqual(["p2"]);
   first.answer(paintedRows);
   await new Promise((resolve) => setTimeout(resolve, 20));
   await settle(painter);

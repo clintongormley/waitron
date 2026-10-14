@@ -1171,7 +1171,11 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.get("/management-api/venue-service/menu-periods/painted-in", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const painted = await viewed(sessionId, (tx) => readPaintedIn(tx, ctx.cfg, new Date()));
+        const asked = c.req.query("periodId");
+        const periodId = asked === undefined ? undefined : requireUuidParam(asked, "MenuPeriodId");
+        const painted = await viewed(sessionId, (tx) =>
+          readPaintedIn(tx, ctx.cfg, new Date(), periodId),
+        );
         return c.json([...painted].map(([periodId, where]) => ({ periodId, ...where })));
       }),
     );
