@@ -1,7 +1,7 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n/t.js";
 
-/** For the element that holds `orderNumber`'s output; a host whose number is bold keeps it bold. */
+/** The bracket sits inside the host's bold number span, so it sets normal weight itself. */
 export const orderNumberStyles = css`
   .was {
     color: var(--wt-color-text-muted);
@@ -10,8 +10,6 @@ export const orderNumberStyles = css`
   }
 `;
 
-/** `#27`, followed by a muted `(was 28, 30)` when the order's dishes went to the kitchen under other
- * numbers. */
 export function orderNumber(n: number, formerNumbers?: number[]): TemplateResult {
   const was =
     formerNumbers && formerNumbers.length > 0
