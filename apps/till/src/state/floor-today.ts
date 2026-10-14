@@ -52,7 +52,6 @@ export function nextFloorMoment(): number {
   return ++floorMoments;
 }
 
-/** Today's name, else the saved label. */
 export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
 }
@@ -62,7 +61,6 @@ export function normalGroupName(members: readonly TableState[]): string {
   return mergeLabel(members.map(shownName));
 }
 
-/** The group's own name for today, else its normal name. */
 export function groupName(members: readonly TableState[]): string {
   return members[0]?.today?.joinName ?? normalGroupName(members);
 }

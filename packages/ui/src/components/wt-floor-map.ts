@@ -196,7 +196,8 @@ const idOf = (target: EventTarget | null): string | null =>
 
 /**
  * Draws the placed tables fitted to its box. A merge (tables sharing a `joinId`) is one button,
- * named by `mergeLabel`, whose id is its first member's in label order.
+ * named by its own name for today, else `mergeLabel` over its tables' shown names, whose id is its
+ * first member's in label order.
  */
 @customElement("wt-floor-map")
 export class WtFloorMap extends LitElement {
