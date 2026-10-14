@@ -438,8 +438,11 @@ export class SpecialDayPainter extends LitElement {
   @state() private month = "";
   @state() private taken: ReadonlyMap<LocalDate, string> = new Map();
   @state() private deleting?: { busy: boolean; message: string };
-  /** The same-named special day offered before a new day on a public holiday, until answered. */
-  @state() private offered?: string;
+  /** The same-named special day offered before a new day on a public holiday, until answered,
+   *  with the holiday's date. */
+  @state() private offered?: { id: string; date: LocalDate };
+  /** Replaced by an edit and by Save: the offer is about the new day only as it opened. */
+  private offerToken = {};
   /** A new day pre-filled from a public holiday can be saved as it opened. */
   private savableAtOpen = false;
   private baseline: Draft = blank([]);
@@ -574,7 +577,7 @@ export class SpecialDayPainter extends LitElement {
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
       const name = date ? holidayDateName(this.holidays, date, "") : "";
       this.adopt(undefined, date ? [date] : [], name);
-      if (name) this.offerExisting(name);
+      if (date && name) this.offerExisting(name, date);
       return;
     }
     this.read(id, this.addDate && isLocalDate(this.addDate) ? this.addDate : undefined);
@@ -667,14 +670,16 @@ export class SpecialDayPainter extends LitElement {
     this.scope?.commit(copyDraft(baseline));
   }
   /** A list that fails or lands late offers nothing: the pre-filled new day stands. */
-  private offerExisting(name: string) {
+  private offerExisting(name: string, date: LocalDate) {
     const generation = this.generation;
+    const token = (this.offerToken = {});
     this.api.specialDays.listSpecialDays().then((days) => {
-      if (generation === this.generation) this.offered = offerMatch(days, name);
+      if (generation !== this.generation || token !== this.offerToken) return;
+      const id = offerMatch(days, name);
+      this.offered = id === undefined ? undefined : { id, date };
     }, ignore);
   }
-  private addTo(id: string) {
-    const date = this.draft.dates[0]!.date;
+  private addTo({ id, date }: { id: string; date: LocalDate }) {
     this.generation = {};
     this.seedToken = {};
     this.offered = undefined;
@@ -773,6 +778,7 @@ export class SpecialDayPainter extends LitElement {
     return { ...(paint.length ? { paint } : {}), ...(zonePaint.length ? { zonePaint } : {}) };
   }
   private change(next: Draft) {
+    this.offerToken = {};
     this.draft = next;
     this.refused = undefined;
     this.notice = "";
@@ -811,6 +817,7 @@ export class SpecialDayPainter extends LitElement {
     };
     const sent = copyPaint(this.draft.paint);
     const seed = this.seedToken;
+    this.offerToken = {};
     const model = this.model;
     this.followToken = {};
     this.unanswered = undefined;
@@ -1419,11 +1426,11 @@ export class SpecialDayPainter extends LitElement {
       <p class="explain" data-test="explain">${t("special.explain")}</p>
     </section>`;
   }
-  private offer(id: string) {
+  private offer(offered: { id: string; date: LocalDate }) {
     const name = this.draft.name;
     return html`<section class="panel" data-test="offer">
       <p>${format("special.offer", { name })}</p>
-      <wt-button data-test="add-to" @click=${() => this.addTo(id)}
+      <wt-button data-test="add-to" @click=${() => this.addTo(offered)}
         >${format("special.add_to", { name })}</wt-button
       >
       <wt-button

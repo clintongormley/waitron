@@ -520,6 +520,45 @@ describe("opened on a public holiday", () => {
     expect(nameValue(late.painter)).toBe("Christmas dinners");
   });
 
+  it("a list that answers after Save offers nothing on the day just saved", async () => {
+    let release!: () => void;
+    const { painter, writes, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days: { sd2: named("sd2", "Navidad", ["2025-12-25"]) },
+      listAfter: new Promise<void>((resolve) => (release = resolve)),
+    });
+    await save(painter, writes);
+    expect(part(painter, "delete")).not.toBeNull();
+    release();
+    await listed(painter, lists);
+    expect(part(painter, "offer")).toBeNull();
+    expect(nameValue(painter)).toBe("Navidad");
+  });
+
+  it("a list that answers after the new day was edited offers nothing, and the edit stands", async () => {
+    let release!: () => void;
+    const { painter, writes, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      holidays: navidad,
+      days: { sd2: named("sd2", "Navidad", ["2025-12-25"]) },
+      listAfter: new Promise<void>((resolve) => (release = resolve)),
+    });
+    await addDates(painter, ["2026-12-14"]);
+    release();
+    await listed(painter, lists);
+    expect(part(painter, "offer")).toBeNull();
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-25"]);
+    await save(painter, writes);
+    expect(writes[0]!.method).toBe("POST");
+    expect((writes[0]!.body as { dates: unknown }).dates).toEqual([
+      { date: "2026-12-14", closedAllDay: false },
+      { date: "2026-12-25", closedAllDay: false },
+    ]);
+  });
+
   it("a read of the offered day that fails says so beside Save", async () => {
     const { painter, events, lists } = await mount({
       specialDayId: null,
