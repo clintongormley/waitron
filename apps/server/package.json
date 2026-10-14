@@ -22,6 +22,7 @@
     "dev:reset:onboard": "tsx scripts/dev-onboard.ts --reset",
     "test": "vitest run",
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
+    "test:aws-rehearsal": "vitest run --config vitest.aws-rehearsal.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",

@@ -2675,8 +2675,8 @@ query printed `table|t`, `table|_litestream_seq` and `table|_litestream_lock`, a
 `litestream restore -o restored.db` of that replica listed the same three tables. (The drafter of slice 2's
 Task 10, #652, recorded the same result on 2026-09-23.)
 
-So a comparison of two venue databases leaves the two tables out, as the stream loop test's
-`tableContents` does (`apps/server/src/stream-loop.e2e.test.ts`), and a check that lists a live or
+So a comparison of two venue databases leaves the two tables out, as the stream loop's
+`tableContents` does (`apps/server/src/testing/stream-loop-scenario.ts`), and a check that lists a live or
 restored database's tables has to leave them out explicitly. The directory goes with the database it
 describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`) and `restoreDatabase`
 (`apps/server/src/restore.ts`) remove it with `venue.db`, and the stream supervisor removes it before

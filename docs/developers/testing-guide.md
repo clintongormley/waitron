@@ -605,6 +605,9 @@ generation must equal B's database, every table but Litestream's own two
 twelve seconds (2026-09-25). Its timeout is the sum of its waits and budgets, a little under ten
 minutes, for the reason the "per-test timeout" section above gives.
 
+The loop itself lives in `apps/server/src/testing/stream-loop-scenario.ts`, so it can also run
+against Amazon S3 by hand, without the frozen-server stage's timing check: see [aws-backup-rehearsal.md](aws-backup-rehearsal.md).
+
 **Binaries.** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs` installs
 both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and

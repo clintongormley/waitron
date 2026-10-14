@@ -4194,7 +4194,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (`waitron-restore restore --from-archive`, `GET /api/backup/archive-recovery-pack`; A538-5), and
   Task 6, which lets the Backups screen choose a folder, the bucket copy's bucket or another bucket,
   show the archive recovery pack, and turn scheduled backups off and back on (A538-6).
-  Tasks 7 to 10 and the real-AWS evidence are open.
+  Task 7 built the opt-in Amazon S3 rehearsal runner and runs the stream loop through it (A538-7;
+  runbook `docs/developers/aws-backup-rehearsal.md`); it has not yet run against Amazon S3.
+  Tasks 8 to 10 and the real-AWS evidence are open.
   `S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s (`packages/stream/src/s3-store.ts`)
   with different error codes, and only the file store's refuses a repeated key or bad size and
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
