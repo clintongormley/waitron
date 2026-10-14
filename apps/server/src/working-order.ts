@@ -719,8 +719,6 @@ export async function priceOrderLines(
   ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
-  // Keep the location's receipt-language keys while freezing each name in the default content
-  // language, so a later language change cannot alter a saved line's text.
   for (const line of gross.lines) {
     line.descriptions = defaultLanguageDescriptions(
       line.descriptions,
