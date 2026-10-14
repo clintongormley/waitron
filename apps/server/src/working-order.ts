@@ -237,14 +237,22 @@ export interface OrderAttendance {
   clock: TrustedClock;
 }
 
-async function captureOrderEdit(
+export async function captureOrderEdit(
   tx: Transaction,
   attendance: OrderAttendance | undefined,
   orderId: string,
   personId: string | undefined,
   locationId: string,
   revision: number,
-  action: "park" | "save" | "line" | "label" | "discard",
+  action:
+    | "park"
+    | "save"
+    | "line"
+    | "label"
+    | "discard"
+    | "invoice-choice"
+    | "receipt-language"
+    | "adjustment",
 ): Promise<void> {
   if (attendance === undefined || personId === undefined) return;
   await attendance.recorder(tx, {
@@ -3594,6 +3602,7 @@ export async function setOrderInvoiceChoice(
   orderId: string,
   request: InvoiceChoiceRequest,
   deliveryContext?: InvoiceChoiceDeliveryContext,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   if (request.invoiceType !== "F1" && request.invoiceType !== "F2") {
     throw new AppError("management.request_invalid", { field: "invoiceType" });
@@ -3636,6 +3645,15 @@ export async function setOrderInvoiceChoice(
         revision,
       })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    await captureOrderEdit(
+      tx,
+      attendance,
+      orderId,
+      attendance?.personId,
+      order.locationId,
+      revision,
+      "invoice-choice",
+    );
     return revision;
   });
 }
@@ -3650,6 +3668,7 @@ export async function setOrderReceiptLanguage(
   cfg: Pick<TillConfig, "nodeId">,
   orderId: string,
   request: { revision: number; language: unknown },
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
@@ -3665,6 +3684,15 @@ export async function setOrderReceiptLanguage(
       .update(workingOrders)
       .set({ receiptLocale: language, revision })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    await captureOrderEdit(
+      tx,
+      attendance,
+      orderId,
+      attendance?.personId,
+      order.locationId,
+      revision,
+      "receipt-language",
+    );
     return revision;
   });
 }

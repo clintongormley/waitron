@@ -24,7 +24,7 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -58,11 +58,13 @@ import type { TillConfig } from "./till-config.js";
 import {
   assertTabOpen,
   bumpRevision,
+  captureOrderEdit,
   extraQuantityFor,
   isReleased,
   keptExtrasOf,
   partyAfterEdit,
   quantityOfLine,
+  type OrderAttendance,
   readOrderRevision,
   refusePaymentInFlight,
   removeFromLine,
@@ -815,6 +817,7 @@ export async function applyAdjustment(
   args: AdjustmentArgs,
   venueLocale: string,
   attempts?: PinAttempts,
+  attendance?: OrderAttendance,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
   const { submissionId, approver, ...command } = args;
   return runServiceCommand(
@@ -874,7 +877,23 @@ export async function applyAdjustment(
         approvedBy: approved,
         note: args.note,
       });
-      return { adjustmentIds: [id], revision: await readOrderRevision(tx, args.orderId) };
+      const revision = await readOrderRevision(tx, args.orderId);
+      if (attendance !== undefined) {
+        const [order] = await tx
+          .select({ locationId: workingOrders.locationId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, args.orderId));
+        await captureOrderEdit(
+          tx,
+          attendance,
+          args.orderId,
+          args.operatorId,
+          order!.locationId,
+          revision,
+          "adjustment",
+        );
+      }
+      return { adjustmentIds: [id], revision };
     },
     cfg.madeHereSink,
   );

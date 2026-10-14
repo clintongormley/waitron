@@ -63,8 +63,11 @@ uncertain after sixty seconds. SMTP acceptance does not establish inbox delivery
 older backup can lose the sent marker and permit a duplicate. Writable workforce primaries start
 both duties and begin a fresh discovery generation at each open. Setup, mirror, fenced, secondary
 and workforce-disabled boots start neither duty. Failure unwind and normal close abort and await
-the duties before closing their database handle. Remaining command capture, restore-path
-qualification and final branch checks remain open; part 3 is unfinished.
+the duties before closing their database handle. Place/cancel till routes forward the amendment
+recorder. Invoice choice, receipt language and cancellation/comp/discount commands also capture the
+admitted worker and trusted instant in their write transaction. The route tests check capture refusal
+rolls back those commands and that repeated submissions create no later activity. Remaining service
+command capture, restore-path qualification and final branch checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

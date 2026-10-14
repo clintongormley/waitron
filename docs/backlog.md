@@ -4559,8 +4559,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   The part-3 branch has source capture, restartable discovery pages and late payment/rota watches.
   Parking, saving a basket, changing a line or label, and discarding an unpaid order capture
   the admitted operator and trusted command time on that branch. Place/cancel helpers and
-  unpaid departure also snapshot their amendment identity, original instant and stored location;
-  forwarding from the place/cancel till routes remains open. The library processor now qualifies
+  unpaid departure also snapshot their amendment identity, original instant and stored location.
+  The place/cancel till routes now forward capture. Invoice choice, receipt language and adjustments
+  capture their admitted operator and trusted instant in the command transaction; replayed adjustments
+  retain their original activity. Their new route tests also check rollback on capture refusal. The library processor now qualifies
   automatic finishes, missing-time questions, overnight deferrals and late clock/rota reconciliation
   on that branch. Clock reads and actions reconcile that worker's completed open day first.
   The reminder helper rechecks current clock and rota evidence, claims before SMTP, suppresses

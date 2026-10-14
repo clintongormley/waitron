@@ -1963,6 +1963,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           delivery,
         },
         { personId: session.personId, emailAvailable },
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
       );
       return c.json({ revision });
     }),
@@ -1992,10 +1995,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ revision?: unknown; language?: unknown }>(c);
-      const revision = await setOrderReceiptLanguage(deps.db, cfg, id, {
-        revision: requireRevision(body.revision),
-        language: body.language,
-      });
+      const revision = await setOrderReceiptLanguage(
+        deps.db,
+        cfg,
+        id,
+        { revision: requireRevision(body.revision), language: body.language },
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+      );
       return c.json({ revision });
     }),
   );
@@ -2026,7 +2034,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
       const result = await placeOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         sendingCfg(cfg, c, session.device),
         id,
         personId,
@@ -2523,7 +2531,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
       const override = parseOverrideField(body.override);
       await cancelPlacedOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         cfg,
         id,
         body.reason,
