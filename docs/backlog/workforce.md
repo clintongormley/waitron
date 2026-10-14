@@ -55,8 +55,13 @@ activity or existing clock history conflicts with an automatic finish. On this b
 clock state or submitting a clock action reconciles your open completed day first. A stale action is
 refused after committing the automatic finish. This worker-only pass leaves the shared day's work
 pending for a complete background pass. A loop helper processes one completed day per pass and waits
-for its active pass on shutdown. Remaining command capture, starting that loop at boot, and
-missing-time email still need connecting; part 3 remains open.
+for its active pass on shutdown. The missing-time reminder helper rechecks current clock and rota
+evidence before claiming, snapshots the saved email rather than a pending replacement, and sends
+outside the write transaction. SMTP acceptance and uncertain delivery suppress another automatic
+attempt; an explicit refusal waits fifteen minutes before retrying. An abandoned claim becomes
+uncertain after sixty seconds. SMTP acceptance does not establish inbox delivery, and restoring an
+older backup can lose the sent marker and permit a duplicate. Remaining command capture, starting
+both duties at boot and their boot lifecycle checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

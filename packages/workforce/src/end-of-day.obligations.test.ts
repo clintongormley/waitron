@@ -7,6 +7,8 @@ import {
   attendanceQuestions,
   enqueueAttendanceDay,
   upsertAttendanceQuestion,
+  claimAttendanceMail,
+  reportAttendanceMail,
 } from "./index.js";
 
 const f = attendanceFixture();
@@ -23,6 +25,56 @@ const missing = (shiftKey: string) => ({
 });
 
 describe("attendance obligations follow current clock and planning evidence", () => {
+  it("revives a cancelled definitive rejection without shortening its saved retry delay", async () => {
+    const at = f.input().now;
+    const {
+      questionIds: [id],
+    } = await f.process({ facts: [], planned: [morning()] });
+    const [mail] = await f.suite.db.select().from(attendanceMail);
+    const claim = (await f.run((tx) =>
+      claimAttendanceMail(tx, {
+        id: mail!.id,
+        holder: "node",
+        recipient: "worker@example.test",
+        now: at,
+      }),
+    ))!;
+    await f.run((tx) => reportAttendanceMail(tx, claim, "rejected", at));
+    await f.suite.db
+      .update(attendanceQuestions)
+      .set({ active: false, inactiveReason: "rota_superseded" })
+      .where(eq(attendanceQuestions.id, id!));
+    await f.suite.db
+      .update(attendanceMail)
+      .set({ status: "cancelled" })
+      .where(eq(attendanceMail.id, mail!.id));
+    const before = (await f.suite.db.select().from(attendanceMail))[0]!;
+    await f.process({ facts: [], planned: [morning()], now: new Date(at.getTime() + 60_000) });
+    expect(await f.questions()).toMatchObject([{ id }]);
+    expect(await f.suite.db.select().from(attendanceMail)).toEqual([
+      { ...before, status: "rejected" },
+    ]);
+    expect(
+      await f.run((tx) =>
+        claimAttendanceMail(tx, {
+          id: mail!.id,
+          holder: "node",
+          recipient: "worker@example.test",
+          now: new Date(at.getTime() + 14 * 60_000),
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      await f.run((tx) =>
+        claimAttendanceMail(tx, {
+          id: mail!.id,
+          holder: "node",
+          recipient: "worker@example.test",
+          now: new Date(at.getTime() + 15 * 60_000),
+        }),
+      ),
+    ).not.toBeNull();
+  });
   it.each(["pending", "sending", "sent", "unknown"] as const)(
     "late clock-in upgrades a %s rota question using its original identity",
     async (status) => {

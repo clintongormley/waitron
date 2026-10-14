@@ -86,7 +86,7 @@ async function retainQuestion(
       .update(attendanceQuestions)
       .set({ active: true, inactiveReason: null })
       .where(eq(attendanceQuestions.id, old.id));
-    // A cancelled, never-claimed reminder can follow a restored obligation; attempted delivery cannot.
+    // Ambiguous or accepted delivery must not be retried when an obligation returns.
     await tx
       .update(attendanceMail)
       .set({ status: "pending", nextAttemptAt: at.toISOString() })
@@ -95,6 +95,16 @@ async function retainQuestion(
           eq(attendanceMail.questionId, old.id),
           eq(attendanceMail.status, "cancelled"),
           sql`${attendanceMail.claimToken} is null`,
+        ),
+      );
+    await tx
+      .update(attendanceMail)
+      .set({ status: "rejected" })
+      .where(
+        and(
+          eq(attendanceMail.questionId, old.id),
+          eq(attendanceMail.status, "cancelled"),
+          eq(attendanceMail.outcome, "rejected"),
         ),
       );
   }

@@ -4562,8 +4562,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   unpaid departure also snapshot their amendment identity, original instant and stored location;
   forwarding from the place/cancel till routes remains open. The library processor now qualifies
   automatic finishes, missing-time questions, overnight deferrals and late clock/rota reconciliation
-  on that branch. It is not connected to a background duty yet. Remaining work includes the
-  rest of command capture, clock-boundary reconciliation, reminder duties and boot wiring.
+  on that branch. Clock reads and actions reconcile that worker's completed open day first.
+  The reminder helper rechecks current clock and rota evidence, claims before SMTP, suppresses
+  uncertain sends and retries explicit rejection after fifteen minutes. Remaining work includes
+  the rest of command capture, connecting both background duties at boot and their lifecycle checks.
   Left: end-of-day discovery and questions (part 3), correction screens (part 4), hours screens
   (part 5), and PDF/CSV plus representatives' access (part 6). The
   [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the legal

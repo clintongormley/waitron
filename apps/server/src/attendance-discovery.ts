@@ -13,6 +13,7 @@ import {
   processAttendanceDay,
   timeEntries,
   type AttendanceDay,
+  type AttendanceDayResult,
 } from "@waitron/workforce";
 
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -65,6 +66,16 @@ export async function reconcileAttendanceBeforeClock(
       ),
     );
   if (!saved) await enqueueAttendanceDay(tx, day);
+  await reconcileAttendanceDay(tx, { ...scope, day }, at);
+}
+
+export async function reconcileAttendanceDay(
+  tx: Transaction,
+  scope: { nodeId: string; locationId: string; personId: string; day: AttendanceDay },
+  at: Date,
+): Promise<AttendanceDayResult> {
+  const { day } = scope;
+  const businessDay = day.businessDay;
   const pending = await tx
     .select()
     .from(attendanceOperationFacts)
@@ -99,7 +110,7 @@ export async function reconcileAttendanceBeforeClock(
       if (watch) await discoverIntegratedAttendance(tx, watch, at);
     }
   }
-  await processAttendanceDay(tx, {
+  return processAttendanceDay(tx, {
     day,
     nodeId: scope.nodeId,
     personId: scope.personId,
