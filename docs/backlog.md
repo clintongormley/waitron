@@ -2007,6 +2007,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
   refuses it, as a delete is refused, or only warns.
 
+- **The booking form draws its bottom alert and Save slot without the shared actions primitive
+  (2026-10-14, A551 review).** `packages/bookings/src/dashboard/booking-form.ts` keeps a
+  `p.error[role=alert]` and its footer button where the Forms contract in
+  `docs/developers/design-system.md` names `wt-form-actions`. The base at
+  `9e40be28237ebdd9eac90a92da9e96b977d8f590` has that same arrangement. Next: use the shared
+  actions primitive while retaining the single correction sentence, keyboard submission and
+  draft/save behavior. A551's focused validation and axe cases pass with the retained arrangement.
+
 - **A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).**
   `clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
   (`apps/server/src/table-removal.ts:93`) has already removed them through `leaveMerges`; with

@@ -284,7 +284,7 @@ describe("booking-form", () => {
     expect(fired).toBe(false);
   });
 
-  it("clears the validation alert as soon as a field changes", async () => {
+  it("clears the validation alert when the last invalid field is corrected", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     await setInput(el, "booking-date", "2026-08-20");
     await setInput(el, "booking-time", "20:00");

@@ -74,7 +74,13 @@ describe.each([
       await validExceptName(el);
       el.tableRefusal = "table.in_joined_table";
       await el.updateComplete;
+      const phone = field(el, "contact-phone");
+      await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+      await phone.updateComplete;
+      phone.focus();
+      expect(el.shadowRoot!.activeElement).toBe(phone);
       await save(el);
+      await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "contact-name"));
       expect(bottom(el)).toBe(sentence);
       expect(field(el, "contact-name").error).toBe(nameError);
       expect(el.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
@@ -100,6 +106,11 @@ describe.each([
       }
       expect(bottom(el)).toBe("");
       await change(el, "booking-date", "");
+      const phone = field(el, "contact-phone");
+      await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+      await phone.updateComplete;
+      phone.focus();
+      expect(el.shadowRoot!.activeElement).toBe(phone);
       await save(el);
       expect(field(el, "booking-date").error).toBe(dateError);
       expect(field(el, "booking-time").error).toBe(timeError);

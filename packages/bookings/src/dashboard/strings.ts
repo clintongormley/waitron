@@ -93,10 +93,6 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
     en: "Choose a table to seat this booking",
     es: "Elige una mesa para sentar esta reserva",
   },
-  "booking.fields_required": {
-    en: "Fill in the date, time, party size and name",
-    es: "Rellena la fecha, la hora, los comensales y el nombre",
-  },
   "booking.party_invalid": {
     en: "Party size must be a whole number of 1 or more",
     es: "Los comensales deben ser un número entero de 1 o más",
