@@ -8,9 +8,8 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
-import { periodColourTokens } from "./period-colour-styles.js";
-import { SEASON_TINTS, seasonTints, seasonTintTokens } from "./season-tint.js";
-import { CALENDAR_COLOURS } from "../hours-types.js";
+import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
+import { SEASON_TINT_TOKENS, seasonTints } from "./season-tint.js";
 import { t } from "./strings.js";
 
 type Department = OpeningHoursModel["departments"][number];
@@ -22,16 +21,17 @@ export type PeriodRow =
 const at = encodeURIComponent;
 
 const swatchColours = unsafeCSS(
-  CALENDAR_COLOURS.map(
-    (colour) =>
-      `wt-data-table::part(colour-${colour}) { background: var(${periodColourTokens(colour).fill}); }`,
-  ).join("\n"),
+  Object.entries(PERIOD_COLOUR_TOKENS)
+    .map(([colour, { fill }]) => `wt-data-table::part(colour-${colour}) { background: ${fill}; }`)
+    .join("\n"),
 );
 const chipTints = unsafeCSS(
-  SEASON_TINTS.map((tint) => {
-    const tokens = seasonTintTokens(tint);
-    return `wt-data-table::part(tint-${tint}) { background: var(${tokens.tint}); color: var(${tokens.onTint}); border-color: var(${tokens.line}); }`;
-  }).join("\n"),
+  Object.entries(SEASON_TINT_TOKENS)
+    .map(
+      ([tint, { tint: fill, onTint, line }]) =>
+        `wt-data-table::part(tint-${tint}) { background: ${fill}; color: ${onTint}; border-color: ${line}; }`,
+    )
+    .join("\n"),
 );
 
 /** The period list of mockup 6: every active department's periods, grouped under it. Cell markup
