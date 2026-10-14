@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { hashPassword, persons } from "@waitron/identity";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { registerSif } from "@waitron/fiscal-verifactu/src/registro-sif.js";
+
 import { establishDormantAllocation } from "@waitron/fiscal-verifactu/src/standby-allocation.js";
 import { activateAuthenticatedDormantAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";

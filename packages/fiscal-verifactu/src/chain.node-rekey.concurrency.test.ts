@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
@@ -7,7 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
-import { currentSif, registerSif } from "./registro-sif.js";
+import { currentSif } from "./registro-sif.js";
 import { VerifactuBackend } from "./backend.js";
 import {
   addTillToNode,

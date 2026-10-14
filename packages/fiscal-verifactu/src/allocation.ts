@@ -19,7 +19,7 @@ import {
   type AllocationRefusal,
   type AllocationValidation,
 } from "./allocation-envelope.js";
-import { WAITRON_ID_SISTEMA } from "./provisioning.js";
+import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
@@ -394,7 +394,7 @@ async function activate(
     nodeId: node.nodeId,
     nif: validated.allocation.taxpayerNif,
     idSistemaInformatico: validated.allocation.softwareId,
-    numeroInstalacion: sql`${validated.allocation.installationIdentity}`,
+    numeroInstalacion: validated.allocation.installationIdentity,
   });
   await tx
     .insert(cadenas)

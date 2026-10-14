@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
-import { registerSif } from "./registro-sif.js";
+
 import * as standby from "./standby-allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import {
@@ -130,7 +131,9 @@ describe("persisting a named spare's dormant paper allocation", () => {
       await rows("registro_sif"),
       await rows("cadenas"),
       await rows("invoice_series"),
-      await rows("contadores_instalacion"),
+      await suite.db.execute(
+        sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+      ).rows,
       await rows("fiscal_allocations"),
     ];
     const proof = evidence();
@@ -153,7 +156,9 @@ describe("persisting a named spare's dormant paper allocation", () => {
       await rows("registro_sif"),
       await rows("cadenas"),
       await rows("invoice_series"),
-      await rows("contadores_instalacion"),
+      await suite.db.execute(
+        sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+      ).rows,
       await rows("fiscal_allocations"),
     ]).toEqual(active);
   });

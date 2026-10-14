@@ -1,8 +1,9 @@
+import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import type { Database } from "@waitron/db";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../../src/modules.js";
 import { venueModuleConfig } from "../../../src/provision.js";
 

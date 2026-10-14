@@ -900,3 +900,17 @@ passed 133 cases; the unedited golden and immutability pair passed 20. These exp
 select the prepared hooks explicitly. No default, schema, allocator or existing assertion
 was changed. Approve the listed ports or retain the old contract and revise the prepared
 hooks before the coupled default/text/counter transition. Earlier approvals stand.
+
+
+### W41s-4 default/text transition, 2026-10-14
+
+The branch now selects the prepared fiscal lifecycle hooks, stores supplied SIF identities as
+text and removes the local installation counter. `scripts/fiscal-allocation-migration.test.ts`
+checks a sampled real record and chain through the product migrator, and checks a deliberately
+orphaned key both with and without the migration's integrity assertion. It does not cover every
+historical row, a complete cold-box journey or the final regeneration after rebase.
+
+Two existing setup checks are outside the approved lists. The exact proposals and retained
+checks are in [the setup-check request](../superpowers/plans/2026-10-14-w41s4-setup-check-approval.md).
+They pass only in a disposable installed candidate; the feature retains those failures. Host
+consumer ports and final qualification remain incomplete. This branch is not for publication.

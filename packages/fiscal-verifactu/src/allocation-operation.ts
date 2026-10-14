@@ -15,7 +15,7 @@ import {
   activateAuthenticatedAllocation,
   activateAuthenticatedDormantAllocation,
 } from "./allocation.js";
-import { WAITRON_ID_SISTEMA } from "./provisioning.js";
+import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { ActivationResult } from "./schema/allocations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";

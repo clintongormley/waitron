@@ -314,8 +314,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **2026-10-14, hook-contract ports approved and qualified on the branch:** the owner
   approved the [seven remaining return-field and refusal-code ports](superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
   Their tests select the prepared hooks explicitly, compare complete signed reservations and
-  persisted series, and check malformed carriers with valid preparation. The default-hook,
-  text-SIF and counter-retirement transition remains coupled work before publication.
+  persisted series, and check malformed carriers with valid preparation.
+  **2026-10-14, unpublished default/text transition:** the branch now selects prepared seed,
+  restore and standby hooks, stores text SIF identities and removes the local installation counter.
+  Real-record migration and orphan controls pass. Two setup checks await the
+  [exact approval request](superpowers/plans/2026-10-14-w41s4-setup-check-approval.md);
+  remaining host consumer ports, final regeneration and the full gates still precede publication.
   New keys now have stored issue-date/four-character names, shown in the handover language
   with the secret and in canonical form in selected-copy restore
   output. Printed recovery packs and the backup chooser's name display remain Task 6 work.

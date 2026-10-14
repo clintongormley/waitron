@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
@@ -30,7 +31,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
+import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";

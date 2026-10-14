@@ -1,12 +1,12 @@
 // Side-effect only: registers this package's error codes on the shared `ErrorParams` registry.
 import "./errors.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
-import { contadoresInstalacion, registroSif } from "./schema/sif.js";
+import { registroSif } from "./schema/sif.js";
 
 /**
  * AEAT caps `IdSistemaInformatico` at two characters (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`).
@@ -27,11 +27,17 @@ function assertUsableIdSistema(value: string): void {
   }
 }
 
+function assertSuppliedInstallation(value: unknown): asserts value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 30)
+    throw new AppError("sif.allocation_invalid", { reason: "installation_invalid" });
+}
+
 export interface RegisterSifParams {
   nodeId: NodeId;
   /** The obligado tributario's NIF. Half of the SIF identity, with IdSIF and NºInstalación. */
   nif: string;
   idSistemaInformatico: string;
+  numeroInstalacion: string;
 }
 
 export interface SifRegistration {
@@ -39,64 +45,9 @@ export interface SifRegistration {
   nodeId: NodeId;
   nif: string;
   idSistemaInformatico: string;
-  numeroInstalacion: number;
+  numeroInstalacion: string;
   registradoEn: Date;
   revocadoEn: Date | null;
-}
-
-/**
- * Allocates the next installation number for (NIF, IdSIF) — the upstream node's counter.
- *
- * `insert … on conflict … do update … returning` is a single statement, so the read of
- * `proximo_numero` and the write of its successor cannot be separated, and one write transaction
- * runs on the venue file at a time.
- *
- * The UNIQUE index `registro_sif_instalacion_uq` on `registro_sif` (nif, id_sistema_informatico,
- * numero_instalacion) remains the actual never-reused guarantee — this is the allocator, not the
- * guard. A manual INSERT, a data-fix script, or a second, differently-written implementation of
- * this function all bypass the allocator, and none of them bypass the index.
- */
-async function mintNumeroInstalacion(
-  tx: Transaction,
-  nif: string,
-  idSistemaInformatico: string,
-): Promise<number> {
-  const [row] = await tx
-    .insert(contadoresInstalacion)
-    .values({ nif, idSistemaInformatico, proximoNumero: 2 })
-    .onConflictDoUpdate({
-      target: [contadoresInstalacion.nif, contadoresInstalacion.idSistemaInformatico],
-      set: { proximoNumero: sql`${contadoresInstalacion.proximoNumero} + 1` },
-    })
-    .returning({ proximoNumero: contadoresInstalacion.proximoNumero });
-
-  // `INSERT ... ON CONFLICT ... DO UPDATE` always inserts or updates exactly one row and always
-  // returns it. Guarded only so `row.proximoNumero` type-checks without a cast.
-  /* v8 ignore start */
-  if (row === undefined) {
-    throw new Error("contadores_instalacion: mint returned no row");
-  }
-  /* v8 ignore stop */
-
-  // RETURNING yields the row AFTER the increment, so the number this caller may use is the one
-  // before it.
-  return row.proximoNumero - 1;
-}
-
-/**
- * Reserve — but do not register — the next installation number for (NIF, IdSIF). The single-writer
- * counter bump `registerSif` performs, exposed on its own so the PRIMARY can allocate a standby's
- * number and hand it down in the adopt bundle (the primary is the sole allocator per NIF; a
- * standby's DB is a copy and must never mint). The standby persists the returned number via
- * `writeReservedSif` on ITS database — it never touches `contadores_instalacion`. Returns the number
- * the caller may use (the pre-increment value); the number is permanently consumed, and a
- * never-promoted standby simply burns it — gaps are permitted.
- */
-export function reserveInstallationNumber(
-  tx: Transaction,
-  params: { nif: string; idSistemaInformatico: string },
-): Promise<number> {
-  return mintNumeroInstalacion(tx, params.nif, params.idSistemaInformatico);
 }
 
 /**
@@ -135,10 +86,11 @@ export async function writeReservedSif(
     nodeId: NodeId;
     nif: string;
     idSistemaInformatico: string;
-    numeroInstalacion: number;
+    numeroInstalacion: string;
   },
 ): Promise<{ id: string }> {
   assertUsableIdSistema(params.idSistemaInformatico);
+  assertSuppliedInstallation(params.numeroInstalacion);
 
   const [inserted] = await tx
     .insert(registroSif)
@@ -161,26 +113,12 @@ export async function writeReservedSif(
   return { id: inserted.id };
 }
 
-/**
- * Register a node, or re-register a reimaged one. Always mints a fresh number.
- *
- * Re-registration is IMPLICIT rather than gated behind an `allowReRegistration` flag. A wiped node
- * has no local state to distinguish itself with, so it cannot pass such a flag truthfully, and
- * upstream cannot tell a reimaged node from a mistakenly-duplicated one. Since minting a fresh
- * number is always safe and reusing one never is, the safe branch is the only branch — which is
- * what "correct by construction" means here. A flag would move the decision to a caller who does
- * not have the information to make it.
- *
- * Runs against the upstream node's database, where `contadores_instalacion`'s single writer
- * lives — so a node cannot be provisioned offline, deliberately: provisioning is an admin action
- * performed once, not a mid-service event, and an already-registered node still sells
- * indefinitely offline.
- */
 export async function registerSif(
   tx: Transaction,
   params: RegisterSifParams,
 ): Promise<SifRegistration> {
   assertUsableIdSistema(params.idSistemaInformatico);
+  assertSuppliedInstallation(params.numeroInstalacion);
 
   // Retire any live identity for this node first, so the partial unique index
   // (registro_sif_activo_uq) has room for the new one. The old row is never updated beyond this
@@ -191,11 +129,7 @@ export async function registerSif(
     .set({ revocadoEn: now() })
     .where(and(eq(registroSif.nodeId, params.nodeId), isNull(registroSif.revocadoEn)));
 
-  const numeroInstalacion = await mintNumeroInstalacion(
-    tx,
-    params.nif,
-    params.idSistemaInformatico,
-  );
+  const numeroInstalacion = params.numeroInstalacion;
 
   const [inserted] = await tx
     .insert(registroSif)
@@ -228,12 +162,6 @@ export async function registerSif(
   };
 }
 
-/**
- * The node's live SIF identity. Throws `sif.not_registered` rather than returning null — every
- * caller needs one, and the concrete encoding of "a node cannot be provisioned offline": an
- * unprovisioned node gets a structured refusal that reaches a screen translatable, never a
- * locally invented number.
- */
 export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRegistration> {
   const [row] = await tx
     .select({

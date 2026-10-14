@@ -1,8 +1,9 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { deployment, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
-import { ALLOCATED_FISCAL_STANDBY, currentSif, registerSif } from "@waitron/fiscal-verifactu";
+import { ALLOCATED_FISCAL_STANDBY, currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";

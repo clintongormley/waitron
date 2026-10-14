@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { describe, expect, it } from "vitest";
 import { and, eq, isNotNull } from "drizzle-orm";
 import {
@@ -21,7 +22,7 @@ import {
   readProductEditor,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { VerifactuBackend, registerSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";

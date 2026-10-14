@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, tenantCredentials } from "@waitron/credentials";
@@ -19,7 +20,7 @@ import { allocationFixture } from "../test/allocation-fixture.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
-import { ID_SISTEMA_MAX_LENGTH, currentSif, registerSif } from "./registro-sif.js";
+import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
 
 // The installation-number counter never resets, so each case relies on the helper's per-test reset
 // to start from an empty `contadores_instalacion`.
@@ -42,6 +43,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await seedTenants(db);
+  await db.insert(deployment).values({ id: 1, environment: "preproduction" });
 });
 
 describe("WAITRON_ID_SISTEMA", () => {
@@ -57,13 +59,23 @@ describe("FISCAL_PROVISIONING.seed", () => {
   });
 
   it("registers the node as a SIF under the taxpayer's own tax id and the product's software id", async () => {
-    const report = await withTransaction(db, (tx) => seed.run(tx, NODE));
+    const fixture = allocationFixture({
+      node: NODE,
+      bases: [
+        { code: "FA", purpose: "standard" },
+        { code: "RF", purpose: "rectificative" },
+      ],
+      identity: "S000001",
+    });
+    const report = await fixture.transaction(db, "setup", (tx, operation) =>
+      seed.run(tx, NODE, operation),
+    );
     const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(sif.nif).toBe("89890001K"); // seedTenants' tax_id for TENANT_A, never an argument
     expect(sif.idSistemaInformatico).toBe(WAITRON_ID_SISTEMA);
-    expect(sif.numeroInstalacion).toBe(1);
+    expect(sif.numeroInstalacion).toBe("S000001");
     expect(report).toContain(sif.id);
-    expect(report).toContain("installation 1");
+    expect(report).toContain("installation S000001");
   });
 
   it("refuses to seed a database with no taxpayer row, loudly and without a domain code", async () => {
@@ -75,10 +87,16 @@ describe("FISCAL_PROVISIONING.seed", () => {
   });
 
   it("re-seeding an existing node mints a fresh installation number and a new chain", async () => {
-    await withTransaction(db, (tx) => seed.run(tx, NODE));
-    await withTransaction(db, (tx) => seed.run(tx, NODE));
+    const bases = [
+      { code: "FA", purpose: "standard" },
+      { code: "RF", purpose: "rectificative" },
+    ];
+    const initial = allocationFixture({ node: NODE, bases, identity: "S000001" });
+    const recovery = allocationFixture({ node: NODE, bases, identity: "P000042" });
+    await initial.transaction(db, "setup", (tx, operation) => seed.run(tx, NODE, operation));
+    await recovery.transaction(db, "re-register", (tx, operation) => seed.run(tx, NODE, operation));
     const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
-    expect(sif.numeroInstalacion).toBe(2);
+    expect(sif.numeroInstalacion).toBe("P000042");
     const head = await db.execute<{ h: string | null }>(
       sql`select ultima_huella as h from cadenas where node_id = ${TENANT_A.nodeId}`,
     );
@@ -88,8 +106,13 @@ describe("FISCAL_PROVISIONING.seed", () => {
 
 describe("allocated fiscal standby contract", () => {
   beforeEach(async () => {
-    await db.insert(deployment).values({ id: 1, environment: "preproduction" });
-    await withTransaction(db, (tx) => seed.run(tx, NODE));
+    await withTransaction(db, (tx) =>
+      registerSif(tx, {
+        nodeId: NODE.nodeId,
+        nif: "89890001K",
+        idSistemaInformatico: WAITRON_ID_SISTEMA,
+      }),
+    );
     await db.insert(invoiceSeries).values([
       { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard" },
       { nodeId: TENANT_A.nodeId, code: "RF", purpose: "rectificative" },

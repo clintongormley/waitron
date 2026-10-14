@@ -1,8 +1,9 @@
+import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 // One provisioned venue for the suites that run the one-shot operator scripts. Provisioned through
 // `planVenue` + `applyVenue`, so the fiscal ids were minted the way a real box mints them.
 import { openVenueDatabase } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 
 export interface TestVenue {

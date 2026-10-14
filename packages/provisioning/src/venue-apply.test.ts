@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -226,10 +226,10 @@ describe("applyVenue", () => {
     expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
 
     // registro_sif.nif came from the tenant's tax_id, never an argument.
-    const sif = await suite.db.execute<{ nif: string; numero_instalacion: number }>(sql`
+    const sif = await suite.db.execute<{ nif: string; numero_instalacion: string }>(sql`
       select nif, numero_instalacion from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
     expect(sif.rows[0]?.nif).toBe("B12345678");
-    expect(sif.rows[0]?.numero_instalacion).toBeGreaterThanOrEqual(1);
+    expect(sif.rows[0]?.numero_instalacion).toBe("S000001");
     expect(result.seeded).toEqual([
       {
         module: "catalogue",
@@ -530,7 +530,11 @@ describe("applyVenue", () => {
       const series = await suite.db.execute<{ code: string }>(
         sql`select code from invoice_series order by code`,
       );
-      expect(series.rows).toEqual([{ code: "A" }, { code: "FF" }, { code: "R" }]);
+      expect(series.rows).toEqual([
+        { code: "A-S000001" },
+        { code: "FF-S000001" },
+        { code: "R-S000001" },
+      ]);
     });
   });
 
@@ -806,17 +810,12 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      [
-        "tenants",
-        "locations",
-        "nodes",
-        "invoice_series",
-        "registro_sif",
-        "contadores_instalacion",
-      ].map((table) => [
-        table,
-        suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
-      ]),
+      ["tenants", "locations", "nodes", "invoice_series", "registro_sif", "fiscal_allocations"].map(
+        (table) => [
+          table,
+          suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
+        ],
+      ),
     );
     const changed = request("B55664422");
     Object.assign(changed.location, { [field]: value });

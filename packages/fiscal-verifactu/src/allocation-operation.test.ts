@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
@@ -21,7 +22,7 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envelope.js";
 import { establishDormantAllocation } from "./standby-allocation.js";
-import { registerSif } from "./registro-sif.js";
+
 import { fiscalReservations } from "./schema/reservations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });

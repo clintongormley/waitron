@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { Hono } from "hono";
 import { persons, hashPassword } from "@waitron/identity";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
@@ -25,7 +26,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   ALLOCATED_FISCAL_STANDBY,
   createPaperAllocationPreparation,
-  registerSif,
 } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";

@@ -124,7 +124,7 @@ export async function seedFiscalParents(
     nodeId: ids.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WAITRON01",
-    numeroInstalacion,
+    numeroInstalacion: String(numeroInstalacion),
   });
   return ids;
 }

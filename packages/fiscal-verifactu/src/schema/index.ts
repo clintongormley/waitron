@@ -7,7 +7,7 @@ export { envioFlujo } from "./envio-flujo.js";
 export { envios } from "./envios.js";
 export { filingCaseEvents, filingCases } from "./filing-cases.js";
 export { registrosFacturacion } from "./registros.js";
-export { contadoresInstalacion, registroSif } from "./sif.js";
+export { registroSif } from "./sif.js";
 
 export { fiscalAllocations } from "./allocations.js";
 export { fiscalReservations } from "./reservations.js";

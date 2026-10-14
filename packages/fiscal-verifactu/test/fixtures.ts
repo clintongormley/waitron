@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
@@ -13,7 +14,7 @@ import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
-import { registerSif } from "../src/registro-sif.js";
+
 import type { Entorno } from "../src/registro-row.js";
 import { nifWithControlLetter } from "../src/testing/seed.js";
 
@@ -97,7 +98,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     nodeId: TENANT_A.nodeId,
     nif: "89890001K",
     idSistemaInformatico: "WAITRON01",
-    numeroInstalacion: 1,
+    numeroInstalacion: "1",
   });
 }
 

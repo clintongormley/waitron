@@ -13,10 +13,4 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("envios", "ledger", LEDGER),
   classify("envio_flujo", "ledger", LEDGER),
   classify("acks", "ledger", LEDGER),
-
-  classify(
-    "contadores_instalacion",
-    "state",
-    "shared per-NIF installation counter; copied to a standby, never drained back (a stale counter would re-mint an installation number and fork the chain)",
-  ),
 ];

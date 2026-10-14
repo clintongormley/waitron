@@ -1,3 +1,4 @@
+import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -236,7 +237,7 @@ it("rejects a replacement key before the real restore hook can activate anything
 
 it("uses the fiscal restore hook with node-key authentication without recreating its series", async () => {
   await withTransaction(suite.db, (tx) =>
-    allocation.registerSif(tx, {
+    seedFixtureSif(tx, {
       nodeId: node.nodeId,
       nif: "89890001K",
       idSistemaInformatico: "W1",

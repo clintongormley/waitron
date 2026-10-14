@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
-import { registerSif } from "./registro-sif.js";
+
 import { registroSif } from "./schema/sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import * as fiscal from "./index.js";
@@ -116,7 +117,11 @@ beforeEach(async () => {
 describe("a dormant standby allocation checked against stored venue facts", () => {
   it("returns the reserved identities without writing a SIF, chain, series, activation or counter", async () => {
     const before = (await suite.db.execute(sql`select * from registro_sif`)).rows;
-    const counters = (await suite.db.execute(sql`select * from contadores_instalacion`)).rows;
+    const counters = (
+      await suite.db.execute(
+        sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+      )
+    ).rows;
     const chains = (await suite.db.execute(sql`select * from cadenas`)).rows;
     const series = await suite.db.select().from(invoiceSeries);
     const input = signed();
@@ -126,9 +131,13 @@ describe("a dormant standby allocation checked against stored venue facts", () =
       reservation: input.reservation.payload,
     });
     expect((await suite.db.execute(sql`select * from registro_sif`)).rows).toEqual(before);
-    expect((await suite.db.execute(sql`select * from contadores_instalacion`)).rows).toEqual(
-      counters,
-    );
+    expect(
+      (
+        await suite.db.execute(
+          sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+        )
+      ).rows,
+    ).toEqual(counters);
     expect((await suite.db.execute(sql`select * from cadenas`)).rows).toEqual(chains);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);

@@ -20,12 +20,12 @@ export const MAX_BASE_CODE_LENGTH =
  */
 export function deriveReservedSeriesCodes(
   bases: readonly { code: string; purpose: string }[],
-  numeroInstalacion: number,
+  numeroInstalacion: string,
 ): { code: string; purpose: string }[] {
   return bases.map((s) => ({ code: `${s.code}-${numeroInstalacion}`, purpose: s.purpose }));
 }
 
-export function stripOwnSuffixes(code: string, registered: ReadonlySet<string | number>): string {
+export function stripOwnSuffixes(code: string, registered: ReadonlySet<string>): string {
   const suffixes = new Set([...registered].map(String));
   let base = code;
   for (;;) {

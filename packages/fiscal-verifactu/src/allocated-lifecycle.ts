@@ -1,7 +1,7 @@
 import "./errors.js";
 import { readTenant, type Transaction } from "@waitron/db";
 import type { ModuleOperationInput, NodeSeed, ProvisionedNode, RestoreHook } from "@waitron/module";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readModuleAllocationSeries } from "./allocation-operation.js";
 import { currentSif } from "./registro-sif.js";
@@ -28,7 +28,22 @@ export const ALLOCATED_FISCAL_SEED: NodeSeed = {
       throw new Error("fiscal seed: tenants is empty, so there is no taxpayer to file under");
     return activate(tx, node, operation, ["setup", "re-register"]);
   },
-  series: { resolve: readModuleAllocationSeries },
+  series: {
+    async resolve(tx, node, bases) {
+      try {
+        return await readModuleAllocationSeries(tx, node, bases);
+      } catch (error) {
+        // Provisioning refuses a retry whose requested bases differ from the committed setup.
+        if (
+          isAppError(error) &&
+          hasCode(error, "sif.allocation_invalid") &&
+          error.params.reason === "series_mismatch"
+        )
+          return [];
+        throw error;
+      }
+    },
+  },
 };
 
 export const ALLOCATED_FISCAL_RESTORE: RestoreHook = async (tx, node, operation) => {

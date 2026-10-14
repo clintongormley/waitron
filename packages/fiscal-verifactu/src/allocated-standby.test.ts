@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,7 +12,7 @@ import { locationId, nodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
-import { registerSif } from "./registro-sif.js";
+
 import { registroSif } from "./schema/sif.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
@@ -129,7 +130,11 @@ async function rows() {
     sif: await suite.db.select().from(registroSif),
     series: await suite.db.select().from(invoiceSeries),
     chains: (await suite.db.execute(sql`select * from cadenas`)).rows,
-    counters: (await suite.db.execute(sql`select * from contadores_instalacion`)).rows,
+    counters: (
+      await suite.db.execute(
+        sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+      )
+    ).rows,
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
   };

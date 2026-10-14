@@ -1,3 +1,4 @@
+import { seedFixtureSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -566,7 +567,7 @@ describe("allocation activation checks inside the venue transaction", () => {
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: "ZZ",
-      numeroInstalacion: 99,
+      numeroInstalacion: "99",
     });
     expect(await validate()).toEqual({ ok: false, reason: "software_mismatch" });
   });
@@ -576,7 +577,7 @@ describe("allocation activation checks inside the venue transaction", () => {
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: candidate.softwareId,
-      numeroInstalacion: 99,
+      numeroInstalacion: "99",
     });
     const before = await suite.db.select().from(registroSif);
     expect(await validate(allocation, approval, { ...context, softwareId: "ZZ" })).toEqual({
@@ -753,7 +754,7 @@ describe("atomic allocation activation", () => {
       nodeId: node.nodeId,
       nif: candidate.taxpayerNif,
       idSistemaInformatico: candidate.softwareId,
-      numeroInstalacion: 99,
+      numeroInstalacion: "99",
     });
     const before = await activationSnapshot();
     await suite.db.execute(
@@ -940,7 +941,7 @@ describe("replay scope and history", () => {
 describe("activation over retained fiscal rows", () => {
   it("retains the old record and identity while retiring its series and resetting only the head", async () => {
     const old = await withTransaction(suite.db, (tx) =>
-      fiscal.registerSif(tx, {
+      seedFixtureSif(tx, {
         nodeId: node.nodeId,
         nif: candidate.taxpayerNif,
         idSistemaInformatico: candidate.softwareId,

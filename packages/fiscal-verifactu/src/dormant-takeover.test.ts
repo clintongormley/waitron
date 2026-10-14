@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { locationId } from "@waitron/shared";
 import { withOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
-import { registerSif } from "./registro-sif.js";
+
 import { establishDormantAllocation } from "./standby-allocation.js";
 import * as activation from "./allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -167,7 +168,9 @@ async function activeRows() {
     await rows("cadenas"),
     await rows("invoice_series"),
     await rows("fiscal_allocations"),
-    await rows("contadores_instalacion"),
+    await suite.db.execute(
+      sql`select name from sqlite_master where name = 'contadores_instalacion'`,
+    ).rows,
   ];
 }
 

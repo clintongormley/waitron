@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,7 +21,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   ALLOCATED_FISCAL_STANDBY,
   createPaperAllocationPreparation,
-  registerSif,
 } from "@waitron/fiscal-verifactu";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";

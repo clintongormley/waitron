@@ -1,3 +1,4 @@
+import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { invoiceSeries, locations, newId, nodes, sales, type Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -9,7 +10,7 @@ import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { cadenas } from "../src/schema/cadenas.js";
 import { registroSif } from "../src/schema/sif.js";
-import { currentSif, registerSif } from "../src/registro-sif.js";
+import { currentSif } from "../src/registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "../src/registro-row.js";
 import type { Entorno, RegistroRow } from "../src/registro-row.js";
 import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
@@ -441,7 +442,7 @@ export async function seedIndependentChain(
     nodeId,
     nif,
     idSistemaInformatico: "INDEP",
-    numeroInstalacion: 1,
+    numeroInstalacion: "1",
   });
 
   const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
@@ -498,7 +499,7 @@ export async function seedPinnedChain(
     nodeId,
     nif: seeded.nif,
     idSistemaInformatico: "WT",
-    numeroInstalacion: pinnedInstallationSequence,
+    numeroInstalacion: String(pinnedInstallationSequence),
   });
   await db.insert(cadenas).values({ nodeId });
 

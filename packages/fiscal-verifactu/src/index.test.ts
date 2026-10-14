@@ -5,7 +5,8 @@ import {
   FISCAL_MIGRATIONS,
   FISCAL_VOCABULARY,
   cadenas,
-  contadoresInstalacion,
+  fiscalAllocations,
+  activateAllocation,
   currentSif,
   envios,
   esPrimerRegistro,
@@ -25,7 +26,7 @@ describe("package public surface (./index.js)", () => {
   it("re-exports FISCAL_MIGRATIONS and every owned table from the package root", () => {
     expect(FISCAL_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_fiscal");
     expect(getTableName(cadenas)).toBe("cadenas");
-    expect(getTableName(contadoresInstalacion)).toBe("contadores_instalacion");
+    expect(getTableName(fiscalAllocations)).toBe("fiscal_allocations");
     expect(getTableName(envios)).toBe("envios");
     expect(getTableName(registroSif)).toBe("registro_sif");
     expect(getTableName(registrosFacturacion)).toBe("registros_facturacion");
@@ -33,6 +34,7 @@ describe("package public surface (./index.js)", () => {
 
   it("re-exports the registration surface (registerSif, currentSif, esPrimerRegistro) from the package root", () => {
     expect(typeof registerSif).toBe("function");
+    expect(typeof activateAllocation).toBe("function");
     expect(typeof currentSif).toBe("function");
     expect(typeof esPrimerRegistro).toBe("function");
   });

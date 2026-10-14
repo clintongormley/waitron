@@ -954,3 +954,28 @@ Next: replace default seed/restore/standby hooks together with text SIF/counter 
 all remaining consumers. Rebase and regenerate the final migrations, repeat the populated upgrade,
 check the Cloud operator contract, and complete both FULL reviews, the normal hook, current-head
 CI and authorised landing. Task 4 remains incomplete; this checkpoint is not for publication.
+
+
+**2026-10-14 default/text transition checkpoint:** the unpublished branch now selects the
+prepared fiscal seed, restore and standby hooks together with text SIF storage and removal of
+`contadores_instalacion`. Registration requires an explicit supplied text identity. Seven new
+checks failed on the previous defaults and pass with this transition. The package run passed
+1,485 cases; the final audit also restored the original human `FA-2026` suffix controls after an
+overly broad fixture replacement and passed the 39 affected cases. The protected golden hash and
+immutability files remain unedited.
+
+The new root migration suite ran the generated rebuild through `applyMigrations` over an actual
+fiscal record and initially failed at the parent drop. Deferring foreign keys and checking for
+violations lets that sampled record and its complete chain survive. An intentionally changed SIF
+key fails the integrity CHECK and retains the old rows and journal; deleting the CHECK in a copied
+migration allows that orphan to commit. These are sampled migration controls, not a complete
+restored-box qualification or a final regenerated-on-main receipt.
+
+The existing venue-application suite passes 41 cases and retains two failing contracts outside
+the exact approved lists. The [setup-check request](2026-10-14-w41s4-setup-check-approval.md)
+proposes a complete text-identity report matcher and preservation of the generic phantom-series
+regression with a non-owning test seed. Both proposed changes are qualified only in an independent
+installed candidate. No feature-tree change to those two checks is authorised by this checkpoint.
+Remaining host input and numeric-counter consumer ports, the Cloud contract check, current-main
+regeneration, complete upgrade qualification, both FULL reviews, the hook and current-head CI
+remain. Do not publish this incomplete default-switch candidate.

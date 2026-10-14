@@ -1,10 +1,11 @@
+import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
-import { registerSif } from "./registro-sif.js";
+
 import {
   altaFor,
   seedNodesForSifContention,
@@ -156,30 +157,26 @@ describe("appendToChain from many callers started together", () => {
   });
 });
 
-describe("registerSif's installation-number counter, from many callers started together", () => {
-  // 20 DISTINCT nodes of ONE obligado (one shared NIF), each registered exactly once: registering
-  // the SAME node twice races a different hazard (registro_sif_activo_uq). This isolates the
-  // (NIF, IdSistemaInformatico) counter's own allocation.
-  //
-  // Weaker than its name: the twenty transactions are serialised by the venue file's write queue,
-  // so this proves twenty distinct, strictly increasing numbers for twenty callers — not that the
-  // allocator survives a true overlap, which this engine cannot stage.
-  it("mints 20 distinct, strictly increasing installation numbers across many nodes of one obligado", async () => {
+describe("supplied SIF identities from many callers started together", () => {
+  it("persists the complete set of 20 supplied identities across distinct nodes", async () => {
     const fixture = await seedNodesForSifContention(suite.db, WRITERS);
     const results = await Promise.all(
-      fixture.nodeIds.map((nodeId) =>
+      fixture.nodeIds.map((nodeId, index) =>
         withTransaction(suite.db, (tx) =>
           registerSif(tx, {
             nodeId,
             nif: fixture.nif,
             idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
+            numeroInstalacion: `P${String(index + 1).padStart(6, "0")}`,
           }),
         ),
       ),
     );
 
-    const numbers = results.map((r) => r.numeroInstalacion).sort((a, b) => a - b);
-    expect(numbers).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
+    const numbers = results.map((r) => r.numeroInstalacion).sort();
+    expect(numbers).toEqual(
+      Array.from({ length: WRITERS }, (_, i) => `P${String(i + 1).padStart(6, "0")}`),
+    );
     expect(new Set(numbers).size).toBe(WRITERS);
   });
 });

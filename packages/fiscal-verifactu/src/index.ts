@@ -14,13 +14,7 @@ export {
   validateAeatCert,
   type AeatCert,
 } from "./provisioning-secret.js";
-export {
-  cadenas,
-  contadoresInstalacion,
-  envios,
-  registroSif,
-  registrosFacturacion,
-} from "./schema/index.js";
+export { cadenas, envios, registroSif, registrosFacturacion } from "./schema/index.js";
 export { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
 export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
@@ -36,14 +30,11 @@ export type {
 } from "./registro-row.js";
 export { verifyChain } from "./verify.js";
 
-export {
-  FISCAL_RESTORE,
-  installationFloor,
-  raiseInstallationFloor,
-  restoreFiscal,
-} from "./restore.js";
+export { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
 export { FISCAL_CLASSIFICATION } from "./classification.js";
+export { fiscalAllocations } from "./schema/allocations.js";
+export { activateAllocation } from "./allocation.js";
 export { drawEmergencyIdentity, validateAllocationEnvelope } from "./allocation-envelope.js";
 export type {
   AllocationContext,

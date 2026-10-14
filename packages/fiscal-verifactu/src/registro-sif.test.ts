@@ -1,23 +1,21 @@
+import { seedFixtureSif } from "../test/sif-fixture.js";
 import {
   UNIQUE_VIOLATION,
   captureError,
   refusalOn,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { currentSif, esPrimerRegistro, registerSif, writeReservedSif } from "./registro-sif.js";
+import { currentSif, esPrimerRegistro, writeReservedSif } from "./registro-sif.js";
 import { registroSif } from "./schema/sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 
-// ONE database for the suite, emptied by the helper after every test. The counter under test is
-// monotonic and never resets, so a case that shares another case's counter makes every assertion
-// about "strictly greater" depend on execution order; the per-test reset empties
-// `contadores_instalacion` with every other data table.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -45,30 +43,43 @@ beforeEach(async () => {
   await seedTenants(db);
 });
 
+async function registerSif(
+  tx: Transaction,
+  params: {
+    nodeId: Parameters<typeof seedFixtureSif>[1]["nodeId"];
+    nif: string;
+    idSistemaInformatico: string;
+  },
+) {
+  const retained = tx.execute<{ n: number }>(
+    sql`select count(*) as n from registro_sif where nif = ${params.nif} and id_sistema_informatico = ${params.idSistemaInformatico}`,
+  ).rows[0]!.n;
+  const supplied = ["S000001", "P000042", "P000043"][retained]!;
+  return seedFixtureSif(tx, { ...params, numeroInstalacion: supplied });
+}
+
 describe("registerSif", () => {
-  it("mints an installation number on first registration", async () => {
+  it("persists the supplied identity on first registration", async () => {
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
-    expect(reg.numeroInstalacion).toBe(1);
+    expect(reg.numeroInstalacion).toBe("S000001");
     expect(reg.nif).toBe("89890001K");
     expect(reg.revocadoEn).toBeNull();
   });
 
-  it("mints strictly increasing numbers across tills of one obligado", async () => {
+  it("persists distinct supplied identities across tills of one obligado", async () => {
     const first = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
     const second = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId2 }),
     );
-    expect(second.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
+    expect(first.numeroInstalacion).toBe("S000001");
+    expect(second.numeroInstalacion).toBe("P000042");
   });
 
-  it("counts per (NIF, IdSIF), not globally", async () => {
-    // A SIF is identified by NIF + IdSIF + NºInstalación, so the counter is scoped to the first
-    // two. A global counter would still be correct but would leak one obligado's till count to
-    // another, and would make the number needlessly large.
+  it("permits the same supplied identity under a different taxpayer", async () => {
     await withTransaction(db, (tx) => registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }));
     const other = await withTransaction(db, (tx) =>
       registerSif(tx, {
@@ -77,7 +88,7 @@ describe("registerSif", () => {
         nodeId: TENANT_B.nodeId,
       }),
     );
-    expect(other.numeroInstalacion).toBe(1);
+    expect(other.numeroInstalacion).toBe("S000001");
   });
 
   it("never reuses a number after a reimage", async () => {
@@ -91,9 +102,7 @@ describe("registerSif", () => {
     const after = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
-    // Strictly greater, and explicitly NOT equal — `toBeGreaterThan` alone would pass if the
-    // implementation returned NaN, and equality is the specific thing forbidden.
-    expect(after.numeroInstalacion).toBeGreaterThan(before.numeroInstalacion);
+    expect(after.numeroInstalacion).toBe("P000042");
     expect(after.numeroInstalacion).not.toBe(before.numeroInstalacion);
     expect(after.id).not.toBe(before.id);
   });
@@ -107,10 +116,10 @@ describe("registerSif", () => {
     await withTransaction(db, (tx) => registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }));
     const rows = await db.execute<{
       id: string;
-      numero_instalacion: number;
+      numero_instalacion: string;
       revocado_en: Date | null;
     }>(
-      sql`select id, numero_instalacion, revocado_en from registro_sif order by numero_instalacion`,
+      sql`select id, numero_instalacion, revocado_en from registro_sif order by revocado_en is null, numero_instalacion`,
     );
     expect(rows.rows).toHaveLength(2);
     expect(rows.rows[0]?.id).toBe(before.id);
@@ -118,15 +127,15 @@ describe("registerSif", () => {
     expect(rows.rows[1]?.revocado_en).toBeNull();
   });
 
-  it("mints again after a third registration, never returning to a burned number", async () => {
-    const seen: number[] = [];
+  it("persists all three supplied identities without reuse", async () => {
+    const seen: string[] = [];
     for (let i = 0; i < 3; i += 1) {
       const reg = await withTransaction(db, (tx) =>
         registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
       );
       seen.push(reg.numeroInstalacion);
     }
-    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(seen).toEqual(["S000001", "P000042", "P000043"]);
     expect(new Set(seen).size).toBe(seen.length);
   });
 
@@ -161,7 +170,7 @@ describe("writeReservedSif", () => {
         ...SIF_PARAMS,
         idSistemaInformatico: "WTX",
         nodeId: TENANT_A.nodeId,
-        numeroInstalacion: 7,
+        numeroInstalacion: "7",
       }),
     ).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AppError);
@@ -199,7 +208,8 @@ describe("re-registration begins a new chain", () => {
     const second = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
-    expect(second.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
+    expect(first.numeroInstalacion).toBe("S000001");
+    expect(second.numeroInstalacion).toBe("P000042");
 
     const head = await db.execute<{
       secuencia: number;

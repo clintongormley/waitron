@@ -64,6 +64,49 @@ export interface VenueResult {
   seeded: readonly SeedReport[];
 }
 
+async function assertActionOrder(actions: readonly VenueAction[], db: Database): Promise<void> {
+  let tenant = false;
+  let location = false;
+  let node = false;
+  let administrator = false;
+  for (const action of actions) {
+    switch (action.kind) {
+      case "ensure-tenant":
+        tenant = true;
+        break;
+      case "create-location":
+        if (!tenant) throw new Error("applyVenue: create-location before ensure-tenant");
+        location = true;
+        break;
+      case "create-node":
+        if (!location) throw new Error("applyVenue: create-node before create-location");
+        node = true;
+        break;
+      case "seed-module":
+        if (!node) throw new Error("applyVenue: seed-module before create-node");
+        break;
+      case "create-series":
+        if (!node) throw new Error("applyVenue: create-series before create-node");
+        break;
+      case "seed-admin":
+        administrator = true;
+        break;
+      case "seed-device-profiles":
+        if (!administrator) {
+          const [existing] = await db
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.role, "admin"))
+            .limit(1);
+          if (existing === undefined)
+            throw new Error("applyVenue: seed-device-profiles before seed-admin");
+        }
+        break;
+    }
+  }
+  if (!node) throw new Error("applyVenue: plan is missing create-node");
+}
+
 export async function applyVenue(
   suppliedActions: readonly VenueAction[],
   deps: VenueApplyDeps,
@@ -74,6 +117,7 @@ export async function applyVenue(
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
+  await assertActionOrder(actions, deps.db);
   const inputs = new Map(
     [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
   );
@@ -84,8 +128,13 @@ export async function applyVenue(
   );
   const filingModule = actions.find((action) => action.kind === "create-node")?.filingModule;
   const seriesOwners = modules.filter((module) => module.provisioning?.seed?.series);
-  if (seriesOwners.length > 1 || seriesOwners.some((module) => module.fiscal?.id !== filingModule))
+  if (seriesOwners.length > 1)
     throw new Error("applyVenue: only the filing module may own initial series");
+  if (seriesOwners.some((module) => module.fiscal?.id !== filingModule)) {
+    const [existing] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
+    if (existing !== undefined) throw new AppError("provisioning.second_venue", {});
+    throw new Error("applyVenue: only the filing module may own initial series");
+  }
   const seriesOwner = seriesOwners[0];
   if (
     seriesOwner !== undefined &&
