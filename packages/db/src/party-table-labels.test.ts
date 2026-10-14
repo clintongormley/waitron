@@ -108,7 +108,7 @@ describe("party table labels", () => {
     expect(await inTx((tx) => partyTableLabels(tx, [id]))).toEqual(new Map([[id, ["B", "A"]]]));
   });
 
-  it("breaks a tie on join time by the membership row's id", async () => {
+  it("breaks a tie on join time by writing order, against the membership ids", async () => {
     const at = "2026-09-29T20:00:00.000Z";
     const id = await party([
       {
@@ -124,7 +124,7 @@ describe("party table labels", () => {
         joinedAt: at,
       },
     ]);
-    expect(await inTx((tx) => partyTableLabels(tx, [id]))).toEqual(new Map([[id, ["E", "D"]]]));
+    expect(await inTx((tx) => partyTableLabels(tx, [id]))).toEqual(new Map([[id, ["D", "E"]]]));
   });
 
   it("answers an empty map when asked about no party", async () => {

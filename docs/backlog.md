@@ -2362,15 +2362,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the `productId` check may leave them green. **Next action:** delete it and see; if they stay
   green, give the line a real `menuItemId` too.
 
-- **Five reads of a party's tables still break a `joined_at` tie by the membership's random id**:
-  `partyTableLabels` (`packages/db/src/party-table-labels.ts`), `partyZone` and `memberTables`
-  (`apps/server/src/parties.ts`), and one read each in `apps/server/src/watch-zones.ts` and
-  `apps/server/src/working-order.ts`. Tables that join a party in one millisecond — merge members
-  joined in a loop by `seatMergeMembers` or `joinMergeMembers` (`apps/server/src/floor-today-merges.ts`)
-  can — are listed in a random order, while the Orders screen's
-  `readPartyTables` breaks the same tie by `rowid`. **Next action:** the same `rowid` tie-break, with
-  a test whose ids sort against the writing order. Left open by A533.
-
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 

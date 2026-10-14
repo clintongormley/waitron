@@ -48,7 +48,7 @@ export async function partyTableLabels(
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, partyTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   const listedGroups = new Set<string>();
   for (const row of rows) {
     if (row.joinName !== null) {

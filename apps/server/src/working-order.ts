@@ -7545,7 +7545,7 @@ async function readSeatedParties(
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
     .where(and(isNull(partyTables.leftAt), eq(diningTables.locationId, locationId)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   const partyIds = [...new Set(members.map((member) => member.partyId))];
   const labels = await partyTableLabels(tx, partyIds);
   const bills = await readBillsOfParties(tx, partyIds);
