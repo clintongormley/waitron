@@ -4225,6 +4225,20 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   counts `NoSuchKey` as deleted; share them, deciding whether the bucket stream takes those checks
   too.
 
+- **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
+  `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
+  `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`:
+  (1) a request to an S3 API outside the receipt's list is caught only once Amazon S3 has answered
+  it (the observer runs after the call, and the store may retry it), so it is detected, not
+  prevented; the simplify review proposed refusing it before it is sent — decide before Task 10's
+  live run; (2) the archive round trip proves download and decryption from the pack alone
+  (`downloadArchive`, `decryptArtifactFile`), not a full `waitron-restore restore --from-archive`
+  placement against Amazon S3; (3) the delete scenario's "a failing listing is recorded" case uses
+  a stand-in backend, so that failure no longer runs through the real S3 storage code; (4) the
+  step-name checks compare against hand-written lists, so a step added later is not caught;
+  (5) the bucket-settings setup and the setup/teardown block are repeated across the four
+  `*.aws-rehearsal.test.ts` files and the local loop and pause tests — share them.
+
 - **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
   `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
   `aws-stream-pause.aws-rehearsal.test.ts`: (1) `ctx.bucketPolicy.put(document)` accepts any policy
