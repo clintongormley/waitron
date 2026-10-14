@@ -733,6 +733,32 @@ describe("the staff roles page", () => {
     expect(rowKeys()).toEqual(["role-w"]);
   });
 
+  it("keeps the delete question open when asked to close while its delete is in flight, then closes it on success", async () => {
+    let answer!: (impact: DeleteImpact) => void;
+    const request = await mount(
+      fakeRequest(() => [waiter, runner], {
+        [`DELETE ${BASE}/role-r`]: () => new Promise<DeleteImpact>((resolve) => (answer = resolve)),
+      }),
+    );
+    const reads = () =>
+      request.mock.calls.filter(([path, method]) => path === BASE && (method ?? "GET") === "GET")
+        .length;
+    await choose("delete-role-r");
+    confirmDelete().click();
+    await settle();
+    deleteDialog()!.dispatchEvent(
+      new CustomEvent("wt-close", { detail: {}, bubbles: true, composed: true }),
+    );
+    await settle();
+    expect(deleteDialog()).not.toBeNull();
+    expect(deleteDialog()!.submitting).toBe(true);
+    const before = reads();
+    answer(impactOf(runner));
+    await settle();
+    expect(deleteDialog()).toBeNull();
+    expect(reads()).toBe(before + 1);
+  });
+
   it.each(["answers", "is refused"] as const)(
     "drops a delete that %s after the page was taken out",
     async (outcome) => {

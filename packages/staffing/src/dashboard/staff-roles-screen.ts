@@ -316,7 +316,7 @@ export class StaffRolesScreen extends LitElement {
         }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          this.#closeDelete();
+          if (!this.deleting?.busy) this.#closeDelete();
         }}
       ></wt-delete-dialog>`,
     );
