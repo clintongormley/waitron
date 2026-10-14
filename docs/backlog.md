@@ -5314,12 +5314,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   passing. Add a second-location draft case that fails without the clause, or establish by running
   the real writers that it is redundant before removing it. Its necessity remains unverified.
 
-- **`priceOrderLines`' call to `fillBlankLocalesWithStaffName` no longer changes what prints** —
-  left open by A497. A new line's variant text is now frozen in the default content language
-  first, so the call alters a value only when the variant's staff name is nothing but spaces, and
-  then from empty text to those spaces (`apps/server/src/working-order.ts`). **Next action:** delete the call,
-  and the helper in `packages/catalogue/src/product-presentation.ts` with its test.
-
 - **The till's status for an original whose printer was deleted uses the error code's sentence**
   ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose
   the wording. Left open by A435 step 2.

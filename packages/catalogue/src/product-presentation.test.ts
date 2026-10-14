@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import {
   staffPresentationName,
   customerPresentationText,
-  fillBlankLocalesWithStaffName,
   joinCustomerPresentationText,
   kitchenPresentationName,
   type ProductPresentation,
@@ -110,15 +109,5 @@ describe("kitchenPresentationName", () => {
     const plain = { ...full, variantName: null, variantKitchenName: null };
     expect(kitchenPresentationName(plain)).toBe("COF");
     expect(kitchenPresentationName({ ...plain, kitchenName: " " })).toBe("Coffee");
-  });
-});
-
-describe("fillBlankLocalesWithStaffName", () => {
-  test("gives each blank locale the staff name and keeps every stored text as it is", () => {
-    expect(fillBlankLocalesWithStaffName({ en: "Large cup", es: "  ", fr: "" }, "Large")).toEqual({
-      en: "Large cup",
-      es: "Large",
-      fr: "Large",
-    });
   });
 });

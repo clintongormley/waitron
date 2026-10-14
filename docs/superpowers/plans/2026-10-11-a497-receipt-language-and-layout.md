@@ -1,5 +1,9 @@
 # A497: Receipt Language Chosen at the Till, and the Printed Layout — Implementation Plan
 
+> **2026-10-14, A612:** The variant-text loop now uses `defaultLanguageDescriptions` alone.
+> The subsequent `fillBlankLocalesWithStaffName` call and helper are retired; see
+> [the current frozen-name contract](../../developers/products.md#what-a-sold-line-freezes).
+
 > **2026-10-12, A493:** Product issuance uses the department receipt description. The old receipt editors are retired; the department dialog owns decoration and Venue details owns receipt language. Earlier contracts below are historical.
 > See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
 

@@ -125,9 +125,10 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's
-  (the parent's) kitchen name. A variant with no customer text in any language stores its own staff
-  name, never the parent's (`customerPresentationText`,
-  `packages/catalogue/src/product-presentation.ts`).
+  (the parent's) kitchen name. A variant with no customer text in any language resolves its own
+  staff name, never the parent's (`customerPresentationText`,
+  `packages/catalogue/src/product-presentation.ts`). A staff name containing only spaces resolves
+  to empty customer entries; the receipt still takes its separately frozen `variant_name`.
   Keeping both sets is what lets a report group variant lines under their parent.
   An extras item naming a variant freezes a composed pair from the published offer instead
   (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`); its child line carries

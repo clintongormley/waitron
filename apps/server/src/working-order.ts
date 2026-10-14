@@ -132,7 +132,6 @@ import {
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
-  fillBlankLocalesWithStaffName,
   effectiveProductColumns,
   kitchenPresentationName,
   parentJoin,
@@ -720,9 +719,8 @@ export async function priceOrderLines(
   ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
-  // A new line's customer text and unit are frozen in the default content language; the
-  // descriptions keep the location's receipt languages as their keys. A variant's blank text takes
-  // the variant's own staff name, never the parent's.
+  // Keep the location's receipt-language keys while freezing each name in the default content
+  // language, so a later language change cannot alter a saved line's text.
   for (const line of gross.lines) {
     line.descriptions = defaultLanguageDescriptions(
       line.descriptions,
@@ -730,13 +728,10 @@ export async function priceOrderLines(
       contentConfig.defaultLanguage,
     );
     if (line.variantDescriptions != null) {
-      line.variantDescriptions = fillBlankLocalesWithStaffName(
-        defaultLanguageDescriptions(
-          line.variantDescriptions,
-          invoiceLocales,
-          contentConfig.defaultLanguage,
-        ),
-        line.variantName ?? "",
+      line.variantDescriptions = defaultLanguageDescriptions(
+        line.variantDescriptions,
+        invoiceLocales,
+        contentConfig.defaultLanguage,
       );
     }
     if (line.unitName != null) {

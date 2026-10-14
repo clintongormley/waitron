@@ -9309,6 +9309,73 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
+  it.each([
+    { staffName: "125 ml", customerName: null, frozen: "125 ml", printed: "125 ml" },
+    { staffName: "  ", customerName: null, frozen: "", printed: "  " },
+    {
+      staffName: "125 ml",
+      customerName: { [LOCALE]: "Copa pequeña", "en-GB": "Small glass" },
+      frozen: "Copa pequeña",
+      printed: "Copa pequeña",
+    },
+    {
+      staffName: "125 ml",
+      customerName: { [LOCALE]: "  ", "fr-FR": "Petit verre" },
+      frozen: "Petit verre",
+      printed: "Petit verre",
+    },
+  ])(
+    "freezes resolved variant text $frozen and retains the receipt name after a live rename",
+    async ({ staffName, customerName, frozen, printed }) => {
+      const { cfg, zoneId, catalogueId } = await setupVenue();
+      const locales = [LOCALE, "en-GB"];
+      const twoLocales = { ...cfg, invoiceLocales: locales };
+      const orderId = randomUUID();
+      const seen = await withTransaction(db, async (tx) => {
+        await tx
+          .update(locations)
+          .set({ invoiceLocales: locales })
+          .where(eq(locations.id, cfg.locationId));
+        const wine = await seedWine(tx, twoLocales, catalogueId);
+        await tx
+          .update(products)
+          .set({ name: staffName, customerName })
+          .where(eq(products.id, wine.wine125));
+        await publishWorkingMenu(tx, catalogueId);
+        await createOpenOrder(
+          tx,
+          twoLocales,
+          orderId,
+          [{ menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" }],
+          null,
+          { zoneId },
+        );
+        await tx
+          .update(products)
+          .set({ name: "Renamed", customerName: { [LOCALE]: "Nuevo nombre" } })
+          .where(eq(products.id, wine.wine125));
+        const [stored] = await tx
+          .select({ variantDescriptions: workingOrderLines.variantDescriptions })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        const { gross, identities } = await readStoredOrder(tx, orderId);
+        return {
+          stored: stored!.variantDescriptions,
+          receipt: ticketLinesFrom(gross, identities).map((line) => line.descriptions),
+        };
+      });
+      expect(seen).toEqual({
+        stored: { [LOCALE]: frozen, "en-GB": frozen },
+        receipt: [
+          {
+            [LOCALE]: `Vino de la casa (${printed})`,
+            "en-GB": `Vino de la casa (${printed})`,
+          },
+        ],
+      });
+    },
+  );
+
   it("stores a variant's text in another language in each invoice locale when the default content language has none", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const locales = [LOCALE, "en-GB"];
