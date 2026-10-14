@@ -57,10 +57,12 @@ export class PlaceholderFit implements ReactiveController {
 
   hostConnected(): void {
     document.fonts.addEventListener("loadingdone", this.#fontsLoaded);
+    this.host.requestUpdate();
   }
 
   hostUpdated(): void {
-    // An update queued before the host was removed still finishes after it.
+    // An update requested before the host was removed still runs after hostDisconnected; anything
+    // it started watching would never be stopped.
     if (this.#resize || !this.host.isConnected) return;
     const field = this.#field();
     if (!field) return;

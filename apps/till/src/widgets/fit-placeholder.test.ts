@@ -119,12 +119,38 @@ describe("PlaceholderFit", () => {
     expect(attached.observersOf(field)).toBe(0);
   });
 
+  it("listens for fonts and watches the field again when its host is put back", async () => {
+    const attached = watchAttachments();
+    const { el, host } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
+      text: "Mesa 1",
+    });
+    const field = el.shadowRoot!.querySelector("wt-input")!;
+
+    host.remove();
+    document.body.append(host);
+    await el.updateComplete;
+    await measured();
+    await el.updateComplete;
+
+    expect(attached.fontListeners()).toBe(1);
+    expect(attached.observersOf(field)).toBe(1);
+  });
+
   it("fits the placeholder to a field first drawn on a later update", async () => {
     const text = "Counter 1, Counter 2, Counter 3, Counter 4";
     const { el } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
       text,
       showField: false,
     });
+    const errors: string[] = [];
+    const record = (event: ErrorEvent) => errors.push(event.message);
+    addEventListener("error", record);
+    try {
+      document.fonts.dispatchEvent(new Event("loadingdone"));
+    } finally {
+      removeEventListener("error", record);
+    }
+    expect(errors).toEqual([]);
 
     el.showField = true;
     await el.updateComplete;
