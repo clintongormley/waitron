@@ -18,6 +18,7 @@ import {
 } from "./allocation-identity.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import { withEmergencyAttempt } from "./emergency-attempt.js";
 
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -149,6 +150,7 @@ export function createEmergencyAllocationPreparation(configuration: {
             "approval",
             "knownIdentities",
             "uncertaintyRecorded",
+            "attempts",
           ]) ||
           prior.version !== 1
         )
@@ -171,25 +173,33 @@ export function createEmergencyAllocationPreparation(configuration: {
         if (!isAllocatedSeries(allocation.series, allocation.installationIdentity, requiredBases))
           refuse("series_mismatch");
         // A reconstructed draw can only replay an exact locally committed activation.
-        return createAllocationPreparation(async (request) => ({
-          ...request,
-          evidence: {
-            allocationId: allocation.allocationId,
-            priorActivation: "committed",
-            requiredBases,
-            incidentEvidence: current.incidentEvidence as string,
-            authority: {
-              kind: "emergency",
-              draw: {
-                identity: allocation.installationIdentity,
-                checksum: installationChecksum(allocation.installationIdentity) ?? "",
+        const consumption = { ...prior };
+        delete consumption.attempts;
+        return withEmergencyAttempt(
+          incidentDirectory,
+          join(incidentDirectory, `${key}.json`),
+          consumption,
+          () =>
+            createAllocationPreparation(async (request) => ({
+              ...request,
+              evidence: {
+                allocationId: allocation.allocationId,
+                priorActivation: "committed",
+                requiredBases,
+                incidentEvidence: current.incidentEvidence as string,
+                authority: {
+                  kind: "emergency",
+                  draw: {
+                    identity: allocation.installationIdentity,
+                    checksum: installationChecksum(allocation.installationIdentity) ?? "",
+                  },
+                  knownIdentities,
+                  incidentRecorded: true,
+                  uncertaintyRecorded: current.uncertaintyRecorded as boolean,
+                },
               },
-              knownIdentities,
-              incidentRecorded: true,
-              uncertaintyRecorded: current.uncertaintyRecorded as boolean,
-            },
-          },
-        })).prepare({ ...held, input: { allocation, approval } }, run);
+            })).prepare({ ...held, input: { allocation, approval } }, run),
+        );
       }
       let draw = drawEmergencyIdentity();
       while (knownIdentities?.includes(draw.identity)) draw = drawEmergencyIdentity();
@@ -232,7 +242,7 @@ export function createEmergencyAllocationPreparation(configuration: {
       if (readOperationAuthority(held.authority, held.binding) === undefined)
         refuse("reauthentication_required");
       // This record stays consumed if activation fails; no saved draw grants authority on a retry.
-      await consume(incidentDirectory, key, {
+      const consumption = {
         version: 1,
         binding: held.binding,
         operatorId: operator.operatorId,
@@ -240,17 +250,24 @@ export function createEmergencyAllocationPreparation(configuration: {
         approval: verdict.approval,
         knownIdentities,
         uncertaintyRecorded: current.uncertaintyRecorded,
-      });
-      return createAllocationPreparation(async (request) => ({
-        ...request,
-        evidence: {
-          allocationId: allocation.allocationId,
-          authority,
-          priorActivation: "none",
-          requiredBases,
-          incidentEvidence: current.incidentEvidence as string,
-        },
-      })).prepare({ ...held, input: { allocation, approval: verdict.approval } }, run);
+      };
+      await consume(incidentDirectory, key, { ...consumption, attempts: [] });
+      return withEmergencyAttempt(
+        incidentDirectory,
+        join(incidentDirectory, `${key}.json`),
+        consumption,
+        () =>
+          createAllocationPreparation(async (request) => ({
+            ...request,
+            evidence: {
+              allocationId: allocation.allocationId,
+              authority,
+              priorActivation: "none",
+              requiredBases,
+              incidentEvidence: current.incidentEvidence as string,
+            },
+          })).prepare({ ...held, input: { allocation, approval: verdict.approval } }, run),
+      );
     },
   };
 }

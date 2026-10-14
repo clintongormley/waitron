@@ -80,6 +80,24 @@ identity and live series. A restored old backup lacking that local result refuse
 the retained file cannot authorise a new activation. Use `uncertain` when you cannot establish
 the earlier outcome. That state refuses activation and leaves the record consumed.
 
-The collector retains the consumption record; recording each later attempt's result in your
-incident history and the complete operator confirmation and handover remain part of the
-unfinished Task 6 procedure. No network service or subscription supplies authority to this path.
+Each incident record also holds an `attempts` list. Before calling activation, the collector
+retains a fresh attempt ID and start time with `outcome: "started"`. It records `"returned"`
+after the callback returns, or `"threw"` after it throws. These words describe the callback;
+`"threw"` does not establish that every local change rolled back. Exception messages and
+parameters are not copied into this record.
+
+If the process stops before retaining the result, that attempt stays `"started"`. Check the
+outside event and the exact local result before declaring the earlier activation committed.
+A missing result does not release the consumed name. If the outside result cannot be retained,
+the collector refuses success; the staged archive and prepared-stream paths publish their
+trading settings only after the collector returns.
+
+The collector updates the record under an exclusive per-event `.lock` file and publishes a
+flushed `.next` file by renaming it over the record, then flushing the incident directory. A
+crash can leave either helper behind. Leave that event consumed and use a fresh event and
+identity when you cannot reconcile it. The collector refuses a locked event or malformed or
+oversized history instead of truncating or replacing it. Retain these files with the incident;
+do not remove them to spend the same name again.
+
+The complete operator confirmation and handover remain part of the unfinished Task 6
+procedure. No network service or subscription supplies authority to this path.

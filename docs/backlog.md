@@ -325,8 +325,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the public recovery record and separate key. Paper recovery has a checked export from signed
   block/consumption files and separate current outside evidence; the host rereads that evidence
   at restart. Emergency recovery has a candidate host collector with a separately configured outside journal,
-  fresh draws, conservative consumption and exact committed-result replay. Focused archive and
-  prepared-stream restart cases pass; paper-only operator handover and the complete interrupted
+  fresh draws, conservative consumption and exact committed-result replay. Its outside incident
+  retains each callback's start and returned or thrown result; missing result storage refuses
+  trading-settings publication. Focused archive and prepared-stream restart cases and a process
+  killed inside its callback pass; paper-only operator handover and the complete interrupted
   activation exercise remain unqualified;
   automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence/fencing, the complete offline

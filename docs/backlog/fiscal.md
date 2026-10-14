@@ -1074,3 +1074,16 @@ prepared-stream restart qualification uses this export and rereads current outsi
 retirement or consumption elsewhere after staging still refuses activation. This does not finish
 the emergency operator handover, later attempt outcomes or the full interruption exercise. The
 restaurant-friendly first-setup custodian design remains A679's separate scope.
+
+
+**2026-10-14 emergency-attempt checkpoint (candidate only):** the outside incident retains a
+fresh attempt ID and start time before the activation callback, then its returned or thrown
+result. An unfinished entry says nothing about whether the local transaction committed. Result
+storage refusal stops the staged archive and prepared-stream paths before trading settings are
+published; qualification includes a locally committed activation with that publication blocked.
+A child killed inside the callback leaves its unfinished entry. The journal keeps earlier entries
+and consumed identities under an exclusive per-event lock and refuses corrupt or oversized
+history. Exception messages and parameters are omitted. See the current
+[emergency procedure](../developers/emergency-recovery.md) for the record and lock-file meanings.
+The operator handover, keep-identity path and complete interruption and first-sale exercise
+remain unfinished; the prior two checkpoints describe their captured versions.
