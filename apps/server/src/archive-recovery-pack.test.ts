@@ -66,9 +66,9 @@ describe("archive recovery pack", () => {
 
   it("decodes a downloaded file whose translated lines surround the token", () => {
     const file = [
-      "Paquete de recuperación de las copias archivadas de Waitron.",
+      "Paquete de recuperación de las copias de Waitron",
       "Guarda este archivo en secreto: abre las copias archivadas del local.",
-      "Para restaurar, sigue «A restore takes one of three sources» en deploy/README.md.",
+      "Para restaurar en una caja nueva una copia archivada, sigue «A restore takes one of three sources» en deploy/README.md.",
       "",
       encodeArchiveRecoveryPack(pack()),
       "",

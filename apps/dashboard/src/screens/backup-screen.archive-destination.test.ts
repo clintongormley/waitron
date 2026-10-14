@@ -1428,7 +1428,7 @@ describe("another S3-compatible bucket", () => {
 const PACK_LINE = "WAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ";
 
 const PACK_FILE_EN = [
-  "Waitron archive recovery pack.",
+  "Waitron archive recovery pack",
   "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
   "Keep the previous pack while you still want to restore archives made before it was replaced.",
   "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
@@ -1439,11 +1439,11 @@ const PACK_FILE_EN = [
 ].join("\n");
 
 const PACK_FILE_ES = [
-  "Paquete de recuperación de las copias de Waitron.",
+  "Paquete de recuperación de las copias de Waitron",
   "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
   "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
   "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
-  "Para restaurar una copia archivada en una caja nueva, sigue «A restore takes one of three sources» en deploy/README.md.",
+  "Para restaurar en una caja nueva una copia archivada, sigue «A restore takes one of three sources» en deploy/README.md.",
   "",
   PACK_LINE,
   "",
@@ -1508,7 +1508,7 @@ describe("recovery pack", () => {
     ["es", PACK_FILE_ES],
     ["en", PACK_FILE_EN],
   ] as const)(
-    "downloads a file in the owner's language (%s) around the pack's code line",
+    "downloads a file in the dashboard's language (%s) around the pack's code line",
     async (locale, file) => {
       const before = currentLocale();
       try {

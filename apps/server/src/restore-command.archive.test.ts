@@ -311,7 +311,7 @@ async function fixture(pack: ArchiveRecoveryPack = PACK): Promise<Fixture> {
   await writeFile(join(f.bucketDir, KEY), artifactBytes);
   await writeFile(
     f.packPath,
-    `Waitron archive recovery pack.\nKeep this file secret.\n\n${encodeArchiveRecoveryPack(pack)}\n`,
+    `Paquete de recuperación de las copias de Waitron\nSigue «A restore takes one of three sources» en deploy/README.md.\n\n${encodeArchiveRecoveryPack(pack)}\n`,
   );
   current = f;
   return f;

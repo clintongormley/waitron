@@ -54,8 +54,8 @@ function token(pack: ArchiveRecoveryPack): string {
 }
 
 /**
- * The pack's code line alone; the dashboard writes the file's explanatory lines around it in the
- * owner's language. Refuses a pack {@link decodeArchiveRecoveryPack} would refuse.
+ * The pack's code line alone; the dashboard writes the file's explanatory lines above it in the
+ * dashboard's language. Refuses a pack {@link decodeArchiveRecoveryPack} would refuse.
  */
 export function encodeArchiveRecoveryPack(pack: ArchiveRecoveryPack): string {
   const line = token(pack);
