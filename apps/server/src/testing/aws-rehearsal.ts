@@ -285,6 +285,8 @@ export interface AwsRehearsal {
   reserveObjects(count: number): void;
   trackChild(pid: number): void;
   trackUpload(key: string, uploadId: string): void;
+  /** The unfinished multipart uploads in `bucket` under `prefix`, an issued prefix or a path below one. */
+  ownedUploads(prefix: string): Promise<TrackedUpload[]>;
   record(event: unknown): void;
   /** Acts on `bucket` alone; `put` takes only a listing-denial document (`assertListingDenial`). */
   bucketPolicy: {
@@ -1271,6 +1273,48 @@ async function runOwned<T>(
         );
       }
       uploads.push({ key, uploadId });
+    },
+    async ownedUploads(prefix) {
+      refuseOnceTearingDown();
+      if (![...issued].some((given) => prefix.startsWith(given))) {
+        throw new AwsRehearsalRefused(
+          "prefix-not-issued",
+          "list under a prefix from prefix(label) or a path below one",
+        );
+      }
+      const send = sender(client, "inventory", callDeps, signal);
+      const found: TrackedUpload[] = [];
+      for await (const listed of listPages<ListMultipartUploadsCommandOutput, UploadMarkers>(
+        (markers) =>
+          send(
+            new ListMultipartUploadsCommand({
+              Bucket: bucket,
+              Prefix: prefix,
+              ...(markers?.keyMarker === undefined ? {} : { KeyMarker: markers.keyMarker }),
+              ...(markers?.uploadIdMarker === undefined
+                ? {}
+                : { UploadIdMarker: markers.uploadIdMarker }),
+            }),
+            "ListMultipartUploads",
+          ),
+        ({ NextKeyMarker: keyMarker, NextUploadIdMarker: uploadIdMarker }) => ({
+          position: { keyMarker, uploadIdMarker },
+          seen: `${keyMarker ?? ""}\u0000${uploadIdMarker ?? ""}`,
+        }),
+        "ListMultipartUploads repeated its marker",
+      )) {
+        if (listed.error !== undefined) {
+          throw new AwsRehearsalFailed(
+            `ListMultipartUploads failed: ${receiptErrorName(nameOf(listed.error))}`,
+          );
+        }
+        for (const upload of listed.output?.Uploads ?? []) {
+          if (upload.Key !== undefined && upload.UploadId !== undefined) {
+            found.push({ key: upload.Key, uploadId: upload.UploadId });
+          }
+        }
+      }
+      return found;
     },
     // The scenario's own entries stay strict, so a refused one fails the scenario where it is made.
     record: (event) => log.record(event),
