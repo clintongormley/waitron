@@ -1462,10 +1462,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
 
     /** Sends a change on table 2, then opens table 3 before the server answers it. */
-    async function changeThenOpenTable3() {
+    async function changeThenOpenTable3(table2: TableState = openTable) {
       let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
       const { el, screen } = await openBurgerTab({
-        getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+        getTablesState: vi.fn().mockResolvedValue([table2, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve({
             lines: [orderId === "wo-8" ? otherLine : burgerLine],
@@ -1522,6 +1522,45 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
       expect(banner(el)!.textContent).toContain(
         "Tu cambio en Burger de la mesa 2 no se ha guardado. Algo salió mal, inténtalo de nuevo",
+      );
+    });
+
+    const terraza: TableState = {
+      ...openTable,
+      today: {
+        placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+        seats: 4,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable: null,
+        joined: null,
+        splitOffFrom: null,
+        zoneRevision: 1,
+        name: "Terraza",
+      },
+    };
+
+    it("names the old table by its name for today when the change was refused", async () => {
+      const { el, settle } = await changeThenOpenTable3(terraza);
+
+      settle.reject(new Error("unexpected"));
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        "Tu cambio en Burger de Terraza no se ha guardado. Algo salió mal, inténtalo de nuevo",
+      );
+    });
+
+    it("names the old table by its name for today when the server did not answer", async () => {
+      const { el, settle } = await changeThenOpenTable3(terraza);
+
+      settle.reject(new TypeError("Failed to fetch"));
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        "El servidor no ha respondido a tu cambio en Burger de Terraza. Abre esa mesa y comprueba si se ha guardado.",
       );
     });
 

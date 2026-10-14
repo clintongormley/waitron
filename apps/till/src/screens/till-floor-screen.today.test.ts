@@ -893,6 +893,18 @@ describe("till-floor-screen: today's names", () => {
     expect(splitWindow(el).name).toBe("Window table");
   });
 
+  it("the tray under the map names a renamed table with no place by today's name", async () => {
+    const el = await mount(
+      [counter4(seatedAt("Window", ["t4"]), { placement: null }), bar()],
+      stubApi(),
+    );
+    const token = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-table-token"]>(
+      "[data-tray-table=t4] wt-table-token",
+    )!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelector(".label")!.textContent!.trim()).toBe("Window");
+  });
+
   const seatTitle = async (el: TillFloorScreen) => {
     const seat = el.shadowRoot!.querySelector("till-seat-dialog")!;
     await seat.updateComplete;

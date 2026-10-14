@@ -770,8 +770,11 @@ export const en = {
     "{line} is no longer on this bill: it was changed on another device. The bill has been read again.",
   // `{line}`, `{table}` and `{reason}` are substituted at the call site; `t()` does not interpolate.
   "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
+  "table.change_not_saved_named": "Your change to {line} on {table} was not saved. {reason}",
   "table.change_unconfirmed":
     "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
+  "table.change_unconfirmed_named":
+    "The server did not answer your change to {line} on {table}. Open that table and check whether it was saved.",
   "table.change_not_saved_no_table": "Your change to {line} was not saved. {reason}",
   "table.change_unconfirmed_no_table":
     "The server did not answer your change to {line}. Open its table and check whether it was saved.",
@@ -1207,7 +1210,9 @@ export const en = {
     "The card refund of {amount} did not go through, so nothing was given back.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
+  "party.changed_named": "Another device changed {table}, so it has been reloaded.",
   "party.changed_tables": "The party is now at tables {tables}.",
+  "party.changed_tables_named": "The party is now at {tables}.",
   "party.changed_bills": "Its bills changed, and {amount} is left to pay.",
   "party.changed_gone": "The party is no longer at this table.",
   "party.changed_other": "Its items or bills were changed.",
@@ -2012,8 +2017,11 @@ export const es: Record<StringKey, string> = {
   "adjust.changed_line_gone":
     "{line} ya no está en esta cuenta: se ha cambiado en otro dispositivo. Se ha vuelto a leer la cuenta.",
   "table.change_not_saved": "Tu cambio en {line} de la mesa {table} no se ha guardado. {reason}",
+  "table.change_not_saved_named": "Tu cambio en {line} de {table} no se ha guardado. {reason}",
   "table.change_unconfirmed":
     "El servidor no ha respondido a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se ha guardado.",
+  "table.change_unconfirmed_named":
+    "El servidor no ha respondido a tu cambio en {line} de {table}. Abre esa mesa y comprueba si se ha guardado.",
   "table.change_not_saved_no_table": "Tu cambio en {line} no se ha guardado. {reason}",
   "table.change_unconfirmed_no_table":
     "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
@@ -2444,7 +2452,9 @@ export const es: Record<StringKey, string> = {
   "bill_refund.failed":
     "La devolución de {amount} con tarjeta no se completó, así que no se ha devuelto nada.",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",
+  "party.changed_named": "Otro dispositivo ha cambiado {table}, así que se ha vuelto a cargar.",
   "party.changed_tables": "Los clientes están ahora en las mesas {tables}.",
+  "party.changed_tables_named": "Los clientes están ahora en {tables}.",
   "party.changed_bills": "Sus cuentas han cambiado y quedan {amount} por pagar.",
   "party.changed_gone": "Los clientes ya no están en esta mesa.",
   "party.changed_other": "Se han cambiado sus artículos o cuentas.",

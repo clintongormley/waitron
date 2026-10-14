@@ -1493,7 +1493,7 @@ export class TillFloorScreen extends LitElement {
           }
         : table.status;
     return toFloorTable(
-      { id: table.id, label: table.label, seats: seatsFor(table) },
+      { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
         ...table,
         // The server reads a table no party holds as free; one needing clearing must not look ready to seat.

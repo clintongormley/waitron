@@ -1800,6 +1800,43 @@ describe("till-app: reads and refusals around the party", () => {
     );
   });
 
+  it("names the party's tables by their names for today when a stale refusal describes it", async () => {
+    const named = (name: string): TableState["today"] => ({
+      placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 1,
+      name,
+    });
+    const reads = floorThat(
+      [seated({ today: named("Window") }), { ...mesa9, today: named("Arch") }],
+      [
+        seated({ today: named("Window") }, { revision: 5, tableIds: ["t4", "t9"] }),
+        { ...mesa9, today: named("Arch") },
+      ],
+    );
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "move-guests", { toTableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "Another device changed Window, so it has been reloaded.",
+    );
+    expect(banner(el)!.textContent).toContain("The party is now at Window, Arch.");
+  });
+
   it("says the table changed, in general words, when a stale refusal names a party the floor did not show", async () => {
     const { el } = await mountApp({
       moveGuests: vi

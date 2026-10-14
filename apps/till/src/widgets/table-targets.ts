@@ -47,22 +47,25 @@ export function otherPartyRead(
   return { otherPartyId: seated.id, expectedOtherPartyRevision: seated.revision };
 }
 
-/** The shown names of the party's tables that `tables` lists, "Mesa 4, 5", a named group's once
+/** The shown names of the tables `ids` names that `tables` lists, a named group's once
  * (`partyTableLabels`, `packages/db/src/party-table-labels.ts`). */
-export function partyTablesLabel(party: TableParty, tables: readonly TableState[]): string {
+export function shownTableNames(ids: readonly string[], tables: readonly TableState[]): string[] {
   const listedGroups = new Set<string>();
-  return partyTablesName(
-    party.tableIds.flatMap((id) => {
-      const table = tables.find((each) => each.id === id);
-      if (table === undefined) return [];
-      const joinId = table.today?.joinId ?? null;
-      if (joinId !== null && table.today?.joinName != null) {
-        if (listedGroups.has(joinId)) return [];
-        listedGroups.add(joinId);
-      }
-      return shownUnder(table);
-    }),
-  );
+  return ids.flatMap((id) => {
+    const table = tables.find((each) => each.id === id);
+    if (table === undefined) return [];
+    const joinId = table.today?.joinId ?? null;
+    if (joinId !== null && table.today?.joinName != null) {
+      if (listedGroups.has(joinId)) return [];
+      listedGroups.add(joinId);
+    }
+    return shownUnder(table);
+  });
+}
+
+/** The shown names of the party's tables that `tables` lists, "Mesa 4, 5". */
+export function partyTablesLabel(party: TableParty, tables: readonly TableState[]): string {
+  return partyTablesName(shownTableNames(party.tableIds, tables));
 }
 
 /** The party's display name with its tables, "Ana (Mesa 4, 5)", or the tables alone for a party
