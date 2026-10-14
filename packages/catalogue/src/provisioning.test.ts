@@ -13,6 +13,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING } from "./provisioning.js";
 import { contentLanguages, menuDetails } from "./schema/menu.js";
+import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
 import { sections } from "./schema/sections.js";
 import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
@@ -95,6 +96,27 @@ describe("catalogue provisioning", () => {
       select default_product_vat_class from catalogue_settings where id = 1`);
     expect(stored.rows).toEqual([{ default_product_vat_class: "zero" }]);
   });
+
+  it("seeds the All products default colour as pale blue", async () => {
+    const node = await venue("ES", "Madrid", "es-ES");
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const settings = await withTransaction(suite.db, (tx) => readCatalogueSettings(tx));
+    expect(settings.defaultColor).toBe("#abcced");
+  });
+
+  it.each([null, "#edabab"])(
+    "keeps an authored All products default colour of %s when another node is seeded",
+    async (authored) => {
+      const node = await venue("ES", "Madrid", "es-ES");
+      const run = () =>
+        withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+      await run();
+      await withTransaction(suite.db, (tx) => saveCatalogueDefaultColor(tx, authored));
+      await run();
+      const settings = await withTransaction(suite.db, (tx) => readCatalogueSettings(tx));
+      expect(settings.defaultColor).toBe(authored);
+    },
+  );
 
   it.each([
     // A venue starts with its default language, the languages Waitron keeps enabled for its area,

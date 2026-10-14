@@ -789,7 +789,7 @@ describe("configuration transfer database path", () => {
       versions,
     );
     expect(transferred.tables.catalogue_settings).toEqual([
-      { id: 1, default_product_vat_class: "zero", default_color: null },
+      { id: 1, default_product_vat_class: "zero", default_color: "#abcced" },
     ]);
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
@@ -798,7 +798,7 @@ describe("configuration transfer database path", () => {
         importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
     });
     expect((await targetSuite.db.execute(sql`select * from catalogue_settings`)).rows).toEqual([
-      { id: 1, default_product_vat_class: "zero", default_color: null },
+      { id: 1, default_product_vat_class: "zero", default_color: "#abcced" },
     ]);
   });
 
