@@ -552,14 +552,6 @@ decision about the naming policy; this change adds no such restriction.
   box on screen at 390 px; the wider refused field and the placeholder's full stops were not
   re-checked.)
 
-## Closing a refusal's message now clears the outcome
-
-- Open, from #1368's review (read, not tested): closing a refusal's message now clears the
-  outcome, so a later save's "Saved …" message with its Undo can appear where before it stayed
-  hidden — the docs say so, but no test covers that case. And when the message closes (its ×, or
-  Undo replacing it), keyboard focus is not put back where it was, unlike the dashboard's alert
-  toast. Next: a test for the first, and return focus to the field the save came from.
-
 ## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,

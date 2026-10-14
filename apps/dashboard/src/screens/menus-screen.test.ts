@@ -7370,6 +7370,64 @@ it.each([
   },
 );
 
+it.each([
+  { locale: "en-GB", message: "Saved Lager's price override: €5.00.", undo: "Undo" },
+  {
+    locale: "es-ES",
+    message: "Guardado el precio propio de Lager: 5,00\u00a0€.",
+    undo: "Deshacer",
+  },
+])(
+  "A611 shows a later save and Undo after closing an earlier refusal in $locale",
+  async ({ locale, message, undo }) => {
+    const before = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(before));
+    const refused = deferred<void>();
+    const reread = deferred<MenuPriceRow[]>();
+    const client = api({ updateMenuItem: vi.fn().mockImplementationOnce(() => refused.promise) });
+    const el = await mountPrices(client);
+    client.getMenuPrices.mockImplementationOnce(() => reread.promise);
+    await commitPrice(el, "mi-burger", "11.00");
+    await commitPrice(el, "mi-lager", "5.00");
+    refused.reject({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(prices(el).outcome).toEqual({
+        kind: "refused",
+        save: burgerSave,
+        reason: codeMessage("connection.failed"),
+      }),
+    );
+    await prices(el).updateComplete;
+    const toast = prices(el).shadowRoot!.querySelector("wt-toast")!;
+    expect(priceUndo(el)).toBeNull();
+    await userEvent.click(toast.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!);
+    await vi.waitFor(() => expect(prices(el).outcome).toBeNull());
+    reread.resolve(
+      lunchPrices().map((row) =>
+        row.menuItemId === "mi-lager" ? { ...row, override: "5.00" } : row,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(prices(el).outcome).toEqual({
+        kind: "saved",
+        save: {
+          key: "mi-lager",
+          menuItemId: "mi-lager",
+          variantId: null,
+          name: "Lager",
+          price: "5.00",
+          previous: null,
+        },
+      }),
+    );
+    await prices(el).updateComplete;
+    expect(toast.open).toBe(true);
+    expect(toast.message).toBe(message);
+    expect(text(priceUndo(el))).toBe(undo);
+  },
+);
+
 it("takes an earlier save's refusal from under its field once a later save of that field succeeds, still saying it in the outcome message", async () => {
   const refused = deferred<void>();
   let written: string | null = null;
