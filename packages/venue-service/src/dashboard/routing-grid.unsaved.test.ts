@@ -25,8 +25,8 @@ const view: PrepStationsView = {
     canMakeDefault: true,
     defaultStationId: "bar",
     stations: [
-      { id: "bar", name: "Bar", active: true },
-      { id: "kitchen", name: "Kitchen", active: true },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
     ],
     stationTimes: [
       {
@@ -47,6 +47,7 @@ const view: PrepStationsView = {
       id: "bar",
       name: "Bar",
       active: true,
+      colour: "blue",
       isDefault: true,
       displayOrder: 1,
       warmAfterMinutes: 5,

@@ -1,3 +1,4 @@
+import type { StationColour } from "@waitron/shared";
 import type { RouteTarget, RoutingRules, StationStatus } from "./routing.js";
 import type { CalendarColour } from "./hours-types.js";
 
@@ -101,7 +102,7 @@ export interface RoutingModel {
   /** Each department's periods in the order its week first runs them; one never placed last. */
   periods: RoutingPeriod[];
   defaultStationId: string | null;
-  stations: { id: string; name: string; active: boolean }[];
+  stations: { id: string; name: string; active: boolean; colour: StationColour }[];
 }
 
 /** `canMakeDefault`: the session may use Make default (`venue.configure`). */

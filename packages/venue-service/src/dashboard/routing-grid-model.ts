@@ -251,6 +251,27 @@ export interface RoutingLookups {
   readonly zoneDepartment: ReadonlyMap<string, string | null>;
 }
 
+/** The colour key's stations: the default and every active station a stored cell or line names. */
+export function usedStations(model: RoutingModel): RoutingModel["stations"] {
+  const named = new Set<string>();
+  if (model.defaultStationId !== null) named.add(model.defaultStationId);
+  for (const cell of model.cells) {
+    for (const { target } of [cell, ...(cell.periods ?? [])]) {
+      if (target.kind === "station") named.add(target.stationId);
+    }
+  }
+  return model.stations.filter((station) => station.active && named.has(station.id));
+}
+
+/** Where a cell sends work during one period: the line holding it, else its plain target. */
+export function stationDuring(
+  lines: readonly Pick<PeriodLineText, "periodIds" | "target">[],
+  periodId: string,
+  plain: RouteTarget | null,
+): RouteTarget | null {
+  return lines.find(({ periodIds }) => periodIds.includes(periodId))?.target ?? plain;
+}
+
 export function routingLookups(model: RoutingModel): RoutingLookups {
   return {
     rules: selectionRulesFromModel(model),

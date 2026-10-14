@@ -64,6 +64,7 @@ import type {
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
+import "./station-colour-picker.js";
 import "./station-times-tab.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import {
@@ -75,7 +76,7 @@ import {
   type StationRefusal,
 } from "./station-editor.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
-import type { DeleteImpact } from "@waitron/shared";
+import { STATION_COLOURS, type DeleteImpact, type StationColour } from "@waitron/shared";
 import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 
 type StationAction = {
@@ -165,6 +166,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private editor?: Editor;
   @state() private draft: NewStation = {
     name: "",
+    colour: "red",
     displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
@@ -914,6 +916,7 @@ export class PrepStationsScreen extends LitElement {
         .station=${{
           id: station.id,
           name: station.name,
+          colour: station.colour,
           active: station.active,
           showsRestOfOrder: station.showsRestOfOrder,
           printerIds: this.#printersOf(station.id),
@@ -921,6 +924,7 @@ export class PrepStationsScreen extends LitElement {
           timingDefaults: station.timingDefaults,
         }}
         .printers=${this.view.printers}
+        .stations=${this.#colourUsers()}
         .canManagePrinters=${canManagePrinters}
         .refusal=${this.stationEditRefusal}
         @station-save=${(event: CustomEvent<StationEditorSave>) => {
@@ -938,12 +942,19 @@ export class PrepStationsScreen extends LitElement {
       ></prep-station-editor>`,
     );
   }
+  #colourUsers() {
+    return (this.view?.stations ?? [])
+      .filter((station) => station.active)
+      .map(({ id, name, colour }) => ({ id, name, colour }));
+  }
   #openStation() {
     this.#stationBaseline = undefined;
     this.stationAttempted = false;
     this.editor = { kind: "station" };
+    const used = this.#colourUsers().map(({ colour }) => colour);
     this.draft = {
       name: "",
+      colour: STATION_COLOURS.find((colour) => !used.includes(colour)) ?? "red",
       displayOrder: 0,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
@@ -956,7 +967,8 @@ export class PrepStationsScreen extends LitElement {
   #change(field: keyof StationInput | "printerIds", value: string | string[]) {
     this.draft = {
       ...this.draft,
-      [field]: field === "name" || field === "printerIds" ? value : Number(value),
+      [field]:
+        field === "name" || field === "colour" || field === "printerIds" ? value : Number(value),
     };
     this.#stationScope?.changed();
     const refused = field === "printerIds" ? undefined : this.fieldError.printerIds;
@@ -1022,6 +1034,7 @@ export class PrepStationsScreen extends LitElement {
       const refusal = refusalOf(e);
       const field = stationRefusalField(refusal);
       if (field === "name") this.fieldError = { name: t("prep.name_taken") };
+      else if (field === "colour") this.fieldError = { colour: t("prep.colour_invalid") };
       else if (field === "printers")
         this.fieldError = {
           printerIds: t(
@@ -1175,6 +1188,20 @@ export class PrepStationsScreen extends LitElement {
       >${this.fieldError[field] ? html`<p class="error" data-field-error=${field} role="alert">${this.fieldError[field]}</p>` : nothing}
     </div>`;
   }
+  #newStationColour() {
+    const identity = this.#stationIdentity;
+    return html`<station-colour-picker
+      .value=${this.draft.colour}
+      .stations=${this.#colourUsers()}
+      .error=${this.fieldError.colour ?? ""}
+      ?busy=${this.busy}
+      @station-colour-change=${(event: CustomEvent<{ colour: StationColour }>) => {
+        event.stopPropagation();
+        if (this.isConnected && identity === this.#stationIdentity)
+          this.#change("colour", event.detail.colour);
+      }}
+    ></station-colour-picker>`;
+  }
   #newStationPrinters() {
     const identity = this.#stationIdentity;
     const printerIds = this.draft.printerIds;
@@ -1217,7 +1244,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
+          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">

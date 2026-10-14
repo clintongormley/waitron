@@ -3,8 +3,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { currentLocale } from "@waitron/dashboard-kit";
+import { isStationColour, type StationColour } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import {
@@ -15,6 +17,7 @@ import {
   zoneKey,
   selectRoutingCell,
   type CellAddress,
+  type RoutingModel,
   type GridCategory,
   type GridProduct,
   type GridRow,
@@ -40,6 +43,8 @@ import {
   routingLookups,
   routingSearch,
   rowInModel,
+  stationDuring,
+  usedStations,
   visibleRoutingRows,
   type CellPeriodLines,
   type MatchRange,
@@ -48,6 +53,7 @@ import {
   type RoutingSearch,
   type SearchRow,
 } from "./routing-grid-model.js";
+import { stationColourStyles } from "./station-colour-styles.js";
 import { t } from "./strings.js";
 
 /** A refused write. `code` and `params` reach the cell's editor while it is open. */
@@ -85,10 +91,23 @@ const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b
  */
 type CellStyle = "set" | "inherited" | "differs" | "blank";
 
+/**
+ * A cell's content and the colour of the station it draws, if painted. `saved` is where the saved
+ * routing sends work, during the chosen period if there is one, ignoring a choice still waiting.
+ */
+type DrawnCell = {
+  saved: RouteTarget | null;
+  colour: StationColour | undefined;
+  content: unknown;
+};
+
+type ComboboxOption = HTMLElementTagNameMap["wt-combobox"]["options"][number];
+
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
   static override styles = [
     baseStyles,
+    stationColourStyles,
     css`
       :host {
         --routing-first: calc(var(--wt-cell-name-max-width) * 1.5);
@@ -115,6 +134,10 @@ export class RoutingGrid extends LitElement {
       .toolbar wt-input {
         flex: 1 1 calc(var(--wt-space-6) * 8);
         max-inline-size: calc(var(--wt-space-6) * 12);
+      }
+      .toolbar wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 6);
+        min-inline-size: 0;
       }
       .count {
         color: var(--wt-color-text-muted);
@@ -147,6 +170,13 @@ export class RoutingGrid extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
+      }
+      td[data-station-colour] {
+        background: var(--station-fill);
+      }
+      /* A shadow, not a border, so the cell's button still covers the whole cell. */
+      td ~ td[data-station-colour] {
+        box-shadow: inset 2px 0 0 var(--wt-color-surface);
       }
       thead th {
         font-weight: var(--wt-font-weight-medium);
@@ -268,8 +298,9 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(var(--wt-focus-offset) * -1);
       }
-      /* Untinted under a refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
-      .cell:hover:not(:has(.cell-error)) {
+      /* A painted cell keeps its fill: the tint can look like another station's. Untinted under a
+         refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
+      td:not([data-station-colour]) > .cell:hover:not(:has(.cell-error)) {
         background: var(--wt-color-surface-lifted);
       }
       .notes {
@@ -285,7 +316,7 @@ export class RoutingGrid extends LitElement {
       .cell[data-style="set"] .station,
       .cell[data-style="set"] .line {
         font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-primary-text);
+        color: var(--wt-color-text);
       }
       .station.inherited,
       .line.inherited {
@@ -297,6 +328,34 @@ export class RoutingGrid extends LitElement {
       }
       .line {
         font-size: var(--wt-font-size-sm);
+      }
+      .dot {
+        display: inline-block;
+        inline-size: var(--wt-space-2);
+        block-size: var(--wt-space-2);
+        margin-inline-end: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--station-dot);
+      }
+      .key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2) var(--wt-space-4);
+        margin: var(--wt-space-3) 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .key li {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        inline-size: var(--wt-space-4);
+        block-size: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--station-fill);
       }
       .cell-error {
         display: block;
@@ -319,6 +378,8 @@ export class RoutingGrid extends LitElement {
   @state() private query = "";
   /** The categories open in the search view; `null` until the person opens or closes one. */
   @state() private searchOpen: ReadonlySet<string> | null = null;
+  /** The period whose stations the cells show; `null` shows every period's lines. */
+  @state() private period: string | null = null;
   /** The cell whose editor is open. */
   @state() private editing: CellAddress | null = null;
 
@@ -328,6 +389,7 @@ export class RoutingGrid extends LitElement {
   #cells: ReadonlyMap<string, RoutingModelCell> = new Map();
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
+  #stations = new Map<string, RoutingModel["stations"][number]>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
   #searchOf: ReturnType<typeof routingSearch> | null = null;
@@ -343,6 +405,9 @@ export class RoutingGrid extends LitElement {
     locale: string;
     of: ReturnType<typeof cellPeriodLines>;
   } | null = null;
+  #used: { model: RoutingModel; stations: RoutingModel["stations"] } | null = null;
+  /** Kept so the Period field is handed the same list, and does not redraw, on each render. */
+  #periodOptions: { model: RoutingModel; locale: string; options: ComboboxOption[] } | null = null;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
@@ -353,11 +418,15 @@ export class RoutingGrid extends LitElement {
     this.#cells = lookups.cells;
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
+    this.#stations = new Map(model.stations.map((station) => [station.id, station]));
     this.#allRows = null;
     this.#blank = blankZoneCell(model, lookups);
     this.#searchOf = routingSearch(model);
     this.#searched = null;
     this.expanded = pruneExpanded(model, this.expanded);
+    if (this.period !== null && !offeredPeriods(model).some(({ id }) => id === this.period)) {
+      this.period = null;
+    }
     const editing = this.editing;
     if (
       editing !== null &&
@@ -396,7 +465,14 @@ export class RoutingGrid extends LitElement {
   }
 
   #station(id: string) {
-    return this.model!.stations.find((station) => station.id === id);
+    return this.#stations.get(id);
+  }
+
+  /** The colour a target paints in; none for No preparation, a missing or disabled station, or a colour outside the twelve. */
+  #colourOf(target: RouteTarget | null): StationColour | undefined {
+    if (target?.kind !== "station") return undefined;
+    const station = this.#station(target.stationId);
+    return station?.active === true && isStationColour(station.colour) ? station.colour : undefined;
   }
 
   #targetText(target: RouteTarget | null): string {
@@ -514,19 +590,26 @@ export class RoutingGrid extends LitElement {
       }}
     >
       <span class=${`station${look}`}>${blank ? "" : station}</span>
-      ${(blank ? [] : lines).map(
-        (line) =>
-          html`<span class=${`line${look}`}>${line.text}</span>${
-              line.flagText === undefined
+      ${(blank ? [] : lines).map((line) => {
+        const dot = this.#colourOf(line.target);
+        return html`<span class=${`line${look}`}
+            >${
+              dot === undefined
                 ? nothing
-                : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
-            }`,
-      )}
+                : html`<span class="dot" aria-hidden="true" data-station-colour=${dot}></span>`
+            }${line.text}</span
+          >${
+            line.flagText === undefined
+              ? nothing
+              : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
+          }`;
+      })}
       ${shownNotes.length === 0 ? nothing : html`<span class="notes" id=${notesId}>${shownNotes}</span>`}
     </button>`;
   }
 
-  #cell(entry: GridRow, zone: Zone) {
+  /** `every` is the row's Every zone's `saved`; a period view names a blank cell that differs. */
+  #cell(entry: GridRow, zone: Zone, every: RouteTarget | null): DrawnCell {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(cellKey(address));
     const selected = this.#inherited(entry.row, zone.id);
@@ -536,10 +619,33 @@ export class RoutingGrid extends LitElement {
         ? this.pending
         : undefined;
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
-    const disabled =
-      shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
-    const text = this.#targetText(shown ?? inherited);
+    const period = this.period;
+    // An inherited cell's period lines are the deciding cell's, not this cell's to warn about.
+    const setHere =
+      period === null || periodLines.inherited
+        ? shown
+        : stationDuring(periodLines.lines, period, shown);
+    const disabled =
+      setHere?.kind === "station" && this.#station(setHere.stationId)?.active !== true
+        ? setHere
+        : null;
+    const target =
+      period === null
+        ? (shown ?? inherited)
+        : stationDuring(periodLines.lines, period, shown ?? inherited);
+    const lines = period === null ? periodLines.lines : [];
+    const saved =
+      waiting === undefined
+        ? target
+        : period === null
+          ? (own?.target ?? inherited)
+          : stationDuring(
+              this.#periodLines(entry.row, zone.id, undefined, selected).lines,
+              period,
+              own?.target ?? inherited,
+            );
+    const text = this.#targetText(target);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
         row: this.#rowName(entry),
@@ -547,17 +653,19 @@ export class RoutingGrid extends LitElement {
         value: text,
         state: t(shown === null ? "routing.inherited" : "routing.set_here"),
       }),
-      ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
+      ...lines.flatMap((line) => [line.text, line.flagText ?? null]),
     );
     const style: CellStyle =
       shown !== null
         ? "set"
         : zone.id === null
           ? "inherited"
-          : this.#blank!(entry.row, zone.id, selected)
-            ? "blank"
-            : "differs";
-    return this.#button(address, label, shown, style, text, periodLines.lines, [
+          : !this.#blank!(entry.row, zone.id, selected)
+            ? "differs"
+            : period !== null && targetKey(target) !== targetKey(every)
+              ? "differs"
+              : "blank";
+    const content = this.#button(address, label, shown, style, text, lines, [
       this.#error(address),
       disabled === null
         ? null
@@ -568,21 +676,22 @@ export class RoutingGrid extends LitElement {
             ${this.#fallbackSentence(disabled.stationId)}</span
           >`,
     ]);
+    return { saved, colour: this.#colourOf(target), content };
   }
 
   #defaultTarget(): RouteTarget | null {
-    const model = this.model!;
-    const active = model.stations.find(
-      (station) => station.id === model.defaultStationId && station.active,
-    );
-    return active ? { kind: "station", stationId: active.id } : null;
+    const id = this.model!.defaultStationId;
+    return id !== null && this.#station(id)?.active === true
+      ? { kind: "station", stationId: id }
+      : null;
   }
 
   /** All categories × Every zone is the default station: Make default, never cleared. */
-  #defaultCell() {
+  #defaultCell(): DrawnCell {
     const model = this.model!;
     const address: CellAddress = { row: { kind: "all" }, zoneId: null };
     const target = this.#defaultTarget();
+    const colour = this.#colourOf(target);
     const name = target === null ? null : this.#targetText(target);
     const repair =
       target !== null
@@ -591,8 +700,12 @@ export class RoutingGrid extends LitElement {
             >${t("routing.default_repair")}</span
           >`;
     if (!model.canMakeDefault) {
-      return html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
-        <span class="note">${t("routing.default_read_only")}</span>`;
+      return {
+        saved: target,
+        colour,
+        content: html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
+          <span class="note">${t("routing.default_read_only")}</span>`,
+      };
     }
     const text = name ?? t("routing.no_station");
     const label = this.#labelWithNote(
@@ -603,7 +716,19 @@ export class RoutingGrid extends LitElement {
         state: t("routing.default_state"),
       }),
     );
-    return this.#button(address, label, target, "set", text, [], [this.#error(address), repair]);
+    return {
+      saved: target,
+      colour,
+      content: this.#button(
+        address,
+        label,
+        target,
+        "set",
+        text,
+        [],
+        [this.#error(address), repair],
+      ),
+    };
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */
@@ -800,6 +925,7 @@ export class RoutingGrid extends LitElement {
     search: RoutingSearch | undefined,
   ) {
     const heading = entry.row.kind === "no_category";
+    let every: RouteTarget | null = null;
     return html`<tr class=${heading ? "heading" : ""}>
       <th
         scope=${heading ? "rowgroup" : "row"}
@@ -812,14 +938,20 @@ export class RoutingGrid extends LitElement {
       ${repeat(
         zones,
         (zone) => zoneKey(zone.id),
-        (zone) =>
-          html`<td data-row=${rowKey(entry.row)} data-zone=${zoneKey(zone.id)}>
-            ${
-              entry.row.kind === "all" && zone.id === null
-                ? this.#defaultCell()
-                : this.#cell(entry, zone)
-            }
-          </td>`,
+        (zone) => {
+          const { saved, colour, content } =
+            entry.row.kind === "all" && zone.id === null
+              ? this.#defaultCell()
+              : this.#cell(entry, zone, every);
+          if (zone.id === null) every = saved;
+          return html`<td
+            data-row=${rowKey(entry.row)}
+            data-zone=${zoneKey(zone.id)}
+            data-station-colour=${colour ?? nothing}
+          >
+            ${content}
+          </td>`;
+        },
       )}
     </tr>`;
   }
@@ -834,6 +966,58 @@ export class RoutingGrid extends LitElement {
       ({ entry }) => rowKey(entry.row),
       (row) => this.#row(row, zones, search),
     );
+  }
+
+  #key(model: RoutingModel) {
+    if (this.#used?.model !== model) {
+      const stations = usedStations(model).filter((station) => isStationColour(station.colour));
+      this.#used = { model, stations };
+    }
+    const { stations } = this.#used;
+    if (stations.length === 0) return nothing;
+    return html`<ul class="key" aria-label=${t("routing.colour_key")}>
+      ${stations.map(
+        (station) =>
+          html`<li>
+            <span class="swatch" aria-hidden="true" data-station-colour=${station.colour}></span
+            >${station.name}
+          </li>`,
+      )}
+    </ul>`;
+  }
+
+  #periodField(model: RoutingModel) {
+    const locale = currentLocale();
+    if (this.#periodOptions?.model !== model || this.#periodOptions.locale !== locale) {
+      const periods = offeredPeriods(model);
+      const grouped = new Set(periods.map(({ departmentId }) => departmentId)).size > 1;
+      const options: ComboboxOption[] =
+        periods.length === 0
+          ? []
+          : [
+              { value: "", label: t("routing.all_periods") },
+              ...periods.map(({ id, name, departmentName }) =>
+                grouped
+                  ? { value: id, label: name, group: departmentName }
+                  : { value: id, label: name },
+              ),
+            ];
+      this.#periodOptions = { model, locale, options };
+    }
+    const { options } = this.#periodOptions;
+    if (options.length === 0) return nothing;
+    return html`<wt-combobox
+      name="period"
+      label=${t("routing.period")}
+      search="auto"
+      show-empty-option
+      .options=${options}
+      .value=${this.period ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.period = event.detail.value === "" ? null : event.detail.value;
+      }}
+    ></wt-combobox>`;
   }
 
   override render() {
@@ -863,7 +1047,7 @@ export class RoutingGrid extends LitElement {
             this.searchOpen = null;
           }}
         ></wt-input
-        ><wt-button
+        >${this.#periodField(model)}<wt-button
           variant="secondary"
           data-test="expand-all"
           @click=${() => this.#setOpen(search, expandAll(model))}
@@ -904,11 +1088,17 @@ export class RoutingGrid extends LitElement {
           }
         </table>
       </div>
+      ${this.#key(model)}
       <wt-form-actions
         .error=${this.refusal === null ? "" : this.#refusalText(this.refusal)}
       ></wt-form-actions>
       ${this.#editorDialog()}`;
   }
+}
+
+/** The periods the Period field offers: those of an active department, in the model's order. */
+function offeredPeriods(model: RoutingModel): RoutingModel["periods"] {
+  return model.periods.filter((period) => period.departmentInactive !== true);
 }
 
 function matchCount(count: number): string {

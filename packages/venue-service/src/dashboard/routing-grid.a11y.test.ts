@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -49,9 +49,9 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
     ],
     defaultStationId: "kitchen",
     stations: [
-      { id: "kitchen", name: "Kitchen", active: true },
-      { id: "bar", name: "Bar", active: true },
-      { id: "old", name: "Old kitchen", active: false },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "old", name: "Old kitchen", active: false, colour: "brown" },
     ],
     canMakeDefault: true,
     ...overrides,
@@ -131,6 +131,58 @@ const mockupTree = routing({
   ],
 });
 
+const COLOURS = [
+  "red",
+  "orange",
+  "amber",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "brown",
+] as const;
+
+/**
+ * Twelve stations, one per colour: category `c<i>` sends Every zone to station `s<i>` with a Lunch
+ * line to the next station, and its product inherits both. One cell carries a refusal and another a
+ * disabled station.
+ */
+const everyColour = routing({
+  periods: flaggedLine.periods.map((period) => ({ ...period, productIds: ["p0"] })),
+  categories: COLOURS.map((_, i) => ({ id: `c${i}`, name: `Category ${i}`, parentId: null })),
+  products: COLOURS.map((_, i) => ({ id: `p${i}`, name: `Product ${i}`, categoryId: `c${i}` })),
+  defaultStationId: "s0",
+  stations: [
+    ...COLOURS.map((colour, i) => ({
+      id: `s${i}`,
+      name: `Station ${colour}`,
+      active: true,
+      colour,
+    })),
+    { id: "old", name: "Old kitchen", active: false, colour: "brown" as const },
+  ],
+  stationTimes: [{ ...routing().stationTimes[0]!, fallbackStationId: "s0", closedSendsTo: "s0" }],
+  cells: [
+    ...COLOURS.map((_, i) => ({
+      row: { kind: "category" as const, categoryId: `c${i}` },
+      zoneId: null,
+      target: { kind: "station" as const, stationId: `s${i}` },
+      periods: [
+        { periodId: "lunch", target: { kind: "station" as const, stationId: `s${(i + 1) % 12}` } },
+      ],
+    })),
+    {
+      row: { kind: "category", categoryId: "c3" },
+      zoneId: "inside",
+      target: { kind: "station", stationId: "old" },
+    },
+  ],
+});
+
 const states: Record<
   string,
   {
@@ -144,6 +196,10 @@ const states: Record<
     flags?: Record<string, boolean>;
     /** Cells and the look each must be drawn in before the scan. */
     styles?: Record<string, string>;
+    /** How many different station colours the cells must be painted in before the scan. */
+    painted?: number;
+    /** Chosen in the Period field before the scan; no period line may then be drawn. */
+    period?: string;
   }
 > = {
   "flagged period line": {
@@ -191,6 +247,31 @@ const states: Record<
     search: { query: "bread", marks: 1 },
   },
   "search, no matches": { model: routing(), search: { query: "zzz", marks: 0 } },
+  "every colour": {
+    model: everyColour,
+    expand: true,
+    painted: 12,
+    refusal: {
+      address: { row: { kind: "category", categoryId: "c5" }, zoneId: null },
+      message: "This station was disabled. Choose another.",
+    },
+  },
+  "one period chosen": {
+    model: everyColour,
+    expand: true,
+    period: "lunch",
+    painted: 12,
+    styles: {
+      'td[data-row="c:c3"][data-zone="every"]': "set",
+      'td[data-row="p:p3"][data-zone="every"]': "inherited",
+      'td[data-row="c:c4"][data-zone="terrace"]': "differs",
+      'td[data-row="c:c3"][data-zone="inside"]': "set",
+    },
+    refusal: {
+      address: { row: { kind: "category", categoryId: "c5" }, zoneId: null },
+      message: "This station was disabled. Choose another.",
+    },
+  },
   refusal: {
     model: routing(),
     refusal: {
@@ -229,6 +310,18 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       });
       await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
     }
+    if (state.period !== undefined) {
+      el.shadowRoot!.querySelector('wt-combobox[name="period"]')!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: state.period },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      const lines = el.shadowRoot!.querySelectorAll(".line").length;
+      if (lines !== 0) throw new Error(`drew ${lines} period lines`);
+    }
     for (const [selector, carries] of Object.entries(state.flags ?? {})) {
       const flag = el.shadowRoot!.querySelector(`${selector} [data-test="period-flag"]`);
       if ((flag !== null) !== carries)
@@ -239,6 +332,14 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
         `${selector} button[data-test="routing-cell"]`,
       )?.dataset.style;
       if (drawn !== style) throw new Error(`${selector}: drawn ${drawn}, not ${style}`);
+    }
+    if (state.painted !== undefined) {
+      const colours = new Set(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("td[data-station-colour]")].map(
+          (cell) => cell.dataset.stationColour,
+        ),
+      );
+      if (colours.size !== state.painted) throw new Error(`painted ${colours.size} colours`);
     }
     await expectNoA11yViolations(host);
   });
@@ -280,6 +381,20 @@ function contrastRatio(a: string, b: string): number {
 }
 
 describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme) => {
+  /** The grid with every row open, and the cell's `td`, its button and the text inside it. */
+  async function hoverable(model: RoutingView, cellSelector: string, textSelector: string) {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model });
+    host.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await el.updateComplete;
+    const td = el.shadowRoot!.querySelector<HTMLElement>(cellSelector)!;
+    const cell = td.querySelector<HTMLButtonElement>('button[data-test="routing-cell"]')!;
+    return { td, cell, text: cell.querySelector(textSelector)! };
+  }
+
   test.each([
     [
       "the not-on-menus mark",
@@ -294,6 +409,25 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       ".line.inherited",
     ],
     ["a set-here station", routing(), 'td[data-row="c:drinks"][data-zone="every"]', ".station"],
+  ])(
+    "keeps %s at 4.5:1 on its station's fill, which a hover keeps",
+    async (_, model, cellSelector, textSelector) => {
+      const { td, cell, text } = await hoverable(model, cellSelector, textSelector);
+      expect(td.dataset.stationColour).toBeDefined();
+      const fill = getComputedStyle(td).backgroundColor;
+      const atRest = getComputedStyle(cell).backgroundColor;
+      expect(atRest).toBe("rgba(0, 0, 0, 0)");
+      await userEvent.hover(cell);
+      expect(cell.matches(":hover")).toBe(true);
+      const hovered = getComputedStyle(cell);
+      expect(hovered.backgroundColor).toBe(atRest);
+      expect(getComputedStyle(td).backgroundColor).toBe(fill);
+      expect(hovered.outlineStyle).toBe("solid");
+      expect(contrastRatio(getComputedStyle(text).color, fill)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  test.each([
     [
       "a differing inherited station",
       routing(),
@@ -313,17 +447,8 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       '[data-test="default-repair"]',
     ],
   ])("keeps %s at 4.5:1 against the hover", async (_, model, cellSelector, textSelector) => {
-    await mountThemed("<div></div>", theme);
-    const el = document.createElement("venue-routing-grid");
-    Object.assign(el, { model });
-    host.append(el);
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
-    await el.updateComplete;
-    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
-      `${cellSelector} button[data-test="routing-cell"]`,
-    )!;
-    const text = cell.querySelector(textSelector)!;
+    const { td, cell, text } = await hoverable(model, cellSelector, textSelector);
+    expect(td.dataset.stationColour).toBeUndefined();
     const atRest = getComputedStyle(cell).backgroundColor;
     await userEvent.hover(cell);
     expect(cell.matches(":hover")).toBe(true);
@@ -356,4 +481,59 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     const behind = getComputedStyle(cell.parentElement!).backgroundColor;
     expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
+
+  // Its colour against the twelve fills is held in `packages/ui-core/src/tokens/colors.test.ts`;
+  // here, that a station cell keeps its fill and draws the ring in that colour.
+  test("outlines a hovered station cell in the focus colour, which stands 3:1 on its fill", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: routing() });
+    host.append(el);
+    await el.updateComplete;
+    const td = el.shadowRoot!.querySelector<HTMLElement>(
+      'td[data-row="c:drinks"][data-zone="every"]',
+    )!;
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-station-blue)";
+    host.append(probe);
+    const blue = getComputedStyle(probe).backgroundColor;
+    expect(getComputedStyle(td).backgroundColor).toBe(blue);
+    const cell = td.querySelector<HTMLButtonElement>('button[data-test="routing-cell"]')!;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell);
+    expect(getComputedStyle(td).backgroundColor).toBe(blue);
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(contrastRatio(hovered.outlineColor, blue)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("the toolbar", () => {
+  afterEach(async () => {
+    await page.viewport(1280, 800);
+  });
+
+  test.each([390, 1280])(
+    "at %i px the search and the Period field fit without overflow",
+    async (width) => {
+      await page.viewport(width, 800);
+      await mountThemed("<div></div>", "light");
+      const el = document.createElement("venue-routing-grid");
+      Object.assign(el, { model: everyColour });
+      host.append(el);
+      await el.updateComplete;
+      const toolbar = el.shadowRoot!.querySelector<HTMLElement>(".toolbar")!;
+      const bounds = toolbar.getBoundingClientRect();
+      for (const selector of ['wt-input[name="search"]', 'wt-combobox[name="period"]']) {
+        const box = el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+        expect(box.width, selector).toBeGreaterThan(0);
+        expect(box.left, selector).toBeGreaterThanOrEqual(bounds.left);
+        expect(box.right, selector).toBeLessThanOrEqual(bounds.right);
+      }
+      expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+    },
+  );
 });

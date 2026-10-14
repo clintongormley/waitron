@@ -358,6 +358,26 @@ describe("seedDemoRestaurant", () => {
     });
   });
 
+  it("gives each demo station its own colour", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 1,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const { rows } = await suite.db.execute<{ name: string; colour: string }>(sql`
+      select name, colour from kitchen_stations
+      where location_id = ${venue.locationId} order by name`);
+    expect(rows).toEqual([
+      { name: "Deli counter", colour: "green" },
+      { name: "Downstairs bar", colour: "blue" },
+      { name: "Kitchen", colour: "orange" },
+      { name: "Upstairs bar", colour: "indigo" },
+    ]);
+  });
+
   it("keeps drinks downstairs without station hours or an evening period", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {

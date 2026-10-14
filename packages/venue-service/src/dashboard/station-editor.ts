@@ -18,12 +18,15 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import type { StationThresholds } from "@waitron/shared";
+import type { StationColour, StationThresholds } from "@waitron/shared";
+import type { StationColourUser } from "./station-colour-picker.js";
+import "./station-colour-picker.js";
 import { t } from "./strings.js";
 
 export interface StationEditorStation {
   id: string;
   name: string;
+  colour: StationColour;
   active: boolean;
   showsRestOfOrder: boolean;
   printerIds: readonly string[];
@@ -39,6 +42,7 @@ export interface StationEditorPrinter {
 /** Only what changed from the opened values; `printerIds` only when printers may be changed. */
 export type StationEditorSave = {
   name?: string;
+  colour?: StationColour;
   printerIds?: string[];
   showsRestOfOrder?: boolean;
 } & { [K in TimingField]?: number | null };
@@ -52,10 +56,11 @@ const TIMING_LABELS = {
 } as const;
 const isTimingField = (value: unknown): value is TimingField =>
   (TIMING_FIELDS as readonly unknown[]).includes(value);
-type Field = "name" | "printers" | TimingField;
+type Field = "name" | "colour" | "printers" | TimingField;
 
 type Draft = {
   name: string;
+  colour: StationColour;
   printerIds: string[];
   showsRestOfOrder: boolean;
 } & { [K in TimingField]: string };
@@ -86,6 +91,7 @@ const timingText = (value: string) => {
 };
 const equal = (a: Draft, b: Draft) =>
   a.name.trim() === b.name.trim() &&
+  a.colour === b.colour &&
   a.showsRestOfOrder === b.showsRestOfOrder &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
@@ -144,6 +150,8 @@ export function listedPrinterIds(
 export function stationRefusalField(refusal: Refusal | undefined): Field | undefined {
   if (refusal === undefined) return undefined;
   if (refusal.code === "station.name_taken") return "name";
+  if (refusal.code === "management.request_invalid" && refusal.params?.field === "colour")
+    return "colour";
   if (
     (refusal.code === "station.thresholds_invalid" ||
       refusal.code === "management.request_invalid") &&
@@ -164,6 +172,8 @@ function refusalText(refusal: Refusal): string {
   switch (stationRefusalField(refusal)) {
     case "name":
       return t("prep.name_taken");
+    case "colour":
+      return t("prep.colour_invalid");
     case "printers":
       return refusal.code === "authorization.not_permitted"
         ? t("prep.printers_not_permitted")
@@ -221,12 +231,15 @@ export class StationEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) station?: StationEditorStation;
   @property({ attribute: false }) printers: readonly StationEditorPrinter[] = [];
+  /** The active stations, whose names the colour picker shows; the edited one is left out. */
+  @property({ attribute: false }) stations: readonly StationColourUser[] = [];
   /** Whether the person holds `printer.manage`; without it the printers are a read-out. */
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
 
   @state() private draft: Draft = {
     name: "",
+    colour: "red",
     printerIds: [],
     showsRestOfOrder: false,
     warmAfterMinutes: "",
@@ -277,6 +290,7 @@ export class StationEditor extends LitElement {
       this.generation = {};
       this.draft = {
         name: station.name,
+        colour: station.colour,
         printerIds: [...station.printerIds],
         showsRestOfOrder: station.showsRestOfOrder,
         ...timingDraft(station.timingOverrides),
@@ -360,6 +374,7 @@ export class StationEditor extends LitElement {
     const draft = this.draft;
     return {
       ...(draft.name.trim() !== base.name.trim() ? { name: draft.name.trim() } : {}),
+      ...(draft.colour !== base.colour ? { colour: draft.colour } : {}),
       ...(this.printersEditable && !sameSet(draft.printerIds, base.printerIds)
         ? { printerIds: [...draft.printerIds] }
         : {}),
@@ -486,6 +501,15 @@ export class StationEditor extends LitElement {
             @keydown=${(event: KeyboardEvent) =>
               submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-station-edit]"))}
           ></wt-input>
+          <station-colour-picker
+            .value=${this.draft.colour}
+            .stations=${this.stations.filter((station) => station.id !== this.station!.id)}
+            .error=${refusedField === "colour" ? fieldMessage : ""}
+            @station-colour-change=${(event: CustomEvent<{ colour: StationColour }>) => {
+              event.stopPropagation();
+              if (current()) this.changed({ ...this.draft, colour: event.detail.colour }, "colour");
+            }}
+          ></station-colour-picker>
           ${this.printersField(current, refusedField === "printers" ? fieldMessage : "")}
           ${
             this.canManagePrinters && !this.station.active

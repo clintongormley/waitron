@@ -151,45 +151,6 @@ list does not exist.
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
 
-## A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour and can show one period at a time (owner 2026-10-13)
-
-The owner's words (2026-10-13): "each prep station should have a colour so that on routing we can
-colour each cell of the table with the colour of the station (what do we do with cells with
-different routes per period?)" and "the routing table should have a dropdown to filter on period, so
-you can see where everything goes during a particular period. defaults to All periods".
-
-- **A station's colour.** Prep stations have no colour today. A menu period picks one of six named
-  colours (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`, chosen in
-  `packages/venue-service/src/dashboard/period-editor.ts`, which offers the first one not yet used).
-  A station picks from a **larger set** than that (owner, 2026-10-13, asked whether to require a
-  colour or offer more: "offer a bigger set than the periods use"), so a venue with more than six
-  stations does not have to repeat one. Every colour is a `--wt-*` token in both themes, and a
-  station's name must stay readable on its fill (4.5:1).
-- **Painting the cells.** A cell in the Routes grid
-  (`packages/venue-service/src/dashboard/routing-grid.ts`) takes the colour of its station. A cell
-  that sends nowhere stays plain. A period line under the station (written out one per line since
-  A507, `## Decisions and deliberate limits` below) gets a small dot in the colour of the station it
-  sends to, so a cell that changes during the day shows it under "All periods".
-- **The period dropdown.** Above the grid, defaulting to "All periods". Choosing a period shows each
-  cell's station during that period — the period line's station where the cell has one for it, the
-  plain station otherwise — so every cell has one station and one solid colour, and the period lines
-  are not drawn.
-- **Settled with the owner from mock-ups (2026-10-13)**, in
-  `docs/backlog/mockups/a584-station-colours/` (the boards' source is `station-colours-mockups.html`
-  there):
-  - **Every cell is coloured** (option B, `2-all-periods-option-b-chosen.png`; option A, which left a
-    cell following its row's Every zone white, was turned down). A cell that follows its row's Every
-    zone takes that station's colour but still writes no name, so the missing name, not the colour,
-    keeps saying "same as this row's Every zone" (the A507 reading). The names drawn bold blue today
-    (set on this row) become bold in the text colour, and inherited ones stay grey, because the fill
-    now carries the colour.
-  - **With one period chosen, a cell shows only that period's station** (option A,
-    `3-one-period-option-a-chosen.png`); option B's small "otherwise Kitchen" line was turned down.
-  - **The dropdown always opens on "All periods"**; the chosen period is not remembered.
-  - The station editor board (`0-station-editor.png`) was shown but not asked about on its own:
-    twelve colours in a 4 × 3 grid, a colour another station has is still offered with that
-    station's name under it, and a new station starts on the first colour no station has.
-
 ## A656 — tidy the Routes tab and its cell editor
 
 Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on a phone
@@ -218,8 +179,7 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
    open and "Expand all" otherwise (`wt-data-table`'s `expandAllLabel` and `collapseAllLabel`
    behave this way; the grid is drawn by hand, so it copies the behaviour rather than switching it
    on), stays to the right of the search box at every width, and the search box takes the rest of
-   the row. A584's "All periods" dropdown joins this toolbar; place it in the same plan if A584 has
-   not landed.
+   the row. A584's Period field already sits after the search box; the tidy keeps it there.
 
 ## Decisions and deliberate limits
 
@@ -252,3 +212,24 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
   product clicked, its own variants and the extras that move with it as their dish, which the
   person already chose. It saves at once; a category, All categories or No category choice that
   moves products still opens the "Review route change" notice.
+
+- **Prep station colours and the Routes grid's painting (A584, owner 2026-10-13).** The owner's
+  decisions: (1) a station picks its colour from a larger set than the six menu periods use ("offer
+  a bigger set than the periods use"); (2) every cell of the Routes grid is coloured, and a cell
+  that follows its row's Every zone takes that station's colour but still writes no name; (3) with
+  "All periods", each period line under a station gets a dot in the colour of the station it sends
+  to; (4) with one period chosen, a cell shows only that period's station, with no "otherwise …"
+  line; (5) the Period dropdown sits beside the search and always opens on "All periods", not
+  remembered. The station editor board (twelve colours, a used colour still offered with its
+  station's name under it, a new station starting on the first unused colour) was shown and not
+  objected to. The colour is `kitchen_stations.colour` in the core set (`packages/db`),
+  because `kitchen_stations` is core's table; it has no CHECK,
+  because a CHECK makes drizzle rebuild `kitchen_stations` and a rebuild deletes its cascading
+  children's rows (a reviewer added one in a scratch worktree and `db:generate` produced
+  `__new_kitchen_stations` five times), so the station routes and the configuration import refuse a
+  colour outside the twelve, and a stored one outside them draws unpainted. With one period chosen,
+  a cell that A507's rule leaves blank is named, in the "differs" style, when its station for the
+  period differs from its row's Every zone's saved station for the period. "Always opens on All
+  periods" is read as each time the page opens: the choice is the grid's own state, never written to
+  the address or to storage. Mockups:
+  [mockups/a584-station-colours/](mockups/a584-station-colours/).

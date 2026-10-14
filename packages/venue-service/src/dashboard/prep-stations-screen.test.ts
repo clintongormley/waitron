@@ -52,7 +52,7 @@ const view: PrepStationsView = {
     ],
     canMakeDefault: true,
     defaultStationId: "bar",
-    stations: [{ id: "bar", name: "Bar", active: true }],
+    stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
       {
         stationId: "bar",
@@ -72,6 +72,7 @@ const view: PrepStationsView = {
       id: "bar",
       name: "Bar",
       active: true,
+      colour: "blue",
       isDefault: true,
       displayOrder: 1,
       warmAfterMinutes: 5,
@@ -220,7 +221,7 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
   async (selector) => {
     const next = withUpstairs({ open: false, why: "closed_by_hand" });
     next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-    next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+    next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
     const grid = (await routingGrid(el))!;
@@ -236,7 +237,7 @@ it.each([
 ] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
   const next = withUpstairs({ open: true, why });
   next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-  next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+  next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
   expect(await routingGrid(el)).not.toBeNull();
@@ -403,7 +404,10 @@ function withUpstairs(
     stations: [...view.stations.map((row) => ({ ...row })), { ...upstairs }],
     routing: {
       ...view.routing,
-      stations: [...view.routing.stations, { id: "upstairs", name: "Upstairs bar", active: true }],
+      stations: [
+        ...view.routing.stations,
+        { id: "upstairs", name: "Upstairs bar", active: true, colour: "indigo" },
+      ],
       stationTimes: [
         ...view.routing.stationTimes,
         {
@@ -667,7 +671,124 @@ it("creates a station from the modal with the chosen thresholds", async () => {
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "red",
   });
+});
+const addPicker = (el: PrepStationsScreen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["station-colour-picker"]>(
+    "wt-modal station-colour-picker",
+  )!;
+const colourTile = (picker: HTMLElementTagNameMap["station-colour-picker"], colour: string) =>
+  picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+const colouredView = (colours: readonly (string | [string, boolean])[]): PrepStationsView => ({
+  ...view,
+  stations: colours.map((entry, index) => {
+    const [colour, active] = typeof entry === "string" ? [entry, true] : entry;
+    return {
+      ...view.stations[0]!,
+      id: index === 0 ? "bar" : `s${index}`,
+      name: index === 0 ? "Bar" : `Station ${index}`,
+      isDefault: index === 0,
+      active,
+      colour: colour as PrepStationsView["stations"][number]["colour"],
+    };
+  }),
+});
+it("a new station starts on the first colour no station has, and is created with the colour chosen", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["red", "orange", ["amber", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const picker = addPicker(el);
+  await picker.updateComplete;
+  expect(picker.value).toBe("amber");
+  expect(
+    el.shadowRoot!.querySelector(
+      "wt-modal .form > div:has(wt-input[name=name]) + station-colour-picker",
+    ),
+  ).toBe(picker);
+  expect(colourTile(picker, "orange").getAttribute("aria-label")).toBe("Orange, used by Station 1");
+  expect(colourTile(picker, "amber").getAttribute("aria-label")).toBe("Amber");
+  colourTile(picker, "cyan").click();
+  await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+    colour: "cyan",
+  });
+});
+it("a new station starts on Red when all twelve are taken", async () => {
+  const a = api({
+    load: vi
+      .fn()
+      .mockResolvedValue(
+        colouredView([
+          "brown",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "red",
+        ]),
+      ),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  expect(addPicker(el).value).toBe("red");
+});
+it("puts a colour refusal from Add station under Colour", async () => {
+  const a = api({
+    createStation: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(addPicker(el).error).toBe("Choose one of these colours.");
+  expect(el.shadowRoot!.querySelector("wt-modal .form > p.error")!.textContent).toBe(
+    "Correct the highlighted fields to continue.",
+  );
+  colourTile(addPicker(el), "teal").click();
+  await settle(el);
+  expect(addPicker(el).error).toBe("");
+});
+it("the station editor opens on the station's colour and names the other active stations", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["blue", "orange", ["teal", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  const picker = editor.shadowRoot!.querySelector("station-colour-picker")!;
+  await picker.updateComplete;
+  expect(picker.value).toBe("blue");
+  expect(picker.stations.map(({ id, colour }) => [id, colour])).toEqual([["s1", "orange"]]);
 });
 it("makes a nondefault station the default", async () => {
   const changed = {
@@ -838,8 +959,8 @@ function fallbackView(): PrepStationsView {
       ...view.routing,
       stations: [
         ...view.routing.stations,
-        { id: "grill", name: "Grill", active: true },
-        { id: "disabled", name: "Closed bar", active: false },
+        { id: "grill", name: "Grill", active: true, colour: "green" },
+        { id: "disabled", name: "Closed bar", active: false, colour: "red" },
       ],
       stationTimes: [
         ...view.routing.stationTimes,
@@ -996,6 +1117,7 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
+    colour: "red",
   });
   expect(a.updateStation).not.toHaveBeenCalled();
 });
@@ -1181,7 +1303,7 @@ it("Delete ignores a stored inactive fallback and makes one request without chan
     { open: false, why: "closed_by_hand" },
     { fallbackStationId: "old", closedSendsTo: null },
   );
-  next.routing.stations.push({ id: "old", name: "Old bar", active: false });
+  next.routing.stations.push({ id: "old", name: "Old bar", active: false, colour: "brown" });
   const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
   const el = await mount(a);
   q(el, '[data-test="delete-upstairs"]')!.click();
@@ -2363,7 +2485,7 @@ it.each([
       history.replaceState(null, "", "/manage/prep-stations");
       const next = withUpstairs({ open: true, why: "open" });
       next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-      next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+      next.routing.stations.push({ id: "retired", name: "Retired", active: false, colour: "red" });
       const { el } = await mountToday(next, {}, theme);
       expect(window.innerWidth).toBe(width);
       const host = el.parentElement!;
@@ -3043,8 +3165,8 @@ describe("Routing grid", () => {
           },
         ],
         stations: [
-          { id: "bar", name: "Bar", active: true },
-          { id: "kitchen", name: "Kitchen", active: true },
+          { id: "bar", name: "Bar", active: true, colour: "blue" },
+          { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
         ],
       },
       zones: [{ id: "terrace", name: "Terrace" }],
@@ -4995,6 +5117,7 @@ describe("The station editor", () => {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      colour: "red",
       printerIds: ["next"],
     });
   });

@@ -148,8 +148,8 @@ it("marks a category with no cell while the default station is switched off, or 
     ],
     defaultStationId: "default",
     stations: [
-      { id: "bar", name: "Bar", active: true },
-      { id: "default", name: "Kitchen", active: false },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "default", name: "Kitchen", active: false, colour: "orange" },
     ],
   };
   const el = await mountBrowser({ routing });
@@ -207,7 +207,7 @@ it("does not mark a folder covered by its own Every zone cell", async () => {
         },
       ],
       defaultStationId: null,
-      stations: [{ id: "kitchen", name: "Kitchen", active: true }],
+      stations: [{ id: "kitchen", name: "Kitchen", active: true, colour: "orange" }],
     },
   });
   expect(await unroutedMarker(el, "folder:f")).toBeNull();
@@ -249,8 +249,8 @@ const routingWith = (overrides: Partial<RoutingFixture> = {}): RoutingModel => (
   ],
   defaultStationId: "kitchen",
   stations: [
-    { id: "bar", name: "Bar", active: true },
-    { id: "kitchen", name: "Kitchen", active: true },
+    { id: "bar", name: "Bar", active: true, colour: "blue" },
+    { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
   ],
   ...overrides,
 });
@@ -306,9 +306,9 @@ it("decides the asterisk from default recovery for a switched-off station", asyn
     routingWith({
       defaultStationId: defaultAvailable ? "kitchen" : null,
       stations: [
-        { id: "bar", name: "Bar", active: false },
-        { id: "terrace", name: "Terrace", active: true },
-        { id: "kitchen", name: "Kitchen", active: true },
+        { id: "bar", name: "Bar", active: false, colour: "blue" },
+        { id: "terrace", name: "Terrace", active: true, colour: "teal" },
+        { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
       ],
       stationTimes: [
         {
@@ -337,8 +337,8 @@ it("clears the asterisk on a category that falls through to a switched-on defaul
   const kitchenOn = (active: boolean) =>
     routingWith({
       stations: [
-        { id: "bar", name: "Bar", active: true },
-        { id: "kitchen", name: "Kitchen", active },
+        { id: "bar", name: "Bar", active: true, colour: "blue" },
+        { id: "kitchen", name: "Kitchen", active, colour: "orange" },
       ],
     });
   const el = await mountBrowser({ routing: kitchenOn(true) });

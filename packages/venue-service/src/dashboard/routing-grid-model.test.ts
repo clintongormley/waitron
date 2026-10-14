@@ -25,6 +25,8 @@ import {
   pruneExpanded,
   rowInModel,
   searchRows,
+  stationDuring,
+  usedStations,
   visibleRoutingRows,
   type SearchRow,
 } from "./routing-grid-model.js";
@@ -70,8 +72,8 @@ function model(
     cells,
     defaultStationId: "kitchen",
     stations: [
-      { id: "kitchen", name: "Kitchen", active: true },
-      { id: "bar", name: "Bar", active: true },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
     ],
   };
 }
@@ -1441,5 +1443,57 @@ describe("searchRows", () => {
   it("adds no rows for a cell of a row's own", () => {
     const routed = { ...deli(), cells: [categoryCell("food"), productCell("water")] };
     expect(lines(searchRows(routed, "zzz")!.rows)).toEqual(["[All] parent"]);
+  });
+});
+
+describe("usedStations", () => {
+  it("usedStations: the default station, then every active station a stored cell or line names, in the model's order", () => {
+    const stations: RoutingModel["stations"] = [
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "coffee", name: "Coffee", active: true, colour: "brown" },
+      { id: "grill", name: "Grill", active: true, colour: "red" },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "old", name: "Old kitchen", active: false, colour: "green" },
+      { id: "pizza", name: "Pizza oven", active: true, colour: "amber" },
+      { id: "unused", name: "Unused", active: true, colour: "teal" },
+    ];
+    const at = (stationId: string): RouteTarget => ({ kind: "station", stationId });
+    const used = usedStations({
+      ...model([folder("drinks"), folder("food")], [], []),
+      stations,
+      cells: [
+        categoryCell("drinks", at("pizza")),
+        categoryCell("food", noPreparation, "terrace"),
+        {
+          ...categoryCell("drinks", at("old"), "terrace"),
+          periods: [
+            { periodId: "lunch", target: at("bar") },
+            { periodId: "dinner", target: noPreparation },
+            { periodId: "brunch", target: at("pizza") },
+          ],
+        },
+        productCell("ghost", at("gone")),
+      ],
+    });
+    expect(used.map((station) => station.name)).toEqual(["Bar", "Kitchen", "Pizza oven"]);
+    expect(usedStations({ ...model([], []), defaultStationId: null })).toEqual([]);
+    expect(usedStations({ ...model([], []), defaultStationId: "kitchen" })).toEqual([
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+    ]);
+  });
+});
+
+describe("stationDuring", () => {
+  it("stationDuring takes the line holding the period, else the plain station", () => {
+    const kitchen: RouteTarget = { kind: "station", stationId: "kitchen" };
+    const oven: RouteTarget = { kind: "station", stationId: "oven" };
+    const lines = [
+      { periodIds: ["lunch", "dinner"], target: oven, text: "Lunch, Dinner: Pizza oven" },
+      { periodIds: ["late"], target: { kind: "no_preparation" } as const, text: "" },
+    ];
+    expect(stationDuring(lines, "dinner", kitchen)).toEqual(oven);
+    expect(stationDuring(lines, "late", kitchen)).toEqual({ kind: "no_preparation" });
+    expect(stationDuring(lines, "breakfast", kitchen)).toBe(kitchen);
+    expect(stationDuring([], "lunch", null)).toBeNull();
   });
 });

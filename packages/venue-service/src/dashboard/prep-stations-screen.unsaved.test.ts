@@ -25,7 +25,7 @@ const view: PrepStationsView = {
     ],
     canMakeDefault: true,
     defaultStationId: "bar",
-    stations: [{ id: "bar", name: "Bar", active: true }],
+    stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
       {
         stationId: "bar",
@@ -45,6 +45,7 @@ const view: PrepStationsView = {
       id: "bar",
       name: "Bar",
       active: true,
+      colour: "blue",
       isDefault: true,
       displayOrder: 1,
       warmAfterMinutes: 5,
@@ -230,6 +231,7 @@ for (const rename of [false, true]) {
               warmAfterMinutes: 5,
               overdueAfterMinutes: 10,
               forgottenAfterMinutes: 15,
+              colour: "red",
             },
           ],
     );
@@ -522,4 +524,54 @@ it("Edit keeps a redrawn editor open when a lone save written after reconnect fi
   expect(modalIn(screen)).toBe(modal);
   expect(modal.querySelector("wt-input")!.value).toBe("Typed while it was sent");
   expect(unload()).toBe(true);
+});
+
+it("Add station with only its colour changed counts as unsaved, asks before closing, and keeps the colour as a string", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen, false);
+  const picker = modal.querySelector("station-colour-picker")!;
+  await picker.updateComplete;
+  const tile = (colour: string) =>
+    picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+  expect(picker.value).toBe("red");
+  expect(unload()).toBe(false);
+  tile("teal").click();
+  await screen.updateComplete;
+  await picker.updateComplete;
+  expect(picker.value).toBe("teal");
+  expect(tile("teal").getAttribute("aria-checked")).toBe("true");
+  expect(unload()).toBe(true);
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await choose("keep");
+  expect(modalIn(screen)).not.toBeNull();
+  await field(modal, "Grill");
+  modal.querySelector<HTMLElement>("[data-test=save-station]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect((writes[0] as { colour: unknown }).colour).toBe("teal");
+});
+
+it("Add station counts picking the opened colour again as no change and closes without asking", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen, false);
+  const picker = modal.querySelector("station-colour-picker")!;
+  await picker.updateComplete;
+  const pick = async (colour: string) => {
+    picker
+      .shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!
+      .click();
+    await screen.updateComplete;
+    await picker.updateComplete;
+  };
+  expect(picker.value).toBe("red");
+  await pick("teal");
+  expect(unload()).toBe(true);
+  await pick("red");
+  expect(picker.value).toBe("red");
+  expect(unload()).toBe(false);
+  const closed = closeOf(modal);
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await closed;
+  await expect.poll(() => modalIn(screen)).toBeNull();
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
 });

@@ -425,6 +425,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
       name: kitchenStations.name,
       active: kitchenStations.active,
       isDefault: kitchenStations.isDefault,
+      colour: kitchenStations.colour,
     })
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
@@ -1118,7 +1119,7 @@ export async function routingModel(
     defaultStationId: rules.defaultStationId,
     stations: stations
       .filter((station) => station.active)
-      .map(({ id, name, active }) => ({ id, name, active })),
+      .map(({ id, name, active, colour }) => ({ id, name, active, colour })),
     stationTimes: stations
       .filter((station) => station.active)
       .map(({ id }) => ({

@@ -15,6 +15,7 @@ async function mount(printerIds = ["epson"]) {
   el.station = {
     id: "grill",
     name: "Grill",
+    colour: "red",
     active: true,
     showsRestOfOrder: false,
     printerIds,

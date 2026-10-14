@@ -535,3 +535,169 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
     expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
   });
 });
+
+// The twelve fills a prep station picks from, in the order the picker offers them.
+const STATION_FILLS = [
+  "red",
+  "orange",
+  "amber",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "brown",
+].map((colour) => `--wt-color-station-${colour}`);
+
+describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
+  test("each fill keeps the text, muted text, warning and danger colours at 4.5:1 or more", () => {
+    const el = mount(theme);
+    for (const fill of STATION_FILLS)
+      for (const text of [
+        "--wt-color-text",
+        "--wt-color-text-muted",
+        "--wt-color-warning",
+        "--wt-color-danger",
+      ])
+        expect(
+          ratio(token(el, text), token(el, fill)),
+          `${text} on ${fill}`,
+        ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("each dot stands 3:1 or more from every station fill and from the surface", () => {
+    const el = mount(theme);
+    for (const dot of STATION_FILLS.map((fill) => `${fill}-dot`))
+      for (const ground of [...STATION_FILLS, "--wt-color-surface"])
+        expect(
+          ratio(token(el, dot), token(el, ground)),
+          `${dot} on ${ground}`,
+        ).toBeGreaterThanOrEqual(3);
+  });
+
+  // A painted cell keeps its fill when hovered or focused, so its ring is drawn on it; a hovered
+  // cell with no station takes the tint.
+  test("the focus colour stands 3:1 or more on every station fill and on the hover tint", () => {
+    const el = mount(theme);
+    for (const ground of [...STATION_FILLS, "--wt-color-surface-lifted"])
+      expect(
+        ratio(token(el, "--wt-color-focus"), token(el, ground)),
+        `--wt-color-focus on ${ground}`,
+      ).toBeGreaterThanOrEqual(3);
+  });
+
+  test("the twelve fills are different colours, and so are the twelve dots", () => {
+    const el = mount(theme);
+    expect(new Set(STATION_FILLS.map((fill) => token(el, fill))).size).toBe(STATION_FILLS.length);
+    expect(new Set(STATION_FILLS.map((fill) => token(el, `${fill}-dot`))).size).toBe(
+      STATION_FILLS.length,
+    );
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = STATION_FILLS.flatMap((fill) => [fill, `${fill}-dot`]);
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
+
+/** CIELAB under D65, from an sRGB hex colour. */
+const lab = (hex: string): [number, number, number] => {
+  expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)) as [
+    number,
+    number,
+    number,
+  ];
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 / 116) * t + 16 / 116);
+  const x = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
+  const y = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  const z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+};
+
+/** CIEDE2000 colour difference between two CIELAB colours (Sharma, Wu and Dalal's formulation). */
+type Lab = readonly [number, number, number];
+const deltaE2000Lab = ([l1, a1, b1]: Lab, [l2, a2, b2]: Lab) => {
+  const rad = Math.PI / 180;
+  const cBar = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
+  const g = 0.5 * (1 - Math.sqrt(cBar ** 7 / (cBar ** 7 + 25 ** 7)));
+  const [ap1, ap2] = [(1 + g) * a1, (1 + g) * a2];
+  const [cp1, cp2] = [Math.hypot(ap1, b1), Math.hypot(ap2, b2)];
+  const hue = (b: number, a: number) => (Math.atan2(b, a) / rad + 360) % 360;
+  const [hp1, hp2] = [hue(b1, ap1), hue(b2, ap2)];
+  let dh = hp2 - hp1;
+  if (cp1 * cp2 === 0) dh = 0;
+  else if (dh > 180) dh -= 360;
+  else if (dh < -180) dh += 360;
+  const dL = l2 - l1;
+  const dC = cp2 - cp1;
+  const dH = 2 * Math.sqrt(cp1 * cp2) * Math.sin((dh / 2) * rad);
+  const lBar = (l1 + l2) / 2;
+  const cpBar = (cp1 + cp2) / 2;
+  const hBar =
+    cp1 * cp2 === 0
+      ? hp1 + hp2
+      : Math.abs(hp1 - hp2) <= 180
+        ? (hp1 + hp2) / 2
+        : (hp1 + hp2 + (hp1 + hp2 < 360 ? 360 : -360)) / 2;
+  const t =
+    1 -
+    0.17 * Math.cos((hBar - 30) * rad) +
+    0.24 * Math.cos(2 * hBar * rad) +
+    0.32 * Math.cos((3 * hBar + 6) * rad) -
+    0.2 * Math.cos((4 * hBar - 63) * rad);
+  const sL = 1 + (0.015 * (lBar - 50) ** 2) / Math.sqrt(20 + (lBar - 50) ** 2);
+  const sC = 1 + 0.045 * cpBar;
+  const sH = 1 + 0.015 * cpBar * t;
+  const rT =
+    -2 *
+    Math.sqrt(cpBar ** 7 / (cpBar ** 7 + 25 ** 7)) *
+    Math.sin(60 * Math.exp(-(((hBar - 275) / 25) ** 2)) * rad);
+  return Math.sqrt((dL / sL) ** 2 + (dC / sC) ** 2 + (dH / sH) ** 2 + rT * (dC / sC) * (dH / sH));
+};
+const deltaE2000 = (one: string, two: string) => deltaE2000Lab(lab(one), lab(two));
+
+test("the colour difference matches Sharma, Wu and Dalal's published CIEDE2000 test pairs", () => {
+  for (const [one, two, published] of [
+    [[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425],
+    [[50, 0, 0], [50, -1, 2], 2.3669],
+    [[50, 2.5, 0], [73, 25, -18], 27.1492],
+    [[60.2574, -34.0099, 36.2677], [60.4626, -34.1751, 39.4387], 1.2644],
+  ] as const)
+    expect(deltaE2000Lab(one, two)).toBeCloseTo(published, 3);
+  const white = lab("#ffffff");
+  expect(white[0]).toBeCloseTo(100, 1);
+  expect(Math.hypot(white[1], white[2])).toBeLessThan(0.05);
+});
+
+test("every pair of dark station fills is at least as far apart as the closest pair of light ones", () => {
+  const fills = (theme: "light" | "dark") => {
+    const el = mount(theme);
+    const values = STATION_FILLS.map((fill) => token(el, fill));
+    el.remove();
+    return values;
+  };
+  const pairs = (values: string[]) =>
+    values.flatMap((one, i) =>
+      values.slice(i + 1).map((two, j) => ({
+        names: `${STATION_FILLS[i]} and ${STATION_FILLS[i + 1 + j]}`,
+        apart: deltaE2000(one, two),
+      })),
+    );
+  const closestLight = Math.min(...pairs(fills("light")).map((pair) => pair.apart));
+  expect(closestLight).toBeGreaterThan(4);
+  for (const pair of pairs(fills("dark")))
+    expect(pair.apart, `dark ${pair.names}`).toBeGreaterThanOrEqual(closestLight);
+});

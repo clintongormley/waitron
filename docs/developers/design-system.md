@@ -124,8 +124,9 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
-and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour
+`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
+`--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -239,6 +240,34 @@ from `--wt-color-surface`, that the four fills differ, that they run green, ambe
 by hue, and that the `prefers-color-scheme` blocks give the same values as the explicit themes. The
 order is chosen so a venue's default seasons, which start with Spring on 1 March, show Spring green,
 Summer amber, Autumn peach and Winter blue.
+
+A prep station's colour (`STATION_COLOURS`, `packages/shared/src/station-colours.ts`) paints its
+Routes cells and its key swatch with `--wt-color-station-<colour>` and its period-line dots with
+`--wt-color-station-<colour>-dot`. There is no text colour per station: a cell's text keeps
+`--wt-color-text`, `--wt-color-text-muted`, `--wt-color-warning` or `--wt-color-danger`.
+
+| Fill                        | Light     | Dot       | Dark      | Dot       |
+| --------------------------- | --------- | --------- | --------- | --------- |
+| `--wt-color-station-red`    | `#fde2e1` | `#d64545` | `#592222` | `#e15656` |
+| `--wt-color-station-orange` | `#fde6cf` | `#c26a1f` | `#55301a` | `#e09452` |
+| `--wt-color-station-amber`  | `#fcefc0` | `#a67a00` | `#44391a` | `#e0ba52` |
+| `--wt-color-station-lime`   | `#e9f4c9` | `#688c19` | `#323f18` | `#b1e052` |
+| `--wt-color-station-green`  | `#d6f0dc` | `#2d934b` | `#194325` | `#52e07a` |
+| `--wt-color-station-teal`   | `#d0eeea` | `#1e9085` | `#19413d` | `#52e0d2` |
+| `--wt-color-station-cyan`   | `#d3ecf7` | `#1a8abb` | `#1d3f4e` | `#52b6e0` |
+| `--wt-color-station-blue`   | `#dce6fb` | `#2f66d6` | `#223459` | `#5483e1` |
+| `--wt-color-station-indigo` | `#e1e0f8` | `#5b55d0` | `#242259` | `#7e79e7` |
+| `--wt-color-station-purple` | `#ecdff8` | `#8d4fcf` | `#3d2259` | `#a667e4` |
+| `--wt-color-station-pink`   | `#fbdfec` | `#d2468c` | `#59223d` | `#e05299` |
+| `--wt-color-station-brown`  | `#eee2d6` | `#8a5a3c` | `#42362c` | `#c29170` |
+
+The "station colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
+that each of those four text colours is 4.5:1 or more on every fill, that each dot is 3:1 or more
+from every fill and from `--wt-color-surface`, that `--wt-color-focus` is 3:1 or more on every fill
+and on `--wt-color-surface-lifted`, that the twelve fills differ and so do the twelve dots, and that
+the `prefers-color-scheme` blocks give the same values as the explicit themes. A further case holds
+that every pair of dark fills is at least as far apart, by CIEDE2000 colour difference, as the
+closest pair of light fills.
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
 `--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
@@ -3572,21 +3601,43 @@ cases in `routing-grid.test.ts`).
 
 Each cell is a borderless button that fills its table cell, except the All categories × Every zone
 cell for someone who cannot set the default station, which is plain text. A warning, a refusal or the default
-cell's repair note under the station is drawn inside the button. Pointing at it tints it with
-`--wt-color-surface-lifted` (not while it shows a refusal, whose colour is under 4.5:1 on that tint
-in the dark theme), draws the focus outline just inside its edges and shows a hand pointer; keyboard
+cell's repair note under the station is drawn inside the button. Every table cell, blank ones
+included, is filled with `--wt-color-station-<colour>` of the station it sends to (for a blank cell, the
+one it inherits), and a choice waiting to be saved paints as it will be saved; a cell stays plain when it sends nowhere (No
+preparation, no station), sends to a disabled or deleted station, or its station's stored colour is
+not one of the twelve. A painted cell beside another cell is parted from it by a 2px line in
+`--wt-color-surface` on its start edge, drawn as an inset shadow so the button still covers the
+whole cell. Pointing at a cell draws the focus outline just inside its edges and shows a hand
+pointer; a painted cell keeps its fill, and a plain one is tinted with `--wt-color-surface-lifted`
+(not while it shows a refusal, whose colour is under 4.5:1 on that tint in the dark theme). Keyboard
 focus draws the same outline. A station or No preparation set in that cell, or
-chosen there and waiting to be saved, is bold in `--wt-color-primary-text`. An inherited Every zone
+chosen there and waiting to be saved, is bold in `--wt-color-text`. An inherited Every zone
 value is in `--wt-color-text-muted`. An inherited zone value is left blank when it is what the row's
 own Every zone shows, judged on saved settings only (a choice waiting to be saved there does not
 count) — the same station, and the same period lines for that zone's department — and
 is otherwise muted and in italics (`blankZoneCell`, `routing-grid-model.ts`). Under the station, one
-line per period choice in smaller text and the station's style ("Lunch, Afternoon: Downstairs bar").
+line per period choice in smaller text and the station's style ("Lunch, Afternoon: Downstairs bar"),
+starting with a small dot in its station's `-dot` colour, hidden from screen readers; a line to No
+preparation or a disabled station has no dot.
 Under a line the cell stores whose period's menus offer none of the row's active products, the grid
 shows "Not on Lunch menus" in the warning colour; the editor shows it under that saved line until
-the line's periods or station change, and it does not change Save.
+the line's periods or station change, and it does not change Save. Under the grid a list named
+"Station colours" shows a swatch and the name of the default station and of every active station a
+stored cell or line names, in the model's station order; a search does not narrow it, and it is not
+drawn when empty.
 
-A search field before Expand all ("Search categories and products") lists All categories, each
+A Period field (a `wt-combobox` named `period`) sits after the search field, offering All periods
+and the periods of every active department, grouped by department when there is more than one; it
+is not drawn when there are none. The choice is the grid's own state, never written to the address
+or to storage, so the page opens on All periods, and a chosen period that a refresh removes falls
+back to All periods. With one period chosen, each cell shows only where it sends work during that
+period — the period line holding it, otherwise its plain station (`stationDuring`,
+`routing-grid-model.ts`) — and its fill follows that station; no period lines or "Not on … menus"
+flags are drawn, while refusals are, and so is a disabled station's warning, for the station the cell itself sends to during the period — its own line for the period, otherwise its own station — never for one it inherits. Names follow the rules above,
+with one addition: a cell those rules leave blank is named, muted and in italics, when its station
+for the period differs from its row's Every zone's saved station for the period.
+
+A search field before the Period field and Expand all ("Search categories and products") lists All categories, each
 category or product whose own name matches, and every category above a match. Matching ignores case
 and accents and follows `textSearch` (`packages/shared/src/text-search.ts`): every word must match,
 as a whole word except the one still being typed, which may be part of one. Each matched word is
@@ -3612,7 +3663,7 @@ to Bar (Lunch: Kitchen)."), then one sentence per zone, periods, from and to wit
 product, an extra once per sentence — and the full list under a closed "Show products", where a
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
 moves nothing, saves at once. Edit, in a
-Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers, the three
+Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
 late-flag minutes (Warm after, Overdue after and Forgotten after) and "Show the rest of the order".
 Save sends only what changed, in one request. A minutes field left blank follows the venue's
 Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
@@ -3622,8 +3673,12 @@ marks the field that fails and stays disabled until that field is fixed. A refus
 that names a minutes field (`station.thresholds_invalid` or `management.request_invalid`) shows
 under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
-a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
-also sets Printers. Station Edit, Make default and Delete actions belong to the Stations row menu,
+a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
+`station-colour-picker` (`station-colour-picker.ts`) of the twelve station colours, each tile
+naming under it the other active stations that have that colour; it is no wider than
+`--wt-field-max-width`, like the dialog's other fields, and its required `*` is in
+`--wt-color-danger`, like theirs. Add station also sets Colour and
+Printers, and starts on the first colour no active station has, or Red when all twelve are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
 an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to

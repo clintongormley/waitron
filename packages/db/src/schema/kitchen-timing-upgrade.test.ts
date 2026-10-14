@@ -14,7 +14,6 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { freshNif } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
-import { kitchenStations } from "./kitchen-stations.js";
 import { stationPrinters } from "./station-printers.js";
 import { locations } from "./tenants.js";
 
@@ -56,19 +55,12 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
     })
     .returning();
   const locationId = location!.id;
-  const [station] = await db
-    .insert(kitchenStations)
-    .values({
-      locationId,
-      name: "Grill",
-      warmAfterMinutes: 2,
-      overdueAfterMinutes: 4,
-      forgottenAfterMinutes: 8,
-    })
-    .returning();
-  const stationId = station!.id;
-  // By hand, like `device_profiles` and `devices` below: the table definition names `printers`
-  // columns later migrations add.
+  // By hand, like `device_profiles` and `devices` below: the table definitions name
+  // `kitchen_stations` and `printers` columns later migrations add.
+  const stationId = randomUUID();
+  await db.run(sql`insert into kitchen_stations
+    (id, location_id, name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes, created_at)
+    values (${stationId}, ${locationId}, 'Grill', 2, 4, 8, ${new Date().toISOString()})`);
   const printerId = randomUUID();
   await db.run(sql`insert into printers (id, location_id, name, transport, local_key)
     values (${printerId}, ${locationId}, 'Grill printer', 'usb', 'grill-fixture')`);

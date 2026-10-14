@@ -199,3 +199,4 @@ export type {
   DepartmentReceiptDiagnostic,
   DepartmentReceiptScope,
 } from "./receipt-text.js";
+export { STATION_COLOURS, isStationColour, type StationColour } from "./station-colours.js";

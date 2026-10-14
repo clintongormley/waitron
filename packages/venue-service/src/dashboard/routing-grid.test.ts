@@ -69,10 +69,10 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
     cells,
     defaultStationId: "kitchen",
     stations: [
-      { id: "kitchen", name: "Kitchen", active: true },
-      { id: "bar", name: "Bar", active: true },
-      { id: "tbar", name: "Terrace bar", active: true },
-      { id: "old", name: "Old kitchen", active: false },
+      { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+      { id: "bar", name: "Bar", active: true, colour: "blue" },
+      { id: "tbar", name: "Terrace bar", active: true, colour: "teal" },
+      { id: "old", name: "Old kitchen", active: false, colour: "brown" },
     ],
     canMakeDefault: true,
     ...overrides,
@@ -983,7 +983,7 @@ describe("venue-routing-grid", () => {
       for (const label of rowLabels(el)) expect(label).not.toContain("›");
     });
 
-    it("draws a station set here bold in the primary text colour, and a blank cell empty", async () => {
+    it("draws a station set here bold in the text colour, and a blank cell empty", async () => {
       const { el } = await mount();
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
@@ -994,7 +994,7 @@ describe("venue-routing-grid", () => {
       ] as const) {
         const value = getComputedStyle(combo(el, row, zone)!.querySelector(".station")!);
         expect(value.fontWeight).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-bold)"));
-        expect(value.color).toBe(tokenValue(el, "color", "var(--wt-color-primary-text)"));
+        expect(value.color).toBe(tokenValue(el, "color", "var(--wt-color-text)"));
       }
       const blank = combo(el, "p:cola", "terrace")!;
       expect(styleOf(blank)).toBe("blank");
@@ -1002,16 +1002,21 @@ describe("venue-routing-grid", () => {
       expect(blank.querySelectorAll(".line")).toHaveLength(0);
     });
 
-    it("tints and outlines a hovered cell, and outlines a keyboard-focused one the same way", async () => {
+    it("keeps a hovered painted cell's fill and outlines it, and outlines a keyboard-focused one the same way", async () => {
       const { el } = await mount();
       const box = combo(el, "c:drinks", "terrace")!;
+      const td = cell(el, "c:drinks", "terrace");
+      expect(td.dataset.stationColour).toBe("blue");
       const atRest = getComputedStyle(box);
       const restBackground = atRest.backgroundColor;
+      const restFill = getComputedStyle(td).backgroundColor;
       expect(atRest.outlineStyle).toBe("none");
       await userEvent.hover(box);
       expect(box.matches(":hover")).toBe(true);
       const hovered = getComputedStyle(box);
-      expect(hovered.backgroundColor).not.toBe(restBackground);
+      expect(hovered.backgroundColor).toBe(restBackground);
+      expect(restBackground).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(td).backgroundColor).toBe(restFill);
       expect(hovered.outlineStyle).toBe("solid");
       expect(hovered.cursor).toBe("pointer");
       const hoverOutline = [hovered.outlineStyle, hovered.outlineWidth, hovered.outlineColor];
@@ -1700,5 +1705,783 @@ describe("venue-routing-grid", () => {
       await el.updateComplete;
       expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
     });
+  });
+});
+
+describe("station colours", () => {
+  /** The computed background a declared token gives a div beside the grid. */
+  const fill = (el: RoutingGrid, token: string) => {
+    const probe = document.createElement("div");
+    probe.style.background = `var(${token})`;
+    el.parentElement!.append(probe);
+    const computed = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return computed;
+  };
+  const colourOf = (el: RoutingGrid, row: string, zone: string) =>
+    cell(el, row, zone).dataset.stationColour;
+  const expanded = async (el: RoutingGrid) => {
+    root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await el.updateComplete;
+  };
+
+  it("paints each cell with its station's colour, including a cell that follows its row's Every zone", async () => {
+    const { el } = await mount(
+      routing({
+        cells: [
+          { row: { kind: "category", categoryId: "drinks" }, zoneId: null, target: station("bar") },
+          {
+            row: { kind: "category", categoryId: "drinks" },
+            zoneId: "terrace",
+            target: station("kitchen"),
+          },
+        ],
+      }),
+    );
+    await expanded(el);
+    expect(styleOf(combo(el, "p:cola", "inside")!)).toBe("blank");
+    expect(colourOf(el, "p:cola", "inside")).toBe("blue");
+    expect(getComputedStyle(cell(el, "p:cola", "inside")).backgroundColor).toBe(
+      fill(el, "--wt-color-station-blue"),
+    );
+    expect(colourOf(el, "c:drinks", "terrace")).toBe("orange");
+    expect(getComputedStyle(cell(el, "c:drinks", "terrace")).backgroundColor).toBe(
+      fill(el, "--wt-color-station-orange"),
+    );
+    expect(colourOf(el, "c:drinks", "every")).toBe("blue");
+  });
+
+  it("paints the default cell, read-only as well", async () => {
+    for (const canMakeDefault of [true, false]) {
+      const { el } = await mount(routing({ canMakeDefault }));
+      expect(colourOf(el, "all", "every")).toBe("orange");
+      expect(getComputedStyle(cell(el, "all", "every")).backgroundColor).toBe(
+        fill(el, "--wt-color-station-orange"),
+      );
+    }
+  });
+
+  it("leaves a cell plain where it sends nowhere: No preparation, no station, or a disabled station", async () => {
+    const { el } = await mount(
+      routing({
+        cells: [
+          ...routing().cells,
+          { row: { kind: "product", productId: "cola" }, zoneId: null, target: station("gone") },
+        ],
+      }),
+    );
+    await expanded(el);
+    for (const [row, zone] of [
+      ["all", "terrace"],
+      ["c:food", "inside"],
+      ["p:cola", "every"],
+    ] as const) {
+      expect(colourOf(el, row, zone), `${row} × ${zone}`).toBeUndefined();
+      expect(getComputedStyle(cell(el, row, zone)).backgroundColor).toBe(
+        fill(el, "--wt-color-surface"),
+      );
+    }
+    const repair = await mount(routing({ defaultStationId: null }));
+    expect(colourOf(repair.el, "all", "every")).toBeUndefined();
+    const repairReadOnly = await mount(routing({ defaultStationId: null, canMakeDefault: false }));
+    expect(colourOf(repairReadOnly.el, "all", "every")).toBeUndefined();
+  });
+
+  it("keeps a hovered orange cell orange and draws the focus outline inside it", async () => {
+    const { el } = await mount();
+    const td = cell(el, "c:food", "every");
+    expect(colourOf(el, "c:food", "every")).toBe("orange");
+    const orange = fill(el, "--wt-color-station-orange");
+    const box = combo(el, "c:food", "every")!;
+    await userEvent.hover(box);
+    expect(box.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(box);
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(td).backgroundColor).toBe(orange);
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(hovered.outlineColor).toBe(
+      (() => {
+        const probe = document.createElement("div");
+        probe.style.color = "var(--wt-color-focus)";
+        el.parentElement!.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      })(),
+    );
+    expect(parseFloat(hovered.outlineOffset)).toBeLessThan(0);
+  });
+
+  it("tints a hovered cell that sends nowhere, which has no fill to keep", async () => {
+    const { el } = await mount();
+    expect(colourOf(el, "all", "terrace")).toBeUndefined();
+    const box = combo(el, "all", "terrace")!;
+    expect(getComputedStyle(box).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await userEvent.hover(box);
+    expect(box.matches(":hover")).toBe(true);
+    expect(getComputedStyle(box).backgroundColor).toBe(fill(el, "--wt-color-surface-lifted"));
+  });
+
+  it("parts neighbouring painted cells with a thin line in the surface colour", async () => {
+    const { el } = await mount();
+    const surface = (() => {
+      const probe = document.createElement("div");
+      probe.style.color = "var(--wt-color-surface)";
+      el.parentElement!.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    })();
+    const every = cell(el, "c:drinks", "every");
+    const terrace = cell(el, "c:drinks", "terrace");
+    expect(every.dataset.stationColour).toBe("blue");
+    expect(terrace.dataset.stationColour).toBe("blue");
+    expect(getComputedStyle(terrace).boxShadow).toBe(`${surface} 2px 0px 0px 0px inset`);
+    expect(getComputedStyle(every).boxShadow).toBe("none");
+  });
+
+  it("paints a choice waiting to be saved as it will be saved", async () => {
+    const drinks: CellAddress = { row: { kind: "category", categoryId: "drinks" }, zoneId: null };
+    const { el } = await mount(routing(), {
+      pending: { address: drinks, target: station("tbar") },
+    });
+    expect(colourOf(el, "c:drinks", "every")).toBe("teal");
+    el.pending = { address: drinks, target: null };
+    await el.updateComplete;
+    expect(colourOf(el, "c:drinks", "every")).toBe("orange");
+    el.pending = { address: drinks, target: NO_PREP };
+    await el.updateComplete;
+    expect(colourOf(el, "c:drinks", "every")).toBeUndefined();
+  });
+
+  it("starts each period line with a dot in its station's colour, and draws none before a No preparation line", async () => {
+    const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
+    const periods: RoutingPeriod[] = [
+      { id: "lunch", ...dining, name: "Lunch", productIds: ["cola"] },
+      { id: "staff", ...dining, name: "Staff lunch", productIds: ["cola"] },
+      { id: "late", ...dining, name: "Late", productIds: ["cola"] },
+    ];
+    const { el } = await mount(
+      routing({
+        periods,
+        cells: [
+          {
+            row: { kind: "category", categoryId: "drinks" },
+            zoneId: null,
+            target: station("bar"),
+            periods: [
+              { periodId: "lunch", target: station("kitchen") },
+              { periodId: "staff", target: NO_PREP },
+              { periodId: "late", target: station("old") },
+            ],
+          } as RoutingCell,
+        ],
+      }),
+    );
+    const own = combo(el, "c:drinks", "every")!;
+    const lineNodes = [...own.querySelectorAll(".line")];
+    expect(lineNodes.map((line) => line.textContent!.trim())).toEqual([
+      "Lunch: Kitchen",
+      "Staff lunch: No preparation",
+      "Late: Old kitchen (Disabled)",
+    ]);
+    const dots = lineNodes.map((line) => line.querySelector<HTMLElement>(".dot"));
+    expect(dots[0]!.dataset.stationColour).toBe("orange");
+    expect(dots[0]!.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(dots[0]!).backgroundColor).toBe(
+      fill(el, "--wt-color-station-orange-dot"),
+    );
+    expect(dots[0]!.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(dots[1]).toBeNull();
+    expect(dots[2]).toBeNull();
+    expect(own.getAttribute("aria-label")).toBe(
+      "Drinks, Every zone: Bar, set here. Lunch: Kitchen. Staff lunch: No preparation. Late: Old kitchen (Disabled)",
+    );
+  });
+
+  it("lists each station the grid sends to once in a key under the grid", async () => {
+    const keyNames = (el: RoutingGrid) =>
+      [...root(el).querySelectorAll(".key li")].map((item) => item.textContent!.trim());
+    const { el } = await mount(
+      routing({
+        stations: [
+          ...routing().stations,
+          { id: "grill", name: "Grill", active: true, colour: "red" },
+        ],
+      }),
+    );
+    const key = root(el).querySelector<HTMLElement>("ul.key")!;
+    expect(key.getAttribute("aria-label")).toBe("Station colours");
+    expect(key.compareDocumentPosition(root(el).querySelector(".scroll")!)).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    expect(keyNames(el)).toEqual(["Kitchen", "Bar", "Terrace bar"]);
+    const swatch = key.querySelector<HTMLElement>("li .swatch")!;
+    expect(swatch.getAttribute("aria-hidden")).toBe("true");
+    expect(swatch.dataset.stationColour).toBe("orange");
+    expect(getComputedStyle(swatch).backgroundColor).toBe(fill(el, "--wt-color-station-orange"));
+    const search = root(el).querySelector<HTMLElement>('wt-input[name="search"]')!;
+    await userEvent.fill(search.shadowRoot!.querySelector("input")!, "bread");
+    await el.updateComplete;
+    expect(keyNames(el)).toEqual(["Kitchen", "Bar", "Terrace bar"]);
+    const empty = await mount(routing({ defaultStationId: null, cells: [] }));
+    expect(root(empty.el).querySelector(".key")).toBeNull();
+  });
+
+  /** Drinks go to the Bar, with a Lunch line on Food sending to the Bar too. */
+  const withBarLine = (stations: RoutingView["stations"]) =>
+    routing({
+      stations,
+      periods: [
+        {
+          id: "lunch",
+          departmentId: "dining",
+          departmentName: "Dining",
+          colour: "blue",
+          name: "Lunch",
+          productIds: ["burger"],
+        },
+      ],
+      cells: [
+        { row: { kind: "category", categoryId: "drinks" }, zoneId: null, target: station("bar") },
+        {
+          row: { kind: "category", categoryId: "food" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("bar") }],
+        } as RoutingCell,
+      ],
+    });
+  const barDot = (el: RoutingGrid) =>
+    combo(el, "c:food", "every")!.querySelector<HTMLElement>(".line .dot");
+  const keyColours = (el: RoutingGrid) =>
+    [...root(el).querySelectorAll<HTMLElement>(".key li")].map(
+      (item) =>
+        `${item.textContent!.trim()}:${item.querySelector<HTMLElement>(".swatch")!.dataset.stationColour}`,
+    );
+
+  it("repaints the cell, the line's dot and the key when a refresh changes one station's colour", async () => {
+    const { el } = await mount(withBarLine(routing().stations));
+    expect(colourOf(el, "c:drinks", "every")).toBe("blue");
+    expect(barDot(el)!.dataset.stationColour).toBe("blue");
+    expect(keyColours(el)).toEqual(["Kitchen:orange", "Bar:blue"]);
+    el.model = withBarLine(
+      routing().stations.map((s) => (s.id === "bar" ? { ...s, colour: "pink" as const } : s)),
+    );
+    await el.updateComplete;
+    expect(colourOf(el, "c:drinks", "every")).toBe("pink");
+    expect(getComputedStyle(cell(el, "c:drinks", "every")).backgroundColor).toBe(
+      fill(el, "--wt-color-station-pink"),
+    );
+    expect(barDot(el)!.dataset.stationColour).toBe("pink");
+    expect(keyColours(el)).toEqual(["Kitchen:orange", "Bar:pink"]);
+  });
+
+  it("draws a station whose stored colour is not one of the twelve unpainted, with no dot and no key entry", async () => {
+    const { el } = await mount(
+      withBarLine(
+        routing().stations.map((s) =>
+          s.id === "bar" ? { ...s, colour: "magenta" as unknown as typeof s.colour } : s,
+        ),
+      ),
+    );
+    expect(shown(combo(el, "c:drinks", "every")!).text).toBe("Bar");
+    expect(colourOf(el, "c:drinks", "every")).toBeUndefined();
+    expect(getComputedStyle(cell(el, "c:drinks", "every")).backgroundColor).toBe(
+      fill(el, "--wt-color-surface"),
+    );
+    expect(combo(el, "c:food", "every")!.querySelector(".line")!.textContent!.trim()).toBe(
+      "Lunch: Bar",
+    );
+    expect(barDot(el)).toBeNull();
+    expect(keyColours(el)).toEqual(["Kitchen:orange"]);
+  });
+});
+
+describe("one period", () => {
+  const restaurant = {
+    departmentId: "restaurant",
+    departmentName: "Restaurant",
+    colour: "blue" as const,
+  };
+  const lunch: RoutingPeriod = { id: "lunch", ...restaurant, name: "Lunch", productIds: [] };
+  const dinner: RoutingPeriod = { id: "dinner", ...restaurant, name: "Dinner", productIds: [] };
+  const breakfast: RoutingPeriod = {
+    id: "breakfast",
+    departmentId: "bar",
+    departmentName: "Bar",
+    colour: "green",
+    name: "Breakfast",
+    productIds: [],
+  };
+  const brunch: RoutingPeriod = {
+    id: "brunch",
+    departmentId: "events",
+    departmentName: "Events",
+    colour: "red",
+    name: "Brunch",
+    productIds: [],
+    departmentInactive: true,
+  };
+  /**
+   * Restaurant runs Lunch and Dinner in the Terrace; Bar runs Breakfast at the Counter. PIZZAS go
+   * to the Kitchen, and to the Pizza oven at Lunch and Dinner; POSTRES on the Terrace go to the
+   * Kitchen, and to the Grill at Lunch; Margherita on the Terrace is set to the Kitchen.
+   */
+  const twoDepartments = (overrides: Partial<RoutingView> = {}) =>
+    routing({
+      stationTimes: [],
+      periods: [lunch, dinner, breakfast, brunch],
+      zones: [
+        { id: "counter", name: "Counter", departmentId: "bar" },
+        { id: "terrace", name: "Terrace", departmentId: "restaurant" },
+      ],
+      categories: [
+        { id: "pizzas", name: "PIZZAS", parentId: null },
+        { id: "postres", name: "POSTRES", parentId: null },
+      ],
+      products: [
+        { id: "margherita", name: "Margherita", categoryId: "pizzas" },
+        { id: "flan", name: "Flan", categoryId: "postres" },
+      ],
+      cells: [
+        {
+          row: { kind: "category", categoryId: "pizzas" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [
+            { periodId: "lunch", target: station("oven") },
+            { periodId: "dinner", target: station("oven") },
+          ],
+        },
+        {
+          row: { kind: "category", categoryId: "postres" },
+          zoneId: "terrace",
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("grill") }],
+        },
+        {
+          row: { kind: "product", productId: "margherita" },
+          zoneId: "terrace",
+          target: station("kitchen"),
+        },
+      ] as RoutingCell[],
+      stations: [
+        { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+        { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+        { id: "grill", name: "Grill", active: true, colour: "purple" },
+      ],
+      ...overrides,
+    });
+  const periodField = (el: RoutingGrid) =>
+    root(el).querySelector<Combo>('wt-combobox[name="period"]');
+  async function choosePeriod(el: RoutingGrid, value: string) {
+    periodField(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  }
+  async function mountExpanded(model = twoDepartments()) {
+    const mounted = await mount(model);
+    root(mounted.el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await mounted.el.updateComplete;
+    return mounted;
+  }
+  /** The station a cell draws, the look it is drawn in, and the colour it is painted. */
+  const drawn = (el: RoutingGrid, row: string, zone: string) => {
+    const box = combo(el, row, zone)!;
+    return {
+      text: shown(box).text,
+      style: styleOf(box),
+      colour: cell(el, row, zone).dataset.stationColour,
+    };
+  };
+  const lineCount = (el: RoutingGrid) => root(el).querySelectorAll(".line").length;
+
+  it("the Period field sits after the search, opens on All periods and offers each active department's periods, grouped by department", async () => {
+    const { el } = await mount(twoDepartments());
+    const box = periodField(el)!;
+    expect(box.label).toBe("Period");
+    expect(box.hideLabel).toBe(false);
+    expect(box.search).toBe("auto");
+    expect(box.value).toBe("");
+    expect(box.showEmptyOption).toBe(true);
+    expect(box.options).toEqual([
+      { value: "", label: "All periods" },
+      { value: "lunch", label: "Lunch", group: "Restaurant" },
+      { value: "dinner", label: "Dinner", group: "Restaurant" },
+      { value: "breakfast", label: "Breakfast", group: "Bar" },
+    ]);
+    const toolbar = [...root(el).querySelector(".toolbar")!.children];
+    const search = root(el).querySelector('wt-input[name="search"]')!;
+    expect(toolbar.indexOf(box)).toBe(toolbar.indexOf(search) + 1);
+    expect(toolbar.indexOf(box)).toBeLessThan(
+      toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
+    );
+    const one = await mount(twoDepartments({ periods: [lunch, dinner, brunch] }));
+    expect(periodField(one.el)!.options).toEqual([
+      { value: "", label: "All periods" },
+      { value: "lunch", label: "Lunch" },
+      { value: "dinner", label: "Dinner" },
+    ]);
+    const none = await mount(twoDepartments({ periods: [brunch] }));
+    expect(periodField(none.el)).toBeNull();
+    const escaped: Event[] = [];
+    el.addEventListener("wt-change", (event) => escaped.push(event));
+    await choosePeriod(el, "lunch");
+    expect(escaped).toEqual([]);
+  });
+
+  it("choosing a period shows each cell's station during it: the line's station where the cell has one, the plain station otherwise", async () => {
+    const { el } = await mountExpanded();
+    expect(lineCount(el)).toBeGreaterThan(0);
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Pizza oven",
+      style: "set",
+      colour: "pink",
+    });
+    expect(drawn(el, "p:margherita", "every")).toEqual({
+      text: "Pizza oven",
+      style: "inherited",
+      colour: "pink",
+    });
+    expect(drawn(el, "c:postres", "terrace")).toEqual({
+      text: "Grill",
+      style: "set",
+      colour: "purple",
+    });
+    expect(drawn(el, "p:margherita", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+    expect(lineCount(el)).toBe(0);
+    expect(root(el).querySelectorAll('[data-test="period-flag"]')).toHaveLength(0);
+    expect(combo(el, "c:pizzas", "every")!.getAttribute("aria-label")).toBe(
+      "PIZZAS, Every zone: Pizza oven, set here",
+    );
+    await choosePeriod(el, "dinner");
+    expect(drawn(el, "c:postres", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+  });
+
+  it("a zone of another department shows its plain station, and is named where its row's Every zone shows another", async () => {
+    const { el } = await mountExpanded();
+    expect(styleOf(combo(el, "c:pizzas", "counter")!)).toBe("blank");
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "Kitchen",
+      style: "differs",
+      colour: "orange",
+    });
+    expect(drawn(el, "c:pizzas", "every").text).toBe("Pizza oven");
+    await choosePeriod(el, "breakfast");
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "orange",
+    });
+  });
+
+  it("a choice waiting on a row's Every zone leaves that row's same-department blank cells blank in the period view", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    el.pending = {
+      address: { row: { kind: "category", categoryId: "pizzas" }, zoneId: null },
+      target: station("grill"),
+    };
+    await el.updateComplete;
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Grill",
+      style: "set",
+      colour: "purple",
+    });
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "pink",
+    });
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "Kitchen",
+      style: "differs",
+      colour: "orange",
+    });
+  });
+
+  it("a cell that follows its row's Every zone stays nameless in the period view, and takes its colour", async () => {
+    const { el } = await mountExpanded();
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "orange",
+    });
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "pink",
+    });
+  });
+
+  it("going back to All periods draws the lines and dots again", async () => {
+    const { el } = await mountExpanded();
+    const before = lineCount(el);
+    const dots = root(el).querySelectorAll(".dot").length;
+    await choosePeriod(el, "lunch");
+    expect(lineCount(el)).toBe(0);
+    await choosePeriod(el, "");
+    expect(periodField(el)!.value).toBe("");
+    expect(lineCount(el)).toBe(before);
+    expect(root(el).querySelectorAll(".dot")).toHaveLength(dots);
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+  });
+
+  it("a chosen period that a refresh removes goes back to All periods", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    el.model = twoDepartments({ periods: [dinner, breakfast] });
+    await el.updateComplete;
+    expect(periodField(el)!.value).toBe("");
+    expect(lineCount(el)).toBeGreaterThan(0);
+    await choosePeriod(el, "dinner");
+    el.model = twoDepartments();
+    await el.updateComplete;
+    expect(periodField(el)!.value).toBe("dinner");
+  });
+
+  const searchInput = (el: RoutingGrid) =>
+    root(el)
+      .querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  const status = (el: RoutingGrid) =>
+    root(el).querySelector<HTMLElement>('[role="status"]')!.textContent!.trim();
+  /** Opens the Period field and clicks the option labelled `label`, as a person does. */
+  async function pickPeriod(el: RoutingGrid, label: string) {
+    const box = periodField(el)!;
+    await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const option = [...box.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (row) => row.textContent!.trim() === label,
+    )!;
+    await userEvent.click(option);
+    await el.updateComplete;
+  }
+
+  it("keeps the Period field's option list while the search is typed into, and rebuilds it in a new language", async () => {
+    const { el } = await mount(twoDepartments());
+    const options = periodField(el)!.options;
+    await userEvent.fill(searchInput(el), "marg");
+    await el.updateComplete;
+    expect(status(el)).toBe("1 match");
+    expect(periodField(el)!.options).toBe(options);
+    setLocale("es");
+    await userEvent.fill(searchInput(el), "margh");
+    await el.updateComplete;
+    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+  });
+
+  it("a search and a chosen period together show the matching rows with each cell's station during the period", async () => {
+    const { el } = await mount(twoDepartments());
+    await userEvent.fill(searchInput(el), "marg");
+    await el.updateComplete;
+    await pickPeriod(el, "Lunch");
+    expect(periodField(el)!.value).toBe("lunch");
+    expect(rowLabels(el)).toEqual(["All categories", "▾ PIZZAS", "Margherita"]);
+    expect(drawn(el, "p:margherita", "every")).toEqual({
+      text: "Pizza oven",
+      style: "inherited",
+      colour: "pink",
+    });
+    expect(drawn(el, "p:margherita", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+    expect(lineCount(el)).toBe(0);
+  });
+
+  it("the period view still draws a refusal, and a disabled station unpainted with its warning", async () => {
+    const postresEvery: CellAddress = {
+      row: { kind: "category", categoryId: "postres" },
+      zoneId: null,
+    };
+    const model = twoDepartments({
+      stations: [
+        { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+        { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+        { id: "grill", name: "Grill", active: true, colour: "purple" },
+        { id: "old", name: "Old kitchen", active: false, colour: "brown" },
+      ],
+    });
+    model.cells = [
+      ...model.cells,
+      { ...postresEvery, target: station("old") },
+      {
+        row: { kind: "product", productId: "flan" },
+        zoneId: null,
+        target: station("kitchen"),
+        periods: [{ periodId: "lunch", target: station("old") }],
+      },
+    ];
+    const { el } = await mountExpanded(model);
+    await choosePeriod(el, "lunch");
+    el.refusal = { address: postresEvery, message: "The change could not be saved." };
+    await el.updateComplete;
+    expect(errorOf(el, "c:postres", "every")).toBe("The change could not be saved.");
+    expect(drawn(el, "c:postres", "every")).toEqual({
+      text: "Old kitchen (Disabled)",
+      style: "set",
+      colour: undefined,
+    });
+    expect(
+      cell(el, "c:postres", "every").querySelector('[data-test="disabled-target"]')!.textContent,
+    ).toContain("Old kitchen: Disabled.");
+    expect(drawn(el, "p:flan", "every")).toEqual({
+      text: "Old kitchen (Disabled)",
+      style: "set",
+      colour: undefined,
+    });
+  });
+
+  describe("the disabled-station warning follows the station shown for the period", () => {
+    /**
+     * Flan goes to the Kitchen, and to the disabled Old kitchen at Lunch; Margherita goes to the
+     * Old kitchen, and to the Kitchen at Lunch; PIZZAS go to the Kitchen, and to the Old kitchen
+     * at Dinner; Calzone has no cell of its own.
+     */
+    const withOldKitchen = () => {
+      const model = twoDepartments({
+        stations: [
+          { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+          { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+          { id: "grill", name: "Grill", active: true, colour: "purple" },
+          { id: "old", name: "Old kitchen", active: false, colour: "brown" },
+        ],
+      });
+      model.products = [
+        ...model.products,
+        { id: "calzone", name: "Calzone", categoryId: "pizzas" },
+      ];
+      model.cells = [
+        {
+          row: { kind: "category", categoryId: "pizzas" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "dinner", target: station("old") }],
+        },
+        {
+          row: { kind: "product", productId: "flan" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("old") }],
+        },
+        {
+          row: { kind: "product", productId: "margherita" },
+          zoneId: null,
+          target: station("old"),
+          periods: [{ periodId: "lunch", target: station("kitchen") }],
+        },
+      ];
+      return model;
+    };
+    const warningOf = (el: RoutingGrid, row: string, zone: string) =>
+      cell(el, row, zone)
+        .querySelector('[data-test="disabled-target"]')
+        ?.textContent!.replace(/\s+/g, " ")
+        .trim() ?? null;
+
+    it("warns where the cell's own line sends the period to a disabled station", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "lunch");
+      expect(drawn(el, "p:flan", "every").text).toBe("Old kitchen (Disabled)");
+      expect(warningOf(el, "p:flan", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+
+    it("does not warn where the cell's own line sends the period to an active station, though its plain station is disabled", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "lunch");
+      expect(drawn(el, "p:margherita", "every").text).toBe("Kitchen");
+      expect(warningOf(el, "p:margherita", "every")).toBeNull();
+      await choosePeriod(el, "dinner");
+      expect(drawn(el, "p:margherita", "every").text).toBe("Old kitchen (Disabled)");
+      expect(warningOf(el, "p:margherita", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+
+    it("does not warn on a cell that only inherits the disabled station for the period", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "dinner");
+      expect(warningOf(el, "c:pizzas", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+      expect(drawn(el, "p:calzone", "every")).toMatchObject({
+        text: "Old kitchen (Disabled)",
+        style: "inherited",
+      });
+      expect(warningOf(el, "p:calzone", "every")).toBeNull();
+    });
+
+    it("All periods still warns only about the cell's plain station", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      expect(drawn(el, "p:flan", "every").text).toBe("Kitchen");
+      expect(warningOf(el, "p:flan", "every")).toBeNull();
+      expect(
+        [...cell(el, "p:flan", "every").querySelectorAll(".line")].map((line) =>
+          line.textContent!.trim(),
+        ),
+      ).toEqual(["Lunch: Old kitchen (Disabled)"]);
+      expect(warningOf(el, "p:margherita", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+  });
+
+  it("a cell opened from the period view edits the whole cell, its period lines included", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    const editor = await openEditor(el, combo(el, "c:pizzas", "every")!);
+    expect(editor.cell).toEqual({
+      address: { row: { kind: "category", categoryId: "pizzas" }, zoneId: null },
+      label: "PIZZAS, Every zone",
+      target: station("kitchen"),
+      periods: [
+        { periodId: "lunch", target: station("oven") },
+        { periodId: "dinner", target: station("oven") },
+      ],
+    });
+    expect(
+      editor.shadowRoot!.querySelectorAll<Combo>('wt-combobox[name="line-periods"]'),
+    ).toHaveLength(1);
+    expect(
+      editor.shadowRoot!.querySelector<Combo>('wt-combobox[name="line-periods"]')!.values,
+    ).toEqual(["lunch", "dinner"]);
+  });
+
+  it("a new grid opens on All periods", async () => {
+    const address = location.href;
+    const first = await mount(twoDepartments());
+    await choosePeriod(first.el, "dinner");
+    expect(periodField(first.el)!.value).toBe("dinner");
+    first.el.remove();
+    const { el } = await mount(twoDepartments());
+    expect(periodField(el)!.value).toBe("");
+    expect(location.href).toBe(address);
+  });
+
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const { el } = await mount(twoDepartments());
+    expect(periodField(el)!.label).toBe("Periodo");
+    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
   });
 });
