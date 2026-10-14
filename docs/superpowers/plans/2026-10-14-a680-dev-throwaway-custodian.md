@@ -21,9 +21,11 @@ these files change: `packages/fiscal-verifactu/src/**` (including `allocation-co
 `allocation-paper-source.ts`, `paper-evidence.ts`, `paper-custodian.ts`, `index.ts`),
 `apps/server/src/setup-api.ts`, `apps/server/src/provision.ts`,
 `docs/developers/paper-custodian.md`. Lane E's open branch `feat/w41s6-offline-recovery-pack`
-edits `paper-evidence.ts`, `paper-custodian.ts`, `index.ts`, `setup-api.ts`, the setup app and
-`paper-custodian.md`; this plan touches none of them, so the two branches should not conflict on
-text. It does CALL four functions from `paper-evidence.ts` (`enrolPaperCustodian`,
+edits `paper-evidence.ts`, `paper-custodian.ts`, `index.ts`, `setup-api.ts`, files under
+`apps/setup/src/` and `paper-custodian.md`; this plan touches none of those (it edits
+`apps/setup/vite.config.ts`, which lane E's branch does not). Both branches DO edit
+`docs/backlog.md` and `docs/backlog/fiscal.md` (Task 9), so whichever lands second may need a
+small rebase there. This plan also CALLS four functions from `paper-evidence.ts` (`enrolPaperCustodian`,
 `paperCustodianFingerprint`, `signPaperBlock`, `signPaperConsumptionForBlock`); if lane E lands
 first and changes one of their signatures, the rebase breaks the typecheck here, not silently.
 
@@ -164,7 +166,8 @@ are in `~/waitron-campaign-b/a680-repro/`.
   (see "A shipped box cannot be pointed at a custodian" above), and making it possible is a
   product change: lane E's A679. **Recommended default:** A680 does not cover it; the box loader
   waits for A679. Meanwhile the owner can load Santet into a laptop onboarding stack by running
-  the same script against the wizard's port (Task 10 gives the command). The alternative — a
+  the same script against the wizard's port, after a two-line edit to it (the last section of
+  this plan gives the edit and the command). The alternative — a
   hand-written compose override on the owner's preproduction box adding the three settings and
   the two files — is an untested operator procedure and belongs in its own item if wanted.
 - No other point needs an owner answer. The new error code is not a STOP: before go-live a code
@@ -205,9 +208,10 @@ are in `~/waitron-campaign-b/a680-repro/`.
   - **"refuses production before signing":** `signDevelopmentAllocation(..., { WAITRON_ENV:
     "production" })` and `createDevelopmentKey({ WAITRON_ENV: "production" })` each reject
     `{ code: "deployment.development_custodian_refused", params: { environment: "production" } }`.
-  - **"accepts unset, dev and preproduction":** `it.each([{}, {WAITRON_ENV: "dev"},
-    {WAITRON_ENV: "preproduction"}])`, each returns an allocation whose `environment` is
-    `"preproduction"`.
+  - **"accepts unset, empty, dev and preproduction":** `it.each([{}, {WAITRON_ENV: ""},
+    {WAITRON_ENV: "dev"}, {WAITRON_ENV: "preproduction"}])`, each returns an allocation whose
+    `environment` is `"preproduction"` (an empty value already means preproduction,
+    `packages/db/src/deployment.ts:23`).
   - **"a misspelt environment is a configuration error":** `{ WAITRON_ENV: "prod" }` rejects
     `server.config_invalid` (it reuses `deploymentEnvironment`, `apps/server/src/config.ts:340`).
   - **"a production-stamped database refuses what it signs":** stamp `production`, offer the
@@ -233,12 +237,15 @@ are in `~/waitron-campaign-b/a680-repro/`.
     { module: "fiscal-verifactu", action: "setup", eventId, sourceId, targetNodeId: nodeId }` and
     `operatorId: administratorId`. `environment: "preproduction"` is a literal, not a parameter.
   - Add the error code to `apps/server/src/errors.ts` with a two-line doc comment in the style of
-    its neighbour.
+    its neighbour. `sign.ts` imports that registry for its side effect,
+    `import "../../src/errors.js";`, as `demo-seed/seed-sales.ts:47` does (house rule: every file
+    that throws a code imports its registry).
 - [ ] Run the same command → GREEN. Read the `Tests` count.
 - [ ] **Deletion control:** delete the `"production"` throw in `assertDevelopmentEnvironment`, run
   again, record which cases fail and with what message (expected: the two production cases,
   because signing then succeeds), restore the line, run GREEN again. Write the control's command
-  and result in the task's commit message.
+  and result in the task's commit message. This is only the first run of the control; Task 5
+  repeats it across every production case the branch adds.
 - [ ] `pnpm --filter @waitron/server typecheck`. Commit (`git commit -s`).
 
 ## Task 2: `applyDevelopmentVenue`, and the demo seed on top of it
@@ -295,12 +302,23 @@ are in `~/waitron-campaign-b/a680-repro/`.
     bytes did not change.
   - **"init refuses production and writes nothing":** `{ WAITRON_ENV: "production" }` → non-zero
     exit, stderr names `deployment.development_custodian_refused`, directory still empty.
+  - **"init refuses production when a key already exists, and changes nothing":** run `init`
+    under `{ WAITRON_ENV: "dev" }`, record the bytes and modification times of `key.pem` and
+    `custodian.json`, then run `init` under `{ WAITRON_ENV: "production" }` → non-zero exit,
+    stderr names `deployment.development_custodian_refused`, stdout is EMPTY (no trust settings
+    printed), and both files' bytes and modification times are unchanged. Without this case a
+    check that sits only in `createDevelopmentKey` would pass every other test: with a key
+    already present, `init` never calls it.
+  - **"init accepts an empty WAITRON_ENV":** `{ WAITRON_ENV: "" }` → exit 0, three lines.
   - **"unknown subcommand prints usage":** non-zero, usage on stderr.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run scripts/dev-custodian/cli.test.ts` → RED.
-- [ ] Implement `files.ts` (`initCustodianDir(dir, env)`: `mkdir -p` with mode `0o700`, create the
-  key with `writeFile(..., { mode: 0o600, flag: "wx" })` only when absent, rewrite `custodian.json`
-  through a temporary file and `rename`) and the `init` branch of `cli.ts` (`--dir <path>`,
-  required; parse with `node:util` `parseArgs`, `strict: true`). The run-when-invoked block
+- [ ] Implement `files.ts` (`initCustodianDir(dir, env)`: call `assertDevelopmentEnvironment(env)`
+  as its FIRST statement, before any file is read or written; then `mkdir -p` with mode `0o700`,
+  create the key with `writeFile(..., { mode: 0o600, flag: "wx" })` only when absent, rewrite
+  `custodian.json` through a temporary file and `rename`) and `cli.ts`. The CLI dispatcher also
+  calls `assertDevelopmentEnvironment(env)` first, before it looks at the subcommand, so every
+  subcommand present and future is refused in production. `init` takes `--dir <path>`,
+  required; parse with `node:util` `parseArgs`, `strict: true`. The run-when-invoked block
   follows `dev-setup.ts`'s last lines. Add the `dev:custodian` script to `apps/server/package.json`
   (`scripts`, not `waitron.commands`: it must never become a shipped command).
 - [ ] GREEN; then one real process: `pnpm --filter @waitron/server --silent dev:custodian init --dir "$(mktemp -d)"`
@@ -321,11 +339,16 @@ are in `~/waitron-campaign-b/a680-repro/`.
     `{ environment: "preproduction", venue: <planVenue-ready request built from the body with the
     NIF normalised>, initialOperations: <stdout's initialOperations> }`. Assert the same three
     table facts as Task 1 with `taxpayer_nif` `B12345674`. This is the same path as reproduction
-    case 5, but with the command's output instead of a test fixture.
+    case 5, but with the command's output instead of a test fixture. The file's `afterEach` calls
+    `vi.unstubAllEnvs()`: `apps/server/vitest.config.ts` does not set `unstubEnvs`, so a stub
+    would otherwise leak into later cases.
   - **"the output keeps the rest of the body byte-for-byte":** every key but
     `initialOperations` is `toEqual` the input.
   - **"a missing full-series code signs FF":** body without `fullSeriesCode` → the signed series
     include `FF-S000001 full` (the planner's default, `packages/provisioning/src/venue-plan.ts:203`).
+    Say in the test's name or one comment that the setup route itself refuses such a body
+    (`asString(v.fullSeriesCode, …)`, `apps/server/src/setup-api.ts:435`), so this case serves
+    callers that build the request themselves, not the wizard.
   - **"refuses a body that already carries initialOperations":** non-zero exit, confirmation file
     not written.
   - **"refuses production":** as in Task 3, and no confirmation file.
@@ -347,6 +370,8 @@ are in `~/waitron-campaign-b/a680-repro/`.
   - Extend the existing expected `.env` line list (`dev-onboard.test.ts:27-31`) with the three
     `WAITRON_FISCAL_*` lines after `WAITRON_HTTP_PORT`. This is a deliberate behaviour change of
     the written file, not a rewritten assertion: the three existing lines and their order stay.
+    Rename that test (`dev-onboard.test.ts:24`, "emits exactly the three setup keys in order, and
+    NONE of the trading-only keys") to say six keys, since it then checks six.
   - **"the first line is unchanged":** the header still reads
     ``# Generated by `pnpm dev:onboard` (setup mode — no venue bound) — do not edit by hand.``
     — `wa-wt` picks the onboarding target by that text (`wa-wt:185`).
@@ -359,9 +384,18 @@ are in `~/waitron-campaign-b/a680-repro/`.
   (default `process.env`); check the environment before `inspectVenues`; call
   `initCustodianDir(join(stateDir, "dev-custodian"), environment)` after migrating; add the three
   keys to `SetupEnv` and `SETUP_ENV_KEYS`. `main()` passes the `stateDir` it already resolves.
-  Print one line saying which custodian directory the box trusts.
+  Print one line saying which custodian directory the box trusts. Cut the comment above
+  `DevOnboardOptions` (`dev-onboard.ts:41`, "No `stateDir`: a setup-mode box never resolves the
+  fiscal slot…"): the type now takes a `stateDir`, so the comment becomes false.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run scripts/dev-onboard.test.ts scripts/dev-setup.test.ts`
-  → GREEN. Typecheck, commit.
+  → GREEN.
+- [ ] **Deletion control, across the whole branch.** Every production refusal the branch adds
+  rests on the one check in `assertDevelopmentEnvironment`. Delete its `"production"` throw and run
+  `pnpm --filter @waitron/server exec vitest run scripts/dev-custodian/sign.test.ts scripts/dev-custodian/apply.test.ts scripts/dev-custodian/cli.test.ts scripts/dev-onboard.test.ts`.
+  EVERY production case in all four files must fail (list them by name in the commit message,
+  with the failure each printed); a production case that still passes is testing something
+  other than the check, and must be fixed before going on. Restore the line, run the same command
+  GREEN. Typecheck, commit. Task 8 repeats this run once more on the finished branch.
 
 ## Task 6: the wizard's dev server adds the allocation
 
@@ -381,18 +415,34 @@ are in `~/waitron-campaign-b/a680-repro/`.
   - **leaves a body that has one:** `initialOperations` present → `sign` not called, upstream got
     the bytes unchanged.
   - **stands aside when there is no custodian:** directory absent → `next()` called, nothing
-    forwarded.
+    forwarded, and the handler `next()` hands over to still reads the FULL request body (assert
+    its bytes). The middleware must check the directory before it reads anything, or Vite's proxy
+    after it receives an empty body.
+  - **forwards the original path:** with the middleware mounted under a prefix, upstream receives
+    `req.originalUrl` (path and query), not the shortened `req.url`.
   - **only that route:** `GET /setup-api/status`, `POST /setup-api/fiscal-test` → `next()`.
   - **a signer refusal is visible:** `sign` throws → 500 with
     `{ error: { code: "dev_custodian.sign_failed", params: {} } }` and the signer's message
     written to the dev server's log; nothing forwarded. (This JSON is a dev-tool answer, not a
     registered product code; say so in one comment.)
-  - **serve only:** the exported Vite plugin object has `apply: "serve"`.
-- [ ] RED, then implement. The default `sign` spawns
+  - **serve only:** the exported Vite plugin object has `apply: "serve"`. Optional, stronger: load
+    the setup app's config for a build (`resolveConfig({ configFile: "apps/setup/vite.config.ts"
+    }, "build")`) and assert no plugin with this plugin's name is in the resolved list.
+- [ ] RED, then implement. Order inside the middleware: match method and path; check the key
+  directory exists (stand aside with `next()` if not, body untouched); only then read the body.
+  The default `sign` spawns
   `pnpm --silent --filter @waitron/server dev:custodian sign --dir <stateDir>/dev-custodian`
-  from the repository root with the body on stdin. Forward with `node:http`/`node:https` to
-  `target` (from `devServerProxy()`; `rejectUnauthorized: false` exactly when `secure: false`,
-  mirroring the proxy). Import nothing from `@waitron/fiscal-verifactu` in this file.
+  from the repository root with the body on stdin. Forward `req.originalUrl ?? req.url` with
+  `node:http`/`node:https` to `target` (from `devServerProxy()`; `rejectUnauthorized: false`
+  exactly when `secure: false`, mirroring the proxy).
+- [ ] **What this file may import.** Vite bundles `apps/setup/vite.config.ts` and everything it
+  imports when it loads the config, and the image's `vite build` of the setup app loads that
+  config too. So `setup-proxy.ts` has runtime imports of `node:` built-ins ONLY, plus type-only
+  imports (`import type`). No runtime import of `files.ts`, `sign.ts`, `@waitron/*` or any other
+  workspace file. Take the `Plugin` type from `vitest/config` (`import type { Plugin } from
+  "vitest/config"`), not `vite`, which does not resolve from `apps/server`; checked 2026-10-14
+  with a scratch file in `apps/server/scripts/` under `pnpm exec tsc --noEmit -p tsconfig.json`:
+  the only error was the scratch file's deliberate control line.
 - [ ] Register in `apps/setup/vite.config.ts`: `plugins: [viteNpmNotices(),
   devCustodianPlugin({ target: devServerProxy().target … })]`, importing
   `../server/scripts/dev-custodian/setup-proxy.js` (the same relative-import shape as the existing
@@ -413,18 +463,30 @@ are in `~/waitron-campaign-b/a680-repro/`.
     `dist/server.js` and `dist/node-entry.js` were found, and every copied outfile has an entry.
   - Bundle all those entries in ONE `esbuild.build` call with the same options as
     `scripts/bundle-node.mjs` `esbuildArgs` (`bundle`, `platform: "node"`, `format: "esm"`,
-    `target: "node24"`, `external: BUNDLE_EXTERNALS` imported from that file), plus
-    `write: false`, `metafile: true`, `outdir` in a temporary directory.
-  - **Control in the other direction:** assert `scripts/demo-seed/seed.ts` IS an input of the
-    server bundle — the scan can see a `scripts/` file when one is shipped.
-  - Assert no input of any output starts with `scripts/dev-custodian/` or equals
+    `target: "node24"`, `external: BUNDLE_EXTERNALS`), plus `write: false`, `metafile: true`,
+    `outdir` in a temporary directory. Load `BUNDLE_EXTERNALS` with a dynamic import of a
+    non-literal path and a cast — `(await import(pathToFileURL(bundleNodePath).href)) as {
+    BUNDLE_EXTERNALS: readonly string[] }` — not a static `import … from
+    "../../../../scripts/bundle-node.mjs"`, which the reviewer measured failing `tsc` 7.0.2 with
+    TS7016 (no declaration file). No `@ts-expect-error`.
+  - Read `metafile.inputs` — the full list of every file esbuild LOADED — never the per-output
+    `metafile.outputs[...].inputs`. The reviewer measured that a bare
+    `import "../scripts/demo-seed/allocation.js"` added to `src/demo-seed.ts` (and also a named
+    import, and a re-export) appeared in `metafile.inputs` but in NO output's inputs, because
+    esbuild dropped the unused code; a check on the per-output lists would pass with the import
+    present.
+  - **Control in the other direction:** assert `scripts/demo-seed/seed.ts` IS in that same
+    `metafile.inputs` list — the scan can see a `scripts/` file when one is loaded.
+  - Assert no key of `metafile.inputs` starts with `scripts/dev-custodian/` or equals
     `scripts/demo-seed/allocation.ts`.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run scripts/dev-custodian/not-shipped.test.ts`;
   record its duration (the 2026-10-14 single-entry CLI build took 4 s; if the test takes more than
   about 15 s, say so in the PR so the shard budget can be checked).
-- [ ] **Deletion control:** add `import "../scripts/dev-custodian/sign.js";` to
-  `apps/server/src/demo-seed.ts`, run → must FAIL naming `scripts/dev-custodian/sign.ts`; remove
-  the line, run → GREEN. Record both in the commit message.
+- [ ] **Deletion control:** add the BARE import `import "../scripts/dev-custodian/sign.js";` to
+  `apps/server/src/demo-seed.ts` (the shape a per-output check misses), run → must FAIL naming
+  `scripts/dev-custodian/sign.ts`; repeat with `import "../scripts/demo-seed/allocation.js";`
+  → must FAIL naming that file; remove the line, run → GREEN. Record all three runs in the
+  commit message.
 - [ ] The guard is weaker than its name in two ways; write them as the file's header comment and
   nowhere else: it reads the Dockerfile's copy list as text, and it covers only `apps/server`'s
   bundles (the browser bundles never include a Vite config). Commit.
@@ -442,7 +504,10 @@ pnpm --filter @waitron/server typecheck && pnpm --filter @waitron/setup typechec
 git diff --stat main -- packages/fiscal-verifactu apps/server/src/setup-api.ts apps/server/src/provision.ts docs/developers/paper-custodian.md apps/server/scripts/demo-seed/allocation.test.ts
 ```
 
-The last command must print nothing. Coverage: this branch adds no file to any coverage table
+The last command must print nothing. Then repeat Task 5's branch-wide deletion control once on
+the finished branch (delete the `"production"` throw in `assertDevelopmentEnvironment`, run the
+four files, every production case fails, restore, GREEN), in case a later task added a
+production case that passes for another reason. Coverage: this branch adds no file to any coverage table
 (`apps/server/scripts/**` is excluded at `apps/server/vitest.config.ts:36`; `errors.ts` gains a
 type only), so `pnpm --filter @waitron/server test:coverage` is not needed locally; CI runs it.
 
@@ -456,7 +521,10 @@ type only), so `pnpm --filter @waitron/server test:coverage` is not needed local
   `pnpm --filter @waitron/server dev:custodian init --dir <dir>` and
   `… sign --dir <dir> < body.json > signed.json`; `applyDevelopmentVenue` for in-process scripts;
   that every one of them refuses `WAITRON_ENV=production`; that a shipped box cannot use any of
-  this (point at A679); the retry limit. Do not edit `paper-custodian.md` (lane E's branch).
+  this (point at A679); the retry limit; and that an onboarding stack created before this
+  change keeps its old `.env` (`wa-wt`'s `ensure_env` reuses an existing one, `wa-wt:142-149`),
+  so it has no key and the wizard still refuses until you run `wa-wt reset onboarding <name>`.
+  Do not edit `paper-custodian.md` (lane E's branch).
   `docs/` is ignored by prettier; check with `pnpm exec prettier --file-info docs/developers/workflow-guide.md`.
 - [ ] Backlog: there is no A680 entry to delete. Add short entries in the fiscal area of
   `docs/backlog.md` (detail in `docs/backlog/fiscal.md`) for: (a) the owner's box loader against a
@@ -495,15 +563,26 @@ onto a main that has #1700.
   line 53 from `await applyVenue(planVenue({...}, ALL_MODULES), { db, modules: ALL_MODULES })` to
   `await applyDevelopmentVenue(planVenue({...}, ALL_MODULES), { db, modules: ALL_MODULES })`.
   Nothing else changes; it refuses `WAITRON_ENV=production`.
-- **`local/square/box-setup.mjs`** against a LAPTOP onboarding stack: no edit. Point it at the
-  wizard's dev server instead of the server, so the dev server signs the request:
-  `node local/square/box-setup.mjs --base http://localhost:<setup port>` (5192 on slot 1, 5292 on
-  slot 2, as `wa-wt ls` shows). Its readiness poll then calls `/management-api/session` on the same
-  base, which the setup app's dev server does not proxy — so for that poll the script needs the
-  server's base instead; the owner session updating the script splits `--base` into a setup base
-  and a server base. If the owner prefers to POST to the server directly, pipe the body through
-  `pnpm --silent --filter @waitron/server dev:custodian sign --dir <state dir>/dev-custodian` first
+- **`local/square/box-setup.mjs`** against a LAPTOP onboarding stack NEEDS A SCRIPT CHANGE,
+  whichever route is used. Pointed unchanged at the wizard's dev server
+  (`--base http://localhost:5192`), its setup POST is signed and succeeds, but its readiness poll
+  (`box-setup.mjs:68`, `POST ${BASE}/management-api/session`) then goes to the Vite dev server,
+  which forwards only `/setup-api` — so the script waits its full three minutes and exits 1.
+  The exact edit, which keeps the real-box use unchanged when `--server` is not given:
+  1. After `const BASE = arg("base", "https://waitron.local");` add
+     `const SERVER = arg("server", BASE);`
+  2. In the readiness loop, change `` `${BASE}/management-api/session` `` to
+     `` `${SERVER}/management-api/session` ``.
+
+  Then run it with the wizard's dev-server port as `--base` and the server as `--server`, both as
+  `wa-wt ls` shows them for the instance. On slot 1:
+  `node local/square/box-setup.mjs --base http://localhost:5192 --server https://localhost:8080`;
+  on slot 2: `--base http://localhost:5292 --server https://localhost:8180`. (`https`, because an
+  onboarding stack's first boot mints the box certificate; the script already accepts its
+  self-signed certificate.) The other route — POSTing to the server directly after piping the
+  body through `pnpm --silent --filter @waitron/server dev:custodian sign --dir <state dir>/dev-custodian`
   (state dir `$HOME/workspace/.waitron-dev/box` on slot 1,
-  `$HOME/workspace/.waitron-dev/instances/<name>/box` on any other slot).
+  `$HOME/workspace/.waitron-dev/instances/<name>/box` on any other) — also needs an edit to the
+  script, to run that command and post its output; the two-line edit above is the smaller one.
 - **`box-setup.mjs` against the real box (`https://waitron.local`)**: not possible with this item
   (STOP 1).
