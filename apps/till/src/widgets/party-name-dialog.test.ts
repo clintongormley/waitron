@@ -58,7 +58,7 @@ describe("till-party-name-dialog", () => {
         setLocale(locale);
         const { el } = await mountWidget<TillPartyNameDialog>(
           "till-party-name-dialog",
-          { tables: "4" },
+          { tables: "Counter 3, Counter 4" },
           theme,
         );
         const dialog = el
@@ -98,6 +98,50 @@ describe("till-party-name-dialog", () => {
     expect(field(el).required).toBe(false);
     expect(field(el).error).toBe("");
     expect(bottom(el).error).toBe("");
+  });
+
+  it.each(["en", "es"])(
+    "shows the name the party has when left empty as the field's placeholder, in %s",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      try {
+        setLocale(locale);
+        const el = await mountDialog({ tables: "Mesa 4, 5", value: "" });
+
+        expect(field(el).placeholder).toBe("Mesa 4, 5");
+        expect(field(el).hint).toBe("");
+        expect(nativeInput(el).placeholder).toBe("Mesa 4, 5");
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("styles a long table list's placeholder to be cut with an ellipsis at 390 px, without scrolling sideways", async () => {
+    const tables = Array.from({ length: 8 }, (_, index) => `Counter ${index + 1}`).join(", ");
+    await page.viewport(390, 900);
+    try {
+      const el = await mountDialog({ tables, value: "" });
+      const dialog = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!;
+      const body = dialog.querySelector<HTMLElement>(".body")!;
+      const input = nativeInput(el);
+      const control = getComputedStyle(input);
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = getComputedStyle(input, "::placeholder").font;
+      const textWidth =
+        input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight);
+
+      expect(input.placeholder).toBe(tables);
+      expect(context.measureText(input.placeholder).width).toBeGreaterThan(textWidth);
+      expect(control.textOverflow).toBe("ellipsis");
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 
   it("puts the cursor in the name field when it opens", async () => {

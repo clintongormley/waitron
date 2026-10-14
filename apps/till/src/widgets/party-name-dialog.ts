@@ -158,7 +158,7 @@ export class TillPartyNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("table.name_label")}
-          .hint=${t("table.name_hint")}
+          .placeholder=${this.tables}
           .value=${live(this.value)}
           .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
