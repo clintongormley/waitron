@@ -1,6 +1,6 @@
 import { assertStillSignedIn } from "./till-session.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
-import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -47,6 +47,7 @@ import type { DeviceRequestConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
 export interface BillRefundRequest {
@@ -71,6 +72,7 @@ export type RefundProviderFor = (providerName: string) => Promise<PaymentProvide
 
 export type BillRefundDeps = Pick<TillSaleDeps, "db" | "clock"> & {
   refundProviderFor?: RefundProviderFor;
+  attendance?: AttendanceRecorder;
 };
 
 /** The practice simulator by its name, else the pooled provider of that name; a name neither
@@ -92,6 +94,34 @@ export function refundProvidersOf(sources: {
 }
 
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
+
+async function captureRefundAttendance(
+  tx: Transaction,
+  refund: RefundRow,
+  attendance: AttendanceRecorder | undefined,
+  outcome: "pending" | "qualified" | "refused",
+  locationId?: string,
+): Promise<void> {
+  if (attendance === undefined) return;
+  if (locationId === undefined) {
+    const [order] = await tx
+      .select({ locationId: workingOrders.locationId })
+      .from(billPayments)
+      .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+      .where(eq(billPayments.id, refund.billPaymentId));
+    locationId = order!.locationId;
+  }
+  await attendance(tx, {
+    source: "refund",
+    key: refund.id,
+    personId: refund.requestedBy,
+    locationId,
+    kind: "payment",
+    at: refund.createdAt,
+    offsetMinutes: 0,
+    outcome,
+  });
+}
 
 /** The retry fingerprint of a refund request (design §5.1). The override is left out, so a retry
  * authorised by another manager is the same refund, and no PIN is hashed into a stored value. */
@@ -242,6 +272,7 @@ async function recordRefundOutcome(
         })
         .where(eq(billPaymentRefunds.id, refundId))
         .returning();
+      await captureRefundAttendance(tx, failed!, deps.attendance, "refused");
       return failed!;
     }
     const [completed] = await tx
@@ -261,6 +292,7 @@ async function recordRefundOutcome(
       authorizedBy: refund.authorizedBy,
       ...(providerRefundRef === null ? {} : { providerRefundRef }),
     });
+    await captureRefundAttendance(tx, completed!, deps.attendance, "qualified");
     return completed!;
   });
 }
@@ -640,6 +672,7 @@ export async function refundBillPayment(
             .insert(billPaymentRefunds)
             .values({ ...values, state: "completed", completedAt: createdAt })
             .returning();
+          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified", cfg.locationId);
           await enqueueBillRefundDrawer(tx, cfg, paymentId, operator.personId, {
             authorizedBy: authorization.authorizedBy,
             viaOverride: authorization.viaOverride,
@@ -679,6 +712,7 @@ export async function refundBillPayment(
             amount: centsToDecimal(values.appliedAmount + values.tipAmount),
             authorizedBy: confirmedBy,
           });
+          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified", cfg.locationId);
           return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
         }
         const provider =
@@ -697,6 +731,7 @@ export async function refundBillPayment(
           .insert(billPaymentRefunds)
           .values({ ...values, state: "pending" })
           .returning();
+        await captureRefundAttendance(tx, refund!, deps.attendance, "pending", cfg.locationId);
         // Inside the transaction, so no loop pass runs between the insert and the claim.
         release = claimLive(liveRefundsOf(deps.db), refund!.id);
         return { kind: "send" as const, refundId: refund!.id, provider };

@@ -7,13 +7,13 @@ import { findPaymentByBillPayment } from "@waitron/payments";
 import { AppError, centsToDecimal, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import type { BillPaymentDeps } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
-import type { TillSaleDeps } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -43,7 +43,7 @@ export function refundLookupGapMs(sentAgeMs: number): number {
  * restart every pending refund is looked up once on the first pass. */
 const lastLookupsOf = perDatabase(() => new Map<string, number>());
 
-export interface BillPaymentsLoopDeps extends TillSaleDeps {
+export interface BillPaymentsLoopDeps extends BillPaymentDeps {
   /** The box's till configuration; an invoice is filed on the bill payment's own till. */
   cfg: TillConfig;
   /** The card providers pending refunds are looked up at; without it none is looked up. */
@@ -104,7 +104,7 @@ export async function settleFromProviderRow(
     // runs `insertAttempting` first) and the simulator charges nothing real, so no row means no
     // reader was asked to charge. The on-device provider writes its row after the money moves, and
     // nothing under `apps/` builds it (design §5.4).
-    await failBillPayment(tx, billPaymentId, now);
+    await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
     return { settled: "failed" };
   }
   // A `failed` row is not proof that nothing moved (SumUp fails a checkout it cannot find), and an

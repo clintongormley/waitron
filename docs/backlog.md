@@ -5415,10 +5415,16 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
-- **The upgrade test overran its 165,500 ms deadline once in CI, on a branch that changed no
-  migration** (PR #1705, run 38607502363, job 116002045326, 2026-10-14). Its finished phases summed
+- **The upgrade test overran its 165,500 ms deadline in CI and a local pre-push run, on branches
+  that changed no migration.** In CI (PR #1705, run 38607502363, job 116002045326, 2026-10-14), its finished phases summed
   168,686 ms and none took 2 seconds; the four main runs before it took 81,898 to 122,555 ms.
-  Whether the runner or the walk was slow was not established.
+  Locally on 2026-10-14, A10-2's pre-push run reached 165,546 ms, with the current
+  `venue-service/0051_wakeful_loa` migrate phase at 386 ms. Its finished phases summed
+  131,521 ms; the longest took 1,350 ms. Lane F retained `receipts/a10-2-ci-fix-push.log`,
+  `receipts/a10-2-upgrade-ps-before.txt` and `receipts/a10-2-upgrade-deadline-probe.log`.
+  The snapshot before the isolated probe includes two A650 Codex review processes; the probe
+  passed in 62,597 ms. Neither that pass nor the later successful hook retry establishes
+  the cause of either deadline overrun.
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux

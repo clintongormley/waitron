@@ -188,7 +188,13 @@ export function mountBillPaymentsApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
+  const fiscal = {
+    db: deps.db,
+    backend: deps.backend,
+    clock: deps.clock,
+    log,
+    attendance: deps.attendance,
+  };
 
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {

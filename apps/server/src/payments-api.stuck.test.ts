@@ -32,6 +32,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
+  AppError,
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -60,6 +61,8 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { takeReaderBillPayment } from "./bill-payments.js";
 import { mountPaymentsApi } from "./payments-api.js";
+import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
+import { attendanceOperationFacts } from "@waitron/workforce";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -148,6 +151,7 @@ async function setup(
     providerFor?: (p: StripeTerminalProvider) => PaymentProvider;
     /** A second provider, served under its own id and connected through the Stripe credential. */
     extra?: PaymentProvider;
+    attendance?: AttendanceRecorder;
   } = {},
 ): Promise<Venue> {
   const venue = await applyVenue(
@@ -258,6 +262,7 @@ async function setup(
       ring: RING,
       environment: "preproduction",
       pool,
+      ...{ attendance: opts.attendance },
       providers: [
         stripeSeat,
         ...(opts.extra === undefined ? [] : [{ ...stripeSeat, providerId: opts.extra.provider }]),
@@ -1046,6 +1051,7 @@ async function strandBillPayment(
   provided: Provided,
   amount = "1.50",
   startedOn: string = v.cfg.origin.deviceId,
+  requester?: { personId: string; at: string },
 ): Promise<string> {
   const [bill] = await suite.db
     .insert(billPayments)
@@ -1057,7 +1063,8 @@ async function strandBillPayment(
       method: "card",
       applied: Math.round(Number(amount) * 100),
       state: "pending",
-      requestedBy: v.managerId,
+      requestedBy: requester?.personId ?? v.managerId,
+      ...(requester === undefined ? {} : { createdAt: requester.at }),
       source: "device",
       deviceId: startedOn,
     })
@@ -1132,6 +1139,111 @@ async function post(
 
 const billResolvePath = (id: string) => `/management-api/payments/bill-payments/${id}/resolve`;
 const attestPath = (id: string) => `/management-api/payments/bill-payments/${id}/attest`;
+
+describe("bill resolution attendance attribution", () => {
+  it.each([
+    {
+      route: "resolve",
+      provided: { kind: "captured" } as Provided,
+      outcome: "received",
+      expected: "qualifying",
+    },
+    {
+      route: "resolve",
+      provided: { kind: "none" } as Provided,
+      outcome: "failed",
+      expected: "refused",
+    },
+    {
+      route: "resolve",
+      provided: { kind: "attempting", intent: { status: "requires_payment_method" } } as Provided,
+      outcome: "failed",
+      expected: "refused",
+    },
+    {
+      route: "attest",
+      provided: { kind: "failed" } as Provided,
+      outcome: "received",
+      expected: "qualifying",
+    },
+    {
+      route: "attest",
+      provided: { kind: "failed" } as Provided,
+      outcome: "failed",
+      expected: "refused",
+    },
+  ])(
+    "$route $outcome settles the original collector's evidence",
+    async ({ route, provided, outcome, expected }) => {
+      const v = await setup({ attendance: recordAttendanceFact });
+      const [worker] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Original collector", pinHash: "scrypt$00$00" })
+        .returning({ id: persons.id });
+      const orderId = await openOrder(v);
+      const id = await strandBillPayment(v, orderId, provided, "1.50", v.cfg.origin.deviceId, {
+        personId: worker!.id,
+        at: MARK,
+      });
+      await withTransaction(suite.db, (tx) =>
+        recordAttendanceFact(tx, {
+          source: "bill-payment",
+          key: id,
+          personId: worker!.id,
+          locationId: v.cfg.locationId,
+          kind: "payment",
+          at: MARK,
+          offsetMinutes: 120,
+          outcome: "pending",
+        }),
+      );
+      const res =
+        route === "resolve"
+          ? await send(v, "POST", billResolvePath(id))
+          : await post(v, attestPath(id), { outcome, note: "Outcome checked", pin: "1234" });
+      expect(res.status).toBe(200);
+      expect((await billPaymentOf(id)).state).toBe(outcome);
+      const [fact] = await suite.db.select().from(attendanceOperationFacts);
+      expect(fact).toEqual({
+        sequence: 1,
+        source: "bill-payment",
+        key: id,
+        personId: worker!.id,
+        locationId: v.cfg.locationId,
+        kind: "payment",
+        at: MARK,
+        offsetMinutes: 120,
+        businessDay: "2026-09-26",
+        outcome: expected,
+      });
+    },
+  );
+
+  it("a capture refusal rolls back manual completion and its invoice", async () => {
+    const v = await setup({
+      attendance: async (tx, fact) => {
+        await recordAttendanceFact(tx, fact);
+        throw new AppError("attendance.invalid", { reason: "completion evidence" });
+      },
+    });
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
+    const res = await post(v, attestPath(id), {
+      outcome: "received",
+      note: "Charged",
+      pin: "1234",
+    });
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("attendance.invalid");
+    expect(await billPaymentOf(id)).toEqual({
+      state: "pending",
+      attestedBy: null,
+      attestationNote: null,
+    });
+    expect(saleIdsFor(orderId)).toEqual([]);
+    expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([]);
+  });
+});
 
 describe("GET /management-api/payments/bill-payments", () => {
   it("lists a pending bill payment with its provider row, and omits a settled one", async () => {

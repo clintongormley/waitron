@@ -81,6 +81,7 @@ import {
   type CardReaderDeleteOptions,
 } from "./card-reader-delete.js";
 import { queryFlag } from "./report-api.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -101,6 +102,7 @@ export interface PaymentsApiDeps {
   fetch?: typeof fetch;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
+  attendance?: AttendanceRecorder;
 }
 
 const PAYMENTS_MANAGE: Permission = "payments.manage";
@@ -1045,7 +1047,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }
     return row;
   };
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, cfg: deps.cfg, log };
+  const fiscal = {
+    db: deps.db,
+    backend: deps.backend,
+    clock: deps.clock,
+    cfg: deps.cfg,
+    log,
+    attendance: deps.attendance,
+  };
 
   // Card payments towards a bill that nothing is driving any more (bill payments design §5.4).
   app.get("/management-api/payments/bill-payments", (c) =>
@@ -1147,7 +1156,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // The provider's own record says nothing was charged, so the reservation is released.
         await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          await failBillPayment(tx, id, now);
+          await failBillPayment(tx, id, now, undefined, deps.attendance);
         });
         return c.json({ outcome: "not_charged" });
       }
@@ -1182,7 +1191,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const attestation = { attestedBy: personId, note };
         const now = deps.clock.now().instant;
         if (outcome === "failed") {
-          await failBillPayment(tx, id, now, attestation);
+          await failBillPayment(tx, id, now, attestation, deps.attendance);
           return { outcome: "not_charged" as const };
         }
         // Dated when the provider settled it, as the work loop does.
@@ -1203,6 +1212,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const refundDeps = {
     db: deps.db,
     clock: deps.clock,
+    attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.simulator, pool: deps.pool }),
   };
 
