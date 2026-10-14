@@ -649,10 +649,14 @@ export class OpeningHoursMonthView extends LitElement {
           .readOnly=${this.readOnly}
           .keyOnly=${this.stationMode}
         ></season-chips>
-        <p class="rows" data-test="rows">
-          ${t("month.rows")}
-          ${legend.map((name, index) => html`${index ? " · " : ""}<strong>${name}</strong>`)}
-        </p>
+        ${
+          this.stationMode
+            ? nothing
+            : html`<p class="rows" data-test="rows">
+                ${t("month.rows")}
+                ${legend.map((name, index) => html`${index ? " · " : ""}<strong>${name}</strong>`)}
+              </p>`
+        }
       </div>
       <table @keydown=${this.#keydown}>
         <thead>

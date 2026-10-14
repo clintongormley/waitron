@@ -3477,8 +3477,8 @@ commit with Save, bind it to that Save even when its preview updates as you type
 Prep stations' Times tab (`station-times-screen.ts`) shows one station's month, read-only. A
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
-`opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker and no
-+ Special day. Each date draws one bar of the times the station gets orders, worked out from
+`opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
++ Special day and no Rows legend. Each date draws one bar of the times the station gets orders, worked out from
 routed products and the zones that can order them, and reads "No orders" on a date it gets none.
 When more than one department sends the station orders in the weeks shown, each period's label
 names its department ("Lunch (Restaurant)"). Dates show their special day's and public holiday's

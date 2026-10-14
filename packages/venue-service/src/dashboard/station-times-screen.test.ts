@@ -184,7 +184,7 @@ describe("Prep station times", () => {
     ]);
     for (const { options } of calls) expect(options).toEqual({ passive: true });
     expect(text(monthRoot(el)!.querySelector('[data-test="month"]'))).toBe("December 2026");
-    expect(text(monthRoot(el)!.querySelector('[data-test="rows"]'))).toBe("Rows: Grill");
+    expect(monthRoot(el)!.querySelector('[data-test="rows"]')).toBeNull();
     expect(cell(el, "2026-12-01")!.querySelectorAll(".track")).toHaveLength(1);
     expect(titles(el, "2026-12-01")).toEqual(["Dinner 19:00–01:00"]);
     expect(cell(el, "2026-12-01")!.querySelector(".day")!.getAttribute("aria-label")).toContain(
@@ -279,7 +279,7 @@ describe("Prep station times", () => {
     release();
     await drawn(el, "2026-12-01", "pass").not.toBeNull();
     expect(monthRoot(el)!.querySelector('.track[data-row="grill"]')).toBeNull();
-    expect(text(monthRoot(el)!.querySelector('[data-test="rows"]'))).toBe("Rows: Pass");
+    expect(monthRoot(el)!.querySelector('[data-test="rows"]')).toBeNull();
   });
 
   it("asks for a chosen station with station-change and draws the first station for an unknown one", async () => {

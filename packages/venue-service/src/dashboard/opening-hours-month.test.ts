@@ -428,7 +428,7 @@ describe("Opening hours month", () => {
     expect(testId(el, "previous-month")).not.toBeNull();
   });
 
-  it("in station mode, draws only the month's steps, its dates and the season key", async () => {
+  it("in station mode, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
     const el = await mount(stationModel(), {
       readOnly: true,
       stationMode: true,
@@ -440,7 +440,7 @@ describe("Opening hours month", () => {
     expect(root(el).querySelector("season-chips")!.keyOnly).toBe(true);
     expect(root(el).querySelectorAll("button")).toHaveLength(0);
     expect(cell(el, "2026-12-09").querySelector(".day")!.getAttribute("role")).toBe("group");
-    expect(text(testId(el, "rows"))).toBe("Rows: Grill");
+    expect(testId(el, "rows")).toBeNull();
     const months = events<{ month: string }>(el, "month-change");
     testId(el, "previous-month")!.click();
     testId(el, "next-month")!.click();
