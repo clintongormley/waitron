@@ -3260,48 +3260,53 @@ export async function moveOrderLines(
   }
   if (source.length > 0) {
     const lineIds = source.map((line) => line.id);
-    await tx
-      .update(ticketItems)
-      .set({ sentOrderNumber: from.orderNumber })
-      .where(
-        and(
-          inArray(ticketItems.workingOrderLineId, lineIds),
-          isNull(ticketItems.sentOrderNumber),
-          eq(ticketItems.madeHere, false),
-          seenByKitchen(tx, lineIds),
-        ),
-      );
+    await stampSentOrderNumber(tx, lineIds, from.orderNumber);
     await tx
       .update(ticketItems)
       .set({ workingOrderId: toTabId })
-      .where(
-        inArray(
-          ticketItems.workingOrderLineId,
-          source.map((line) => line.id),
-        ),
-      );
+      .where(inArray(ticketItems.workingOrderLineId, lineIds));
     await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
   return source.map((line) => line.id);
 }
 
 /**
- * Of the ticket items of these lines, those the kitchen has seen: fired, or in a held group whose
- * HOLD ticket printed. A held item whose HOLD ticket never printed first prints on the order it is
- * on when it fires.
+ * Give the ticket items of these lines, as they leave order number `fromNumber`, that number as the
+ * one they were sent under — only those the kitchen has seen (fired, or in a held group whose HOLD
+ * ticket printed), never one made here, and never over a number they already carry. A held item
+ * whose HOLD ticket never printed first prints on the order it is on when it fires.
  */
-function seenByKitchen(tx: Transaction, lineIds: string[]): SQL {
-  return or(
-    isNotNull(ticketItems.firedAt),
-    inArray(
-      ticketItems.workingOrderLineId,
-      tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-        .where(and(inArray(workingOrderLines.id, lineIds), isNotNull(orderGroups.holdPrintedAt))),
-    ),
-  )!;
+async function stampSentOrderNumber(
+  tx: Transaction,
+  lineIds: string[],
+  fromNumber: number,
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(ticketItems)
+    .set({ sentOrderNumber: fromNumber })
+    .where(
+      and(
+        inArray(ticketItems.workingOrderLineId, lineIds),
+        isNull(ticketItems.sentOrderNumber),
+        eq(ticketItems.madeHere, false),
+        or(
+          isNotNull(ticketItems.firedAt),
+          exists(
+            tx
+              .select({ id: workingOrderLines.id })
+              .from(workingOrderLines)
+              .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+              .where(
+                and(
+                  eq(workingOrderLines.id, ticketItems.workingOrderLineId),
+                  isNotNull(orderGroups.holdPrintedAt),
+                ),
+              ),
+          ),
+        ),
+      ),
+    );
 }
 
 /** Assert a working order is OPEN, else `tab.not_open`; its revision. */
@@ -3728,7 +3733,6 @@ async function carveLines(
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
       groupState: orderGroups.state,
-      groupHoldPrintedAt: orderGroups.holdPrintedAt,
       orderNumber: workingOrders.orderNumber,
     })
     .from(workingOrderLines)
@@ -3860,12 +3864,7 @@ async function carveLines(
 
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
-  /** The number a copy of `row`'s ticket item takes when it leaves this order, as
-   * {@link seenByKitchen} decides it. */
-  const leavingNumber = (row: SourceLine): number | null =>
-    fromTabId !== toTabId && (row.ticketFiredAt !== null || row.groupHoldPrintedAt !== null)
-      ? row.orderNumber
-      : null;
+  const copiedLineIds: string[] = [];
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -3954,9 +3953,9 @@ async function carveLines(
               toTabId,
               splitChildId,
               child.moved,
-              leavingNumber(child.row),
             );
             splitFrom.set(splitTicketId, child.row.ticketItemId);
+            copiedLineIds.push(splitChildId);
             await copyKitchenJobLines(tx, child.row.id, splitChildId);
             movedLineIds.push(child.row.id);
           }
@@ -3969,9 +3968,9 @@ async function carveLines(
             toTabId,
             splitLineId,
             quantity,
-            leavingNumber(line),
           );
           splitFrom.set(splitTicketId, line.ticketItemId);
+          copiedLineIds.push(splitLineId);
           await copyKitchenJobLines(tx, line.id, splitLineId);
           movedLineIds.push(line.id);
         }
@@ -3986,6 +3985,9 @@ async function carveLines(
     }
   }
   if (fromTabId !== toTabId) {
+    if (partials.length > 0) {
+      await stampSentOrderNumber(tx, copiedLineIds, partials[0]!.line.orderNumber);
+    }
     await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
     // Whole lines were checked as they moved (`moveOrderLines`); the parts split off were not.
     if (partials.length > 0) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
@@ -4069,9 +4071,7 @@ export async function splitUnitsWithinOrder(
 
 /**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
- * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged. The
- * copy keeps the item's sent order number, else takes `leavingNumber` unless it is made here, which
- * no kitchen paper ever carried.
+ * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
  */
 async function splitTicketItem(
   tx: Transaction,
@@ -4080,7 +4080,6 @@ async function splitTicketItem(
   toOrderId: string,
   splitLineId: string,
   moved: string,
-  leavingNumber: number | null,
 ): Promise<string> {
   const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
   const movedThousandths = stringToThousandths(moved);
@@ -4096,7 +4095,6 @@ async function splitTicketItem(
     workingOrderId: toOrderId,
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
-    sentOrderNumber: ticket!.sentOrderNumber ?? (ticket!.madeHere ? null : leavingNumber),
   });
   const passMarks = await tx
     .select()
