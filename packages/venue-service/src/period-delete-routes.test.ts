@@ -513,7 +513,7 @@ describe("the period-delete routes", () => {
     expect(await stored(r)).toEqual(before);
   });
 
-  it("today's DELETE finds no route and changes nothing", async () => {
+  it("the retired DELETE finds no route and changes nothing", async () => {
     const r = await routed();
     const before = await stored(r);
     const response = await r.app.request(`${BASE}/${r.lunch}`, {

@@ -236,12 +236,20 @@ export class PeriodsScreen extends LitElement {
   }
   private actions(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
-    return html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })} align="end"
-      ><wt-button variant="secondary" data-test="edit-period" @click=${() => this.edit(row)}
+    return html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })}
+      ><wt-button
+        variant="secondary"
+        align="start"
+        data-test="edit-period"
+        @click=${() => this.edit(row)}
         >${t("menu.edit")}</wt-button
       ><a data-test="open-hours" href=${seasonPainterPath({ departmentId: row.departmentId })}
         >${t("period.open_hours")}</a
-      ><wt-button variant="danger" data-test="delete-period" @click=${() => this.askDelete(row)}
+      ><wt-button
+        variant="danger"
+        align="start"
+        data-test="delete-period"
+        @click=${() => this.askDelete(row)}
         >${t("menu.delete")}</wt-button
       ></wt-row-actions
     >`;

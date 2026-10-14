@@ -210,13 +210,13 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
 
 **Left open by A506-11, for the later parts.**
 - The period dialog keeps the End offset field although mockup 7 leaves it out, because nothing
-  else edits a period's end offset (open question Q1). Owner to confirm; removing it is one field.
+  else edits a period's end offset (open question Q1 of A506-11). Owner to confirm; removing it is one field.
 - The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does,
-  because `wt-form-actions` has no left-hand slot (ruling C3).
+  because `wt-form-actions` has no left-hand slot (ruling C3 of A506-11).
 - A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year, not
-  back to the Periods page (open question Q10, ruling C22): a manager loses their place.
+  back to the Periods page (open question Q10 and ruling C22 of A506-11): a manager loses their place.
 - The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
-  dashboard (open question Q9); `readOpeningHoursModel` still works both out on every read. See also
+  dashboard (open question Q9 of A506-11); `readOpeningHoursModel` still works both out on every read. See also
   "Routing reads do work only one screen uses" in `docs/backlog.md`.
 
 **Left open by A506-9, for the later parts.**

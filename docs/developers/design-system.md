@@ -4133,6 +4133,9 @@ routing cells that name it, and whether today's later opening of it ends or move
 replacement. When it changes none of these, it says the period is painted nowhere and no hours
 change. When the period is painted or kept open today and the
 department has another period, a Replace with choice offers them, with None first. The delete button names the period.
+It is its own `wt-modal`, not `wt-delete-dialog`, which has no place for Replace with. A failed
+re-read keeps the impact last shown and leaves Delete usable. It takes no draft scope: Replace with
+is a confirmation's choice, not staged input.
 Cases: the `periods-screen*.test.ts`, `period-dialog*.test.ts` and `period-delete-dialog*.test.ts`
 files.
 
