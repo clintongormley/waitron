@@ -3,11 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openVenueDatabase, tenants } from "@waitron/db";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { paperCustodianFingerprint } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { loadConfig } from "../src/config.js";
 import { parseEnvFile } from "./dev-setup.js";
 import {
@@ -21,22 +20,16 @@ const sampleSetupEnv: SetupEnv = {
   WAITRON_VENUE_DIR: "/var/lib/waitron/venue",
   WAITRON_ENV: "dev",
   WAITRON_HTTP_PORT: "8080",
-  WAITRON_FISCAL_CUSTODIAN_FILE: "/var/lib/waitron/state/dev-custodian/custodian.json",
-  WAITRON_FISCAL_CONFIRMATION_FILE: "/var/lib/waitron/state/dev-custodian/confirmation.json",
-  WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: "sample-fingerprint",
 };
 
 describe("renderSetupEnvFile", () => {
-  it("emits exactly the six setup keys in order, and NONE of the trading-only keys", () => {
+  it("emits exactly the three setup keys in order, and NONE of the trading-only keys", () => {
     const text = renderSetupEnvFile(sampleSetupEnv);
     const lines = text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"));
     expect(lines).toEqual([
       "WAITRON_VENUE_DIR=/var/lib/waitron/venue",
       "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
-      "WAITRON_FISCAL_CUSTODIAN_FILE=/var/lib/waitron/state/dev-custodian/custodian.json",
-      "WAITRON_FISCAL_CONFIRMATION_FILE=/var/lib/waitron/state/dev-custodian/confirmation.json",
-      "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT=sample-fingerprint",
     ]);
     // A stray WAITRON_TILL_*_ID would push the box into trading mode.
     expect(text).not.toMatch(/WAITRON_TILL_/);
@@ -58,21 +51,13 @@ describe("devOnboard against a real venue directory", () => {
   let workDir: string;
   let venueDir: string;
   let envPath: string;
-  let stateDir: string;
   let first: DevOnboardResult;
 
   beforeAll(async () => {
     workDir = await mkdtemp(join(tmpdir(), "waitron-dev-onboard-"));
     venueDir = join(workDir, "venue");
     envPath = join(workDir, ".env");
-    stateDir = join(workDir, "state");
-    first = await devOnboard({
-      venueDir,
-      envPath,
-      stateDir,
-      environment: process.env,
-      log: () => {},
-    });
+    first = await devOnboard({ venueDir, envPath, environment: process.env, log: () => {} });
   }, 180_000);
 
   afterAll(async () => {
@@ -107,9 +92,6 @@ describe("devOnboard against a real venue directory", () => {
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_ENV: "dev",
       WAITRON_HTTP_PORT: "8080",
-      WAITRON_FISCAL_CUSTODIAN_FILE: join(stateDir, "dev-custodian", "custodian.json"),
-      WAITRON_FISCAL_CONFIRMATION_FILE: join(stateDir, "dev-custodian", "confirmation.json"),
-      WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: first.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
     });
     expect(Object.keys(written)).not.toContain("WAITRON_CREDENTIALS_KEY");
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
@@ -119,23 +101,10 @@ describe("devOnboard against a real venue directory", () => {
     const shifted = await devOnboard({
       venueDir: join(workDir, "shifted-venue"),
       envPath: join(workDir, "shifted.env"),
-      stateDir: join(workDir, "shifted-state"),
       httpPort: "8180",
       environment: process.env,
     });
     expect(shifted.env.WAITRON_HTTP_PORT).toBe("8180");
-  });
-
-  it("dev:onboard writes a custodian the settings point at", () => {
-    const written = parseEnvFile(readFileSync(envPath, "utf8"));
-    const custodian = JSON.parse(readFileSync(written.WAITRON_FISCAL_CUSTODIAN_FILE!, "utf8")) as {
-      publicKey: string;
-      fingerprint: string;
-    };
-    expect(custodian.fingerprint).toBe(written.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT);
-    expect(paperCustodianFingerprint(custodian.publicKey)).toBe(
-      written.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
-    );
   });
 
   it("dev:onboard refuses production before migrating", async () => {
@@ -144,10 +113,9 @@ describe("devOnboard against a real venue directory", () => {
       devOnboard({
         venueDir: join(refusedDir, "venue"),
         envPath: join(refusedDir, ".env"),
-        stateDir: join(refusedDir, "state"),
         environment: { WAITRON_ENV: "production" },
       }),
-    ).rejects.toMatchObject({ code: "deployment.development_custodian_refused" });
+    ).rejects.toThrow(/WAITRON_ENV=production/);
     expect(await readdir(workDir)).not.toContain("refused");
   });
 
@@ -180,7 +148,7 @@ describe("devOnboard against a real venue directory", () => {
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Onboard Refuse SL" });
     });
     await expect(
-      devOnboard({ venueDir, envPath, stateDir, environment: process.env, log: () => {} }),
+      devOnboard({ venueDir, envPath, environment: process.env, log: () => {} }),
     ).rejects.toThrow(/already holds a venue/i);
     expect(await tenantsCount()).toBe(1);
   });
@@ -201,6 +169,7 @@ describe("dev-onboard run as a command", () => {
     const venueDir = join(workDir, "venue");
     mkdirSync(venueDir);
     writeFileSync(join(venueDir, "sentinel"), "keep me");
+    const settingsFile = join(workDir, "settings.env");
     const result = spawnSync(
       process.execPath,
       ["--import", "tsx", fileURLToPath(new URL("./dev-onboard.ts", import.meta.url)), "--reset"],
@@ -213,12 +182,14 @@ describe("dev-onboard run as a command", () => {
           WAITRON_ENV: "production",
           WAITRON_STATE_DIR: join(workDir, "state"),
           WAITRON_VENUE_DIR: venueDir,
+          WAITRON_DEV_ENV_FILE: settingsFile,
         },
       },
     );
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("deployment.development_custodian_refused");
+    expect(result.stderr).toContain("WAITRON_ENV=production");
     expect(result.stdout).not.toContain("removed");
     expect(readFileSync(join(venueDir, "sentinel"), "utf8")).toBe("keep me");
+    expect(existsSync(settingsFile)).toBe(false);
   }, 90_000);
 });

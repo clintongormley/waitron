@@ -20,7 +20,6 @@
     "dev:reset": "tsx scripts/dev-setup.ts --reset",
     "dev:onboard": "tsx scripts/dev-onboard.ts",
     "dev:reset:onboard": "tsx scripts/dev-onboard.ts --reset",
-    "dev:custodian": "tsx scripts/dev-custodian/cli.ts",
     "test": "vitest run",
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
     "test:aws-rehearsal": "vitest run --config vitest.aws-rehearsal.config.ts",
