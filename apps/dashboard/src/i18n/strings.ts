@@ -1513,8 +1513,6 @@ export const en = {
     "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
   "backup.destination.stream_snapshot":
     "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
-  "backup.destination.stream_replaces":
-    "Backups go only to this bucket, not to a folder on this box.",
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
   "backup.destination.folder_refused":
@@ -4388,8 +4386,6 @@ export const es: Record<StringKey, string> = {
     "No se han podido leer los ajustes de la copia en el bucket, así que ahora no se puede elegir su bucket.",
   "backup.destination.stream_snapshot":
     "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
-  "backup.destination.stream_replaces":
-    "Las copias van solo a este bucket, no a una carpeta de esta caja.",
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_refused":

@@ -553,16 +553,14 @@ describe("choosing where backups go", () => {
     expect(q(el, "[data-test=destination]")).toBeNull();
   });
 
-  it("choosing the bucket copy's bucket sends that kind alone, and says what Save copies and where archives go", async () => {
+  it("choosing the bucket copy's bucket sends that kind alone, says what Save copies and where archives go, and does not say it replaces the folder", async () => {
     const { el, api } = await openConfigure();
     await setFolder(el, false);
     await choose(el, "stream-bucket");
     expect(text(q(el, "[data-test=stream-snapshot]")!)).toContain(
       t("backup.destination.stream_snapshot"),
     );
-    expect(text(q(el, "[data-test=stream-replaces]")!)).toContain(
-      t("backup.destination.stream_replaces"),
-    );
+    expect(q(el, "[data-test=stream-replaces]")).toBeNull();
     expect(text(q(el, "[data-test=stream-location]")!)).toContain(
       `stream-bucket/venues/archives/${VENUE}/`,
     );
@@ -634,10 +632,9 @@ describe("choosing where backups go", () => {
     expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
   });
 
-  it("a folder typed as the bucket choice's own name is a change from the bucket choice", async () => {
+  it("turning the folder on beside a stored bucket is a change", async () => {
     const { el } = await openEdit(ON_STREAM_BUCKET);
     await setFolder(el, true);
-    await typeFolder(el, "stream-bucket");
     expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
   });
 
@@ -2584,6 +2581,17 @@ describe("a folder on this box and a bucket together", () => {
     expect(await buttonState(el, "apply")).toEqual(["primary", false]);
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+  });
+
+  it("on the settings editor, turning a stored folder off with no bucket is held by the form's own check", async () => {
+    const { el, api } = await openEdit(LOCAL_ONLY);
+    await setFolder(el, false);
+    expect(choice(el)!.value).toBe("none");
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    await settle();
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(choice(el)!.error).toBe(t("backup.destination.nothing_chosen"));
   });
 
   it("a missing bucket field beside a filled folder marks only the bucket field", async () => {

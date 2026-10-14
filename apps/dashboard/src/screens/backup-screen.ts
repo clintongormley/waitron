@@ -1616,7 +1616,6 @@ export class BackupScreen extends LitElement {
 
   #renderStreamChoice(bucket: NonNullable<StreamSettingsView["bucket"]> | null): TemplateResult {
     return html`
-      <p class="hint" data-test="stream-replaces">${t("backup.destination.stream_replaces")}</p>
       <p class="hint" data-test="stream-snapshot">${t("backup.destination.stream_snapshot")}</p>
       ${
         bucket === null || this.status === undefined

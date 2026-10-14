@@ -281,6 +281,35 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it.each([true, false])("renders the folder switch turned %s accessibly", async (on) => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      theme,
+    );
+    await flush(el);
+    await setFolder(el, on);
+    const folder = q(el, "[data-test=archive-folder-on]") as HTMLElementTagNameMap["wt-switch"];
+    expect(folder.checked).toBe(on);
+    expect(q(el, "[data-test=destination]") !== null).toBe(on);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders neither a folder nor a bucket, refused by the form, accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      theme,
+    );
+    await flush(el);
+    await setFolder(el, false);
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    const box = q(el, "[data-test=archive-destination]") as HTMLElementTagNameMap["wt-combobox"];
+    expect(box.error).toBe(t("backup.destination.nothing_chosen"));
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the configure wizard accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
