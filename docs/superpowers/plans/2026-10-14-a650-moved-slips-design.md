@@ -403,7 +403,8 @@ Drawing: picture 7.
   saying from where to where. A prep station can be set to differ." / "Cuando comida que ya tiene
   la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso
   MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte." It saves when flipped,
-  like its neighbours (`#save` and `#switch`, `service-settings-panel.ts:97-137`).
+  like its neighbours (`#save` and `#switch`, `service-settings-panel.ts:97-137`). Part 3 ships the
+  hint without its last sentence (the prep-station one); Part 4 adds it back with the station's choice.
 
 ### The prep station's override
 
@@ -751,7 +752,9 @@ combobox shows "As the venue (print)" when the station is null and the venue on,
 `station-editor.unsaved.test.ts` — a changed choice asks before closing;
 `packages/venue-service/src/routes.test.ts` — the routing view carries the venue's value. Add the
 combobox's states to `station-editor.a11y.test.ts`, and check `station-editor.save-state.test.ts`.
-Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`.
+Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`. Also add back the venue
+switch's last hint sentence, "A prep station can be set to differ." / "Cada estación puede
+configurarse aparte." (§6), which Part 3 left out, and its two pinned test strings.
 
 ## 8. Questions for the owner (the build proceeds on each default)
 
