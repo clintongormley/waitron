@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { stampDeployment, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  stampDeployment,
+  withTransaction,
+  type Database,
+  type DeploymentEnvironment,
+  type Transaction,
+} from "@waitron/db";
 import {
   applyVenue,
   parseInitialVenueInput,
@@ -7,6 +13,7 @@ import {
   assertNoForeignTenant,
   planVenue,
   readTenantIdentities,
+  throwawayApplyInput,
   venueFiscalSelection,
   type VenueRequest,
   type VenueResult,
@@ -43,6 +50,12 @@ export interface ProvisionRequest {
   /** The import goes to a different taxpayer: the request's tax ID must differ from the bundle's. */
   newTaxpayer?: boolean;
   initialOperations?: InitialVenueInput;
+  /** Set only by the setup route: the venue's enabled module that offers one makes its own
+   * preproduction allocation. Never together with `initialOperations`. */
+  initialAllocation?: {
+    readonly kind: "throwaway";
+    readonly hostEnvironment: DeploymentEnvironment;
+  };
 }
 
 export interface ProvisionDeps {
@@ -154,6 +167,7 @@ export async function provisionVenue(
     req.initialOperations === undefined ? undefined : parseInitialVenueInput(req.initialOperations);
   if (
     initial === null ||
+    (initial !== undefined && req.initialAllocation !== undefined) ||
     initial?.inputs.some(
       (input) =>
         !modules.some(
@@ -182,12 +196,21 @@ export async function provisionVenue(
     throw new AppError("setup.already_provisioned", {});
   }
 
+  const throwaway =
+    req.initialAllocation === undefined
+      ? undefined
+      : throwawayApplyInput(plan, modules, [
+          req.initialAllocation.hostEnvironment,
+          req.environment,
+        ]);
+
   await stampDeployment(deps.ownerDb, req.environment);
 
   const result = await applyVenue(plan, {
     ...(initial === undefined ? {} : initialVenueApplyInput(initial)),
     db: deps.ownerDb,
     modules,
+    ...throwaway,
     beforeCommit: deps.beforeCommit,
   });
 
