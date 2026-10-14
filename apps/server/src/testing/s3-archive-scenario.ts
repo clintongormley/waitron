@@ -1,6 +1,6 @@
 import { createCipheriv, createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, copyFile, open, rm, stat } from "node:fs/promises";
+import { access, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { hasCode, isAppError } from "@waitron/shared";
 import { createS3FileStore, statusOf, type CommandObservation } from "@waitron/stream";
@@ -12,6 +12,7 @@ import {
 } from "../archive-recovery-pack.js";
 import { downloadArchive } from "../archive-download.js";
 import { archiveNamespace } from "../archive-settings.js";
+import { ARTIFACT_HEADER_BYTES } from "../artifact-cipher.js";
 import { decryptArtifactFile, encryptArtifactFile } from "../artifact-cipher-file.js";
 import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
@@ -21,11 +22,6 @@ import type { S3ScenarioFixture } from "./s3-scenario-fixture.js";
 import { answered2xx, is2xx, scenarioSteps } from "./s3-scenario-steps.js";
 
 const MiB = 1024 * 1024;
-/**
- * What `encryptArtifactFile` adds to the plaintext: a 33-byte header and a 16-byte tag
- * (`artifact-cipher-file.ts`); AES-GCM's ciphertext is as long as its plaintext.
- */
-const CIPHER_OVERHEAD_BYTES = 49;
 /** `planParts` in `packages/stream/src/s3-file-store.ts` uses its 8 MiB minimum up to 80,000 MiB. */
 const PART_BYTES = 8 * MiB;
 const ABORT_ARCHIVE_BYTES = 3 * PART_BYTES;
@@ -42,25 +38,22 @@ export interface ArchiveAbortSummary {
 }
 
 /**
- * Writes `bytes` of deterministic pseudo-random bytes, AES-CTR's keystream under a key derived from
- * `seed`, and answers their SHA-256.
+ * `bytes` of deterministic pseudo-random bytes, AES-CTR's keystream under a key derived from `seed`;
+ * `digest()` answers their SHA-256 once every chunk has been read.
  */
-async function writeSynthetic(path: string, bytes: number, seed: string): Promise<string> {
+function syntheticPlaintext(bytes: number, seed: string) {
   const key = createHash("sha256").update(seed).digest();
   const stream = createCipheriv("aes-256-ctr", key, Buffer.alloc(16));
   const hash = createHash("sha256");
-  const out = await open(path, "wx", 0o600);
-  try {
+  async function* chunks(): AsyncGenerator<Buffer> {
     const zeros = Buffer.alloc(MiB);
-    for (let written = 0; written < bytes; written += MiB) {
-      const chunk = stream.update(zeros.subarray(0, Math.min(MiB, bytes - written)));
+    for (let made = 0; made < bytes; made += MiB) {
+      const chunk = stream.update(zeros.subarray(0, Math.min(MiB, bytes - made)));
       hash.update(chunk);
-      await out.write(chunk);
+      yield chunk;
     }
-  } finally {
-    await out.close();
   }
-  return hash.digest("hex");
+  return { chunks: chunks(), digest: () => hash.digest("hex") };
 }
 
 async function sha256Of(path: string): Promise<string> {
@@ -83,13 +76,11 @@ async function syntheticArchive(
   seed: string,
   signal: AbortSignal,
 ): Promise<{ plainHash: string; path: string }> {
-  const plain = join(folder, "plain.bin");
   const path = join(folder, "archive.backup.enc");
-  const plainHash = await writeSynthetic(plain, encryptedBytes - CIPHER_OVERHEAD_BYTES, seed);
-  await encryptArtifactFile(createReadStream(plain), path, RECOVERY_KEY, signal);
-  await rm(plain);
+  const plain = syntheticPlaintext(encryptedBytes - ARTIFACT_HEADER_BYTES, seed);
+  await encryptArtifactFile(plain.chunks, path, RECOVERY_KEY, signal);
   expect((await stat(path)).size).toBe(encryptedBytes);
-  return { plainHash, path };
+  return { plainHash: plain.digest(), path };
 }
 
 /** Tracks the upload a CreateMultipartUpload answer names, by the bucket key it was sent for. */
@@ -186,9 +177,8 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
       });
 
       await step("tamper-refused", async () => {
-        const tampered = join(work, "tampered.backup.enc");
-        await copyFile(downloaded.path, tampered);
-        const handle = await open(tampered, "r+");
+        // Nothing reads the staged download after this step, so the byte is flipped in it, not in a copy.
+        const handle = await open(downloaded.path, "r+");
         try {
           const middle = Math.floor(bytes / 2);
           const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, middle);
@@ -197,9 +187,8 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
           await handle.close();
         }
         await refusedDecrypt(join(work, "tampered.bin"), (out) =>
-          decryptArtifactFile(tampered, out, pack.recoveryKey),
+          decryptArtifactFile(downloaded.path, out, pack.recoveryKey),
         );
-        await rm(tampered);
         phase("tamper-refused");
       });
     } finally {
