@@ -4,12 +4,15 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
 import {
   dropAction,
+  groupName,
   groupSplitOf,
+  normalGroupName,
   onTodaysPlan,
   outOfServiceJoined,
   pendingPlaces,
   resetTableOf,
   sheetActions,
+  shownName,
   spareSpot,
   sparesOf,
   takenOffOf,
@@ -984,5 +987,37 @@ describe("Split tables… on a group", () => {
     expect(dropAction(tables, { tableId: "bar", x: 16, y: 20, targetId: "long" })).toMatchObject({
       heading: "Bar+Counter 3+Counter 4+Counter 5",
     });
+  });
+});
+
+describe("today's names", () => {
+  const bar = table("bar", "Bar", { today: today({ joinId: "j" }) });
+  const c4 = table("c4", "Counter 4", { today: today({ joinId: "j" }) });
+  const window4 = table("c4", "Counter 4", { today: today({ joinId: "j", name: "Window" }) });
+  const named = (each: TableState): TableState => ({
+    ...each,
+    today: { ...each.today!, joinName: "García birthday" },
+  });
+
+  it("shows a table's own name for today, else its saved label", () => {
+    expect(shownName(window4)).toBe("Window");
+    expect(shownName(c4)).toBe("Counter 4");
+    expect(shownName(table("c4", "Counter 4", { today: today({ name: null }) }))).toBe("Counter 4");
+    expect(shownName(table("c4", "Counter 4", { today: null }))).toBe("Counter 4");
+  });
+
+  it("names a group by its own name, else its tables' shown names in number order", () => {
+    expect(groupName([named(bar), named(window4)])).toBe("García birthday");
+    expect(groupName([window4, bar])).toBe("Bar+Window");
+    expect(groupName([c4, bar])).toBe("Bar+Counter 4");
+    expect(groupName([{ ...bar, today: { ...bar.today!, joinName: null } }, c4])).toBe(
+      "Bar+Counter 4",
+    );
+    expect(groupName([])).toBe("");
+  });
+
+  it("names a group's normal name from its tables' shown names, never its own name", () => {
+    expect(normalGroupName([named(bar), named(window4)])).toBe("Bar+Window");
+    expect(normalGroupName([c4, bar])).toBe("Bar+Counter 4");
   });
 });

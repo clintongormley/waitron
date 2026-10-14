@@ -267,6 +267,18 @@ describe("zones and their tables", () => {
     expect(mapTables([...merged, alone]).map((row) => row.linkId)).toEqual(["Q", "Q", "Q"]);
   });
 
+  it("carries today's names only when a table or its group has one", () => {
+    const plain = table({ id: "t1", today: today({ name: null, joinName: null }) });
+    expect(mapTables([plain])[0]).not.toHaveProperty("name");
+    expect(mapTables([plain])[0]).not.toHaveProperty("groupName");
+    expect(mapTables([table({ id: "t1", today: today() })])[0]).not.toHaveProperty("name");
+    const named = table({
+      id: "t1",
+      today: today({ joinId: "j", name: "Window", joinName: "García birthday" }),
+    });
+    expect(mapTables([named])[0]).toMatchObject({ name: "Window", groupName: "García birthday" });
+  });
+
   it("marks a fixed table fixed", () => {
     const fixed = table({ id: "t1", today: today({ fixed: true }) });
     expect(mapTables([fixed])[0]!.fixed).toBe(true);

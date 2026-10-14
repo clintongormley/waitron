@@ -52,6 +52,21 @@ export function nextFloorMoment(): number {
   return ++floorMoments;
 }
 
+/** Today's name, else the saved label. */
+export function shownName(table: TableState): string {
+  return table.today?.name ?? table.label;
+}
+
+/** What the group is called with no name of its own: its tables' shown names in number order. */
+export function normalGroupName(members: readonly TableState[]): string {
+  return mergeLabel(members.map(shownName));
+}
+
+/** The group's own name for today, else its normal name. */
+export function groupName(members: readonly TableState[]): string {
+  return members[0]?.today?.joinName ?? normalGroupName(members);
+}
+
 /** `table` and every other member of its merge, in `tables`' order; `table` alone in none. */
 export function mergeMembersOf(tables: readonly TableState[], table: TableState): TableState[] {
   const joinId = table.today?.joinId ?? null;
