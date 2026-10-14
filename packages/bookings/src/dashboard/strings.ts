@@ -33,6 +33,9 @@ const en = {
   "booking.no_show": "No-show",
   "booking.cancel": "Cancel",
   "booking.fix_fields": "Correct the highlighted fields to continue.",
+  "booking.date_required": "Enter a date",
+  "booking.time_required": "Enter a time",
+  "booking.name_required": "Enter a name",
   "action.save": "Save",
   "action.edit": "Edit",
 } as const;
@@ -60,6 +63,9 @@ const es: Record<keyof typeof en, string> = {
   "booking.no_show": "No presentada",
   "booking.cancel": "Cancelar",
   "booking.fix_fields": "Corrige los campos marcados para continuar.",
+  "booking.date_required": "Introduce una fecha",
+  "booking.time_required": "Introduce una hora",
+  "booking.name_required": "Introduce un nombre",
   "action.save": "Guardar",
   "action.edit": "Editar",
 };

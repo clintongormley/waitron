@@ -248,7 +248,11 @@ describe("booking-form", () => {
     await click(el, "confirm");
     expect(fired).toBe(false);
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("booking.fields_required", "es-ES"));
+    expect(alert.textContent!.trim()).toBe("Corrige los campos marcados para continuar.");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=contact-name]")!
+        .error,
+    ).toBe("Introduce un nombre");
   });
 
   it("blocks and shows an alert when the party size is not a positive whole number", async () => {
@@ -259,9 +263,13 @@ describe("booking-form", () => {
     await setInput(el, "party-size", "0");
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("booking.party_invalid", "es-ES"),
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent!.trim()).toBe(
+      "Corrige los campos marcados para continuar.",
     );
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=party-size]")!
+        .error,
+    ).toBe(codeMessage("booking.party_invalid", "es-ES"));
   });
 
   it("makes confirm a no-op while busy (single-flight)", async () => {

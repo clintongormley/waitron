@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  focusFirstInvalid,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -88,7 +94,7 @@ export class BookingForm extends LitElement {
   @state() private contactPhone = "";
   @state() private notes = "";
   @state() private tableId = "";
-  @state() private validationError: string | null = null;
+  @state() private attempted = false;
 
   #identity: string | null | undefined;
   #opening = {};
@@ -190,7 +196,7 @@ export class BookingForm extends LitElement {
         notes: b?.notes ?? "",
         tableId: b?.tableId ?? "",
       });
-      this.validationError = null;
+      this.attempted = false;
     }
     if (!this.open) this.#disposeDraft();
     else if (this.isConnected && !this.#scope) {
@@ -217,7 +223,6 @@ export class BookingForm extends LitElement {
     if (!this.isConnected || !this.open || opening !== this.#opening) return;
     this[field] = event.detail.value;
     this.#scope?.changed();
-    if (this.validationError) this.validationError = null;
   }
 
   #onTableChange(event: CustomEvent<{ value: string }>, opening: object): void {
@@ -228,26 +233,29 @@ export class BookingForm extends LitElement {
     this.#scope?.changed();
   }
 
-  #validate(): string | null {
-    if (this.date.trim() === "" || this.time.trim() === "" || this.contactName.trim() === "") {
-      return "booking.fields_required";
-    }
+  #ownErrors(): Partial<Record<keyof BookingDraft, string>> {
+    const errors: Partial<Record<keyof BookingDraft, string>> = {};
+    if (this.date.trim() === "") errors.date = t("booking.date_required");
+    if (this.time.trim() === "") errors.time = t("booking.time_required");
+    if (this.contactName.trim() === "") errors.contactName = t("booking.name_required");
     if (!POSITIVE_INT.test(this.partySize) || Number(this.partySize) < 1) {
-      return "booking.party_invalid";
+      errors.partySize = codeMessage("booking.party_invalid");
     }
-    return null;
+    return errors;
   }
 
   #confirm(event: Event, opening: object): void {
     event.stopPropagation();
     if (this.busy || !this.isConnected || !this.open || opening !== this.#opening) return;
     if (saveActionState(this.#scope).unchanged) return;
-    const error = this.#validate();
-    if (error !== null) {
-      this.validationError = error;
+    this.attempted = true;
+    if (Object.keys(this.#ownErrors()).length > 0) {
+      void this.updateComplete.then(() => {
+        if (this.isConnected && this.open && opening === this.#opening)
+          focusFirstInvalid(this.shadowRoot!);
+      });
       return;
     }
-    this.validationError = null;
     this.#submitted = this.#value();
 
     const body: BookingInput = {
@@ -290,10 +298,9 @@ export class BookingForm extends LitElement {
   override render() {
     const opening = this.#opening;
     const save = saveActionState(this.#scope);
-    const bottom = [
-      ...(this.validationError === null ? [] : [codeMessage(this.validationError)]),
-      ...(this.tableRefusal === null ? [] : [t("booking.fix_fields")]),
-    ];
+    const errors = this.attempted ? this.#ownErrors() : {};
+    const invalid = Object.keys(errors).length > 0;
+    const marked = invalid || this.tableRefusal !== null;
     return html`${keyed(
       opening,
       html`
@@ -315,6 +322,8 @@ export class BookingForm extends LitElement {
             label=${t("booking.date")}
             .value=${this.date}
             name="booking-date"
+            required
+            .error=${errors.date ?? ""}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "date", opening)}
           ></wt-input>
           <wt-input
@@ -324,6 +333,8 @@ export class BookingForm extends LitElement {
             label=${t("booking.time")}
             .value=${this.time}
             name="booking-time"
+            required
+            .error=${errors.time ?? ""}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "time", opening)}
           ></wt-input>
           <wt-input
@@ -333,6 +344,8 @@ export class BookingForm extends LitElement {
             label=${t("booking.party_size")}
             .value=${this.partySize}
             name="party-size"
+            required
+            .error=${errors.partySize ?? ""}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "partySize", opening)}
           ></wt-input>
           <wt-input
@@ -341,6 +354,8 @@ export class BookingForm extends LitElement {
             label=${t("booking.contact_name")}
             .value=${this.contactName}
             name="contact-name"
+            required
+            .error=${errors.contactName ?? ""}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "contactName", opening)}
           ></wt-input>
           <wt-input
@@ -378,15 +393,15 @@ export class BookingForm extends LitElement {
           ></wt-combobox>
 
           ${
-            bottom.length > 0
-              ? html`<p class="error" role="alert" data-test="error">${bottom.join(" ")}</p>`
+            marked
+              ? html`<p class="error" role="alert" data-test="error">${t("booking.fix_fields")}</p>`
               : nothing
           }
           <wt-button
             slot="footer"
             variant=${save.variant}
             data-test="confirm"
-            ?disabled=${save.unchanged || this.busy}
+            ?disabled=${save.unchanged || this.busy || invalid}
             @click=${(e: Event) => this.#confirm(e, opening)}
             >${t("action.save")}</wt-button
           >

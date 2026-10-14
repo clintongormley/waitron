@@ -2007,13 +2007,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
   refuses it, as a delete is refused, or only warns.
 
-- **A551. The booking form shows two sentences at its foot when a Table refusal meets its own
-  checks (2026-10-12).** Its own checks (for example a blank Name) mark no field and print their
-  own sentence at the bottom instead of the shared "Correct the highlighted fields to continue.";
-  since #1601 a refused Table is marked under Table with that shared sentence, so a Save with Name
-  blank while the Table refusal shows prints both. The own-checks behaviour predates #1601. Next:
-  make the form's own checks mark their fields and use the shared sentence (CLAUDE.md §3, forms).
-
 - **A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).**
   `clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
   (`apps/server/src/table-removal.ts:93`) has already removed them through `leaveMerges`; with
