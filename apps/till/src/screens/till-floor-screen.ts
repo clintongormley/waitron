@@ -66,6 +66,7 @@ import {
   shownName,
   shownUnder,
   spareSpot,
+  withoutTodaysNames,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
@@ -539,8 +540,13 @@ export class TillFloorScreen extends LitElement {
   /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
-  @state() private seating: { table: TableState; heading: string; withTableIds?: string[] } | null =
-    null;
+  @state() private seating: {
+    table: TableState;
+    heading: string;
+    /** `heading` is a name for today. */
+    named: boolean;
+    withTableIds?: string[];
+  } | null = null;
   @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
@@ -677,7 +683,7 @@ export class TillFloorScreen extends LitElement {
    */
   #openTable(
     table: TableState,
-    seat: { heading: string; withTableIds: string[] } | null = null,
+    seat: { heading: string; named: boolean; withTableIds: string[] } | null = null,
   ): void {
     if (!this.tables.some((current) => current.id === table.id)) return;
     if (needsClearing(table)) {
@@ -691,7 +697,7 @@ export class TillFloorScreen extends LitElement {
         return;
       }
       this.refusedZoneId = null;
-      this.seating = seat === null ? { table, heading: this.#shownAs(table) } : { table, ...seat };
+      this.seating = seat === null ? { table, ...this.#seatHeading(table) } : { table, ...seat };
       return;
     }
     this.#emit("open-table", { tableId: table.id, seated: true });
@@ -743,6 +749,13 @@ export class TillFloorScreen extends LitElement {
   /** The name `table` is shown under: its merge's, else its own. */
   #shownAs(table: TableState): string {
     return this.#mergeName(table) ?? shownName(table);
+  }
+
+  #seatHeading(table: TableState): { heading: string; named: boolean } {
+    const heading = this.#shownAs(table);
+    const members = this.#mergeOf(table);
+    const saved = members === null ? table.label : groupName(members.map(withoutTodaysNames));
+    return { heading, named: heading !== saved };
   }
 
   /** The party `table` is linked to on the map (a party drawn as two or more groups), or null. */
@@ -894,7 +907,12 @@ export class TillFloorScreen extends LitElement {
         return;
       case "seat": {
         const table = this.#zone.visible.find((each) => each.id === action.tableId)!;
-        this.#openTable(table, { heading: action.heading, withTableIds: action.withTableIds });
+        const saved = dropAction(this.#zone.visible.map(withoutTodaysNames), drop);
+        this.#openTable(table, {
+          heading: action.heading,
+          named: saved.kind === "seat" && saved.heading !== action.heading,
+          withTableIds: action.withTableIds,
+        });
         return;
       }
       case "join": {
@@ -1688,6 +1706,7 @@ export class TillFloorScreen extends LitElement {
     if (seating === null) return nothing;
     return html`<till-seat-dialog
       .tableLabel=${seating.heading}
+      .named=${seating.named}
       @seat-confirm=${(event: Event) => this.#onSeatConfirm(event, seating)}
       @seat-cancel=${(event: Event) => {
         event.stopPropagation();

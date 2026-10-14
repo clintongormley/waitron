@@ -640,6 +640,7 @@ export const en = {
   "signal.unavailable": "Unavailable: {items}",
   "signal.bill_requested": "Bill requested",
   "seat.title": "Seat table {table}",
+  "seat.title_named": "Seat {table}",
   "seat.guest_count": "Guests",
   "seat.guest_count_invalid": "Enter a whole number of guests from 1 to 999, or leave it empty",
   "seat.confirm": "Seat",
@@ -1885,6 +1886,7 @@ export const es: Record<StringKey, string> = {
   "signal.unavailable": "No disponible: {items}",
   "signal.bill_requested": "Cuenta pedida",
   "seat.title": "Sentar en la mesa {table}",
+  "seat.title_named": "Sentar en {table}",
   "seat.guest_count": "Comensales",
   "seat.guest_count_invalid":
     "Escribe un número entero de comensales entre 1 y 999, o déjalo vacío",

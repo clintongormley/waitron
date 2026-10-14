@@ -44,6 +44,18 @@ describe("till-seat-dialog", () => {
     expect(field(el).required).toBe(false);
   });
 
+  it.each([
+    ["en", "Seat Window"],
+    ["es", "Sentar en Window"],
+  ])("names a name for today without the word table in %s", async (locale, heading) => {
+    setLocale(locale);
+    const { el } = await mountWidget<TillSeatDialog>("till-seat-dialog", {
+      tableLabel: "Window",
+      named: true,
+    });
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(heading);
+  });
+
   it.each(["en", "es"])("leaves Guests without a placeholder in %s", async (locale) => {
     setLocale(locale);
     const el = await mountDialog();

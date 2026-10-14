@@ -893,6 +893,62 @@ describe("till-floor-screen: today's names", () => {
     expect(splitWindow(el).name).toBe("Window table");
   });
 
+  const seatTitle = async (el: TillFloorScreen) => {
+    const seat = el.shadowRoot!.querySelector("till-seat-dialog")!;
+    await seat.updateComplete;
+    return seat.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.heading;
+  };
+  const tap = async (el: TillFloorScreen, tableId: string) => {
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+
+  it("the seat window says a renamed table's name without the word table", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await tap(el, "t4");
+    expect(await seatTitle(el)).toBe("Seat Window");
+  });
+
+  it("the seat window says a renamed table's name without the word table in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount([counter4(), bar()], stubApi());
+      await tap(el, "t4");
+      expect(await seatTitle(el)).toBe("Sentar en Window");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("the seat window says a named group's name without the word table", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday"))],
+      stubApi(),
+    );
+    await tap(el, "t5");
+    expect(await seatTitle(el)).toBe("Seat García birthday");
+  });
+
+  it("the seat window still says table for a table with no name for today", async () => {
+    const el = await mount([counter4(), counter5()], stubApi());
+    await tap(el, "t5");
+    expect(await seatTitle(el)).toBe("Seat table Counter 5");
+  });
+
+  it("the seat window for two fixed tables dropped together says their names for today without the word table", async () => {
+    const el = await mount([counter4({}, { fixed: true }), bar({ fixed: true })], stubApi());
+    await drop(el, { tableId: "tb", x: 3, y: 3, targetId: "t4" });
+    expect(await seatTitle(el)).toBe("Seat Bar+Window");
+  });
+
+  it("the seat window for two fixed tables with no names for today still says table", async () => {
+    const el = await mount([counter5({ fixed: true }), bar({ fixed: true })], stubApi());
+    await drop(el, { tableId: "tb", x: 5, y: 3, targetId: "t5" });
+    expect(await seatTitle(el)).toBe("Seat table Bar+Counter 5");
+  });
+
   it("the seat window for a renamed table on its own is headed with today's name", async () => {
     const el = await mount([counter4(), bar()], stubApi());
     mapOf(el).dispatchEvent(

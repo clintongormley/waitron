@@ -62,6 +62,12 @@ export function shownUnder(table: TableState): string {
   return table.today?.joinName ?? shownName(table);
 }
 
+export function withoutTodaysNames(table: TableState): TableState {
+  return table.today === null
+    ? table
+    : { ...table, today: { ...table.today, name: null, joinName: null } };
+}
+
 /** The details sheet's heading: the merge's name, else the table's own name for today, else
  * "Table 4". */
 export function detailsHeading(table: TableState, mergeName: string | null): string {
