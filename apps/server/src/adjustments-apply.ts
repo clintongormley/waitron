@@ -829,6 +829,10 @@ export async function applyAdjustment(
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver, attempts);
+      const activity =
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       let splits: AdjustmentSplit[] = [];
       if (args.action === "cancel") {
         await removeFromLine(
@@ -838,12 +842,13 @@ export async function applyAdjustment(
           voidTargetOf(plan.line!),
           plan.removed,
           args.operatorId,
+          activity,
         );
       } else {
         splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
-        await partyAfterEdit(tx, args.orderId, [], args.operatorId);
+        await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
       }
       const { line } = plan;
       const id = await recordAdjustment(tx, {
@@ -891,6 +896,7 @@ export async function applyAdjustment(
           order!.locationId,
           revision,
           "adjustment",
+          activity?.at,
         );
       }
       return { adjustmentIds: [id], revision };

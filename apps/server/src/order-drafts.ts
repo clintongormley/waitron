@@ -374,16 +374,22 @@ export async function submitDraft(
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
-      const placed = await placeGroups(tx, cfg, partyId, {
-        groups: groups.map(({ lineIds, release }) => {
-          const inGroup = new Set(lineIds);
-          return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
-        }),
-        joinGroupId,
-        operatorId,
-        billId: input.billId,
-        revisionMoved: true,
-      });
+      const placed = await placeGroups(
+        tx,
+        cfg,
+        partyId,
+        {
+          groups: groups.map(({ lineIds, release }) => {
+            const inGroup = new Set(lineIds);
+            return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
+          }),
+          joinGroupId,
+          operatorId,
+          billId: input.billId,
+          revisionMoved: true,
+        },
+        attendance === undefined ? undefined : { recorder: attendance, at },
+      );
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
       await tx

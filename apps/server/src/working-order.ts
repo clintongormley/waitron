@@ -257,6 +257,7 @@ export async function captureOrderEdit(
     | "send"
     | "recall"
     | "make-at",
+  at?: string,
 ): Promise<void> {
   if (attendance === undefined || personId === undefined) return;
   await attendance.recorder(tx, {
@@ -265,7 +266,7 @@ export async function captureOrderEdit(
     personId,
     locationId,
     kind: "order",
-    at: attendance.clock.now().instant.toISOString(),
+    at: at ?? attendance.clock.now().instant.toISOString(),
     offsetMinutes: 0,
     outcome: "qualified",
   });
@@ -2573,6 +2574,7 @@ export async function removeFromLine(
   target: VoidTarget,
   removed: number | null,
   operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
   const extra =
@@ -2658,7 +2660,13 @@ export async function removeFromLine(
       );
     if (extra !== null) await tellKitchenOfCancelledExtra(tx, cfg, tabId, extra);
     await assertBillInvariant(tx, [tabId]);
-    await partyAfterEdit(tx, tabId, target.groupId === null ? [] : [target.groupId], operatorId);
+    await partyAfterEdit(
+      tx,
+      tabId,
+      target.groupId === null ? [] : [target.groupId],
+      operatorId,
+      attendance,
+    );
     return;
   }
   const children = await tx
@@ -2672,7 +2680,7 @@ export async function removeFromLine(
     .where(eq(workingOrderLines.parentLineId, target.id));
   await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
   await assertBillInvariant(tx, [tabId]);
-  await partyAfterEdit(tx, tabId, [], operatorId);
+  await partyAfterEdit(tx, tabId, [], operatorId, attendance);
 }
 
 /**
@@ -2714,10 +2722,11 @@ export async function partyAfterEdit(
   orderId: string,
   leftGroups: readonly string[],
   operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const partyId = await partyOfOrder(tx, orderId);
   if (partyId === null) return;
-  await removeEmptiedHeldGroups(tx, partyId, leftGroups, operatorId);
+  await removeEmptiedHeldGroups(tx, partyId, leftGroups, operatorId, attendance);
   await bumpPartyRevision(tx, partyId);
 }
 
@@ -4989,7 +4998,8 @@ async function applyLineEdits(
     fresh: RequestedLine[];
   },
   operatorId: string | undefined,
-): Promise<{ changed: boolean }> {
+  attendance?: OrderAttendance,
+): Promise<{ changed: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, cfg, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
@@ -5281,6 +5291,11 @@ async function applyLineEdits(
   // one fired now, one held, as the lines' `kitchen` says, except units added beside an adjusted
   // line, which join that line's group. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
+  const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
+  const activity =
+    attendance === undefined || operatorId === undefined || !changed
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   if (order.partyId !== null) {
     for (const as of pricedAs) {
       if (
@@ -5293,13 +5308,17 @@ async function applyLineEdits(
       }
       const actorId = requireOperator(operatorId);
       const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId);
-      await recordGroupEvent(tx, {
-        partyId: order.partyId,
-        groupId,
-        kind: "submitted",
-        actorId,
-        detail: { workingOrderId: orderId, release: as.kitchen },
-      });
+      await recordGroupEvent(
+        tx,
+        {
+          partyId: order.partyId,
+          groupId,
+          kind: "submitted",
+          actorId,
+          detail: { workingOrderId: orderId, release: as.kitchen },
+        },
+        activity,
+      );
       newGroups.set(as.kitchen, groupId);
     }
   }
@@ -5617,7 +5636,6 @@ async function applyLineEdits(
       );
   }
   await assertBillInvariant(tx, [orderId]);
-  const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
   if (changed) await refuseOrderOverSimplifiedLimit(tx, cfg, orderId, before);
   if (changed) {
     await partyAfterEdit(
@@ -5625,9 +5643,10 @@ async function applyLineEdits(
       orderId,
       plan.removed.flatMap((parent) => (parent.groupId === null ? [] : [parent.groupId])),
       operatorId,
+      activity,
     );
   }
-  return { changed };
+  return { changed, at: activity?.at };
 }
 
 /**
@@ -5859,13 +5878,14 @@ export async function updateHeldOrder(
         },
       });
     }
-    const { changed } = await applyLineEdits(
+    const { changed, at } = await applyLineEdits(
       tx,
       cfg,
       id,
       order,
       { edits, removed: order.parents.filter((parent) => !claimed.has(parent.id)), fresh },
       req.operatorId,
+      attendance,
     );
     const relabelled = (req.label ?? null) !== label;
     if (relabelled) {
@@ -5880,7 +5900,7 @@ export async function updateHeldOrder(
       await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
     }
     if (changed || relabelled)
-      await captureOrderEdit(tx, attendance, id, req.operatorId, locationId, revision, "save");
+      await captureOrderEdit(tx, attendance, id, req.operatorId, locationId, revision, "save", at);
     return revision;
   });
 }
@@ -5911,7 +5931,7 @@ export async function updateOrderLine(
   if (parent === undefined) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  const { changed } = await applyLineEdits(
+  const { changed, at } = await applyLineEdits(
     tx,
     cfg,
     orderId,
@@ -5933,10 +5953,11 @@ export async function updateOrderLine(
       fresh: [],
     },
     operatorId,
+    attendance,
   );
   const saved = await countEdit(tx, orderId, revision, changed);
   if (changed)
-    await captureOrderEdit(tx, attendance, orderId, operatorId, locationId, saved, "line");
+    await captureOrderEdit(tx, attendance, orderId, operatorId, locationId, saved, "line", at);
   return saved;
 }
 

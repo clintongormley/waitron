@@ -3,12 +3,16 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
   newId,
+  locations,
+  orderGroupEvents,
+  orderGroups,
   parties,
   printJobs,
   serviceCommands,
   ticketItems,
   workingOrderLines,
   workingOrders,
+  withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -16,6 +20,7 @@ import { adjustments } from "@waitron/adjustments";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
+import { readAttendanceFacts } from "./attendance-facts.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";
 import {
@@ -97,6 +102,105 @@ async function state() {
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
+async function heldCancellation(app: Hono) {
+  const bill = await billWith(v, [{ name: "Burger" }], { operatorId: v.staffId, release: "hold" });
+  const body = {
+    submissionId: newId(),
+    expectedRevision: bill.revision,
+    lineId: await lineIdOf(v, bill.billId, 1),
+    reasonId: v.reasonId.house,
+    action: "cancel",
+    note: null,
+  };
+  return {
+    billId: bill.billId,
+    send: () =>
+      send(
+        app,
+        v.cookie.supervisor,
+        "POST",
+        `/api/working-orders/${bill.billId}/adjustments`,
+        body,
+      ),
+  };
+}
+describe("an adjustment that empties a held group", () => {
+  it("snapshots the removed group at the same trusted instant as the cancellation", async () => {
+    const command = await heldCancellation(api(recordAttendanceFact)),
+      reading = v.clock.now();
+    vi.spyOn(v.clock, "now")
+      .mockReturnValueOnce({ ...reading, instant: new Date("2026-01-05T16:40:00.987Z") })
+      .mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
+    expect(await command.send()).toMatchObject({ status: 200 });
+    const [event] = await suite.db
+      .select()
+      .from(orderGroupEvents)
+      .where(eq(orderGroupEvents.kind, "removed"));
+    expect(event!.actorId).toBe(v.supervisorId);
+    const facts = (await state()).facts;
+    expect(facts.map((f) => [f.personId, f.locationId, f.at])).toEqual([
+      [v.supervisorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
+      [v.supervisorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
+    ]);
+    expect(facts[0]!.key).toBe(`group:${event!.id}`);
+    const before = await state();
+    vi.spyOn(v.clock, "now").mockImplementation(() => {
+      throw new Error("replay clock");
+    });
+    expect(await command.send()).toMatchObject({ status: 200 });
+    expect(await state()).toEqual(before);
+  });
+  it("keeps the removed event's original location after its bill moves", async () => {
+    const command = await heldCancellation(api(recordAttendanceFact));
+    expect(await command.send()).toMatchObject({ status: 200 });
+    const [event] = await suite.db
+      .select()
+      .from(orderGroupEvents)
+      .where(eq(orderGroupEvents.kind, "removed"));
+    const [other] = await suite.db
+      .insert(locations)
+      .values({ name: "Other", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
+      .returning();
+    await suite.db
+      .update(workingOrders)
+      .set({ locationId: other!.id })
+      .where(eq(workingOrders.id, command.billId));
+    const read = (locationId: string) =>
+      withTransaction(suite.db, (tx) =>
+        readAttendanceFacts(tx, {
+          locationId,
+          businessDay: "2026-01-05",
+          startAt: "2026-01-05T00:00:00Z",
+          endAt: "2026-01-06T00:00:00Z",
+        }),
+      );
+    expect(
+      (await read(v.cfg.locationId))
+        .filter((f) => f.key === `group:${event!.id}`)
+        .map((f) => [f.personId, f.at]),
+    ).toEqual([[v.supervisorId, "2026-01-05T16:40:00.000Z"]]);
+    expect((await read(other!.id)).filter((f) => f.key === `group:${event!.id}`)).toEqual([]);
+  });
+  it("rolls back a held cancellation whose removed-event capture refuses", async () => {
+    const command = await heldCancellation(
+      api(async (tx, fact) => {
+        await recordAttendanceFact(tx, fact);
+        if (fact.key.startsWith("group:"))
+          throw new AppError("attendance.invalid", { reason: "removed group refused" });
+      }),
+    );
+    const before = await state(),
+      groups = await suite.db.select().from(orderGroups),
+      events = await suite.db.select().from(orderGroupEvents);
+    expect(await command.send()).toMatchObject({
+      status: 400,
+      json: { code: "attendance.invalid" },
+    });
+    expect(await state()).toEqual(before);
+    expect(await suite.db.select().from(orderGroups)).toEqual(groups);
+    expect(await suite.db.select().from(orderGroupEvents)).toEqual(events);
+  });
+});
 describe("adjustment order activity", () => {
   it.each(actions)(
     "%s retains the initiating worker rather than line credit or supplied attribution",

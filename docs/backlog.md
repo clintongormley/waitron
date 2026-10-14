@@ -104,7 +104,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    breaks are built. End-of-day closure and questions, corrections, own hours and the export
    surfaces remain in parts 3–6. The part-3 branch now captures direct group commands, legacy prep
    and reporting an already placed bill as unpaid. Course releases and group moves that empty a group
-   also snapshot their derived events. Remaining event snapshots and restore checks precede branch
+   also snapshot their derived events. Draft submissions, basket edits and held-line cancellations
+   capture their group events too. Remaining event snapshots and restore checks precede branch
    review. My hours is omitted until part 5 supplies its screen.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,

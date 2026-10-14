@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   orderDraftEvents,
+  orderGroupEvents,
   parties,
   orderDraftLines,
   orderDrafts,
@@ -183,8 +184,10 @@ describe("accepted draft attendance capture", () => {
       await run((tx) => submitDraft(tx, v.cfg, partyId, first.id, input, recordAttendanceFact)),
     ).toEqual(result);
     expect(await operations()).toEqual(before);
+    const [groupEvent] = await suite.db.select().from(orderGroupEvents);
     expect(before.map((r) => [r.key, r.at])).toEqual([
       [`${first.id}:${first.revision}:save`, "2026-01-05T09:00:00.000Z"],
+      [`group:${groupEvent!.id}`, "2026-01-05T12:00:00.000Z"],
       [`${first.id}:${first.revision + 1}:submit`, "2026-01-05T12:00:00.000Z"],
     ]);
   });
