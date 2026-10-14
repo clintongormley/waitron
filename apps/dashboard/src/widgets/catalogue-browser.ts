@@ -33,6 +33,7 @@ import "./category-color-form.js";
 import { refusalText } from "./archive-refusal.js";
 import { archiveExtraListWarning } from "./archive-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
+import { countOf } from "./count-text.js";
 
 interface OperationDraft {
   destination: string;
@@ -496,12 +497,6 @@ export class CatalogueBrowser extends LitElement {
   #contentsChoice(): FolderContents {
     return this.#asksContents() ? this.contents : "move_up";
   }
-  #plural(key: Parameters<typeof t>[0], count: number): string {
-    return t(count === 1 ? (`${key}_one` as Parameters<typeof t>[0]) : key).replace(
-      "{count}",
-      String(count),
-    );
-  }
   /** Where the contents of the outermost selected categories go: their parent when they share one. */
   #contentsParent(roots: readonly FolderSummary[]): string {
     const byId = new Map(this.categories.map((category) => [category.id, category]));
@@ -576,8 +571,8 @@ export class CatalogueBrowser extends LitElement {
     const ownRoutes = this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0);
     const innerRoutes = Math.max(0, totals.routes - ownRoutes);
     const parent = this.#contentsParent(rootSummaries);
-    const folderCount = this.#plural("folders.count", totals.folders);
-    const productCount = this.#plural("folders.product_count", totals.active);
+    const folderCount = countOf("folders.count", totals.folders);
+    const productCount = countOf("folders.product_count", totals.active);
     const moving = [
       ...(totals.folders ? [folderCount] : []),
       ...(totals.active ? [productCount] : []),
@@ -588,7 +583,7 @@ export class CatalogueBrowser extends LitElement {
     );
     const deleted = [
       ...(totals.folders ? [folderCount] : []),
-      ...(innerRoutes ? [this.#plural("folders.route_count", innerRoutes)] : []),
+      ...(innerRoutes ? [countOf("folders.route_count", innerRoutes)] : []),
     ];
     const actions = [
       ...(deleted.length
@@ -606,7 +601,7 @@ export class CatalogueBrowser extends LitElement {
           ]
         : []),
     ].join(" ");
-    const heading = this.#plural(
+    const heading = countOf(
       this.operation === "move"
         ? "folders.move_heading"
         : selection.categoryIds.length
@@ -738,7 +733,7 @@ export class CatalogueBrowser extends LitElement {
                               }`
                           : nothing
                       }
-                      ${ownRoutes ? html`<p>${this.#plural("folders.routes_warning", ownRoutes)}</p>` : nothing}`
+                      ${ownRoutes ? html`<p>${countOf("folders.routes_warning", ownRoutes)}</p>` : nothing}`
                     : nothing
                 }
               `
@@ -1015,7 +1010,7 @@ export class CatalogueBrowser extends LitElement {
                 ${
                   this.selecting
                     ? html`<span data-test="selected-count" aria-live="polite"
-                          >${this.#plural("folders.selected", this.selected.length)}</span
+                          >${countOf("folders.selected", this.selected.length)}</span
                         >
                         <wt-button
                           data-test="move"

@@ -4,6 +4,12 @@ export function countOf(
   key:
     | "folders.count"
     | "folders.product_count"
+    | "folders.route_count"
+    | "folders.move_heading"
+    | "folders.delete_heading"
+    | "folders.archive_products_heading"
+    | "folders.routes_warning"
+    | "folders.selected"
     | "menus.section_count"
     | "product.variant_count"
     | "modifiers.delete_warning_products"

@@ -672,6 +672,17 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **Menu prices' cleared-price range test missed the narrow layout on main CI** —
+  [A608's merge run 38505417966](https://github.com/clintongormley/waitron/actions/runs/38505417966/job/115661820912)
+  failed `widens a field whose stored price is cleared, so the range it then shows is whole at
+  320 px (font )`: `apps/dashboard/src/widgets/menu-prices-table.test.ts:2625` expected the
+  table's `narrow` attribute but received false (1 failed, 3433 passed in dashboard shard 4).
+  A609 changed neither this test nor the menu-prices table. The focused command
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-prices-table.test.ts -t
+  'widens a field whose stored price is cleared'` passed both cases on macOS on 2026-10-14.
+  **Next action:** reproduce the failed shard with its CI viewport/layout conditions and fix
+  the cause; keep the narrow-layout assertion. The cause remains unverified.
+
 - **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
   A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
   390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
@@ -700,10 +711,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   row until the list is scrolled again (`apps/dashboard/src/widgets/section-add-products.ts`).
   **Next action:** keep the list's end in view when the block grows, test-first in real Chromium.
 
-- **Two copies of the count wording helper** — left by A453. `countOf`
-  (`apps/dashboard/src/widgets/count-text.ts`) and the catalogue browser's private `#plural`
-  (`apps/dashboard/src/widgets/catalogue-browser.ts`) pick the `_one` string the same way.
-  **Next action:** make the catalogue browser use `countOf`, widening its key list.
+- **The menus screen still duplicates the count wording choice** — found during A609's review.
+  `apps/dashboard/src/screens/menus-screen.ts:2584` (`folders.selected`) and `:3333`
+  (`folders.move_heading`) choose singular/plural and replace `{count}` inline. Both keys are
+  accepted by `widgets/count-text.ts`'s `countOf` now. **Next action:** use `countOf` at both
+  sites and keep the existing English/Spanish wording checks. The catalogue browser's copy
+  was removed by A609; the menus screen is outside that item's scope.
 
 - **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
   by A453. At narrow width `wt-data-table` stops indenting after four levels
