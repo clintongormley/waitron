@@ -4780,3 +4780,22 @@ it("A462 Products root closure reports the top category once and survives a live
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
   expect(sent).toHaveLength(1);
 });
+
+it.each([
+  ["en-GB", ["folder:d"], "Delete 1 item?"],
+  ["en-GB", ["folder:d", "folder:f"], "Delete 2 items?"],
+  ["es", ["folder:d"], "¿Eliminar 1 elemento?"],
+  ["es", ["folder:d", "folder:f"], "¿Eliminar 2 elementos?"],
+] as const)(
+  "words the visible delete heading for its selected categories (%s, %o)",
+  async (locale, keys, heading) => {
+    setLocale(locale);
+    onTestFinished(() => setLocale("en-GB"));
+    const el = await mountBrowser();
+    await selectKeys(el, [...keys]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(dialog(el)?.shadowRoot?.querySelector("h2")?.textContent).toBe(heading),
+    );
+  },
+);
