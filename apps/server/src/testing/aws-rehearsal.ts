@@ -1761,7 +1761,7 @@ function ownedBucketOf(left: LeftReceipt): string | null {
   return left.bucket;
 }
 
-function namesRun(text: string, runId: string): boolean {
+export function namesRun(text: string, runId: string): boolean {
   try {
     const marker: unknown = JSON.parse(text);
     return isPlainObject(marker) && Object.keys(marker).length === 1 && marker.runId === runId;

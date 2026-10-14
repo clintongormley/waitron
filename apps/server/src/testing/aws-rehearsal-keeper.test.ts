@@ -1,10 +1,14 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BUCKET,
   FakeAdmin,
+  KEY_ID,
+  SECRET,
   NONCE,
   RUN_ID,
   START_TIME,
@@ -15,7 +19,12 @@ import {
 import { journalFileName, type RehearsalJournal } from "./aws-rehearsal-journal.js";
 import { type KeeperDeps, keeperLogPath, runKeeper } from "./aws-rehearsal-keeper.js";
 import { type AwsReceipt, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
-import { currentRequestScope, uninstallSendGate } from "./aws-send-gate.js";
+import {
+  currentRequestScope,
+  installSendGate,
+  setSendGateStrict,
+  uninstallSendGate,
+} from "./aws-send-gate.js";
 
 const CEILING = 1_000_000;
 const GRACE = 30_000;
@@ -405,6 +414,8 @@ describe("runKeeper", () => {
     expect(await runKeeper(journalPath, h.deps)).toBe(1);
 
     expect(h.printed.join("\n")).toContain("gave up waiting");
+    expect(h.printed).toContain(`bucket ${BUCKET}`);
+    expect(h.printed).toContain(`folder ${scratchRoot()}`);
     expect(fake.calls).toEqual([]);
     expect(h.removeDir).not.toHaveBeenCalled();
     expect((await logLines()).at(-1)).toBe("exit 1");
@@ -460,5 +471,183 @@ describe("runKeeper", () => {
       expect.objectContaining({ region: "eu-north-1" }),
       "http://127.0.0.1:7070",
     );
+  });
+  describe("what it says is left", () => {
+    it("names a process that would not stop, and not the bucket it deleted", async () => {
+      await writeJournalFile(journal({ pids: [{ pid: 4242, startTime: START_TIME }] }));
+      const fake = bucketWithObjects();
+      const h = harness(fake, { isAlive: (pid) => pid === 4242 });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(fake.names()).toContain("DeleteBucket");
+      expect(h.printed).toEqual([interruptedPath(), "left behind:", "process 4242"]);
+      const written = await receipt();
+      expect(written.remaining).toEqual({ bucket: null, uploadIds: [] });
+      expect(written.cleanupCommand).toBeNull();
+    });
+
+    it.each([
+      ["AbortMultipartUpload", "an upload abort"],
+      ["DeleteBucketPolicy", "a policy removal"],
+    ])("after %s fails (%s), a deleted bucket is not named", async (api) => {
+      await writeJournalFile(
+        journal({ uploads: [{ key: `rehearsal-${RUN_ID}/loop/big`, uploadId: "upload-1" }] }),
+      );
+      const fake = bucketWithObjects({
+        answers: {
+          [api]: () => {
+            throw sdkError("InternalError", 500);
+          },
+        },
+      });
+      const h = harness(fake);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(fake.names()).toContain("DeleteBucket");
+      expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
+      const written = await receipt();
+      expect(written.remaining).toEqual({ bucket: null, uploadIds: [] });
+      expect(written.cleanupCommand).toBeNull();
+    });
+  });
+
+  describe("the ownership marker", () => {
+    it("deletes nothing when the marker names another run", async () => {
+      await writeJournalFile(journal());
+      const fake = new FakeAdmin({
+        objects: [
+          [NONCE, JSON.stringify({ runId: "run-9999" })],
+          ["someone-elses/object", "x"],
+        ],
+      });
+      const h = harness(fake);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(fake.names()).toEqual(["GetObject"]);
+      expect(fake.objects.size).toBe(2);
+      expect(h.printed).toEqual([
+        interruptedPath(),
+        "left behind:",
+        `bucket ${BUCKET} (ownership unknown)`,
+      ]);
+      expect((await receipt()).ownership).toEqual({
+        state: "unowned-candidate",
+        bucket: null,
+        candidate: BUCKET,
+      });
+    });
+
+    it("tears down when the marker was never written", async () => {
+      await writeJournalFile(journal());
+      const fake = new FakeAdmin({ objects: [[`rehearsal-${RUN_ID}/loop/a`, "x"]] });
+      const h = harness(fake);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(fake.names()).toContain("DeleteBucket");
+      expect(fake.objects.size).toBe(0);
+      expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
+    });
+  });
+
+  describe("a refusal after the run ended", () => {
+    it.each([
+      ["AWS_PROFILE", "owned", `bucket ${BUCKET}`],
+      ["WAITRON_RUN_AWS_REHEARSAL", "creating", `bucket ${BUCKET} (ownership unknown)`],
+    ] as const)(
+      "with %s unset still removes scratch and names the %s bucket",
+      async (variable, state, bucketLine) => {
+        await mkdir(scratchRoot());
+        await writeFile(join(scratchRoot(), "secrets.env"), "AWS_SECRET_ACCESS_KEY=x\n");
+        await writeJournalFile(
+          journal({
+            state,
+            scratchRoot: scratchRoot(),
+            uploads:
+              state === "owned"
+                ? [{ key: `rehearsal-${RUN_ID}/loop/big`, uploadId: "upload-1" }]
+                : [],
+          }),
+        );
+        const fake = bucketWithObjects();
+        const h = harness(fake, {
+          env: profileEnv({ credentialsFile, configFile }, { [variable]: undefined }),
+        });
+
+        expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+        expect(fake.calls).toEqual([]);
+        await expect(stat(scratchRoot())).rejects.toThrow();
+        expect(h.printed[0]).toMatch(/^AWS rehearsal refused \(/);
+        expect(h.printed.slice(1)).toEqual([
+          "left behind:",
+          bucketLine,
+          ...(state === "owned" ? ["upload upload-1"] : []),
+        ]);
+        expect(await readdir(receiptDir)).not.toContain(`aws-rehearsal-${RUN_ID}-interrupted.json`);
+        expect((await logLines()).at(-1)).toBe("exit 1");
+      },
+    );
+  });
+
+  describe("with a real SDK client", () => {
+    function stubbed() {
+      const paths: string[] = [];
+      const client = new S3Client({
+        region: "eu-north-1",
+        credentials: { accessKeyId: KEY_ID, secretAccessKey: SECRET },
+        requestHandler: {
+          async handle(request: { path: string }) {
+            paths.push(request.path);
+            return {
+              response: {
+                statusCode: 404,
+                headers: { "content-type": "application/xml" },
+                body: Readable.from([
+                  '<?xml version="1.0"?><Error><Code>NoSuchBucket</Code><Message>gone</Message></Error>',
+                ]),
+              },
+            };
+          },
+        },
+      });
+      return { client, paths };
+    }
+
+    afterEach(() => {
+      setSendGateStrict(false);
+    });
+
+    it("sends its marker read as the runner, and leaves the gate strict", async () => {
+      installSendGate();
+      // Earlier cases' keepers left the gate strict, which would refuse this unscoped control.
+      setSendGateStrict(false);
+      const control = stubbed();
+      await control.client
+        .send(new GetObjectCommand({ Bucket: BUCKET, Key: NONCE }))
+        .catch(() => {});
+      expect(control.paths).toHaveLength(1);
+
+      await writeJournalFile(journal());
+      const real = stubbed();
+      const h = harness(new FakeAdmin(), { createAdminClient: () => real.client });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(real.paths).toHaveLength(1);
+      expect(real.paths[0]).toContain(NONCE);
+      const after = stubbed();
+      const refused = await after.client
+        .send(new GetObjectCommand({ Bucket: BUCKET, Key: NONCE }))
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      expect(String(refused)).toContain("outside a rehearsal run");
+      expect(after.paths).toEqual([]);
+    });
   });
 });

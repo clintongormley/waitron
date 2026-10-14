@@ -10,10 +10,12 @@ import { createBucketClient, nameOf } from "@waitron/stream";
 import {
   type AdminClient,
   assertCleanupCommandFits,
+  assertRehearsalOptIn,
   call,
   carriedRemaining,
   containedLog,
   loadRehearsalProfile,
+  namesRun,
   type RehearsalProfile,
   receiptFailureCause,
   removeScratch,
@@ -144,6 +146,8 @@ interface BucketOutcome {
   remaining: AwsReceiptRemaining;
   /** A bucket the keeper may not delete because nothing proves this run made it. */
   unknown: string | null;
+  /** Tracked processes still running after teardown tried to stop them. */
+  processes: number[];
 }
 
 const NOTHING: AwsReceiptRemaining = { bucket: null, uploadIds: [] };
@@ -190,9 +194,18 @@ export async function runKeeper(
       deps.sleep(first.keeperCeilingMs).then(() => false),
     ]);
     if (!ended) {
+      const latest = await readJournalAt(journalPath, deps).catch(() => first);
       lines.say(
         `gave up waiting: the run did not end within ${first.keeperCeilingMs} ms; nothing done`,
       );
+      const left = [
+        ...journalLeft(latest, deps),
+        ...(latest.scratchRoot === null ? [] : [`folder ${latest.scratchRoot}`]),
+      ];
+      if (left.length > 0) {
+        lines.say("may be left:");
+        for (const line of left) lines.say(line);
+      }
       return end(1);
     }
     const journal = await readJournalAt(journalPath, deps);
@@ -208,15 +221,63 @@ export async function runKeeper(
   }
 }
 
+function sayLeft(lines: Lines, left: readonly string[]): void {
+  if (left.length === 0) {
+    lines.say("nothing left behind");
+  } else {
+    lines.say("left behind:");
+    for (const line of left) lines.say(line);
+  }
+}
+
+/** What the journal says may still exist when the keeper sends nothing; scratch is named apart. */
+function journalLeft(journal: RehearsalJournal, deps: KeeperDeps): string[] {
+  const { state, bucket } = journal;
+  if (state !== "owned" && state !== "creating") return [];
+  return [
+    state === "owned" ? `bucket ${bucket}` : `bucket ${bucket} (ownership unknown)`,
+    ...(state === "owned" ? journal.uploads.map(({ uploadId }) => `upload ${uploadId}`) : []),
+    ...matchingPids(journal, deps, { say: () => {}, note: () => {} })
+      .filter((pid) => deps.isAlive(pid))
+      .map((pid) => `process ${pid}`),
+  ];
+}
+
+async function removeJournalScratch(
+  journal: RehearsalJournal,
+  deps: KeeperDeps,
+): Promise<{ entry: TeardownEntry | null; left: string | null }> {
+  if (journal.scratchRoot === null) return { entry: null, left: null };
+  const entry = await removeScratch(true, journal.scratchRoot, deps.removeDir, false);
+  return { entry, left: entry.outcome === "failed" ? journal.scratchRoot : null };
+}
+
 async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): Promise<number> {
   const { runId, region, bucket, receiptDir } = journal;
-  const profile = await loadRehearsalProfile(deps.env, deps);
-  if (profile.region !== region) {
-    throw new AwsRehearsalRefused("region-mismatch", "the journal's region must equal AWS_REGION");
+  let profile: RehearsalProfile;
+  let log: ReturnType<typeof createReceiptLog>;
+  try {
+    assertRehearsalOptIn(deps.env);
+    profile = await loadRehearsalProfile(deps.env, deps);
+    if (profile.region !== region) {
+      throw new AwsRehearsalRefused(
+        "region-mismatch",
+        "the journal's region must equal AWS_REGION",
+      );
+    }
+    assertCleanupCommandFits(region, runId, receiptDir);
+    log = createReceiptLog({ runId, region, ...journal.header }, profile, "interrupted");
+  } catch (error) {
+    // Nothing can be sent, but the scratch folder holding the run's secrets is still removed.
+    lines.say(describe(error));
+    const scratch = await removeJournalScratch(journal, deps);
+    sayLeft(lines, [
+      ...journalLeft(journal, deps),
+      ...(scratch.left === null ? [] : [`folder ${scratch.left}`]),
+    ]);
+    return 1;
   }
-  assertCleanupCommandFits(region, runId, receiptDir);
   const receiptPath = join(receiptDir, receiptFileName(runId, "interrupted"));
-  const log = createReceiptLog({ runId, region, ...journal.header }, profile, "interrupted");
   const contained = containedLog(log);
   const { record } = contained;
   record({ scenario: "lifecycle", phase: "interrupted", outcome: "failed" });
@@ -247,18 +308,39 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
       for (const step of BUCKET_STEPS) contained.teardown({ step, outcome: "skipped" });
     };
 
+    const unknown: BucketOutcome = {
+      ownership: { state: "unowned-candidate", bucket: null, candidate: bucket },
+      remaining: NOTHING,
+      unknown: bucket,
+      processes: [],
+    };
     const outcome = await requests.scope.run(async (): Promise<BucketOutcome> => {
       const owned = { state: "owned", bucket } as const;
       switch (journal.state) {
         case "owned": {
-          if (gone(await marker())) {
+          const read = await marker();
+          if (gone(read)) {
             lines.note(`${bucket} is already gone`);
             skipBucketSteps();
-            return { ownership: owned, remaining: NOTHING, unknown: null };
+            return { ownership: owned, remaining: NOTHING, unknown: null, processes: [] };
           }
+          // No marker: a run killed between its create's answer and the marker's write.
+          if (read.error === undefined || nameOf(read.error) !== "NoSuchKey") {
+            let text: string | undefined;
+            try {
+              text = await read.output?.Body?.transformToString();
+            } catch {
+              text = undefined;
+            }
+            if (read.error !== undefined || text === undefined || !namesRun(text, runId)) {
+              lines.note(`${bucket}'s ownership marker is unreadable or names another run`);
+              return unknown;
+            }
+          }
+          const pids = matchingPids(journal, deps, lines);
           const teardown = await teardownOwnedBucket(
             client,
-            { bucket, runId, uploads: journal.uploads, pids: matchingPids(journal, deps, lines) },
+            { bucket, runId, uploads: journal.uploads, pids },
             {
               isAlive: deps.isAlive,
               kill: deps.kill,
@@ -270,11 +352,19 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
             },
           );
           for (const entry of teardown.entries) contained.teardown(entry);
-          return { ownership: owned, remaining: teardown.remaining, unknown: null };
+          const failed = (step: TeardownEntry["step"]): boolean =>
+            teardown.entries.some((entry) => entry.step === step && entry.outcome === "failed");
+          // teardownOwnedBucket names the bucket after any failed step; only a failed delete leaves it.
+          return {
+            ownership: owned,
+            remaining: failed("delete-bucket") ? teardown.remaining : NOTHING,
+            unknown: null,
+            processes: failed("stop-child") ? pids.filter((pid) => deps.isAlive(pid)) : [],
+          };
         }
         case "deleted":
           skipBucketSteps();
-          return { ownership: owned, remaining: NOTHING, unknown: null };
+          return { ownership: owned, remaining: NOTHING, unknown: null, processes: [] };
         case "creating": {
           lines.note(`waiting ${deps.graceMs} ms for a create that may still land`);
           await deps.sleep(deps.graceMs);
@@ -283,13 +373,10 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
               ownership: { state: "not-created", bucket: null },
               remaining: NOTHING,
               unknown: null,
+              processes: [],
             };
           }
-          return {
-            ownership: { state: "unowned-candidate", bucket: null, candidate: bucket },
-            remaining: NOTHING,
-            unknown: bucket,
-          };
+          return unknown;
         }
         default:
           return {
@@ -299,16 +386,14 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
             },
             remaining: NOTHING,
             unknown: null,
+            processes: [],
           };
       }
     });
 
-    let folderLeft: string | null = null;
-    if (journal.scratchRoot !== null) {
-      const entry = await removeScratch(true, journal.scratchRoot, deps.removeDir, false);
-      contained.teardown(entry);
-      if (entry.outcome === "failed") folderLeft = journal.scratchRoot;
-    }
+    const scratch = await removeJournalScratch(journal, deps);
+    if (scratch.entry !== null) contained.teardown(scratch.entry);
+    const folderLeft = scratch.left;
 
     const remaining = carriedRemaining(outcome.remaining, profile, contained);
     requests.finished();
@@ -334,14 +419,10 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
       ...(remaining.bucket === null ? [] : [`bucket ${remaining.bucket}`]),
       ...(outcome.unknown === null ? [] : [`bucket ${outcome.unknown} (ownership unknown)`]),
       ...remaining.uploadIds.map((id) => `upload ${id}`),
+      ...outcome.processes.map((pid) => `process ${pid}`),
       ...(folderLeft === null ? [] : [`folder ${folderLeft}`]),
     ];
-    if (left.length === 0) {
-      lines.say("nothing left behind");
-    } else {
-      lines.say("left behind:");
-      for (const line of left) lines.say(line);
-    }
+    sayLeft(lines, left);
     const unplanned = unplannedFailure(requests.close());
     if (unplanned !== undefined) lines.say(unplanned.message);
     return left.length > 0 || receiptFailed || unplanned !== undefined || contained.refused() > 0
