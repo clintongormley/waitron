@@ -4103,6 +4103,16 @@ describe("till-table-order-screen", () => {
       },
     });
 
+    /** `table` in a group named "García birthday" for today, carrying `party`. */
+    const inGroup = (table: TableState, party: TableParty): TableState => {
+      const named = renamed(table, "");
+      return {
+        ...named,
+        party,
+        today: { ...named.today!, name: null, joinId: "j1", joinName: "García birthday" },
+      };
+    };
+
     it("Move guests names a table renamed for today by its name, among the targets and the party's tables", async () => {
       const floor = partyTables(true);
       const tables = floor.tables.map((table) =>
@@ -4151,16 +4161,8 @@ describe("till-table-order-screen", () => {
     it("Move guests names an unnamed party at a group named for today by the group's name once, its targets by their own names", async () => {
       const floor = partyTables(true);
       const party = { ...floor.party, name: null, displayName: "García birthday" };
-      const inGroup = (table: TableState): TableState => {
-        const named = renamed(table, "");
-        return {
-          ...named,
-          party,
-          today: { ...named.today!, name: null, joinId: "j1", joinName: "García birthday" },
-        };
-      };
       const tables = floor.tables.map((table) =>
-        table.id === "t4" || table.id === "t5" ? inGroup(table) : table,
+        table.id === "t4" || table.id === "t5" ? inGroup(table, party) : table,
       );
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", party, tables });
       await toMenu(el);
@@ -4171,6 +4173,28 @@ describe("till-table-order-screen", () => {
         t("table.move_guests_heading").replace("{party}", "García birthday"),
       );
       expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Mesa 5");
+    });
+
+    it("Name the party shows an unnamed party at a group named for today by the group's name once, as the field's placeholder", async () => {
+      const floor = partyTables(true);
+      const party = { ...floor.party, name: null, displayName: "García birthday" };
+      const tables = floor.tables.map((table) =>
+        table.id === "t4" || table.id === "t5" ? inGroup(table, party) : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", party, tables });
+      await toMenu(el);
+      click(el, '[data-action="name"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<boolean> }
+      >("till-party-name-dialog")!;
+      await dialog.updateComplete;
+      const field = dialog.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<boolean> }
+      >("wt-input")!;
+      await field.updateComplete;
+
+      expect(field.shadowRoot!.querySelector("input")!.placeholder).toBe("García birthday");
     });
 
     it("Split a table names a table renamed for today by its name, in its choices and its heading", async () => {

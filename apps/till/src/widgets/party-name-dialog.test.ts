@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import "./party-name-dialog.js";
+import { fitPlaceholder } from "./party-name-dialog.js";
 import type { PartyNameDetail, TillPartyNameDialog } from "./party-name-dialog.js";
 
 afterEach(cleanupWidgets);
@@ -22,6 +22,42 @@ const nativeInput = (el: TillPartyNameDialog) =>
 const save = (el: TillPartyNameDialog) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-name-save]")!;
 const bottom = (el: TillPartyNameDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
+
+/** Measured with the page's own layout, not the window's canvas: a span in the placeholder's font
+ * and letter spacing, against the field's unrounded box less its borders and padding. */
+function drawn(el: TillPartyNameDialog) {
+  const input = nativeInput(el);
+  const control = getComputedStyle(input);
+  const placeholder = getComputedStyle(input, "::placeholder");
+  const px = (value: string) => parseFloat(value);
+  return {
+    placeholder: input.placeholder,
+    width(text: string): number {
+      const probe = document.createElement("span");
+      probe.style.cssText = "position: absolute; visibility: hidden; white-space: pre";
+      probe.style.font = placeholder.font;
+      probe.style.letterSpacing = placeholder.letterSpacing;
+      probe.textContent = text;
+      document.body.append(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    },
+    textBox:
+      input.getBoundingClientRect().width -
+      px(control.borderLeftWidth) -
+      px(control.borderRightWidth) -
+      px(control.paddingLeft) -
+      px(control.paddingRight),
+  };
+}
+
+/** Adds a placeholder rule inside the name field's own shadow tree. */
+function stylePlaceholder(el: TillPartyNameDialog, rule: string): void {
+  const style = document.createElement("style");
+  style.textContent = `.field-control::placeholder { ${rule} }`;
+  field(el).shadowRoot!.append(style);
+}
 
 async function type(el: TillPartyNameDialog, value: string): Promise<void> {
   const input = nativeInput(el);
@@ -58,7 +94,7 @@ describe("till-party-name-dialog", () => {
         setLocale(locale);
         const { el } = await mountWidget<TillPartyNameDialog>(
           "till-party-name-dialog",
-          { tables: "4" },
+          { tables: "Counter 3, Counter 4" },
           theme,
         );
         const dialog = el
@@ -72,14 +108,8 @@ describe("till-party-name-dialog", () => {
         expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
         expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
         expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-        const input = nativeInput(el);
-        const control = getComputedStyle(input);
-        const placeholder = getComputedStyle(input, "::placeholder");
-        const context = document.createElement("canvas").getContext("2d")!;
-        context.font = placeholder.font;
-        const textWidth =
-          input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight);
-        expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(textWidth);
+        const shown = drawn(el);
+        expect(shown.width(shown.placeholder)).toBeLessThanOrEqual(shown.textBox);
       } finally {
         setLocale(previousLocale);
         await page.viewport(1280, 900);
@@ -98,6 +128,202 @@ describe("till-party-name-dialog", () => {
     expect(field(el).required).toBe(false);
     expect(field(el).error).toBe("");
     expect(bottom(el).error).toBe("");
+  });
+
+  it.each(["en", "es"])(
+    "shows the name the party has when left empty as the field's placeholder, in %s",
+    async (locale) => {
+      const previousLocale = currentLocale();
+      try {
+        setLocale(locale);
+        const el = await mountDialog({ tables: "Mesa 4, 5", value: "" });
+
+        expect(field(el).placeholder).toBe("Mesa 4, 5");
+        expect(field(el).hint).toBe("");
+        expect(nativeInput(el).placeholder).toBe("Mesa 4, 5");
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  describe("a placeholder wider than the field", () => {
+    const counters = (count: number) =>
+      Array.from({ length: count }, (_, index) => `Counter ${index + 1}`).join(", ");
+
+    /** A ResizeObserver reports after the frame's animation callbacks, so this waits two frames. */
+    async function measured(): Promise<void> {
+      for (let frame = 0; frame < 2; frame++)
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+
+    function expectOnScreen(el: TillPartyNameDialog, width: number): void {
+      const dialog = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!;
+      const body = dialog.querySelector<HTMLElement>(".body")!;
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    }
+
+    it("shortens a long table list to whole names and an ellipsis that fit at 390 px, with the cursor in the field", async () => {
+      const tables = counters(8);
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ tables, value: "" });
+
+        await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
+        const { placeholder, width, textBox } = drawn(el);
+        expect(width(tables)).toBeGreaterThan(textBox);
+        expect(tables.startsWith(placeholder.slice(0, -"…".length))).toBe(true);
+        expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+        expect(field(el).shadowRoot!.activeElement).toBe(nativeInput(el));
+        expectOnScreen(el, 390);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("cuts a single long name by characters, with an ellipsis that fits at 390 px", async () => {
+      const tables = "W".repeat(40);
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ tables, value: "" });
+
+        await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/^W+…$/));
+        const { placeholder, width, textBox } = drawn(el);
+        expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+        expect(width(`W${placeholder}`)).toBeGreaterThan(textBox);
+        expectOnScreen(el, 390);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("shortens the list once the field narrows, with no ResizeObserver loop as it narrows and widens", async () => {
+      const tables = counters(5);
+      await page.viewport(1280, 900);
+      try {
+        const el = await mountDialog({ tables, value: "" });
+        await measured();
+        const wide = drawn(el);
+        expect(wide.width(tables)).toBeLessThanOrEqual(wide.textBox);
+        expect(wide.placeholder).toBe(tables);
+        const errors: string[] = [];
+        const record = (event: ErrorEvent) => errors.push(event.message);
+        addEventListener("error", record);
+        try {
+          await page.viewport(390, 900);
+
+          await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
+          const narrow = drawn(el);
+          expect(narrow.width(tables)).toBeGreaterThan(narrow.textBox);
+          expect(narrow.width(narrow.placeholder)).toBeLessThanOrEqual(narrow.textBox);
+          for (const width of [700, 390, 1280, 390]) {
+            await page.viewport(width, 900);
+            await measured();
+          }
+          expect(errors).toEqual([]);
+        } finally {
+          removeEventListener("error", record);
+        }
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("fits the list to the placeholder's letter spacing", async () => {
+      const tables = counters(8);
+      await page.viewport(1280, 900);
+      try {
+        const el = await mountDialog({ tables, value: "" });
+        await measured();
+        stylePlaceholder(el, "letter-spacing: 2px");
+
+        await page.viewport(390, 900);
+
+        await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
+        await measured();
+        const { placeholder, width, textBox } = drawn(el);
+        expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("measures the list again on document.fonts' loadingdone event, without the field changing width", async () => {
+      const tables = counters(8);
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ tables, value: "" });
+        await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
+        await measured();
+        const before = drawn(el);
+        stylePlaceholder(el, "letter-spacing: 2px");
+        expect(drawn(el).width(before.placeholder)).toBeGreaterThan(before.textBox);
+
+        document.fonts.dispatchEvent(new Event("loadingdone"));
+        await el.updateComplete;
+
+        const after = drawn(el);
+        expect(after.textBox).toBe(before.textBox);
+        expect(after.width(after.placeholder)).toBeLessThanOrEqual(after.textBox);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+
+    it("shortens a new, longer table list without the field changing width", async () => {
+      await page.viewport(390, 900);
+      try {
+        const el = await mountDialog({ tables: "Counter 1, Counter 2", value: "" });
+        await measured();
+        expect(nativeInput(el).placeholder).toBe("Counter 1, Counter 2");
+
+        el.tables = counters(8);
+        await el.updateComplete;
+
+        expect(nativeInput(el).placeholder).toMatch(/^Counter 1, .*, …$/);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    });
+  });
+
+  describe("fitPlaceholder, measuring one unit per character", () => {
+    const measure = (text: string) => text.length;
+
+    it("keeps text that fits exactly as it is", () => {
+      expect(fitPlaceholder("Aa, Bb", 6, measure)).toBe("Aa, Bb");
+    });
+
+    it("keeps as many whole names as fit, then an ellipsis", () => {
+      expect(fitPlaceholder("Aa, Bb, Cc", 9, measure)).toBe("Aa, Bb, …");
+      expect(fitPlaceholder("Aa, Bb, Cc", 8, measure)).toBe("Aa, …");
+    });
+
+    it("cuts the first name by characters when not even it fits beside the ellipsis", () => {
+      expect(fitPlaceholder("Abcdef, Gh", 4, measure)).toBe("Abc…");
+      expect(fitPlaceholder("Wwwwwwww", 5, measure)).toBe("Wwww…");
+    });
+
+    it("drops a space left before the ellipsis", () => {
+      expect(fitPlaceholder("Ab cdef", 4, measure)).toBe("Ab…");
+    });
+
+    it("cuts between whole characters, never inside an emoji", () => {
+      const chef = "\u{1F469}\u200D\u{1F373}";
+      expect(fitPlaceholder(chef.repeat(3), 8, measure)).toBe(`${chef}…`);
+    });
+
+    it("cuts between whole characters, never between a letter and its accent", () => {
+      expect(fitPlaceholder("e\u0301e\u0301e\u0301", 4, measure)).toBe("e\u0301…");
+    });
+
+    it("shows the ellipsis alone when no character fits", () => {
+      expect(fitPlaceholder("Ww", 0, measure)).toBe("…");
+    });
   });
 
   it("puts the cursor in the name field when it opens", async () => {

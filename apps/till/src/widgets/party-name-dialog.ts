@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
@@ -12,12 +12,38 @@ import {
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { PARTY_NAME_MAX } from "@waitron/shared";
+import { PARTY_NAME_MAX, TABLE_SEPARATOR } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
 export interface PartyNameDetail {
   /** Trimmed; null clears the name. */
   name: string | null;
+}
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * Chromium draws a text field's `text-overflow: ellipsis` only while the field does not have the
+ * cursor, and this window opens with the cursor in it, so the placeholder is shortened as text.
+ * Whole names of the list are kept where one fits; otherwise the first is cut between characters.
+ */
+export function fitPlaceholder(
+  text: string,
+  width: number,
+  measure: (text: string) => number,
+): string {
+  if (measure(text) <= width) return text;
+  const names = text.split(TABLE_SEPARATOR);
+  for (let count = names.length - 1; count > 0; count--) {
+    const shortened = `${names.slice(0, count).join(TABLE_SEPARATOR)}${TABLE_SEPARATOR}…`;
+    if (measure(shortened) <= width) return shortened;
+  }
+  const characters = Array.from(graphemes.segment(names[0]!), ({ segment }) => segment);
+  for (let length = characters.length; length > 0; length--) {
+    const shortened = `${characters.slice(0, length).join("").trimEnd()}…`;
+    if (measure(shortened) <= width) return shortened;
+  }
+  return "…";
 }
 
 @customElement("till-party-name-dialog")
@@ -42,6 +68,18 @@ export class TillPartyNameDialog extends LitElement {
   @property() refusal = "";
 
   @state() private attempted = false;
+  /** The width the placeholder may take: the name field's text box less a pixel to spare; infinite
+   * until the field is first measured. */
+  #textBox = Number.POSITIVE_INFINITY;
+  #placeholder = "";
+  #resize?: ResizeObserver;
+  readonly #measure = document.createElement("canvas").getContext("2d")!;
+  /** A web font that finishes loading changes the text's width but not the field's, so no resize
+   * reports it. */
+  readonly #fontsLoaded = () => {
+    const field = this.renderRoot.querySelector<HTMLElement>("wt-input");
+    if (field) this.#measureField(field);
+  };
 
   @state() private active = true;
   #scope?: DraftScope<string>;
@@ -52,10 +90,12 @@ export class TillPartyNameDialog extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    document.fonts.addEventListener("loadingdone", this.#fontsLoaded);
     this.requestUpdate();
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("tables")) this.#fit();
     if (!this.isConnected || !this.active || this.#scope) return;
     this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
@@ -70,7 +110,38 @@ export class TillPartyNameDialog extends LitElement {
     scope.commit(this.#baseline);
   }
 
+  override updated(): void {
+    if (this.#resize) return;
+    const field = this.renderRoot.querySelector("wt-input")!;
+    this.#resize = new ResizeObserver(() => this.#measureField(field));
+    this.#resize.observe(field);
+  }
+
+  #measureField(field: HTMLElement): void {
+    const input = field.shadowRoot!.querySelector("input")!;
+    const control = getComputedStyle(input);
+    const placeholder = getComputedStyle(input, "::placeholder");
+    this.#measure.font = placeholder.font;
+    this.#measure.letterSpacing = placeholder.letterSpacing;
+    this.#textBox =
+      input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight) - 1;
+    const shown = this.#placeholder;
+    this.#fit();
+    if (this.#placeholder !== shown) this.requestUpdate();
+  }
+
+  #fit(): void {
+    this.#placeholder = fitPlaceholder(
+      this.tables,
+      this.#textBox,
+      (text) => this.#measure.measureText(text).width,
+    );
+  }
+
   override disconnectedCallback(): void {
+    document.fonts.removeEventListener("loadingdone", this.#fontsLoaded);
+    this.#resize?.disconnect();
+    this.#resize = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -158,7 +229,7 @@ export class TillPartyNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("table.name_label")}
-          .hint=${t("table.name_hint")}
+          .placeholder=${this.#placeholder}
           .value=${live(this.value)}
           .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
