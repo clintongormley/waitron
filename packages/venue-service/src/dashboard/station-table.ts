@@ -76,7 +76,7 @@ export class StationTable extends LitElement {
         ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
         ${this.statusNotes[station.id] ? html`<span part="station-status">${this.statusNotes[station.id]}</span>` : nothing}
-        ${!station.isDefault ? html`<a part="service-times" aria-label=${`${station.name}: ${t("prep.when_gets_orders")}`} href=${`/manage/opening-hours?view=week&station=${encodeURIComponent(station.id)}`}>${t("prep.when_gets_orders")}</a>` : nothing}</span
+        ${!station.isDefault ? html`<a part="service-times" aria-label=${`${station.name}: ${t("prep.when_gets_orders")}`} href=${`/manage/prep-stations/view/times/station/${encodeURIComponent(station.id)}`}>${t("prep.when_gets_orders")}</a>` : nothing}</span
       ></span
     >`;
   }

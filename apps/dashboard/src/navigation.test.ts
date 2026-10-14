@@ -90,6 +90,18 @@ it("preserves the Prep stations tab when the dashboard rewrites its destination,
   expect(location.pathname).toBe("/manage/prep-stations/view/tickets");
 });
 
+it("preserves the Prep stations Times tab and its station when the dashboard rewrites its destination", () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("view")).toBe("times");
+  expect(url.read("station")).toBe("grill");
+  url.write({ dashboard: "prep-stations" }, true);
+  expect(location.pathname).toBe("/manage/prep-stations/view/times/station/grill");
+});
+
 it("preserves the Opening hours tab and department a link names when the dashboard rewrites its destination", () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/deli");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;

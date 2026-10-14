@@ -3,7 +3,15 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
+import {
+  registerIcons,
+  applyTokens,
+  NavigationGuard,
+  type WtCombobox,
+  type WtInput,
+} from "@waitron/ui";
+import type { OpeningHoursApi } from "./opening-hours-client.js";
+import type { PrepStationTimes } from "./station-times-screen.js";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
@@ -115,6 +123,10 @@ async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<Prep
   hosts.push(host);
   const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
   el.api = a;
+  el.hoursApi = {
+    watchMonth: () => () => {},
+    watchStationTimes: () => () => {},
+  } as unknown as OpeningHoursApi;
   host.append(el);
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
@@ -1371,6 +1383,7 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routes" },
+    { key: "times", label: "Times" },
   ]);
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
@@ -1468,6 +1481,179 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   await settle(el);
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+});
+
+describe("the Times tab", () => {
+  /** Terrace is second by display order, so the Upstairs bar is the first non-default after Bar. */
+  const timesView = (): PrepStationsView => {
+    const loaded = withUpstairs({ open: true, why: "open" });
+    loaded.stations.push(
+      { ...upstairs, id: "terrace", name: "Terrace", displayOrder: 3 },
+      { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 0 },
+    );
+    return loaded;
+  };
+  const hoursApi = () =>
+    ({
+      liveData: undefined,
+      watchMonth: vi.fn(() => () => {}),
+      watchStationTimes: vi.fn(() => () => {}),
+    }) as unknown as OpeningHoursApi;
+  async function mountTimes(loaded: PrepStationsView = timesView()) {
+    const host = document.createElement("div");
+    applyTokens(host);
+    document.body.append(host);
+    hosts.push(host);
+    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+    el.api = api({ load: vi.fn().mockResolvedValue(loaded) });
+    el.hoursApi = hoursApi();
+    host.append(el);
+    await settle(el);
+    await settle(el);
+    return el;
+  }
+  const times = (el: PrepStationsScreen) =>
+    el.shadowRoot!.querySelector<PrepStationTimes>("prep-station-times");
+  const tabs = (el: PrepStationsScreen) => el.shadowRoot!.querySelector("wt-tabs")!;
+
+  it.each([
+    ["en", "Times"],
+    ["es", "Horarios"],
+  ] as const)(
+    "is the third tab, labelled in %s, and opens on the station its address names through a reload",
+    async (locale, label) => {
+      setLocale(locale);
+      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
+      let el = await mountTimes();
+      expect(tabs(el).items.map((item) => item.key)).toEqual(["stations", "routing", "times"]);
+      expect(tabs(el).items[2]!.label).toBe(label);
+      expect(tabs(el).value).toBe("times");
+      expect(times(el)?.closest('[slot="times"]')).not.toBeNull();
+      expect(times(el)!.stationId).toBe("terrace");
+      expect(times(el)!.stations.map((station) => station.id)).toEqual(
+        expect.arrayContaining(["bar", "upstairs", "terrace"]),
+      );
+      expect(times(el)!.api).toBe(el.hoursApi);
+      el.parentElement!.remove();
+      el = await mountTimes();
+      expect(tabs(el).value).toBe("times");
+      expect(times(el)!.stationId).toBe("terrace");
+      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
+    },
+  );
+
+  it("choosing a station writes it to the address as a new history entry", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/times/station/upstairs");
+    const el = await mountTimes();
+    const count = history.length;
+    times(el)!.dispatchEvent(
+      new CustomEvent("station-change", {
+        detail: { stationId: "terrace" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(el);
+    expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
+    expect(history.length).toBe(count + 1);
+    expect(times(el)!.stationId).toBe("terrace");
+    history.back();
+    await expect.poll(() => times(el)?.stationId).toBe("upstairs");
+  });
+
+  it.each([
+    ["no station", "/manage/prep-stations/view/times"],
+    ["an unknown station", "/manage/prep-stations/view/times/station/gone"],
+    ["a switched-off station", "/manage/prep-stations/view/times/station/disabled"],
+  ])(
+    "replaces %s with the first active station without a history entry",
+    async (_case, address) => {
+      history.replaceState(null, "", address);
+      const count = history.length;
+      const el = await mountTimes();
+      await expect
+        .poll(() => location.pathname)
+        .toBe("/manage/prep-stations/view/times/station/bar");
+      expect(history.length).toBe(count);
+      expect(times(el)!.stationId).toBe("bar");
+    },
+  );
+
+  it("replaces the shown station with the first one when a refresh no longer lists it", async () => {
+    const liveData = new LiveData();
+    const loaded = timesView();
+    const without = { ...loaded, stations: loaded.stations.filter((s) => s.id !== "terrace") };
+    history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
+    const host = document.createElement("div");
+    document.body.append(host);
+    hosts.push(host);
+    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+    el.api = api({
+      liveData,
+      load: vi.fn().mockResolvedValueOnce(loaded).mockResolvedValue(without),
+    });
+    el.hoursApi = hoursApi();
+    host.append(el);
+    await expect.poll(() => times(el)?.stationId).toBe("terrace");
+    const count = history.length;
+    liveData.invalidate([{ type: "kitchen_stations", id: "terrace" }]);
+    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/times/station/bar");
+    expect(history.length).toBe(count);
+    expect(times(el)!.stationId).toBe("bar");
+  });
+
+  it.each(["stations", "routing"] as const)(
+    "switching to %s clears the station from the address",
+    async (key) => {
+      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
+      const el = await mountTimes();
+      tabs(el).shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
+      await settle(el);
+      expect(tabs(el).value).toBe(key);
+      expect(location.pathname).toBe(`/manage/prep-stations/view/${key}`);
+      expect(times(el)).toBeNull();
+    },
+  );
+
+  it("an address naming a station on another tab drops the station without a history entry", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/routing/station/terrace");
+    const count = history.length;
+    const el = await mountTimes();
+    expect(tabs(el).value).toBe("routing");
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing");
+    expect(history.length).toBe(count);
+  });
+
+  it("a station's link on the Stations table opens Times on that station on the same page", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async () => "proceeded",
+    });
+    // What the dashboard shell does with a click on a /manage link (`dashboard-app.ts`, `#onAppLink`).
+    const follow = (event: MouseEvent) => {
+      const anchor = event
+        .composedPath()
+        .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+      if (!anchor) return;
+      event.preventDefault();
+      void guard.write(new URL(anchor.href));
+    };
+    document.addEventListener("click", follow, true);
+    try {
+      const el = await mountTimes();
+      const link = stationTable(el)!.querySelector<HTMLAnchorElement>(
+        'a[href="/manage/prep-stations/view/times/station/terrace"]',
+      )!;
+      link.click();
+      await expect.poll(() => tabs(el).value).toBe("times");
+      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
+      await expect.poll(() => times(el)?.stationId).toBe("terrace");
+    } finally {
+      document.removeEventListener("click", follow, true);
+      guard.dispose();
+    }
+  });
 });
 
 it("has no station hours section, editor or Today actions", async () => {
@@ -1586,6 +1772,7 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   for (const [key, actions] of [
     ["stations", ["new-station"]],
     ["routing", []],
+    ["times", []],
     ["stations", ["new-station"]],
   ] as const) {
     tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
@@ -4969,11 +5156,11 @@ describe.each([
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
     await settle(el);
     const links = [
-      ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/opening-hours"]'),
+      ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/prep-stations"]'),
     ];
     expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-      [label, "/manage/opening-hours?view=week&station=upstairs"],
-      [label, "/manage/opening-hours?view=week&station=terrace"],
+      [label, "/manage/prep-stations/view/times/station/upstairs"],
+      [label, "/manage/prep-stations/view/times/station/terrace"],
     ]);
     expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
       `Upstairs bar: ${label}`,
