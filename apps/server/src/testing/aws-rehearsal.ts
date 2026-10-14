@@ -108,6 +108,9 @@ const UNSUPPORTED_PROVIDER_KEYS = [
   "sso_start_url",
 ];
 
+const ENDPOINT_KEYS = ["endpoint_url", "services"];
+const ENDPOINT_VARIABLES = ["AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_S3"];
+
 export function assertRehearsalOptIn(env: Env): void {
   if (env.WAITRON_RUN_AWS_REHEARSAL !== "1") {
     throw new AwsRehearsalRefused(
@@ -188,6 +191,15 @@ function section(text: string, name: string, variable: string): Map<string, stri
         `${key} in ${variable} is not supported`,
       );
   }
+  // The SDK sends to these instead of Amazon; `deps.endpoint` is the only way a run points elsewhere.
+  for (const key of ENDPOINT_KEYS) {
+    if (found.has(key)) {
+      throw new AwsRehearsalRefused(
+        "endpoint-unsupported",
+        `${key} in ${variable} is not supported: a rehearsal sends only to Amazon S3`,
+      );
+    }
+  }
   if (found.has("aws_session_token")) {
     throw new AwsRehearsalRefused(
       "session-token-unsupported",
@@ -207,6 +219,14 @@ export async function loadRehearsalProfile(
       "profile-mismatch",
       `AWS_PROFILE must be ${AWS_REHEARSAL_PROFILE}`,
     );
+  }
+  for (const name of ENDPOINT_VARIABLES) {
+    if (!isUnset(env[name])) {
+      throw new AwsRehearsalRefused(
+        "endpoint-unsupported",
+        `${name} must be unset: a rehearsal sends only to Amazon S3`,
+      );
+    }
   }
   const region = required(env, "AWS_REGION");
   const credentialsPath = absolutePath(env, "AWS_SHARED_CREDENTIALS_FILE");

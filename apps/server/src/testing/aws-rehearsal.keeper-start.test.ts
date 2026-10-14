@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CONFIG,
   FakeAdmin,
   type FakeHarness,
   profileEnv,
@@ -12,12 +13,15 @@ import {
   fakeHarness,
   writeProfileFiles,
 } from "./aws-rehearsal-fake.js";
-import { journalFileName } from "./aws-rehearsal-journal.js";
+import { journalFileName, writeJournal } from "./aws-rehearsal-journal.js";
+import { startKeeper } from "./aws-rehearsal-keeper-start.js";
 import type { AwsReceipt } from "./aws-rehearsal-receipt.js";
 import {
   AwsRehearsalRefused,
   type AwsRehearsalDeps,
+  cleanupFromReceipt,
   keeperEnv,
+  loadRehearsalProfile,
   withAwsRehearsal,
 } from "./aws-rehearsal.js";
 
@@ -227,4 +231,132 @@ describe("withAwsRehearsal — a local endpoint", () => {
     expect(h.fake.names()).toContain("GetBucketEncryption");
     expect(h.fake.names()).toContain("GetBucketVersioning");
   });
+});
+
+describe("withAwsRehearsal — the journal of a run whose keeper did not start", () => {
+  it("is removed, having been in the receipt folder while the keeper was being started", async () => {
+    const path = join(receiptDir, journalFileName(RUN_ID));
+    const seen: boolean[] = [];
+    const h = harness({
+      journal: writeJournal,
+      startKeeper: async () => {
+        seen.push(existsSync(path));
+        throw new Error("spawn failed");
+      },
+    });
+    const refusal = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((refusal as AwsRehearsalRefused).reason).toBe("keeper-unavailable");
+    expect(seen).toEqual([true]);
+    expect(existsSync(path)).toBe(false);
+  });
+});
+
+describe("an S3 endpoint taken from outside the run", () => {
+  const LOCAL = "http://127.0.0.1:9";
+  const SHAPES: [string, Record<string, string>, string][] = [
+    ["AWS_ENDPOINT_URL_S3", { AWS_ENDPOINT_URL_S3: LOCAL }, CONFIG],
+    ["AWS_ENDPOINT_URL", { AWS_ENDPOINT_URL: LOCAL }, CONFIG],
+    ["endpoint_url in the profile", {}, `${CONFIG}endpoint_url = ${LOCAL}\n`],
+    ["services in the profile", {}, `${CONFIG}services = local-s3\n`],
+  ];
+
+  async function shaped(variables: Record<string, string>, config: string): Promise<FakeHarness> {
+    await writeFile(configFile, config);
+    const h = harness();
+    h.deps.env = { ...h.deps.env, ...variables };
+    return h;
+  }
+
+  it.each(SHAPES)("loadRehearsalProfile refuses %s", async (_label, variables, config) => {
+    const h = await shaped(variables, config);
+    const refusal = await rejection(loadRehearsalProfile(h.deps.env!, h.deps as AwsRehearsalDeps));
+    expect((refusal as AwsRehearsalRefused).reason).toBe("endpoint-unsupported");
+    expect(refusal.message).not.toContain(LOCAL);
+  });
+
+  it.each(SHAPES)(
+    "withAwsRehearsal refuses %s before any client is built",
+    async (_label, variables, config) => {
+      const h = await shaped(variables, config);
+      const starts: string[] = [];
+      h.deps.startKeeper = async (path) => {
+        starts.push(path);
+        return { keeperPid: null, end: () => {} };
+      };
+      const refusal = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+      expect((refusal as AwsRehearsalRefused).reason).toBe("endpoint-unsupported");
+      expect(h.createAdminClient).not.toHaveBeenCalled();
+      expect(starts).toEqual([]);
+      expect(h.journals).toEqual([]);
+    },
+  );
+
+  it.each(SHAPES)(
+    "cleanupFromReceipt refuses %s before any client is built",
+    async (_label, variables, config) => {
+      const h = await shaped(variables, config);
+      const refusal = await rejection(
+        cleanupFromReceipt(join(receiptDir, `aws-rehearsal-${RUN_ID}.json`), h.deps),
+      );
+      expect((refusal as AwsRehearsalRefused).reason).toBe("endpoint-unsupported");
+      expect(h.createAdminClient).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows a run when neither variable is set, or one is empty, and the profile names no endpoint", async () => {
+    const h = await shaped({ AWS_ENDPOINT_URL: "", AWS_ENDPOINT_URL_S3: "" }, CONFIG);
+    await withAwsRehearsal(async () => undefined, h.deps);
+    expect(h.fake.names()).toContain("CreateBucket");
+  });
+});
+
+describe("startKeeper, the default", () => {
+  const MARK_READY =
+    'import { writeFileSync } from "node:fs";\n' +
+    'const journal = process.argv[process.argv.indexOf("--journal") + 1];\n' +
+    "const ready = () => writeFileSync(journal, JSON.stringify({ ready: true, keeperPid: process.pid }));\n";
+
+  async function launcher(name: string, body: string): Promise<string> {
+    const path = join(dir, `${name}.mjs`);
+    await writeFile(path, MARK_READY + body);
+    return path;
+  }
+
+  const journalPath = (): string => join(dir, "journal.json");
+  const env = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+
+  it("resolves with the keeper's pid once the journal says ready and the launcher has exited 0", async () => {
+    const marker = join(dir, "exited");
+    const script = await launcher(
+      "slow-exit",
+      `ready();\nsetTimeout(() => { writeFileSync(${JSON.stringify(marker)}, ""); process.exit(0); }, 500);\n`,
+    );
+    const handle = await startKeeper(journalPath(), env, { script, readyMs: 10_000 });
+    expect(handle.keeperPid).toBeGreaterThan(1);
+    expect(existsSync(marker)).toBe(true);
+    handle.end();
+  }, 20_000);
+
+  it.each([
+    ["exits non-zero before saying ready", "process.exit(3);\n"],
+    ["says ready but exits non-zero", "ready();\nprocess.exit(1);\n"],
+  ])(
+    "refuses keeper-unavailable when the launcher %s",
+    async (_how, body) => {
+      const script = await launcher("fails", body);
+      const refusal = await rejection(startKeeper(journalPath(), env, { script, readyMs: 10_000 }));
+      expect((refusal as AwsRehearsalRefused).reason).toBe("keeper-unavailable");
+      expect(refusal.message).toContain("the keeper's launcher failed");
+    },
+    20_000,
+  );
+
+  it("refuses keeper-unavailable when the journal never says ready within the wait", async () => {
+    const script = await launcher("silent", "process.exit(0);\n");
+    const started = Date.now();
+    const refusal = await rejection(startKeeper(journalPath(), env, { script, readyMs: 1_500 }));
+    expect((refusal as AwsRehearsalRefused).reason).toBe("keeper-unavailable");
+    expect(refusal.message).toContain("did not report ready within 1500 ms");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1_500);
+  }, 20_000);
 });

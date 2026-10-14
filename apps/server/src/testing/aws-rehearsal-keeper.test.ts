@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BUCKET,
+  CONFIG,
   FakeAdmin,
   KEY_ID,
   SECRET,
@@ -591,6 +592,20 @@ describe("runKeeper", () => {
         expect((await logLines()).at(-1)).toBe("exit 1");
       },
     );
+  });
+
+  it("refuses a profile that names its own S3 endpoint before building a client", async () => {
+    await writeFile(configFile, `${CONFIG}endpoint_url = http://127.0.0.1:9\n`);
+    await writeJournalFile(journal({ state: "owned" }));
+    const fake = bucketWithObjects();
+    const h = harness(fake);
+
+    expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+    expect(h.createAdminClient).not.toHaveBeenCalled();
+    expect(fake.calls).toEqual([]);
+    expect(h.printed[0]).toMatch(/^AWS rehearsal refused \(endpoint-unsupported\)/);
+    expect(h.printed.slice(1)).toEqual(["left behind:", `bucket ${BUCKET}`]);
   });
 
   describe("with a real SDK client", () => {

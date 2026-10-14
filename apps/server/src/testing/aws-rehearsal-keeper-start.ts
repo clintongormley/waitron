@@ -67,13 +67,14 @@ function keeperReady(journalPath: string): number | null {
  * Spawns the launcher, which starts the keeper in a session of its own and exits, so the keeper's
  * parent is pid 1. The keeper's stdin is a pipe whose writing end only this process holds, so this
  * process ending, however it ends, is end-of-file there. Resolves once the journal shows the keeper
- * ready; refuses `keeper-unavailable` otherwise.
+ * ready and the launcher has exited 0; refuses `keeper-unavailable` otherwise.
  */
 export async function startKeeper(
   journalPath: string,
   env: Readonly<Record<string, string | undefined>>,
-  readyMs: number = KEEPER_READY_MS,
+  options: { readyMs?: number; script?: string } = {},
 ): Promise<KeeperHandle> {
+  const readyMs = options.readyMs ?? KEEPER_READY_MS;
   let tty: number | undefined;
   try {
     tty = openSync("/dev/tty", "w");
@@ -81,11 +82,19 @@ export async function startKeeper(
     // No terminal (launchd, CI, a detached group): the keeper writes its log alone.
   }
   let failed = false;
+  let exited = false;
   const child = (() => {
     try {
       return spawn(
         process.execPath,
-        ["--import", tsxLoaderUrl(), KEEPER_SCRIPT, "--launch", "--journal", journalPath],
+        [
+          "--import",
+          tsxLoaderUrl(),
+          options.script ?? KEEPER_SCRIPT,
+          "--launch",
+          "--journal",
+          journalPath,
+        ],
         { env: keeperEnv(env), stdio: ["pipe", tty ?? "ignore", tty ?? "ignore"] },
       );
     } finally {
@@ -96,6 +105,7 @@ export async function startKeeper(
     failed = true;
   });
   child.on("exit", (code) => {
+    exited = true;
     if (code !== 0) failed = true;
   });
   // Node destroys `child.stdin` when the child exits, which here is at once: the launcher's exit
@@ -114,8 +124,9 @@ export async function startKeeper(
   };
   const until = Date.now() + readyMs;
   while (!failed && Date.now() < until) {
+    // Ready and the launcher gone, so the keeper is no longer this process's child.
     const pid = keeperReady(journalPath);
-    if (pid !== null) return { keeperPid: pid, end };
+    if (pid !== null && exited) return { keeperPid: pid, end };
     await delay(KEEPER_POLL_MS);
   }
   end();

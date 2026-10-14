@@ -4,14 +4,14 @@
 // reported SKIPPED; with CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS the case.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { ListBucketsCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { journalFileName } from "./testing/aws-rehearsal-journal.js";
+import { journalFileName, processStartTime } from "./testing/aws-rehearsal-journal.js";
 import { tsxLoaderUrl } from "./testing/aws-rehearsal-keeper-start.js";
 import { receiptFileName } from "./testing/aws-rehearsal-receipt.js";
 import {
@@ -56,6 +56,22 @@ function psField(pid: number, field: "ppid" | "pgid"): string {
   return execFileSync("ps", ["-o", `${field}=`, "-p", String(pid)], { encoding: "utf8" }).trim();
 }
 
+async function journalsIn(
+  receiptDir: string | undefined,
+): Promise<{ keeperPid: number | null; pids: { pid: number; startTime: string | null }[] }[]> {
+  if (receiptDir === undefined || !existsSync(receiptDir)) return [];
+  const names = (await readdir(receiptDir)).filter((name) => name.endsWith("-journal.json"));
+  const journals = [];
+  for (const name of names) {
+    try {
+      journals.push(JSON.parse(await readFile(join(receiptDir, name), "utf8")));
+    } catch {
+      // Being replaced as it was read; the pids it names are in the next one too.
+    }
+  }
+  return journals;
+}
+
 function stopPid(pid: number | undefined, group = false): void {
   if (pid === undefined || !alive(pid)) return;
   try {
@@ -70,7 +86,12 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
   let s3: S3TestServer | undefined;
   let client: S3Client | undefined;
   /** Every pid this suite started or caused, stopped by pid alone in afterEach. */
-  const started: { driver?: ChildProcess; keeperPid?: number; sleepPid?: number } = {};
+  let started: {
+    driver?: ChildProcess;
+    receiptDir?: string;
+    keeperPid?: number;
+    sleepPid?: number;
+  } = {};
 
   beforeAll(async () => {
     if (!versitygw.ok) return;
@@ -90,10 +111,19 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     });
   }, S3_READY_MS + 10_000);
 
-  afterEach(() => {
+  afterEach(async () => {
     if (started.driver?.pid !== undefined) stopPid(started.driver.pid, true);
-    stopPid(started.keeperPid);
-    stopPid(started.sleepPid);
+    // A case that failed before the driver's RUN line knows these only from the run's journal.
+    const pids = new Set([started.keeperPid, started.sleepPid]);
+    for (const journal of await journalsIn(started.receiptDir)) {
+      if (journal.keeperPid !== null) pids.add(journal.keeperPid);
+      // Only while it is still the process the run started.
+      for (const { pid, startTime } of journal.pids) {
+        if (startTime !== null && processStartTime(pid) === startTime) pids.add(pid);
+      }
+    }
+    for (const pid of pids) stopPid(pid);
+    started = {};
   });
 
   afterAll(async () => {
@@ -135,6 +165,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
     point: string,
   ): Promise<{ facts: RunFacts; receiptDir: string; output: () => string }> {
     const receiptDir = join(caseDir, "receipts");
+    started.receiptDir = receiptDir;
     const tmp = join(caseDir, "tmp");
     await mkdir(tmp, { recursive: true });
     const credentials = join(caseDir, "credentials");

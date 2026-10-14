@@ -29,7 +29,8 @@ export type AwsRehearsalRefusalReason =
   | "request-unplanned"
   | "journal-refused"
   | "journal-unwritable"
-  | "keeper-unavailable";
+  | "keeper-unavailable"
+  | "endpoint-unsupported";
 
 /** Its message names a rule and a variable or key, or a rehearsal bucket's name; never another value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {
