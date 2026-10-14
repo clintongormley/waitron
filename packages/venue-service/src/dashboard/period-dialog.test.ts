@@ -443,6 +443,24 @@ it("draws the chosen swatch's ring outside the swatch, clear of its fill", async
   expect(getComputedStyle(swatch(el, "green")).outlineStyle).toBe("none");
 });
 
+it("LOOK L1, L2, L9: the Colour label stands clear of its swatches, the chosen swatch is ringed in the text colour, and the end-offset explanation is small muted hint text", async () => {
+  const el = await mount(true);
+  const legend = el.shadowRoot!.querySelector("fieldset[name=colour] > legend")!;
+  expect(
+    swatch(el, "blue").getBoundingClientRect().top - legend.getBoundingClientRect().bottom,
+  ).toBeGreaterThanOrEqual(4);
+  const text = getComputedStyle(legend).color;
+  expect(getComputedStyle(swatch(el, "blue")).outlineColor).toBe(text);
+  const explanation = getComputedStyle(
+    el.shadowRoot!.querySelector("[data-test=offset-explanation]")!,
+  );
+  expect(explanation.fontSize).toBe(
+    getComputedStyle(el).getPropertyValue("--wt-font-size-sm").trim(),
+  );
+  expect(explanation.color).not.toBe(text);
+  expect(parseFloat(explanation.marginTop)).toBeLessThan(0);
+});
+
 it("a Save refused only for its colour moves focus to the first swatch", async () => {
   const el = document.createElement("period-dialog");
   el.menus = menus;
@@ -777,6 +795,8 @@ it("Painted in shows season chips in the order given with their tints, then spec
       special: true,
     },
   ]);
+  for (const chip of el.shadowRoot!.querySelectorAll("[data-test=painted-in] a.chip"))
+    expect(getComputedStyle(chip).textDecorationLine).toBe("none");
   el.paintedInLinks = false;
   await el.updateComplete;
   expect(paintedChips(el).map(({ tag, href }) => ({ tag, href }))).toEqual([

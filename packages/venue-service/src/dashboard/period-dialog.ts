@@ -77,6 +77,7 @@ export class PeriodDialog extends LitElement {
       }
       legend {
         padding: 0;
+        margin-block-end: var(--wt-space-2);
       }
       [role="radiogroup"] {
         display: flex;
@@ -93,7 +94,7 @@ export class PeriodDialog extends LitElement {
         cursor: pointer;
       }
       .swatch[aria-checked="true"] {
-        outline: var(--wt-selected-ring);
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-text);
         outline-offset: var(--wt-focus-offset);
       }
       [data-test="colour-error"] {
@@ -114,6 +115,7 @@ export class PeriodDialog extends LitElement {
         border: 1px solid var(--wt-color-palette-purple);
         border-radius: var(--wt-radius-full);
         color: var(--wt-color-text);
+        text-decoration: none;
       }
       .chip[data-tint] {
         background: var(--season-tint);
@@ -123,7 +125,8 @@ export class PeriodDialog extends LitElement {
       [data-test="not-painted"] {
         color: var(--wt-color-warning);
       }
-      [data-test="menu-includes"] {
+      [data-test="menu-includes"],
+      [data-test="offset-explanation"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
