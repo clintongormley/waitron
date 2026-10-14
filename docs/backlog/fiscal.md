@@ -687,30 +687,6 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   a case to `N1`/`N2`, that is an explicit classification threaded through sale facts, reporting and
   every Veri\*Factu sale, correction and substitution path — never a quiet redefinition of `zero`.
 
-## The owner's box loader cannot set up a Veri\*Factu venue on a shipped box
-
-`local/square/box-setup.mjs` sends its setup to `https://waitron.local`, a box running the shipped
-image. That box cannot be pointed at any custodian: `deploy/compose.yml` passes none of the three
-`WAITRON_FISCAL_*` settings (`WAITRON_FISCAL_CUSTODIAN_FILE`, `WAITRON_FISCAL_CONFIRMATION_FILE`,
-`WAITRON_FISCAL_CUSTODIAN_FINGERPRINT`) to the server, and the fiscal module refuses a signed
-allocation without them (`sif.allocation_invalid`, `reason: outside_confirmation_missing`,
-`packages/fiscal-verifactu/src/allocation-configuration.ts`). A680's throwaway
-custodian serves only development stacks and in-process scripts. Making a shipped box trust a
-custodian is a product change, lane E's A679, and the loader waits for it, as A680's plan
-recommends at its first stop point. Until then the loader can set up a laptop onboarding stack through the
-wizard's dev server, after the two-line edit in
-`docs/superpowers/plans/2026-10-14-a680-dev-throwaway-custodian.md` → _What the owner's local
-Santet scripts should call_.
-
-## A retried wizard submission on a development stack is a new setup, not a replay
-
-On a development stack the wizard's Vite dev server signs each setup with the throwaway custodian,
-and every signing mints fresh node, administrator and event ids (`signSetupBody`,
-`apps/server/scripts/dev-custodian/files.ts`). So if the wizard's answer is lost and the setup is
-submitted again, the server receives a different operation from the first, not the same one
-repeated, and does not treat it as a replay. On a development stack the cure is
-`wa-wt reset onboarding <name>`.
-
 ## Decisions and deliberate limits
 
 - **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is

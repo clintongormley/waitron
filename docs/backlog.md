@@ -473,15 +473,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **Non-blocking while pre-production; blocking before going live.**
   [Detail](backlog/fiscal.md#no-tax-0-is-an-open-fiscal-question-and-it-must-be-answered-before-the-first-live-filing)
 
-- **The owner's box loader cannot set up a Veri\*Factu venue on a shipped box.**
-  `local/square/box-setup.mjs` posts to `https://waitron.local`, and a shipped box cannot be told to
-  trust any custodian. Waits for A679. Left open by A680.
-  [Detail](backlog/fiscal.md#the-owners-box-loader-cannot-set-up-a-verifactu-venue-on-a-shipped-box)
-
-- **A retried wizard submission on a development stack is a new setup, not a replay.** The dev
-  signer mints fresh node, administrator and event ids for every submission. Left open by A680.
-  [Detail](backlog/fiscal.md#a-retried-wizard-submission-on-a-development-stack-is-a-new-setup-not-a-replay)
-
 ### The setup wizard, onboarding and the demo venue
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -691,6 +682,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` (lines 416-419) before
   `devSetup` refuses production (line 347), against the file's own header (line 4). Fix: the same
   check at the top of `main()` that `dev-onboard.ts` has. Found by A680.
+
+- **The setup wizard has no text for `sif.throwaway_allocation_refused`.** A box started with
+  `WAITRON_ENV=production` still offers Demo and Preparation (`apps/setup/src/screens/mode-screen.ts`
+  shows only a production warning), and either one is refused with that code, so the operator sees
+  the wizard's generic failure. Left open by A680 (its plan's D6).
+
+- **Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
+  #1700.** Neither needs a supplied allocation since A680, so on a shared network a stranger can set
+  up an unconfigured box in either mode before its owner does. Only a preproduction venue can come of
+  it. Left open by A680 (its plan's unsure point 2).
 
 ### Menus and the catalogue
 
@@ -5691,11 +5692,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
   migrated database. Observed once by an implementer (five store tests failed with a foreign-key
   refusal), not independently re-run. Left open by A429 slice 1 (#1493).
-
-- **A relative `WAITRON_STATE_DIR` means two different folders to the setup app's dev server.**
-  `scripts/dev-server-proxy.ts` resolves it from `apps/setup`, the dev signer's
-  `apps/server/scripts/dev-custodian/setup-proxy.ts` from `apps/server`. `wa-wt` passes an absolute
-  path unless `WA_WT_STATE` is set to a relative one. Left open by A680.
 
 ### Dependency upgrades
 
