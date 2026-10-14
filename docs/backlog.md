@@ -1977,12 +1977,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  Part 1 built, Parts 2 to 4 to build).** Part 1, the rule and the slip, is built. Left: Part 2,
-  the till shows "#27 (was 28)" wherever it shows an order number (a migration); Part 3, printing
-  MOVED slips becomes a venue setting (default on); Part 4, each prep station can follow or
-  override it (after Parts 2 and 3 and lane A's a506-12). Three small owner questions carry
-  defaults. [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  Parts 1 and 2 built, Parts 3 and 4 to build).** Part 1, the rule and the slip, and Part 2, "#27
+  (was 28)" on the Pass, kitchen screens and the counter's Waiting and Held lists, are built. Left:
+  Part 3, printing MOVED slips becomes a venue setting (default on); Part 4, each prep station can
+  follow or override it (after Part 3). The owner answered the plan's three small questions with
+  its defaults. [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
+
+- **A683 — The party's name prints on every kitchen ticket, as on MOVED slips (owner, 2026-10-14;
+  decided, not queued).** The owner wants "Order 5 · Ana" on ordinary kitchen tickets too, not only
+  on MOVED slips, so the cook meets the name on the first ticket. Reference: picture 5 in
+  [the A650 mockups](backlog/mockups/a650-moved-slips/).
+
+- **A684 — A kitchen screen's kanban cell at phone width hides the dish name (2026-10-14; open).**
+  At 390 px the cell's row already cuts the dish name ("1× Pae…"); with A650's "(was 28, 30)" beside
+  the number it shrinks to "1× …" and the order tag wraps onto three lines. The cell's layout
+  (`apps/till/src/widgets/station-queue.ts`) needs room for both. Left open by A650 Part 2.
 
 - **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
   (2026-10-14; open).** Each chooses its own tables to snapshot (`readSentWorkAt`,
