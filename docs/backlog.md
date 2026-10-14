@@ -3525,6 +3525,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   (`wt-row-actions`) has not been tried.** No screen marks one disabled yet; W88's busy-tree point
   would be the first. Left open by A629 (#1684).
 
+- **A middle-click on a dashboard link marked `aria-disabled="true"` outside a ⋮ menu may still open
+  it in a new tab — not tried.** The dashboard cancels such a link in `#onAppLink`
+  (`apps/dashboard/src/dashboard-app.ts`), which listens for `click` only; in A629's tests a
+  middle-click on a ⋮ menu link opened a new page in Chromium until `auxclick` was cancelled too.
+  Raised by A629's review (#1684).
+
 - **`wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.** Other long tables
   (Orders, Staff, Payments and the rest) keep scrolling with the content column until someone
   decides they should opt in too; each would need its screen to give the table a bounded height, as
