@@ -1419,6 +1419,11 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **An emptied name field says what it goes back to only as its placeholder (A665, owner
+  2026-10-14: "leave it").** Owner 2026-10-14: the name windows show what an emptied field goes back
+  to as the placeholder only; no hidden description for screen readers. The windows are the till's
+  party Name window and the floor's Rename window (since A643, #1692, and A658, #1698); what a
+  cleared field goes back to is the table list, or the group's normal name.
 - **Back to saved place tells the kitchen when a party's tables read differently (A606, owner
   2026-10-14, overturning A581 part 2's default).** A table sent back from a group a party sits at
   prints a MOVED slip for each of the party's bills with work sent whose table name changed:
@@ -1427,8 +1432,11 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   keep the name and the slip reads "García birthday -> Bar, García birthday". That is lane C's
   reading, not the owner's: the owner's example assumed the group ended and read "-> Bar, Counter 3,
   Counter 4, Counter 5". Owner may overturn it. A plain rename for today still prints nothing. The owner found that slip
-  misleading (2026-10-14); A650's design proposes the rule that replaces this one
-  ([design](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)).
+  misleading (2026-10-14) and ruled on its replacement the same day (A650): a slip only when an
+  order left a table, a name on its kitchen paper is gone (so a rename prints) or its dishes moved
+  to an order with another number; the Bar case above then prints nothing. This entry describes the
+  code until A650 Part 1 lands, which rewrites it
+  ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)).
 - **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
   2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named
   or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared

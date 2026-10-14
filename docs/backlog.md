@@ -1769,25 +1769,24 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  design written, waiting for the owner's answers).** Today a MOVED slip prints whenever an order's
-  printed place name changes, one slip per kitchen line, so sending Bar back from the named group of four
+  rulings in, build planned in four parts).** Today a MOVED slip prints whenever an order's printed
+  place name changes, one slip per kitchen line, so sending Bar back from the named group of four
   "García birthday" printed "García birthday -> Bar, García birthday" although nothing moved. The
-  design proposes: a slip only when an order left a table or a name on its kitchen paper is gone,
-  one slip per order per station, reading "Order 5 / From: Mesa 11 / To: Mesa 12", translated. Five
-  questions for the owner; build only after the answers. Once built, it would also settle two open points in this file: a
-  HOLD ticket that goes stale when its guests move (the kitchen area), and a bill moved to the
-  counter whose slip names the same table on both sides (the table actions plan's Task 7 point).
-  [Design](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  owner ruled (2026-10-14): a slip when an order left a table, a name on its kitchen paper is gone
+  (a rename prints), or its dishes now sit on an order with another number (Merge bills, Transfer
+  items, Split the bill print "Order 28 -> 27"); one slip per order per station, "Order 5 · Ana /
+  From: Mesa 11 / To: Mesa 12", translated, held dishes on a HOLD ticket listed under HOLD; the
+  till shows "#27 (was 28)" wherever it shows an order number; and printing MOVED slips becomes a
+  venue setting (default on) that each prep station can follow or override. Parts: 1 the rule and
+  slip, 2 "(was N)" (a migration), 3 the venue switch, 4 the station override (after lane A's
+  a506-12). Three small owner questions carry defaults. Once built, it also settles two open points
+  in this file: a HOLD ticket that goes stale when its guests move (the kitchen area), and a bill
+  moved to the counter whose slip names the same table on both sides (the table actions plan's
+  Task 7 point). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
 
-- **A665 — A screen reader no longer hears what an emptied name field goes back to (2026-10-14;
-  owner to decide).** Since A643 (#1692) and A658 (#1698) the till's party Name window and floor
-  Rename window show that name (the table list, or the group's normal name) only as the empty
-  field's placeholder, with no hint, so once a name is typed nothing tells a screen reader what
-  clearing it restores. The owner approved removing the hint; decide whether the field should carry
-  that name some other way. Minor, same files: the comment above `fitPlaceholder`
-  (`apps/till/src/widgets/fit-placeholder.ts`) says whole names are kept "where one fits", looser
-  than what it does at the edge.
+- **The comment above `fitPlaceholder` (`apps/till/src/widgets/fit-placeholder.ts`) says whole
+  names are kept "where one fits", looser than what it does at the edge.** Left open by A665.
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
   the Seats prompt opens (2026-10-14; owner to decide).** Found by A659's probe (#1699): a floor Join with…

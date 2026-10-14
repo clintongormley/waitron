@@ -1,0 +1,241 @@
+<!doctype html><html><head><meta charset="utf-8"><title>A650 build plan mockups</title><style>
+/* MOCKUP ONLY. Colours copied by hand from packages/ui-core/src/tokens/colors.css (light theme). */
+:root { --bg: #f7f7f8; --surface: #ffffff; --sunken: #d6d9e0; --text: #16181d; --muted: #5c626e; --primary: #1f6feb; --on-primary: #ffffff; --border: #d6d9e0; --warn: #b26a00; }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #e9e6df; margin: 0; padding: 24px; color: #222; }
+section { background: #f6f4ef; border-radius: 10px; padding: 18px 22px; margin: 0 0 28px; width: max-content; max-width: 1500px; }
+h1 { font-size: 22px; margin: 0 0 4px; } h3 { font-size: 15px; margin: 14px 0 8px; }
+p.lead { margin: 0 0 14px; max-width: 1100px; font-size: 14px; line-height: 1.45; }
+.mock { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: #7a4fb3; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
+.papers { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+figure.paper { margin: 0; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); padding: 8px 10px 12px; border-top: 3px dashed #bbb; border-bottom: 3px dashed #bbb; }
+figure.paper pre { margin: 6px 0 0; font: 13px/1.35 "Menlo", "DejaVu Sans Mono", monospace; }
+figure.w58 pre { width: 30ch; } figure.w80 pre { width: 42ch; }
+figcaption { font-size: 11px; color: #555; }
+.tag { font-weight: 700; padding: 1px 6px; border-radius: 4px; color: #fff; background: #2a7a3a; }
+table.cases { border-collapse: collapse; } table.cases th, table.cases td { border-top: 1px solid #ccc; padding: 10px 12px; vertical-align: top; text-align: left; }
+table.cases th { width: 250px; } th .t { font-size: 14px; } th .n { font-weight: 400; font-size: 12px; color: #555; margin-top: 4px; line-height: 1.35; }
+.nothing { padding: 10px 12px; border-radius: 6px; font-size: 13px; max-width: 360px; line-height: 1.4; background: #e3f1e5; border: 1px solid #2a7a3a; }
+/* Till screens */
+.screen { background: var(--bg); border: 1px solid #bbb; border-radius: 8px; padding: 12px; width: 520px; }
+.screen.narrow { width: 360px; }
+.screen .bar { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+.board { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.order { display: flex; flex-direction: column; gap: 8px; min-width: 224px; padding: 12px; border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 14px; }
+.order-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.number { font-weight: 700; } .former { font-weight: 400; color: var(--muted); }
+.age { color: var(--muted); font-size: 12px; }
+.dish { font-size: 14px; } .grp { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.btn { display: inline-block; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; background: var(--surface); color: var(--text); }
+.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.row { display: flex; gap: 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin-bottom: 8px; font-size: 14px; }
+.row .meta { margin-left: auto; color: var(--muted); font-size: 13px; }
+.note { font-size: 12px; color: #444; max-width: 520px; line-height: 1.4; margin: 6px 0 0; }
+.cols { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+/* Dashboard */
+.dash { background: var(--bg); border: 1px solid #bbb; border-radius: 8px; width: 620px; color: var(--text); font-size: 14px; }
+.dash .banner { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 16px; font-weight: 700; }
+.dash .tabs { display: flex; gap: 18px; padding: 10px 16px 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+.dash .tabs span { padding-bottom: 8px; color: var(--muted); } .dash .tabs span.on { color: var(--text); border-bottom: 2px solid var(--primary); font-weight: 600; }
+.dash .body { padding: 14px 16px 18px; }
+.dash h2 { font-size: 17px; margin: 0 0 4px; }
+.setting { margin-top: 16px; display: flex; align-items: center; gap: 10px; }
+.switch { width: 36px; height: 20px; border-radius: 10px; background: var(--sunken); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.switch.on { background: var(--primary); } .switch.on::after { left: 18px; }
+.hint { margin: 4px 0 0 46px; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.new { outline: 2px dashed #7a4fb3; outline-offset: 4px; border-radius: 4px; }
+.field { margin-top: 14px; } .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 3px; }
+.box { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 8px 10px; display: flex; justify-content: space-between; }
+.box .chev { color: var(--muted); }
+.list { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); margin-top: 2px; box-shadow: 0 4px 10px rgba(0,0,0,.12); }
+.list div { padding: 8px 10px; } .list div.sel { background: #e8f0fe; }
+.modal { background: var(--surface); border: 1px solid #bbb; border-radius: 10px; width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: var(--text); font-size: 14px; }
+.modal .head { padding: 14px 16px 6px; font-size: 17px; font-weight: 700; }
+.modal .content { padding: 0 16px 10px; }
+.modal .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.btn.quiet { color: #9aa1ad; border-color: var(--border); }
+.inline-switch { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+.small { font-size: 12px; color: var(--muted); }
+</style></head><body>
+
+<section id="s5"><h1>A650 · 5. The slips after the owner's rulings <span class="mock">MOCKUP</span></h1>
+<p class="lead">What the kitchen printer prints under the build plan. Every case in English at 80 mm (42 columns) and Spanish at 58 mm (30 columns). The order line carries the party's own name when it has one (ruling 3). A slip prints when only the order number changed (ruling 4). Held dishes already on a HOLD ticket are listed under HOLD on the same slip (ruling 5).</p>
+<table class="cases"><tbody>
+<tr><th><div class="t">Merge bills at Mesa 91</div><div class="n">Party "Ana". Order 28's Burger joins order 27 at the same table. Only the number changed.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Grill
+Order 28 -> 27 · Ana
+From: Mesa 91
+To:   Mesa 91
+13:24
+1.000 x BURG</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 28 -> 27 · Ana
+De: Mesa 91
+A:  Mesa 91
+13:24
+1.000 x BURG</pre></figure></div></td></tr>
+<tr><th><div class="t">Transfer items at Mesa 91</div><div class="n">One of order 28's two Burgers and its Chips go to order 27. The slip lists only what moved; order 28 keeps a Burger and gets no slip.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Grill
+Order 28 -> 27 · Ana
+From: Mesa 91
+To:   Mesa 91
+13:24
+1.000 x BURG
+1.000 x CHIPS</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 28 -> 27 · Ana
+De: Mesa 91
+A:  Mesa 91
+13:24
+1.000 x BURG
+1.000 x CHIPS</pre></figure></div></td></tr>
+<tr><th><div class="t">Split the bill at Mesa 91</div><div class="n">The Flan is split off order 28 onto a new order 29.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Postres
+Order 28 -> 29 · Ana
+From: Mesa 91
+To:   Mesa 91
+13:24
+1.000 x FLAN</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Postres
+Pedido 28 -> 29 · Ana
+De: Mesa 91
+A:  Mesa 91
+13:24
+1.000 x FLAN</pre></figure></div></td></tr>
+<tr><th><div class="t">Join a table held by another party, bills merge</div><div class="n">Mesa 73's party joins Mesa 74's; Mesa 74's order 25 merges into order 24. Order 24's own dishes get nothing: it only gained a table.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Postres
+Order 25 -> 24
+From: Mesa 74
+To:   Mesa 73, 74
+13:24
+1.000 x FLAN</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Postres
+Pedido 25 -> 24
+De: Mesa 74
+A:  Mesa 73, 74
+13:24
+1.000 x FLAN</pre></figure></div></td></tr>
+<tr><th><div class="t">Move guests Mesa 11 → Mesa 12</div><div class="n">Party "Ana", order 5. Ruling 3's party name on the order line.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Grill
+Order 5 · Ana
+From: Mesa 11
+To:   Mesa 12
+13:24
+2.000 x BURG
+1.000 x CHIPS</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 5 · Ana
+De: Mesa 11
+A:  Mesa 12
+13:24
+2.000 x BURG
+1.000 x CHIPS</pre></figure></div></td></tr>
+<tr><th><div class="t">Move guests with a held group on a HOLD ticket</div><div class="n">Party "Ana", order 34, Mesa 111 → Mesa 112. A Burger fired; group 2 held and already printed marked HOLD.</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Grill
+Order 34 · Ana
+From: Mesa 111
+To:   Mesa 112
+13:24
+1.000 x BURG
+HOLD
+GROUP 2
+1.000 x STEAK</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 34 · Ana
+De: Mesa 111
+A:  Mesa 112
+13:24
+1.000 x BURG
+HOLD
+GROUP 2
+1.000 x STEAK</pre></figure></div></td></tr>
+<tr><th><div class="t">Rename for today, Fiesta → Fiesta 2</div><div class="n">A seated group renamed; order 26, party not named. Ruling 1 (b).</div></th>
+<td><div class="papers"><figure class="paper w80"><figcaption><span class="tag">EN</span> 80 mm</figcaption><pre>*** MOVED ***
+Grill
+Order 26
+From: Fiesta
+To:   Fiesta 2
+13:24
+1.000 x BURG</pre></figure><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 26
+De: Fiesta
+A:  Fiesta 2
+13:24
+1.000 x BURG</pre></figure></div></td></tr>
+<tr><th><div class="t">A long party name at 58 mm</div><div class="n">Order 7, party "Cumpleaños de la abuela", off the group "Boda" to Mesa 23. The order line wraps under the number.</div></th>
+<td><div class="papers"><figure class="paper w58"><figcaption><span class="tag">ES</span> 58 mm</figcaption><pre>*** MOVIDO ***
+Grill
+Pedido 7 · Cumpleaños de la
+           abuela
+De: Boda
+A:  Mesa 23
+13:24
+1.000 x BURG</pre></figure><div class="nothing"><b>A station set not to print MOVED slips</b> (§6 of the plan) prints none of these. Its kitchen screen still shows the moved notice, and the till still shows "(was 28)".</div></div></td></tr>
+</tbody></table></section>
+
+<section id="s6"><h1>A650 · 6. "(was 28)" on the till <span class="mock">MOCKUP</span></h1>
+<p class="lead">After Merge bills at Mesa 91, order 28's dishes are on order 27, but the kitchen's paper says 28. Every till screen that shows an order number shows the numbers that order's dishes were sent under as well, muted, after its own. It stays as long as the order is on that screen. Drawn in the till's light theme; the real screens use the same tokens in the dark theme.</p>
+<div class="cols">
+<div><h3>Pass screen, before and after (English)</h3>
+<div class="screen"><p class="bar">Before Merge bills</p><div class="board">
+<div class="order"><div class="order-head"><span class="number">#27</span><span>Mesa 91</span><span class="age">6 min</span></div><div class="dish">1 x Paella</div><div><span class="btn">All done</span></div></div>
+<div class="order"><div class="order-head"><span class="number">#28</span><span>Mesa 91</span><span class="age">4 min</span></div><div class="dish">1 x Burger</div><div><span class="btn">All done</span></div></div>
+</div>
+<p class="bar" style="margin-top:14px">After Merge bills</p><div class="board">
+<div class="order"><div class="order-head"><span class="number">#27 <span class="former">(was 28)</span></span><span>Mesa 91</span><span class="age">6 min</span></div><div class="dish">1 x Paella</div><div class="dish">1 x Burger</div><div><span class="btn">All done</span></div></div>
+</div></div>
+<p class="note">The cook calls "28 is ready". The runner finds "#27 (was 28)" on the Pass screen. After two merges the order reads "#27 (was 28, 30)", lowest first.</p></div>
+
+<div><h3>Kitchen screen (a station), Spanish</h3>
+<div class="screen narrow"><p class="bar">Grill</p>
+<div class="order"><div class="order-head"><span class="number">#27 <span class="former">(antes 28)</span></span><span>Mesa 91</span><span class="age">6 min</span></div><div class="dish">1 x Paella</div><div class="dish">1 x Burger</div></div></div>
+<h3>Counter: Waiting and Held, English</h3>
+<div class="screen narrow">
+<div class="row"><span class="number">#41 <span class="former">(was 40)</span></span><span>Ana</span><span class="meta">Sent, not paid</span></div>
+<div class="row"><span class="number">#43</span><span>Luis</span><span class="meta">Paid, not handed over</span></div>
+</div>
+<p class="note">A counter order split with Split the bill: the dishes split off went to the kitchen as 40 and are now on 41.</p></div>
+
+<div><h3>Transfer items: both orders stay</h3>
+<div class="screen narrow"><p class="bar">Pass screen</p><div class="board">
+<div class="order"><div class="order-head"><span class="number">#27 <span class="former">(was 28)</span></span><span>Mesa 91</span><span class="age">6 min</span></div><div class="dish">1 x Paella</div><div class="dish">1 x Burger</div></div>
+<div class="order"><div class="order-head"><span class="number">#28</span><span>Mesa 91</span><span class="age">4 min</span></div><div class="dish">1 x Burger</div></div>
+</div></div>
+<p class="note">One of order 28's two Burgers moved to order 27. A cook calling 28 can mean either card, and both carry 28.</p></div>
+</div>
+</section>
+
+<section id="s7"><h1>A650 · 7. The MOVED-slip setting <span class="mock">MOCKUP</span></h1>
+<p class="lead">The venue's default is a switch in Settings → Kitchen, under "Changes after sending", saved as soon as it is flipped, like the switches beside it. A prep station can follow it or choose for itself, in its Edit station window, saved with that window's Save. New field outlined in purple.</p>
+<div class="cols">
+<div class="dash"><div class="banner">Restaurante Santet S.L.</div><div class="tabs"><span>…</span><span class="on">Kitchen</span><span>Tables</span><span>…</span></div>
+<div class="body"><h2>Changes after sending</h2>
+<div class="setting"><span class="switch on"></span>Allow changes to items already sent to the kitchen</div>
+<p class="hint">When off, staff cannot change or recall an item the kitchen already has; they cancel it instead.</p>
+<div class="field"><label>Identical dishes on a kitchen ticket</label><div class="box"><span>One line: 3 x Burger</span><span class="chev">▾</span></div></div>
+<div class="setting"><span class="switch"></span>Print held groups in advance</div>
+<p class="hint">A held group prints straight away on a kitchen ticket marked HOLD. …</p>
+<div class="new"><div class="setting"><span class="switch on"></span>Print MOVED slips</div>
+<p class="hint">When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where. A prep station can be set to differ.</p></div>
+<div class="field"><label>Reminder to fire the next group</label><div class="box"><span>10 minutes</span><span class="chev">▾</span></div></div>
+</div></div>
+
+<div><div class="modal"><div class="head">Edit station</div><div class="content">
+<div class="field"><label>Name *</label><div class="box"><span>Grill</span></div></div>
+<div class="field"><label>Printers</label><div class="box"><span>Cocina TM-T20</span><span class="chev">▾</span></div></div>
+<div class="field"><label>Warm after (min)</label><div class="box"><span style="color:#9aa1ad;font-style:italic">5</span></div><div class="small">Leave blank to use the venue default.</div></div>
+<div class="inline-switch"><span class="switch"></span>Show the rest of the order</div>
+<div class="new field"><label>MOVED slips</label><div class="box"><span>As the venue (print)</span><span class="chev">▾</span></div>
+<div class="list"><div class="sel">As the venue (print)</div><div>Print</div><div>Don't print</div></div></div>
+</div><div class="foot"><span class="btn">Cancel</span><span class="btn quiet">Save</span></div></div>
+<p class="note">"As the venue" names the venue's current choice in brackets. Spanish: "Avisos MOVIDO" with "Como el local (imprimir)", "Imprimir", "No imprimir"; the venue switch reads "Imprimir avisos MOVIDO". Save stays quiet and disabled until something in the window changes.</p></div>
+</div>
+</section>
+</body></html>
