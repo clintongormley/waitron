@@ -638,7 +638,7 @@ describe("the staffing paint routes", () => {
     });
   });
 
-  it("refuses a malformed special-day edit, a date not of the special day and an area or staff role elsewhere with 400, and a special day elsewhere with 404", async () => {
+  it("refuses a malformed special-day edit, a date not of the special day, an area elsewhere and an unknown staff role with 400, and a special day elsewhere with 404", async () => {
     const p = await painted();
     const path = `${STAFFING}/special-days/${p.specialDayId}`;
     const ok = { area: p.dept, dateId: p.aug14, blocks: null };
