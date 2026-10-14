@@ -1303,6 +1303,7 @@ async function runOwned<T>(
         }),
         "ListMultipartUploads repeated its marker",
       )) {
+        if (listed.error instanceof AwsRehearsalFailed) throw listed.error;
         if (listed.error !== undefined) {
           throw new AwsRehearsalFailed(
             `ListMultipartUploads failed: ${receiptErrorName(nameOf(listed.error))}`,

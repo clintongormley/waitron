@@ -24,8 +24,8 @@ export interface S3ObjectStoreOptions {
   /** Replaces {@link BUCKET_IDLE_MS}. Tests only. */
   idleMs?: number;
   /**
-   * Told of every command once its attempts end. Rehearsals only. An observer that throws fails
-   * the command with what it threw.
+   * Told of each command that reaches the client's `initialize` step, once its attempts end.
+   * Rehearsals only. An observer that throws fails the command with what it threw.
    */
   observe?: (observation: CommandObservation) => void;
 }

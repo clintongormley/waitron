@@ -64,10 +64,10 @@ function observed(responses: Scripted[], observe?: (o: CommandObservation) => vo
 describe("observing a bucket client's commands", () => {
   it("reports each command once, with its name, input, output and time taken", async () => {
     const { client, seen } = observed([PUT_OK, PUT_OK]);
-    const before = Date.now();
+    const before = performance.now();
     await client.send(new PutObjectCommand({ Bucket: "owner-bucket", Key: "a", Body: "x" }));
     await client.send(new PutObjectCommand({ Bucket: "owner-bucket", Key: "b", Body: "y" }));
-    const took = Date.now() - before;
+    const took = performance.now() - before;
     expect(seen).toHaveLength(2);
     expect(seen.map((o) => o.command)).toEqual(["PutObjectCommand", "PutObjectCommand"]);
     expect(seen[0]!.input).toMatchObject({ Bucket: "owner-bucket", Key: "a" });

@@ -215,6 +215,20 @@ describe("the request recorder", () => {
     }
   });
 
+  it.each(["archives/venue-1/key.bin", "AKIAIOSFODNN7EXAMPLE"])(
+    "records an error named %s as Unlisted",
+    (name) => {
+      const [event] = recorded({
+        command: "GetObjectCommand",
+        input: {},
+        error: refusal(name, 403),
+        elapsedMs: 1,
+      });
+      expect(event).toMatchObject({ errorName: "Unlisted" });
+      expect(JSON.stringify(event)).not.toContain(name);
+    },
+  );
+
   it("records only events the receipt accepts unchanged", () => {
     const events = [
       ...recorded({ command: "HeadObjectCommand", input: {}, output: ok(), elapsedMs: 1 }),

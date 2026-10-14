@@ -1,5 +1,5 @@
 import { nameOf, statusOf, type CommandObservation } from "@waitron/stream";
-import { RECEIPT_APIS } from "./aws-rehearsal-receipt.js";
+import { RECEIPT_APIS, receiptErrorName } from "./aws-rehearsal-receipt.js";
 
 type Fields = Record<string, unknown>;
 
@@ -37,7 +37,7 @@ export function requestRecorder(
     };
     const attempts = field(field(answer, "$metadata"), "attempts");
     if (isCount(attempts, 1)) event.attempts = attempts;
-    if (failed) event.errorName = nameOf(observation.error);
+    if (failed) event.errorName = receiptErrorName(nameOf(observation.error));
     const events: Fields[] = [event];
     if (api === "DeleteObjects") {
       const objects = field(field(observation.input, "Delete"), "Objects");

@@ -177,7 +177,7 @@ describe("ctx.ownedUploads", () => {
       }
     });
     expect(result.name).toBe("AwsRehearsalFailed");
-    expect(result.message).toMatch(/^ListMultipartUploads failed: /);
+    expect(result.message).toBe("ListMultipartUploads repeated its marker");
     expect(sent).toHaveLength(2);
   });
 
