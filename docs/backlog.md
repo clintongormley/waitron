@@ -672,6 +672,17 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **Menu prices' cleared-price range test missed the narrow layout on main CI** —
+  [A608's merge run 38505417966](https://github.com/clintongormley/waitron/actions/runs/38505417966/job/115661820912)
+  failed `widens a field whose stored price is cleared, so the range it then shows is whole at
+  320 px (font )`: `apps/dashboard/src/widgets/menu-prices-table.test.ts:2625` expected the
+  table's `narrow` attribute but received false (1 failed, 3433 passed in dashboard shard 4).
+  A609 changed neither this test nor the menu-prices table. The focused command
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/menu-prices-table.test.ts -t
+  'widens a field whose stored price is cleared'` passed both cases on macOS on 2026-10-14.
+  **Next action:** reproduce the failed shard with its CI viewport/layout conditions and fix
+  the cause; keep the narrow-layout assertion. The cause remains unverified.
+
 - **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
   A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
   390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
