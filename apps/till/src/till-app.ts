@@ -2307,9 +2307,7 @@ export class TillApp extends LitElement {
    * was out, a read when a choice answered while it was out. A choice that failed with no HTTP
    * status may have been stored too. The equipment is then read again once no choice waits, unless
    * a later choice's answer is shown first; that read is tried once, and if it fails the next
-   * choice's answer or the next opening reads again. `#equipmentReads` counts reads answered,
-   * shown or not; `#equipmentChanged` counts the changes this tab made the server store: choices
-   * answered with what it stored, and profile switches. A read sent before one is set aside. */
+   * choice's answer or the next opening reads again. */
   #equipmentReads = 0;
   #equipmentChanged = 0;
   #equipmentStale = false;
@@ -5408,11 +5406,24 @@ export class TillApp extends LitElement {
       } else {
         this.#equipmentStale = true;
       }
-      if (nfc !== undefined)
+      if (nfc !== undefined) {
+        const selection = change.selection;
+        const noPrinterRole =
+          "kind" in change &&
+          change.kind === "printer" &&
+          typeof selection === "object" &&
+          !stored.roles.some(
+            (role) =>
+              (role.role === "receipt" || role.role === "payment_slip") &&
+              (role.chosenId === selection.id || role.resolved?.id === selection.id),
+          );
         this.nfcNotice = {
-          message: t("equipment.picked_up").replace("{item}", () => nfc.name),
+          message: noPrinterRole
+            ? t("equipment.no_printer_role")
+            : t("equipment.picked_up").replace("{item}", () => nfc.name),
           tone: "info",
         };
+      }
     } catch (error) {
       if (!current()) {
         this.#equipmentStale = true;

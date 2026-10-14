@@ -38,6 +38,62 @@ async function signOut(el: TillApp) {
 }
 
 describe("NFC throughout the till", () => {
+  it.each([
+    ["receipt", "chosen"],
+    ["receipt", "resolved"],
+    ["payment_slip", "chosen"],
+    ["payment_slip", "resolved"],
+  ])("an accepted printer scan confirms its %s %s assignment", async (target, source) => {
+    const stored = {
+      roles: NFC_EQUIPMENT.roles.map((role) =>
+        role.role === target
+          ? {
+              ...role,
+              ...(source === "chosen"
+                ? { selection: "item", chosenId: PRINTER_ID, chosen: role.choices[0]! }
+                : { resolved: { id: PRINTER_ID, name: "Portable printer", available: true } }),
+            }
+          : role,
+      ),
+    };
+    const { el } = await mountEquipmentApp({
+      setDeviceEquipment: vi.fn().mockResolvedValue(stored),
+    });
+    await signIn(el);
+    (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
+    await vi.waitFor(() => expect(notice(el)?.message).toBe("Picked up Portable printer"));
+    expect(notice(el)?.tone).toBe("info");
+  });
+  it.each(["none", "drawer-only"])(
+    "an accepted printer scan with %s assignment reports no selected printer role",
+    async (assignment) => {
+      const stored = {
+        roles: NFC_EQUIPMENT.roles.map((role) =>
+          assignment === "drawer-only" && role.role === "cash_drawer"
+            ? {
+                ...role,
+                selection: "item",
+                chosenId: PRINTER_ID,
+                resolved: { id: PRINTER_ID, name: "Portable printer", available: true },
+              }
+            : role,
+        ),
+      };
+      const setDeviceEquipment = vi.fn().mockResolvedValue(stored);
+      const { el } = await mountEquipmentApp({ setDeviceEquipment });
+      await signIn(el);
+      (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
+      await vi.waitFor(() =>
+        expect(notice(el)?.message).toBe("No printer role selected. Choose a role in Equipment."),
+      );
+      expect(notice(el)?.tone).toBe("info");
+      expect(setDeviceEquipment.mock.calls[0]![0]).toEqual({
+        kind: "printer",
+        selection: { id: PRINTER_ID },
+        via: "scan",
+      });
+    },
+  );
   it.each(["continue", "cancel"])(
     "holds a tap while a named operator's profile loads, and respects %s",
     async (action) => {

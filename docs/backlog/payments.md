@@ -126,7 +126,8 @@ along with Tap-to-Pay._
 On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipment, press
 Allow NFC for that address's first permission grant. Close the dialog and tap a registered reader
 and portable printer from Counter, Floor, a table's order, payment, Station, Pass and My Schedule.
-Check the pick-up notice and Equipment's assignments. Try a foreign label and a reader with a
+Check the pick-up notice and Equipment's assignments. Try a printer with no pick-up roles;
+its notice must say that no printer role is selected. Try a foreign label and a reader with a
 payment already running; neither should change the assignment. Sign out, tap a registered sticker,
 and sign in normally: the selection must wait for sign-in. Open a row's QR camera, return to the
 list and close the dialog; NFC must resume without a second selection from the same tap. Lock the

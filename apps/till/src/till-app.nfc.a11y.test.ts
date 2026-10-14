@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtToast } from "@waitron/ui";
-import { FakeNdefReader, installNfc, READER_ID } from "../test/equipment-nfc.js";
+import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { mountEquipmentApp, signIn } from "../test/equipment-app.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
@@ -18,7 +18,7 @@ for (const locale of ["en-GB", "es-ES"] as const) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
       describe(`NFC pickup notice ${locale}/${theme}/${width}`, () => {
-        it.each(["success", "foreign", "refused", "read-error", "unavailable"])(
+        it.each(["success", "foreign", "refused", "read-error", "unavailable", "no-printer-role"])(
           "accessible %s feedback fits the viewport",
           async (state) => {
             installNfc();
@@ -46,7 +46,9 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 Promise.reject(new DOMException("unavailable", "NotReadableError"));
               visibility.mockReturnValue("visible");
               document.dispatchEvent(new Event("visibilitychange"));
-            } else
+            } else if (state === "no-printer-role")
+              nfc.read(`waitron-equipment:printer:${PRINTER_ID}`);
+            else
               nfc.read(
                 state === "foreign" ? "foreign label" : `waitron-equipment:reader:${READER_ID}`,
               );
