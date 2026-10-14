@@ -3,8 +3,8 @@ import {
   type ListMultipartUploadsCommandOutput,
 } from "@aws-sdk/client-s3";
 import type { BucketConfig } from "@waitron/stream";
-import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
 import { sanitizeEvent, type AwsReceiptEvent } from "./aws-rehearsal-receipt.js";
+import { fixtureBudget } from "./fixture-budget.js";
 import type { S3ScenarioFixture } from "./s3-scenario-fixture.js";
 
 export interface LocalS3Fixture {
@@ -15,8 +15,8 @@ export interface LocalS3Fixture {
 }
 
 /**
- * A scenario fixture over a local S3 server. Its budgets are the AWS rehearsal's own
- * (`AWS_REHEARSAL_LIMITS`), refused the same way, so a scenario over budget fails here first.
+ * A scenario fixture over a local S3 server, with the AWS rehearsal's own budget (`fixtureBudget`),
+ * so a scenario over budget fails here first.
  */
 export function localS3Fixture(opts: {
   bucket: BucketConfig;
@@ -31,38 +31,15 @@ export function localS3Fixture(opts: {
   const record = (event: object): void => {
     events.push(sanitizeEvent(event));
   };
-  let uploaded = 0;
-  let objects = 0;
+  const budget = fixtureBudget(record, (detail) => new Error(`fixture-limit: ${detail}`));
   const fixture: S3ScenarioFixture = {
     bucket: opts.bucket,
     venueId: opts.venueId,
     scratch: opts.scratch,
     signal: opts.signal,
     record,
-    reserveUpload(bytes, role) {
-      const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
-      const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
-      if (overTotal || overArchive) {
-        record({
-          scenario: "lifecycle",
-          phase: "fixture-limit",
-          objectRole: role,
-          bytes,
-          outcome: "refused",
-        });
-        throw new Error(
-          `fixture-limit: ${overArchive ? "an archive fixture is over its byte limit" : "the upload budget is spent"}`,
-        );
-      }
-      uploaded += bytes;
-    },
-    reserveObjects(count) {
-      if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
-        record({ scenario: "lifecycle", phase: "fixture-limit", count, outcome: "refused" });
-        throw new Error("fixture-limit: the object budget is spent");
-      }
-      objects += count;
-    },
+    reserveUpload: budget.reserveUpload,
+    reserveObjects: budget.reserveObjects,
     trackUpload(key, uploadId) {
       tracked.push({ key, uploadId });
     },

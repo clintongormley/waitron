@@ -1,5 +1,7 @@
 import { expect } from "vitest";
 import { buildBackupBackend } from "../backup-backends.js";
+import { nameOf } from "@waitron/stream";
+import { receiptErrorName } from "./aws-rehearsal-receipt.js";
 import { requestRecorder } from "./aws-request-recorder.js";
 import type { S3ScenarioFixture } from "./s3-scenario-fixture.js";
 
@@ -55,27 +57,53 @@ export async function runDeleteManyScenario(
       }),
     },
   );
-  const call = { signal: fixture.signal };
+  // Aborted on the first failed upload, so no upload loop outlives the scenario.
+  const stopUploads = new AbortController();
+  const call = { signal: AbortSignal.any([fixture.signal, stopUploads.signal]) };
   const phase = (name: string, count: number, ok: boolean): void => {
     fixture.record({ scenario: SCENARIO, phase: name, count, outcome: ok ? "ok" : "failed" });
   };
+  async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      fixture.record({
+        scenario: SCENARIO,
+        phase: name,
+        outcome: "failed",
+        errorName: receiptErrorName(nameOf(error)),
+      });
+      throw error;
+    }
+  }
   try {
-    let next = 0;
-    await Promise.all(
-      Array.from({ length: IN_FLIGHT }, async () => {
-        while (next < keys.length) {
-          const index = next;
-          next += 1;
-          await backend.put(keys[index]!, bodies[index]!, call);
-        }
-      }),
-    );
+    await step("put", async () => {
+      let next = 0;
+      let first: { error: unknown } | undefined;
+      await Promise.allSettled(
+        Array.from({ length: IN_FLIGHT }, async () => {
+          while (next < keys.length && !call.signal.aborted) {
+            const index = next;
+            next += 1;
+            try {
+              await backend.put(keys[index]!, bodies[index]!, call);
+            } catch (error) {
+              first ??= { error };
+              stopUploads.abort();
+            }
+          }
+        }),
+      );
+      if (first !== undefined) throw first.error;
+      fixture.signal.throwIfAborted();
+    });
 
-    const before = (await backend.list(KEY_PREFIX, call)).map(({ key }) => key).sort();
+    const listed = await step("listed-before", () => backend.list(KEY_PREFIX, call));
+    const before = listed.map(({ key }) => key).sort();
     phase("listed-before", before.length, before.join("\n") === keys.join("\n"));
     expect(before).toEqual(keys);
 
-    await backend.deleteMany(keys, call);
+    await step("deleted", () => backend.deleteMany(keys, call));
     const deletes = requests.filter(
       ({ phase: name, api }) => name === "request" && api === "DeleteObjects",
     );
@@ -98,7 +126,7 @@ export async function runDeleteManyScenario(
     expect(answered).toBe(true);
     expect(keyErrors).toEqual([]);
 
-    const after = await backend.list(KEY_PREFIX, call);
+    const after = await step("listed-after", () => backend.list(KEY_PREFIX, call));
     phase("listed-after", after.length, after.length === 0);
     expect(after).toEqual([]);
     return { put: keys.length, deleteBatches, remaining: after.length };

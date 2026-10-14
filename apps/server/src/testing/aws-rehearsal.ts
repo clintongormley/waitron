@@ -62,6 +62,7 @@ import {
   type TeardownEntry,
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
+import { fixtureBudget } from "./fixture-budget.js";
 import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
@@ -919,12 +920,6 @@ function createFailure(ownership: CreateOutcome, bucket: string): AwsRehearsalFa
   }
 }
 
-function nonNegativeInteger(value: number, what: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AwsRehearsalRefused("fixture-limit", `${what} must be a non-negative integer`);
-  }
-}
-
 async function preflight(
   client: AdminClient,
   bucket: string,
@@ -1194,27 +1189,10 @@ async function runOwned<T>(
       );
     }
   };
-  let uploaded = 0;
-  let objects = 0;
-  const reserveUpload = (bytes: number, role: string): void => {
-    nonNegativeInteger(bytes, "bytes");
-    const overTotal = uploaded + bytes > AWS_REHEARSAL_LIMITS.uploadedBytes;
-    const overArchive = role === "archive" && bytes > AWS_REHEARSAL_LIMITS.archiveBytes;
-    if (overTotal || overArchive) {
-      record({
-        scenario: "lifecycle",
-        phase: "fixture-limit",
-        objectRole: role,
-        bytes,
-        outcome: "refused",
-      });
-      throw new AwsRehearsalRefused(
-        "fixture-limit",
-        overArchive ? "an archive fixture is over its byte limit" : "the upload budget is spent",
-      );
-    }
-    uploaded += bytes;
-  };
+  const { reserveUpload, reserveObjects } = fixtureBudget(
+    record,
+    (detail) => new AwsRehearsalRefused("fixture-limit", detail),
+  );
   const issued = new Set<string>();
   const labels = new Set<string>();
   const ctx: AwsRehearsal = {
@@ -1244,19 +1222,7 @@ async function runOwned<T>(
       };
     },
     reserveUpload,
-    reserveObjects(count) {
-      nonNegativeInteger(count, "count");
-      if (objects + count > AWS_REHEARSAL_LIMITS.deleteObjects) {
-        record({
-          scenario: "lifecycle",
-          phase: "fixture-limit",
-          count,
-          outcome: "refused",
-        });
-        throw new AwsRehearsalRefused("fixture-limit", "the object budget is spent");
-      }
-      objects += count;
-    },
+    reserveObjects,
     trackChild(pid) {
       refuseOnceTearingDown();
       if (!Number.isSafeInteger(pid) || pid <= 0) {

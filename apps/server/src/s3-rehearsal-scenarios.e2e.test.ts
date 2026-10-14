@@ -6,9 +6,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { S3Client } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { localS3Fixture } from "./testing/local-s3-fixture.js";
+import { localS3Fixture, type LocalS3Fixture } from "./testing/local-s3-fixture.js";
 import { DELETE_MANY_SCENARIO_MS, runDeleteManyScenario } from "./testing/s3-delete-scenario.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
@@ -94,17 +95,40 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     };
   }
 
+  async function deleteManyFixture(ctx: { skip(note: string): never }): Promise<LocalS3Fixture> {
+    const { server, client: admin, scratch: root } = requireServer(ctx);
+    return localS3Fixture({
+      bucket: bucketFor(server, "delete-many"),
+      venueId: "venue-1",
+      scratch: await mkdtemp(join(root, "delete-many-")),
+      signal: stop.signal,
+      send: (command) => admin.send(command),
+    });
+  }
+
+  /** The fixture, with `record` throwing `failure` after recording the `nth` request to `api`. */
+  function failingAt(local: LocalS3Fixture, api: string, nth: number, failure: Error) {
+    let seen = 0;
+    return {
+      ...local.fixture,
+      record(event: object) {
+        local.fixture.record(event);
+        if ((event as { api?: unknown }).api === api && ++seen === nth) throw failure;
+      },
+    };
+  }
+
+  /** A refusal the bucket client does not retry, so the request fails at once. */
+  function injected(): Error {
+    return Object.assign(new Error("injected for the test"), {
+      $metadata: { httpStatusCode: 403 },
+    });
+  }
+
   it(
     "1,005 objects are deleted in batches of 1,000 and 5 and none remain",
     async (ctx) => {
-      const { server, client: admin, scratch: root } = requireServer(ctx);
-      const local = localS3Fixture({
-        bucket: bucketFor(server, "delete-many"),
-        venueId: "venue-1",
-        scratch: await mkdtemp(join(root, "delete-many-")),
-        signal: stop.signal,
-        send: (command) => admin.send(command),
-      });
+      const local = await deleteManyFixture(ctx);
       const summary = await runDeleteManyScenario(local.fixture);
       expect(summary).toEqual({ put: 1005, deleteBatches: [1000, 5], remaining: 0 });
       const tally: Record<string, number> = {};
@@ -120,6 +144,54 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
         { scenario: "delete-many", phase: "listed-after", count: 0, outcome: "ok" },
       ]);
       await expect(local.fixture.ownedUploads(local.fixture.bucket.prefix)).resolves.toEqual([]);
+    },
+    DELETE_MANY_SCENARIO_MS,
+  );
+
+  it("refuses a 1,006th object before it sends any request", async (ctx) => {
+    const local = await deleteManyFixture(ctx);
+    local.fixture.reserveObjects(1);
+    await expect(runDeleteManyScenario(local.fixture)).rejects.toThrow(/fixture-limit/);
+    expect(local.events).toEqual([
+      { scenario: "lifecycle", phase: "fixture-limit", count: 1005, outcome: "refused" },
+    ]);
+  });
+
+  it(
+    "stops every upload once one fails, so no request follows the rejection",
+    async (ctx) => {
+      const local = await deleteManyFixture(ctx);
+      const failure = injected();
+      await expect(
+        runDeleteManyScenario(failingAt(local, "PutObject", 50, failure)),
+      ).rejects.toMatchObject({ params: { operation: "put", status: 403 } });
+      const atRejection = local.events.length;
+      await delay(1000);
+      expect(local.events.length).toBe(atRejection);
+      expect(local.events.filter(({ api }) => api === "PutObject").length).toBeLessThan(100);
+      expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
+        { scenario: "delete-many", phase: "put", outcome: "failed", errorName: "AppError" },
+      ]);
+    },
+    DELETE_MANY_SCENARIO_MS,
+  );
+
+  it(
+    "records a listing that fails as a failed phase",
+    async (ctx) => {
+      const local = await deleteManyFixture(ctx);
+      const failure = injected();
+      await expect(
+        runDeleteManyScenario(failingAt(local, "ListObjectsV2", 1, failure)),
+      ).rejects.toMatchObject({ params: { operation: "list", status: 403 } });
+      expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
+        {
+          scenario: "delete-many",
+          phase: "listed-before",
+          outcome: "failed",
+          errorName: "AppError",
+        },
+      ]);
     },
     DELETE_MANY_SCENARIO_MS,
   );

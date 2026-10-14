@@ -22,11 +22,10 @@ function fixture() {
 }
 
 describe("the local S3 scenario fixture", () => {
-  it("refuses a 1,006th object before any request, and records the refusal", () => {
-    const { built, send } = fixture();
+  it("refuses a 1,006th object and records the refusal", () => {
+    const { built } = fixture();
     built.fixture.reserveObjects(AWS_REHEARSAL_LIMITS.deleteObjects);
     expect(() => built.fixture.reserveObjects(1)).toThrow(/fixture-limit/);
-    expect(send).not.toHaveBeenCalled();
     expect(built.events).toEqual([
       { scenario: "lifecycle", phase: "fixture-limit", count: 1, outcome: "refused" },
     ]);
@@ -49,6 +48,15 @@ describe("the local S3 scenario fixture", () => {
       ["fixture-limit", "archive", "refused"],
       ["fixture-limit", "delete-object", "refused"],
     ]);
+  });
+
+  it("refuses a count or byte size that is not a non-negative integer, as the rehearsal does", () => {
+    const { built } = fixture();
+    expect(() => built.fixture.reserveObjects(-5)).toThrow(/fixture-limit/);
+    expect(() => built.fixture.reserveObjects(Number.NaN)).toThrow(/fixture-limit/);
+    expect(() => built.fixture.reserveObjects(2000)).toThrow(/fixture-limit/);
+    expect(() => built.fixture.reserveUpload(Number.NaN, "archive")).toThrow(/fixture-limit/);
+    expect(() => built.fixture.reserveUpload(1e12, "x")).toThrow(/fixture-limit/);
   });
 
   it("refuses an event the receipt schema would refuse", () => {

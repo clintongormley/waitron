@@ -504,7 +504,8 @@ Before calling a package green, verify its CI coverage result on the current hea
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
 (`apps/server`) as three-way and eight-way file shards, each with a `-merge` job that enforces the thresholds on
-the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
+the merged blob (#216) — the files that need the two downloaded binaries (the stream loop and pause tests, the S3 rehearsal
+scenarios and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
 two-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then `test-fiscal-verifactu`,
