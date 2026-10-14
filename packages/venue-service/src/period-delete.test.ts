@@ -646,18 +646,37 @@ describe("deleting a period", () => {
       ]);
     });
 
-    it("names the replacement on a routing line that named the period, and keeps the replacement's own line where a cell has both", async () => {
+    it("deletes the routing lines naming the period, naming the replacement on none, and keeps the rest", async () => {
       const v = await deleteVenue();
 
       await remove(v, v.lunch, v.afternoon);
 
       expect((await stored(v)).routing).toEqual(
-        [
-          "No category Afternoon Barra",
-          "Cocktails Afternoon Cocina",
-          "Cocktails Dinner Cocina",
-        ].sort(),
+        ["Cocktails Afternoon Cocina", "Cocktails Dinner Cocina"].sort(),
       );
+    });
+
+    it("deletes exactly the routing lines the impact read listed before the delete", async () => {
+      const v = await deleteVenue();
+      const before = (await stored(v)).routing;
+      const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
+      const afternoonUses = async () =>
+        (await scoped((tx) => readRoutingUses(tx, v.cfg, v.afternoon))).get(v.afternoon);
+      const afternoonBefore = await afternoonUses();
+
+      await remove(v, v.lunch, v.afternoon);
+
+      const lunchLines = before.filter((line) => line.includes(" Lunch "));
+      expect(lunchLines).toHaveLength(2);
+      expect(impact.routingUses.map((use) => use.rowKind).sort()).toEqual([
+        "category",
+        "no_category",
+      ]);
+      expect(impact.routingUses).toHaveLength(lunchLines.length);
+      expect((await stored(v)).routing).toEqual(
+        before.filter((line) => !lunchLines.includes(line)),
+      );
+      expect(await afternoonUses()).toEqual(afternoonBefore);
     });
 
     it("moves today's extension of the period, and an older day's, to the replacement", async () => {

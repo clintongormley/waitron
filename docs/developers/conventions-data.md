@@ -692,15 +692,15 @@ the impact says only whether the period has a keep-open extension today, though 
 those special days' paint and every day's extension too. With a replacement, which must be another
 period of the same department, every range painting the period, in season weeks
 and on special-day dates past or future, names the replacement, and on each day that held the
-period touching ranges of one period then join; a routing-cell line naming it names the
-replacement, except in a cell that already has a line for the replacement, which keeps that line
-and loses the period's; and every keep-open extension of it names the replacement, and where one of the replacement's
+period touching ranges of one period then join; and every keep-open extension of it names the
+replacement, and where one of the replacement's
 ranges that day covers the extension's start, the extension then starts at that range's end, or is
 deleted when the range already reaches the extension's end. Without one,
 its painted ranges are deleted, a special-day date left with no paint loses its `department_days`
-row so the season shows through, and its routing lines and extensions go with the period through
-their cascading foreign keys. It all runs in the caller's transaction, and ends with an end-offset
-check over the period's department that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
+row so the season shows through, and its extensions go with the period through their cascading
+foreign key. Its routing-cell lines go with the period through their cascading foreign key whether
+or not there is a replacement; none is moved to the replacement (owner, 2026-10-13, A578). It all
+runs in the caller's transaction, and ends with an end-offset check over the period's department that refuses `menu_timetable.invalid` (`reason: "end_offset"`).
 
 A configuration transfer carries both tables under the importing venue's location
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming

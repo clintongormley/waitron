@@ -347,7 +347,7 @@ describe("the period-delete routes", () => {
     });
   });
 
-  it("POST delete with a replacement paints, routes and keeps open the replacement instead, and answers 204", async () => {
+  it("POST delete with a replacement paints and keeps open the replacement instead, deletes the period's routing lines, and answers 204", async () => {
     const r = await routed();
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
@@ -364,7 +364,7 @@ describe("the period-delete routes", () => {
         "Autumn 3 Dinner 20:00-23:00",
       ],
       specialDays: [`${PAST} Afternoon 13:00-15:00`, `${FUTURE} Afternoon 13:00-18:00`],
-      routing: ["Afternoon"],
+      routing: [],
       extensions: [`${r.today} Afternoon 16:00-17:00`],
       periods: ["Afternoon", "Dinner"],
     });

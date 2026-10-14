@@ -11,7 +11,6 @@ import type { PeriodRoutingUse } from "./menu-timetable-types.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import { menuPeriods } from "./schema/menus.js";
 import { periodExtensions } from "./schema/period-extensions.js";
-import { routingCellPeriods } from "./schema/routing.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -232,24 +231,6 @@ export async function deletePeriod(
           ),
         );
   } else {
-    // A cell holds one line per period (routing_cell_periods_cell_period_key), so the period's
-    // line goes where the replacement already has one before the rest are renamed.
-    const replacementCells = tx
-      .select({ cellId: routingCellPeriods.cellId })
-      .from(routingCellPeriods)
-      .where(eq(routingCellPeriods.periodId, replacementId));
-    await tx
-      .delete(routingCellPeriods)
-      .where(
-        and(
-          eq(routingCellPeriods.periodId, periodId),
-          inArray(routingCellPeriods.cellId, replacementCells),
-        ),
-      );
-    await tx
-      .update(routingCellPeriods)
-      .set({ periodId: replacementId })
-      .where(eq(routingCellPeriods.periodId, periodId));
     await tx
       .update(departmentDayRanges)
       .set({ periodId: replacementId })
