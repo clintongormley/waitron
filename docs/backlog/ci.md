@@ -361,7 +361,8 @@ server without changing their deployed same-origin paths; this also affects setu
   and 2026-10-07). #1337 (2026-10-07) moved the receipts into the `docs/developers/` topic files and
   took it from about 102 KB to about 71 KB. Add rules freely; prune when touching an entry, and sweep
   when the file has grown well past about 71 KB, per `CLAUDE.md` §7. The campaign watcher checks it on
-  its 3-hourly evaluation. A housekeeping check, never a blocker.
+  its 3-hourly evaluation. A housekeeping check, never a blocker. Receipt excerpts and the pointer guard's limits are retained in the
+  [developer topics](../developers/writing-claims.md#root-instruction-receipts-retained-on-2026-10-14).
 - **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
   root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
   widen the guard if that gap ever costs something.

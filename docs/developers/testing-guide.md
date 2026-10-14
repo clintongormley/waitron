@@ -1696,3 +1696,38 @@ write requests `withWriteLock`, then release the first. The course response must
 new product default and clear it; the station write must refuse newly preparing food. These
 cases use no timed sleep to arrange the writes. The separate course-retention suite checks a
 new course-free product choice firing earliest after its default clears.
+
+
+## Root instruction receipts retained on 2026-10-14
+
+These excerpts retain the measurements, mechanisms and guard limits from the root
+`CLAUDE.md` before A583 moved their detail here. They do not change the rules.
+
+### Loopback packet size
+
+Cost: the
+pause test's last restore failed twice in CI, each about 31 s after the stream resumed, just past
+its 30 s ceiling.
+
+### Fixture writes beside an in-process server
+
+**A test that starts the server in its own process writes to the venue database only before
+`startServer` or after `close()`**: this engine waits for a lock on the one thread both share,
+so the server's open transaction cannot commit and the test's write fails `database is locked`
+when its busy wait runs out.
+
+### Fixture write incident
+
+Cost: main run 38430159396 failed `boot.backup-network.test.ts`'s
+hanging-destination case.
+
+### Native dialog close
+
+`wt-dialog` sends `wt-close` only when Chromium reports the
+native close, which Chromium queues for the next rendered frame.
+
+### Pointer-click microtasks
+
+In
+Chromium a scripted click runs pending microtasks only after the whole dispatch; a real pointer
+click runs them after each listener.
