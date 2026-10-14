@@ -149,6 +149,45 @@ describe("device-profile store against a real migrated database", () => {
     }
   });
 
+  it("persists clock-in on operator profiles and refuses a shared display", async () => {
+    await seedTenant(suite.db);
+    const clockSession = await seedSession("manager");
+    try {
+      for (const formFactor of ["till", "phone-portrait", "tablet-landscape"] as const) {
+        const created = await inTx((tx) =>
+          createDeviceProfile(tx, {
+            managementSessionId: clockSession,
+            name: `Clock ${formFactor}`,
+            formFactor,
+            canvasId: null,
+            capabilities: ["clock-in"],
+          }),
+        );
+        expect((await inTx((tx) => getDeviceProfile(tx, created.id)))?.capabilities).toEqual([
+          "clock-in",
+        ]);
+      }
+      const error = await errorOf(() =>
+        inTx((tx) =>
+          createDeviceProfile(tx, {
+            managementSessionId: clockSession,
+            name: "Clock kitchen",
+            formFactor: "kds",
+            canvasId: null,
+            capabilities: ["clock-in"],
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        code: "device_profile.invalid",
+        params: { reason: "shared_display_action" },
+      });
+      expect(await rowCount()).toBe(3);
+    } finally {
+      await purgeProfiles();
+    }
+  });
+
   it("carries the device form factor through create → get → list", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");

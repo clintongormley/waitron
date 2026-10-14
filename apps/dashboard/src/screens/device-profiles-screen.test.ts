@@ -1992,6 +1992,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       "cap-hand-over-orders",
       "cap-print-receipt",
       "cap-open-cash-drawer",
+      "cap-clock-in",
     ]);
     expect(flags("profile-screens")).toEqual([
       "cap-act-as-kds",

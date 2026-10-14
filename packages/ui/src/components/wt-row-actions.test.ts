@@ -43,6 +43,22 @@ async function mountActions() {
 }
 
 describe("row actions", () => {
+  it("renders a slotted name inside the native trigger, opens the menu and returns focus on Escape", async () => {
+    const { el, trigger, popup } = await mountActions();
+    const name = document.createElement("span");
+    name.slot = "trigger";
+    name.textContent = "Ana · Working";
+    el.append(name);
+    await el.updateComplete;
+    const slot = trigger.querySelector<HTMLSlotElement>('slot[name="trigger"]');
+    expect(slot?.assignedElements()).toEqual([name]);
+    expect(getComputedStyle(name).color).toBe(getComputedStyle(trigger).color);
+    await userEvent.click(name);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
+  });
   it("shows the kebab icon on its trigger, not the hamburger — this is a per-row menu, not navigation", async () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
     const icon = el.shadowRoot!.querySelector("button wt-icon")!;
@@ -521,9 +537,11 @@ describe("standard icon trigger", () => {
     expect(popup.matches(":popover-open")).toBe(true);
   });
 
-  it("renders the configured icon directly without a custom trigger slot", async () => {
+  it("renders the configured icon as the empty trigger slot's fallback", async () => {
     const { el, trigger } = await mountActions();
-    expect(el.shadowRoot!.querySelector('slot[name="trigger"]')).toBeNull();
+    const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="trigger"]')!;
+    expect(slot).not.toBeNull();
+    expect(slot.assignedElements()).toEqual([]);
     expect(trigger.querySelector("wt-icon")!.getAttribute("name")).toBe("kebab");
   });
 

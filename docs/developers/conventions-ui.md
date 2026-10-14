@@ -1136,3 +1136,16 @@ refund case in `apps/server/src/till-api.profile-actions.test.ts`, the calibrati
 `packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
 nothing stops a new route queuing a `drawer` job without `drawerPrinter` or taking cash without
 `assertTakesCash`.
+
+
+## A clock refusal belongs to its signed-in orientation
+
+A clocking refusal can describe one person's admission or open shift. Keep the disabled clock
+state only for that signed-in orientation; a new successful sign-in starts a fresh own-state read
+when the boot flag and profile action permit it. The server checks that person's admission again.
+
+Measured2026-10-14 in real Chromium: `pnpm --filter @waitron/till exec vitest run
+src/till-app.clock.test.ts -t 'a clock refusal for one person' --reporter=verbose` first failed
+because the next admitted person's Clock in page was missing. Resetting the refusal flag during
+sign-in made that case pass; it also checks the next person's successful clock entry.
+The separate module/profile-disabled cases retain their no-request assertions.

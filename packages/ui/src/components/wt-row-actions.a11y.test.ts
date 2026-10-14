@@ -9,6 +9,22 @@ import "./wt-button.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (theme) => {
+  test.each(["Ana: Working", "Ana: Trabajando"])(
+    "a named trigger (%s), closed and open",
+    async (label) => {
+      const el = await mountThemed(
+        `<wt-row-actions label="${label}"><span slot="trigger">${label}</span><wt-button>Log out</wt-button></wt-row-actions>`,
+        theme,
+      );
+      const trigger = el.shadowRoot!.querySelector("button")!;
+      expect(
+        trigger.querySelector<HTMLSlotElement>('slot[name="trigger"]')?.assignedElements(),
+      ).toHaveLength(1);
+      await expectNoA11yViolations(host);
+      await userEvent.click(trigger);
+      await expectNoA11yViolations(host);
+    },
+  );
   test("names the hamburger and its open create, edit and delete actions", async () => {
     const el = await mountThemed(
       `<wt-row-actions label="Department actions">

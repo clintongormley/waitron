@@ -72,6 +72,7 @@ import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { mountTillClockApi } from "./till-clock-api.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
@@ -274,6 +275,7 @@ export interface TillApiDeps {
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
   invoiceEmailAvailable?: () => Promise<boolean>;
+  workforceEnabled?: boolean;
 }
 
 async function resolveHttpOrderZone(
@@ -1123,6 +1125,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
+  if (deps.workforceEnabled === true)
+    mountTillClockApi(
+      app,
+      { db: deps.db, cfg: deps.cfg, now: () => deps.clock.now().instant },
+      log,
+    );
   const simulator = deps.cardProvider;
   if (simulator instanceof SimulatorPaymentProvider) {
     const demoRun = createErrorBoundary(
@@ -1397,6 +1405,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       /* v8 ignore stop */
       return c.json({
         locale: deps.venueLocale,
+        clockingAvailable: deps.workforceEnabled === true,
         // The location's receipt language, kept separate from the UI `locale`: the UI derivation
         // drops UI-unsupported codes, which must never reach the receipt.
         invoiceLocale: boot.invoiceLocale,

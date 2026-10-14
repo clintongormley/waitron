@@ -5,6 +5,8 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TabDef } from "../layout.js";
+import type { TillClockState } from "../api/client.js";
+import type { TillClockAction } from "../state/clocking.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
@@ -55,6 +57,10 @@ const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "loadLocales",
   "phone",
   "kiosk",
+  "clockState",
+  "clockAvailable",
+  "clockBusy",
+  "clockError",
 ];
 
 /**
@@ -146,6 +152,28 @@ export class TillTabShell extends LitElement {
 
       .operator {
         font-weight: var(--wt-font-weight-bold);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .clock-dot {
+        width: var(--wt-space-2);
+        height: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-text-muted);
+      }
+
+      .clock-dot.working {
+        background: var(--wt-color-success);
+      }
+      .clock-dot.on_break {
+        background: var(--wt-color-warning);
+      }
+
+      .clock-message {
+        white-space: normal;
+        max-width: calc(var(--wt-tap-min) * 6);
       }
 
       .head.phone {
@@ -210,6 +238,10 @@ export class TillTabShell extends LitElement {
   @property({ attribute: false }) tabs: TabDef[] = [];
   @property() activeTabKey?: string;
   @property() operatorName = "";
+  @property({ attribute: false }) clockState: TillClockState | null = null;
+  @property({ type: Boolean }) clockAvailable = false;
+  @property({ type: Boolean }) clockBusy = false;
+  @property() clockError = "";
   @property({ attribute: false }) transferCount?: number;
   @property({ type: Boolean }) transferAvailable = false;
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
@@ -486,8 +518,78 @@ export class TillTabShell extends LitElement {
   }
 
   #operatorAndLogout(variant: ActionVariant): TemplateResult {
-    return html`<span class="operator">${this.operatorName}</span
-      ><wt-button
+    if (variant === "ghost") return html`${this.#operatorName()}${this.#operatorActions(variant)}`;
+    return html`<wt-row-actions
+      class="operator-menu"
+      align="end"
+      label=${`${this.operatorName}${this.clockAvailable ? `: ${this.#clockLabel()}` : ""}`}
+    >
+      <span slot="trigger">${this.#operatorName()}</span>
+      ${this.#operatorActions(variant)}
+    </wt-row-actions>`;
+  }
+
+  #clockLabel(): string {
+    if (this.clockState === null) return t("clock.unknown");
+    return t(
+      this.clockState.state === "working"
+        ? "clock.working"
+        : this.clockState.state === "on_break"
+          ? "clock.on_break"
+          : "clock.clocked_out",
+    );
+  }
+
+  #operatorName(): TemplateResult {
+    return html`<span class="operator"
+      >${this.operatorName}${
+        this.clockAvailable
+          ? html` ${this.clockState?.state === "out" ? nothing : html`<span class=${`clock-dot ${this.clockState?.state ?? "unknown"}`} aria-hidden="true"></span>`}
+              <span class="visually-hidden" data-clock-state>${this.#clockLabel()}</span>`
+          : nothing
+      }</span
+    >`;
+  }
+
+  #operatorActions(variant: ActionVariant): TemplateResult {
+    const state = this.clockState;
+    const foreign =
+      state !== null &&
+      state.activeLocationId !== null &&
+      state.activeLocationId !== state.locationId;
+    const disabled = this.clockBusy || state === null || foreign;
+    const action = (kind: TillClockAction, label: string) =>
+      html`<wt-button
+        data-clock-action=${kind}
+        variant=${disabled ? "secondary" : "primary"}
+        align="start"
+        .disabled=${disabled}
+        @click=${() => this.#emit("clock-action", { action: kind })}
+        >${label}</wt-button
+      >`;
+    return html`${
+        this.clockAvailable
+          ? html`
+              ${this.clockError ? html`<span class="clock-message" role="status">${this.clockError}</span>` : nothing}
+              ${foreign ? html`<span class="clock-message">${t("clock.other_location")}</span>` : nothing}
+              ${
+                state === null
+                  ? html`<wt-button
+                      data-clock-retry
+                      variant="secondary"
+                      align="start"
+                      .disabled=${this.clockBusy}
+                      @click=${() => this.#emit("retry-clock-read")}
+                      >${t("clock.retry")}</wt-button
+                    >`
+                  : state.state === "out"
+                    ? action("in", t("clock.in"))
+                    : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
+                      ${action("out", t("clock.out"))}`
+              }
+            `
+          : nothing
+      }<wt-button
         class="logout"
         variant=${variant}
         align=${variant === "ghost" ? "start" : nothing}

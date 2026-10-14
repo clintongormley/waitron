@@ -1717,6 +1717,20 @@ focused suites passed while Linux CI failed the later mouse assertions, so a loc
 pass was not evidence of restored input devices on Linux.
 
 
+## Pause a Hono JSON request at its text reader
+
+To hold a request between authentication and its write, pause the raw request's `text()` method.
+On Hono 4.13.9, `c.req.json()` reads that text and parses it; overriding `Request.json()` leaves
+the request running and your test waiting for a gate it never reaches.
+
+Measured 2026-10-14 while building A10-2: a real Hono POST whose handler called `c.req.json()`,
+with counters on both raw methods, returned `{"counts":{"json":0,"text":1},"body":{"value":"text"}}`.
+The queued clock cases in `apps/server/src/till-clock-api.test.ts` pause `raw.text`, wait for that
+read, hold a separate write, and track the clock request's call to `withWriteLock` before releasing
+the writer. Removing the clock adapter's session recheck made its queued-ended-session case
+return 200 instead of 401. The full probe and test output are retained in the campaign receipts;
+the receiver-method measurement is limited to that Hono version.
+
 ## Kitchen deletion history and queued writes
 
 The integrated deletion case in `apps/server/src/kitchen-delete.integration.test.ts` creates a

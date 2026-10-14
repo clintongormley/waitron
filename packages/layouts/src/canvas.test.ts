@@ -54,6 +54,7 @@ describe("profile actions and screens", () => {
         "hand-over-orders",
         "print-receipt",
         "open-cash-drawer",
+        "clock-in",
       ].sort(),
     );
   });

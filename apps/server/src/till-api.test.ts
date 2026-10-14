@@ -1212,6 +1212,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
       locale: "es-ES",
+      clockingAvailable: false,
       // The RECEIPT locale — the location's first `invoice_locales` entry, DISTINCT from the UI `locale`
       // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
       // drives them apart).
