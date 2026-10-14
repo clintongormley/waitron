@@ -449,13 +449,14 @@ describe("till-floor-screen: Rename", () => {
     const opened = await pressRename(el, "c4");
     await typeName(opened, "García birthday");
 
-    el.tables = group({ c3: { name: "Corner" } });
+    const named = { joinName: "Terrace" };
+    el.tables = group({ bar: named, c3: { ...named, name: "Corner" }, c4: named, c5: named });
     await settle(el);
     await opened.updateComplete;
 
     expect(windowOf(el)).toBe(opened);
     expect(shown(opened)).toEqual({
-      heading: "Rename Bar+Corner+Counter 4+Counter 5",
+      heading: "Rename Terrace",
       value: "García birthday",
       hint: "Leave it empty for Bar+Corner+Counter 4+Counter 5",
     });
