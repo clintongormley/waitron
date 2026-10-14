@@ -1,4 +1,5 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -197,5 +198,141 @@ describe("AwsRehearsal.scratch", () => {
     const refusal = await kept!.scratch("late").catch((error: unknown) => error);
     expect((refusal as AwsRehearsalRefused).reason).toBe("teardown-started");
     expect(await exists(root())).toBe(false);
+  });
+
+  describe("a scenario still running when teardown starts", () => {
+    // Writes `secrets.env` every 5 ms, remaking its folder first, until `stop` or its own signal.
+    function writer(honoursSignal: boolean) {
+      let stop = false;
+      let finished: Promise<void> | undefined;
+      const scenario = (ctx: AwsRehearsal): Promise<void> => {
+        finished = (async () => {
+          const folder = await ctx.scratch("loop");
+          while (!stop && !(honoursSignal && ctx.signal.aborted)) {
+            await mkdir(folder, { recursive: true });
+            await writeFile(join(folder, "secrets.env"), "KEY=value\n");
+            await delay(5);
+          }
+        })();
+        return finished;
+      };
+      return {
+        scenario,
+        async end() {
+          stop = true;
+          await finished;
+        },
+      };
+    }
+
+    it("records remove-scratch as failed and names the root when the settle wait runs out", async () => {
+      const w = writer(false);
+      const error = await rejection(
+        withAwsRehearsal(w.scenario, deps({}, { deadlineMs: 30, settleMs: 20 })),
+      );
+      try {
+        expect((await receipt()).teardown.at(-1)).toMatchObject({
+          step: "remove-scratch",
+          outcome: "failed",
+        });
+        expect(error.message).toContain(`scratch folder not removed: ${root()}`);
+      } finally {
+        await w.end();
+      }
+    });
+
+    it("records remove-scratch as ok when the scenario stops within the settle wait", async () => {
+      const w = writer(true);
+      const error = await rejection(
+        withAwsRehearsal(w.scenario, deps({}, { deadlineMs: 30, settleMs: 1_000 })),
+      );
+      await w.end();
+      expect(error.message).toContain("deadline");
+      expect(error.message).not.toContain("scratch folder not removed");
+      expect((await receipt()).teardown.at(-1)).toEqual({ step: "remove-scratch", outcome: "ok" });
+      expect(await exists(root())).toBe(false);
+    });
+  });
+
+  it("records remove-scratch as failed when the root is back after the removal", async () => {
+    const removeDir = vi.fn(async (path: string) => {
+      await rm(path, { recursive: true, force: true });
+      await mkdir(path);
+    });
+    const error = await rejection(
+      withAwsRehearsal(
+        async (ctx) => {
+          await ctx.scratch("loop");
+        },
+        deps({}, { removeDir }),
+      ),
+    );
+    expect(error.message).toContain(`scratch folder not removed: ${root()}`);
+    expect((await receipt()).teardown.at(-1)).toEqual({
+      step: "remove-scratch",
+      outcome: "failed",
+      errorName: "ScratchRecreated",
+      httpStatus: null,
+    });
+  });
+
+  it("names the root on the top line when a scenario failure and a removal failure combine", async () => {
+    const removeDir = vi.fn(async () => {
+      throw new Error("permission denied");
+    });
+    const error = await rejection(
+      withAwsRehearsal(
+        async (ctx) => {
+          await ctx.scratch("loop");
+          throw new Error("scenario broke");
+        },
+        deps({}, { removeDir }),
+      ),
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.message.split("\n")[0]).toContain(`scratch folder not removed: ${root()}`);
+  });
+
+  it("names the root on the top line when a print failure and a removal failure combine", async () => {
+    const removeDir = vi.fn(async () => {
+      throw new Error("permission denied");
+    });
+    const error = await rejection(
+      withAwsRehearsal(
+        async (ctx) => {
+          await ctx.scratch("loop");
+        },
+        deps(
+          {},
+          {
+            removeDir,
+            print: () => {
+              throw new Error("stdout closed");
+            },
+          },
+        ),
+      ),
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.message).toContain(`scratch folder not removed: ${root()}`);
+  });
+
+  it("names the root on the top line when the receipt is not written and the removal fails", async () => {
+    const removeDir = vi.fn(async () => {
+      throw new Error("permission denied");
+    });
+    // A file where the receipt folder should be, so writing the receipt fails.
+    await writeFile(receiptDir, "not a folder");
+    const error = await rejection(
+      withAwsRehearsal(
+        async (ctx) => {
+          await ctx.scratch("loop");
+        },
+        deps({}, { removeDir }),
+      ),
+    );
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.message).toContain("receipt was not written");
+    expect(error.message).toContain(`scratch folder not removed: ${root()}`);
   });
 });

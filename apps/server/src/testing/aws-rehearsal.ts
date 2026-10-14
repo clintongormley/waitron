@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -1098,6 +1098,8 @@ interface DeadlineOptions {
   outside: AbortSignal | undefined;
   now(): number;
   record(event: unknown): void;
+  /** Called when `body` was still running at the end of the settle wait. */
+  unsettled?(): void;
 }
 
 /**
@@ -1151,6 +1153,7 @@ async function runWithDeadline<T>(body: () => Promise<T>, options: DeadlineOptio
         elapsedMs: Math.max(0, now() - settleStarted),
         outcome: settled ? "ok" : "failed",
       });
+      if (!settled) options.unsettled?.();
     }
   }
 }
@@ -1383,6 +1386,7 @@ async function runOwned<T>(
   let failure: unknown;
   let result: T | undefined;
   let teardown: TeardownResult | undefined;
+  let scenarioStillRunning = false;
   await requests.scope.run(async () => {
     try {
       result = await runWithDeadline(setUpAndRun, {
@@ -1392,6 +1396,9 @@ async function runOwned<T>(
         outside: deps.signal,
         now: deps.now,
         record,
+        unsettled: () => {
+          scenarioStillRunning = true;
+        },
       });
     } catch (error) {
       failure = error;
@@ -1414,11 +1421,18 @@ async function runOwned<T>(
   const scratchEntries: TeardownEntry[] = [];
   if (created?.state === "owned" || scratchMade) {
     await Promise.all(scratchMaking);
-    const entry = await removeScratch(scratchMade, scratchRoot, deps.removeDir);
+    const entry = await removeScratch(
+      scratchMade,
+      scratchRoot,
+      deps.removeDir,
+      scenarioStillRunning,
+    );
     contained.teardown(entry);
     scratchEntries.push(entry);
   }
-  const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed");
+  const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed")
+    ? `; scratch folder not removed: ${scratchRoot}`
+    : "";
   const ownership: CreateOutcome = created ?? {
     state: "unowned-candidate",
     bucket: null,
@@ -1462,7 +1476,7 @@ async function runOwned<T>(
       ? undefined
       : new AwsRehearsalFailed(
           `teardown failed at ${failed}` +
-            (scratchLeft ? `; scratch folder not removed: ${scratchRoot}` : "") +
+            scratchLeft +
             (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
   const problems = [
@@ -1480,14 +1494,14 @@ async function runOwned<T>(
     throw new AggregateError(
       [...problems, receiptFailure],
       `the rehearsal's receipt was not written; bucket left: ${left}; ` +
-        `failed teardown steps: ${failed}`,
+        `failed teardown steps: ${failed}${scratchLeft}`,
     );
   }
   if (printFailure !== undefined) {
     if (problems.length === 0) throw printFailure;
     throw new AggregateError(
       [...problems, printFailure],
-      `the rehearsal failed; receipt: ${receiptPath}`,
+      `the rehearsal failed${scratchLeft}; receipt: ${receiptPath}`,
     );
   }
   if (problems.length === 1) throw problems[0];
@@ -1496,24 +1510,38 @@ async function runOwned<T>(
       problems,
       teardownFailure === undefined
         ? `the rehearsal failed; receipt: ${receiptPath}`
-        : `the rehearsal failed and so did its teardown; receipt: ${receiptPath}`,
+        : `the rehearsal failed and so did its teardown${scratchLeft}; receipt: ${receiptPath}`,
     );
   }
   return result as T;
 }
 
+/** `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this. */
 async function removeScratch(
   made: boolean,
   root: string,
   removeDir: AwsRehearsalDeps["removeDir"],
+  stillRunning: boolean,
 ): Promise<TeardownEntry> {
   if (!made) return { step: "remove-scratch", outcome: "skipped" };
   try {
     await removeDir(root);
-    return { step: "remove-scratch", outcome: "ok" };
   } catch (error) {
     return failedEntry("remove-scratch", error);
   }
+  const back = await access(root).then(
+    () => true,
+    () => false,
+  );
+  if (stillRunning || back) {
+    return {
+      step: "remove-scratch",
+      outcome: "failed",
+      errorName: stillRunning ? "ScenarioStillRunning" : "ScratchRecreated",
+      httpStatus: null,
+    };
+  }
+  return { step: "remove-scratch", outcome: "ok" };
 }
 
 /**
