@@ -1779,6 +1779,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Design](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
 
+- **A665 — A screen reader no longer hears what an emptied name field goes back to (2026-10-14;
+  owner to decide).** Since A643 (#1692) and A658 (#1698) the till's party Name window and floor
+  Rename window show that name (the table list, or the group's normal name) only as the empty
+  field's placeholder, with no hint, so once a name is typed nothing tells a screen reader what
+  clearing it restores. The owner approved removing the hint; decide whether the field should carry
+  that name some other way. Minor, same files: the comment above `fitPlaceholder`
+  (`apps/till/src/widgets/fit-placeholder.ts`) says whole names are kept "where one fits", looser
+  than what it does at the edge.
+
 - **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
   (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a
   Burger nobody had sent, into Mesa 43's party): the move queued an ordinary kitchen ticket and the
