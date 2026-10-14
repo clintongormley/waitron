@@ -4286,12 +4286,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
   by its review.
 
-- **A backup that fails before reaching any destination tells the owner nothing about why.** When
-  a run stops early, for example on `backup.staging_space_low` or `recovery.state_incomplete`, it is
-  only logged as `backup.failed` with its code. No
-  destination records an outcome and no alert names the cause; what the owner sees is
-  `backup.destination_overdue`, once the last archive is old enough. Left open by A538-3.
-
 - **A destination holding only old-format archive names reads as never backed up.** Since A538-3a
   the status counts only names `parseBackupArchiveKey` reads. Left open by A538-3.
 

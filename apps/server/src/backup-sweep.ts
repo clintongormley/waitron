@@ -293,8 +293,16 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
 async function tick(deps: BackupSweepDeps): Promise<void> {
   try {
     await runOnce(deps);
+    // `runOnce` returns only after every destination call has settled and recorded its own outcome.
+    if (deps.outcomes) delete deps.outcomes.runStopped;
   } catch (err) {
     if (deps.signal.aborted) return;
-    deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
+    const errorCode = codeOf(err);
+    deps.log("warn", "backup.failed", { errorCode });
+    if (deps.outcomes)
+      deps.outcomes.runStopped = {
+        code: errorCode,
+        at: (deps.now ?? (() => new Date()))().toISOString(),
+      };
   }
 }

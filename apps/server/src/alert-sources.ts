@@ -135,6 +135,9 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
  * a restart until the next sweep tick. */
 export interface BackupOutcomeHolder {
   failed: Map<string, { at: string }>;
+  /** Set while the most recent backup run stopped before any destination call; `code` is the error
+   * code it stopped on. In memory only, like `failed`. */
+  runStopped?: { code: string; at: string };
 }
 
 export function recordBackupOutcome(
@@ -187,6 +190,17 @@ export function backupAlertSource(deps: {
           });
         }
         return alerts;
+      }
+      const stopped = deps.outcomes.runStopped;
+      if (stopped) {
+        alerts.push({
+          key: "backup.run_stopped",
+          code: "backup.run_stopped",
+          params: { reason: stopped.code },
+          severity: "error",
+          since: stopped.at,
+          screen: BACKUP_SCREEN,
+        });
       }
       for (const d of status.destinations) {
         if (d.stale) {

@@ -259,6 +259,48 @@ describe("backupAlertSource", () => {
   });
 });
 
+describe("backupAlertSource and a run that stopped before any destination", () => {
+  const configured: BackupStatus = {
+    configured: true,
+    destinations: [
+      {
+        id: "local",
+        lastBackupAt: NOW.toISOString(),
+        ageSeconds: 5,
+        stale: false,
+        readErrorCode: null,
+      },
+    ],
+  };
+  const stopped = (): BackupOutcomeHolder => ({
+    failed: new Map(),
+    runStopped: { code: "backup.staging_space_low", at: "2026-09-15T11:58:00Z" },
+  });
+
+  it("raises backup.run_stopped naming the code the run stopped on", async () => {
+    expect(await src(configured, stopped()).read(ctx)).toEqual([
+      {
+        key: "backup.run_stopped",
+        code: "backup.run_stopped",
+        params: { reason: "backup.staging_space_low" },
+        severity: "error",
+        since: "2026-09-15T11:58:00Z",
+        screen: "backup",
+      },
+    ]);
+  });
+
+  it("raises no backup.run_stopped while backups are not configured", async () => {
+    const alerts = await src({ configured: false }, stopped()).read(ctx);
+    expect(alerts.map((a) => a.code)).not.toContain("backup.run_stopped");
+  });
+
+  it("raises no backup.run_stopped when the last run did not stop early", async () => {
+    const alerts = await src(configured, { failed: new Map() }).read(ctx);
+    expect(alerts.map((a) => a.code)).not.toContain("backup.run_stopped");
+  });
+});
+
 describe("backupAlertSource and the bucket copy", () => {
   const none = { failed: new Map() };
   const configured: BackupStatus = { configured: true, destinations: [] };
