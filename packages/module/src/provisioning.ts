@@ -72,8 +72,8 @@ export interface StandbyProvisioning {
 
 /** A module's own preproduction-only allocation, for a venue set up with none supplied. */
 export interface ThrowawayAllocation {
-  /** Refuses (`sif.throwaway_allocation_refused`) when `environments` is empty or names
-   * "production", before any key is made. */
+  /** Refuses, with the implementing module's own code, unless `environments` is non-empty and
+   * every entry is exactly "preproduction", before any key is made. */
   prepare(request: {
     /** Every environment the venue is known by; all must be preproduction. */
     readonly environments: readonly ("production" | "preproduction")[];

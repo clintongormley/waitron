@@ -233,6 +233,41 @@ describe("the throwaway allocation seat", () => {
       expect(keys).toBe(0);
     });
 
+    it.each([
+      [["Production"], "Production"],
+      [[undefined], "undefined"],
+      [["dev"], "dev"],
+      [[""], ""],
+      [["preproduction", "dev"], "dev"],
+      [[Object.create(null)], "object"],
+    ] as const)(
+      "refuses %j, which is not exactly preproduction, before making a key",
+      (environments, reported) => {
+        let keys = 0;
+        const counted = createThrowawayAllocation({
+          generateKey: () => {
+            keys += 1;
+            return generateKeyPairSync("ed25519");
+          },
+        });
+        expect(() =>
+          counted.prepare({
+            environments: environments as unknown as readonly "preproduction"[],
+            taxpayerNif: TAXPAYER,
+            bases,
+            nodeId: node.nodeId,
+            administratorId: randomUUID(),
+          }),
+        ).toThrow(
+          expect.objectContaining({
+            code: "sif.throwaway_allocation_refused",
+            params: { environment: reported },
+          }),
+        );
+        expect(keys).toBe(0);
+      },
+    );
+
     it("the seat refuses production too", () => {
       expect(() => prepareFor(["production"])).toThrow(
         expect.objectContaining({ code: "sif.throwaway_allocation_refused" }),

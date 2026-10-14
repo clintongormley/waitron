@@ -17,6 +17,14 @@ const RECIPIENT_VENUE_ID = "throwaway-preproduction";
 const SOURCE_ID = "throwaway-preproduction";
 const INCIDENT_EVIDENCE = "throwaway-preproduction-allocation";
 
+function describeEnvironment(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return typeof value;
+  }
+}
+
 const throwawayId = () => `throwaway-${randomUUID()}`;
 
 export interface ThrowawayAllocationOptions {
@@ -32,8 +40,11 @@ export function createThrowawayAllocation(
     prepare({ environments, taxpayerNif, bases, nodeId, administratorId }) {
       if (environments.length === 0)
         throw new AppError("sif.throwaway_allocation_refused", { environment: "none" });
-      if (environments.includes("production"))
-        throw new AppError("sif.throwaway_allocation_refused", { environment: "production" });
+      const refused = environments.findIndex((environment) => environment !== "preproduction");
+      if (refused !== -1)
+        throw new AppError("sif.throwaway_allocation_refused", {
+          environment: describeEnvironment(environments[refused]),
+        });
 
       const keys = generateKey();
       const publicPem = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
