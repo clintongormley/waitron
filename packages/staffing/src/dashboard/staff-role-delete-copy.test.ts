@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { staffRoleDeleteCopy } from "./staff-role-delete-copy.js";
+import { STAFFING_STRINGS } from "./strings.js";
 
 const before = currentLocale();
 afterEach(() => setLocale(before));
@@ -30,7 +31,8 @@ it.each([
     [
       "Eliminar rol de personal",
       "Por qué no se puede eliminar",
-      "Trabajo que termina",
+      // Read from the catalogue: its words for work and a shift are on the English-only list.
+      STAFFING_STRINGS.es["staffing.role.delete_ends"],
       "Ajustes eliminados",
       "Esta acción no se puede deshacer.",
       "Cancelar",
@@ -84,7 +86,11 @@ it.each([
 
 it.each([
   ["en", "1 shift uses this staff role.", "3 shifts use this staff role."],
-  ["es", "1 turno usa este rol de personal.", "3 turnos usan este rol de personal."],
+  [
+    "es",
+    STAFFING_STRINGS.es["staffing.role.delete_shifts_one"],
+    STAFFING_STRINGS.es["staffing.role.delete_shifts_other"].replace("{count}", "3"),
+  ],
 ] as const)("says how many shifts use the role in %s", (locale, one, several) => {
   setLocale(locale);
   const { refusal } = staffRoleDeleteCopy();
