@@ -42,7 +42,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   const stop = new AbortController();
   const running = new Set<Promise<unknown>>();
 
-  /** Starts a scenario that teardown waits for, so a timed-out one never outlives the server. */
+  /** Starts a scenario that teardown waits for, up to ABORT_SETTLE_MS, before it stops the server. */
   function started<T>(scenario: Promise<T>): Promise<T> {
     running.add(scenario);
     return scenario;

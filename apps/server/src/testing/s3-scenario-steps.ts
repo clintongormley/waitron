@@ -53,7 +53,8 @@ export function scenarioSteps(
     },
     /**
      * Runs `run`; anything it throws, a failed `expect` included, is recorded as phase `name` failing
-     * and thrown on. A step records no "ok" itself: `run` ends with `phase(name, ...)` for that.
+     * and thrown on. A step records no "ok" itself; a step whose success belongs in the receipt ends `run` with
+     * `phase(name, ...)`.
      */
     async step<T>(name: string, run: () => T | Promise<T>): Promise<T> {
       try {

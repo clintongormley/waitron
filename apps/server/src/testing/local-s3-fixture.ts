@@ -22,8 +22,8 @@ export interface LocalS3Fixture {
 
 /**
  * A scenario fixture over a local S3 server, with the AWS rehearsal's own budget (`fixtureBudget`)
- * and its refusals of a prefix and an upload id, so a scenario the rehearsal would refuse fails here
- * first.
+ * and its refusals of an unissued prefix and of an upload id the receipt could not carry, so a
+ * scenario that breaks one of those fails here first.
  */
 export function localS3Fixture(opts: {
   bucket: BucketConfig;

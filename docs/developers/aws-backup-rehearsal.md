@@ -285,15 +285,13 @@ path below one, and refuses any other prefix.
 `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
 2026-10-14 on a Mac with versitygw 1.8.0
 (`WAITRON_REQUIRE_STREAM_BINARIES=1 pnpm --filter @waitron/server exec vitest run src/s3-rehearsal-scenarios.e2e.test.ts`),
-all 8 cases passed. The requests each scenario recorded were: delete-many,
+all 6 cases passed. The requests each scenario recorded were: delete-many,
 1,005 PutObject, 3 ListObjectsV2 and 2 DeleteObjects, all 200; the round trip, 1
 CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 and 1 GetObject, all
 200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1
-AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does. One of
-those 8, the delete-many scenario's refusal of a 1,006th object, has since moved to
-`apps/server/src/testing/s3-delete-scenario.test.ts`, which needs no server, and so has its failing
-first listing, so the file now holds 6. Run again the same day after that move, the same command
-passed all 6, and the scenarios sent the same requests and got the same answers.
+AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does. The
+delete-many scenario's refusal of a 1,006th object and its failing first listing are checked without
+a server, in `apps/server/src/testing/s3-delete-scenario.test.ts`.
 
 ## When teardown fails: the cleanup command
 

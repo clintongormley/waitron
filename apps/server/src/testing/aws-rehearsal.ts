@@ -63,8 +63,6 @@ import {
 } from "./aws-rehearsal-receipt.js";
 import { fixtureBudget } from "./fixture-budget.js";
 import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
-
-export type { TrackedUpload };
 import { settleWithin } from "./settle-within.js";
 
 export type AwsRehearsalRefusalReason =
