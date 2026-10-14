@@ -26,7 +26,9 @@ export type AwsRehearsalRefusalReason =
   | "run-id-unsupported"
   | "policy-refused"
   | "plan-refused"
-  | "request-unplanned";
+  | "request-unplanned"
+  | "journal-refused"
+  | "journal-unwritable";
 
 /** Its message names a rule and a variable or key, or a rehearsal bucket's name; never another value read from the environment or a file. */
 export class AwsRehearsalRefused extends Error {

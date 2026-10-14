@@ -66,6 +66,13 @@ import { fixtureBudget } from "./fixture-budget.js";
 import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
+import {
+  type JournalPid,
+  type JournalState,
+  processStartTime,
+  type RehearsalJournal,
+  writeJournal,
+} from "./aws-rehearsal-journal.js";
 import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
 import {
   currentRequestScope,
@@ -296,6 +303,12 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   /** The folder a run's scratch root is made in. */
   scratchBase: string;
   removeDir(path: string): Promise<void>;
+  /** Writes the journal synchronously; it is in the file when this returns. */
+  journal(receiptDir: string, journal: RehearsalJournal): void;
+  /** A pid's start time as `ps -o lstart=` prints it, or null when it cannot be read. */
+  processStartTime(pid: number): string | null;
+  /** A local S3 endpoint, for proofs only; never read from the environment. */
+  endpoint?: string;
 }
 
 export interface TeardownTarget {
@@ -705,8 +718,8 @@ export async function teardownOwnedBucket(
 }
 
 /**
- * Refuses, before any command, a run whose receipt or cleanup receipt could not carry a cleanup
- * command; the cleanup receipt's name is the longer of the two.
+ * Refuses, before any command, a run whose run, cleanup or interrupted receipt could not carry a
+ * cleanup command; the interrupted receipt's name is the longest.
  */
 function assertCleanupCommandFits(region: string, runId: string, receiptDir: string): void {
   if (!isReceiptRegion(region)) {
@@ -715,13 +728,13 @@ function assertCleanupCommandFits(region: string, runId: string, receiptDir: str
       "AWS_REGION must look like eu-north-1 for the cleanup command to carry it",
     );
   }
-  if (!isReceiptToken(runId) || !isReceiptToken(`${runId}-cleanup`)) {
+  if (!isReceiptToken(runId) || !isReceiptToken(`${runId}-interrupted`)) {
     throw new AwsRehearsalRefused(
       "run-id-unsupported",
-      "the run id must be a token of at most 56 characters for the cleanup receipt's name",
+      "the run id must be a token of at most 52 characters for the interrupted receipt's name",
     );
   }
-  for (const kind of ["run", "cleanup"] as const) {
+  for (const kind of ["run", "cleanup", "interrupted"] as const) {
     const command = cleanupCommandFor(region, join(receiptDir, receiptFileName(runId, kind)));
     const tooLong = command.length > CLEANUP_COMMAND_MAX;
     if (!isReceiptCleanupCommand(command)) {
@@ -788,6 +801,8 @@ function defaultDeps(env: Env): AwsRehearsalDeps {
     print: (line) => process.stdout.write(`${line}\n`),
     scratchBase: tmpdir(),
     removeDir: (path) => rm(path, { recursive: true, force: true }),
+    journal: writeJournal,
+    processStartTime,
   };
 }
 
@@ -1174,14 +1189,12 @@ async function runOwned<T>(
   }
   assertCleanupCommandFits(region, runId, receiptDir);
   const receiptPath = join(receiptDir, receiptFileName(runId));
-  const log = createReceiptLog(
-    receiptHeader(deps, runId, region, {
-      ...AWS_REHEARSAL_LIMITS,
-      deadlineMs: deps.deadlineMs,
-      teardownMs: deps.teardownMs,
-    }),
-    profile,
-  );
+  const header = receiptHeader(deps, runId, region, {
+    ...AWS_REHEARSAL_LIMITS,
+    deadlineMs: deps.deadlineMs,
+    teardownMs: deps.teardownMs,
+  });
+  const log = createReceiptLog(header, profile);
   const contained = containedLog(log);
   const { record } = contained;
   const callDeps = { now: deps.now, record };
@@ -1209,6 +1222,53 @@ async function runOwned<T>(
   const scratchLabels = new Set<string>();
   const scratchMaking: Promise<unknown>[] = [];
   let scratchMade = false;
+
+  const journalPids: JournalPid[] = [];
+  let journalState: JournalState = "creating";
+  let journalScratch: string | null = null;
+  let journalFailures = 0;
+  const journalNow = (): RehearsalJournal => ({
+    version: 1,
+    runId,
+    region,
+    bucket,
+    state: journalState,
+    uploads: uploads.map((upload) => ({ ...upload })),
+    pids: journalPids.map((entry) => ({ ...entry })),
+    scratchRoot: journalScratch,
+    receiptDir,
+    header: {
+      commit: header.commit,
+      node: header.node,
+      sdkVersion: header.sdkVersion,
+      litestreamVersion: header.litestreamVersion,
+      startedAt: header.startedAt,
+      limits: header.limits,
+    },
+    teardownMs: deps.teardownMs,
+    keeperCeilingMs: 2 * (deps.deadlineMs + deps.settleMs + deps.teardownMs),
+    ...(deps.endpoint === undefined ? {} : { endpoint: deps.endpoint }),
+    keeperPid: null,
+    ready: null,
+  });
+  // Once a bucket may exist a failed write fails the run, but never stops it or its teardown.
+  const journal = (state: JournalState = journalState): void => {
+    journalState = state;
+    try {
+      deps.journal(receiptDir, journalNow());
+    } catch {
+      journalFailures += 1;
+      record({ scenario: "lifecycle", phase: "journal", outcome: "failed" });
+    }
+  };
+  try {
+    deps.journal(receiptDir, journalNow());
+  } catch {
+    throw new AwsRehearsalRefused(
+      "journal-unwritable",
+      "the journal could not be written in the receipt folder; nothing was created",
+    );
+  }
   const requests = runScope(
     createRequestPlan({ bucket, apis, prefixes: () => issued }),
     record,
@@ -1234,6 +1294,10 @@ async function runOwned<T>(
         throw new AwsRehearsalRefused("label-refused", "a scratch label is new and a token");
       }
       scratchLabels.add(label);
+      if (journalScratch === null) {
+        journalScratch = scratchRoot;
+        journal();
+      }
       scratchMade = true;
       const folder = join(scratchRoot, label);
       const making = mkdir(scratchRoot, { recursive: true }).then(() => mkdir(folder));
@@ -1260,7 +1324,9 @@ async function runOwned<T>(
       if (!Number.isSafeInteger(pid) || pid <= 0) {
         throw new AwsRehearsalRefused("child-pid-refused", "a child pid is a positive integer");
       }
+      journalPids.push({ pid, startTime: deps.processStartTime(pid) });
       pids.push(pid);
+      journal();
     },
     trackUpload(key, uploadId) {
       refuseOnceTearingDown();
@@ -1270,7 +1336,14 @@ async function runOwned<T>(
           "an upload id the receipt could not carry is not tracked",
         );
       }
+      if (carriesKeyPair(key, profile)) {
+        throw new AwsRehearsalRefused(
+          "upload-id-refused",
+          "an upload key the journal could not carry is not tracked",
+        );
+      }
       uploads.push({ key, uploadId });
+      journal();
     },
     async ownedUploads(prefix) {
       refuseOnceTearingDown();
@@ -1340,6 +1413,7 @@ async function runOwned<T>(
   const setUpAndRun = async (): Promise<T> => {
     if (signal.aborted) {
       created = { state: "not-created", bucket: null };
+      journal("not-created");
       throw new AwsRehearsalFailed("the rehearsal was stopped before it created a bucket");
     }
     const answer = await call(
@@ -1355,6 +1429,8 @@ async function runOwned<T>(
       signal,
     );
     created = classifyCreate(bucket, answer.error);
+    // An unanswered create stays `creating`: the bucket may exist.
+    if (created.state !== "unowned-candidate") journal(created.state);
     if (created.state !== "owned") throw createFailure(created, bucket);
     stopIfStopped();
     const nonce = ownershipNonce(runId);
@@ -1414,6 +1490,11 @@ async function runOwned<T>(
         },
       );
       for (const entry of teardown.entries) contained.teardown(entry);
+      if (
+        teardown.entries.some((entry) => entry.step === "delete-bucket" && entry.outcome === "ok")
+      ) {
+        journal("deleted");
+      }
     }
   });
   tearingDown = true;
@@ -1469,6 +1550,16 @@ async function runOwned<T>(
       printFailure = error;
     }
   }
+  let finishFailure: AwsRehearsalFailed | undefined;
+  if (receiptFailure === undefined) {
+    // Written last, so a keeper that reads it knows the receipt exists.
+    journalState = "finished";
+    try {
+      deps.journal(receiptDir, journalNow());
+    } catch {
+      finishFailure = new AwsRehearsalFailed("the journal was not marked finished");
+    }
+  }
   const refusals = requests.close();
 
   const teardownFailure =
@@ -1483,7 +1574,13 @@ async function runOwned<T>(
     failure,
     unplannedFailure(refusals),
     refusedEntriesFailure(contained.refused()),
+    journalFailures === 0
+      ? undefined
+      : new AwsRehearsalFailed(
+          `${journalFailures} journal write${journalFailures === 1 ? "" : "s"} failed, so the journal may not have named everything this run made`,
+        ),
     teardownFailure,
+    finishFailure,
   ].filter((error) => error !== undefined);
   if (receiptFailure !== undefined) {
     const left =

@@ -456,9 +456,12 @@ export function createReceiptLog(
   };
 }
 
-/** The file name a run's receipt, or a cleanup's, takes in its folder. */
-export function receiptFileName(runId: string, kind: "run" | "cleanup" = "run"): string {
-  return `aws-rehearsal-${token(runId, "header.runId")}${kind === "cleanup" ? "-cleanup" : ""}.json`;
+/** The file name a run's receipt, a cleanup's or a keeper's after an interrupt, takes in its folder. */
+export function receiptFileName(
+  runId: string,
+  kind: "run" | "cleanup" | "interrupted" = "run",
+): string {
+  return `aws-rehearsal-${token(runId, "header.runId")}${kind === "run" ? "" : `-${kind}`}.json`;
 }
 
 export async function writeReceipt(
