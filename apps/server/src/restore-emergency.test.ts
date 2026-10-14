@@ -183,6 +183,9 @@ it.each(["archive", "stream"] as const)(
       const retained = await readFile(join(outside, names[0]!), "utf8");
       expect(JSON.parse(retained).allocation).toEqual(rows[0]?.allocation);
       expect(retained).not.toContain(nodeKey);
+      const readable = await readFile(join(outside, `${names[0]!}.txt`), "utf8");
+      expect(readable).not.toContain(nodeKey);
+      expect(readable).not.toContain(encryptionKey);
     } finally {
       await copy.close();
     }

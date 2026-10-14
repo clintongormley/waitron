@@ -151,8 +151,8 @@ migrations and assets over the existing `waitron:dev` runtime (Node 26.8.1), as 
 `--network none`. Paper and emergency CLI restores exited 0. Both staged restores reached
 `server.listening`; their placed databases kept the same node/location and held the fresh
 identity with all three series at number 1. The emergency JSON and readable copy matched the
-stored allocation and source, retained the returned attempt and contained neither archive nor
-node key. Missing outside configuration, a read-only incident directory and a wrong paper
+stored allocation and source and retained the returned attempt. Separate staged-restore tests
+check that neither key appears in the readable copy. Missing outside configuration, a read-only incident directory and a wrong paper
 fingerprint each exited 1 without publishing trading settings. The documented Compose override
 was resolved with `docker compose config --format json` and checked for its two mount modes and
 unchanged state-volume name.
