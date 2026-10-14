@@ -16,6 +16,7 @@ class StationEditorLeaveApp extends LitElement {
           colour: "orange",
           active: true,
           showsRestOfOrder: false,
+          printMovedSlips: null,
           printerIds: ["epson"],
           timingOverrides: {
             warmAfterMinutes: null,
@@ -230,5 +231,23 @@ it("a changed colour counts as unsaved, and picking the opened colour again does
   expect(unload()).toBe(false);
   expect(save(el).variant).toBe("secondary");
   expect(save(el).disabled).toBe(true);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});
+
+it("a changed MOVED slips choice asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const pickMoved = async (value: string) => {
+    el.shadowRoot!.querySelector("wt-combobox[name=printMovedSlips]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await el.updateComplete;
+  };
+  await pickMoved("dont-print");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickMoved("venue");
+  expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });

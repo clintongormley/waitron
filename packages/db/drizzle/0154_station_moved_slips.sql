@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_stations` ADD `print_moved_slips` integer;

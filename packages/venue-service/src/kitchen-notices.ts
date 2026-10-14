@@ -328,7 +328,7 @@ export async function writePrintHeldWork(tx: Transaction, value: boolean): Promi
     .onConflictDoUpdate({ target: serviceSettings.id, set: { printHeldWork: value } });
 }
 
-/** Whether food the kitchen already has prints a MOVED slip when it moves. No row reads ON. */
+/** The venue's MOVED slips choice, which a prep station left as the venue follows. No row reads ON. */
 export async function readPrintMovedSlips(tx: Transaction): Promise<boolean> {
   const [row] = await tx
     .select({ printMovedSlips: serviceSettings.printMovedSlips })

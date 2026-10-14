@@ -35,6 +35,8 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
+  /** Null follows the venue-wide MOVED slips choice. */
+  printMovedSlips: boolean | null;
   colour: StationColour;
   timingDefaults: StationThresholds;
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
@@ -132,6 +134,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
+      printMovedSlips: kitchenStations.printMovedSlips,
       colour: kitchenStations.colour,
       warmAfterMinutes: kitchenStationTiming.warmAfterMinutes,
       overdueAfterMinutes: kitchenStationTiming.overdueAfterMinutes,
@@ -198,6 +201,7 @@ export async function updateStation(
     name?: string;
     displayOrder?: number;
     showsRestOfOrder?: boolean;
+    printMovedSlips?: boolean | null;
     colour?: StationColour;
     printerIds?: readonly string[];
   } & StationTimingPatch,

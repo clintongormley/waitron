@@ -2333,6 +2333,17 @@ describe("the print-moved-slips setting", () => {
     expect(await stored(fx)).toBe(true);
   });
 
+  it("the routing view carries the venue's value, so the Edit station window can name it", async () => {
+    const fx = await fixture();
+    const routing = "/management-api/venue-service/routing";
+    expect(await stored(fx, routing)).toBe(true);
+    expect(
+      (await send(fx.app, "PUT", PRINT_MOVED_SLIPS, fx.managerCookie, { printMovedSlips: false }))
+        .status,
+    ).toBe(204);
+    expect(await stored(fx, routing)).toBe(false);
+  });
+
   it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
     const fx = await fixture();
     expect(

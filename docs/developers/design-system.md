@@ -2240,7 +2240,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order and a station's three late-flag minutes are edited in the station editor. Routing
+Rest-of-order, MOVED slips and a station's three late-flag minutes are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -3666,7 +3666,9 @@ product, an extra once per sentence — and the full list under a closed "Show p
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
 moves nothing, saves at once. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
-late-flag minutes (Warm after, Overdue after and Forgotten after) and "Show the rest of the order".
+late-flag minutes (Warm after, Overdue after and Forgotten after), "Show the rest of the order" and MOVED
+slips — As the venue (naming the venue's current choice), Print or Don't print; choosing As the venue
+again sends null.
 Save sends only what changed, in one request. A minutes field left blank follows the venue's
 Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
 follows the default again. Save first checks that each filled minutes field is a whole number from

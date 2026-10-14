@@ -46,6 +46,7 @@ const model: RoutingView = {
     { id: "bar", name: "Bar", active: true, colour: "blue" },
   ],
   canMakeDefault: true,
+  printMovedSlips: true,
 };
 
 it("does not search again when an editor opens or a choice is waiting, and does when a category opens during the search", async () => {

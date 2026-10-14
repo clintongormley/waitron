@@ -1034,6 +1034,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
+      printMovedSlips: boolean | null;
       colour: string;
     }[]
   > {
@@ -1044,6 +1045,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
+      printMovedSlips: boolean | null;
       colour: string;
     }[];
   }
@@ -1720,6 +1722,64 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
       showsRestOfOrder: false,
+    });
+  });
+
+  it("lists a new station following the venue for MOVED slips", async () => {
+    const id = await createStation(unique("Moved default"));
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      printMovedSlips: null,
+    });
+  });
+
+  it("PATCH saves a station's MOVED slips choice as print, don't print or as the venue", async () => {
+    const id = await createStation(unique("Moved choice"));
+    for (const printMovedSlips of [true, false, null]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ printMovedSlips }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(204);
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        printMovedSlips,
+      });
+    }
+  });
+
+  it("PATCH refuses a MOVED slips choice that is not true, false or null", async () => {
+    const id = await createStation(unique("Moved invalid"));
+    await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ printMovedSlips: false }) },
+      managerCookie,
+    );
+    const response = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ printMovedSlips: "yes" }) },
+      managerCookie,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "printMovedSlips" },
+      },
+    });
+    const numeric = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ printMovedSlips: 1 }) },
+      managerCookie,
+    );
+    expect(numeric.status).toBe(400);
+    expect(await numeric.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "printMovedSlips" },
+      },
+    });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      printMovedSlips: false,
     });
   });
 

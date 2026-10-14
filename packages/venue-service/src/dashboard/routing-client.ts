@@ -31,6 +31,8 @@ export interface PrepStation {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   showsRestOfOrder: boolean;
+  /** Null follows the venue's choice. */
+  printMovedSlips: boolean | null;
   colour: StationColour;
   timingDefaults: StationThresholds;
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
@@ -119,7 +121,7 @@ export class PrepStationsApi {
     id: string,
     input: Partial<
       Pick<StationInput, "name" | "displayOrder" | "colour"> &
-        Pick<PrepStation, "showsRestOfOrder"> & {
+        Pick<PrepStation, "showsRestOfOrder" | "printMovedSlips"> & {
           [Field in keyof StationThresholds]: number | null;
         } & {
           /** Needs `printer.manage` as well, and an active station. */

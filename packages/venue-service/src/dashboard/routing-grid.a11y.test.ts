@@ -54,6 +54,7 @@ function routing(overrides: Partial<RoutingView> = {}): RoutingView {
       { id: "old", name: "Old kitchen", active: false, colour: "brown" },
     ],
     canMakeDefault: true,
+    printMovedSlips: true,
     ...overrides,
   };
 }

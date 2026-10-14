@@ -233,3 +233,8 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
   periods" is read as each time the page opens: the choice is the grid's own state, never written to
   the address or to storage. Mockups:
   [mockups/a584-station-colours/](mockups/a584-station-colours/).
+
+- **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
+  (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and
+  a station's own MOVED slips choice decide paper only. Plan:
+  [2026-10-14-a650-moved-slips-design.md](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.

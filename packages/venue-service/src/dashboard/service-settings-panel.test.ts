@@ -526,7 +526,7 @@ describe("the setting that prints MOVED slips", () => {
     expect(
       on.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
     ).toBe(
-      "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where.",
+      "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where. A prep station can be set to differ.",
     );
     const names = [...on.shadowRoot!.querySelectorAll('[data-test="kitchen-changes"] [name]')].map(
       (control) => control.getAttribute("name"),
@@ -626,7 +626,7 @@ describe("the setting that prints MOVED slips", () => {
     expect(
       el.shadowRoot!.querySelector('[data-test="print-moved-slips-hint"]')!.textContent!.trim(),
     ).toBe(
-      "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde.",
+      "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte.",
     );
   });
 });

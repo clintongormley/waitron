@@ -29,6 +29,8 @@ export interface StationEditorStation {
   colour: StationColour;
   active: boolean;
   showsRestOfOrder: boolean;
+  /** Null follows the venue's choice. */
+  printMovedSlips: boolean | null;
   printerIds: readonly string[];
   /** A null timing follows the venue default. */
   timingOverrides: { [K in TimingField]: number | null };
@@ -45,6 +47,7 @@ export type StationEditorSave = {
   colour?: StationColour;
   printerIds?: string[];
   showsRestOfOrder?: boolean;
+  printMovedSlips?: boolean | null;
 } & { [K in TimingField]?: number | null };
 
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
@@ -63,6 +66,7 @@ type Draft = {
   colour: StationColour;
   printerIds: string[];
   showsRestOfOrder: boolean;
+  printMovedSlips: boolean | null;
 } & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
@@ -93,6 +97,7 @@ const equal = (a: Draft, b: Draft) =>
   a.name.trim() === b.name.trim() &&
   a.colour === b.colour &&
   a.showsRestOfOrder === b.showsRestOfOrder &&
+  a.printMovedSlips === b.printMovedSlips &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
@@ -187,6 +192,22 @@ function refusalText(refusal: Refusal): string {
   }
 }
 
+const movedChoice = (value: boolean | null) =>
+  value === null ? "venue" : value ? "print" : "dont-print";
+const movedValue = (choice: string) =>
+  choice === "print" ? true : choice === "dont-print" ? false : null;
+
+function movedOptions(venuePrints: boolean) {
+  return [
+    {
+      value: "venue",
+      label: t(venuePrints ? "prep.moved_slips_venue_print" : "prep.moved_slips_venue_dont_print"),
+    },
+    { value: "print", label: t("prep.moved_slips_print") },
+    { value: "dont-print", label: t("prep.moved_slips_dont_print") },
+  ];
+}
+
 function timingDraft(overrides: StationEditorStation["timingOverrides"]) {
   return Object.fromEntries(
     TIMING_FIELDS.map((field) => [
@@ -236,12 +257,15 @@ export class StationEditor extends LitElement {
   /** Whether the person holds `printer.manage`; without it the printers are a read-out. */
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
+  /** The venue's MOVED slips choice, which a station left as the venue follows. */
+  @property({ attribute: false }) venuePrintsMovedSlips = true;
 
   @state() private draft: Draft = {
     name: "",
     colour: "red",
     printerIds: [],
     showsRestOfOrder: false,
+    printMovedSlips: null,
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
@@ -293,6 +317,7 @@ export class StationEditor extends LitElement {
         colour: station.colour,
         printerIds: [...station.printerIds],
         showsRestOfOrder: station.showsRestOfOrder,
+        printMovedSlips: station.printMovedSlips,
         ...timingDraft(station.timingOverrides),
       };
       this.baseline = copy(this.draft);
@@ -362,7 +387,7 @@ export class StationEditor extends LitElement {
     };
   }
 
-  private changed(draft: Draft, field: Field | "rest") {
+  private changed(draft: Draft, field: Field | "rest" | "printMovedSlips") {
     this.draft = draft;
     this.printerDropped = false;
     if (stationRefusalField(this.refusal) === field) this.refusal = undefined;
@@ -380,6 +405,9 @@ export class StationEditor extends LitElement {
         : {}),
       ...(draft.showsRestOfOrder !== base.showsRestOfOrder
         ? { showsRestOfOrder: draft.showsRestOfOrder }
+        : {}),
+      ...(draft.printMovedSlips !== base.printMovedSlips
+        ? { printMovedSlips: draft.printMovedSlips }
         : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
@@ -549,6 +577,21 @@ export class StationEditor extends LitElement {
             }}
           ></wt-switch>
           <p class="note">${t("prep.shows_rest_of_order_hint")}</p>
+          <wt-combobox
+            name="printMovedSlips"
+            label=${t("prep.moved_slips")}
+            search="never"
+            .value=${movedChoice(this.draft.printMovedSlips)}
+            .options=${movedOptions(this.venuePrintsMovedSlips)}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (current())
+                this.changed(
+                  { ...this.draft, printMovedSlips: movedValue(event.detail.value) },
+                  "printMovedSlips",
+                );
+            }}
+          ></wt-combobox>
         </div>
         <wt-form-actions
           slot="footer"
