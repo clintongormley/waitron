@@ -292,6 +292,88 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+### A Veri\*Factu venue on a development stack
+
+A Veri\*Factu venue cannot be created from nothing. Its setup has to carry a fiscal allocation,
+which is the installation number and invoice series a custodian (the person or service that hands
+out installation numbers and keeps the register of them) has signed for that taxpayer, and the box
+only accepts a signature from a custodian it has been told to trust. Without one, the wizard on an
+onboarding stack stops with `sif.allocation_invalid` (`reason: reauthentication_required`); that is
+what a fresh onboarding stack answered before this change, measured in
+`docs/superpowers/plans/2026-10-14-a680-dev-throwaway-custodian.md`.
+
+So a development stack brings its own custodian: a throwaway signing key that exists only on your
+laptop and only ever signs preproduction allocations. Production is the one environment it never
+touches. Every entry point below calls `assertDevelopmentEnvironment`
+(`apps/server/scripts/dev-custodian/sign.ts`) before it creates a key, signs or writes anything, and
+that refuses `WAITRON_ENV=production` with `deployment.development_custodian_refused`. It reads the
+environment of the process that runs it; for the wizard's dev server, that is the environment the
+Vite process was started with, which its signer inherits.
+
+#### The onboarding stack
+
+`pnpm dev:onboard`, which `wa-wt onboarding <name>` runs for you, creates the key under
+`<state dir>/dev-custodian/` and writes three settings into `apps/server/.env` beside the ones it
+already wrote: `WAITRON_FISCAL_CUSTODIAN_FILE`, `WAITRON_FISCAL_CONFIRMATION_FILE` and
+`WAITRON_FISCAL_CUSTODIAN_FINGERPRINT` (`apps/server/scripts/dev-onboard.ts`). Those three tell the
+server to trust that key. If the directory already holds a key, `dev:onboard` keeps it
+(`initCustodianDir`, `apps/server/scripts/dev-custodian/files.ts`).
+
+The wizard's Vite dev server then signs each setup for you. Its config loads a small middleware
+(`devCustodianPlugin`, `apps/server/scripts/dev-custodian/setup-proxy.ts`, applied to the dev
+server only, never to `vite build`) that catches the wizard's `POST /setup-api/provision`. When the
+body is a JSON object without `initialOperations` and `<state dir>/dev-custodian/` exists, it runs
+the signer below on the body and forwards the signed result to the server. Any other body, and every
+request when the directory is missing, goes to the server unchanged. The wizard itself and every
+shipped route are untouched, so you can set up any taxpayer, real tax ID included, and the result
+is always a preproduction venue.
+
+When signing fails, the wizard gets HTTP 500 with the code `dev_custodian.sign_failed`, and the
+Vite log shows the signer's own message. The signer is killed if it has not answered within 60
+seconds (`SIGN_TIMEOUT_MS`), along with anything it started.
+
+#### Signing by hand
+
+The same key is reachable from the command line, which is what the middleware runs:
+
+```sh
+pnpm --filter @waitron/server dev:custodian init --dir <dir>
+pnpm --silent --filter @waitron/server dev:custodian sign --dir <dir> < body.json > signed.json
+```
+
+`init` creates the key in `<dir>` if there is none and prints the three settings to put in the
+server's environment. `sign` reads a provision body on standard input and prints it back with
+`initialOperations` added; it refuses a body that is not an object, already carries
+`initialOperations`, has no `venue`, names an unknown country, has an invalid `taxId` or lacks
+`seriesCode` or `rectificativeSeriesCode`. A relative `--dir` is resolved against the directory you
+typed the command in (`INIT_CWD`), not `apps/server`, where pnpm runs the script. `--silent` keeps
+pnpm's own banner out of `signed.json`.
+
+#### In-process scripts
+
+A script that provisions a venue database directly, without a server, calls
+`applyDevelopmentVenue(actions, deps)` (`apps/server/scripts/dev-custodian/apply.ts`) where it
+would call `applyVenue`. It makes a fresh key for that one call, signs the allocation, stamps the
+database preproduction and applies the venue, so it needs none of the three settings.
+
+#### What it cannot do
+
+**A shipped box cannot use any of this.** The image's `deploy/compose.yml` passes none of the
+three `WAITRON_FISCAL_*` settings to the server, so a box cannot be pointed at this custodian or any
+other. Making that possible is a product change, tracked as A679.
+
+**A retried submission is a new setup, not a replay.** Each signing mints fresh node, administrator
+and event ids (`signSetupBody`, `apps/server/scripts/dev-custodian/files.ts`). If the wizard's
+answer is lost and you submit again, the server sees a different operation from the first, not the
+same one repeated. On a development stack the cure is `wa-wt reset onboarding <name>`.
+
+**An onboarding stack created before this change has no key.** `wa-wt`'s `ensure_env` keeps an
+`apps/server/.env` that already exists (`~/workspace/tools/wa-wt`, `ensure_env`), so that stack's
+`.env` has none of the three settings and its state directory has no `dev-custodian/`. The
+middleware stands aside and the wizard refuses as it did before. Run `wa-wt reset onboarding <name>`
+once: the reset clears the instance's box state except `tls`, and the `dev:onboard` it runs creates
+the key and the settings.
+
 ## Iterating against a local checkout of `@waitron/verifactu`
 
 `@waitron/verifactu` is no longer a package in this workspace — it was extracted into its own
