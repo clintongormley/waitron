@@ -1050,3 +1050,50 @@ help about anything you want very quickly."
   place for the longer explanation. A237's remaining "?" buttons may move into help mode instead of
   becoming hints; decide in the plan.
 
+
+## A653 — every long dashboard table scrolls the same way, with less above it
+
+Owner, 2026-10-14, from two screenshots of the Santet venue at desktop width
+([mockups/a653-table-scrolling/](mockups/a653-table-scrolling/)): "the products table scrolls
+independently of the page, but the menu table doesn't. these (and other similar tables) should be
+consistent. the problem is the amount of space that is used above the table which needs to be
+minimised, especially for use on mobiles".
+
+- **Today.** Products (`apps/dashboard/src/widgets/product-list.ts`, through `catalogue-screen.ts`
+  and `catalogue-browser.ts`) sets `wt-data-table`'s `stickyHeader`: the toolbar and column
+  headings stay at the top of the table's box and only the rows scroll
+  (`docs/developers/design-system.md`, `stickyHeader`). No other screen sets it, so a menu's
+  Structure tab (`widgets/menu-structure-table.ts`) and the other long tables (Orders, Staff,
+  Payments and the rest) scroll with the content column. A screen that opts in has to give the
+  table a bounded height, as Products does.
+- **Which way.** The owner's note reads as Products' way being the one to keep, with its cost —
+  the height above the table — being what to fix; confirm that at the plan before converting
+  screens. Settle which tables count as "long" (a tree such as Structure, a list that grows with the
+  venue's data) and which stay page-scrolled.
+- **The height to win back.** Above a menu's Structure rows, in order: the dashboard banner, the
+  Menus breadcrumb, the menu's name with its "Live: version …" status line, the tab strip
+  (Structure, Price overrides, Home page, Preview), the toolbar row (Filters, Select, search box),
+  and the column headings. Products has no breadcrumb or tabs but the same toolbar. Phones first;
+  measure the row area at 375×667 and 390×844 before and after.
+- **W80's open points, now part of this item** (detail: [catalogue.md, W80](catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)).
+  At 375×667 Products' box held the All products row and one whole product row after W83, which
+  the item that built it called short of "enough rows to remain usable"; Select and move mode
+  overflowed there, and A303 changed that layout without the measurement being retaken.
+
+## A654 — the sidebar folds to a strip of icons
+
+Owner, 2026-10-14, while looking at the Products table being wider than its box: "perhaps we need
+to add a way to shrink the left navbar down to a thin column with icons (we need icons for the
+navbar sections)".
+
+- **Today.** The sidebar's groups are `NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts`; a
+  group may carry an `icon` from `apps/dashboard/src/icons.ts`, and only Settings (`configuration`,
+  `gear`) does. Overview has no header at all, and modules add items to groups, so every group a
+  module can fill needs its icon whether or not core lists items in it. Clicking a group header
+  folds that group's links away; nothing narrows the sidebar itself.
+- **Phones.** At 48rem wide or less the sidebar is already a drawer behind the menu button, so the
+  strip is for wider screens; say in the plan whether a tablet-width window starts folded.
+- **To decide at the plan:** how the strip opens a group's pages (a flyout beside the icon, or
+  unfolding the sidebar), whether the folded state is remembered per browser, and the icon for each
+  group (Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing,
+  Settings). Icons follow design-system.md.

@@ -222,6 +222,9 @@ _2026-10-06, A303: Select now has its own action bar below Search, and grips occ
 leading column. The W80/W83 measurements above describe the earlier layout; the 375×667
 selection measurement has not been retaken._
 
+_2026-10-14: both open points here — few rows at 375×667, and `stickyHeader` set only by Products —
+are now part of A653 ([dashboard.md](dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it))._
+
 ## Products: Filters and Select at the start of the table's toolbar (W83, #1193): left open
 
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner

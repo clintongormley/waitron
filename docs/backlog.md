@@ -723,6 +723,21 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails),
   [mockups](backlog/mockups/a652-photo-framing/)
 
+- **A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
+  `apps/dashboard/src/widgets/product-list.ts`: (1) "Standalone ordering" (`product.ordering`,
+  Spanish "Pedido por separado") gets a shorter heading — the owner suggested "Standalone"; choose it
+  beside A647's new values (Anyone / Staff only / Nobody), and the Spanish needs the owner's wording.
+  (2) Allergens and Dietary info start hidden (`choosable: "hidden"`) and stay in the column chooser.
+  (3) Made at is deleted, or at the very least loses the grey second line under a category's station
+  ("set on this category", "from {name}", "default station", "some items made elsewhere",
+  `folders.made_at_*`), which makes each category row up to three lines tall; which of the two is
+  the owner's call at the plan. Either way "Kitchen routing unavailable"
+  (`folders.made_at_unavailable`, drawn on category rows when the stations cannot be read) needs a
+  new place rather than going with it; and deleting the column also deletes the station link to Prep
+  stations' routing view (`/manage/prep-stations/view/routing`). Decided with it: the Availability
+  column stays as it is, and the table staying wider than its box at desktop width is accepted
+  (there will always be too many columns here; A654 gives it more room).
+
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
@@ -951,13 +966,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **After browser Back to another menu with no edits made, the include's Edit dialog stays open over
   that menu**, as the section Edit dialog does: choosing another menu does not close either (read in
   `menus-screen.ts`, not run). Left open by A380 (#1385).
-
-- **At 375×667 the Products table's box gave few rows, short of the item's "enough rows to remain
-  usable"**, and a larger minimum does not fit that screen without the toolbar scrolling away; no
-  kept test covers Select and move mode there. Whether that is enough rows is the owner's call. Left
-  open by W80 (#1187); A303 changed the layout and the 375×667 selection measurement has not been
-  retaken.
-  [Detail](backlog/catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)
 
 - **A desktop window narrow enough to leave the Products table under 768px gets the full-screen
   Filters panel** — at which window width that happens with the sidebar shown was not measured. Left
@@ -3399,6 +3407,24 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A653 — every long dashboard table scrolls the same way, with less above it (owner,
+  2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows
+  inside the table's own box (`wt-data-table`'s `stickyHeader`, set by no other screen); a menu's
+  Structure tab, and the other long tables, scroll the whole page instead. Make them consistent.
+  The cost of Products' way is the height spent above the table — banner, page title, breadcrumb,
+  status line, tabs, the Filters and Select buttons and the search box — which on a phone leaves
+  few rows; cut that down, phones first. Takes in W80's two open points: few rows at 375×667, and
+  `stickyHeader` set only by Products.
+  [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
+  [screenshots](backlog/mockups/a653-table-scrolling/)
+
+- **A654 — the sidebar folds to a strip of icons (owner, 2026-10-14; open).** A way to narrow the
+  dashboard's left sidebar to a thin column of icons, giving wide tables such as Products the room.
+  Each sidebar section (Overview, Reporting, Service, Products and menus, Venue operations, Team,
+  Purchasing, Settings) needs an icon; only Settings has one today. Phones keep today's drawer. Clicking a section header already folds
+  that section's links away, but nothing narrows the sidebar.
+  [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons)
+
 - **A625. A row menu wraps its two-word items after the window is resized to phone width.** Seen on
   the Staff roles page (A585-1's look): after a desktop window was narrowed to 390 px, "Move up" and
   "Move down" broke onto two centred lines and the menu touched the screen's edge; loaded directly at
@@ -3554,12 +3580,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   (`apps/dashboard/src/dashboard-app.ts`), which listens for `click` only; in A629's tests a
   middle-click on a ⋮ menu link opened a new page in Chromium until `auxclick` was cancelled too.
   Raised by A629's review (#1684).
-
-- **`wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.** Other long tables
-  (Orders, Staff, Payments and the rest) keep scrolling with the content column until someone
-  decides they should opt in too; each would need its screen to give the table a bounded height, as
-  the Products screen does. Left open by W80 (#1187).
-  [Detail](backlog/catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)
 
 - **The table's Customise columns button is icon-only beside Filters and Select but has neither
   their look nor a tooltip.** Left open by W83's review (#1193), not started.
