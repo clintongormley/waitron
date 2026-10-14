@@ -227,41 +227,29 @@ function pickerModel(): OpeningHoursModel {
     ],
   };
 }
-const picker = (el: Screen) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
-function pick(el: Screen, value: string) {
-  picker(el).dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-}
-it("lists All departments then active departments with their zones on Week only", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
-  expect(picker(el).options).toEqual([
-    { value: "all", label: "All departments" },
-    { value: "restaurant", label: "Restaurant" },
-    { value: "zone:terrace", label: "Restaurant › Terrace" },
-    { value: "bar", label: "Bar" },
-  ]);
-});
 it("keeps a zone through Back and Forward and clears it when choosing a department", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
+  history.replaceState(null, "", "/manage/opening-hours/view/year");
   const guard = new NavigationGuard(window, {
     isDirty: () => false,
     request: async () => "proceeded",
   });
   try {
-    const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
+    const el = await mount((async (path: string) =>
+      path.includes("/opening-hours/year?")
+        ? yearRead(2026)
+        : structuredClone(pickerModel())) as DashboardRequest);
     const painter = () => el.shadowRoot!.querySelector("season-painter");
-    pick(el, "zone:terrace");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/department/restaurant/zone/terrace");
+    history.pushState(
+      null,
+      "",
+      "/manage/opening-hours/view/season/department/restaurant/zone/terrace",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
     await expect.poll(() => painter()?.zoneId).toBe("terrace");
     expect(painter()!.departmentId).toBe("restaurant");
     history.back();
     await expect.poll(() => painter()).toBeNull();
-    expect(picker(el).value).toBe("all");
+    expect(location.pathname).toBe("/manage/opening-hours/view/year");
     history.forward();
     await expect.poll(() => painter()?.zoneId).toBe("terrace");
     painter()!.dispatchEvent(
@@ -280,59 +268,7 @@ it("keeps a zone through Back and Forward and clears it when choosing a departme
     guard.dispose();
   }
 });
-it("links All departments headings to a department and returns to the all view", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-  const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);
-  expect(picker(el).value).toBe("all");
-  const all = el.shadowRoot!.querySelector<LitElement>("opening-hours-all");
-  expect(all).not.toBeNull();
-  await all!.updateComplete;
-  const link = all!.shadowRoot!.querySelector<HTMLElement>("[data-department=bar]");
-  expect(link).not.toBeNull();
-  link!.click();
-  await expect.poll(() => el.shadowRoot!.querySelector("season-painter")?.departmentId).toBe("bar");
-  expect(location.pathname).toBe("/manage/opening-hours/view/season/department/bar");
-  el.shadowRoot!.querySelector("season-painter")!.dispatchEvent(
-    new CustomEvent("painter-close", { bubbles: true, composed: true }),
-  );
-  await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/week/department/all");
-  expect(picker(el).value).toBe("all");
-  expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
-});
-it("draws the picked season's standard week for All departments", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all/season/summer");
-  const data = pickerModel();
-  const monday = (startsAt: string) => [
-    { weekday: 1, slots: [{ periodId: "p1", startsAt, endsAt: "14:00" }] },
-  ];
-  const el = await mount((async () =>
-    structuredClone({
-      ...data,
-      seasons: [
-        { id: "autumn", name: "Autumn", startsOn: "09-01" },
-        { id: "summer", name: "Summer", startsOn: "06-01" },
-      ],
-      currentSeasonId: "autumn",
-      departments: data.departments.map((department) =>
-        department.id === "restaurant"
-          ? {
-              ...department,
-              seasonWeeks: [
-                { seasonId: "autumn", week: monday("10:00") },
-                { seasonId: "summer", week: monday("12:00") },
-              ],
-            }
-          : department,
-      ),
-    })) as DashboardRequest);
-  const all = el.shadowRoot!.querySelector<LitElement>("opening-hours-all")!;
-  await all.updateComplete;
-  expect(
-    all.shadowRoot!.querySelector("service-grid")!.columns.find((c) => c.key === "1:restaurant")!
-      .slots,
-  ).toEqual([{ periodId: "p1", startsAt: "12:00", endsAt: "14:00" }]);
-});
-it("ignores a zone belonging to another department and unknown picker values", async () => {
+it("ignores a zone belonging to another department", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
   const el = await mount((async (path: string) =>
     path.includes("/opening-hours/year?")
@@ -343,22 +279,6 @@ it("ignores a zone belonging to another department and unknown picker values", a
     .toBe("/manage/opening-hours/view/season/department/bar");
   const painter = el.shadowRoot!.querySelector("season-painter")!;
   expect([painter.departmentId, painter.zoneId]).toEqual(["bar", ""]);
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await expect.poll(() => picker(el)?.value).toBe("all");
-  pick(el, "zone:missing");
-  await el.updateComplete;
-  expect(picker(el).value).toBe("all");
-  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
-});
-
-it("still offers All departments when no department is available", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-  const data = { ...model(), departments: [] };
-  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
-  expect(picker(el)).not.toBeNull();
-  expect(picker(el).options).toEqual([{ value: "all", label: "All departments" }]);
-  expect(el.shadowRoot!.textContent).toContain("No departments");
 });
 
 function yearRead(

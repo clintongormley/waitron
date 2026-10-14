@@ -14,8 +14,6 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
-import "./opening-hours-all.js";
-import "./opening-hours-station.js";
 import "./opening-hours-year.js";
 import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
@@ -199,7 +197,7 @@ export class OpeningHoursScreen extends LitElement {
             : "week";
     const href = navigationGuardFor(window)?.href ?? location.href;
     const stationId = this.url.read("station") ?? new URL(href).searchParams.get("station") ?? "";
-    if (shown === "week" && !stationId && named.departmentId !== "all") {
+    if (shown === "week") {
       this.replaceAddress(this.painterUrl(named));
       return;
     }
@@ -1084,26 +1082,6 @@ export class OpeningHoursScreen extends LitElement {
                 </div>
                 <div slot="week">
                   ${this.view === "week" && !department ? html`<p>${t("menu.no_departments")}</p>` : nothing}
-                  ${
-                    this.view === "week" && this.stationId
-                      ? html`<opening-hours-station
-                          .api=${this.api}
-                          .model=${this.model}
-                          .stationId=${this.stationId}
-                        ></opening-hours-station>`
-                      : this.view === "week" && this.departmentId === "all"
-                        ? html`<opening-hours-all
-                            .departments=${this.model.departments}
-                            .clockRevision=${this.model.clockRevision}
-                            .dayCutover=${this.model.dayCutover}
-                            .seasonId=${this.season}
-                            @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
-                              event.stopPropagation();
-                              void this.chooseDepartment(event.detail.departmentId);
-                            }}
-                          ></opening-hours-all>`
-                        : nothing
-                  }
                 </div>
               </wt-tabs>`
       }

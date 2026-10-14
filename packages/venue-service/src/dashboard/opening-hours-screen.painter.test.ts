@@ -289,21 +289,6 @@ describe("links into the painter", () => {
     }
   });
 
-  it("closing a painter a department choice on All departments opened goes back to that page", async () => {
-    history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/view/week/department/all");
-    const el = await mount("/manage/opening-hours/view/week/department/all");
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
-    el.shadowRoot!.querySelector("[name=departmentId]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "d3" }, bubbles: true, composed: true }),
-    );
-    await cancel(await shownPainter(el));
-    await expect.poll(() => painterOf(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/week/department/all");
-    history.back();
-    await expect.poll(() => location.pathname).toBe("/manage/before");
-  });
-
   it("closing a painter reached by Back to an old Week address replaces it with the view it drew over", async () => {
     history.replaceState(null, "", "/manage/before");
     history.pushState(null, "", "/manage/opening-hours/view/week/department/d1");
@@ -346,26 +331,6 @@ describe("links into the painter", () => {
     }
   });
 
-  it("the All departments season picker writes its season before the department, and reads it back", async () => {
-    const el = await mount("/manage/opening-hours/view/week/department/all");
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
-    el.shadowRoot!.querySelector("[name=seasonId]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "spring" }, bubbles: true, composed: true }),
-    );
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/season/spring/department/all");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("opening-hours-all")!.seasonId)
-      .toBe("spring");
-    history.replaceState(null, "", "/manage/opening-hours/view/week/season/winter/department/all");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("opening-hours-all")!.seasonId)
-      .toBe("winter");
-    expect(painterOf(el)).toBeNull();
-  });
-
   it("a season chip's ✎ still opens the season dialog and not the painter", async () => {
     const el = await mount("/manage/opening-hours/view/year/year/2027");
     const seasonChips = await chips(el);
@@ -398,38 +363,21 @@ describe("links into the painter", () => {
     expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
   });
 
-  it("a station's link still draws that station's read-only week", async () => {
-    const el = await mount("/manage/opening-hours?view=week&station=s1");
-    const station = await expect
-      .poll(() => el.shadowRoot!.querySelector("opening-hours-station"))
-      .not.toBeNull()
-      .then(() => el.shadowRoot!.querySelector("opening-hours-station")!);
-    expect(station.stationId).toBe("s1");
-    expect(tabs(el).value).toBe("week");
-    expect(painterOf(el)).toBeNull();
-    expect(`${location.pathname}${location.search}`).toBe(
-      "/manage/opening-hours?view=week&station=s1",
-    );
-  });
-
-  it("All departments still draws its read-only week, and a department chosen there opens the painter over it", async () => {
-    const el = await mount("/manage/opening-hours/view/week/department/all");
-    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
-    expect(painterOf(el)).toBeNull();
-    expect(tabs(el).value).toBe("week");
-    el.shadowRoot!.querySelector("[name=departmentId]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "d3" }, bubbles: true, composed: true }),
-    );
+  it.each([
+    ["a station's query", "/manage/opening-hours?view=week&station=s1"],
+    ["a station's path", "/manage/opening-hours/view/week/station/s1"],
+    ["All departments", "/manage/opening-hours/view/week/department/all"],
+  ])("an old Week address naming %s opens the painter in its place", async (_, address) => {
+    history.replaceState(null, "", "/manage/before");
+    const pushed = pushedPaths();
+    const el = await mount(address);
     await expect
       .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d3");
-    const painter = await shownPainter(el);
-    expect(el.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
-    await cancel(painter);
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/week/department/all");
-    await expect.poll(() => painterOf(el)).toBeNull();
+      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+    expect(new URLSearchParams(location.search).has("station")).toBe(false);
+    expect(pushed()).toEqual([]);
+    await shownPainter(el);
+    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
   });
 
   it("a season chip asking for a week while the painter is open changes nothing", async () => {
@@ -805,24 +753,5 @@ describe("a viewer's painter", () => {
     expect(painter.edited()).toEqual({ departments: [], zones: [] });
     await settle(painter);
     expect(writes).toEqual([]);
-  });
-
-  it("a department heading on All departments opens a read-only painter", async () => {
-    const el = await mount("/manage/opening-hours/view/week/department/all", undefined, [], true);
-    const all = await expect
-      .poll(() => el.shadowRoot!.querySelector("opening-hours-all"))
-      .not.toBeNull()
-      .then(() => el.shadowRoot!.querySelector("opening-hours-all")!);
-    const heading = await expect
-      .poll(() => all.shadowRoot!.querySelector<HTMLAnchorElement>('a[href$="/department/d1"]'))
-      .not.toBeNull()
-      .then(() => all.shadowRoot!.querySelector<HTMLAnchorElement>('a[href$="/department/d1"]')!);
-    heading.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
-    const painter = await shownPainter(el);
-    expect(painter.readOnly).toBe(true);
-    expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
   });
 });

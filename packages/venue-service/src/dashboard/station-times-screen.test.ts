@@ -16,6 +16,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-12-10T10:00:00Z"));
 });
 afterEach(() => {
+  DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "01:00" };
   vi.useRealTimers();
   hosts.splice(0).forEach((host) => host.remove());
   setLocale("en");
@@ -70,7 +71,7 @@ function meta(month: string): OpeningHoursMonth {
 }
 
 const sunday = (date: LocalDate) => new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
-const DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "01:00" };
+let DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "01:00" };
 const ALL_DAY = { periodId: "allday", startsAt: "10:00", endsAt: "02:00" };
 /** The Grill makes the Restaurant's dinners, never on a Sunday; the Pass gets the Restaurant's
  *  dinners and the Bar's all-day orders. Neither gets anything on 25 December. */
@@ -363,15 +364,17 @@ describe("Prep station times", () => {
     expect(alerts(el)).toEqual([]);
   });
 
-  it("reads both again when it is attached again", async () => {
+  it("reads both again when it is attached again, and draws the new answer", async () => {
     const { el, calls } = await mount({ stationId: "grill" });
     await drawn(el, "2026-12-01", "grill").not.toBeNull();
+    expect(titles(el, "2026-12-01")).toEqual(["Dinner 19:00–01:00"]);
     el.remove();
+    DINNER = { ...DINNER, startsAt: "20:00" };
     const before = calls.length;
     document.body.append(el);
     await expect.poll(() => calls.length).toBe(before + 2);
     expect(readsOf(calls.slice(before), "month?")).toHaveLength(1);
     expect(readsOf(calls.slice(before), "service-times?")).toHaveLength(1);
-    await drawn(el, "2026-12-01", "grill").not.toBeNull();
+    await expect.poll(() => titles(el, "2026-12-01")).toEqual(["Dinner 20:00–01:00"]);
   });
 });
