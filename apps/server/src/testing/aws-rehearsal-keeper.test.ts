@@ -423,6 +423,30 @@ describe("runKeeper", () => {
     expect((await logLines()).at(-1)).toBe("exit 1");
   });
 
+  it("at the ceiling names each tracked process still running as itself, and signals none", async () => {
+    await writeJournalFile(
+      journal({
+        pids: [
+          { pid: 101, startTime: START_TIME },
+          { pid: 102, startTime: START_TIME },
+          { pid: 103, startTime: START_TIME },
+        ],
+      }),
+    );
+    const h = harness(bucketWithObjects(), {
+      waitForRunnerEnd: () => NEVER,
+      sleep: async () => {},
+      processStartTime: (pid) => (pid === 103 ? "Thu Oct 15 09:00:00 2026" : START_TIME),
+    });
+    withAlive(h, [101, 103]);
+
+    expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+    const may = h.printed.slice(h.printed.indexOf("may be left:") + 1);
+    expect(may).toEqual([`bucket ${BUCKET}`, "process 101"]);
+    expect(h.kill).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["a bucket outside the rehearsal pattern", { bucket: "someone-elses-bucket" }, "bucket"],
     ["a scratch folder outside tmpdir", { scratchRoot: "/etc/waitron" }, "scratchRoot"],

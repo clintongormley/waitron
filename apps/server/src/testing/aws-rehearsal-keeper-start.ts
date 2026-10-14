@@ -124,7 +124,7 @@ export async function startKeeper(
   };
   const until = Date.now() + readyMs;
   while (!failed && Date.now() < until) {
-    // Ready and the launcher gone, so the keeper is no longer this process's child.
+    // Ready and the launcher gone, so the keeper is outside the runner's process tree.
     const pid = keeperReady(journalPath);
     if (pid !== null && exited) return { keeperPid: pid, end };
     await delay(KEEPER_POLL_MS);

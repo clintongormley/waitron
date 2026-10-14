@@ -234,6 +234,7 @@ describe("AwsRehearsal.scratch", () => {
         expect((await receipt()).teardown.at(-1)).toMatchObject({
           step: "remove-scratch",
           outcome: "failed",
+          errorName: "ScenarioStillRunning",
         });
         expect(error.message).toContain(`scratch folder not removed: ${root()}`);
       } finally {

@@ -607,6 +607,20 @@ describe("the remove-scratch teardown step", () => {
     },
   );
 
+  it("accepts an owned run receipt with a failed bucket step beside it", () => {
+    const log = createReceiptLog(header, KEYS, "run");
+    for (const step of BUCKET_STEPS.slice(0, -1)) log.teardown({ step, outcome: "ok" });
+    log.teardown({ step: "delete-bucket", outcome: "failed", errorName: "InternalError" });
+    log.teardown({ step: "remove-scratch", outcome: "ok" });
+    const receipt = log.finish(finishParts);
+    expect(receipt.teardown).toHaveLength(6);
+    expect(receipt.teardown).toContainEqual({
+      step: "delete-bucket",
+      outcome: "failed",
+      errorName: "InternalError",
+    });
+  });
+
   it.each(BUCKET_STEPS)("refuses an owned run receipt missing its %s step", (missing) => {
     const log = createReceiptLog(header, KEYS, "run");
     for (const step of BUCKET_STEPS) if (step !== missing) log.teardown({ step, outcome: "ok" });
