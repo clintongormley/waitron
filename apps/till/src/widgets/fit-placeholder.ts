@@ -38,7 +38,10 @@ export class PlaceholderFit implements ReactiveController {
   readonly #measure = document.createElement("canvas").getContext("2d")!;
   /** A web font that finishes loading changes the text's width but not the field's, so no resize
    * reports it. */
-  readonly #fontsLoaded = () => this.#measureField();
+  readonly #fontsLoaded = () => {
+    const field = this.#field();
+    if (field) this.#measureField(field);
+  };
 
   constructor(
     private readonly host: LitElement,
@@ -52,11 +55,17 @@ export class PlaceholderFit implements ReactiveController {
     if (this.text() !== this.#fitted) this.#fit();
   }
 
-  hostUpdated(): void {
-    if (this.#resize) return;
-    this.#resize = new ResizeObserver(() => this.#measureField());
-    this.#resize.observe(this.host.renderRoot.querySelector("wt-input")!);
+  hostConnected(): void {
     document.fonts.addEventListener("loadingdone", this.#fontsLoaded);
+  }
+
+  hostUpdated(): void {
+    // An update queued before the host was removed still finishes after it.
+    if (this.#resize || !this.host.isConnected) return;
+    const field = this.#field();
+    if (!field) return;
+    this.#resize = new ResizeObserver(() => this.#measureField(field));
+    this.#resize.observe(field);
   }
 
   hostDisconnected(): void {
@@ -65,8 +74,11 @@ export class PlaceholderFit implements ReactiveController {
     this.#resize = undefined;
   }
 
-  #measureField(): void {
-    const field = this.host.renderRoot.querySelector("wt-input")!;
+  #field(): HTMLElement | null {
+    return this.host.renderRoot.querySelector<HTMLElement>("wt-input");
+  }
+
+  #measureField(field: HTMLElement): void {
     const input = field.shadowRoot!.querySelector("input")!;
     const control = getComputedStyle(input);
     const placeholder = getComputedStyle(input, "::placeholder");
