@@ -323,8 +323,11 @@ Keep the custodian's private signing key outside the venue; these settings name 
 The event file's statements remain your confirmation of the outside master, not independent proof
 that an old snapshot is current. Use the formats in the configured-source section above.
 
-For initial setup, add `initialOperations` to your setup request. It contains `nodeId`,
-`administratorId` and an `inputs` array. Each entry has `module`, `eventId`, `sourceId` and `input`.
+For a setup with a supplied allocation, which Live needs on a box that is not a development box,
+add `initialOperations` to your setup request. Without it, Demo, Preparation and a development
+box's Live make a throwaway preproduction allocation
+([workflow-guide.md](workflow-guide.md#a-verifactu-venue-without-a-signed-allocation)).
+`initialOperations` contains `nodeId`, `administratorId` and an `inputs` array. Each entry has `module`, `eventId`, `sourceId` and `input`.
 The fiscal input is the signed allocation and its approval. Create the planned IDs before signing;
 the signed consumption, approval and separate event confirmation must name those same identities.
 Do not put a signing key, recovery secret, host path or trust object in this input.
