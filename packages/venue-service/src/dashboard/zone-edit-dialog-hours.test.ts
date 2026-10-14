@@ -63,6 +63,14 @@ it("links to the season painter on this zone in the venue's current season", asy
     .poll(href)
     .toBe("/manage/opening-hours/view/season/season/winter/department/d1/zone/z1");
 });
+it("with no current season, links to the season painter on this zone without a season", async () => {
+  await mount(twoSeasons(null));
+  await expect
+    .poll(() =>
+      el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")?.getAttribute("href"),
+    )
+    .toBe("/manage/opening-hours/view/season/department/d1/zone/z1");
+});
 it("names the season in Spanish with the season's stored name", async () => {
   setLocale("es-ES");
   await mount(twoSeasons("winter"));

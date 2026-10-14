@@ -21,6 +21,7 @@ import {
 } from "./client.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import { seasonPainterPath } from "./opening-hours-paths.js";
 import { zoneClosedWeek } from "./zone-closed-week.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -410,7 +411,11 @@ export class ZoneEditDialog extends LitElement {
             <p>
               <a
                 data-test="zone-opening-hours"
-                href=${`/manage/opening-hours/view/season${this.hours?.currentSeasonId ? `/season/${encodeURIComponent(this.hours.currentSeasonId)}` : ""}/department/${encodeURIComponent(zone.departmentId)}/zone/${encodeURIComponent(zone.id)}`}
+                href=${seasonPainterPath({
+                  seasonId: this.hours?.currentSeasonId ?? undefined,
+                  departmentId: zone.departmentId,
+                  zoneId: zone.id,
+                })}
                 >${t("venue.zone_opening_hours")}</a
               >
             </p>
