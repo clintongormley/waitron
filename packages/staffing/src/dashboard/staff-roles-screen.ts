@@ -111,8 +111,7 @@ export class StaffRolesScreen extends LitElement {
     this,
     () => this.api.liveData,
     (error) => {
-      const deletion = this.deleting;
-      if (!deletion) return;
+      const deletion = this.deleting!;
       if (codeOf(error) === "staff_role.not_found") {
         // While this screen's own delete is in flight, its answer closes the question.
         if (!deletion.busy) this.#staffRoleGone();
