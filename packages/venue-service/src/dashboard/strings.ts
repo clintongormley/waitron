@@ -478,6 +478,8 @@ const en = {
   "venue.readiness.department_no_periods": "has no opening periods.",
   "venue.readiness.holiday_missing":
     "{name} (Every year) has no public holiday of that name in {year}.",
+  "venue.readiness.date_shared":
+    "{other} and {name} both fall on {date}. {name} applies; change one to choose.",
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
   "venue.kitchen_changes": "Changes after sending",
@@ -1313,6 +1315,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.readiness.department_no_periods": "no tiene períodos de apertura.",
   "venue.readiness.holiday_missing":
     "{name} (cada año): en {year} no hay ningún festivo con ese nombre.",
+  "venue.readiness.date_shared":
+    "{other} y {name} caen el {date}. Se aplica {name}; cambia uno para elegir.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
   "venue.kitchen_changes": "Cambios tras el envío",

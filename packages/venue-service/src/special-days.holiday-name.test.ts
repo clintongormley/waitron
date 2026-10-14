@@ -172,15 +172,25 @@ const standing = async (v: Venue, days: readonly string[]) => {
 /** A Closed all day date written raw, as when a later year's holiday list ships after it was saved
  *  and moves a repeating holiday date onto it, which the special-day writer refuses once that list
  *  is present, as it is in this suite. */
-const rawDay = (v: Venue, name: string, date: string, repeatsYearly = false) =>
+const rawDay = (
+  v: Venue,
+  name: string,
+  date: string,
+  repeatsYearly = false,
+  holidayName: string | null = null,
+) =>
   scoped(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
       .values({ locationId: v.cfg.locationId, name, repeatsYearly })
       .returning({ id: specialDays.id });
-    await tx
-      .insert(specialDayDates)
-      .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date, closedAllDay: true });
+    await tx.insert(specialDayDates).values({
+      specialDayId: day!.id,
+      locationId: v.cfg.locationId,
+      date,
+      closedAllDay: true,
+      holidayName,
+    });
     return { id: day!.id };
   });
 
@@ -587,6 +597,75 @@ describe("the readiness list warns when a later year has no holiday of the name"
     const v = await venue();
     await save(v, { name: "Viernes Santo", repeatsYearly: false, dates: dates(["2026-04-03"]) });
     expect(await warnings(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+  });
+});
+
+describe("the readiness list warns when two special days come to share a date", () => {
+  const clashes = async (v: Venue, at: Date) =>
+    (await scoped((tx) => listVenueReadiness(tx, v.cfg, at))).filter(
+      (issue) => issue.code === "special_day.date_shared",
+    );
+  const clash = (
+    date: string,
+    applies: { id: string },
+    name: string,
+    other: { id: string },
+    otherName: string,
+  ) => ({
+    code: "special_day.date_shared",
+    date,
+    specialDayId: applies.id,
+    specialDayName: name,
+    otherSpecialDayId: other.id,
+    otherSpecialDayName: otherName,
+  });
+
+  it("names a repeating holiday that moved onto a fixed date, which applies, in the current and next year", async () => {
+    const v = await venue();
+    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const feria = await rawDay(v, "Feria", "2026-03-26", true);
+    const expected = [clash("2027-03-26", feria, "Feria", friday, "Viernes Santo")];
+    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await clashes(v, new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
+    expect(await standing(v, ["2027-03-26"])).toEqual({ "2027-03-26": feria.id });
+  });
+
+  it("names a one-off date the moved holiday meets as the one that applies", async () => {
+    const v = await venue();
+    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const dinner = await rawDay(v, "Company dinner", "2027-03-26");
+    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+      clash("2027-03-26", dinner, "Company dinner", friday, "Viernes Santo"),
+    ]);
+  });
+
+  it("says nothing when no two special days meet", async () => {
+    const v = await venue();
+    await yearly(v, "Viernes Santo", "2026-04-03");
+    await rawDay(v, "Company dinner", "2027-03-27");
+    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([]);
+  });
+
+  it("says nothing of a clash outside the current and next year", async () => {
+    const v = await venue();
+    await yearly(v, "Viernes Santo", "2026-04-03");
+    await rawDay(v, "Feria", "2026-03-26", true);
+    expect(await clashes(v, new Date("2028-06-01T10:00:00Z"))).toEqual([]);
+  });
+
+  it("gives two holiday-following dates that meet to the earlier stored date", async () => {
+    const v = await venue();
+    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const later = await rawDay(v, "Vigilia", "2026-04-04", true, "Viernes Santo");
+    expect(await clashes(v, new Date("2026-06-01T10:00:00Z"))).toEqual([
+      clash("2027-03-26", friday, "Viernes Santo", later, "Vigilia"),
+    ]);
+    const w = await venue();
+    const first = await yearly(w, "Viernes Santo", "2026-04-03");
+    const earlier = await rawDay(w, "Vigilia", "2026-04-02", true, "Viernes Santo");
+    expect(await clashes(w, new Date("2026-06-01T10:00:00Z"))).toEqual([
+      clash("2027-03-26", earlier, "Vigilia", first, "Viernes Santo"),
+    ]);
   });
 });
 

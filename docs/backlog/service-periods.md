@@ -133,27 +133,6 @@ only `department_days` and `zone_days` rows that have a season, while
 closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
 all.
 
-## Two special days can come to share a date
-
-Left open by A506-5, #1603. The point is kept in its own words:
-
-- Two special days can come to share a date after both were saved — two repeating ones, or a
-  one-off and a repeating date that follows a holiday's name: a save compares dates only in the
-  years whose holiday lists exist then, so "Good Friday" (every year, saved on a
-  public holiday) and "Fair" (every year, 26 March) both save while only 2026's list ships; when
-  2027's list puts Viernes Santo on 26 March, every reader gives the day to the date standing there
-  on its own terms (a one-off, one repeating on its month and day, or one following a holiday's
-  name in the year it was saved) over one only following a
-  holiday's name there (`standingInYear`, `packages/venue-service/src/repeat-rules.ts`; the same
-  holds when a holiday-area change moves the holiday), the readiness list says nothing,
-  and every later save of either day that keeps its clashing date is refused with
-  `special_day.date_taken`. Shown by the
-  A506-5 finish-branch review with the two rows inserted as a 2026-only save stores them. A
-  configuration import reaches the same state another way: it compares a holiday-following date
-  in its first year only (`NO_HOLIDAY_DATES`, `packages/venue-service/src/configuration-transfer.ts`).
-  Wanted: a readiness line for such a clash, whichever kinds of date meet, in the current or next
-  year.
-
 ## The readiness line for a repeating holiday date names the official holiday
 
 Left open by A506-5, #1603.
@@ -216,6 +195,9 @@ which start at year 100; changing `isLocalDate` would change which dates the ser
 outside (menu publication dates, imports), so it needs a decision.
 
 ## Decisions and deliberate limits
+
+- Once two special days share a date, a save of either day that keeps that date is refused with
+  `special_day.date_taken` (A577, #1702, 2026-10-14).
 
 - **Opening hours are seasons and special days (A506, owner, 2026-10-11).** Every venue has
   seasons that cover the whole year and repeat every year, each with its own week per department;
