@@ -99,7 +99,25 @@ function paintedIn(nowhere: boolean): PaintedInRow[] {
 async function mount(state: string, theme: "light" | "dark") {
   const wrapper = await mountThemed("<div></div>", theme);
   const screen = document.createElement("dashboard-periods-screen") as PeriodsScreen;
-  screen.api = new OpeningHoursApi((async (path: string) => {
+  screen.api = new OpeningHoursApi((async (path: string, method: string) => {
+    if (path.endsWith("/delete-impact"))
+      return {
+        seasons: 4,
+        specialDays: 1,
+        routingUses:
+          state === "delete"
+            ? []
+            : [
+                { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
+                { rowKind: "all", rowLabel: null, zoneName: "Terrace" },
+              ],
+        keptOpenToday: true,
+        replacements: [
+          { id: "p1", name: "Breakfast" },
+          { id: "p5", name: "Christmas set menu" },
+        ],
+      };
+    if (method === "POST") throw { code: "hours.clock_changed" };
     if (path.endsWith("/menu-periods/painted-in")) {
       if (state === "painted-in-failed") throw new Error("offline");
       return paintedIn(state === "not-painted");
@@ -121,18 +139,50 @@ async function mount(state: string, theme: "light" | "dark") {
     await expect.poll(() => table.shadowRoot!.querySelector("[part~=chip]")).not.toBeNull();
   }
   await screen.updateComplete;
+  if (state.startsWith("delete")) {
+    const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+    table
+      .shadowRoot!.querySelector<HTMLElement>(
+        'tr[data-row-key="period:p2"] [data-test=delete-period]',
+      )!
+      .click();
+    await screen.updateComplete;
+    const dialog = screen.shadowRoot!.querySelector("period-delete-dialog")!;
+    const confirm = () =>
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=confirm-delete]",
+      )!;
+    await expect.poll(() => confirm().disabled).toBe(false);
+    const body = dialog.shadowRoot!.querySelector("[data-test=body]")!.textContent!;
+    if (state === "delete-routing") expect(body).toContain("Named in 2 routing cells");
+    if (state === "delete") expect(body).not.toContain("routing cell");
+    if (state === "delete-refused") {
+      confirm().click();
+      await expect
+        .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")!.error)
+        .toBe("The business-day start changed. Reload hours.");
+    }
+    await dialog.updateComplete;
+  }
   return screen;
 }
 
 describe.each(["light", "dark"] as const)("Periods (%s)", (theme) => {
-  test.each(["list", "empty", "viewer", "not-painted", "load-failed", "painted-in-failed"])(
-    "%s",
-    async (state) => {
-      setLocale("en");
-      await mount(state, theme);
-      await expectNoA11yViolations(host);
-    },
-  );
+  test.each([
+    "list",
+    "empty",
+    "viewer",
+    "not-painted",
+    "load-failed",
+    "painted-in-failed",
+    "delete",
+    "delete-routing",
+    "delete-refused",
+  ])("%s", async (state) => {
+    setLocale("en");
+    await mount(state, theme);
+    await expectNoA11yViolations(host);
+  });
 });
 
 describe.each(["en", "es"] as const)("Periods row menus (%s)", (locale) => {

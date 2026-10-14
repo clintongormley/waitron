@@ -48,6 +48,8 @@ export class PeriodEditing implements ReactiveController {
       paintedIn?: () => readonly PaintedInRow[] | undefined;
       paintedInLinks?: boolean;
       readOnly?: () => boolean;
+      /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
+      onDelete?: (department: Department, period: Period) => void;
     },
   ) {
     host.addController(this);
@@ -78,6 +80,11 @@ export class PeriodEditing implements ReactiveController {
         )
     )
       this.created = undefined;
+  }
+
+  /** Whether a period dialog is open, or its write is still pending. */
+  get editing(): boolean {
+    return this.editor !== undefined || this.busy;
   }
 
   /** Whether `periodId` can be painted in `department`: one of its periods, or one just created. */
@@ -200,6 +207,7 @@ export class PeriodEditing implements ReactiveController {
         }
         .menus=${model.menus}
         .busy=${this.busy}
+        .deletable=${this.options.onDelete !== undefined}
         .submitLabel=${
           editor.period || this.options.chooseDepartment ? "" : t("painter.add_and_paint")
         }
@@ -207,6 +215,21 @@ export class PeriodEditing implements ReactiveController {
         @period-close=${(event: Event) => {
           event.stopPropagation();
           if (this.editor === editor && !this.busy) this.close();
+        }}
+        @period-delete=${(event: CustomEvent<{ periodId: string }>) => {
+          event.stopPropagation();
+          const period = editor.period;
+          if (
+            (this.editor !== undefined && this.editor !== editor) ||
+            this.busy ||
+            !department ||
+            event.currentTarget !== this.host.renderRoot.querySelector("period-dialog") ||
+            !period ||
+            period.id !== event.detail.periodId
+          )
+            return;
+          if (this.editor === editor) this.close();
+          this.options.onDelete?.(department, period);
         }}
       ></period-dialog>`,
     );

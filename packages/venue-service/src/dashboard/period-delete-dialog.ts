@@ -199,12 +199,12 @@ export class PeriodDeleteDialog extends LitElement {
           variant="secondary"
           ?disabled=${this.busy}
           @click=${() => {
-            if (!this.busy) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+            if (!this.busy) void this.shadowRoot!.querySelector("wt-modal")?.requestClose("cancel");
           }}
           >${t("prep.cancel")}</wt-button
         >
         ${
-          this.readError && !impact
+          this.readError
             ? html`<wt-button
                 slot="secondary"
                 data-test="retry-delete"

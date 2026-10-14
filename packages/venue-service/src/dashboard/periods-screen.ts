@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -7,11 +8,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
-import type { OpeningHoursApi, PaintedInRow } from "./opening-hours-client.js";
+import type { OpeningHoursApi, PaintedInRow, PeriodDeleteImpact } from "./opening-hours-client.js";
+import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
 import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
 import { SEASON_TINT_TOKENS, seasonTints } from "./season-tint.js";
+import { refusalOf } from "./refusal.js";
 import { t } from "./strings.js";
+import "./period-delete-dialog.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
@@ -20,6 +24,16 @@ export type PeriodRow =
   | ({ kind: "period"; departmentId: string; departmentName: string } & Period);
 
 const at = encodeURIComponent;
+
+type Deletion = {
+  period: Period;
+  clockRevision: number;
+  /** The latest impact read; an answer to an earlier one is ignored. */
+  generation: number;
+  impact?: PeriodDeleteImpact;
+  readError: string;
+  busy: boolean;
+};
 
 const swatchColours = unsafeCSS(
   Object.entries(PERIOD_COLOUR_TOKENS)
@@ -116,7 +130,9 @@ export class PeriodsScreen extends LitElement {
     paintedIn: () => this.paintedRows,
     paintedInLinks: true,
     readOnly: () => this.readOnly,
+    onDelete: (_department, period) => this.askDelete(period),
   });
+  @state() private deleting?: Deletion;
   private detach?: () => void;
   private paintedDetach?: () => void;
 
@@ -126,6 +142,7 @@ export class PeriodsScreen extends LitElement {
       (model) => {
         this.model = model;
         this.readError = "";
+        this.followDeletion();
       },
       () => {
         this.readError = t("period.load_error");
@@ -139,6 +156,7 @@ export class PeriodsScreen extends LitElement {
         this.paintedRows = rows;
         this.painted = new Map(rows.map(({ periodId, ...painted }) => [periodId, painted]));
         this.paintedInError = "";
+        if (this.deleting) void this.readImpact(this.deleting);
       },
       () => {
         this.paintedInError = t("period.painted_in_error");
@@ -196,13 +214,14 @@ export class PeriodsScreen extends LitElement {
         data-test="open-hours"
         href=${`/manage/opening-hours/view/season/department/${at(row.departmentId)}`}
         >${t("period.open_hours")}</a
-      ><wt-button variant="danger" data-test="delete-period"
+      ><wt-button variant="danger" data-test="delete-period" @click=${() => this.askDelete(row)}
         >${t("menu.delete")}</wt-button
       ></wt-row-actions
     >`;
   }
 
   private edit(row: PeriodRow & { kind: "period" }) {
+    if (this.deleting) return;
     const department = this.model?.departments.find(({ id }) => id === row.departmentId);
     const period = department?.periods.find(({ id }) => id === row.id);
     if (period) this.periods.open(department!, period);
@@ -279,7 +298,7 @@ export class PeriodsScreen extends LitElement {
             : html`<wt-button
                 data-test="add-period"
                 ?disabled=${!model}
-                @click=${() => this.model && this.periods.open(null)}
+                @click=${() => this.model && !this.deleting && this.periods.open(null)}
                 >${t("period.add_button")}</wt-button
               >`
         }
@@ -300,7 +319,115 @@ export class PeriodsScreen extends LitElement {
                 .rowCollapsible=${() => false}
               ></wt-data-table>`
       }
-      ${model && !this.readOnly ? this.periods.render() : nothing}`;
+      ${model && !this.readOnly ? this.periods.render() : nothing}
+      ${model && !this.readOnly ? this.renderDeletion() : nothing}`;
+  }
+
+  /** Closes the delete dialog once its period is gone, else reads what deleting it changes again. */
+  private followDeletion() {
+    const deletion = this.deleting;
+    if (!deletion) return;
+    const listed = this.model!.departments.some(
+      ({ active, periods }) => active && periods.some(({ id }) => id === deletion.period.id),
+    );
+    if (listed) void this.readImpact(deletion);
+    else this.deleting = undefined;
+  }
+
+  private askDelete(period: Period) {
+    if (this.readOnly || !this.isConnected || !this.model || this.deleting || this.periods.editing)
+      return;
+    const deletion: Deletion = {
+      period,
+      clockRevision: this.model.clockRevision,
+      generation: 0,
+      readError: "",
+      busy: false,
+    };
+    this.deleting = deletion;
+    void this.readImpact(deletion);
+  }
+
+  private async readImpact(deletion: Deletion) {
+    const generation = ++deletion.generation;
+    let impact: PeriodDeleteImpact;
+    try {
+      impact = await this.api.readPeriodDeleteImpact(deletion.period.id);
+    } catch {
+      if (this.current(deletion, generation)) {
+        deletion.readError = t("period.delete_read_error");
+        this.requestUpdate();
+      }
+      return;
+    }
+    if (!this.current(deletion, generation)) return;
+    deletion.impact = impact;
+    deletion.readError = "";
+    this.requestUpdate();
+  }
+  private current(deletion: Deletion, generation: number) {
+    return this.deleting === deletion && deletion.generation === generation && this.isConnected;
+  }
+
+  private async confirmDelete(
+    event: CustomEvent<{ periodId: string; replacementPeriodId: string | null }>,
+  ) {
+    event.stopPropagation();
+    const deletion = this.deleting;
+    const component = event.currentTarget as PeriodDeleteDialog;
+    if (
+      !deletion ||
+      deletion.busy ||
+      this.readOnly ||
+      !this.isConnected ||
+      component !== this.renderRoot.querySelector("period-delete-dialog") ||
+      event.detail.periodId !== deletion.period.id
+    )
+      return;
+    deletion.busy = true;
+    component.refusal = undefined;
+    this.requestUpdate();
+    try {
+      await this.api.deletePeriod(
+        deletion.period.id,
+        event.detail.replacementPeriodId,
+        deletion.clockRevision,
+      );
+    } catch (error) {
+      if (this.deleting === deletion && this.isConnected) component.refusal = refusalOf(error);
+      return;
+    } finally {
+      deletion.busy = false;
+      this.requestUpdate();
+    }
+    if (this.deleting === deletion) this.deleting = undefined;
+    this.api.rereadWatches();
+  }
+
+  private renderDeletion(): unknown {
+    const deletion = this.deleting;
+    if (!deletion) return nothing;
+    return keyed(
+      deletion,
+      html`<period-delete-dialog
+        .open=${true}
+        .period=${deletion.period}
+        .impact=${deletion.impact}
+        .readError=${deletion.readError}
+        .busy=${deletion.busy}
+        @period-delete-confirm=${(
+          event: CustomEvent<{ periodId: string; replacementPeriodId: string | null }>,
+        ) => void this.confirmDelete(event)}
+        @period-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (this.deleting === deletion && !deletion.busy) void this.readImpact(deletion);
+        }}
+        @period-delete-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.deleting === deletion && !deletion.busy) this.deleting = undefined;
+        }}
+      ></period-delete-dialog>`,
+    );
   }
 }
 

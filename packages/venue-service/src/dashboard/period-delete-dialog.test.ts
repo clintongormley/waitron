@@ -310,6 +310,21 @@ it("while loading Confirm is quiet (secondary) and disabled; a failed read shows
   expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
 });
 
+it("a failed re-read while an earlier impact is on screen shows the error and Retry, and keeps the impact", async () => {
+  const el = await mount(impactOf({ seasons: 2 }));
+  expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).toBeNull();
+  el.readError = "What deleting it changes could not be read.";
+  await el.updateComplete;
+  expect(bottom(el)).toBe("What deleting it changes could not be read.");
+  expect(body(el)).toContain("Painted in 2 seasons.");
+  const retries = listen(el, "period-delete-retry");
+  const retry = el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-delete]");
+  expect(retry, "Retry beside a shown impact").not.toBeNull();
+  retry!.click();
+  expect(retries).toEqual([{}]);
+  expect(confirm(el).disabled).toBe(false);
+});
+
 it("Cancel and the modal's close emit period-delete-close", async () => {
   const el = await mount(impactOf());
   const closes = listen(el, "period-delete-close");
