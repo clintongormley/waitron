@@ -393,3 +393,116 @@ describe("a group renamed for today, in the copies bills store", () => {
     expect((await billRow(v, second)).label).toBe(name);
   });
 });
+
+/** Counter 6 named "own" for today, seated, with Table 9 named "nine" pushed onto it: one group. */
+async function seatedPair(names: { own: string; nine: string } | null) {
+  const zone = await LONG_TABLE();
+  if (names !== null) {
+    await rename(zone.table.c6!, names.own);
+    await rename(zone.table.t9!, names.nine);
+  }
+  const guests = await seat(v, zone.table.c6!, 2);
+  await pushOnto(guests.partyId, zone.table.t9!, zone.table.c6!, 6);
+  return { ...zone, guests };
+}
+
+async function splitTableOff(partyId: string, tableId: string, billId: string | null) {
+  await post(`/api/parties/${partyId}/split-table`, {
+    tableId,
+    billId,
+    expectedPartyRevision: await revisionOf(v, partyId),
+  });
+}
+
+describe("a table split off a group renamed for today, as the kitchen sees it", () => {
+  it("Table 9 split off with no bill prints one MOVED slip from the group's name to Counter 6's own name", async () => {
+    const own = suffixed("Window");
+    const { table, guests } = await seatedPair({ own, nine: suffixed("Patio") });
+    const name = suffixed("García birthday");
+    await rename(table.c6!, name);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
+
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}`));
+  });
+
+  it("Table 9 split off taking a bill prints a MOVED slip for each bill, from the group's name to its own table's name", async () => {
+    const own = suffixed("Window");
+    const nine = suffixed("Patio");
+    const { table, guests } = await seatedPair({ own, nine });
+    const name = suffixed("García birthday");
+    await rename(table.c6!, name);
+    await orderForParty(v, guests.partyId, ["Burger", "Burger"], guests.tabId);
+    const second = await split(v, guests.partyId, guests.tabId, [2]);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, second));
+
+    const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
+    expect(slips).toHaveLength(2);
+    expect(slips.filter((s) => s.includes(prepareText(`${name} -> ${own}`)))).toHaveLength(1);
+    expect(slips.filter((s) => s.includes(prepareText(`${name} -> ${nine}`)))).toHaveLength(1);
+  });
+
+  it("Table 9 split off an unnamed group with no bill prints one MOVED slip to Counter 6", async () => {
+    const { table, guests } = await seatedPair(null);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
+
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(prepareText(`-> ${await labelOf(table.c6!)}`));
+  });
+
+  it("Table 9 split off an unnamed group taking a bill prints a MOVED slip for each bill", async () => {
+    const { table, guests } = await seatedPair(null);
+    await orderForParty(v, guests.partyId, ["Burger", "Burger"], guests.tabId);
+    const second = await split(v, guests.partyId, guests.tabId, [2]);
+
+    const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, second));
+
+    const slips = printed.filter(isMovedSlip).map((lines) => lines.join(" "));
+    expect(slips).toHaveLength(2);
+    const counter6 = prepareText(`-> ${await labelOf(table.c6!)}`);
+    const table9 = prepareText(`-> ${await labelOf(table.t9!)}`);
+    expect(slips.filter((s) => s.includes(counter6))).toHaveLength(1);
+    expect(slips.filter((s) => s.includes(table9))).toHaveLength(1);
+  });
+});
+
+describe("guests moved onto one table of their group renamed for today, as the kitchen sees it", () => {
+  async function moveTo(partyId: string, toTableId: string) {
+    await post(`/api/parties/${partyId}/move`, {
+      toTableId,
+      expectedPartyRevision: await revisionOf(v, partyId),
+    });
+  }
+
+  it("moved onto Counter 6 they print one MOVED slip from the group's name to Counter 6's own name", async () => {
+    const own = suffixed("Window");
+    const { table, guests } = await seatedPair({ own, nine: suffixed("Patio") });
+    const name = suffixed("García birthday");
+    await rename(table.c6!, name);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => moveTo(guests.partyId, table.c6!));
+
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}`));
+  });
+
+  it("moved onto Counter 6 of an unnamed group they print one MOVED slip to Counter 6", async () => {
+    const { table, guests } = await seatedPair(null);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => moveTo(guests.partyId, table.c6!));
+
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(prepareText(`-> ${await labelOf(table.c6!)}`));
+  });
+});

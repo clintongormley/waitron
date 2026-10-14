@@ -151,12 +151,7 @@ import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
-import {
-  joinMergeMembers,
-  leaveMergesRestoring,
-  mergeMembers,
-  writeMerge,
-} from "./floor-today-merges.js";
+import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
@@ -2688,14 +2683,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                     holder === null ? [partyId] : [partyId, holder],
                   );
             const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
-            if (path === "move") {
-              // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
-              const merged = await mergeMembers(tx, tableId);
-              await leaveMergesRestoring(
-                tx,
-                heldBefore.filter((id) => id !== tableId && merged.includes(id)),
-              );
-            }
             await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {
               const held = merge.moving === tableId ? merge.target : merge.moving;
@@ -2745,14 +2732,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
-        return movingRooms(tx, deps.cfg, held, undefined, async () => {
-          const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+        return movingRooms(tx, deps.cfg, held, undefined, () =>
+          splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
             expectedPartyRevision,
             operatorId: personId,
-          });
-          await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
-          return split;
-        });
+          }),
+        );
       });
       return c.json(result);
     }),

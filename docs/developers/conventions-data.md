@@ -1716,7 +1716,11 @@ onto first (`writeMerge`). The room's print reads both columns, so a rename move
 Bills, receipts, kitchen tickets and MOVED slips, the expo board and pass screens, overdue orders
 and the floor's party name read a table's shown name — its group's today's name, else its own,
 else its saved name, a group's name once per party (`partyTableLabels` and `orderTableLabels`,
-`packages/db/src/party-table-labels.ts`). A bill split off a party bill, or taken to the counter
+`packages/db/src/party-table-labels.ts`). Split a table, Move guests, Split tables… on a group and
+a party join with a merge compare each bill's shown name for its MOVED slip after the group has
+changed, in the same transaction (`splitTable` and `moveGuests` in
+`apps/server/src/table-actions.ts`, `splitGroup` in `apps/server/src/floor-today-split-group.ts`,
+the join route in `apps/server/src/till-api.ts`). A bill split off a party bill, or taken to the counter
 from a party with no name, stores the shown names of that moment; an issued bill keeps the label
 it was issued with. The closing party's `table_names`, the orders list and its table filter keep
 saved names.
