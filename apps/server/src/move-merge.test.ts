@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   floorTodayJoinTables,
   floorTodayJoins,
@@ -32,7 +32,7 @@ import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -979,6 +979,175 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
         "(mostrador)",
         ["1.000 x BURG"],
       ),
+    ]);
+  });
+});
+
+/** A fired Burger in group 1 and a held Paella in group 2 placed on the bill. */
+async function burgerAndHeldPaella(v: PartyVenue, partyId: string, billId: string): Promise<void> {
+  await inTx(v, (tx) =>
+    placeGroups(tx, v.cfg, partyId, {
+      groups: [
+        { lines: [{ menuItemId: v.item("Burger"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: v.item("Paella"), quantity: "1" }], release: "hold" },
+      ],
+      operatorId: OPERATOR,
+      billId,
+    }),
+  );
+}
+
+describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ruling 5)", () => {
+  const printHeldWork = (v: PartyVenue, on: boolean) => inTx(v, (tx) => writePrintHeldWork(tx, on));
+  afterEach(() => withTransaction(db, (tx) => writePrintHeldWork(tx, false)));
+
+  it("a party with a fired Burger and a held group 2 Paella on a HOLD ticket moving Mesa 111 to 112 prints one Grill slip listing both, the Paella under HOLD and GROUP 2", async () => {
+    const v = await setupPartyVenue(db);
+    await printHeldWork(v, true);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const mesa112 = await v.table("Mesa 112");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 111"));
+    await burgerAndHeldPaella(v, partyId, tabId);
+    const numbers = await numbersOf([tabId]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa112, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 111", "Mesa 112", [
+        "1.000 x BURG",
+        "HOLD",
+        "GROUP 2",
+        "1.000 x PAELLA",
+      ]),
+    ]);
+    expect(byDish(await noticesOf([tabId]))).toEqual([
+      ["BURG", tabId, "Mesa 112"],
+      ["PAELLA", tabId, "Mesa 112"],
+    ]);
+  });
+
+  it("lists each held group on a HOLD ticket under its own GROUP line, its dishes in line order", async () => {
+    const v = await setupPartyVenue(db);
+    await printHeldWork(v, true);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const mesa119 = await v.table("Mesa 119");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 118"));
+    const line = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [
+          { lines: [line("Paella"), line("Burger")], release: "hold" },
+          { lines: [line("Paella")], release: "hold" },
+        ],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const numbers = await numbersOf([tabId]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa119, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 118", "Mesa 119", [
+        "HOLD",
+        "GROUP 1",
+        "1.000 x PAELLA",
+        "1.000 x BURG",
+        "GROUP 2",
+        "1.000 x PAELLA",
+      ]),
+    ]);
+  });
+
+  it("a held group never printed adds nothing to the slip and records no notice", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const mesa114 = await v.table("Mesa 114");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 113"));
+    await burgerAndHeldPaella(v, partyId, tabId);
+    const numbers = await numbersOf([tabId]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa114, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 113", "Mesa 114", ["1.000 x BURG"]),
+    ]);
+    expect(byDish(await noticesOf([tabId]))).toEqual([["BURG", tabId, "Mesa 114"]]);
+  });
+
+  it("Split the bill of a held dish on a HOLD ticket prints a slip that starts with HOLD, onto the new order", async () => {
+    const v = await setupPartyVenue(db);
+    await printHeldWork(v, true);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 115"));
+    await burgerAndHeldPaella(v, partyId, tabId);
+    const before = (await printedBy(grill)).length;
+
+    const second = await split(v, partyId, tabId, [2]);
+
+    const numbers = await numbersOf([tabId, second]);
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip(
+        "Grill",
+        `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
+        "Mesa 115",
+        "Mesa 115",
+        ["HOLD", "GROUP 2", "1.000 x PAELLA"],
+      ),
+    ]);
+    expect(byDish(await noticesOf([second]))).toEqual([["PAELLA", second, "Mesa 115"]]);
+  });
+
+  it("Split the bill of a held dish whose group was never printed prints nothing and records no notice", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 116"));
+    await burgerAndHeldPaella(v, partyId, tabId);
+    const before = (await printedBy(grill)).length;
+
+    const second = await split(v, partyId, tabId, [2]);
+
+    expect(await slipsSince(grill, before)).toEqual([]);
+    expect(await noticesOf([tabId, second])).toEqual([]);
+  });
+
+  it("Transfer items of a held dish on a HOLD ticket prints it under HOLD and GROUP 2, onto the other order", async () => {
+    const v = await setupPartyVenue(db);
+    await printHeldWork(v, true);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 117"));
+    await burgerAndHeldPaella(v, partyId, tabId);
+    const second = await split(v, partyId, tabId, [1]);
+    const numbers = await numbersOf([tabId, second]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => transferItems(tx, v.cfg, tabId, second, [{ lineNo: 2 }], command));
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip(
+        "Grill",
+        `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
+        "Mesa 117",
+        "Mesa 117",
+        ["HOLD", "GROUP 2", "1.000 x PAELLA"],
+      ),
+    ]);
+    expect(byDish(await noticesOf([second]))).toEqual([
+      ["BURG", second, "Mesa 117"],
+      ["PAELLA", second, "Mesa 117"],
     ]);
   });
 });

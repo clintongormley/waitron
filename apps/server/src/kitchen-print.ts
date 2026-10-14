@@ -1004,32 +1004,84 @@ async function printCorrectionSlips(
   }
 }
 
-/** An order's fired kitchen work and its places and order number. */
+/** The kitchen work an order has on paper, and its places and order number. */
 export interface SentWork {
   orderNumber: string;
-  /** Null when nothing is fired. */
+  /** Null when the kitchen has nothing on paper. */
   places: OrderPlaces | null;
+  /** Its fired ticket items and its held ones on a HOLD ticket ({@link readOnHoldTickets}). */
   ticketItemIds: ReadonlySet<string>;
+  /** Of {@link ticketItemIds}, the held ones. */
+  heldItemIds: ReadonlySet<string>;
 }
 
 /** Read before a path moves an order's lines to another table. */
 export async function readSentWork(tx: Transaction, orderId: string): Promise<SentWork> {
-  const fired = await tx
-    .select({ id: ticketItems.id })
-    .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  if (fired.length === 0) return { orderNumber: "", places: null, ticketItemIds: new Set() };
+  const sent = (await readSentItems(tx, [orderId])).get(orderId);
+  if (sent === undefined) {
+    return { orderNumber: "", places: null, ticketItemIds: new Set(), heldItemIds: new Set() };
+  }
   const places = (await readOrderPlaces(tx, [orderId])).get(orderId)!;
-  return {
-    orderNumber: String(places.orderNumber),
-    places,
-    ticketItemIds: new Set(fired.map((row) => row.id)),
+  return { orderNumber: String(places.orderNumber), places, ...sent };
+}
+
+/**
+ * The ticket items the kitchen has on paper for each of `orderIds`, keyed by order: its fired ones
+ * and its held ones on a HOLD ticket. An order with none is left out.
+ */
+async function readSentItems(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, { ticketItemIds: Set<string>; heldItemIds: Set<string> }>> {
+  const fired = await tx
+    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
+    .from(ticketItems)
+    .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
+  const held = await readOnHoldTickets(tx, orderIds);
+  const sent = new Map<string, { ticketItemIds: Set<string>; heldItemIds: Set<string> }>();
+  const entry = (orderId: string) => {
+    const known = sent.get(orderId) ?? { ticketItemIds: new Set(), heldItemIds: new Set() };
+    sent.set(orderId, known);
+    return known;
   };
+  for (const item of fired) entry(item.workingOrderId).ticketItemIds.add(item.id);
+  for (const item of held) {
+    const known = entry(item.workingOrderId);
+    known.ticketItemIds.add(item.id);
+    known.heldItemIds.add(item.id);
+  }
+  return sent;
+}
+
+/**
+ * The unfired ticket items of `orderIds` whose group is still held and whose HOLD ticket was
+ * queued: the held work the kitchen has on paper.
+ */
+async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
+  return tx
+    .select({
+      id: ticketItems.id,
+      workingOrderId: ticketItems.workingOrderId,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(
+      and(
+        inArray(ticketItems.workingOrderId, [...orderIds]),
+        isNull(ticketItems.firedAt),
+        eq(orderGroups.state, "held"),
+        isNotNull(orderGroups.holdPrintedAt),
+      ),
+    );
 }
 
 /**
  * Tell the kitchen of sent work that moved. When the kitchen is to be told ({@link kitchenToBeTold}),
- * each of `before`'s fired items now on `toOrderId` gets a `moved` notice, at the quantity its
+ * each of `before`'s items on paper now on `toOrderId` gets a `moved` notice, at the quantity its
  * ticket asks for, and each station with an active printer gets one MOVED slip listing those items.
  * `splitFrom` maps a ticket item a split made to the one it copied.
  */
@@ -1185,14 +1237,17 @@ async function notifyMoved(
   splitFrom: ReadonlyMap<string, string>,
 ): Promise<void> {
   const toOrderId = header.id;
-  const moved: CorrectionItem[] = onOrder
-    .filter((item) => !item.madeHere && before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
-    .map((item) => ({
+  const moved: MovedItem[] = onOrder.flatMap((item) => {
+    const was = splitFrom.get(item.id) ?? item.id;
+    if (item.madeHere || !before.ticketItemIds.has(was)) return [];
+    return {
       workingOrderLineId: item.workingOrderLineId,
       stationId: item.stationId!,
       quantity: item.quantity,
       wasStarted: isStarted(item.state),
-    }));
+      held: before.heldItemIds.has(was),
+    };
+  });
   if (moved.length === 0) return;
 
   await VENUE_SERVICE.recordKitchenNotices(
@@ -1213,11 +1268,17 @@ async function notifyMoved(
   });
 }
 
-/** One MOVED slip per station of `items`, to its printers, listing its items as its tickets do. */
+/** A dish a MOVED slip lists; `held` when it is on a HOLD ticket rather than fired. */
+type MovedItem = CorrectionItem & { held: boolean };
+
+/**
+ * One MOVED slip per station of `items`, to its printers, listing its fired items as its tickets
+ * do and its held ones under HOLD, group by group.
+ */
 async function printMovedSlips(
   tx: Transaction,
   cfg: TillConfig,
-  items: readonly CorrectionItem[],
+  items: readonly MovedItem[],
   slip: Pick<MovedSlip, "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText">,
 ): Promise<void> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
@@ -1233,26 +1294,32 @@ async function printMovedSlips(
   for (const stationId of stationIds) {
     const targets = byStation.get(stationId);
     if (targets === undefined) continue;
-    const printed = items
+    const listed = items
       .filter((item) => item.stationId === stationId)
       .map((target) => {
         const entry = itemsByLine.get(target.workingOrderLineId)!;
         const item = atFiredQuantity(entry.item, target);
         return {
+          held: target.held,
           lineNo: entry.lineNo,
           item: entry.group === null ? item : { ...item, group: entry.group },
         };
       })
-      .sort(byGroupThenLine)
-      .map((entry) => entry.item);
+      .sort(byGroupThenLine);
+    const held: MovedSlip["held"] = [];
+    for (const { item } of listed.filter((entry) => entry.held)) {
+      const last = held.at(-1);
+      if (last !== undefined && last.group === item.group) last.items.push(item);
+      else held.push({ group: item.group!, items: [item] });
+    }
     for (const group of groupByLayout(targets)) {
       const bytes = formatMovedSlip(
         {
           ...slip,
           stationName: stationNames.get(stationId)!.name,
           at,
-          items: printed,
-          held: [],
+          items: listed.filter((entry) => !entry.held).map((entry) => entry.item),
+          held,
           locale: cfg.locale,
         },
         group[0]!,
@@ -1264,47 +1331,36 @@ async function printMovedSlips(
 
 /**
  * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
- * them ({@link partyFamilies}), keyed by bill; a bill with nothing fired is left out. Read before a
- * table action changes which tables those bills belong to.
+ * them ({@link partyFamilies}), keyed by bill; a bill the kitchen has nothing on paper for is left
+ * out. Read before a table action changes which tables those bills belong to.
  */
 export async function readPartiesSentWork(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, SentWork>> {
-  const work = new Map<string, SentWork>();
   const ofParties = [...new Set([...(await partyFamilies(tx, partyIds)).values()].flat())];
-  const rows = await tx
-    .select({
-      id: workingOrders.id,
-      orderNumber: workingOrders.orderNumber,
-      ticketItemId: ticketItems.id,
-    })
+  const bills = await tx
+    .select({ id: workingOrders.id, orderNumber: workingOrders.orderNumber })
     .from(workingOrders)
-    .innerJoin(
-      ticketItems,
-      and(eq(ticketItems.workingOrderId, workingOrders.id), isNotNull(ticketItems.firedAt)),
-    )
     .where(
       and(
         inArray(workingOrders.status, ["open", "placed", "settled"]),
         inArray(workingOrders.partyId, ofParties),
       ),
     );
-  const sent = new Map<
-    string,
-    { bill: Omit<(typeof rows)[number], "ticketItemId">; fired: Set<string> }
-  >();
-  for (const { ticketItemId, ...bill } of rows) {
-    const entry = sent.get(bill.id) ?? { bill, fired: new Set<string>() };
-    entry.fired.add(ticketItemId);
-    sent.set(bill.id, entry);
-  }
+  const sent = await readSentItems(
+    tx,
+    bills.map((bill) => bill.id),
+  );
   const places = await readOrderPlaces(tx, [...sent.keys()]);
-  for (const { bill, fired } of sent.values()) {
+  const work = new Map<string, SentWork>();
+  for (const bill of bills) {
+    const items = sent.get(bill.id);
+    if (items === undefined) continue;
     work.set(bill.id, {
       orderNumber: String(bill.orderNumber),
       places: places.get(bill.id)!,
-      ticketItemIds: fired,
+      ...items,
     });
   }
   return work;
@@ -1373,27 +1429,12 @@ async function readReprintParts(
         eq(ticketItems.madeHere, false),
       ),
     );
-  const held = await tx
-    .select({
-      workingOrderId: ticketItems.workingOrderId,
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      quantity: ticketItems.quantity,
-    })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(
-      and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
-        isNull(ticketItems.firedAt),
-        eq(orderGroups.state, "held"),
-        isNotNull(orderGroups.holdPrintedAt),
-      ),
-    );
+  const held = await readOnHoldTickets(tx, orderIds);
   const byOrder = (rows: typeof fired) => {
     const items = new Map<string, FiredItem[]>(orderIds.map((id) => [id, []]));
-    for (const { workingOrderId, ...item } of rows) items.get(workingOrderId)!.push(item);
+    for (const { workingOrderId, workingOrderLineId, stationId, quantity } of rows) {
+      items.get(workingOrderId)!.push({ workingOrderLineId, stationId, quantity });
+    }
     return items;
   };
   const firedByOrder = byOrder(fired);
