@@ -374,6 +374,20 @@ describe("the send gate's host check", () => {
     expect(scope.refusals().count).toBe(0);
   });
 
+  it("checks the host on a client that cached its middleware before its first send in a scope", async () => {
+    const { client, handled } = recording({
+      endpoint: LOCAL,
+      forcePathStyle: true,
+      cacheMiddleware: true,
+    });
+    await client.send(planned());
+    expect(handled()).toBe(1);
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
+    const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
+    expect(handled()).toBe(1);
+    expect((error as Error).message).toContain(HOST_REFUSAL);
+  });
+
   it("lets a local host through only when the scope allows any host", async () => {
     const { client, handled, hosts } = recording({ endpoint: LOCAL, forcePathStyle: true });
     const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });

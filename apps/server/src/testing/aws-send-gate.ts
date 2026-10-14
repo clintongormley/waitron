@@ -146,6 +146,9 @@ function addHostCheck(client: object): void {
     },
     { step: "finalizeRequest", priority: "low", name: "waitronRehearsalHostCheck" },
   );
+  // With `cacheMiddleware: true`, @smithy/core 3.35.0's `Client.send` keeps each command's built
+  // stack in `handlers`; one built before this check was added would skip it.
+  delete (client as { handlers?: unknown }).handlers;
 }
 
 function gatedSend(this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown): unknown {
