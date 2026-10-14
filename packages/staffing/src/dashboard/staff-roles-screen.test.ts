@@ -8,7 +8,7 @@ import {
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
 import { applyTokens, type DataTableColumn } from "@waitron/ui";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { StaffingApi, type StaffPerson, type StaffRole } from "./client.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
 import "./staff-roles-screen.js";
@@ -133,14 +133,20 @@ async function deleteMessage() {
 }
 
 describe("the staff roles page", () => {
-  it("lists each staff role's colour, name and holder count in position order", async () => {
+  it("lists each staff role's swatch and name, and its holder count, in position order", async () => {
     await mount(fakeRequest(() => [runner, waiter, cook]));
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Staff roles");
     expect(rowKeys()).toEqual(["role-w", "role-c", "role-r"]);
-    expect(cells("role-w").slice(0, 3)).toEqual(["Green", "Waiter", "2 people"]);
-    expect(cells("role-c").slice(0, 3)).toEqual(["Red", "Cook", "1 person"]);
-    expect(cells("role-r").slice(0, 3)).toEqual(["Purple", "Runner", "No people"]);
-    const swatch = row("role-c").querySelector<HTMLElement>("[part~=swatch]")!;
+    expect(
+      (table()!.columns as readonly DataTableColumn<StaffRole>[]).map((column) => column.key),
+    ).toEqual(["name", "people", "actions"]);
+    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "2 people"]);
+    expect(cells("role-c").slice(0, 2)).toEqual(["Cook", "1 person"]);
+    expect(cells("role-r").slice(0, 2)).toEqual(["Runner", "No people"]);
+    const nameCell = row("role-c").querySelector("td")!;
+    const swatch = nameCell.querySelector<HTMLElement>("[part~=swatch]")!;
+    expect(nameCell.textContent!.trim()).toBe("Cook");
+    expect(swatch.parentElement!.firstElementChild).toBe(swatch);
     expect(swatch.getAttribute("part")).toBe("swatch swatch-red");
     const painted = getComputedStyle(swatch).backgroundColor;
     const probe = document.createElement("span");
@@ -150,6 +156,28 @@ describe("the staff roles page", () => {
     expect(painted).not.toBe(
       getComputedStyle(row("role-w").querySelector("[part~=swatch]")!).backgroundColor,
     );
+  });
+
+  it("centres the swatch on the name, and keeps the name on the row's text line", async () => {
+    await mount(fakeRequest(() => [waiter]));
+    const [nameCell, peopleCell] = [...row("role-w").querySelectorAll("td")];
+    const textBox = (cell: Element) => {
+      const range = document.createRange();
+      const text = [...cell.querySelectorAll("*"), cell]
+        .flatMap((node) => [...node.childNodes])
+        .find((node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "")!;
+      range.selectNodeContents(text);
+      return range.getBoundingClientRect();
+    };
+    const name = textBox(nameCell!);
+    const people = textBox(peopleCell!);
+    expect(Math.abs(name.bottom - people.bottom)).toBeLessThan(0.5);
+    const swatch = nameCell!.querySelector("[part~=swatch]")!.getBoundingClientRect();
+    expect(swatch.width).toBeGreaterThan(0);
+    expect(Math.abs((swatch.top + swatch.bottom) / 2 - (name.top + name.bottom) / 2)).toBeLessThan(
+      1.5,
+    );
+    expect(swatch.right).toBeLessThan(name.left);
   });
 
   it("pins the actions column to the end", async () => {
@@ -254,7 +282,7 @@ describe("the staff roles page", () => {
     expect(dialog().staffRole).toEqual(cook);
   });
 
-  it("reads the list again when the dialog closes, without waiting for a saved event", async () => {
+  it("does not read the list again when the dialog is cancelled", async () => {
     const request = await mount(fakeRequest(() => [waiter]));
     await choose("edit-role-w");
     const reads = () =>
@@ -270,7 +298,78 @@ describe("the staff roles page", () => {
     await closed;
     await settle();
     expect(dialog().open).toBe(false);
+    expect(reads()).toBe(before);
+  });
+
+  it("with no live updates, reads again when a dialog that wrote closes, even with no saved event", async () => {
+    const request = await mount(
+      fakeRequest(() => [waiter], {
+        [`POST ${BASE}`]: () => ({ ...runner, holderIds: [] }),
+        [`PUT ${BASE}/role-r/holders`]: () => {
+          throw { code: "connection.failed" };
+        },
+      }),
+    );
+    const reads = () =>
+      request.mock.calls.filter(([path, method]) => path === BASE && (method ?? "GET") === "GET")
+        .length;
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!);
+    await settle();
+    const saved = vi.fn();
+    el.addEventListener("staff-role-saved", saved);
+    const inner = dialog();
+    inner.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Runner" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await inner.updateComplete;
+    await chooseOptions(inner.shadowRoot!.querySelector("wt-combobox[name=people]")!, ["p-ana"]);
+    await inner.updateComplete;
+    inner.shadowRoot!.querySelector<HTMLElement>("[data-test=save-staff-role]")!.click();
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(`${BASE}/role-r/holders`, "PUT", {
+        personIds: ["p-ana"],
+      }),
+    );
+    await settle();
+    const before = reads();
+    const closed = new Promise((resolve) =>
+      inner.shadowRoot!.querySelector("wt-modal")!.addEventListener("wt-close", resolve, {
+        once: true,
+      }),
+    );
+    inner.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-staff-role]")!.click();
+    await closed;
+    await settle();
+    expect(saved).not.toHaveBeenCalled();
     expect(reads()).toBe(before + 1);
+  });
+
+  it("with live updates, leaves the refresh after a write to the live layer", async () => {
+    const liveData = new LiveData();
+    const request = await mount(
+      fakeRequest(() => [waiter, cook]),
+      { liveData },
+    );
+    const reads = () =>
+      request.mock.calls.filter(([path, method]) => path === BASE && (method ?? "GET") === "GET")
+        .length;
+    const before = reads();
+    await choose("move-down-role-w");
+    await choose("delete-role-w");
+    const modal = deleteModal()!;
+    const closed = new Promise((resolve) =>
+      modal.addEventListener("wt-close", resolve, { once: true }),
+    );
+    modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await closed;
+    await settle();
+    expect(request).toHaveBeenCalledWith(`${BASE}/role-w`, "DELETE");
+    expect(reads()).toBe(before);
+    liveData.clear();
   });
 
   it("moves a staff role up or down with reorder, offering only the moves it can make", async () => {
@@ -306,7 +405,31 @@ describe("the staff roles page", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     await settle();
     expect(alertText("action-alert")).toBe(message);
+    await choose("edit-role-c");
+    expect(alertText("action-alert")).toBe("");
     liveData.clear();
+  });
+
+  it.each([
+    ["+ New staff role", "new"],
+    ["Delete", "delete"],
+  ] as const)("clears a move's refusal when %s starts another action", async (_, action) => {
+    await mount(
+      fakeRequest(() => [waiter, cook], {
+        [`PUT ${BASE}/order`]: () => {
+          throw { code: "staffing.invalid" };
+        },
+      }),
+    );
+    await choose("move-down-role-w");
+    expect(alertText("action-alert")).not.toBe("");
+    if (action === "new")
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!,
+      );
+    else await choose("delete-role-w");
+    await settle();
+    expect(alertText("action-alert")).toBe("");
   });
 
   it("asks before deleting, naming the painted blocks that go with it", async () => {
@@ -327,9 +450,24 @@ describe("the staff roles page", () => {
     expect(deleteModal()).toBeNull();
   });
 
-  it("offers Delete on a staff role with shifts, names them, and shows the in-use refusal", async () => {
+  it("says a staff role with shifts cannot be deleted, and draws Delete quiet and disabled", async () => {
+    const request = await mount(fakeRequest(() => [cook]));
+    await choose("delete-role-c");
+    const modal = deleteModal()!;
+    expect(modal.textContent).toContain("Cook can't be deleted while 2 shifts use it.");
+    expect(modal.textContent).not.toContain("Delete Cook?");
+    expect(modal.textContent).not.toContain("painted");
+    const confirm = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=confirm-delete]",
+    )!;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.variant).toBe("secondary");
+    expect(request).not.toHaveBeenCalledWith(`${BASE}/role-c`, "DELETE");
+  });
+
+  it("shows the in-use refusal when the shifts were assigned after the list was read", async () => {
     const request = await mount(
-      fakeRequest(() => [cook], {
+      fakeRequest(() => [{ ...cook, shiftCount: 0 }], {
         [`DELETE ${BASE}/role-c`]: () => {
           throw { code: "staff_role.in_use", params: { staffRoleId: "role-c" } };
         },
@@ -338,11 +476,10 @@ describe("the staff roles page", () => {
     await choose("delete-role-c");
     const modal = deleteModal()!;
     expect(modal.textContent).toContain("Delete Cook?");
-    expect(modal.textContent).toContain("2 shifts are assigned to it.");
-    expect(modal.textContent).toContain("Its 1 painted staffing block goes too.");
     const confirm = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
       "[data-test=confirm-delete]",
     )!;
+    expect(confirm.variant).toBe("danger");
     confirm.click();
     await settle();
     expect(request).toHaveBeenCalledWith(`${BASE}/role-c`, "DELETE");
@@ -350,15 +487,21 @@ describe("the staff roles page", () => {
       `Could not delete the staff role: ${codeMessage("staff_role.in_use")}`,
     );
     expect(deleteModal()).not.toBeNull();
-    expect(confirm.disabled).toBe(false);
   });
 
-  it("names a single shift in the singular, and closes the question on Cancel", async () => {
+  it("names a single shift in the singular, in English and Spanish, and closes on Cancel", async () => {
+    setLocale("es");
+    await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0 }]));
+    await choose("delete-role-c");
+    expect(deleteModal()!.textContent).toContain(
+      "No se puede eliminar Cook mientras lo use 1 turno.",
+    );
+    host.remove();
+    setLocale("en");
     await mount(fakeRequest(() => [{ ...cook, shiftCount: 1, blockCount: 0 }]));
     await choose("delete-role-c");
     const modal = deleteModal()!;
-    expect(modal.textContent).toContain("1 shift is assigned to it.");
-    expect(modal.textContent).not.toContain("painted");
+    expect(modal.textContent).toContain("Cook can't be deleted while 1 shift uses it.");
     const closed = new Promise((resolve) =>
       modal.addEventListener("wt-close", resolve, { once: true }),
     );
@@ -424,6 +567,50 @@ describe("the staff roles page", () => {
     },
   );
 
+  it("creates the next staff role after a held create answers once the page was taken out and put back", async () => {
+    let answer!: (value: StaffRole) => void;
+    let creates = 0;
+    const request = await mount(
+      fakeRequest(() => [waiter], {
+        [`POST ${BASE}`]: (body) => {
+          creates += 1;
+          if (creates === 1) return new Promise<StaffRole>((resolve) => (answer = resolve));
+          return { ...cook, ...(body as object), id: "role-cook" };
+        },
+      }),
+    );
+    const typeAndSave = async (name: string) => {
+      const inner = dialog();
+      inner
+        .shadowRoot!.querySelector("wt-input[name=name]")!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: name }, bubbles: true, composed: true }),
+        );
+      await inner.updateComplete;
+      inner.shadowRoot!.querySelector<HTMLElement>("[data-test=save-staff-role]")!.click();
+      await settle();
+    };
+    const add = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!;
+    await userEvent.click(add());
+    await settle();
+    await typeAndSave("Runner");
+    el.remove();
+    host.append(el);
+    await settle();
+    await userEvent.click(add());
+    await settle();
+    answer({ ...runner, id: "role-runner" });
+    await settle();
+    await typeAndSave("Cook");
+    expect(
+      request.mock.calls.filter(([, method]) => method === "POST").map(([, , body]) => body),
+    ).toEqual([
+      { name: "Runner", colour: "blue" },
+      { name: "Cook", colour: "blue" },
+    ]);
+    expect(request.mock.calls.filter(([, method]) => method === "PUT")).toEqual([]);
+  });
+
   it("offers no changes to a reader", async () => {
     await mount(
       fakeRequest(() => [waiter]),
@@ -431,7 +618,6 @@ describe("the staff roles page", () => {
     );
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")).toBeNull();
     expect((table()!.columns as readonly DataTableColumn<StaffRole>[]).map((c) => c.key)).toEqual([
-      "colour",
       "name",
       "people",
     ]);
@@ -442,7 +628,7 @@ describe("the staff roles page", () => {
     setLocale("es");
     await mount(fakeRequest(() => [waiter]));
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Roles de personal");
-    expect(cells("role-w").slice(0, 3)).toEqual(["Verde", "Waiter", "2 personas"]);
+    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "2 personas"]);
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")!.textContent!.trim()).toBe(
       "+ Nuevo rol de personal",
     );

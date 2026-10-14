@@ -8,13 +8,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { StaffRole, StaffingApi } from "./client.js";
-import { colourName, holderCount, t, tf, type StringKey } from "./strings.js";
+import { holderCount, t, tf, type StringKey } from "./strings.js";
 import "./staff-role-dialog.js";
 
 type Deletion = { staffRole: StaffRole; busy: boolean; error?: string };
 
-const count = (one: StringKey, other: StringKey, value: number) =>
-  value === 1 ? t(one) : tf(other, { count: String(value) });
+const count = (one: StringKey, other: StringKey, value: number, name = "") =>
+  tf(value === 1 ? one : other, { count: String(value), name });
 
 /** Lists the venue's staff roles in their order, and adds, edits, moves and deletes them. */
 @customElement("dashboard-staff-roles-screen")
@@ -43,12 +43,15 @@ export class StaffRolesScreen extends LitElement {
         color: var(--wt-color-danger);
       }
       /* Cell markup lives in the table's shadow root, so only a part reaches it. */
-      wt-data-table::part(colour) {
+      /* Baseline-aligned so the name sits on the row's text line; the swatch centres on it. */
+      wt-data-table::part(name) {
         display: inline-flex;
-        align-items: center;
+        align-items: baseline;
         gap: var(--wt-space-2);
       }
       wt-data-table::part(swatch) {
+        align-self: center;
+        flex: none;
         inline-size: var(--wt-space-4);
         block-size: var(--wt-space-4);
         border-radius: var(--wt-radius-sm);
@@ -119,9 +122,14 @@ export class StaffRolesScreen extends LitElement {
     }
   }
 
+  /** With no live updates nothing else reports a write, so the list is read again. */
+  async #afterWrite(): Promise<void> {
+    if (this.api.liveData === undefined) await this.#load();
+  }
+
   async #move(staffRole: StaffRole, step: -1 | 1): Promise<void> {
     if (this.busy) return;
-    const ids = this.staffRoles!.map((role) => role.id);
+    const ids = this.staffRoles!.map((listed) => listed.id);
     const from = ids.indexOf(staffRole.id);
     [ids[from], ids[from + step]] = [ids[from + step]!, ids[from]!];
     this.busy = true;
@@ -133,8 +141,7 @@ export class StaffRolesScreen extends LitElement {
     } finally {
       this.busy = false;
     }
-    // Also after a refusal: the route refuses a stale order whole, so a retry needs the current one.
-    await this.#load();
+    await this.#afterWrite();
   }
 
   async #delete(deletion: Deletion): Promise<void> {
@@ -156,7 +163,7 @@ export class StaffRolesScreen extends LitElement {
     this.deleting = { ...current, busy: false };
     await this.updateComplete;
     this.renderRoot.querySelector("wt-modal")?.closeAfter("saved");
-    await this.#load();
+    await this.#afterWrite();
   }
 
   #rowMenu(staffRole: StaffRole, index: number) {
@@ -172,6 +179,7 @@ export class StaffRolesScreen extends LitElement {
       >`;
     return html`<wt-row-actions label=${tf("staffing.role.actions", { name: staffRole.name })}>
       ${item("edit", t("staffing.role.edit"), () => {
+        this.actionError = undefined;
         this.editing = staffRole;
       })}
       ${
@@ -185,6 +193,7 @@ export class StaffRolesScreen extends LitElement {
           : nothing
       }
       ${item("delete", t("staffing.role.delete"), () => {
+        this.actionError = undefined;
         this.deleting = { staffRole, busy: false };
       })}
     </wt-row-actions>`;
@@ -193,16 +202,14 @@ export class StaffRolesScreen extends LitElement {
   #columns(): DataTableColumn<StaffRole>[] {
     const columns: DataTableColumn<StaffRole>[] = [
       {
-        key: "colour",
-        label: t("staffing.role.column.colour"),
+        key: "name",
+        label: t("staffing.role.column.name"),
         cell: (staffRole) =>
-          html`<span part="colour"
-            ><span part=${`swatch swatch-${staffRole.colour}`}></span>${colourName(
-              staffRole.colour,
-            )}</span
+          html`<span part="name"
+            ><span part=${`swatch swatch-${staffRole.colour}`}></span
+            ><span>${staffRole.name}</span></span
           >`,
       },
-      { key: "name", label: t("staffing.role.column.name"), cell: (staffRole) => staffRole.name },
       {
         key: "people",
         label: t("staffing.role.column.people"),
@@ -225,6 +232,8 @@ export class StaffRolesScreen extends LitElement {
     const deletion = this.deleting;
     if (!deletion) return nothing;
     const { staffRole } = deletion;
+    // The server refuses to delete a staff role that shifts use (staff_role.in_use).
+    const blocked = staffRole.shiftCount > 0;
     return html`<wt-modal
       open
       size="compact"
@@ -236,20 +245,20 @@ export class StaffRolesScreen extends LitElement {
         this.deleting = undefined;
       }}
     >
-      <p>${tf("staffing.role.delete_question", { name: staffRole.name })}</p>
       ${
-        staffRole.shiftCount > 0
+        blocked
           ? html`<p>
               ${count(
-                "staffing.role.delete_shifts_one",
-                "staffing.role.delete_shifts_other",
+                "staffing.role.delete_blocked_one",
+                "staffing.role.delete_blocked_other",
                 staffRole.shiftCount,
+                staffRole.name,
               )}
             </p>`
-          : nothing
+          : html`<p>${tf("staffing.role.delete_question", { name: staffRole.name })}</p>`
       }
       ${
-        staffRole.blockCount > 0
+        !blocked && staffRole.blockCount > 0
           ? html`<p>
               ${count(
                 "staffing.role.delete_blocks_one",
@@ -269,8 +278,9 @@ export class StaffRolesScreen extends LitElement {
           >${t("staffing.role.cancel")}</wt-button
         >
         <wt-button
-          variant="danger"
+          variant=${blocked ? "secondary" : "danger"}
           data-test="confirm-delete"
+          ?disabled=${blocked}
           ?loading=${deletion.busy}
           @click=${() => void this.#delete(deletion)}
           >${t("staffing.role.delete")}</wt-button
@@ -280,7 +290,7 @@ export class StaffRolesScreen extends LitElement {
   }
 
   override render() {
-    const roles = this.staffRoles;
+    const staffRoles = this.staffRoles;
     return html`<div class="heading">
         <h1>${t("staffing.role.title")}</h1>
         ${
@@ -290,6 +300,7 @@ export class StaffRolesScreen extends LitElement {
                 data-test="new-staff-role"
                 ?disabled=${this.busy}
                 @click=${() => {
+                  this.actionError = undefined;
                   this.editing = null;
                 }}
                 >${t("staffing.role.new")}</wt-button
@@ -298,7 +309,7 @@ export class StaffRolesScreen extends LitElement {
       </div>
       <p class="intro">${t("staffing.role.intro")}</p>
       ${
-        roles && this.loadError
+        staffRoles && this.loadError
           ? html`<p class="alert" role="alert" data-test="load-alert">${this.loadError}</p>`
           : nothing
       }
@@ -310,12 +321,12 @@ export class StaffRolesScreen extends LitElement {
       <wt-data-table
         data-test="staff-roles"
         aria-label=${t("staffing.role.title")}
-        .rows=${roles ?? []}
+        .rows=${staffRoles ?? []}
         .columns=${this.#columns()}
         .rowKey=${(staffRole: StaffRole) => staffRole.id}
-        .loading=${roles === undefined && this.loadError === undefined}
+        .loading=${staffRoles === undefined && this.loadError === undefined}
         .loadingMessage=${t("staffing.role.loading")}
-        .errorMessage=${roles === undefined ? (this.loadError ?? "") : ""}
+        .errorMessage=${staffRoles === undefined ? (this.loadError ?? "") : ""}
         .emptyMessage=${t("staffing.role.empty")}
       ></wt-data-table>
       ${
@@ -325,9 +336,9 @@ export class StaffRolesScreen extends LitElement {
               .api=${this.api}
               .staffRole=${this.editing ?? undefined}
               .open=${this.editing !== undefined}
-              @staff-role-close=${() => {
+              @staff-role-close=${(event: CustomEvent<{ wrote: boolean }>) => {
                 this.editing = undefined;
-                void this.#load();
+                if (event.detail.wrote) void this.#afterWrite();
               }}
             ></staff-role-dialog>`
       }

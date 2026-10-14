@@ -68,6 +68,8 @@ export class StaffRoleDialog extends LitElement {
   @state() private holdersRefused?: string;
   @state() private people?: StaffPerson[];
   @state() private peopleError?: string;
+  /** Whether any write succeeded since the dialog opened, so the host knows to read again. */
+  private wrote = false;
   /** The id written to: the edited staff role, or the one this dialog has created. */
   @state() private savedId?: string;
   private scope?: DraftScope<Draft>;
@@ -107,6 +109,7 @@ export class StaffRoleDialog extends LitElement {
       this.generation = {};
       this.openedFor = this.staffRole?.id;
       this.savedId = this.staffRole?.id;
+      this.wrote = false;
       this.draft = draftOf(this.staffRole);
       this.baseline = copy(this.draft);
       this.attempted = false;
@@ -188,6 +191,7 @@ export class StaffRoleDialog extends LitElement {
       return;
     }
     const generation = this.generation;
+    const identity = this.identity;
     const submitted = copy({ ...this.draft, name: this.draft.name.trim() });
     const details = { name: submitted.name, colour: submitted.colour };
     const baseline = this.baseline!;
@@ -204,8 +208,12 @@ export class StaffRoleDialog extends LitElement {
       this.refusal = { code: codeOf(error), params };
       return;
     }
-    // The id describes the server, so it is kept even when the answer is otherwise stale.
-    if (saved) this.savedId = saved.id;
+    // Taken out of the page and put back still open on the same subject, the dialog keeps the
+    // created id, or its next Save would create a second staff role.
+    if (saved && this.open && identity === this.identity) {
+      this.savedId = saved.id;
+      this.wrote = true;
+    }
     if (generation !== this.generation) return;
     if (saved) {
       this.baseline = { ...baseline, name: saved.name, colour: saved.colour };
@@ -214,6 +222,7 @@ export class StaffRoleDialog extends LitElement {
     if (!sameHolders(submitted.holderIds, this.baseline!.holderIds)) {
       try {
         saved = await this.api.setHolders(this.savedId!, submitted.holderIds);
+        this.wrote = true;
       } catch (error) {
         if (generation !== this.generation) return;
         this.busy = false;
@@ -320,7 +329,7 @@ export class StaffRoleDialog extends LitElement {
           event.stopPropagation();
           if (current()) {
             this.open = false;
-            this.emit("staff-role-close");
+            this.emit("staff-role-close", { wrote: this.wrote });
           }
         }}
         @keydown=${(event: KeyboardEvent) =>

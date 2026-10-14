@@ -338,6 +338,48 @@ describe("staff-role dialog", () => {
     expect(api.setHolders).toHaveBeenLastCalledWith("role-new", ["p-ana"]);
   });
 
+  it.each([
+    ["for a new staff role", undefined, "createStaffRole"],
+    ["on another staff role", waiter, "updateStaffRole"],
+  ] as const)(
+    "drops a late create's id when the dialog was closed and reopened %s",
+    async (_, reopenedOn, expected) => {
+      const api = await mount();
+      let settle!: (value: StaffRole) => void;
+      api.createStaffRole.mockImplementationOnce(
+        () => new Promise<StaffRole>((resolve) => (settle = resolve)),
+      );
+      await typeName("Runner");
+      await press();
+      await vi.waitFor(() => expect(api.createStaffRole).toHaveBeenCalled());
+      el.remove();
+      el.open = false;
+      document.body.append(el);
+      await el.updateComplete;
+      el.staffRole = reopenedOn;
+      el.open = true;
+      await el.updateComplete;
+      settle({ ...waiter, id: "role-runner", name: "Runner", holderIds: [] });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await el.updateComplete;
+      await typeName("Cook");
+      const close = closed();
+      await press();
+      await close;
+      if (expected === "createStaffRole") {
+        expect(api.createStaffRole).toHaveBeenCalledTimes(2);
+        expect(api.createStaffRole).toHaveBeenLastCalledWith({ name: "Cook", colour: "blue" });
+        expect(api.updateStaffRole).not.toHaveBeenCalled();
+      } else {
+        expect(api.createStaffRole).toHaveBeenCalledTimes(1);
+        expect(api.updateStaffRole).toHaveBeenCalledWith("role-1", {
+          name: "Cook",
+          colour: "green",
+        });
+      }
+    },
+  );
+
   it("says when the people cannot be loaded, and still saves the details", async () => {
     const api = await mount(
       waiter,
