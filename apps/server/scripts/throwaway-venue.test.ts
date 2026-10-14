@@ -92,6 +92,22 @@ describe("applyDevelopmentVenue", () => {
     expect(facts()).toEqual(before);
   });
 
+  it("refuses production with no module offering a throwaway allocation, before writing anything", async () => {
+    const modules = ALL_MODULES.filter((module) => module.name !== "fiscal-verifactu");
+    const before = facts();
+    await expect(
+      applyDevelopmentVenue(
+        planVenue(request(real), modules),
+        { db: suite.db, modules },
+        { WAITRON_ENV: "production" },
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.throwaway_allocation_refused",
+      params: { environment: "production" },
+    });
+    expect(facts()).toEqual(before);
+  });
+
   it("refuses two modules offering a throwaway allocation before writing anything", async () => {
     const fiscal = ALL_MODULES.find((module) => module.name === "fiscal-verifactu")!;
     const modules = [...ALL_MODULES, { ...fiscal, name: "fiscal-twin" }];
