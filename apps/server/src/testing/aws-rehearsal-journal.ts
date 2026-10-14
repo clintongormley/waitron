@@ -1,7 +1,7 @@
 // What a rehearsal run has created, written as it goes, so a keeper can clean up after a kill.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, normalize } from "node:path";
 import {
   isReceiptRegion,
   isReceiptToken,
@@ -82,10 +82,13 @@ const KEYS = [
   "ready",
 ] as const;
 const HEADER_TOKENS = ["commit", "node", "sdkVersion", "litestreamVersion", "startedAt"] as const;
-const LOOPBACK = /^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/;
+const LOOPBACK = /^http:\/\/(?:127\.0\.0\.1|localhost):[1-9][0-9]{0,4}$/;
 const START_TIME = /^[A-Za-z0-9 :]{1,64}$/;
 const RECEIPT_DIR = /^\/[A-Za-z0-9._/@-]+$/;
 const S3_KEY_MAX = 1024;
+const CONTROL = /\p{Cc}/u;
+// Far above any run's budget, and inside what setTimeout can wait.
+const DURATION_MAX_MS = 24 * 60 * 60_000;
 
 export function journalFileName(runId: string): string {
   return `aws-rehearsal-${runId}-journal.json`;
@@ -138,8 +141,20 @@ function positiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
+/** Pid 1 is init or launchd, never a child the run started. */
+function childPid(value: unknown): value is number {
+  return positiveInteger(value) && value > 1;
+}
+
 function duration(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw refused(field);
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > DURATION_MAX_MS
+  ) {
+    throw refused(field);
+  }
   return value;
 }
 
@@ -148,6 +163,8 @@ function receiptDir(value: unknown): string {
     typeof value !== "string" ||
     !isAbsolute(value) ||
     !RECEIPT_DIR.test(value) ||
+    normalize(value) !== value ||
+    (value.length > 1 && value.endsWith("/")) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
     throw refused("receiptDir");
@@ -161,7 +178,12 @@ function uploads(value: unknown): JournalUpload[] {
     if (!isRecord(upload)) throw refused("uploads");
     onlyKeys(upload, ["key", "uploadId"], "uploads.");
     const { key, uploadId } = upload;
-    if (typeof key !== "string" || key.length === 0 || key.length > S3_KEY_MAX) {
+    if (
+      typeof key !== "string" ||
+      key.length === 0 ||
+      key.length > S3_KEY_MAX ||
+      CONTROL.test(key)
+    ) {
       throw refused("uploads");
     }
     if (!isReceiptUploadId(uploadId)) throw refused("uploads");
@@ -175,7 +197,7 @@ function pids(value: unknown): JournalPid[] {
     if (!isRecord(entry)) throw refused("pids");
     onlyKeys(entry, ["pid", "startTime"], "pids.");
     const { pid, startTime } = entry;
-    if (!positiveInteger(pid)) throw refused("pids");
+    if (!childPid(pid)) throw refused("pids");
     if (startTime !== null && (typeof startTime !== "string" || !START_TIME.test(startTime))) {
       throw refused("pids");
     }

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -125,10 +125,40 @@ describe("readJournal", () => {
     ["keeperPid", { keeperPid: 0 }],
     ["ready", { ready: "yes" }],
     [SECRETISH, { [SECRETISH]: 1 }],
+    ["endpoint", { endpoint: "http://127.0.0.1:65536" }],
+    ["endpoint", { endpoint: "http://127.0.0.1:080" }],
+    ["endpoint", { endpoint: "http://localhost:0" }],
+    ["receiptDir", { receiptDir: `/var/has space/${SECRETISH}` }],
+    ["receiptDir", { receiptDir: `/var//${SECRETISH}` }],
+    ["receiptDir", { receiptDir: `/var/${SECRETISH}/` }],
+    ["pids", { pids: [{ pid: 4242, startTime: null, extra: SECRETISH }] }],
+    ["pids", { pids: [{ pid: 1, startTime: null }] }],
+    ["header", { header: { ...journal().header, extra: SECRETISH } }],
+    ["uploads", { uploads: [{ key: "k".repeat(1025), uploadId: "upload-1" }] }],
+    ["uploads", { uploads: [{ key: `a\n${SECRETISH}`, uploadId: "upload-1" }] }],
+    ["uploads", { uploads: [{ key: `a\u0000${SECRETISH}`, uploadId: "upload-1" }] }],
+    ["keeperCeilingMs", { keeperCeilingMs: 1e308 }],
+    ["teardownMs", { teardownMs: 1e308 }],
   ])("refuses a bad %s, naming the field and never the value", (field, overrides) => {
     const error = refusal(text({ ...journal(), ...overrides }));
     if (field !== SECRETISH) expect(error.message).toContain(field);
     expect(error.message).not.toContain(SECRETISH);
+  });
+
+  it("accepts the edges it allows: port 65535, a 1024-character key, pid 2", () => {
+    const read = readJournal(
+      text(
+        journal({
+          endpoint: "http://localhost:65535",
+          uploads: [{ key: "k".repeat(1024), uploadId: "upload-1" }],
+          pids: [{ pid: 2, startTime: null }],
+          keeperCeilingMs: 24 * 60 * 60_000,
+        }),
+      ),
+      { tmpdir: TMP },
+    );
+    expect(read.endpoint).toBe("http://localhost:65535");
+    expect(read.pids).toEqual([{ pid: 2, startTime: null }]);
   });
 
   it("refuses a journal missing a field", () => {
@@ -159,6 +189,22 @@ describe("writeJournal", () => {
     expect(await readdir(receipts)).toEqual([journalFileName(RUN_ID)]);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     expect(readJournal(await readFile(path, "utf8"), { tmpdir: TMP }).state).toBe("deleted");
+  });
+
+  it("replaces the file rather than writing into it, so a reader holding the old one sees it whole", () => {
+    const receipts = join(dir, "receipts");
+    writeJournal(receipts, journal({ state: "creating" }));
+    const path = join(receipts, journalFileName(RUN_ID));
+    const before = statSync(path).ino;
+    const held = openSync(path, "r");
+    try {
+      writeJournal(receipts, journal({ state: "owned" }));
+      expect(statSync(path).ino).not.toBe(before);
+      expect(readJournal(readFileSync(held, "utf8"), { tmpdir: TMP }).state).toBe("creating");
+    } finally {
+      closeSync(held);
+    }
+    expect(readJournal(readFileSync(path, "utf8"), { tmpdir: TMP }).state).toBe("owned");
   });
 
   it("is synchronous: the file holds the journal as soon as the call returns", () => {

@@ -1252,23 +1252,23 @@ async function runOwned<T>(
     ready: null,
   });
   // Once a bucket may exist a failed write fails the run, but never stops it or its teardown.
+  // The whole serialised journal, as writeReceipt checks the receipt's text.
+  const writeChecked = (): void => {
+    const body = journalNow();
+    if (carriesKeyPair(JSON.stringify(body), profile)) {
+      throw new AwsRehearsalRefused("journal-refused", "the journal would hold the key pair");
+    }
+    deps.journal(receiptDir, body);
+  };
   const journal = (state: JournalState = journalState): void => {
     journalState = state;
     try {
-      deps.journal(receiptDir, journalNow());
+      writeChecked();
     } catch {
       journalFailures += 1;
       record({ scenario: "lifecycle", phase: "journal", outcome: "failed" });
     }
   };
-  try {
-    deps.journal(receiptDir, journalNow());
-  } catch {
-    throw new AwsRehearsalRefused(
-      "journal-unwritable",
-      "the journal could not be written in the receipt folder; nothing was created",
-    );
-  }
   const requests = runScope(
     createRequestPlan({ bucket, apis, prefixes: () => issued }),
     record,
@@ -1463,6 +1463,15 @@ async function runOwned<T>(
   let result: T | undefined;
   let teardown: TeardownResult | undefined;
   let scenarioStillRunning = false;
+  // After every refusal that can come before CreateBucket, so a refused run leaves no journal.
+  try {
+    writeChecked();
+  } catch {
+    throw new AwsRehearsalRefused(
+      "journal-unwritable",
+      "the journal could not be written in the receipt folder; nothing was created",
+    );
+  }
   await requests.scope.run(async () => {
     try {
       result = await runWithDeadline(setUpAndRun, {
@@ -1555,7 +1564,7 @@ async function runOwned<T>(
     // Written last, so a keeper that reads it knows the receipt exists.
     journalState = "finished";
     try {
-      deps.journal(receiptDir, journalNow());
+      writeChecked();
     } catch {
       finishFailure = new AwsRehearsalFailed("the journal was not marked finished");
     }

@@ -12,6 +12,7 @@ import {
   RUN_ID,
   rejection,
   SECRET,
+  KEY_ID,
   sdkError,
   START_TIME,
   SUFFIX,
@@ -345,16 +346,93 @@ describe("a journal that cannot be written", () => {
         ctx.trackChild(4242);
       }, h.deps),
     );
-    const messages = [error, ...((error as Partial<AggregateError>).errors ?? [])].map(
-      (each: Error) => each.message,
-    );
-    expect(messages.some((message) => message.includes("journal"))).toBe(true);
+    expect(messagesOf(error)).toEqual([
+      "AwsRehearsalFailed: 3 journal writes failed, so the journal may not have named everything this run made",
+      "AwsRehearsalFailed: the journal was not marked finished",
+    ]);
     expect(h.fake.calls.map((call) => call.name)).toContain("DeleteBucket");
     const receipt = JSON.parse(await readFile(receiptPath(), "utf8")) as AwsReceipt;
     expect(receipt.remaining).toEqual({ bucket: null, uploadIds: [] });
     expect(
       receipt.events.filter((event) => event.phase === "journal").map((event) => event.outcome),
     ).toEqual(["failed", "failed", "failed"]);
+  });
+});
+
+function messagesOf(error: Error): string[] {
+  return ((error as Partial<AggregateError>).errors ?? []).map(
+    (each: Error) => `${each.name}: ${each.message}`,
+  );
+}
+
+describe("a journal that cannot be written, round 1", () => {
+  it("names one failed write in the singular", async () => {
+    const h = harness(
+      {},
+      {
+        journal: (_dir, journal) => {
+          if (journal.pids.length > 0 && journal.state === "owned") throw new Error("disk full");
+          h.journals.push(structuredClone(journal));
+        },
+      },
+    );
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.trackChild(4242);
+      }, h.deps),
+    );
+    expect(`${error.name}: ${error.message}`).toBe(
+      "AwsRehearsalFailed: 1 journal write failed, so the journal may not have named everything this run made",
+    );
+    expect(last(h).state).toBe("finished");
+  });
+
+  it("names only the unfinished journal when that is the one write that failed", async () => {
+    const h = harness(
+      {},
+      {
+        journal: (_dir, journal) => {
+          if (journal.state === "finished") throw new Error("disk full");
+          h.journals.push(structuredClone(journal));
+        },
+      },
+    );
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(`${error.name}: ${error.message}`).toBe(
+      "AwsRehearsalFailed: the journal was not marked finished",
+    );
+  });
+
+  it("refuses a journal holding the key pair, as a failed write, before the writer sees it", async () => {
+    const h = harness({}, { endpoint: `http://127.0.0.1:7070/${KEY_ID}` });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("journal-unwritable");
+    expect(h.journals).toEqual([]);
+    expect(h.fake.calls).toEqual([]);
+  });
+});
+
+describe("round 1: refusals before the first journal write", () => {
+  it("a refused plan writes no journal and sends nothing", async () => {
+    const h = harness({}, { apis: ["CreateBucket"] });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect((error as AwsRehearsalRefused).reason).toBe("plan-refused");
+    expect(h.journals).toEqual([]);
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  it("writes finished when printing the receipt's path throws", async () => {
+    const h = harness(
+      {},
+      {
+        print: () => {
+          throw new Error("stdout closed");
+        },
+      },
+    );
+    await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(existsSync(receiptPath())).toBe(true);
+    expect(last(h).state).toBe("finished");
   });
 });
 
