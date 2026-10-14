@@ -203,6 +203,12 @@ it("recovers a failed initial load and ignores model reads that settle after rem
   expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2026);
 });
 
+it("shows the Spanish Opening hours title", async () => {
+  setLocale("es");
+  const el = await mount();
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Horario de apertura");
+});
+
 function pickerModel(): OpeningHoursModel {
   const data = model();
   data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", seasonWeeks: [] }];
