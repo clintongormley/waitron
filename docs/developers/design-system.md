@@ -1942,21 +1942,22 @@ season's week for every active department and zone, in a full-screen frame (`pai
 `wt-modal size="full"`). Its bar holds ✕, the heading "<season> week", ‹ the season chip ›, the
 department-or-zone picker, a Periods link, and Cancel and Save; the bar stays in view while the
 paint grid (`paint-grid.ts`) scrolls in the space under it. A heading too long for its room wraps
-onto more lines rather than being cut. A paint row offers the department's
-periods (✎ edits one), Closed and + New period, which saves the period on its own and chooses it.
-Dragging down a day paints the chosen period in the business day's quarter hours; a drag over a
-block replaces what it covers, touching blocks of one period join, and clicking a block offers
-another period or Delete. Each day's ⋮ offers Copy to…, with a tick per day, and Clear. In a
-department, Closed erases; a zone paints Closed only, over its department's week drawn faded, and
-Delete there gives the time back to the department. One draft holds every department and zone of
-the season, so the picker keeps edits; Save stays quiet until the draft changes and writes the
-edited weeks in one request. ‹ › ask first when there are edits. A refusal that names a department
-or zone switches the picker to it, marks the day's heading and is told beside Save; the draft stays
-for a retry. A live refresh keeps edited weeks; one that removes the season, removes a department or
-zone with edits, or makes a department with edits inactive, drops those edits and says so beside
-Save. The grid fits seven days in 1280 px; at phone
-width the grid scrolls sideways with its time column pinned. A venue viewer gets ✕ alone, no paint
-row, and a grid that does not change.
+onto more lines rather than being cut. A paint row offers the department's periods (✎ edits one),
+Closed and + New period, which saves the period on its own and chooses it. Dragging down a day
+paints the chosen period in the business day's quarter hours; a drag over a block replaces what it
+covers, touching blocks of one period join, and clicking a block offers another period or Delete.
+Each day's ⋮ offers Copy to…, with a tick per day, and Clear. In a department, Closed erases; a zone
+paints Closed only, over its department's week drawn faded, and Delete there gives the time back to
+the department. One draft holds every department and zone of the season, so the picker keeps edits;
+Save stays quiet until the draft changes and writes the edited weeks in one request. ‹ › ask first
+when there are edits. A refusal that names a department or zone switches the picker to it, marks the
+day's heading and is told beside Save; the draft stays for a retry. A live refresh keeps edited
+weeks; after a save, the weeks it sent follow the first read that started after it answered, while
+no other save is in flight, except days repainted since it was sent; one that removes the season,
+removes a department or zone with edits, or makes a department with edits inactive, drops those
+edits and says so beside Save. The grid fits seven days in 1280 px; at phone width the grid scrolls
+sideways with its time column pinned. A venue viewer gets ✕ alone, no paint row, and a grid that
+does not change.
 
 The per-date editor (`opening-hours-day.ts`) paints one date of a special day. A special day's
 Edit hours on this date opens it at `/view/date/date/<yyyy-mm-dd>`; with no date, or one that is

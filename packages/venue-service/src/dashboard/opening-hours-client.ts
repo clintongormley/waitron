@@ -143,8 +143,11 @@ export class OpeningHoursApi {
       recovered,
     );
   }
-  rereadWatches(): void {
-    this.#watches.reread(QUERY_DEPENDENCIES["opening-hours"]);
+  rereadWatches(): number {
+    return this.#watches.reread(QUERY_DEPENDENCIES["opening-hours"]);
+  }
+  readNumberOf(model: object): number | undefined {
+    return this.#watches.readNumberOf(model);
   }
   rereadWithSpecialDays(): void {
     this.specialDays.rereadWatches();

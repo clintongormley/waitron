@@ -217,17 +217,23 @@ from a season chip, an ordinary date and a zone's Opening hours link.
   from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
   server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
   was read in the code, not run.
-- A slow live read started before a save can briefly replace the week just saved; repainting in
-  that moment and saving again undoes the first save. With live data, as on the dashboard, the
-  stale read is delivered by `LiveData`'s read (`packages/dashboard-kit/src/live-data.ts`), which
-  applies whatever answers; without it, `model-watch.ts` applies a read that started before the
-  save until a later read answers. A fix may need both places. The old week editors are believed
-  to have had the same flaw; that was read, not reproduced. The other order fails too: a live read
-  that arrives while a save is in flight is not applied to the weeks being saved, and once the save
-  succeeds the painter keeps showing what it sent, so another manager's change in that read is
-  hidden and a later save sends the older week back (reproduced in the A506-8 finish-branch review
-  with a delayed save reply). Telling the two orders apart needs the read to say whether it saw the
-  save.
+- A save writes each edited week whole, all seven days. If another manager's save of the same week
+  is stored after the read this painter's copy of the week came from and before this save is stored,
+  this save puts back the days they changed, and nothing shows it. A fix needs the server to refuse
+  a week changed since the draft was read, or to write only the changed days. Read in the code
+  (`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
+  against the server.
+- An edited week keeps all its days when a live update changes a day the manager did not paint, so a
+  later Save sends that day's old hours back. The one exception is the first read that started after
+  a save of that week answered, with no other save in flight: it takes in the stored days not
+  repainted since (`rebaseDays`). This is A506-8's rule, asserted by "a live model refresh keeps an
+  edited week and reseeds the ones not edited" in `season-painter.test.ts`. Following unedited days
+  one by one would reverse that assertion, so it is an owner decision. PR #1651 (A506-9) leaves the
+  same question open for special days: a live update merges paint per department or zone, not per
+  date.
+- `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
+  own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
+  the code, not run.
 - The routes `PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week`
   (`routes.ts`) are called by no client now that the painter saves through
   `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.

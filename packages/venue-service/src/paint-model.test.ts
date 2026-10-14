@@ -4,6 +4,7 @@ import {
   copyDay,
   deleteBlock,
   paintStretch,
+  rebaseDays,
   stepAt,
   stepMinuteAt,
   type Paint,
@@ -12,6 +13,7 @@ import {
 const LUNCH = "lunch";
 const AFTERNOON = "afternoon";
 const BREAKFAST = "breakfast";
+const DINNER = "dinner";
 const paint = (periodId: string | null, startsAt: string, endsAt: string): Paint => ({
   periodId,
   startsAt,
@@ -242,5 +244,59 @@ describe("stepAt", () => {
     expect(stepAt(40, 0, "06:00")).toBe("06:00");
     expect(stepAt(40, 0, "05:50")).toBe("06:00");
     expect(stepAt(40, -10, "06:00")).toBe("06:00");
+  });
+});
+
+describe("rebaseDays", () => {
+  it("takes the stored days, keeping only the days painted differently from what was sent", () => {
+    const stored = new Map([
+      ["1", [paint(DINNER, "18:00", "21:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", []],
+    ]);
+    const sent = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", []],
+    ]);
+    const current = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", [paint(AFTERNOON, "15:00", "17:00")]],
+    ]);
+    const rebased = rebaseDays(stored, sent, current);
+    expect(rebased).toEqual(
+      new Map([
+        ["1", [paint(DINNER, "18:00", "21:00")]],
+        ["3", [paint(LUNCH, "07:00", "09:00")]],
+        ["4", [paint(AFTERNOON, "15:00", "17:00")]],
+      ]),
+    );
+    const inputs = [stored, sent, current].flatMap((days) => [...days.values()].flat());
+    for (const day of rebased.values())
+      for (const block of day) expect(inputs).not.toContain(block);
+  });
+
+  it("a day removed since the save is left out, a day added since is kept, and a day only stored is kept", () => {
+    const stored = new Map([
+      ["2026-12-24", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-26", [paint(DINNER, "18:00", "21:00")]],
+    ]);
+    const sent = new Map([
+      ["2026-12-24", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+    ]);
+    const current = new Map([
+      ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+      ["2026-12-31", [paint(AFTERNOON, "15:00", "17:00")]],
+    ]);
+    expect(rebaseDays(stored, sent, current)).toEqual(
+      new Map([
+        ["2026-12-25", [paint(LUNCH, "13:00", "16:00")]],
+        ["2026-12-26", [paint(DINNER, "18:00", "21:00")]],
+        ["2026-12-31", [paint(AFTERNOON, "15:00", "17:00")]],
+      ]),
+    );
   });
 });

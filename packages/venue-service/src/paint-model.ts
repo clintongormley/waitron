@@ -92,3 +92,21 @@ export function samePaint(a: readonly Paint[], b: readonly Paint[]): boolean {
     )
   );
 }
+
+/** `stored`'s days, except each day `current` paints differently from `sent` (a missing day
+ *  paints nothing), which takes `current`'s, or is left out when `current` has no such day. */
+export function rebaseDays<K>(
+  stored: ReadonlyMap<K, readonly Paint[]>,
+  sent: ReadonlyMap<K, readonly Paint[]>,
+  current: ReadonlyMap<K, readonly Paint[]>,
+): Map<K, Paint[]> {
+  const copy = (day: readonly Paint[]) => day.map((range) => ({ ...range }));
+  const rebased = new Map([...stored].map(([key, day]) => [key, copy(day)]));
+  for (const key of new Set([...sent.keys(), ...current.keys()])) {
+    const day = current.get(key);
+    if (samePaint(day ?? [], sent.get(key) ?? [])) continue;
+    if (day) rebased.set(key, copy(day));
+    else rebased.delete(key);
+  }
+  return rebased;
+}
