@@ -1,186 +1,179 @@
-# A679: complete first fiscal setup
+# A679: first Live fiscal setup
 
-**Proposal for owner review, 2026-10-14. No implementation approval or plan.**
-You must be able to prepare a new restaurant and finish fiscal setup through the wizard,
-without a repository checkout, shell commands or a Cloud subscription.
-An allocation is the signed assignment of an installation identity and its invoice series.
-A custodian is the named person who keeps the signing key and the current master register.
+**Proposal for owner review, updated 2026-10-14 at 22:05. No full-design or build approval.**
+You must be able to finish Live fiscal setup without a repository checkout, shell commands or
+Cloud subscription. An allocation is a signed assignment of an installation identity and its
+invoice series. Your custodian keeps the signing key and current master register outside the box.
 
-## Scope and evidence
+## Settled scope and order
 
-A679 goes before W41s-6 under the owner's 21:05 directive. W41s-6 is parked at
-`beee37c61dca221b20dba5d1c822a1ead6ea3e72`, without a push or PR, and rebases afterwards.
-The driver ran the fresh-reset onboarding wizard on main `641665e4c0be3828a61ec98975bdfd461b5a5edb`.
-Prepare posted no `initialOperations`, returned HTTP 400 `sif.allocation_invalid / reauthentication_required`,
-and showed a network/certificate failure with Try again. Status stayed unprovisioned.
-This was development-mode preproduction; no production box was run. Receipt: Lane E `receipts/a679/reproduction.json`.
-The A680 plan was read in Lane B's worktree, not on main. Its automatic throwaway custodian
-belongs only to development/test. A679 neither duplicates that signer nor changes its scope.
+The owner's Lane E decisions supersede the earlier scope and order:
 
-Reading receipts on this tree:
+- **21:50, option A approved:** offer BOTH a guided first outside paper kit and import from an
+  existing custodian. Both routes converge on the same public import and authority checks.
+- **22:00:** Demo and Preparation need no kit or allocation import. B/A680 owns the automatic,
+  clearly marked throwaway preproduction signer in the box, refused in production, with a deletion
+  control. A679 must use that work, not implement a second signer. Live always needs real outside custody.
+- **22:05:** only Demo is urgent before morning, handled by B/A680. Finish and publish these Live
+  design docs now. Un-park and finish W41s6; build A679 after W41s6 lands, before W41s7, on A680.
+  This order does not approve the full A679 design or its build. The driver owns queue changes.
 
-| Path | What the source shows |
+## Evidence and source reads
+
+The driver reproduced fresh-reset Prepare on main `641665e4c0be3828a61ec98975bdfd461b5a5edb`:
+no `initialOperations`, HTTP 400 `sif.allocation_invalid / reauthentication_required`, a
+network/certificate failure with Try again, and unprovisioned status. This was development
+preproduction, explicitly NOT production. Receipt: Lane E `receipts/a679/reproduction.json`.
+This revision reads source only; it runs no wizard, tests or product code and claims no A680 landing.
+
+| Path/function read | What the source shows |
 | --- | --- |
-| `apps/setup/src/api/client.ts:72`, `setup-app.ts:856` | The provision body has no `initialOperations`; the wizard posts its assembled draft. |
-| `apps/server/src/setup-api.ts:475`, `:524` | The server parses and forwards that optional input. |
-| `packages/provisioning/src/initial-venue-input.ts:37`, `venue-apply.ts:511` | Planned node/admin IDs and module event/source inputs bind setup authority before seeding. |
-| `packages/fiscal-verifactu/src/allocated-lifecycle.ts:16` | Missing operation input refuses with `sif.allocation_invalid / reauthentication_required`. |
-| `apps/server/src/fiscal-readiness-runner.ts:113` | The readiness test uses a retained, separate preproduction database and the supplied initial operations. |
+| `apps/setup/src/api/client.ts` (`ProvisionBody`), `setup-app.ts` (`assembleBody`) | No declared allocation input; the wizard submits its draft. |
+| `apps/server/src/setup-api.ts` (`parseProvisionPayload`, fiscal-test/provision routes) | Parses optional input; fiscal-test requires Live/production; production provision checks readiness first. |
+| `apps/server/src/boot.ts` (`runFiscalTest`, `assertFiscalReady`) | Passes request operations to the test runner; checks separately stored readiness evidence before provisioning. |
+| `apps/server/src/fiscal-readiness-runner.ts` (`submitFiscalReadiness`, `testVenue`) | Retains `fiscal-readiness-db-<binding>` separately, stamps it preproduction, and records/drains there with supplied operations. |
+| `apps/server/src/fiscal-readiness.ts` (`createFiscalReadinessStore`) | Stores accepted evidence bound to venue/certificate/module/build inputs; an applicable Live activation requires matching evidence. |
+| `packages/provisioning/src/initial-venue-input.ts`, `venue-apply.ts` (`applyVenue`) | Planned node/admin IDs and module event/source inputs bind initial authority before seeding. |
+| `packages/fiscal-verifactu/src/allocated-lifecycle.ts` (`activate`) | Missing operation input refuses with `sif.allocation_invalid / reauthentication_required`. |
 
-The table is source evidence; the browser observation is the separate receipt above.
-The historical numeric-schema wording in W41s §9.4 is superseded by the schema below.
+These are source-read receipts, separate from the driver's historical browser reproduction.
 
-## Settled W41s requirements
+## Settled W41s constraints
 
-Follow [W41s §3 and §9.1–9.4](2026-10-04-fiscal-prevention-and-offline-recovery-design.md).
-Its dated owner decisions and landed validation are constraints; A679 does not reopen recovery policy.
+Keep [W41s §3 and §9.1–9.4](2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
+and its settled signature, consumption, fingerprint and current-master requirements:
 
-- Keep one named custodian and one writable current master outside every venue and venue backup.
+- One named custodian and one writable current master stay outside every venue and venue backup.
   Reserve names across all venues of the taxpayer/software/environment, including series used elsewhere.
-- Initial paper names use `S` plus six digits. Recovery paper, Cloud and emergency spaces remain disjoint.
-  Do not infer that `S000001` is free because this box or venue is new.
-- Keep the separate Ed25519 private signing key off the box and out of venue backups/recovery packs.
-  A public key inside an allocation cannot enrol itself. Compare its fingerprint independently
-  with the current outside register. A valid signature does not prove that register is current.
-- Record the exact assignment and mark it consumed outside before local activation. An abandoned
-  or failed activation never frees it. An old printout, backup or uploaded snapshot is not the master.
-- Bind signed consumption, approval and independently collected evidence to the same allocation,
+- Initial paper names are `S` plus six digits; recovery paper, Cloud and emergency spaces stay disjoint.
+  A new box or venue is no evidence that `S000001` is free.
+- The separate Ed25519 private key stays off the box and out of venue backups/recovery packs.
+  A public key inside an allocation cannot enrol itself. Independently compare its complete
+  fingerprint with the current outside master; a valid signature does not establish currency.
+- Record the exact assignment and mark it consumed outside before activation. Abandonment or
+  failure never frees it. Old printouts, backups and uploaded snapshots cannot replace the master.
+- Bind signed consumption, approval and separately collected evidence to the same allocation,
   taxpayer, software, environment, complete series, event, source, target node and operator.
-- Validate candidate identities and boundary invoice numbers with the real fiscal validator before
-  issuing/printing a block. Keep the exact purpose set, base/name/counter bounds and duplicate checks.
-- Initial setup confirms the absence of a former machine for this activation and no parallel setup.
-  This is an operational statement, not remote fencing. Keep issuance disabled on missing evidence.
-- Preserve existing fiscal assertions, golden huella and immutability tests unmodified. Changes to
-  `registerSif`, `restoreFiscal`, alta builders, hashes or numbering need the driver's explicit scope gate.
+- Before issuing/printing a block, run the real fiscal validator over candidates and boundary invoice
+  numbers. Keep the exact purpose set, base/name/counter bounds, finite capacity and duplicate checks.
+- Initial setup confirms no former machine for this activation and no parallel setup. That statement
+  does not remotely stop another machine. Missing evidence keeps issuance disabled.
+- A679 changes no `registerSif`, `restoreFiscal`, alta builders, hashes, numbering, golden huella
+  or inmutabilidad assertions. Preserve existing fiscal checks and behavioral assertions.
 
-## Three approaches and recommendation
+## Live readiness and production activation
 
-| Approach | What you do | Tradeoff |
-| --- | --- | --- |
-| B. Import only | Your separately held custodian supplies signed public allocation/consumption files. You compare the fingerprint and confirm the current master separately. | Smallest signing surface, but leaves an ordinary new owner needing a friendly outside signing tool. Import alone does not meet the goal. |
-| C. Guided kit only | On the custodian's own computer, use a downloaded browser tool to retain a key, establish the master, and sign public files for the box. | Accessible first use; must not start a second master when one already exists. |
-| A. Both, recommended | Offer guided kit creation when there is no master, and import when you already have a custodian. Both converge on the same checks. | More UI, but serves both first-time and established taxpayers without replacing outside authority. |
+**Intended A679/A680 contract, requiring joint validation:** Live readiness always uses the
+retained separate preproduction database. It must obtain A680's throwaway allocation automatically,
+without asking you for a real preproduction kit or imported allocation. Its own event, planned
+node/admin IDs and module inputs belong to that database. Keep accepted readiness evidence and
+its existing bindings. A680's production refusal must judge the actual target database/environment:
+a Live wizard's production request cannot authorise a throwaway production activation.
 
-**Pending OWNER decision 1:** import, guided kit, or both? Recommend A. For taxpayer B12345674,
-you can finish a genuine first installation without a developer; a second venue uses the same master.
-The drawings show A's proposed retention checkpoint, not a working product or an approved choice.
+The later Live activation needs a distinct real production signed allocation and outside consumption.
+Do not forward that production input into readiness or copy readiness allocation evidence into Live.
+For Olivo, the test uses A680's disposable preproduction identity; production separately reserves
+`S000001` only if its current master says it is free. No test data, chain, series or counters are
+promoted. Readiness acceptance grants no production name. Trace both host paths again when building;
+the source reads above do not establish that A680 already fulfils this contract.
 
-## Worked example and guided journey (proposal A)
+## Worked Live journey (details proposed)
 
 You enter **Restaurante Olivo S.L., B12345674**, a new Madrid venue, and administrator Elena.
-Elena chooses bases `A` standard, `FF` full and `R` rectificative for this example; the fiscal
-module supplies software ID `W1` and validates that complete requested set. If the current production master confirms no earlier assignment,
-the custodian reserves `S000001`: `A-S000001`, `FF-S000001`, `R-S000001`.
-A second venue takes the next free entry in that master, rather than restarting the sequence.
+Elena chooses bases `A` standard, `FF` full and `R` rectificative. The fiscal module supplies
+software ID `W1` and validates the complete set. With no prior production assignment in the
+current master, the custodian reserves `S000001`: `A-S000001`, `FF-S000001`, `R-S000001`.
+A second venue consults the same master and takes the next free entry.
 
-1. Choose Prepare or Live and finish venue/admin details. Show the actual fiscal environment,
-   not just the journey label. Freeze a server-owned setup event before any reservation.
-2. After the approved ownership confirmation, the server plans unpredictable node UUID, administrator UUID, module event and source IDs.
-   Download a public setup request containing these bindings and the frozen taxpayer/series scope.
-   The custodian must sign those same IDs; seeding must not mint replacements afterwards.
-3. Ask whether a current register already exists for this taxpayer and environment. Existing:
-   import its public files. None: name a custodian and use the outside browser tool to add a kit.
-   A second register or a new key must never silently reset consumed/reserved names.
-   Before printing a block, reserve its exact serials in that master for the named venue and scope.
-4. Proposed master: one writable paper original held by the custodian, not a digital registry.
-   The tool signs public receipts; reprints/downloads are snapshots. A digital master needs owner approval.
-   Run that tool locally on the custodian's separate computer, disconnected while handling the key.
-   Download an encrypted signing-key file and retain it separately from the printable master.
-   Print/download the register with scope, generation/block IDs and full public-key fingerprint.
-   Test reopening the saved key before releasing its in-memory copy. Keep one writable master;
-   additional printouts must say they are snapshots. Printing the private key is an OWNER choice.
-5. Mark the reserved entry consumed in the current master for the frozen setup event,
-   node, source and Elena's planned ID. Record date, exact series and attempt history, then sign.
-   Download public allocation and consumption receipts; retain them with the current master.
-6. Back at the box, import only those public files. In a separate confirmation step, compare
-   the complete fingerprint from the current master, confirm consultation/consumption for this
-   event, and identify its incident record. Do not accept these claims inside `initialOperations`.
-7. Review the exact identity set and reconfirm the setup owner before activating. Activation
-   cannot substitute for the ownership confirmation before releasing the request in step 2. Activate through the existing allocation checks and one venue transaction.
-   Retain public trust and the local committed result durably before publishing trading mode.
+1. Choose Live and finish venue/admin details. Show **Live / Production**. Keep the existing
+   certificate, email and readiness steps, with the separate test contract above.
+2. Confirm first-setup ownership using the still-undecided method below. Freeze a server-owned
+   unpredictable setup event, planned node UUID, administrator UUID and module event/source IDs.
+   Download a public request bound to those IDs and the taxpayer/environment/complete series.
+   Signing and seeding use those exact IDs; neither silently replaces them.
+3. Ask whether this taxpayer/software/production scope already has a current master. Existing:
+   use its custodian and import signed public files. None: name a custodian and guide creation of
+   the outside kit. BOTH routes are approved. Never silently start another master or reset names.
+4. **Retention proposal:** keep one writable paper original with the named custodian. Use a
+   downloaded self-contained browser tool on their separate computer, disconnected while handling
+   the key. Save an encrypted key file separately from the printed master and test reopening it
+   before releasing the in-memory key. Print/download scope, generation/block IDs and full public-key
+   fingerprint; label extra copies as snapshots. Paper versus digital master and secret-paper key
+   retention remain OWNER choices. Reserve exact serials in the master before printing a block.
+5. Mark the entry consumed in that current master for the frozen event, source, node and Elena's
+   planned ID. Record time, exact series and attempt history, then sign allocation/consumption
+   receipts. Keep them with the master. Once consumed, the entry stays consumed.
+6. At the box, import only public files. Separately compare the complete fingerprint from the
+   current master, confirm fresh consultation/consumption for this event and identify its incident
+   record. Dedicated authenticated host steps collect these claims, not `initialOperations`.
+7. Review all identities and reconfirm ownership before activation. That confirmation cannot replace
+   step 2. Use existing allocation checks and one venue transaction. Retain public trust and the
+   local committed result durably before publishing trading mode; accepted readiness is also required.
 
-**Production and preproduction are independent.** A production allocation cannot seed the
-readiness test database. For B12345674, preproduction may independently allocate `S000001`
-with its own event, node, allocation/block and consumption evidence; it is not a copy of production.
-Its invoices and counters never move into the production database. Live needs accepted readiness
-evidence and a distinct production allocation; an accepted test does not authorise production names.
-The existing test runner needs the preproduction input before the production activation input.
-Real Prepare/preproduction custody is still an OWNER choice; A680 settles only development/test.
-Recommend the same real custodian route for both environments, clearly labelled on every artifact.
+## Ownership, interruption and secret boundaries
 
-## Ownership, trust and interruption requirements
+**NEXT OWNER choice: first-setup ownership.** Setup routes currently have no login
+(`apps/server/src/setup-api.ts`, `mountSetup`); the future administrator's password is no existing
+login. Choose the current trusted-local model with a bound owner/event, or a physical one-use code
+and short-lived session. Neither is approved. Code delivery would also need a decision. Keep adoption
+and restore outside A679's authentication change, but coordinate their existing mutual exclusion.
+Bind planned administrator credentials without storing plaintext or claiming existing account authority.
 
-**Pending OWNER decision 2:** how do you claim this unconfigured box? The routes currently have
-no login (`setup-api.ts:58`); supplying a future administrator password is not an existing login.
-Choose the current trusted-local-setup model with a bound owner/event, or a physically obtained
-one-use setup code and short-lived session. Neither is approved here; code delivery needs a decision.
-Do not extend authentication to adoption or restore in A679; coordinate their existing exclusion.
-Reconfirm ownership before releasing a request for consumption and again before activation;
-bind the planned administrator credentials without storing plaintext or claiming existing account authority.
+One durable owner/event covers preparation, readiness, public import, trust confirmation and activation.
+Reject competing tabs/devices and provision/adoption/restore events before outside consumption.
+The POST latches in `mountSetup` begin too late for this journey; `createSetupOperationStore`
+(`apps/server/src/setup-operation.ts`) deletes `started` state on error. Consumed attempts must retain
+bindings/outcomes. A lost response or restart must not mint fresh IDs or another master.
 
-One durable owner/event must cover preparation, readiness, public import, trust confirmation and
-activation. Reject competing tabs/devices and concurrent provision/adoption/restore events before
-any outside consumption. The current POST latch (`setup-api.ts:686`) starts too late for a
-multi-screen preparation journey. The current store drops `started` state on error
-(`setup-operation.ts:198`); consumed attempts must instead keep their bindings and outcome.
-Losing a browser response or restarting must not silently create fresh IDs or another master.
-
-Collect trust and current-register statements through dedicated authenticated host steps, not
-through the allocation body. Persist public trust/fingerprint independently of imported evidence;
-record the exact consultation for this event. Rereading a persisted `true` is not a fresh consultation.
-After interruption, consult the current master again. Replay only when outside bindings and the
-local committed allocation result agree. Otherwise leave that entry consumed and record abandonment;
-claim a different one when prior activation is uncertain. Never roll back the master with the box.
-Changing taxpayer/environment/bases or abandoning a prepared event requires explicit resolution;
-after consumption it requires new evidence, never reuse of the old assignment.
+Persist public trust independently of imports; saved `true` is not fresh consultation. After an
+interruption, consult the current master again. Replay only when outside bindings and the local
+committed result agree. Otherwise leave the entry consumed, record abandonment and claim a different
+one if activation is uncertain. Never roll the master back with the box. Changed scope/bases or an
+abandoned event require explicit resolution. After consumption, use new evidence and a fresh assignment
+unless the committed replay above agrees; never reuse an uncertain assignment.
+Report a committed write separately from a failed refresh. Offer no blind restart or activation retry.
 
 Private keys/passphrases stay in the outside tool's memory and explicit encrypted download only.
-No upload, analytics, network calls, browser storage, request/error logs or venue backup may carry
-them. Use local cryptographic randomness; reject secret-bearing imports without echoing contents.
-Use a self-contained downloadable tool with no remote assets; no box endpoint generates the key.
-The box accepts bounded public files and stores secret-free audit references. Report a write that
-committed separately from a failed refresh; do not offer a blind activation retry.
+No uploads, analytics, network calls, browser storage, request/error logs or venue backups carry them.
+Use cryptographic randomness and no remote assets. No box endpoint generates a real custody key.
+Bound public imports and reject secret-bearing files without echoing contents; audit references stay public.
+A680's disposable preproduction key is the separate approved exception, never real Live custody.
 
-## Persistent host configuration and actual schema
+## Host persistence, module boundary and schema
 
-`allocation-configuration.ts:8–10` reads three `WAITRON_FISCAL_*` values from `process.env`.
-`node-entry.ts:488` passes merged box settings to `startServer`; `box-env.ts:7–33` returns a
-separate object. `config.ts:410` reads that object, while `trading-config.ts:32` writes only
-trading identity/settings. `deploy/compose.yml:21–43` supplies no custodian settings.
-The direct server entry (`bin.ts:7`) passes `process.env`; the CLI's initial input file
-(`packages/provisioning/src/cli.ts:330`) also supplies no independent trust by itself.
-Consequently a parser/UI change alone does not connect durable box settings to this collector.
-A679 must define and exercise a persisted public configuration reader at preparation and after
-restart. Paths must be host-selected, not browser input. Missing/changed trust must refuse,
-and saved event confirmation must not become perpetual authority. Do not solve this by retaining a key.
+Source read: `packages/fiscal-verifactu/src/allocation-configuration.ts` (`FISCAL_OPERATIONS`)
+reads three `WAITRON_FISCAL_*` values from `process.env`. `loadBoxEnv` returns a separate merged
+object; `runEntry` passes it to `startServer`, and `loadConfig` reads that argument. `writeTradingEnv`
+stores trading settings, not custodian settings. The direct `apps/server/src/bin.ts` passes
+`process.env`; the provisioning CLI's `WAITRON_INITIAL_VENUE_INPUT` file is no independent trust.
+A679 must connect a durable public configuration reader to collection before activation and after
+restart. Host code selects paths, not browser input. Missing/changed trust refuses; saved event
+confirmation is not perpetual authority. Box files are the writer's proposal, not an approved choice.
 
-Generic host code must carry module IDs, opaque input and generic bindings through module seats.
-Here, opaque means only the module interprets the input; seats are its extension points.
-The fiscal module owns `S` names, `W1`, signature formats, series rules and refusal meanings.
-Use a browser-safe module contribution for its screens; do not hardcode Veri*Factu vocabulary
-or import a fiscal implementation into the host. A no-filing module skips this allocation step.
+Generic host code carries module IDs, opaque inputs (interpreted only by their module) and bindings
+through module seats, its extension points. The fiscal module owns `S` names, `W1`, signatures,
+series rules and refusals. Use browser-safe module screens; the host imports no fiscal implementation
+or hardcoded Veri*Factu vocabulary. Modules with no filing contribution skip allocation.
 
-Actual schema: `schema/sif.ts:22` already stores a text identity; `schema/allocations.ts:20–45`
-stores allocation, approval, bases and committed result, with scoped unique keys. Migration
-`packages/fiscal-verifactu/drizzle/0006_numerous_roughhouse.sql` installs both. No second identity
-conversion or fiscal-ledger migration is indicated by this read. Persistent setup ownership/trust
-can use box files (writer's recommendation); a new SQL representation would need a migration.
-Decide after owner answers; do not edit shipped SQL or add speculative compatibility/backfills.
+Source read: `packages/fiscal-verifactu/src/schema/sif.ts` already holds a text identity;
+`schema/allocations.ts` holds allocation, approval, bases and committed results with unique keys.
+`drizzle/0006_numerous_roughhouse.sql` installs them. W41s §9.4's historical numeric description is
+superseded. No second identity conversion or ledger migration is indicated by this read. A new SQL
+ownership/trust representation would need a migration; do not edit shipped SQL or add compatibility.
 
-## Remaining owner choices and presentation calls
+## Remaining decisions and driver handoff
 
-Ask decision 1 first. Then settle real preproduction custody, first-setup ownership/code delivery,
-who holds the paper master, and whether an encrypted key file suffices or secret paper is required.
-Suggested first question: “For Olivo, B12345674, should first setup import a custodian's signed
-files, help you make and retain an outside kit, or offer both? I recommend both.”
-Cloud allocation fetching/reconciliation belongs to W41s-C3. Recommend the same paper route for
-subscribers until then; ask only if subscriber setup must behave differently before C3 arrives.
+Recommend asking ownership first: “Elena opens Olivo's new box on its local network. May she claim
+setup there with a bound owner/event, or must she enter a one-use code obtained physically from the
+box? I recommend the physical code, subject to deciding how you obtain it.” Then settle who retains
+the master, paper versus digital retention, and encrypted key file versus additional secret paper.
+Cloud fetching/reconciliation remains W41sC3. Use the paper route for subscribers until then;
+that default creates no new owner question.
 
-Minor writer calls: retain existing venue/certificate/email/readiness steps; put allocation before
-final activation; show register retention before public import. Use semantic fields and concise
-EN/ES labels, required marks, inline errors plus the bottom form message, quiet unavailable actions,
-draft protection and 44px targets from the shared UI contract. No top error summary.
-The four [static drawings](../../backlog/mockups/a679-first-fiscal-setup/) show light-theme desktop
-and phone proposals with explicit pending confirmations. They make no claim about browser behavior.
-Driver validation must cover real wizard/restart/concurrency/refusals and both themes; preserve
-the existing fiscal checks and their assertions. No implementation plan precedes the owner answers.
+The four [static EN/ES drawings](../../backlog/mockups/a679-first-fiscal-setup/) keep 1280/390 widths
+and show the Live/Production outside-kit checkpoint. BOTH routes are approved; retention details
+are proposed. Keep the shared form contract, semantic names, EN/ES inline and bottom errors,
+quiet unavailable actions, draft protection and 44px targets. No top error summary.
+The driver owns fresh-context builder review, XML/render/visual checks and later joint A679/A680
+wizard/restart/concurrency/refusal validation in both themes, signed commits and docs-only locked
+landing. No plan is written now; full-design/build approval remains outstanding.

@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1032" viewBox="0 0 1280 1032" role="img" aria-labelledby="title desc" lang="en">
-<title id="title">Keep your custodian kit · PROPOSAL A · OWNER DECISION PENDING</title>
-<desc id="desc">Static wireframe of proposed guided first fiscal setup. The outside custodian retains an encrypted private key and one current master register before signing. Public import, trust confirmation and activation on the box follow later. Continue is unavailable until retention is confirmed.</desc>
+<title id="title">Keep your custodian kit · LIVE / PRODUCTION · BOTH ROUTES APPROVED</title>
+<desc id="desc">Static Live/Production wireframe. Both routes are approved: a guided first outside kit and import from an existing custodian. Kit retention details remain proposed. The private key and one current master stay outside the box; only signed public files return to it. No working controls.</desc>
 <!-- Static export of UI colour, spacing, radius and target-size tokens. -->
 <style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#16181d;font-size:14px} .muted{fill:#5c626e}.small{font-size:12px}.heading{font-size:22px;font-weight:600}.group{font-size:18px;font-weight:600}.strong{font-weight:600}.link{fill:#1a5fd0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}</style>
 <rect x="0" y="0" width="1280" height="1032" rx="0" fill="#f7f7f8"/>
 <rect x="0" y="0" width="1280" height="36" rx="0" fill="#e3ebfb"/>
-<text x="32" y="23" class="small strong link">PROPOSAL A · OWNER DECISION PENDING</text>
+<text x="32" y="23" class="small strong link">LIVE / PRODUCTION · BOTH ROUTES APPROVED</text>
 <rect x="0" y="36" width="1280" height="68" rx="0" fill="#ffffff"/>
 <text x="32" y="76" class="group">Waitron</text>
-<text x="180" y="76" class="muted">First fiscal setup</text>
+<text x="180" y="76" class="muted">Live setup / Production</text>
 <text x="1184" y="76" class="small muted">EN / ES</text>
 <rect x="24" y="128" width="244" height="260" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
 <text x="44" y="158" class="small strong muted">YOUR SETUP</text>
@@ -25,6 +25,7 @@
 <text x="44" y="457" class="small link">Import public files</text>
 <text x="44" y="477" class="small link">on the box.</text>
 <text x="300" y="148" class="small strong muted">Custodian tool · separate computer</text>
+<text x="840" y="148" class="small muted">Kit retention details proposed</text>
 <text x="300" y="190" class="heading">Keep your custodian kit</text>
 <text x="300" y="219" class="muted">Keep the signing key and current register outside the Waitron box.</text>
 <text x="300" y="241" class="muted">Only signed public files go back to the box.</text>

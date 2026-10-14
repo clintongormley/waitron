@@ -1,17 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="1360" viewBox="0 0 390 1360" role="img" aria-labelledby="title desc" lang="es">
-<title id="title">Conserva tu kit de custodia · PROPUESTA A · PENDIENTE DE APROBACIÓN</title>
-<desc id="desc">Static wireframe of proposed guided first fiscal setup. The outside custodian retains an encrypted private key and one current master register before signing. Public import, trust confirmation and activation on the box follow later. Continue is unavailable until retention is confirmed.</desc>
+<title id="title">Conserva tu kit de custodia · EN VIVO / PRODUCCIÓN · AMBAS VÍAS APROBADAS</title>
+<desc id="desc">Dibujo estático de configuración en vivo/producción. Ambas vías están aprobadas: primer kit externo guiado e importación de archivos de un responsable existente. Los detalles de conservación siguen propuestos. La clave privada y el único maestro actual quedan fuera de la caja; solo se importan archivos públicos firmados. No hay controles funcionales.</desc>
 <!-- Static export of UI colour, spacing, radius and target-size tokens. -->
 <style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#16181d;font-size:14px} .muted{fill:#5c626e}.small{font-size:12px}.heading{font-size:22px;font-weight:600}.group{font-size:18px;font-weight:600}.strong{font-weight:600}.link{fill:#1a5fd0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}</style>
 <rect x="0" y="0" width="390" height="1360" rx="0" fill="#f7f7f8"/>
 <rect x="0" y="0" width="390" height="36" rx="0" fill="#e3ebfb"/>
-<text x="16" y="23" class="small strong link">PROPUESTA A · PENDIENTE DE APROBACIÓN</text>
+<text x="16" y="23" class="small strong link">EN VIVO / PRODUCCIÓN · AMBAS VÍAS APROBADAS</text>
 <rect x="0" y="36" width="390" height="68" rx="0" fill="#ffffff"/>
 <text x="16" y="76" class="group">Waitron</text>
 <text x="374" y="75" text-anchor="end" class="small muted">EN / ES</text>
-<text x="16" y="128" class="small strong">Primera configuración fiscal</text>
+<text x="16" y="128" class="small strong">Configuración en vivo / Producción</text>
 <text x="16" y="151" class="small muted">Herramienta de custodia · equipo separado</text>
 <text x="16" y="184" class="small link strong">Paso 2 de 4 · Conservar kit</text>
+<text x="16" y="202" class="small muted">Conservación del kit propuesta</text>
 <text x="16" y="222" class="heading">Conserva tu kit de custodia</text>
 <text x="16" y="252" class="muted">Guarda el kit en el equipo del responsable.</text>
 <text x="16" y="274" class="muted">A la caja solo van archivos públicos.</text>

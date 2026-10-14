@@ -194,6 +194,21 @@ an ordinary restaurant owner. After W41s-4 lands, design a friendly route, such 
 or a printed setup kit, while preserving the separate custodian and outside register. The owner
 requested this follow-up on 2026-10-14; no design or product work belongs in W41s-4.
 
+**A679 update, 2026-10-14, owner decisions at 21:50, 22:00 and 22:05:** BOTH a guided first
+outside paper kit and import from an existing custodian are approved for Live. Demo and
+Preparation need no kit or allocation import. B/A680 owns the automatic, clearly marked
+throwaway preproduction signer in the box, refused in production, with a deletion control;
+A679 adds no second signer. Only Demo is urgent before morning. The
+[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) and static
+EN/ES drawings cover the Live route. Finish W41s-6, then build A679 on A680 before W41s-7.
+Full-design/build approval, physical-code versus current local ownership, master retention and
+key format remain open. Live keeps real outside production custody. Its readiness check must
+use A680's throwaway allocation in the retained separate preproduction database, without a real
+preproduction kit; activation needs a distinct real production signed allocation. This is the
+intended joint contract requiring validation, not a claim of landed A680 behavior. Test data and
+counters are never promoted. Cloud fetching remains W41sC3; use paper before then. The driver's
+main `641665e` reproduction remains a development-preproduction observation, not production.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,

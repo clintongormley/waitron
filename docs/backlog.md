@@ -307,12 +307,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
-- **A venue without Cloud needs a usable paper-custodian route.** If you do not subscribe to
-  Cloud, your custodian currently needs a repository checkout to create a signing key and sign
-  allocations, plus a separate master register. A679 reproduced the fresh Prepare wizard's
-  missing allocation on 2026-10-14 and has a [first-setup proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md)
-  with EN/ES phone/desktop drawings. Owner choices remain open; no product fix has landed.
-  Detail: [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+- **A679. First Live fiscal setup without Cloud.** The owner approved both a guided first
+  outside paper kit and import from an existing custodian on 2026-10-14. The
+  [Live proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) has EN/ES
+  phone and desktop drawings; ownership and kit retention remain undecided. Finish W41s-6,
+  then build A679 on A680 before W41s-7. A680 owns kit-free Demo/Preparation and the intended
+  throwaway allocation for Live's separate preproduction readiness test. Joint validation and
+  full-design approval remain open; Live activation needs real production custody. Detail:
+  [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — remaining recovery and resolution work.
   Allocation validation and local activation use outside signed identities, with a dormant standby
