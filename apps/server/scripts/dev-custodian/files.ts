@@ -1,8 +1,14 @@
-import { createPublicKey } from "node:crypto";
+import { createPublicKey, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { paperCustodianFingerprint } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { assertDevelopmentEnvironment, createDevelopmentKey, type DevelopmentKey } from "./sign.js";
+import {
+  assertDevelopmentEnvironment,
+  createDevelopmentKey,
+  signDevelopmentAllocation,
+  type DevelopmentKey,
+} from "./sign.js";
 
 export interface CustodianDir {
   readonly custodianFile: string;
@@ -63,3 +69,62 @@ export async function initCustodianDir(dir: string, env: NodeJS.ProcessEnv): Pro
     fingerprint: key.fingerprint,
   };
 }
+
+export async function signSetupBody(
+  dir: string,
+  body: unknown,
+  env: NodeJS.ProcessEnv,
+): Promise<Record<string, unknown>> {
+  assertDevelopmentEnvironment(env);
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    throw new SignError("the provision body must be a JSON object");
+  if (Object.hasOwn(body, "initialOperations"))
+    throw new SignError("the provision body already carries initialOperations");
+  const venue = (body as { venue?: unknown }).venue as Record<string, unknown> | undefined;
+  if (typeof venue !== "object" || venue === null)
+    throw new SignError("the provision body has no venue");
+  const country = getVenueSetupCountryPack(String(venue.country));
+  if (country === undefined) throw new SignError(`unknown country ${String(venue.country)}`);
+  const taxId = country.taxIdentifier?.validate(String(venue.taxId));
+  if (taxId?.valid === false) throw new SignError(`invalid taxId ${String(venue.taxId)}`);
+  const key = await loadDevelopmentKey(dir);
+  if (key === null) throw new SignError(`no key in ${dir}; run dev:custodian init first`);
+  const nodeId = randomUUID();
+  const administratorId = randomUUID();
+  const eventId = randomUUID();
+  const sourceId = "developer-custodian";
+  const { input, confirmation } = signDevelopmentAllocation(
+    {
+      key,
+      taxpayerNif: taxId?.valid === true ? taxId.normalized : String(venue.taxId),
+      bases: [
+        { code: String(venue.seriesCode), purpose: "standard" },
+        {
+          code: typeof venue.fullSeriesCode === "string" ? venue.fullSeriesCode : "FF",
+          purpose: "full",
+        },
+        { code: String(venue.rectificativeSeriesCode), purpose: "rectificative" },
+      ],
+      nodeId,
+      administratorId,
+      eventId,
+      sourceId,
+      now: new Date(),
+    },
+    env,
+  );
+  await writeFileAtomically(
+    custodianPaths(dir).confirmation,
+    `${JSON.stringify(confirmation, null, 2)}\n`,
+  );
+  return {
+    ...body,
+    initialOperations: {
+      nodeId,
+      administratorId,
+      inputs: [{ module: "fiscal-verifactu", eventId, sourceId, input }],
+    },
+  };
+}
+
+export class SignError extends Error {}

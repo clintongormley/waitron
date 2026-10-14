@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { AppError } from "@waitron/shared";
-import { initCustodianDir } from "./files.js";
+import { initCustodianDir, SignError, signSetupBody } from "./files.js";
 import { assertDevelopmentEnvironment } from "./sign.js";
 
 interface Output {
@@ -48,15 +48,32 @@ async function init(args: readonly string[], io: CliIo): Promise<number> {
   return 0;
 }
 
+async function sign(args: readonly string[], io: CliIo): Promise<number> {
+  const dir = dirOption(args);
+  let text = "";
+  for await (const chunk of io.stdin) text += chunk.toString();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new SignError("standard input is not JSON");
+  }
+  io.stdout.write(`${JSON.stringify(await signSetupBody(dir, body, io.env), null, 2)}\n`);
+  return 0;
+}
+
 export async function runDevCustodian(argv: readonly string[], io: CliIo): Promise<number> {
   try {
     assertDevelopmentEnvironment(io.env);
     const [command, ...rest] = argv;
     if (command === "init") return await init(rest, io);
+    if (command === "sign") return await sign(rest, io);
     throw new UsageError(command === undefined ? "no subcommand" : `unknown subcommand ${command}`);
   } catch (error) {
     if (error instanceof AppError) {
       io.stderr.write(`dev:custodian: ${error.code} ${JSON.stringify(error.params)}\n`);
+    } else if (error instanceof SignError) {
+      io.stderr.write(`dev:custodian: ${error.message}\n`);
     } else if (
       error instanceof UsageError ||
       String((error as { code?: unknown }).code).startsWith("ERR_PARSE_ARGS")
