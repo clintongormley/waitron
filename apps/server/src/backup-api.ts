@@ -13,6 +13,7 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  BUCKET_CHOICES,
   archiveNamespace,
   hasExactKeys,
   isRecord,
@@ -21,6 +22,7 @@ import {
   readHeldArchiveSettings,
   requestInvalid,
   resolveArchiveChoices,
+  checkArchiveChoiceList,
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
@@ -105,9 +107,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.archive_settings_unreadable": 409,
   "backup.stream_settings_unreadable": 409,
 };
-
-/** The destination choices `resolveArchiveChoices` resolves against the bucket copy's settings. */
-const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
 
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
 const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
@@ -205,15 +204,7 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
   const body = await readJsonBody<unknown>(c);
   if (!isRecord(body)) throw requestInvalid("body");
   onlyKeys(body, APPLY_FIELDS, "body");
-  const { destinations } = body;
-  if (
-    !Array.isArray(destinations) ||
-    destinations.length === 0 ||
-    destinations.length > 2 ||
-    !destinations.every(isRecord)
-  ) {
-    throw requestInvalid("destinations");
-  }
+  const destinations = checkArchiveChoiceList(body.destinations);
   const { recoveryKey, destinationTimeoutMs } = body;
   if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
     throw requestInvalid("recoveryKey");

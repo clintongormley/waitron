@@ -437,22 +437,33 @@ export function resolveArchiveChoice(
   }
 }
 
+/** The destination choices resolved against the bucket copy's settings; a Save lists one at most. */
+export const BUCKET_CHOICES = new Set<unknown>(["stream-bucket", "custom-s3"]);
+
+/** Counts the raw kinds before any entry resolves, so an entry's own refusal never answers for a
+ * list that is wrong as a whole. */
+export function checkArchiveChoiceList(raw: unknown): Record<string, unknown>[] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > 2 ||
+    !raw.every(isRecord) ||
+    raw.filter((c) => c.kind === "local-fs").length > 1 ||
+    raw.filter((c) => BUCKET_CHOICES.has(c.kind)).length > 1
+  ) {
+    throw requestInvalid("destinations");
+  }
+  return raw;
+}
+
 /** A Save's destinations: at most one folder and one bucket, returned folder first. */
 export function resolveArchiveChoices(
   choices: unknown,
   ctx: { venueId: string; stream: StreamSettings | null; held: ArchiveSettings | null },
 ): BackupDestination[] {
-  if (
-    !Array.isArray(choices) ||
-    choices.length === 0 ||
-    choices.length > 2 ||
-    !choices.every(isRecord)
-  ) {
-    throw requestInvalid("destinations");
-  }
-  const resolved = choices.map((choice) => resolveArchiveChoice(choice, ctx));
-  const folders = resolved.filter((d) => d.kind === "local-fs");
-  const buckets = resolved.filter((d) => d.kind === "s3");
-  if (folders.length > 1 || buckets.length > 1) throw requestInvalid("destinations");
-  return [...folders, ...buckets];
+  const resolved = checkArchiveChoiceList(choices).map((c) => resolveArchiveChoice(c, ctx));
+  return [
+    ...resolved.filter((d) => d.kind === "local-fs"),
+    ...resolved.filter((d) => d.kind === "s3"),
+  ];
 }

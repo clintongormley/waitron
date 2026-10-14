@@ -394,6 +394,28 @@ describe("resolveArchiveChoices", () => {
     });
   });
 
+  it.each<[string, unknown[], Parameters<typeof resolveArchiveChoices>[1]]>([
+    [
+      "the stream bucket and a custom bucket with no bucket copy",
+      [streamBucket, custom],
+      { ...ctx, stream: null },
+    ],
+    [
+      "two custom buckets with no secret",
+      [
+        { ...custom, secretAccessKey: "" },
+        { ...custom, bucket: "second-bucket", secretAccessKey: "" },
+      ],
+      ctx,
+    ],
+    ["two folders, the first with no folder", [{ kind: "local-fs", dir: "" }, folder], ctx],
+  ])("refuses %s as the list, before either entry is resolved", (_label, choices, at) => {
+    expect(refusal(() => resolveArchiveChoices(choices, at))).toEqual({
+      code: "backup.request_invalid",
+      params: { field: "destinations" },
+    });
+  });
+
   it("keeps an entry's own field when that entry is refused", () => {
     expect(
       refusal(() => resolveArchiveChoices([{ kind: "local-fs", dir: "" }, streamBucket], ctx)),

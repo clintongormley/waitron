@@ -2324,6 +2324,67 @@ describe("backup admin routes", () => {
       }, 60_000);
     }
 
+    const TWO_BUCKETS = [{ kind: "stream-bucket" }, { ...CUSTOM, secretAccessKey: CUSTOM_SECRET }];
+    const TWO_BUCKETS_REFUSED = {
+      error: { code: "backup.request_invalid", params: { field: "destinations" } },
+    };
+
+    it("two buckets are refused as the list when no bucket copy is stored, with nothing written", async () => {
+      const { sc, post } = await primaryApp();
+      const res = await post("/api/backup/apply", applyList(TWO_BUCKETS));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
+      expect(await readSealed()).toBeNull();
+      expect(bucket.calls).toEqual([]);
+      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+    }, 60_000);
+
+    it("two buckets are refused as the list before a different key is refused, with nothing written", async () => {
+      await storeStream();
+      const { sc, post } = await primaryApp();
+      expect(
+        (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+          .status,
+      ).toBe(200);
+      const held = await readSealed();
+      const keyFile = await readFile(join(sc.stateDir, "backup.env"), "utf8");
+      const res = await post("/api/backup/apply", {
+        ...applyList(TWO_BUCKETS),
+        recoveryKey: KEY_2,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
+      expect(await readSealed()).toEqual(held);
+      expect(await readFile(join(sc.stateDir, "backup.env"), "utf8")).toBe(keyFile);
+    }, 60_000);
+
+    it("two buckets are refused as the list while the bucket copy's settings cannot be read, with nothing written", async () => {
+      await storeUnreadableStream();
+      const { sc, post } = await primaryApp();
+      const res = await post("/api/backup/apply", applyList(TWO_BUCKETS));
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
+      expect(await readSealed()).toBeNull();
+      expect(bucket.calls).toEqual([]);
+      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+    }, 60_000);
+
+    it("a folder beside a bucket that fails the test, with no key held, writes no key file", async () => {
+      bucket.failGet = true;
+      const { sc, post } = await primaryApp();
+      const res = await post(
+        "/api/backup/apply",
+        applyList([
+          { kind: "local-fs", dir: makeDestDir() },
+          { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+        ]),
+      );
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.archive_test_failed" } });
+      expect(await readSealed()).toBeNull();
+      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+    }, 60_000);
+
     it("a malformed destination list is refused as the list, before the key is checked", async () => {
       const { sc, post } = await primaryApp();
       const dir = makeDestDir();
