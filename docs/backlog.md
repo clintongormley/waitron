@@ -1960,11 +1960,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tables' names, and the kitchen is told nothing — treated like a rename (A581 default 5). Owner
   question in lane C's questions.md, "A581 part 2 (#1649)": answer (b) to print a slip on that path.
 
-- **A617. The Rename window's group check across rooms is untested (2026-10-14).** The window
-  closes when its table's group changes (`#mergeRead`, `apps/till/src/screens/till-floor-screen.ts`),
-  and it reads the group from the whole floor read, not only the room on screen. Believed reachable
-  while the window is open; no test covers it. Left open by A581 part 4's review (#1664).
-
 - **A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
   (2026-10-13).** Reset table refuses `table.place_taken`; Reset to saved plan has no such check.
   Found reading, not run, by the A579 design.
