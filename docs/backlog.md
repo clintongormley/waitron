@@ -4123,9 +4123,19 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
   Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
-  (#1681); part 2 (staffing paint storage and routes, the slot and matching library) is built on
-  `feat/a585-2-staffing-paint`; parts 3–8 are open, in the order of the
+  (#1681); part 2 (staffing paint storage and routes, the slot and matching library) landed
+  (#1686); parts 3–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
+- **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
+  changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
+  hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
+  block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
+  review). Next: decide with A585-6 whether a block may run to the day's real end.
+- **A645. A staffing save whose body is a JSON string names field "0".** `"x"` sent as the body of a
+  staffing PUT answers `management.request_invalid` with `field: "0"` (`onlyKeys` in
+  `packages/staffing/src/routes.ts` reads the string's character keys); it is refused and nothing is
+  written, but the field is meaningless. Same for the staff-role routes (#1681). Next: refuse a
+  non-object body before reading its keys.
 - **A636. The Staff roles list re-reads when any person changes.** Its live query `staff-roles`
   (`packages/staffing/src/dashboard/live-queries.ts`) depends on `persons`, but the list read
   (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
