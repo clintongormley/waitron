@@ -100,7 +100,7 @@ async function splitGroup(
     if (staying.length >= 2 && seats === null) throw new AppError("merge.seats_required", {});
     const groupSeats = staying.length >= 2 ? seats : null;
     if (leaving.length === 0) return leaveAsGroup(tx, merge.joinId, partIds, groupSeats);
-    const before = await readPartiesSentWork(tx, cfg, losing);
+    const before = await readPartiesSentWork(tx, losing);
     for (const partyId of losing) {
       await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
     }

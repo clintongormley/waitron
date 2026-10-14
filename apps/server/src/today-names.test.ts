@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { printJobs } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
+import { partyTablesName } from "@waitron/shared";
 import { kitchenNotices } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -235,13 +236,34 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
-  it("the same push onto an unnamed seated group prints one MOVED slip", async () => {
+  it("the same push onto an unnamed seated group prints no MOVED slip either: the party only gains a table", async () => {
     const { table, guests } = await seatedGroup();
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
 
     const printed = await jobsFrom(() => pushOnto(guests.partyId, table.c6!, table.bar!, 16));
 
-    expect(printed.filter(isMovedSlip)).toHaveLength(1);
+    expect(printed.filter(isMovedSlip)).toEqual([]);
+  });
+
+  it("Bar pushed onto the seated, joined Long table prints one MOVED slip from Long table to Bar and its parts, as Long table and its name are gone", async () => {
+    const zone = await LONG_TABLE();
+    const guests = await seat(v, zone.table.long!, 12);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() =>
+      pushOnto(guests.partyId, zone.table.bar!, zone.table.long!, 14),
+    );
+
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    const labels = await Promise.all(
+      [zone.table.bar!, zone.table.c3!, zone.table.c4!, zone.table.c5!].map(labelOf),
+    );
+    // The To text is long enough to wrap, so the lines are compared with their spacing collapsed.
+    const collapsed = (text: string) => text.replace(/\s+/g, " ");
+    expect(collapsed(slips[0]!.join(" "))).toContain(
+      collapsed(fromTo(await labelOf(zone.table.long!), partyTablesName(labels))),
+    );
   });
 
   it("the party moved from the renamed group to Table 9 prints one MOVED slip from the name to Table 9", async () => {
@@ -547,7 +569,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     expect(slips[0]!.join(" ")).toContain(fromTo(name, `${own}, ${nine}`));
   });
 
-  it("Bar back to its saved place leaves the named group of three and prints one MOVED slip from the name to Bar and the name", async () => {
+  it("Bar back to its saved place leaves the named group of three and prints no MOVED slip: the party keeps every table and the name", async () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c3!, name);
@@ -556,10 +578,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     const printed = await jobsFrom(() => backToSavedPlace(table.bar!));
 
     expect((await floorRow(v, table.c3!)).today?.joinName).toBe(name);
-    const slips = printed.filter(isMovedSlip);
-    expect(slips).toHaveLength(1);
-    const barAndGroup = `${await labelOf(table.bar!)}, ${name}`;
-    expect(slips[0]!.join(" ")).toContain(fromTo(name, barAndGroup));
+    expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
   it("an unnamed group of two ended the same way prints no MOVED slip", async () => {

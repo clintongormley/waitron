@@ -99,7 +99,7 @@ export async function moveGuests(
   }
   if (table.holding === null) await refuseUnseatable(tx, cfg, table);
 
-  const before = await readPartiesSentWork(tx, cfg, [partyId]);
+  const before = await readPartiesSentWork(tx, [partyId]);
   const leaving = held.filter((id) => id !== toTableId);
   await leaveForClearing(tx, leaving, nowIso());
   const mainBillId = await readMainBill(tx, partyId);
@@ -156,7 +156,7 @@ export async function joinTables(
   await refuseUnseatable(tx, cfg, table);
 
   const later = options.slipsLater !== undefined;
-  const before = later ? null : await readPartiesSentWork(tx, cfg, [partyId]);
+  const before = later ? null : await readPartiesSentWork(tx, [partyId]);
   const mainBillId = await readMainBill(tx, partyId);
   await addTable(tx, partyId, tableId, { clearStatus: false });
   if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
@@ -174,7 +174,7 @@ async function combineAt(
   intoZoneId?: string | null,
 ): Promise<TableActionResult> {
   const later = options.slipsLater;
-  const before = later === undefined ? await readPartiesSentWork(tx, cfg, [from, into]) : null;
+  const before = later === undefined ? await readPartiesSentWork(tx, [from, into]) : null;
   const combined = await combineParties(tx, cfg, {
     from,
     into,
@@ -298,7 +298,7 @@ export async function splitTable(
     firers = await leaveParty(tx, billId);
   }
 
-  const before = await readPartiesSentWork(tx, cfg, [partyId]);
+  const before = await readPartiesSentWork(tx, [partyId]);
   await leaveTables(tx, [tableId]);
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })

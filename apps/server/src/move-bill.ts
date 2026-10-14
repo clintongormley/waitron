@@ -94,7 +94,7 @@ export async function moveBill(
     await refuseMainBillLeaving(tx, source, billId);
     firers = await leaveParty(tx, billId);
   }
-  const before = await readSentWork(tx, cfg, billId);
+  const before = await readSentWork(tx, billId);
 
   let result: MoveBillResult;
   let held: string[] = [];

@@ -28,7 +28,12 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  partyTablesName,
+  perDishOptionQuantity,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -999,9 +1004,8 @@ async function printCorrectionSlips(
   }
 }
 
-/** An order's fired kitchen work and its table and order number. */
+/** An order's fired kitchen work and its places and order number. */
 export interface SentWork {
-  tableLabel: string | null;
   orderNumber: string;
   /** Null when nothing is fired. */
   places: OrderPlaces | null;
@@ -1009,29 +1013,26 @@ export interface SentWork {
 }
 
 /** Read before a path moves an order's lines to another table. */
-export async function readSentWork(
-  tx: Transaction,
-  cfg: TillConfig,
-  orderId: string,
-): Promise<SentWork> {
+export async function readSentWork(tx: Transaction, orderId: string): Promise<SentWork> {
   const fired = await tx
     .select({ id: ticketItems.id })
     .from(ticketItems)
     .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
-  if (fired.length === 0)
-    return { tableLabel: null, orderNumber: "", places: null, ticketItemIds: new Set() };
-  const header = await readOrderHeader(tx, cfg, orderId);
+  if (fired.length === 0) return { orderNumber: "", places: null, ticketItemIds: new Set() };
   const places = (await readOrderPlaces(tx, [orderId])).get(orderId)!;
-  return { ...header, places, ticketItemIds: new Set(fired.map((row) => row.id)) };
+  return {
+    orderNumber: String(places.orderNumber),
+    places,
+    ticketItemIds: new Set(fired.map((row) => row.id)),
+  };
 }
 
 /**
- * Tell the kitchen of sent work that moved to another table. When the table a correction slip names
- * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
- * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and each station with an
- * active printer gets one MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it copied.
- * `force` tells the kitchen whatever the two labels read: a bill moved to or from the counter can
- * read the same on both sides.
+ * Tell the kitchen of sent work that moved. When `toOrderId`'s places now have lost one of
+ * `before`'s ({@link lostAPlace}), each of `before`'s fired items now on `toOrderId` gets a `moved`
+ * notice, at the quantity its ticket asks for, and each station with an active printer gets one
+ * MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it copied.
+ * `force` tells the kitchen even when no place was lost.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
@@ -1043,10 +1044,44 @@ export async function enqueueMovedSlips(
 ): Promise<void> {
   if (before.ticketItemIds.size === 0) return;
   const header = await readOrderHeader(tx, cfg, toOrderId);
-  if (options.force !== true && header.tableLabel === before.tableLabel) return;
-  const fired = await readTicketItemsOn(tx, [toOrderId]);
   const after = (await readPlacesNow(tx, [header])).get(toOrderId)!;
+  if (!lostAPlace(before.places!, after.places) && options.force !== true) return;
+  const fired = await readTicketItemsOn(tx, [toOrderId]);
   await notifyMoved(tx, cfg, before, header, after, fired.get(toOrderId) ?? [], splitFrom);
+}
+
+/**
+ * Whether the order left one of `before`'s tables, or a place name its kitchen paper carries (the
+ * counter among them) is no longer one of its places.
+ */
+function lostAPlace(before: OrderPlaces, after: OrderPlaces): boolean {
+  const tables = new Set(after.tables.map((table) => table.id));
+  const names = new Set(after.names);
+  return (
+    before.tables.some((table) => !tables.has(table.id)) ||
+    (before.counter && !after.counter) ||
+    before.names.some((name) => !names.has(name))
+  );
+}
+
+/**
+ * The slip's From and To. When the two read the same but the tables differ (one table of a named
+ * group to another), each side adds its own tables in brackets.
+ */
+function movedTexts(
+  before: OrderPlaces,
+  after: OrderPlaces,
+  locale: string,
+): { fromText: string; toText: string } {
+  const fromText = movedPlaceText(before, locale);
+  const toText = movedPlaceText(after, locale);
+  const afterIds = new Set(after.tables.map((table) => table.id));
+  const sameTables =
+    afterIds.size === before.tables.length && before.tables.every((t) => afterIds.has(t.id));
+  if (fromText !== toText || sameTables) return { fromText, toText };
+  const tables = (places: OrderPlaces) =>
+    ` (${partyTablesName(places.tables.map((table) => table.name))})`;
+  return { fromText: fromText + tables(before), toText: toText + tables(after) };
 }
 
 /** Where an order is now, and the name of the party it sits with. */
@@ -1131,7 +1166,7 @@ async function readTicketItemsOn(
 
 /**
  * The `moved` notices and MOVED slips for `before`'s items now on the order `header` heads, whose
- * places and ticket items the caller has read and whose table differs from `before`'s. A bill now
+ * places and ticket items the caller has read and which the kitchen is to be told of. A bill now
  * of no party takes the name of the party it left.
  */
 async function notifyMoved(
@@ -1168,8 +1203,7 @@ async function notifyMoved(
     fromNumber: before.orderNumber,
     ...(header.orderNumber === before.orderNumber ? {} : { toNumber: header.orderNumber }),
     ...(partyName === null ? {} : { partyName }),
-    fromText: movedPlaceText(placesBefore, cfg.locale),
-    toText: movedPlaceText(after.places, cfg.locale),
+    ...movedTexts(placesBefore, after.places, cfg.locale),
   });
 }
 
@@ -1229,7 +1263,6 @@ async function printMovedSlips(
  */
 export async function readPartiesSentWork(
   tx: Transaction,
-  cfg: TillConfig,
   partyIds: readonly string[],
 ): Promise<Map<string, SentWork>> {
   const work = new Map<string, SentWork>();
@@ -1238,10 +1271,6 @@ export async function readPartiesSentWork(
     .select({
       id: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
-      label: workingOrders.label,
       ticketItemId: ticketItems.id,
     })
     .from(workingOrders)
@@ -1264,15 +1293,9 @@ export async function readPartiesSentWork(
     entry.fired.add(ticketItemId);
     sent.set(bill.id, entry);
   }
-  const labels = await orderTableLabels(
-    tx,
-    cfg.locationId,
-    [...sent.values()].map(({ bill }) => bill),
-  );
   const places = await readOrderPlaces(tx, [...sent.keys()]);
   for (const { bill, fired } of sent.values()) {
     work.set(bill.id, {
-      tableLabel: labels.get(bill.id)!,
       orderNumber: String(bill.orderNumber),
       places: places.get(bill.id)!,
       ticketItemIds: fired,
@@ -1295,15 +1318,15 @@ export async function enqueueMovedSlipsFor(
     .filter(([, work]) => work.ticketItemIds.size > 0)
     .map(([billId, work]) => ({ work, to: mergedInto.get(billId) ?? billId }));
   if (moves.length === 0) return;
-  const headers = await readOrderHeaders(tx, cfg, [...new Set(moves.map((move) => move.to))]);
-  const changed = moves.filter((move) => headers.get(move.to)!.tableLabel !== move.work.tableLabel);
-  if (changed.length === 0) return;
-  const destinations = [...new Set(changed.map((move) => move.to))];
-  const onOrders = await readTicketItemsOn(tx, destinations);
+  const destinations = [...new Set(moves.map((move) => move.to))];
+  const headers = await readOrderHeaders(tx, cfg, destinations);
   const now = await readPlacesNow(
     tx,
     destinations.map((to) => headers.get(to)!),
   );
+  const changed = moves.filter((move) => lostAPlace(move.work.places!, now.get(move.to)!.places));
+  if (changed.length === 0) return;
+  const onOrders = await readTicketItemsOn(tx, [...new Set(changed.map((move) => move.to))]);
   for (const { work, to } of changed) {
     const header = headers.get(to)!;
     await notifyMoved(tx, cfg, work, header, now.get(to)!, onOrders.get(to) ?? [], new Map());

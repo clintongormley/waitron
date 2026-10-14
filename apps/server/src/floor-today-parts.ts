@@ -85,7 +85,7 @@ export async function passGuests(
     .update(diningTables)
     .set({ needsClearingSince: null })
     .where(inArray(diningTables.id, [...toTableIds]));
-  const before = slips === "now" ? await readPartiesSentWork(tx, cfg, [partyId]) : null;
+  const before = slips === "now" ? await readPartiesSentWork(tx, [partyId]) : null;
   await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
   const [latest] = await tx
     .select({ joinedAt: max(partyTables.joinedAt) })

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  floorTodayJoinTables,
+  floorTodayJoins,
   kitchenStations,
   locations,
   printJobs,
@@ -359,7 +361,7 @@ async function printedBy(printerId: string): Promise<string[]> {
  * them changes the destination of the sent dishes on every bill of the party.
  */
 describe("a table action tells the kitchen of every bill of the party", () => {
-  it("tells the kitchen of sent dishes on every bill of a party that joins a table, and only those", async () => {
+  it("tells the kitchen nothing of a party that joins a free table: no bill lost a table or a name", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
@@ -372,12 +374,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
 
     await join(v, partyId, mesa5);
 
-    const added = (await noticesOf([tabId, checkId])).slice(before.length);
-    expect(added).toHaveLength(2);
-    expect(added.map((n) => n.kind)).toEqual(["moved", "moved"]);
-    expect(added.map((n) => n.movedTo)).toEqual(["Mesa 4, 5", "Mesa 4, 5"]);
-    expect(added.map((n) => n.workingOrderId).sort()).toEqual([tabId, checkId].sort());
-    expect(added.map((n) => n.lineName).sort()).toEqual(["BURG", "TINTO"]);
+    expect((await noticesOf([tabId, checkId])).slice(before.length)).toEqual([]);
   });
 
   it("tells the kitchen of every bill when a table leaves the party, naming the tables the dishes had", async () => {
@@ -444,7 +441,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     ]);
   });
 
-  it("tells the kitchen of every bill of the party that takes in another party's table", async () => {
+  it("tells the kitchen nothing of the bills of a party that takes in another party's table, nor of the bill merged in, whose table and name stay", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
     const mesa7 = await v.table("Mesa 7");
@@ -468,15 +465,10 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       }),
     );
 
-    const notices = await noticesOf([ana.tabId, checkId, other.tabId]);
-    expect(byDish(notices)).toEqual([
-      ["BURG", ana.tabId, "Mesa 4, 7"],
-      ["FLAN", ana.tabId, "Mesa 4, 7"],
-      ["TINTO", checkId, "Mesa 4, 7"],
-    ]);
+    expect(await noticesOf([ana.tabId, checkId, other.tabId])).toEqual([]);
   });
 
-  it("tells the kitchen of a split bill of the party taken in, which joins the receiving party", async () => {
+  it("tells the kitchen nothing of the bills of the party taken in, which keep their table and its name", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
     const mesa7 = await v.table("Mesa 7");
@@ -499,11 +491,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       }),
     );
 
-    const notices = await noticesOf([ana.tabId, other.tabId, otherCheckId]);
-    expect(byDish(notices)).toEqual([
-      ["FLAN", ana.tabId, "Mesa 4, 7"],
-      ["TARTA", otherCheckId, "Mesa 4, 7"],
-    ]);
+    expect(await noticesOf([ana.tabId, other.tabId, otherCheckId])).toEqual([]);
   });
 });
 
@@ -692,6 +680,88 @@ describe("a MOVED slip per order per station", () => {
     const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
     expect(slips.map((lines) => lines.slice(0, 5))).toEqual([
       ["*** MOVIDO ***", "Grill", `Pedido ${number} · Luis`, "De: Mesa 21", "A:  Mesa 22"],
+    ]);
+  });
+});
+
+/** Puts the tables into one of today's groups, named `name`. */
+async function group(v: PartyVenue, name: string, tableIds: string[]): Promise<void> {
+  await inTx(v, async (tx) => {
+    const [row] = await tx
+      .insert(floorTodayJoins)
+      .values({ zoneId: v.tables.zoneId, seats: 8, name })
+      .returning({ id: floorTodayJoins.id });
+    for (const tableId of tableIds)
+      await tx
+        .insert(floorTodayJoinTables)
+        .values({ joinId: row!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+  });
+}
+
+describe("when a MOVED slip prints: a table or a place name lost (§3)", () => {
+  it("a free table joined prints nothing and records no notice: no table and no name is lost (row 6)", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa71 = await v.table("Mesa 71");
+    const mesa72 = await v.table("Mesa 72");
+    const { partyId, tabId } = await seat(v, mesa71);
+    await order(v, tabId, "Burger");
+    const before = (await printedBy(grill)).length;
+    const notices = await noticesOf([tabId]);
+
+    await join(v, partyId, mesa72);
+
+    expect((await printedBy(grill)).slice(before)).toEqual([]);
+    expect(await noticesOf([tabId])).toEqual(notices);
+  });
+
+  it("Split a table with no bill chosen prints From: Mesa 51, 52 / To: Mesa 51 for each bill that stays (row 8)", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa51 = await v.table("Mesa 51");
+    const mesa52 = await v.table("Mesa 52");
+    const { partyId, tabId } = await seat(v, mesa51);
+    await join(v, partyId, mesa52);
+    await order(v, tabId, "Burger", "Burger");
+    await split(v, partyId, tabId, [2]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, mesa52, null, command));
+
+    const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
+    expect(slips.map((lines) => lines.slice(3, 5))).toEqual([
+      ["De: Mesa 51, 52", "A:  Mesa 51"],
+      ["De: Mesa 51, 52", "A:  Mesa 51"],
+    ]);
+  });
+
+  it("a bill moved between two tables of the group Terraza names each side's table in brackets (row 12b)", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa77 = await v.table("Mesa 77");
+    const mesa78 = await v.table("Mesa 78");
+    const { partyId, tabId } = await seat(v, mesa77);
+    // Seating a grouped table seats the whole group, so the group forms after the party sits.
+    await group(v, "Terraza", [mesa77, mesa78]);
+    await order(v, tabId, "Paella", "Burger");
+    const second = await split(v, partyId, tabId, [2]);
+    const before = (await printedBy(grill)).length;
+    const expectedPartyRevision = await revisionOf(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        second,
+        { tableId: mesa78 },
+        { bills: "merge", operatorId: OPERATOR, expectedPartyRevision },
+      ),
+    );
+
+    const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
+    expect(slips.map((lines) => lines.slice(3, 5))).toEqual([
+      ["De: Terraza (Mesa 77)", "A:  Terraza (Mesa 78)"],
     ]);
   });
 });

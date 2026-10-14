@@ -188,7 +188,7 @@ export async function mergeCheckedBills(
 ): Promise<void> {
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
-  const before = known.kitchenTold === true ? null : await readSentWork(tx, cfg, fromBillId);
+  const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
@@ -220,7 +220,7 @@ export async function transferItems(
   assertDistinctTransferLines(fromBillId, transfers);
   await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
 
-  const before = await readSentWork(tx, cfg, fromBillId);
+  const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
     refuseHeld: false,
   });

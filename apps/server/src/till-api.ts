@@ -2686,11 +2686,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             const before =
               slipsLater === undefined
                 ? null
-                : await readPartiesSentWork(
-                    tx,
-                    sendCfg,
-                    holder === null ? [partyId] : [partyId, holder],
-                  );
+                : await readPartiesSentWork(tx, holder === null ? [partyId] : [partyId, holder]);
             const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
             await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {

@@ -746,7 +746,7 @@ export async function backToSaved(
   }
   const members = merge?.members.map((member) => member.tableId) ?? [];
   const parties = members.length === 0 ? [] : [...new Set((await holdersOf(tx, members)).values())];
-  const before = parties.length === 0 ? null : await readPartiesSentWork(tx, cfg, parties);
+  const before = parties.length === 0 ? null : await readPartiesSentWork(tx, parties);
   await leaveMerges(tx, [tableId]);
   await tx
     .update(floorTodayTables)
