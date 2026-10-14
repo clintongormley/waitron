@@ -61,6 +61,7 @@ const STREAM_TEST_FILES = [
   "src/stream-pause.e2e.test.ts",
   "src/s3-rehearsal-scenarios.e2e.test.ts",
   "src/aws-send-gate.e2e.test.ts",
+  "src/aws-rehearsal-interrupt.e2e.test.ts",
   "src/testing/s3-test-server.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [

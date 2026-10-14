@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import { access, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -67,12 +68,14 @@ import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-l
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import {
+  journalFileName,
   type JournalPid,
   type JournalState,
   processStartTime,
   type RehearsalJournal,
   writeJournal,
 } from "./aws-rehearsal-journal.js";
+import { type KeeperHandle, keeperEnv, startKeeper } from "./aws-rehearsal-keeper-start.js";
 import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
 import {
   currentRequestScope,
@@ -83,6 +86,7 @@ import {
 } from "./aws-send-gate.js";
 
 export { AwsRehearsalRefused, type AwsRehearsalRefusalReason } from "./aws-rehearsal-refused.js";
+export { type KeeperHandle, keeperEnv } from "./aws-rehearsal-keeper-start.js";
 
 export interface RehearsalProfile {
   region: string;
@@ -288,7 +292,7 @@ export interface TeardownDeps {
 
 export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   env: Env;
-  createAdminClient(profile: RehearsalProfile): AdminClient;
+  createAdminClient(profile: RehearsalProfile, endpoint: string | undefined): AdminClient;
   randomSuffix(): string;
   runId(): string;
   commit(): string;
@@ -307,8 +311,10 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   journal(receiptDir: string, journal: RehearsalJournal): void;
   /** A pid's start time as `ps -o lstart=` prints it, or null when it cannot be read. */
   processStartTime(pid: number): string | null;
-  /** A local S3 endpoint, for proofs only; never read from the environment. */
+  /** A local S3 endpoint, for proofs only; never read from the environment. With one, the preflight is skipped. */
   endpoint?: string;
+  /** Starts the keeper on the journal at `journalPath` with `env` (the runner passes `keeperEnv`); resolves once it is ready. */
+  startKeeper(journalPath: string, env: Env): Promise<KeeperHandle>;
 }
 
 export interface TeardownTarget {
@@ -777,13 +783,14 @@ function defaultDeps(env: Env): AwsRehearsalDeps {
   return {
     env,
     readFile: (path) => readFile(path, "utf8"),
-    createAdminClient: (profile) =>
+    createAdminClient: (profile, endpoint) =>
       createBucketClient({
         region: profile.region,
         bucket: "",
         prefix: "",
         accessKeyId: profile.accessKeyId,
         secretAccessKey: profile.secretAccessKey,
+        ...(endpoint === undefined ? {} : { endpoint }),
       }),
     randomSuffix: randomBucketSuffix,
     runId: randomUUID,
@@ -803,6 +810,7 @@ function defaultDeps(env: Env): AwsRehearsalDeps {
     removeDir: (path) => rm(path, { recursive: true, force: true }),
     journal: writeJournal,
     processStartTime,
+    startKeeper,
   };
 }
 
@@ -955,7 +963,7 @@ export async function withAwsRehearsal<T>(
     throw new AwsRehearsalFailed("the rehearsal was stopped before it started");
   }
   installSendGate();
-  const client = deps.createAdminClient(profile);
+  const client = deps.createAdminClient(profile, deps.endpoint);
   markRunnerClient(client);
   try {
     return await runOwned(scenario, deps, deps.apis, profile, client, receiptDir);
@@ -1227,6 +1235,7 @@ async function runOwned<T>(
   let journalState: JournalState = "creating";
   let journalScratch: string | null = null;
   let journalFailures = 0;
+  let keeperPid: number | null = null;
   const journalNow = (): RehearsalJournal => ({
     version: 1,
     runId,
@@ -1248,8 +1257,8 @@ async function runOwned<T>(
     teardownMs: deps.teardownMs,
     keeperCeilingMs: 2 * (deps.deadlineMs + deps.settleMs + deps.teardownMs),
     ...(deps.endpoint === undefined ? {} : { endpoint: deps.endpoint }),
-    keeperPid: null,
-    ready: null,
+    keeperPid,
+    ready: keeperPid === null ? null : true,
   });
   // Once a bucket may exist a failed write fails the run, but never stops it or its teardown.
   // The whole serialised journal, as writeReceipt checks the receipt's text.
@@ -1310,6 +1319,7 @@ async function runOwned<T>(
         throw new AwsRehearsalRefused("prefix-not-issued", "use a prefix from prefix(label)");
       }
       return {
+        ...(deps.endpoint === undefined ? {} : { endpoint: deps.endpoint }),
         region,
         bucket,
         prefix,
@@ -1454,7 +1464,14 @@ async function runOwned<T>(
       throw new AwsRehearsalFailed(`writing the ownership nonce to ${bucket} failed`);
     }
     stopIfStopped();
-    await preflight(client, bucket, callDeps, signal);
+    if (deps.endpoint === undefined) {
+      await preflight(client, bucket, callDeps, signal);
+    } else {
+      // A local S3 server: versitygw answers GetBucketEncryption 501 NotImplemented (design D12).
+      for (const api of ["GetBucketEncryption", "GetBucketVersioning"]) {
+        record({ scenario: "lifecycle", phase: "preflight", api, outcome: "skipped" });
+      }
+    }
     stopIfStopped();
     return scenario(ctx);
   };
@@ -1472,154 +1489,177 @@ async function runOwned<T>(
       "the journal could not be written in the receipt folder; nothing was created",
     );
   }
-  await requests.scope.run(async () => {
-    try {
-      result = await runWithDeadline(setUpAndRun, {
-        controller,
-        deadlineMs: deps.deadlineMs,
-        settleMs: deps.settleMs,
-        outside: deps.signal,
-        now: deps.now,
-        record,
-        unsettled: () => {
-          scenarioStillRunning = true;
-        },
-      });
-    } catch (error) {
-      failure = error;
-    }
-    if (created?.state === "owned") {
-      tearingDown = true;
-      teardown = await teardownOwnedBucket(
-        client,
-        { bucket, runId, uploads, pids },
-        {
-          ...deps,
+  const journalPath = join(receiptDir, journalFileName(runId));
+  let keeper: KeeperHandle;
+  try {
+    keeper = await deps.startKeeper(journalPath, keeperEnv(deps.env));
+  } catch (error) {
+    rmSync(journalPath, { force: true });
+    throw error instanceof AwsRehearsalRefused && error.reason === "keeper-unavailable"
+      ? error
+      : new AwsRehearsalRefused(
+          "keeper-unavailable",
+          "the keeper could not be started; nothing was created",
+        );
+  }
+  keeperPid = keeper.keeperPid;
+  try {
+    return await runStarted();
+  } finally {
+    // After `finished`, so a keeper that reads end-of-file finds the run done.
+    keeper.end();
+  }
+
+  async function runStarted(): Promise<T> {
+    await requests.scope.run(async () => {
+      try {
+        result = await runWithDeadline(setUpAndRun, {
+          controller,
+          deadlineMs: deps.deadlineMs,
+          settleMs: deps.settleMs,
+          outside: deps.signal,
+          now: deps.now,
           record,
-        },
+          unsettled: () => {
+            scenarioStillRunning = true;
+          },
+        });
+      } catch (error) {
+        failure = error;
+      }
+      if (created?.state === "owned") {
+        tearingDown = true;
+        teardown = await teardownOwnedBucket(
+          client,
+          { bucket, runId, uploads, pids },
+          {
+            ...deps,
+            record,
+          },
+        );
+        for (const entry of teardown.entries) contained.teardown(entry);
+        if (
+          teardown.entries.some((entry) => entry.step === "delete-bucket" && entry.outcome === "ok")
+        ) {
+          journal("deleted");
+        }
+      }
+    });
+    tearingDown = true;
+    // A run that never owned a bucket records this step only if it made scratch.
+    const scratchEntries: TeardownEntry[] = [];
+    if (created?.state === "owned" || scratchMade) {
+      await Promise.all(scratchMaking);
+      const entry = await removeScratch(
+        scratchMade,
+        scratchRoot,
+        deps.removeDir,
+        scenarioStillRunning,
       );
-      for (const entry of teardown.entries) contained.teardown(entry);
-      if (
-        teardown.entries.some((entry) => entry.step === "delete-bucket" && entry.outcome === "ok")
-      ) {
-        journal("deleted");
+      contained.teardown(entry);
+      scratchEntries.push(entry);
+    }
+    const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed")
+      ? `; scratch folder not removed: ${scratchRoot}`
+      : "";
+    const ownership: CreateOutcome = created ?? {
+      state: "unowned-candidate",
+      bucket: null,
+      candidate: bucket,
+    };
+
+    const remaining = carriedRemaining(
+      teardown?.remaining ?? { bucket: null, uploadIds: [] },
+      profile,
+      contained,
+    );
+    const failed = failedSteps([...(teardown?.entries ?? []), ...scratchEntries]);
+    let receiptFailure: AwsRehearsalFailed | undefined;
+    requests.finished();
+    try {
+      const receipt = log.finish({
+        finishedAt: new Date(deps.now()).toISOString(),
+        ownership,
+        remaining,
+        cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
+        sourceOnly: SOURCE_ONLY_APIS,
+      });
+      await writeReceipt(receiptDir, receipt, profile);
+    } catch (error) {
+      receiptFailure = new AwsRehearsalFailed(
+        `the receipt was not written (${receiptFailureCause(error)})`,
+      );
+    }
+    let printFailure: unknown;
+    if (receiptFailure === undefined) {
+      try {
+        deps.print(receiptPath);
+      } catch (error) {
+        printFailure = error;
       }
     }
-  });
-  tearingDown = true;
-  // A run that never owned a bucket records this step only if it made scratch.
-  const scratchEntries: TeardownEntry[] = [];
-  if (created?.state === "owned" || scratchMade) {
-    await Promise.all(scratchMaking);
-    const entry = await removeScratch(
-      scratchMade,
-      scratchRoot,
-      deps.removeDir,
-      scenarioStillRunning,
-    );
-    contained.teardown(entry);
-    scratchEntries.push(entry);
-  }
-  const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed")
-    ? `; scratch folder not removed: ${scratchRoot}`
-    : "";
-  const ownership: CreateOutcome = created ?? {
-    state: "unowned-candidate",
-    bucket: null,
-    candidate: bucket,
-  };
-
-  const remaining = carriedRemaining(
-    teardown?.remaining ?? { bucket: null, uploadIds: [] },
-    profile,
-    contained,
-  );
-  const failed = failedSteps([...(teardown?.entries ?? []), ...scratchEntries]);
-  let receiptFailure: AwsRehearsalFailed | undefined;
-  requests.finished();
-  try {
-    const receipt = log.finish({
-      finishedAt: new Date(deps.now()).toISOString(),
-      ownership,
-      remaining,
-      cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, receiptPath),
-      sourceOnly: SOURCE_ONLY_APIS,
-    });
-    await writeReceipt(receiptDir, receipt, profile);
-  } catch (error) {
-    receiptFailure = new AwsRehearsalFailed(
-      `the receipt was not written (${receiptFailureCause(error)})`,
-    );
-  }
-  let printFailure: unknown;
-  if (receiptFailure === undefined) {
-    try {
-      deps.print(receiptPath);
-    } catch (error) {
-      printFailure = error;
+    let finishFailure: AwsRehearsalFailed | undefined;
+    if (receiptFailure === undefined) {
+      // Written last, so a keeper that reads it knows the receipt exists.
+      journalState = "finished";
+      try {
+        writeChecked();
+      } catch {
+        finishFailure = new AwsRehearsalFailed("the journal was not marked finished");
+      }
     }
-  }
-  let finishFailure: AwsRehearsalFailed | undefined;
-  if (receiptFailure === undefined) {
-    // Written last, so a keeper that reads it knows the receipt exists.
-    journalState = "finished";
-    try {
-      writeChecked();
-    } catch {
-      finishFailure = new AwsRehearsalFailed("the journal was not marked finished");
-    }
-  }
-  const refusals = requests.close();
+    const refusals = requests.close();
 
-  const teardownFailure =
-    failed === "none"
-      ? undefined
-      : new AwsRehearsalFailed(
-          `teardown failed at ${failed}` +
-            scratchLeft +
-            (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
-        );
-  const problems = [
-    failure,
-    unplannedFailure(refusals),
-    refusedEntriesFailure(contained.refused()),
-    journalFailures === 0
-      ? undefined
-      : new AwsRehearsalFailed(
-          `${journalFailures} journal write${journalFailures === 1 ? "" : "s"} failed, so the journal may not have named everything this run made`,
-        ),
-    teardownFailure,
-    finishFailure,
-  ].filter((error) => error !== undefined);
-  if (receiptFailure !== undefined) {
-    const left =
-      remaining.bucket ??
-      (ownership.state === "unowned-candidate"
-        ? `${ownership.candidate} (ownership unknown)`
-        : "none");
-    throw new AggregateError(
-      [...problems, receiptFailure],
-      `the rehearsal's receipt was not written; bucket left: ${left}; ` +
-        `failed teardown steps: ${failed}${scratchLeft}`,
-    );
+    const teardownFailure =
+      failed === "none"
+        ? undefined
+        : new AwsRehearsalFailed(
+            `teardown failed at ${failed}` +
+              scratchLeft +
+              (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
+          );
+    const problems = [
+      failure,
+      unplannedFailure(refusals),
+      refusedEntriesFailure(contained.refused()),
+      journalFailures === 0
+        ? undefined
+        : new AwsRehearsalFailed(
+            `${journalFailures} journal write${journalFailures === 1 ? "" : "s"} failed, so the journal may not have named everything this run made`,
+          ),
+      teardownFailure,
+      finishFailure,
+    ].filter((error) => error !== undefined);
+    if (receiptFailure !== undefined) {
+      const left =
+        remaining.bucket ??
+        (ownership.state === "unowned-candidate"
+          ? `${ownership.candidate} (ownership unknown)`
+          : "none");
+      throw new AggregateError(
+        [...problems, receiptFailure],
+        `the rehearsal's receipt was not written; bucket left: ${left}; ` +
+          `failed teardown steps: ${failed}${scratchLeft}`,
+      );
+    }
+    if (printFailure !== undefined) {
+      if (problems.length === 0) throw printFailure;
+      throw new AggregateError(
+        [...problems, printFailure],
+        `the rehearsal failed${scratchLeft}; receipt: ${receiptPath}`,
+      );
+    }
+    if (problems.length === 1) throw problems[0];
+    if (problems.length > 1) {
+      throw new AggregateError(
+        problems,
+        teardownFailure === undefined
+          ? `the rehearsal failed; receipt: ${receiptPath}`
+          : `the rehearsal failed and so did its teardown${scratchLeft}; receipt: ${receiptPath}`,
+      );
+    }
+    return result as T;
   }
-  if (printFailure !== undefined) {
-    if (problems.length === 0) throw printFailure;
-    throw new AggregateError(
-      [...problems, printFailure],
-      `the rehearsal failed${scratchLeft}; receipt: ${receiptPath}`,
-    );
-  }
-  if (problems.length === 1) throw problems[0];
-  if (problems.length > 1) {
-    throw new AggregateError(
-      problems,
-      teardownFailure === undefined
-        ? `the rehearsal failed; receipt: ${receiptPath}`
-        : `the rehearsal failed and so did its teardown${scratchLeft}; receipt: ${receiptPath}`,
-    );
-  }
-  return result as T;
 }
 
 /** `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this. */
@@ -1811,7 +1851,7 @@ export async function cleanupFromReceipt(
   const contained = containedLog(log);
   const { record } = contained;
   installSendGate();
-  const client = deps.createAdminClient(profile);
+  const client = deps.createAdminClient(profile, undefined);
   markRunnerClient(client);
   const requests = runScope(
     createRequestPlan({ bucket, apis: [], prefixes: () => new Set() }),

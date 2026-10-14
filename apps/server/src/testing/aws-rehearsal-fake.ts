@@ -228,6 +228,8 @@ export function fakeHarness(
         journals.push(structuredClone(journal));
       },
       processStartTime: () => START_TIME,
+      // No keeper process: these suites start none.
+      startKeeper: async () => ({ keeperPid: null, end: () => {} }),
       // These suites' scenarios send only through the runner's own admin client.
       apis: [],
     },
