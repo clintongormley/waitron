@@ -24,7 +24,8 @@ import {
 } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -50,6 +51,27 @@ import {
   waitForEvent,
   seedTradingVenue,
 } from "./testing/boot-harness.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+
+// Tampering must reach the live watch; the fixture route queues on the server's own handle.
+vi.mock("./management-api.js", async (original) => {
+  const actual = await original<typeof import("./management-api.js")>();
+  return {
+    ...actual,
+    mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
+      const [app, deps] = args;
+      app.post("/__test/tamper", async (c) => {
+        const statements = await c.req.json<string[]>();
+        await withTransaction(deps.db, (tx) => {
+          for (const statement of statements) tx.run(sql.raw(statement));
+        });
+        return c.body(null, 204);
+      });
+      return actual.mountManagementApi(...args);
+    },
+  };
+});
 
 /**
  * `undici`'s `fetch` rejects here as it does in `boot.test.ts`, so no boot in this file reaches the
@@ -645,6 +667,7 @@ describe("startServer — the append-only watch in trading mode", () => {
 
   /** A seeded trading venue of its own, so a tampered trigger reaches no other test. */
   async function startWatched() {
+    beforeServerStarts();
     const venue = await freshVenue();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-append-only-state-"));
     const cleanup = async () => {
@@ -652,6 +675,8 @@ describe("startServer — the append-only watch in trading mode", () => {
       await rm(stateDir, { recursive: true, force: true });
     };
     let server: StartedServer | undefined;
+    let base = "";
+    let stopped = false;
     try {
       await seedTradingVenue(venue.store.venue);
       await venue.store.close();
@@ -673,6 +698,7 @@ describe("startServer — the append-only watch in trading mode", () => {
         { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
       );
       await awaitListening(port);
+      base = `http://127.0.0.1:${port}`;
     } catch (error) {
       // A listener that never bound rejects its close; the original error is the one to report.
       await server?.close().catch(() => {});
@@ -681,14 +707,32 @@ describe("startServer — the append-only watch in trading mode", () => {
       throw error;
     }
     return {
-      server,
+      server: {
+        ...server,
+        close: async () => {
+          try {
+            await server.close();
+          } finally {
+            stopped = true;
+          }
+        },
+      },
       stateDir,
       cleanup,
-      /** The timeout lets the DDL wait out a boot duty's write rather than fail SQLITE_BUSY. */
-      tamper: (statements: string) => {
+      tamper: async (statements: readonly string[]) => {
+        if (!stopped) {
+          const response = await fetch(`${base}/__test/tamper`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(statements),
+          });
+          expect(response.status).toBe(204);
+          return;
+        }
+        beforeServerStarts();
         const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5_000 });
         try {
-          raw.exec(statements);
+          raw.exec(statements.join("\n"));
         } finally {
           raw.close();
         }
@@ -699,10 +743,13 @@ describe("startServer — the append-only watch in trading mode", () => {
   for (const [what, statements, refusedTriggers] of [
     [
       "replaced",
-      `drop trigger ${UPDATE}; create trigger ${UPDATE} before update on sales begin select 1; end;`,
+      [
+        `drop trigger ${UPDATE};`,
+        `create trigger ${UPDATE} before update on sales begin select 1; end;`,
+      ],
       { missing: [], altered: [UPDATE] },
     ],
-    ["dropped", `drop trigger ${UPDATE};`, { missing: [UPDATE], altered: [] }],
+    ["dropped", [`drop trigger ${UPDATE};`], { missing: [UPDATE], altered: [] }],
   ] as const) {
     it(`keeps an untouched box trading, then stops it and records the refusal for the next start when a trigger is ${what}`, async () => {
       await withMockedKill(async (kills) => {
@@ -711,7 +758,7 @@ describe("startServer — the append-only watch in trading mode", () => {
           await delay(INTERVAL_MS * 5);
           expect(kills).toEqual([]);
 
-          box.tamper(statements);
+          await box.tamper(statements);
           await vi.waitFor(() => expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]), {
             timeout: 5_000,
           });
@@ -744,7 +791,7 @@ describe("startServer — the append-only watch in trading mode", () => {
         await box.server.close();
         // A watch left running reads the closed store, which throws, so it logs and never refuses.
         const lines = await withCapturedStdout(async (captured) => {
-          box.tamper(`drop trigger ${UPDATE};`);
+          await box.tamper([`drop trigger ${UPDATE};`]);
           await delay(INTERVAL_MS * 5);
           return captured;
         });

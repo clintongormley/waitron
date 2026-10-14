@@ -10,10 +10,13 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { VenueDetailsModel } from "./venue-detail-types.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
@@ -96,6 +99,7 @@ describe("a running venue's account email clock", () => {
           WAITRON_BACKUP_RECOVERY_KEY: "venue-preview-recovery-key",
           WAITRON_BACKUP_INTERVAL_MS: "86400000",
         };
+        beforeServerStarts();
         const [admin] = await suite.db
           .insert(persons)
           .values({
@@ -117,6 +121,25 @@ describe("a running venue's account email clock", () => {
             value: { url: `smtp://127.0.0.1:${smtpPort}`, from: "no-reply@example.test" },
           }),
         );
+        const invitees: string[] = [];
+        if (path !== "profile") {
+          for (const index of [0, 1, 2]) {
+            beforeServerStarts();
+            const [person] = await suite.db
+              .insert(persons)
+              .values({
+                displayName: `Invitee ${index}`,
+                pinHash: hashPin("1234"),
+                email: `invitee-${index}@example.test`,
+                role: "staff",
+                status: path === "invitation" ? "pending" : "active",
+                passwordHash: hashPassword(PASSWORD),
+                locale: "en-GB",
+              })
+              .returning({ id: persons.id });
+            invitees.push(person!.id);
+          }
+        }
         const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
         server = await startServer({ ...env, WAITRON_VENUE_DIR: dirname(database) }, env);
         await vi.waitFor(async () => {
@@ -130,21 +153,9 @@ describe("a running venue's account email clock", () => {
           });
         const send = async (index: number) => {
           if (path !== "profile") {
-            const [person] = await suite.db
-              .insert(persons)
-              .values({
-                displayName: `Invitee ${index}`,
-                pinHash: hashPin("1234"),
-                email: `invitee-${index}@example.test`,
-                role: "staff",
-                status: path === "invitation" ? "pending" : "active",
-                passwordHash: hashPassword(PASSWORD),
-                locale: "en-GB",
-              })
-              .returning({ id: persons.id });
             if (path === "invitation") {
               const response = await request(
-                `/management-api/staff/${person!.id}/invitation`,
+                `/management-api/staff/${invitees[index]!}/invitation`,
                 "POST",
               );
               expect(response.status).toBe(200);

@@ -4818,10 +4818,9 @@ the tree. What remains, largest first:
   `onTestFinished`, as `wt-floor-plan-canvas.test.ts`'s cursor cases now do.
 
 - **Server suites write to the venue database while their in-process server runs (found by
-  A538-5f).** Nine suites, as of 2026-10-13. Each can fail `database is locked` whenever the write
-  meets one of the server's open transactions
-  ([why](developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down)).
-  Found by reading, none reproduced. Next: move each write before `startServer` or after
+  A538-5f).** Remaining: `boot.test.ts` and `boot.invoice-delivery.test.ts`, reserved by retained
+  manual work on `a493-assertion-ports` when A605 checked on 2026-10-14. Found by reading;
+  no locking failure reproduced in these two files. Move each write before `startServer` or after
   `close()`, or make it through the server's API.
   [Detail](backlog/ci.md#server-suites-write-to-the-venue-database-while-their-in-process-server-runs-found-by-a538-5f)
 

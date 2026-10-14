@@ -29,7 +29,8 @@ import {
   writeContentLanguages,
 } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
+import { serverFixture } from "./testing/server-fixture.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
@@ -66,6 +67,24 @@ import {
   startFakeSmtp,
   seedTradingVenue,
 } from "./testing/boot-harness.js";
+
+const { beforeServerStarts, startServer } = serverFixture();
+
+// The setup refusal needs a stamp written after boot; its fixture shares the server's write queue.
+vi.mock("./setup-api.js", async (original) => {
+  const actual = await original<typeof import("./setup-api.js")>();
+  return {
+    ...actual,
+    mountSetup: (...args: Parameters<typeof actual.mountSetup>) => {
+      const [app, deps] = args;
+      app.post("/__test/stamp-deployment", async (c) => {
+        await withTransaction(deps.db!, () => stampDeployment(deps.db!, "production"));
+        return c.body(null, 204);
+      });
+      return actual.mountSetup(...args);
+    },
+  };
+});
 
 /**
  * `undici`'s `fetch` rejects here as it does in `boot.test.ts`, so no boot in this file reaches the
@@ -280,6 +299,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
 
   it("writes an answered password reset's token and reads the mail settings before close() closes the venue store, then sends its email", async () => {
     const smtp = await startFakeSmtp();
+    beforeServerStarts();
     const venue = await freshVenue();
     try {
       const db = venue.store.venue;
@@ -400,6 +420,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }
 
   it("finishes a provision whose venue had already committed, re-using that venue rather than minting another", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const precommittedStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-precommitted-"));
     try {
@@ -438,6 +459,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("provisions no till, and the trading start that follows sells from a paired device with no WAITRON_TILL_TILL_ID", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const keptStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-till-state-"));
     try {
@@ -543,6 +565,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 120_000);
 
   it("validates a restore artifact before staging it, refusing one the recovery key cannot open", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
@@ -574,6 +597,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("deletes setup validation's plaintext copy after staging a confirmed archive", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const source = await freshVenue();
     const dumpDir = await mkdtemp(join(tmpdir(), "waitron-boot-validation-copy-"));
@@ -661,6 +685,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   };
 
   it("refuses a pasted kit it cannot read, and gives up on a bucket that never answers, staging nothing", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     try {
       await withSilentBucket(async (endpoint) => {
@@ -702,6 +727,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("keeps a refusing bucket's own error name out of the answer and the log unless it is listed", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-bucket-name-logs-"));
     // XML-escaped on the wire; the client decodes it back to the markup.
@@ -786,6 +812,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("keeps a key the bucket lists outside the folder asked for out of the answer and the log", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-bucket-key-logs-"));
     const venueId = "c0000000-0000-4000-8000-000000000002";
@@ -892,6 +919,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   // An archive whose database holds bucket settings may be a copy of a server still selling, so
   // staging it checks that server's bucket first.
   it("asks whether the old server is gone when an archive's bucket never answers, staging nothing", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const source = await freshVenue();
     const vaultKey = Buffer.alloc(32, 5).toString("base64");
@@ -980,6 +1008,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("refuses to adopt from a primary it cannot reach", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     try {
       await withSetupBoot(
@@ -1007,6 +1036,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const personId = "33333333-3333-4333-8333-333333333333";
     const operationId = "44444444-4444-4444-8444-444444444444";
@@ -1044,6 +1074,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   }, 60_000);
 
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
+    beforeServerStarts();
     const venue = await freshVenue();
     const bundle = {
       designated: {
@@ -1084,7 +1115,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
         // Stamped after boot, as a live provision refused inside `applyVenue` leaves it on a
         // preproduction host; boot itself refuses a database stamped for another environment.
-        await stampDeployment(venue.store.venue, "production");
+        const stamped = await post("/__test/stamp-deployment", {});
+        expect(stamped.status).toBe(204);
         const expected = {
           error: {
             code: "deployment.already_stamped",
@@ -1328,6 +1360,7 @@ describe("startServer — the configuration export route in trading mode", () =>
   ] as const)(
     "onboarding intent %s answers the export route with %s",
     async (intent, status) => {
+      beforeServerStarts();
       const venue = await freshVenue();
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-export-route-state-"));
       let server: StartedServer | undefined;
