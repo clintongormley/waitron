@@ -1667,6 +1667,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   just after midnight before the changeover on the 1st the two can show different months — left
   open by A506-12.
 
+- **On the Times tab, two departments' ranges at the same time hide each other** (ASK A2 of
+  A506-12, #1701). A station's day is one bar holding every range it gets, so a station fed by
+  Restaurant's Dinner and Bar's All day, both 10:00–02:00, draws both in one place, and hovering
+  names only one ("All day (Bar) 10:00–02:00"); seen by the run-it review, not on the demo. Owner to
+  choose: keep one bar, one track per department, or one label naming both where times overlap —
+  left open by A506-12.
+
 - **A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour
   and can show one period at a time (owner 2026-10-13)** — OPEN, not started. Each station picks a
   colour from a larger set than the six menu periods use; a cell takes its station's colour, and each
