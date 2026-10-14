@@ -9,8 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { LOOP_APIS } from "./testing/aws-rehearsal-plans.js";
-import { uninstallSendGate } from "./testing/aws-send-gate.js";
-import { runUnderPlan } from "./testing/local-request-plan.js";
+import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -74,7 +73,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
-      uninstallSendGate,
+      endLocalPlans,
     ]) {
       try {
         await cleanup();
@@ -102,8 +101,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       const server = await startS3TestServer({ bin: versitygw.bin, root: join(folder, "s3") });
       s3 = server;
       const events: StreamLoopEvent[] = [];
-      // Which box's `replicate` children the seam was told of, and whether each was running then.
-      const replicating: Array<{ box: string; alive: boolean }> = [];
+      // Which box's `replicate` children the seam was told of.
+      const replicating: Array<{ box: string; pid: number }> = [];
       running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
         runStreamLoopScenario({
           bucket: {
@@ -124,7 +123,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
             spawn: trackedSpawn((pid, args) => {
               if (args[0] !== "replicate") return;
               const box = /[/\\](box-[ab])[/\\]/.exec(args.at(-1) ?? "")?.[1] ?? "unknown";
-              replicating.push({ box, alive: isRunning(pid) });
+              replicating.push({ box, pid });
             }),
           },
         }),
@@ -134,7 +133,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         STREAM_LOOP_PHASES.map((phase) => [phase, "ok"]),
       );
       expect([...new Set(replicating.map(({ box }) => box))].sort()).toEqual(["box-a", "box-b"]);
-      expect(replicating.filter(({ alive }) => !alive)).toEqual([]);
+      // The scenario's closes stopped every Litestream it started.
+      expect(replicating.filter(({ pid }) => isRunning(pid))).toEqual([]);
     },
     LOOP_TIMEOUT_MS,
   );

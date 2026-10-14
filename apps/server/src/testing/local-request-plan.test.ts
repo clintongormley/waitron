@@ -2,8 +2,7 @@ import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, describe, expect, it } from "vitest";
-import { uninstallSendGate } from "./aws-send-gate.js";
-import { runUnderPlan } from "./local-request-plan.js";
+import { endLocalPlans, runUnderPlan } from "./local-request-plan.js";
 
 const BUCKET = "local-bucket";
 const PREFIX = "local-run/loop/";
@@ -29,7 +28,7 @@ const put = (key: string) => new PutObjectCommand({ Bucket: BUCKET, Key: key, Bo
 const options = { bucket: BUCKET, apis: ["PutObject"] as const, prefixes: [PREFIX] };
 
 afterAll(() => {
-  uninstallSendGate();
+  endLocalPlans();
 });
 
 describe("runUnderPlan", () => {
@@ -65,6 +64,32 @@ describe("runUnderPlan", () => {
     });
     await expect(late).rejects.toThrow("PutObject was sent after the run has ended");
     expect(handled()).toBe(0);
+    expect(() => endLocalPlans()).toThrow(
+      "1 request(s) refused after their run had ended; the first: PutObject was sent after the run has ended",
+    );
+    expect(() => endLocalPlans()).not.toThrow();
+  });
+
+  it("rethrows the body's own error when nothing was refused", async () => {
+    const failure = new Error("the scenario failed");
+    await expect(
+      runUnderPlan(options, async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+  });
+
+  it("fails naming the refusal, keeping the body's error as the cause, when the body throws after one", async () => {
+    const { client } = recording();
+    const failure = new Error("the scenario failed");
+    const error = await runUnderPlan({ ...options, apis: [] }, async () => {
+      await client.send(put(`${PREFIX}a`)).catch(() => undefined);
+      throw failure;
+    }).catch((e: unknown) => e);
+    expect((error as Error).message).toBe(
+      "1 unplanned request(s) refused before sending; the first: PutObject is not among the scenario's declared APIs",
+    );
+    expect((error as Error).cause).toBe(failure);
   });
 
   it("lets a request made outside any scope through", async () => {

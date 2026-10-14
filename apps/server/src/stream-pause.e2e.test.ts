@@ -8,8 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, it } from "vitest";
 import { PAUSE_APIS } from "./testing/aws-rehearsal-plans.js";
-import { uninstallSendGate } from "./testing/aws-send-gate.js";
-import { runUnderPlan } from "./testing/local-request-plan.js";
+import { endLocalPlans, runUnderPlan } from "./testing/local-request-plan.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
@@ -52,7 +51,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
-      uninstallSendGate,
+      endLocalPlans,
     ]) {
       try {
         await cleanup();

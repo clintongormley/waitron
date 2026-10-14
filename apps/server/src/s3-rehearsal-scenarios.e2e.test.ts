@@ -11,8 +11,8 @@ import { CreateMultipartUploadCommand, PutObjectCommand, S3Client } from "@aws-s
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { archiveNamespace } from "./archive-settings.js";
 import { ARCHIVE_APIS, DELETE_APIS } from "./testing/aws-rehearsal-plans.js";
-import { markRunnerClient, uninstallSendGate } from "./testing/aws-send-gate.js";
-import { runUnderPlan, type LocalPlan } from "./testing/local-request-plan.js";
+import { markRunnerClient } from "./testing/aws-send-gate.js";
+import { endLocalPlans, runUnderPlan, type LocalPlan } from "./testing/local-request-plan.js";
 import { localS3Fixture, type LocalS3Fixture } from "./testing/local-s3-fixture.js";
 import {
   ARCHIVE_SCENARIO_MS,
@@ -89,7 +89,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       async () => {
         if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
       },
-      uninstallSendGate,
+      endLocalPlans,
     ]) {
       try {
         await cleanup();
