@@ -68,12 +68,14 @@ export class TillPartyNameDialog extends LitElement {
   @property() refusal = "";
 
   @state() private attempted = false;
-  /** The name field's text box, in pixels; infinite until the field is first measured. */
+  /** The width the placeholder may take: the name field's text box less a pixel to spare; infinite
+   * until the field is first measured. */
   #textBox = Number.POSITIVE_INFINITY;
   #placeholder = "";
   #resize?: ResizeObserver;
   readonly #measure = document.createElement("canvas").getContext("2d")!;
-  /** A font that arrives late changes the text's width but not the field's, so no resize says so. */
+  /** A web font that finishes loading changes the text's width but not the field's, so no resize
+   * reports it. */
   readonly #fontsLoaded = () => {
     const field = this.renderRoot.querySelector<HTMLElement>("wt-input");
     if (field) this.#measureField(field);
@@ -121,7 +123,6 @@ export class TillPartyNameDialog extends LitElement {
     const placeholder = getComputedStyle(input, "::placeholder");
     this.#measure.font = placeholder.font;
     this.#measure.letterSpacing = placeholder.letterSpacing;
-    // A pixel to spare, as `clientWidth` is rounded to a whole pixel.
     this.#textBox =
       input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight) - 1;
     const shown = this.#placeholder;

@@ -52,7 +52,7 @@ function drawn(el: TillPartyNameDialog) {
   };
 }
 
-/** Styles the name field's own shadow tree, as a font or theme change would. */
+/** Adds a placeholder rule inside the name field's own shadow tree. */
 function stylePlaceholder(el: TillPartyNameDialog, rule: string): void {
   const style = document.createElement("style");
   style.textContent = `.field-control::placeholder { ${rule} }`;
@@ -201,7 +201,7 @@ describe("till-party-name-dialog", () => {
       }
     });
 
-    it("shortens the list once the field narrows", async () => {
+    it("shortens the list once the field narrows, with no ResizeObserver loop as it narrows and widens", async () => {
       const tables = counters(5);
       await page.viewport(1280, 900);
       try {
@@ -252,7 +252,7 @@ describe("till-party-name-dialog", () => {
       }
     });
 
-    it("fits the list again when fonts finish loading, without the field changing width", async () => {
+    it("measures the list again on document.fonts' loadingdone event, without the field changing width", async () => {
       const tables = counters(8);
       await page.viewport(390, 900);
       try {
@@ -313,7 +313,8 @@ describe("till-party-name-dialog", () => {
     });
 
     it("cuts between whole characters, never inside an emoji", () => {
-      expect(fitPlaceholder("😀😀😀", 4, measure)).toBe("😀…");
+      const chef = "\u{1F469}\u200D\u{1F373}";
+      expect(fitPlaceholder(chef.repeat(3), 8, measure)).toBe(`${chef}…`);
     });
 
     it("cuts between whole characters, never between a letter and its accent", () => {
