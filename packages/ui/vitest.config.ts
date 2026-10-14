@@ -30,6 +30,49 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
   await page.emulateMedia({ reducedMotion });
 };
 
+interface ClickOptions {
+  button?: "left" | "middle";
+  modifiers?: ("Control" | "Meta" | "Shift")[];
+}
+
+interface OpenedPage {
+  url(): string;
+  close(): Promise<void>;
+}
+
+interface PlaywrightBrowserContext {
+  waitForEvent(event: "page", options: { timeout: number }): Promise<OpenedPage>;
+}
+
+interface PlaywrightFrame {
+  click(selector: string, options: ClickOptions & { force: true }): Promise<void>;
+}
+
+/** Clicks the element, then answers the URL of the page the click opened, or "none" if no page
+ * opened within a second. A new tab is outside the test's page, so only the provider can see it.
+ * Forced, because Playwright will not click an aria-disabled element. */
+const clickForNewPage: BrowserCommand<[selector: string, options: ClickOptions]> = async (
+  context,
+  selector,
+  options,
+) => {
+  const { context: browserContext, frame } = context as unknown as {
+    context: PlaywrightBrowserContext;
+    frame(): Promise<PlaywrightFrame>;
+  };
+  const opened = browserContext
+    .waitForEvent("page", { timeout: 1000 })
+    .catch((error: unknown) =>
+      error instanceof Error && error.name === "TimeoutError" ? null : Promise.reject(error),
+    );
+  await (await frame()).click(selector, { ...options, force: true });
+  const page = await opened;
+  if (page === null) return "none";
+  const url = page.url();
+  await page.close();
+  return url;
+};
+
 export default defineConfig({
   // Prebundle the table directives so discovering one cannot reload an in-flight browser test.
   optimizeDeps: { include: ["lit/directives/repeat.js", "lit/directives/class-map.js"] },
@@ -47,6 +90,7 @@ export default defineConfig({
       commands: {
         emulateColorScheme,
         emulateReducedMotion,
+        clickForNewPage,
         ...parkPointerCommands,
       },
     },

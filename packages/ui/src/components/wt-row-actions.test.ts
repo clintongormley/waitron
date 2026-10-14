@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
 import { WtDataTable } from "./wt-data-table.js";
@@ -13,6 +13,15 @@ async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>
   Object.assign(el, props);
   await el.updateComplete;
   return { el, host };
+}
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    clickForNewPage: (
+      selector: string,
+      options: { button?: "middle"; modifiers?: "Shift"[] },
+    ) => Promise<string>;
+  }
 }
 
 afterEach(cleanup);
@@ -684,6 +693,8 @@ describe("a link entry", () => {
     }
   }
 
+  // Playwright waits for an aria-disabled element to become enabled before clicking it; a person
+  // can still press a greyed link.
   it("does not open its page when clicked while marked aria-disabled, and stays open", async () => {
     const { el, link } = await mountLinkAndButton({ disabled: true });
     const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -693,11 +704,13 @@ describe("a link entry", () => {
   });
 
   it("does not open its page on Enter while marked aria-disabled", async () => {
-    const { link } = await mountLinkAndButton({ disabled: true });
+    const { el, link } = await mountLinkAndButton({ disabled: true });
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     link.focus();
     expect(document.activeElement).toBe(link);
     const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
     expect(outcome).toEqual({ hash: "#start", defaultPrevented: true });
+    expect(popup.matches(":popover-open")).toBe(true);
   });
 
   it("opens its page on a real click when not disabled", async () => {
@@ -709,11 +722,63 @@ describe("a link entry", () => {
   });
 
   it("opens its page on Enter when not disabled", async () => {
-    const { link } = await mountLinkAndButton();
+    const { el, link } = await mountLinkAndButton();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     link.focus();
     const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
     expect(outcome).toEqual({ hash: "#wine", defaultPrevented: false });
+    expect(popup.matches(":popover-open")).toBe(false);
   });
+
+  async function newPageOutcome(
+    link: HTMLAnchorElement,
+    options: { button?: "middle"; modifiers?: "Shift"[] },
+  ): Promise<{ opened: string; defaultPrevented: boolean | undefined }> {
+    // A new page on the test's own URL would start a second Vitest runner.
+    link.setAttribute("href", "about:blank#wine");
+    link.setAttribute("data-new-page", "");
+    const type = options.button === "middle" ? "auxclick" : "click";
+    let defaultPrevented: boolean | undefined;
+    const record = (event: Event) => {
+      if (event.target === link) defaultPrevented = event.defaultPrevented;
+    };
+    document.addEventListener(type, record);
+    try {
+      const opened = await commands.clickForNewPage("[data-new-page]", options);
+      return { opened, defaultPrevented };
+    } finally {
+      document.removeEventListener(type, record);
+    }
+  }
+
+  const newPageGestures = [
+    { gesture: "a middle-click", options: { button: "middle" as const } },
+    { gesture: "a Shift-click", options: { modifiers: ["Shift" as const] } },
+  ];
+
+  it.each(newPageGestures)(
+    "does not open a new page on $gesture while marked aria-disabled",
+    async ({ options }) => {
+      const { el, link } = await mountLinkAndButton({ disabled: true });
+      const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(await newPageOutcome(link, options)).toEqual({
+        opened: "none",
+        defaultPrevented: true,
+      });
+      expect(popup.matches(":popover-open")).toBe(true);
+    },
+  );
+
+  it.each(newPageGestures)(
+    "opens a new page on $gesture when not disabled",
+    async ({ options }) => {
+      const { link } = await mountLinkAndButton();
+      expect(await newPageOutcome(link, options)).toEqual({
+        opened: "about:blank#wine",
+        defaultPrevented: false,
+      });
+    },
+  );
 });
 
 test("reinserted after removal while open reports closed and opens normally again", async () => {

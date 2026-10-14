@@ -133,9 +133,14 @@ export class WtRowActions extends LitElement {
   private readonly judgeAction = {
     capture: true,
     handleEvent: (event: MouseEvent) => {
-      if (this.actionOf(event)?.matches('a[href][aria-disabled="true"]')) event.preventDefault();
+      this.cancelDisabledLink(event);
       if (this.closesMenu(event)) this.closingClicks.add(event);
     },
+  };
+  // A middle-click opens a link in a new tab through `auxclick`, which fires no `click`.
+  private readonly judgeAuxclick = {
+    capture: true,
+    handleEvent: (event: MouseEvent) => this.cancelDisabledLink(event),
   };
   private readonly closingClicks = new WeakSet<Event>();
 
@@ -157,6 +162,10 @@ export class WtRowActions extends LitElement {
       !action.hasAttribute("disabled") &&
       action.getAttribute("aria-disabled") !== "true"
     );
+  }
+
+  private cancelDisabledLink(event: MouseEvent): void {
+    if (this.actionOf(event)?.matches('a[href][aria-disabled="true"]')) event.preventDefault();
   }
 
   private actionOf(event: MouseEvent): HTMLElement | undefined {
@@ -197,7 +206,9 @@ export class WtRowActions extends LitElement {
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
-        <div class="actions" @click=${this.judgeAction}><slot @click=${this.onAction}></slot></div>
+        <div class="actions" @click=${this.judgeAction} @auxclick=${this.judgeAuxclick}>
+          <slot @click=${this.onAction}></slot>
+        </div>
       </div>
     `;
   }
