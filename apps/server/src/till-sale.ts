@@ -64,6 +64,11 @@ import type {
   TillSaleDeps as BaseTillSaleDeps,
 } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import {
+  beginIntegratedAttendance,
+  finishIntegratedAttendance,
+  pendingIntegratedAttendanceKey,
+} from "./attendance-integrated.js";
 type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
 import { issuancePass } from "./issuance-pass.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
@@ -1111,9 +1116,15 @@ async function payIntegrated(
         workingOrderId: req.id,
       });
       if (captured !== undefined && captured.saleId === null) {
+        const attendanceKey = await pendingIntegratedAttendanceKey(
+          tx,
+          deps.attendance,
+          req.id,
+          deps.provider.provider,
+        );
         return outstanding !== undefined
-          ? { kind: "recover-settle" as const, captured, outstanding }
-          : { kind: "recover" as const, captured };
+          ? { kind: "recover-settle" as const, captured, outstanding, attendanceKey }
+          : { kind: "recover" as const, captured, attendanceKey };
       }
 
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
@@ -1129,7 +1140,17 @@ async function payIntegrated(
           };
         }
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
-        return { kind: "settle" as const, outstanding };
+        const attendanceKey = await beginIntegratedAttendance(
+          tx,
+          deps.attendance,
+          {
+            id: req.id,
+            provider: deps.provider.provider,
+            personId: operatorId,
+          },
+          () => deps.clock.now().instant,
+        );
+        return { kind: "settle" as const, outstanding, attendanceKey };
       }
 
       // After the recovery above, so a till pressing Pay again to file a captured payment is never
@@ -1201,6 +1222,16 @@ async function payIntegrated(
     // Inside the transaction, so no release pass runs between a mark and its registration, and a
     // check of this order in any transaction after this one (`refusePlacedPaymentInFlight`, a
     // cancel's `paymentAttemptIsLive`) sees the attempt live until this call ends.
+    const attendanceKey = await beginIntegratedAttendance(
+      tx,
+      deps.attendance,
+      {
+        id: req.id,
+        provider: deps.provider.provider,
+        personId: operatorId,
+      },
+      () => deps.clock.now().instant,
+    );
     onLive(attemptAt ?? PLACED_ATTEMPT);
     return {
       kind: "collect" as const,
@@ -1208,6 +1239,7 @@ async function payIntegrated(
       identities: order.identities,
       wasPlaced,
       attemptAt,
+      attendanceKey,
     };
   });
 
@@ -1216,10 +1248,17 @@ async function payIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
+    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId, prepared.attendanceKey);
   }
   if (prepared.kind === "recover-settle") {
-    return finalizeSettleRecovery(deps, cfg, req, prepared.captured, prepared.outstanding);
+    return finalizeSettleRecovery(
+      deps,
+      cfg,
+      req,
+      prepared.captured,
+      prepared.outstanding,
+      prepared.attendanceKey,
+    );
   }
 
   // ---- P2 (no tx) ----
@@ -1246,6 +1285,11 @@ async function payIntegrated(
     throw error;
   }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
+    if (result.state === "failed" || result.state === "network_unavailable") {
+      await withTransaction(deps.db, (tx) =>
+        finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
+      );
+    }
     // A timed-out reader leaves its payment `attempting`, which keeps the mark: the provider's
     // sweep may still capture it.
     await releasePaymentAttempt(deps, req.id, attemptAt);
@@ -1256,7 +1300,15 @@ async function payIntegrated(
   if (prepared.kind === "settle") {
     return {
       outcome: "captured",
-      ticket: await finalizeSettle(deps, cfg, req, prepared.outstanding, tip, result),
+      ticket: await finalizeSettle(
+        deps,
+        cfg,
+        req,
+        prepared.outstanding,
+        tip,
+        result,
+        prepared.attendanceKey,
+      ),
     };
   }
   const ticket = await finalizeCapture(
@@ -1269,6 +1321,7 @@ async function payIntegrated(
     result,
     operatorId,
     prepared.wasPlaced,
+    prepared.attendanceKey,
   );
   return { outcome: "captured", ticket };
 }
@@ -1427,6 +1480,7 @@ async function finalizeCapture(
   operatorId?: string,
   // True when the order was `placed` at P1.
   wasPlaced = false,
+  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
@@ -1499,6 +1553,7 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,
@@ -1560,6 +1615,7 @@ async function finalizeRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   operatorId?: string,
+  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -1658,6 +1714,7 @@ async function finalizeRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
     if (notSent !== null) {
       await raiseDishesNotSent(
         tx,
@@ -1752,6 +1809,7 @@ async function finalizeSettle(
   outstanding: { saleId: SaleId; amountDue: Decimal },
   tip: Decimal,
   result: PaymentResult,
+  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`/`accepted_offline`
@@ -1788,6 +1846,7 @@ async function finalizeSettle(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -1819,6 +1878,7 @@ async function finalizeSettleRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
+  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -1875,6 +1935,7 @@ async function finalizeSettleRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };

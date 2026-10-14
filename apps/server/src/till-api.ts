@@ -1782,6 +1782,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
           deviceProfileId: device.deviceProfileId,
           log,
+          attendance: deps.attendance,
         },
         saleCfg,
         { ...body, zoneId },

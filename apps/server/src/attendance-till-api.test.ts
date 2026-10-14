@@ -192,6 +192,33 @@ describe("till attendance recorder admission", () => {
     },
   );
 
+  it("passes the admitted integrated collector without trusting submitted attribution", async () => {
+    const api = app(recordAttendanceFact, new SimulatorPaymentProvider(suite.db));
+    const opened = await login(api);
+    expect(opened.status).toBe(200);
+    const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
+    vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
+    const paid = await api.request("/api/pay", {
+      method: "POST",
+      headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        id: newId(),
+        zoneId: v.counter.zoneId,
+        lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        personId: "untrusted person",
+        at: "2026-10-15T20:00:00Z",
+        locationId: "untrusted location",
+      }),
+    });
+    expect(paid.status).toBe(200);
+    expect(await paid.json()).toMatchObject({ outcome: "captured", ticket: { total: "12.00" } });
+    expect(
+      (await suite.db.select().from(attendanceOperationFacts))
+        .filter((r) => r.source === "whole-payment")
+        .map((r) => [r.personId, r.locationId, r.at, r.outcome]),
+    ).toEqual([[OPERATOR, v.cfg.locationId, "2026-10-14T13:00:00.000Z", "qualifying"]]);
+  });
+
   it("passes the admitted bill payment to the recorder without trusting body attribution", async () => {
     const { tabId } = await seat(v, await v.table("Payment attendance"));
     await order(v, tabId, "Burger");

@@ -2160,3 +2160,120 @@ describe("the manager's lists, of rows written within one millisecond", () => {
     expect(body.map((row) => row.refundId)).toEqual(asked);
   });
 });
+
+describe("whole-order attendance on manager recovery", () => {
+  it("failed cleanup cannot refuse a new worker attempt started after provider resolution", async () => {
+    const fake = new FakePaymentProvider(suite.db);
+    const v = await setup({ extra: fake, attendance: recordAttendanceFact });
+    const [worker] = await suite.db
+      .insert(persons)
+      .values({ displayName: "First collector", pinHash: "scrypt$00$00" })
+      .returning({ id: persons.id });
+    const orderId = await openOrder(v);
+    const paymentDeps = {
+      db: suite.db,
+      backend,
+      clock,
+      provider: fake,
+      attendance: recordAttendanceFact,
+    };
+    fake.stallNextCollect();
+    expect(
+      await payWorkingOrderIntegrated(paymentDeps, v.cfg, { id: orderId, lines: [] }, worker!.id),
+    ).toEqual({ outcome: "timeout" });
+    const [old] = await suite.db.select().from(attendanceOperationFacts);
+    const [payment] = await suite.db.select().from(payments);
+    const resolve = fake.resolveAbandonedAttempt.bind(fake);
+    fake.scriptAbandonedAttempt({ outcome: "failed", cancelledAtProvider: false });
+    const resolving = vi
+      .spyOn(fake, "resolveAbandonedAttempt")
+      .mockImplementation(async (...args) => {
+        const result = await resolve(...args);
+        fake.stallNextCollect();
+        expect(
+          await payWorkingOrderIntegrated(
+            paymentDeps,
+            v.cfg,
+            { id: orderId, lines: [] },
+            v.managerId,
+          ),
+        ).toEqual({ outcome: "timeout" });
+        return result;
+      });
+    try {
+      expect((await send(v, "POST", resolvePath(payment!.id))).status).toBe(200);
+      const rows = await suite.db.select().from(attendanceOperationFacts);
+      expect(rows.map((r) => [r.personId, r.outcome])).toEqual([
+        [worker!.id, "refused"],
+        [v.managerId, "pending"],
+      ]);
+      expect(rows[0]!.key).toBe(old!.key);
+      expect(rows[1]!.key).not.toBe(old!.key);
+      expect((await orderOf(orderId)).mark).not.toBeNull();
+    } finally {
+      resolving.mockRestore();
+    }
+  });
+
+  it.each(["captured", "failed", "unknown"] as const)(
+    "%s settles only the original worker request",
+    async (outcome) => {
+      const fake = new FakePaymentProvider(suite.db);
+      const v = await setup({ extra: fake, attendance: recordAttendanceFact });
+      const [worker] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Original whole-order collector", pinHash: "scrypt$00$00" })
+        .returning({ id: persons.id });
+      const orderId = await openOrder(v);
+      const reading = clock.now();
+      const originalClock = vi
+        .spyOn(clock, "now")
+        .mockReturnValue({ ...reading, instant: new Date(MARK) });
+      try {
+        fake.stallNextCollect();
+        expect(
+          await payWorkingOrderIntegrated(
+            { db: suite.db, backend, clock, provider: fake, attendance: recordAttendanceFact },
+            v.cfg,
+            { id: orderId, lines: [] },
+            worker!.id,
+          ),
+        ).toEqual({ outcome: "timeout" });
+        const before = await suite.db.select().from(attendanceOperationFacts);
+        expect(before).toHaveLength(1);
+        expect(before[0]).toMatchObject({ personId: worker!.id, at: MARK, outcome: "pending" });
+        const [payment] = await suite.db
+          .select()
+          .from(payments)
+          .where(eq(payments.workingOrderId, orderId));
+        fake.scriptAbandonedAttempt(
+          outcome === "unknown"
+            ? { outcome: "unknown", reason: "unreachable" }
+            : { outcome, cancelledAtProvider: false },
+        );
+        originalClock.mockReturnValue({ ...reading, instant: new Date("2026-10-14T18:00:00Z") });
+        const res = await send(v, "POST", resolvePath(payment!.id));
+        expect(res.status).toBe(outcome === "unknown" ? 409 : 200);
+        expect(
+          (await suite.db.select().from(attendanceOperationFacts)).map((r) => [
+            r.key,
+            r.personId,
+            r.at,
+            r.outcome,
+          ]),
+        ).toEqual([
+          [
+            before[0]!.key,
+            worker!.id,
+            MARK,
+            outcome === "unknown" ? "pending" : outcome === "captured" ? "qualifying" : "refused",
+          ],
+        ]);
+        expect(fake.collectCalls).toHaveLength(1);
+        expect(saleIdsFor(orderId)).toHaveLength(outcome === "captured" ? 1 : 0);
+      } finally {
+        originalClock.mockRestore();
+      }
+    },
+  );
+});

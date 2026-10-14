@@ -82,6 +82,10 @@ import {
 } from "./card-reader-delete.js";
 import { queryFlag } from "./report-api.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import {
+  finishIntegratedAttendance,
+  pendingIntegratedAttendanceKey,
+} from "./attendance-integrated.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -987,7 +991,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // The sale is filed under the device that started the payment, never the dashboard.
         const origin = storedDeviceOrigin(row);
         await requireConnected(tx, cardProviderById(deps.providers, row.provider));
-        return { ...row, attemptAt: row.attemptAt, personId, origin };
+        const attendanceKey = await pendingIntegratedAttendanceKey(
+          tx,
+          deps.attendance,
+          row.workingOrderId,
+          row.provider,
+        );
+        return { ...row, attemptAt: row.attemptAt, personId, origin, attendanceKey };
       });
 
       const { provider, resolved } = await resolveAtProvider(
@@ -1006,6 +1016,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // Read back rather than trusting the update: the work loop may have cleared the mark first.
         const orderUnlocked = await gated(sessionId, async (tx) => {
           await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
+          await finishIntegratedAttendance(tx, deps.attendance, stuck.attendanceKey, "refused");
           const [order] = await tx
             .select({ mark: workingOrders.paymentAttemptAt })
             .from(workingOrders)
@@ -1023,6 +1034,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           clock: deps.clock,
           provider: withoutCollect(provider),
           log,
+          attendance: deps.attendance,
         },
         { ...deps.cfg, origin: stuck.origin },
         { id: stuck.workingOrderId, lines: [] },
