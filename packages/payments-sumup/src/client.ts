@@ -73,7 +73,6 @@ export interface SumUpClient {
     transactionId: string;
     amount?: Decimal;
   }): Promise<{ status: "accepted" | "refused" }>;
-  /** A refund whose HTTP status is returned as data, redirects and server errors included. */
   sendRefund(params: { transactionId: string; amount: Decimal }): Promise<{ httpStatus: number }>;
   /** Every reader paired to the merchant account. */
   listReaders(): Promise<(SumUpReader & { name: string })[]>;
