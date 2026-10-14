@@ -287,6 +287,15 @@ const notices: KitchenNotice[] = [
   },
   { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
+  // Moved to the counter, onto an order with another number.
+  {
+    ...baseNotice,
+    id: "kn-moved-counter",
+    kind: "moved",
+    wasStarted: false,
+    movedTo: null,
+    orderLabel: "#28 → #27",
+  },
   { ...baseNotice, id: "kn-rerouted", kind: "rerouted", wasStarted: false, reroutedTo: "Grill" },
   // A HOLD correction's two directions.
   { ...baseNotice, id: "kn-added", kind: "changed", wasStarted: false, direction: "added" },

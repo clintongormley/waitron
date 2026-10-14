@@ -1252,21 +1252,27 @@ async function notifyMoved(
   });
   if (moved.length === 0) return;
 
+  const placesBefore = before.places!;
+  const texts = movedTexts(placesBefore, after.places, cfg.locale);
+  // The station screen words the counter itself, in the screen's own language.
   await VENUE_SERVICE.recordKitchenNotices(
     tx,
     cfg,
     toOrderId,
     moved.map(toNoticeItem),
     "moved",
-    header.tableLabel,
+    after.places.counter ? null : texts.toText,
+    null,
+    null,
+    null,
+    placesBefore.orderNumber,
   );
-  const placesBefore = before.places!;
   const partyName = header.partyId === null ? placesBefore.partyName : after.partyName;
   await printMovedSlips(tx, cfg, moved, {
     fromNumber: before.orderNumber,
     ...(header.orderNumber === before.orderNumber ? {} : { toNumber: header.orderNumber }),
     ...(partyName === null ? {} : { partyName }),
-    ...movedTexts(placesBefore, after.places, cfg.locale),
+    ...texts,
   });
 }
 

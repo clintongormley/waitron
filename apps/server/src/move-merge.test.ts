@@ -777,6 +777,11 @@ describe("when a MOVED slip prints: a table or a place name lost (§3)", () => {
     expect(slips.map((lines) => lines.slice(3, 5))).toEqual([
       ["De: Terraza (Mesa 77)", "A:  Terraza (Mesa 78)"],
     ]);
+    // The first is the split's, on the same tables; the second the move's, the slip's To text.
+    expect((await noticesOf([second])).map((n) => n.movedTo)).toEqual([
+      "Terraza",
+      "Terraza (Mesa 78)",
+    ]);
   });
 });
 

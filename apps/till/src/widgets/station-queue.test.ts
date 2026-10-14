@@ -1451,6 +1451,29 @@ describe("till-station-queue — kitchen notices strip", () => {
   });
 
   it.each([
+    ["en-GB", "Moved to the counter"],
+    ["es-ES", "Pasado al mostrador"],
+  ])(
+    "shows a moved notice with no table, in %s, as moved to the counter, under its order as recorded",
+    async (locale, sentence) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups,
+          stationId: "st-1",
+          notices: [notice({ kind: "moved", movedTo: null, orderLabel: "#28 → #27" })],
+        });
+        const row = rows(el)[0]!;
+        expect(row.querySelector(".notice-moved")!.textContent!.trim()).toBe(sentence);
+        expect(row.querySelector(".notice-order")!.textContent!.trim()).toBe("#28 → #27");
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it.each([
     ["en-GB", "Moved station", "Moved to Grill"],
     ["es-ES", "Cambio de estación", "Pasado a Grill"],
   ])(

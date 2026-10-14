@@ -208,7 +208,12 @@ function lastGroupOf(partyId: string): string {
 }
 
 function noticesOn(billIds: string[]) {
-  return v.db.all<{ working_order_id: string; kind: string; line_name: string; moved_to: string }>(
+  return v.db.all<{
+    working_order_id: string;
+    kind: string;
+    line_name: string;
+    moved_to: string | null;
+  }>(
     sql`
       select working_order_id, kind, line_name, moved_to from kitchen_notices
       where working_order_id in (${sql.join(
@@ -1261,8 +1266,8 @@ describe("MOVED notices", () => {
     expect((await billRow(v, second)).label).toBe("Mesa aviso 2 A");
     expect(noticesOn([second])).toEqual([
       ...splitNotices,
-      { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 2 A" },
-      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 2 A" },
+      { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: null },
+      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: null },
     ]);
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
   });

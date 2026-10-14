@@ -1025,8 +1025,8 @@ describe("moving sent work to another table tells the kitchen", () => {
       movedTo: "T1",
     };
     expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
-      { ...notice, workingOrderId: checkId, orderLabel: `#${checkNumber} · T1` },
-      { ...notice, workingOrderId: tabId, orderLabel: `#${tabNumber}` },
+      { ...notice, workingOrderId: checkId, orderLabel: `#${tabNumber} → #${checkNumber} · T1` },
+      { ...notice, workingOrderId: tabId, orderLabel: `#${checkNumber} → #${tabNumber}` },
     ]);
     expect(await printedBy(printerId)).toEqual([
       ...printed,

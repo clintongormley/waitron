@@ -613,7 +613,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
 
 /**
  * A walk-up sale of one Burger delivered to `tableId` in `zoneId` and paid in cash. The sale takes
- * the table's zone, and a paid walk-up sale fires its dishes only in a zone that starts orders at
+ * the table's zone, and a paid walk-up sale fires its dishes in a zone that starts orders at
  * the counter and takes payment before the food, so the zone is set that way for the sale and its
  * settings put back after, as a manager would, since table actions refuse a zone that does not
  * serve tables.

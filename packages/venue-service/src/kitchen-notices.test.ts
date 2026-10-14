@@ -781,6 +781,63 @@ describe("recordKitchenNotices", () => {
     ]);
   });
 
+  it("labels a moved notice by the number the dishes came from and the one they are on, when the two differ", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 27, null);
+    const labelled = await seedOrder(v.locationId, 30, "Table 4");
+    const burger = (o: { burgerLineId: string }) => [
+      { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        burger(order),
+        "moved",
+        "Mesa 7",
+        null,
+        null,
+        null,
+        28,
+      );
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        burger(order),
+        "moved",
+        "Mesa 7",
+        null,
+        null,
+        null,
+        27,
+      );
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        labelled.orderId,
+        burger(labelled),
+        "moved",
+        null,
+        null,
+        null,
+        null,
+        28,
+      );
+    });
+    expect(
+      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
+        notice.orderLabel,
+        notice.movedTo,
+      ]),
+    ).toEqual([
+      ["#28 → #27", "Mesa 7"],
+      ["#27", "Mesa 7"],
+      ["#28 → #30 · Table 4", null],
+    ]);
+  });
+
   it("records and lists a rerouted notice with its destination station", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 10, null);

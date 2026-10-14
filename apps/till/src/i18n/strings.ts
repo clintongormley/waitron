@@ -380,6 +380,7 @@ export const en = {
   "station.notice.started": "Started",
   // `{table}` is substituted at the call site.
   "station.notice.moved_to": "Moved to {table}",
+  "station.notice.moved_to_counter": "Moved to the counter",
   "station.notice.rerouted_to": "Moved to {station}",
   // `{extra}` is substituted at the call site.
   "station.notice.cancelled_extra": "Cancel: {extra}",
@@ -1671,6 +1672,7 @@ export const es: Record<StringKey, string> = {
   "station.notice.rerouted": "Cambio de estación",
   "station.notice.started": "Empezado",
   "station.notice.moved_to": "Movido a {table}",
+  "station.notice.moved_to_counter": "Pasado al mostrador",
   "station.notice.rerouted_to": "Pasado a {station}",
   "station.notice.cancelled_extra": "Quitar: {extra}",
   "station.notice.acknowledge": "Entendido",
