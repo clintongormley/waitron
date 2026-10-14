@@ -11,8 +11,8 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError, isUuid, normaliseUuid } from "@waitron/shared";
-import { parseArea, parseBlocks } from "./paint-rules.js";
+import { AppError, normaliseUuid } from "@waitron/shared";
+import { parseArea, parseBlocks, record, uuid } from "./paint-rules.js";
 import {
   listStaffingAreas,
   readSeasonStaffing,
@@ -88,22 +88,22 @@ const invalid = (field: string) => new AppError("staffing.invalid", { field });
 /** The body's `edits` list, each edit checked to hold only `keys`. */
 function editList(
   body: Record<string, unknown>,
-  keys: readonly string[],
+  keys: ReadonlySet<string>,
 ): { edit: Record<string, unknown>; field: string }[] {
   onlyKeys(body, ["edits"]);
   const { edits } = body;
   if (!Array.isArray(edits)) throw invalid("edits");
   return edits.map((edit: unknown, index) => {
     const field = `edits.${index}`;
-    if (typeof edit !== "object" || edit === null || Array.isArray(edit)) throw invalid(field);
-    const extra = Object.keys(edit).find((key) => !keys.includes(key));
-    if (extra !== undefined) throw invalid(`${field}.${extra}`);
-    return { edit: edit as Record<string, unknown>, field };
+    return { edit: record(edit, field, keys), field };
   });
 }
 
+const SEASON_EDIT_KEYS = new Set(["area", "weekday", "blocks"]);
+const SPECIAL_DAY_EDIT_KEYS = new Set(["area", "dateId", "blocks"]);
+
 function seasonEdits(body: Record<string, unknown>, cutover: string): SeasonStaffingEdit[] {
-  return editList(body, ["area", "weekday", "blocks"]).map(({ edit, field }) => {
+  return editList(body, SEASON_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
     const { weekday } = edit;
     if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
@@ -115,13 +115,12 @@ function seasonEdits(body: Record<string, unknown>, cutover: string): SeasonStaf
 /** `blocks: null` is a value (the date follows the season); a missing `blocks` is refused by
  *  `parseBlocks` as `undefined`. */
 function specialDayEdits(body: Record<string, unknown>, cutover: string): SpecialDayStaffingEdit[] {
-  return editList(body, ["area", "dateId", "blocks"]).map(({ edit, field }) => {
+  return editList(body, SPECIAL_DAY_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
-    const { dateId } = edit;
-    if (typeof dateId !== "string" || !isUuid(dateId)) throw invalid(`${field}.dateId`);
+    const dateId = uuid(edit.dateId, `${field}.dateId`);
     const blocks =
       edit.blocks === null ? null : parseBlocks(edit.blocks, `${field}.blocks`, cutover);
-    return { area, dateId: dateId.toLowerCase(), blocks };
+    return { area, dateId, blocks };
   });
 }
 

@@ -7,14 +7,18 @@ const STEP_TIME = /^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/;
 const BLOCK_KEYS = new Set(["staffRoleId", "headcount", "startsAt", "endsAt"]);
 const AREA_KEYS = new Set(["kind", "id"]);
 
-function record(value: unknown, field: string, keys: ReadonlySet<string>): Record<string, unknown> {
+export function record(
+  value: unknown,
+  field: string,
+  keys: ReadonlySet<string>,
+): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid(field);
   const unknown = Object.keys(value).find((key) => !keys.has(key));
   if (unknown !== undefined) throw invalid(`${field}.${unknown}`);
   return value as Record<string, unknown>;
 }
 
-function uuid(value: unknown, field: string): string {
+export function uuid(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
   return value.toLowerCase();
 }

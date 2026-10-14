@@ -697,6 +697,44 @@ describe("the staffing paint routes", () => {
     );
   });
 
+  it("keeps the later of two season edits for the same area and weekday", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const later = p.block({ headcount: 5, startsAt: "18:00", endsAt: "23:00" });
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.dept, weekday: 5, blocks: [p.block()] },
+          { area: p.dept, weekday: 5, blocks: [later] },
+        ],
+      }),
+      204,
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { weekdays: unknown }[];
+    };
+    expect(read.areas[0]!.weekdays).toEqual(week({ 5: [later] }));
+  });
+
+  it("keeps the later of two special-day edits for the same area and date", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/special-days/${p.specialDayId}`;
+    const later = p.block({ headcount: 5, startsAt: "18:00", endsAt: "23:00" });
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.grill, dateId: p.aug14, blocks: [p.block()] },
+          { area: p.grill, dateId: p.aug14, blocks: [later] },
+        ],
+      }),
+      204,
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { dates: { blocks: unknown }[] }[];
+    };
+    expect(read.areas[1]!.dates[0]!.blocks).toEqual([later]);
+  });
+
   it("accepts upper-case spellings of every id", async () => {
     const p = await painted();
     const upperArea = (area: AreaRef): AreaRef => ({ ...area, id: area.id.toUpperCase() });
