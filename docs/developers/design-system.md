@@ -4134,8 +4134,8 @@ replacement. When it changes none of these, it says the period is painted nowher
 change. When the period is painted or kept open today and the
 department has another period, a Replace with choice offers them, with None first. The delete button names the period.
 It is its own `wt-modal`, not `wt-delete-dialog`, which has no place for Replace with. A failed
-re-read keeps the impact last shown and leaves Delete usable, except after a changed-clock
-refusal, below. Delete sends the clock revision the
+re-read keeps the impact last shown and leaves Delete usable, except for the read that follows a
+changed-clock refusal, below. Delete sends the clock revision the
 impact on screen was read under. A delete refused because the business-day start changed has its
 own sentence, "The business-day start changed. Check what deleting it changes, then delete it
 again.", not the shared "Reload hours.": the dialog reads what deleting it changes again by itself,
