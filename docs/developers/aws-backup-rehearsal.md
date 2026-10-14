@@ -22,7 +22,7 @@ and none has run against Amazon S3; task 10 of the A538 plan
   The package's normal and preproduction configs exclude those files, and CI never runs the
   rehearsal. Without `WAITRON_RUN_AWS_REHEARSAL=1`, the run stops in its global setup before it
   reads a credentials file or opens a connection, and reports no test count.
-- **Its own bucket only.** Each run creates one fresh bucket named
+- **Its own bucket only.** Each run (one per scenario file) creates one fresh bucket named
   `waitron-rehearsal-waitron-<12 random characters>` in your region, writes an ownership marker
   object into it (`.waitron-rehearsal-owner`, naming the run), and never touches any other bucket. If
   `WAITRON_AWS_REHEARSAL_BUCKET` is set to anything but an empty value, the run refuses: it never reuses a bucket you name.
@@ -52,7 +52,9 @@ Two limits matter if something goes wrong:
   late Litestream upload can leave the bucket behind. In the loop scenario the runner never learns
   the Litestream child's process id, so it has no child of its own to stop; the AWS pause test hands
   the server the function that starts Litestream, so the runner learns each child's id and stops it
-  at teardown (see "The pause scenario"). When the bucket is
+  at teardown (see "The pause scenario"). The delete and archive scenarios pass the run's stop
+  signal to every bucket request. Decrypting an archive on your machine takes no signal: in a review
+  on 2026-10-14, a stop during decryption took about 575 ms to settle. When the bucket is
   left, the run fails and the receipt gives the cleanup command.
 - **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
   receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
@@ -79,6 +81,11 @@ AWS_PROFILE=waitron-rehearsal AWS_REGION=eu-north-1 \
 WAITRON_RUN_AWS_REHEARSAL=1 \
 pnpm --filter @waitron/server test:aws-rehearsal
 ```
+
+This runs every `*.aws-rehearsal.test.ts` file in `apps/server/src`, one at a time. Each scenario
+file is its own run, with its own bucket, deadline and receipt, so the loop, pause, delete and
+archive files make four buckets and four receipts; the profile file only reads the profile and
+creates no bucket.
 
 The variables the rehearsal's own code reads:
 
@@ -229,13 +236,14 @@ Its working folder is `waitron-aws-stream-pause-<random>` under your temporary f
 ## The delete and archive scenarios
 
 Each scenario has its own label prefix in the run's bucket and goes through the product's own S3
-backend (`buildBackupBackend`), so the requests are the ones the product sends.
+backend (`buildBackupBackend`), so each request is built by the product's own store code.
 
 - **`delete-many`** (`apps/server/src/aws-delete.aws-rehearsal.test.ts`, steps in
   `apps/server/src/testing/s3-delete-scenario.ts`): puts 1,005 tiny objects, about 28 KB in all,
   lists them, deletes them through the backend's `deleteMany`, and checks from the recorded requests
   that two DeleteObjects calls of 1,000 and 5 keys were answered and that a listing then finds
-  nothing. Its phases are `put`, `listed-before`, `deleted` and `listed-after`.
+  nothing. Its phases are `listed-before`, `deleted` and `listed-after`, and `put` when putting
+  fails.
 - **`archive-roundtrip`** and **`archive-abort`** (`apps/server/src/aws-archive.aws-rehearsal.test.ts`,
   steps in `apps/server/src/testing/s3-archive-scenario.ts`) run one after the other in one run, so
   in one bucket under one 128 MiB budget. The round trip uploads a synthetic encrypted archive of
@@ -252,8 +260,9 @@ backend (`buildBackupBackend`), so the requests are the ones the product sends.
 `request` row: the API name, HTTP status, attempts, elapsed time and outcome, and for DeleteObjects
 the number of keys sent, for PutObject and UploadPart the bytes sent. A row never holds a key, a
 body or a URL. A request to an API outside the receipt's list (`RECEIPT_APIS`,
-`apps/server/src/testing/aws-rehearsal-receipt.ts`) throws in the recorder, and the store fails that
-request with what was thrown, so the scenario fails.
+`apps/server/src/testing/aws-rehearsal-receipt.ts`) makes the recorder throw, but only once Amazon
+S3 has answered: the request has already been sent, and the store may send it again. The store then
+fails the request and the scenario fails.
 
 **Observed or source-only.** The receipt's action table lists each API on that list once. An API is
 `observed` when some recorded step names it with an HTTP status (teardown steps do not count); otherwise it is `source-only`
