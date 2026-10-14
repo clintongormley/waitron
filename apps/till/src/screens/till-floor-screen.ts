@@ -146,6 +146,9 @@ interface Renaming {
   heading: string;
   value: string;
   normalName: string;
+  /** The tables of its group at opening, or null: a rename in a group renames the group, so the
+   * window closes when that changes. */
+  group: string | null;
   sent: boolean;
   refusal: TodayNameRefusal | null;
 }
@@ -1355,9 +1358,20 @@ export class TillFloorScreen extends LitElement {
       heading: t("floor.rename_title").replace("{table}", () => this.#shownAs(table)),
       value: (members === null ? table.today?.name : table.today?.joinName) ?? "",
       normalName: members === null ? table.label : normalGroupName(members),
+      group: this.#groupKey(table),
       sent: false,
       refusal: null,
     };
+  }
+
+  #groupKey(table: TableState): string | null {
+    const members = this.#mergeOf(table);
+    return members === null
+      ? null
+      : members
+          .map((each) => each.id)
+          .sort()
+          .join(" ");
   }
 
   /** The table Rename was opened on, while it still offers Rename. */
@@ -1365,11 +1379,13 @@ export class TillFloorScreen extends LitElement {
     return this.tables.find((each) => each.id === tableId && sheetActions(each).includes("rename"));
   }
 
-  /** While its name is out, the window stays until its table leaves the floor read. */
+  /** While its name is out, the window stays until its table leaves the floor read; otherwise while
+   * the table offers Rename in the group it was opened in. */
   #renameShown(renaming: Renaming): boolean {
-    return renaming.sent
-      ? this.tables.some((each) => each.id === renaming.tableId)
-      : this.#renamable(renaming.tableId) !== undefined;
+    const table = renaming.sent
+      ? this.tables.find((each) => each.id === renaming.tableId)
+      : this.#renamable(renaming.tableId);
+    return table !== undefined && this.#groupKey(table) === renaming.group;
   }
 
   #renameWindow(): TemplateResult | typeof nothing {

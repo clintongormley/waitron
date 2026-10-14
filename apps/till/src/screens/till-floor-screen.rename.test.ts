@@ -124,6 +124,16 @@ const shown = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) => ({
   hint: fieldOf(opened).hint,
 });
 
+async function typeName(
+  opened: HTMLElementTagNameMap["till-today-name-dialog"],
+  name: string,
+): Promise<void> {
+  const input = fieldOf(opened).shadowRoot!.querySelector("input")!;
+  input.value = name;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await opened.updateComplete;
+}
+
 function countRefreshes(el: TillFloorScreen): { count: number } {
   const seen = { count: 0 };
   el.addEventListener("floor-refresh", () => seen.count++);
@@ -288,13 +298,108 @@ describe("till-floor-screen: Rename", () => {
   it("keeps what the waiter typed when another till renames the table meanwhile", async () => {
     const el = await mount(bar(), stubApi());
     const opened = await pressRename(el, "bar");
+    await typeName(opened, "Window");
 
     el.tables = [table("bar", "Bar", 40, { name: "Terrace" }), table("c3", "Counter 3", 10)];
     await settle(el);
     await opened.updateComplete;
 
     expect(windowOf(el)).toBe(opened);
-    expect(opened.value).toBe("");
+    expect(fieldOf(opened).shadowRoot!.querySelector("input")!.value).toBe("Window");
+    expect(opened.value).toBe("Window");
+  });
+
+  it("keeps the window open with a too-long refusal under the field", async () => {
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({
+      code: "management.request_invalid",
+      status: 400,
+      field: "name",
+    });
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    expect(windowOf(el)).toBe(opened);
+    expect(opened.refusal).toEqual({ code: "management.request_invalid", field: "name" });
+    expect(floorRefusal(el)).toBeNull();
+  });
+
+  it("moves a refusal under the field to the floor when the table stops offering Rename", async () => {
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({
+      code: "table.label_taken",
+      status: 409,
+      label: "Window",
+      field: "name",
+    });
+    const el = await mount(bar(), api);
+    send(await pressRename(el, "bar"), "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    el.tables = [table("bar", "Bar", 40, { takenOff: true }), table("c3", "Counter 3", 10)];
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe("Another table already has that name");
+  });
+
+  it("closes the window, sending nothing, when another till joins its table into a group", async () => {
+    const api = stubApi();
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+    await typeName(opened, "Window");
+
+    el.tables = [
+      table("bar", "Bar", 40, { joinId: "g" }),
+      table("c3", "Counter 3", 42, { joinId: "g" }),
+    ];
+    await settle(el);
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(api.nameToday).not.toHaveBeenCalled();
+  });
+
+  it("closes the window, sending nothing, when its table's group ends", async () => {
+    const api = stubApi();
+    const el = await mount(group(), api);
+    const opened = await pressRename(el, "c4");
+
+    el.tables = group().map((each) =>
+      each.id === "c4" ? { ...each, today: { ...each.today!, joinId: null } } : each,
+    );
+    await settle(el);
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(api.nameToday).not.toHaveBeenCalled();
+  });
+
+  it("moves a refusal under the field to the floor when its table joins a group", async () => {
+    const api = stubApi();
+    api.nameToday.mockRejectedValueOnce({
+      code: "table.label_taken",
+      status: 409,
+      label: "Window",
+      field: "name",
+    });
+    const el = await mount(bar(), api);
+    send(await pressRename(el, "bar"), "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    el.tables = [
+      table("bar", "Bar", 40, { joinId: "g" }),
+      table("c3", "Counter 3", 42, { joinId: "g" }),
+    ];
+    await settle(el);
+
+    expect(windowOf(el)).toBeNull();
+    expect(floorRefusal(el)).toBe("Another table already has that name");
   });
 
   it("closes the window when its table leaves the floor read", async () => {
