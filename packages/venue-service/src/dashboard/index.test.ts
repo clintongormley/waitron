@@ -6,6 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
+import type { PeriodsScreen } from "./periods-screen.js";
 
 const containers: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -266,6 +267,51 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
   });
 });
 
+it("registers Periods between Opening hours and Prep stations, readable with venue.view", async () => {
+  const model = {
+    dayCutover: "06:00",
+    menus: [],
+    seasons: [],
+    departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
+  };
+  const fetchImpl = vi.fn((path: string) =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(path.endsWith("/menu-periods/painted-in") ? [] : model),
+    } as Response),
+  );
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens![1]!;
+  expect(entry.screen).toEqual({
+    id: "periods",
+    navLabelKey: "nav.periods",
+    group: "operations",
+    order: 20,
+    requiresPermission: "venue_service.manage",
+    readPermission: "venue.view",
+  });
+  expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.periods"]).toBe("Periods");
+  expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.periods"]).toBe("Periodos");
+  const liveData = new LiveData();
+  const handle = entry.create({
+    request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    liveData,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(handle.render(true), container);
+  const screen = container.querySelector<PeriodsScreen>("dashboard-periods-screen")!;
+  expect(screen.readOnly).toBe(true);
+  expect(screen.api.liveData).toBe(liveData);
+  await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
+  render(handle.render(false), container);
+  await screen.updateComplete;
+  expect(screen.readOnly).toBe(false);
+  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
+});
+
 it("registers Opening hours without a separate Station hours page", () => {
   const screens = [
     VENUE_SERVICE_DASHBOARD.screen,
@@ -274,6 +320,7 @@ it("registers Opening hours without a separate Station hours page", () => {
   expect(screens.map((screen) => screen.id)).toEqual([
     "venue-operations",
     "prep-stations",
+    "periods",
     "opening-hours",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
