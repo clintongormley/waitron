@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import rehearsalConfig from "../../vitest.aws-rehearsal.config.js";
+import { profileEnv, rejection, writeProfileFiles } from "./aws-rehearsal-fake.js";
 import {
   AWS_REHEARSAL_LIMITS,
   AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
@@ -44,11 +44,11 @@ let credentialsFile: string;
 let configFile: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "aws-rehearsal-profile-"));
-  credentialsFile = join(dir, "credentials");
-  configFile = join(dir, "config");
-  await writeFile(credentialsFile, CREDENTIALS);
-  await writeFile(configFile, CONFIG);
+  ({ dir, credentialsFile, configFile } = await writeProfileFiles(
+    "aws-rehearsal-profile-",
+    CREDENTIALS,
+    CONFIG,
+  ));
 });
 
 afterEach(async () => {
@@ -56,25 +56,15 @@ afterEach(async () => {
 });
 
 function env(overrides: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
-  return {
-    WAITRON_RUN_AWS_REHEARSAL: "1",
-    AWS_PROFILE: "waitron-rehearsal",
-    AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
-    AWS_CONFIG_FILE: configFile,
-    AWS_REGION: "eu-north-1",
-    ...overrides,
-  };
+  return profileEnv({ credentialsFile, configFile }, overrides);
 }
 
 const deps = { readFile: (path: string) => readFile(path, "utf8") };
 
 async function refusal(promise: Promise<unknown>): Promise<AwsRehearsalRefused> {
-  const error = await promise.then(
-    () => undefined,
-    (thrown: unknown) => thrown,
-  );
+  const error = await rejection(promise);
   expect(error).toBeInstanceOf(AwsRehearsalRefused);
-  const message = (error as Error).message;
+  const message = error.message;
   for (const secret of [KEY_ID, SECRET, SESSION, ROLE, dir]) expect(message).not.toContain(secret);
   return error as AwsRehearsalRefused;
 }
