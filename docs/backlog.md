@@ -4335,6 +4335,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   leaves the shown pack in place (`#dropStalePack`, `apps/dashboard/src/screens/backup-screen.ts`).
   Left open by A538-5 and A538-6d.
 
+- **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
+  there (#1695).** (1) A folder typed in the settings editor and then cancelled can reappear in the
+  "Turn on backups" form later; it is never sent and never counts as a change. (2) A refusal of the
+  other bucket's secret that arrives after the owner switched the bucket choice away from "Another
+  S3-compatible bucket" is dropped, so the next Save asks again. Neither was reproduced outside the
+  reviewer's run. Separately, an entry of the Save's `destinations` list with an unknown kind is
+  refused under field `destination`, a name the request no longer has; the dashboard never sends one
+  (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`).
+
 - **The Backups screen's Spanish names the bucket copy two ways.** The bucket choice's option says
   "El bucket de la copia continua" (`backup.destination.choice_stream`), while the hints beside it
   and the rest of the screen say "la copia en el bucket". From A538-6 (#1642); seen in A639's
