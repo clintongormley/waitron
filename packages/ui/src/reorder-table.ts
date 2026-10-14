@@ -20,7 +20,7 @@ const DRAG_CURSOR = "--reorder-drag-cursor";
  * hand the page's own cursor back only when the last one ends; the first hold's cursor stays until
  * then. A document's rules do not reach into a shadow root, so the overriding sheet is adopted by
  * the document and by every open shadow root present when the first hold starts; one attached
- * later is not covered. */
+ * later is not covered, and an element's own `!important` cursor rule can still win. */
 const pageDrag = {
   count: 0,
   cursor: "",

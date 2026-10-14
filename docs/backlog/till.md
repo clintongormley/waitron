@@ -1523,16 +1523,16 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 - **A turned table's size dots stay on its own sides (A548, owner, 2026-10-12).** At every angle the
   dots sit on the table's own sides, diagonal on a 30° table; only each dot's cursor follows the way
   it drags on screen.
-- **A drag's cursor wins over every element on the page until release (A642, owner, 2026-10-14).**
+- **A drag's cursor overrides the page's own cursor rules until release, short of the limits below
+  (A642, owner 2026-10-14, overturning A580's limit that an element with a cursor rule of its own
+  kept it).**
   A dragged size dot's arrow and row reordering's grabbing hand both go through one shared seam
   (`holdPageCursor` and `releasePageCursor`, `packages/ui/src/reorder-table.ts`). The first hold adds
-  a style sheet forcing its cursor on every element to the document and to every open shadow root
-  on the page at that moment; the last release takes it out of each again. In Chromium, the tests
-  in `packages/ui/src/reorder-table.test.ts` read the held cursor mid-drag on a plain link and on the
-  inner button inside `wt-button`, and `pointer` on both after release and after a cancelled row
-  drag. A shadow root attached after the drag starts does not get the sheet: only a rule there that
-  reads `--reorder-drag-cursor` follows the drag, as a reorder table's handle mounted mid-drag was
-  tested to.
+  a style sheet that sets its cursor `!important` on every element to the document and to every
+  open shadow root on the page at that moment; the last release takes it out of each again. A
+  shadow root attached after the drag starts does not get the sheet: an element there with a cursor
+  rule of its own keeps it unless that rule reads `--reorder-drag-cursor`. An element's own
+  `!important` cursor rule can still win over the sheet.
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag
   or immediate table write route. Labels remain unique across the location. Hierarchy Delete is

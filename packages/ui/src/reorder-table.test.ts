@@ -698,7 +698,7 @@ async function mountCursorOwners(): Promise<{ link: HTMLElement; inner: HTMLElem
   };
 }
 
-it("holds the cursor over every element on the page, inside shadow roots too, and gives each its own back", async () => {
+it("holds the cursor over a link and a shadow-root button present when the hold begins, and gives each its own back", async () => {
   const { link, inner } = await mountCursorOwners();
   expect(getComputedStyle(link).cursor).toBe("pointer");
   expect(getComputedStyle(inner).cursor).toBe("pointer");
@@ -713,7 +713,7 @@ it("holds the cursor over every element on the page, inside shadow roots too, an
   expect(getComputedStyle(inner).cursor).toBe("pointer");
 });
 
-it("keeps the first hold's cursor over every element until the last hold is released", async () => {
+it("keeps the first hold's cursor on a link and a shadow-root button until the last hold is released", async () => {
   const { link, inner } = await mountCursorOwners();
   holdPageCursor("ns-resize");
   holdPageCursor("grabbing");
