@@ -53,8 +53,7 @@ Two limits matter if something goes wrong:
   the Litestream child's process id, so it has no child of its own to stop; the AWS pause test hands
   the server the function that starts Litestream, so the runner learns each child's id and stops it
   at teardown (see "The pause scenario"). The delete and archive scenarios pass the run's stop
-  signal to every bucket request. Decrypting an archive on your machine takes no signal: in a review
-  on 2026-10-14, a stop during decryption took about 575 ms to settle. When the bucket is
+  signal to every bucket request. Decrypting an archive on your machine takes no signal. When the bucket is
   left, the run fails and the receipt gives the cleanup command.
 - **Ctrl-C is not handled.** Interrupting the run from the terminal skips teardown and writes no
   receipt. The bucket is left behind, and nothing printed names it. Find it in the S3 console by its
@@ -116,7 +115,8 @@ bucket, and deletes the bucket.
 It then writes a receipt, `aws-rehearsal-<run id>.json`, and prints its path. A receipt holds the
 commit, versions, region, times and limits, one row per recorded step (a stage name, an outcome, a
 duration, and where relevant an API name, HTTP status and AWS error name), the teardown steps and
-their outcomes, and what is left. It never holds a key, a URL, an object's contents or a raw error
+their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the five
+teardown steps is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
 message. For the loop scenario, the recorded steps are `probe`, `pointer-a`, `sale-a`, `rebuild`,
 `pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. The rehearsal passes the loop no way
 to freeze the transport, so `frozen-transport` always reads `skipped` here: the stage's sales
@@ -253,19 +253,21 @@ backend (`buildBackupBackend`), so each request is built by the product's own st
   `tamper-refused`). The abort starts a 24 MiB archive upload, cancels it once one part has been
   answered, and checks that an AbortMultipartUpload was sent, no completion was, and neither an
   unfinished upload nor an object, at any key, is left under its archive folder (phases `aborted`,
-  `uploads-after`, `listed-after`).
+  `uploads-after`, `listed-after`, and `abort-cleanup` when the store fails to cancel its own
+  upload).
   Together they reserve 56 MiB of the budget.
 
 **What the receipt records.** Besides the phases, every S3 request these scenarios send is one
 `request` row: the API name, HTTP status, attempts, elapsed time and outcome, and for DeleteObjects
-the number of keys sent, for PutObject and UploadPart the bytes sent. A row never holds a key, a
+the number of keys sent, for PutObject and UploadPart the bytes sent. A DeleteObjects answer that
+lists per-key errors adds a `delete-key-errors` row with their count. A row never holds a key, a
 body or a URL. A request to an API outside the receipt's list (`RECEIPT_APIS`,
 `apps/server/src/testing/aws-rehearsal-receipt.ts`) makes the recorder throw, but only once Amazon
 S3 has answered: the request has already been sent, and the store may send it again. The store then
 fails the request and the scenario fails.
 
 **Observed or source-only.** The receipt's action table lists each API on that list once. An API is
-`observed` when some recorded step names it with an HTTP status (teardown steps do not count); otherwise it is `source-only`
+`observed` when some recorded step names it with an HTTP status; otherwise it is `source-only`
 when the runner lists it as known only from reading the code (GetBucketLocation, HeadObject,
 CreateMultipartUpload, UploadPart, CompleteMultipartUpload), and `not-exercised` otherwise. So a
 live run of the archive scenarios is what can move the multipart APIs to `observed`.
@@ -277,7 +279,9 @@ path below one, and refuses any other prefix.
 
 **Local evidence only.** The same scenarios run against versitygw in
 `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
-2026-10-14 on a Mac, all 8 cases passed. The requests each scenario recorded were: delete-many,
+2026-10-14 on a Mac with versitygw 1.8.0
+(`WAITRON_REQUIRE_STREAM_BINARIES=1 pnpm --filter @waitron/server exec vitest run src/s3-rehearsal-scenarios.e2e.test.ts`),
+all 8 cases passed. The requests each scenario recorded were: delete-many,
 1,005 PutObject, 3 ListObjectsV2 and 2 DeleteObjects, all 200; the round trip, 1
 CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 and 1 GetObject, all
 200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1
