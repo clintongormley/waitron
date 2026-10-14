@@ -163,7 +163,7 @@ export async function joinTables(
   return { partyId, mainBillId, merged: false };
 }
 
-/** {@link combineParties} as a table action: the kitchen is told of every sent dish that moved, unless `slipsLater` leaves that to the caller. */
+/** {@link combineParties} as a table action: the kitchen is told when `kitchenToBeTold` (kitchen-print.ts) says so, unless `slipsLater` leaves that to the caller. */
 async function combineAt(
   tx: Transaction,
   cfg: TillConfig,

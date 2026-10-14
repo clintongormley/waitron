@@ -329,7 +329,8 @@ is not ended under it. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
 Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review,
-reproduced with a throwaway test): Move guests onto a table another party holds in the same named
+reproduced with a throwaway test under the rule before A650 Part 1, and re-read but not re-run
+since): Move guests onto a table another party holds in the same named
 group can end the group (`leaveMergeOf`) after `combineAt` has queued its slips (`moveGuests`,
 `apps/server/src/table-actions.ts`). It needs a party holding part of a group, so taking the whole
 group should remove it (reasoned, not tested).
