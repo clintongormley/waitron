@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { STATION_COLOURS, type StationColour } from "@waitron/shared";
-import { cleanup, mount } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { StationColourPicker } from "./station-colour-picker.js";
 import "./station-colour-picker.js";
 
@@ -80,6 +80,25 @@ it("offers the twelve colours in four columns, the chosen one checked", async ()
     radios(el).map((button) => Math.round(button.getBoundingClientRect().left)),
   );
   expect([tops.size, lefts.size]).toEqual([3, 4]);
+});
+
+it("draws its required star in the danger colour, as every field's label does", async () => {
+  const el = await picker();
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-danger)";
+  host.append(probe);
+  const star = el.shadowRoot!.querySelector("legend .required")!;
+  expect(getComputedStyle(star).color).toBe(getComputedStyle(probe).color);
+});
+
+it("is no wider than the field cap a dialog sets, and as wide as its container without one", async () => {
+  const el = await picker();
+  host.style.width = "600px";
+  expect(el.getBoundingClientRect().width).toBe(600);
+  host.style.setProperty("--wt-field-max-width", "300px");
+  expect(el.getBoundingClientRect().width).toBe(300);
+  const tiles = radios(el).map((button) => button.getBoundingClientRect().right);
+  expect(Math.max(...tiles)).toBeLessThanOrEqual(el.getBoundingClientRect().right);
 });
 
 it("names under each colour the other stations that have it", async () => {

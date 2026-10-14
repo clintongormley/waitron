@@ -381,6 +381,20 @@ function contrastRatio(a: string, b: string): number {
 }
 
 describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme) => {
+  /** The grid with every row open, and the cell's `td`, its button and the text inside it. */
+  async function hoverable(model: RoutingView, cellSelector: string, textSelector: string) {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model });
+    host.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await el.updateComplete;
+    const td = el.shadowRoot!.querySelector<HTMLElement>(cellSelector)!;
+    const cell = td.querySelector<HTMLButtonElement>('button[data-test="routing-cell"]')!;
+    return { td, cell, text: cell.querySelector(textSelector)! };
+  }
+
   test.each([
     [
       "the not-on-menus mark",
@@ -395,6 +409,25 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       ".line.inherited",
     ],
     ["a set-here station", routing(), 'td[data-row="c:drinks"][data-zone="every"]', ".station"],
+  ])(
+    "keeps %s at 4.5:1 on its station's fill, which a hover keeps",
+    async (_, model, cellSelector, textSelector) => {
+      const { td, cell, text } = await hoverable(model, cellSelector, textSelector);
+      expect(td.dataset.stationColour).toBeDefined();
+      const fill = getComputedStyle(td).backgroundColor;
+      const atRest = getComputedStyle(cell).backgroundColor;
+      expect(atRest).toBe("rgba(0, 0, 0, 0)");
+      await userEvent.hover(cell);
+      expect(cell.matches(":hover")).toBe(true);
+      const hovered = getComputedStyle(cell);
+      expect(hovered.backgroundColor).toBe(atRest);
+      expect(getComputedStyle(td).backgroundColor).toBe(fill);
+      expect(hovered.outlineStyle).toBe("solid");
+      expect(contrastRatio(getComputedStyle(text).color, fill)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  test.each([
     [
       "a differing inherited station",
       routing(),
@@ -414,17 +447,8 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       '[data-test="default-repair"]',
     ],
   ])("keeps %s at 4.5:1 against the hover", async (_, model, cellSelector, textSelector) => {
-    await mountThemed("<div></div>", theme);
-    const el = document.createElement("venue-routing-grid");
-    Object.assign(el, { model });
-    host.append(el);
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
-    await el.updateComplete;
-    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
-      `${cellSelector} button[data-test="routing-cell"]`,
-    )!;
-    const text = cell.querySelector(textSelector)!;
+    const { td, cell, text } = await hoverable(model, cellSelector, textSelector);
+    expect(td.dataset.stationColour).toBeUndefined();
     const atRest = getComputedStyle(cell).backgroundColor;
     await userEvent.hover(cell);
     expect(cell.matches(":hover")).toBe(true);
@@ -458,9 +482,8 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // Hover swaps the fill for the tint, so this ring sits on the tint; under keyboard focus the same
-  // ring sits on the fill. Its colour against the twelve fills and the tint is held in
-  // `packages/ui-core/src/tokens/colors.test.ts`; here, that a station cell draws it in that colour.
+  // Its colour against the twelve fills is held in `packages/ui-core/src/tokens/colors.test.ts`;
+  // here, that a station cell keeps its fill and draws the ring in that colour.
   test("outlines a hovered station cell in the focus colour, which stands 3:1 on its fill", async () => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("venue-routing-grid");
@@ -479,6 +502,8 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     await userEvent.hover(cell);
     expect(cell.matches(":hover")).toBe(true);
     const hovered = getComputedStyle(cell);
+    expect(getComputedStyle(td).backgroundColor).toBe(blue);
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(hovered.outlineStyle).toBe("solid");
     expect(contrastRatio(hovered.outlineColor, blue)).toBeGreaterThanOrEqual(3);
   });

@@ -28,6 +28,7 @@ export class StationColourPicker extends LitElement {
     css`
       :host {
         display: block;
+        max-width: var(--wt-field-max-width);
         container-type: inline-size;
       }
       fieldset {
@@ -43,6 +44,7 @@ export class StationColourPicker extends LitElement {
       }
       .required {
         margin-inline-start: var(--wt-space-1);
+        color: var(--wt-color-danger);
       }
       [role="radiogroup"] {
         display: grid;

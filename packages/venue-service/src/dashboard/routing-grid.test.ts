@@ -1002,16 +1002,21 @@ describe("venue-routing-grid", () => {
       expect(blank.querySelectorAll(".line")).toHaveLength(0);
     });
 
-    it("tints and outlines a hovered cell, and outlines a keyboard-focused one the same way", async () => {
+    it("keeps a hovered painted cell's fill and outlines it, and outlines a keyboard-focused one the same way", async () => {
       const { el } = await mount();
       const box = combo(el, "c:drinks", "terrace")!;
+      const td = cell(el, "c:drinks", "terrace");
+      expect(td.dataset.stationColour).toBe("blue");
       const atRest = getComputedStyle(box);
       const restBackground = atRest.backgroundColor;
+      const restFill = getComputedStyle(td).backgroundColor;
       expect(atRest.outlineStyle).toBe("none");
       await userEvent.hover(box);
       expect(box.matches(":hover")).toBe(true);
       const hovered = getComputedStyle(box);
-      expect(hovered.backgroundColor).not.toBe(restBackground);
+      expect(hovered.backgroundColor).toBe(restBackground);
+      expect(restBackground).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(td).backgroundColor).toBe(restFill);
       expect(hovered.outlineStyle).toBe("solid");
       expect(hovered.cursor).toBe("pointer");
       const hoverOutline = [hovered.outlineStyle, hovered.outlineWidth, hovered.outlineColor];
@@ -1780,6 +1785,59 @@ describe("station colours", () => {
     expect(colourOf(repair.el, "all", "every")).toBeUndefined();
     const repairReadOnly = await mount(routing({ defaultStationId: null, canMakeDefault: false }));
     expect(colourOf(repairReadOnly.el, "all", "every")).toBeUndefined();
+  });
+
+  it("keeps a hovered orange cell orange and draws the focus outline inside it", async () => {
+    const { el } = await mount();
+    const td = cell(el, "c:food", "every");
+    expect(colourOf(el, "c:food", "every")).toBe("orange");
+    const orange = fill(el, "--wt-color-station-orange");
+    const box = combo(el, "c:food", "every")!;
+    await userEvent.hover(box);
+    expect(box.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(box);
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(td).backgroundColor).toBe(orange);
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(hovered.outlineColor).toBe(
+      (() => {
+        const probe = document.createElement("div");
+        probe.style.color = "var(--wt-color-focus)";
+        el.parentElement!.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      })(),
+    );
+    expect(parseFloat(hovered.outlineOffset)).toBeLessThan(0);
+  });
+
+  it("tints a hovered cell that sends nowhere, which has no fill to keep", async () => {
+    const { el } = await mount();
+    expect(colourOf(el, "all", "terrace")).toBeUndefined();
+    const box = combo(el, "all", "terrace")!;
+    expect(getComputedStyle(box).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await userEvent.hover(box);
+    expect(box.matches(":hover")).toBe(true);
+    expect(getComputedStyle(box).backgroundColor).toBe(fill(el, "--wt-color-surface-lifted"));
+  });
+
+  it("parts neighbouring painted cells with a thin line in the surface colour", async () => {
+    const { el } = await mount();
+    const surface = (() => {
+      const probe = document.createElement("div");
+      probe.style.color = "var(--wt-color-surface)";
+      el.parentElement!.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    })();
+    const every = cell(el, "c:drinks", "every");
+    const terrace = cell(el, "c:drinks", "terrace");
+    expect(every.dataset.stationColour).toBe("blue");
+    expect(terrace.dataset.stationColour).toBe("blue");
+    expect(getComputedStyle(terrace).boxShadow).toBe(`${surface} 2px 0px 0px 0px inset`);
+    expect(getComputedStyle(every).boxShadow).toBe("none");
   });
 
   it("paints a choice waiting to be saved as it will be saved", async () => {

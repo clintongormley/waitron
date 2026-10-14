@@ -174,6 +174,10 @@ export class RoutingGrid extends LitElement {
       td[data-station-colour] {
         background: var(--station-fill);
       }
+      /* A shadow, not a border, so the cell's button still covers the whole cell. */
+      td ~ td[data-station-colour] {
+        box-shadow: inset 2px 0 0 var(--wt-color-surface);
+      }
       thead th {
         font-weight: var(--wt-font-weight-medium);
         font-size: var(--wt-font-size-sm);
@@ -294,8 +298,9 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(var(--wt-focus-offset) * -1);
       }
-      /* Untinted under a refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
-      .cell:hover:not(:has(.cell-error)) {
+      /* A painted cell keeps its fill: the tint can look like another station's. Untinted under a
+         refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
+      td:not([data-station-colour]) > .cell:hover:not(:has(.cell-error)) {
         background: var(--wt-color-surface-lifted);
       }
       .notes {

@@ -249,7 +249,7 @@ Routes cells with `--wt-color-station-<colour>` and its period-line dots and key
 | Fill                        | Light     | Dot       | Dark      | Dot       |
 | --------------------------- | --------- | --------- | --------- | --------- |
 | `--wt-color-station-red`    | `#fde2e1` | `#d64545` | `#592222` | `#e15656` |
-| `--wt-color-station-orange` | `#fde6cf` | `#c26a1f` | `#4f351e` | `#e09452` |
+| `--wt-color-station-orange` | `#fde6cf` | `#c26a1f` | `#55301a` | `#e09452` |
 | `--wt-color-station-amber`  | `#fcefc0` | `#a67a00` | `#44391a` | `#e0ba52` |
 | `--wt-color-station-lime`   | `#e9f4c9` | `#688c19` | `#323f18` | `#b1e052` |
 | `--wt-color-station-green`  | `#d6f0dc` | `#2d934b` | `#194325` | `#52e07a` |
@@ -259,13 +259,15 @@ Routes cells with `--wt-color-station-<colour>` and its period-line dots and key
 | `--wt-color-station-indigo` | `#e1e0f8` | `#5b55d0` | `#242259` | `#7e79e7` |
 | `--wt-color-station-purple` | `#ecdff8` | `#8d4fcf` | `#3d2259` | `#a667e4` |
 | `--wt-color-station-pink`   | `#fbdfec` | `#d2468c` | `#59223d` | `#e05299` |
-| `--wt-color-station-brown`  | `#eee2d6` | `#8a5a3c` | `#4c3729` | `#c29170` |
+| `--wt-color-station-brown`  | `#eee2d6` | `#8a5a3c` | `#42362c` | `#c29170` |
 
 The "station colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
 that each of those four text colours is 4.5:1 or more on every fill, that each dot is 3:1 or more
 from every fill and from `--wt-color-surface`, that `--wt-color-focus` is 3:1 or more on every fill
 and on `--wt-color-surface-lifted`, that the twelve fills differ and so do the twelve dots, and that
-the `prefers-color-scheme` blocks give the same values as the explicit themes.
+the `prefers-color-scheme` blocks give the same values as the explicit themes. A further case holds
+that every pair of dark fills is at least as far apart, by CIEDE2000 colour difference, as the
+closest pair of light fills (indigo and purple, about 4.7).
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
 `--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
@@ -3603,8 +3605,11 @@ cell's repair note under the station is drawn inside the button. Every table cel
 included, is filled with `--wt-color-station-<colour>` of the station it sends to (for a blank cell, the
 one it inherits), and a choice waiting to be saved paints as it will be saved; a cell stays plain when it sends nowhere (No
 preparation, no station), sends to a disabled or deleted station, or its station's stored colour is
-not one of the twelve. Pointing at it tints it with `--wt-color-surface-lifted` in place of its fill (not while it shows a refusal, whose colour is under 4.5:1 on that tint
-in the dark theme), draws the focus outline just inside its edges and shows a hand pointer; keyboard
+not one of the twelve. A painted cell beside another cell is parted from it by a 2px line in
+`--wt-color-surface` on its start edge, drawn as an inset shadow so the button still covers the
+whole cell. Pointing at a cell draws the focus outline just inside its edges and shows a hand
+pointer; a painted cell keeps its fill, and a plain one is tinted with `--wt-color-surface-lifted`
+(not while it shows a refusal, whose colour is under 4.5:1 on that tint in the dark theme). Keyboard
 focus draws the same outline. A station or No preparation set in that cell, or
 chosen there and waiting to be saved, is bold in `--wt-color-text`. An inherited Every zone
 value is in `--wt-color-text-muted`. An inherited zone value is left blank when it is what the row's
@@ -3670,7 +3675,9 @@ under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
 `station-colour-picker` (`station-colour-picker.ts`) of the twelve station colours, each tile
-naming under it the other active stations that have that colour. Add station also sets Colour and
+naming under it the other active stations that have that colour; it is no wider than
+`--wt-field-max-width`, like the dialog's other fields, and its required `*` is in
+`--wt-color-danger`, like theirs. Add station also sets Colour and
 Printers, and starts on the first colour no active station has, or Red when all twelve are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
 an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
