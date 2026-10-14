@@ -292,52 +292,57 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
-### A Veri\*Factu venue without a custodian kit
+### A Veri\*Factu venue without a signed allocation
 
 A Veri\*Factu venue's setup has to carry a fiscal allocation: the installation number and invoice
 series a custodian (the person or service that hands out installation numbers and keeps the
-register of them) has signed for that taxpayer. For a venue that will never file for real, the box
-makes its own: a throwaway allocation, signed by a key made in memory for that one setup and never
-written anywhere (`packages/fiscal-verifactu/src/throwaway-allocation.ts`).
+register of them) has signed for that taxpayer. When a Demo or Preparation setup, or Live on a
+development box (one started with `WAITRON_ENV=dev`), supplies no allocation, the box makes its
+own: a throwaway allocation, signed by a key made in memory for that one setup and never written
+anywhere (`packages/fiscal-verifactu/src/throwaway-allocation.ts`).
 
 **When the box makes one.** The setup route asks for a throwaway allocation when the request
 carries no `initialOperations` (no supplied allocation) and the mode is Demo or Preparation, on any
-box, or Live on a box started with `WAITRON_ENV=dev` (`throwawayMarker`,
-`apps/server/src/setup-api.ts`). All three are stamped preproduction (the same file, where
-`parseProvisionPayload` picks the environment). A request that supplies an allocation always goes
-through the real custodian path, unchanged.
+box, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-api.ts`). All three
+are stamped preproduction: the database records, once and permanently, which environment it
+belongs to, and `parseProvisionPayload` in the same file picks it. A request that supplies an
+allocation always goes through the real custodian path, unchanged.
 
-**When it is refused.** The throwaway signer refuses unless both the box's environment and the
-request's are preproduction, with `sif.throwaway_allocation_refused`, before it makes a key, and
-`provisionVenue` (`apps/server/src/provision.ts`) asks it before it writes anything. So on a box
-started with `WAITRON_ENV=production`, Demo and Preparation answer HTTP 400 with that code. This
-holds only where an enabled module offers a throwaway allocation, which today is the Veri\*Factu
-module; a territory with no fiscal module makes no allocation at all, so there is nothing to refuse.
-The setup wizard has no text of its own for this refusal yet.
+**When the setup route refuses it.** The throwaway signer refuses unless both the box's
+environment and the request's are preproduction, with `sif.throwaway_allocation_refused`, before
+it makes a key, and `provisionVenue` (`apps/server/src/provision.ts`) asks it before it writes
+anything. So on a box started with `WAITRON_ENV=production`, Demo and Preparation answer HTTP 400
+with that code. Through the setup route this holds only where an enabled module offers a throwaway
+allocation, which today is the Veri\*Factu module. A territory whose fiscal slot is `fiscal-none`,
+which files nothing, makes no allocation, so there is nothing to refuse; no country the setup route
+accepts today has one. The setup wizard has no text of its own for this refusal yet.
 
-**Live on a real box needs a supplied allocation** (A679). On a box not started with
-`WAITRON_ENV=dev`, a Live setup without one stops at `setup.fiscal_test_required` (HTTP 409) before
-its fiscal test, and past the test at `sif.allocation_invalid` with `reason:
+**Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
+a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`
+(HTTP 409) before its fiscal test, and past the test at `sif.allocation_invalid` with `reason:
 reauthentication_required` (HTTP 400), as `apps/server/src/setup-throwaway.route.test.ts` shows.
 
 **How to recognise a throwaway venue.** Its `fiscal_allocations` row has an `allocation_key`
 beginning `throwaway-` and environment `preproduction`, the deployment is stamped `preproduction`,
-and a setup through the wizard logged `setup.throwaway_allocation` with the mode. Every identifier
-the signer chooses begins `throwaway-` or is `waitron-throwaway-preproduction`. The installation number (`S000001`)
-and the series (`<code>-S000001`) are ordinary, because they reach AEAT. A setup replayed after
-a lost answer logs no line of its own.
+and a setup through the wizard logged `setup.throwaway_allocation` with the mode. Inside the signed
+allocation, the allocation, generation and block ids begin `throwaway-`, the custodian is
+`waitron-throwaway-preproduction`, and the recipient venue and setup source are
+`throwaway-preproduction`; the setup's event id is an ordinary UUID. The installation number
+(`S000001`) and the series (`<code>-S000001`) are ordinary too, because they reach AEAT. A setup
+replayed after a lost answer logs no line of its own.
 
 **In-process scripts.** A script that provisions a venue database directly, without a server, calls
 `applyDevelopmentVenue(actions, deps)` (`apps/server/scripts/throwaway-venue.ts`) where it would call
-`applyVenue`. It goes through the same throwaway step, so the same refusal applies when its own
-process runs with `WAITRON_ENV=production`, and it stamps the database preproduction.
-`dev-setup.ts` uses it through `applyDeveloperDemoVenue`
+`applyVenue`. It refuses with `sif.throwaway_allocation_refused` before writing anything when its
+own process runs with `WAITRON_ENV=production`, whether or not an enabled module offers a throwaway
+allocation. With `WAITRON_ENV` unset, empty, `dev` or `preproduction` it goes through the same
+throwaway step and stamps the database preproduction; any other value is refused as
+`server.config_invalid`. `dev-setup.ts` uses it through `applyDeveloperDemoVenue`
 (`apps/server/scripts/demo-seed/allocation.ts`).
 
-**An older onboarding stack.** An `apps/server/.env` that still holds the three
-`WAITRON_FISCAL_*` lines from an earlier version of `dev:onboard` is harmless: a throwaway setup
-never reads them, and only the real custodian path does
-(`packages/fiscal-verifactu/src/allocation-configuration.ts`).
+**A leftover `.env`.** An `apps/server/.env` written by an earlier development build of this change
+may hold three `WAITRON_FISCAL_*` lines. They are harmless: a throwaway setup never reads them, and
+only the real custodian path does (`packages/fiscal-verifactu/src/allocation-configuration.ts`).
 
 ## Iterating against a local checkout of `@waitron/verifactu`
 
