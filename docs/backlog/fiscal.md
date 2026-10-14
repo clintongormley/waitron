@@ -209,6 +209,17 @@ Statements below that a conflict holds its chain, that a cancellation of a rejec
 held or holds its chain, or that the brake reads the three records immediately before a record,
 describe the earlier behaviour.
 
+**2026-10-14, approved hook-contract checks:** the owner approved exactly the seven groups in
+[the supplemental request](../superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+The six affected suites on the Task 4 branch now select the prepared hooks for those cases.
+They check omitted host-created series, complete signed reservation contents and persisted
+active series with each purpose. Malformed-carrier cases receive valid independently prepared
+operations, then check `sif.allocation_invalid` with `reservation_mismatch` and retained rollback
+checks. Separate databases qualify the bundle's complete series at takeover; their fixtures copy
+primary scope and live bases, rather than exercising backup transport. The default descriptors,
+text-SIF schema and counter retirement remain unfinished, followed by final migration qualification,
+the Cloud contract check, both full reviews, the normal push hook and current-head CI.
+
 **2026-10-13, old-backup authentication:** the owner chose the verifier in the selected
 backup for cold restore; live takeover keeps the live verifier. The key name is now stored
 beside each newly minted verifier, shown with the handover secret, and read from the placed

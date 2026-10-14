@@ -1,21 +1,25 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { locations, withTransaction } from "@waitron/db";
-import { currentSif } from "@waitron/fiscal-verifactu";
+import { deployment, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
+import { ALLOCATED_FISCAL_STANDBY, currentSif, registerSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { nodeId as brandNodeId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
-import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
+import {
+  establishReservedStandbyIdentity,
+  generateStandbyIdentity,
+  type StandbyIdentity,
+} from "./reserved-identity.js";
+import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
+import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
+import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 
-// `establishReservedStandbyIdentity` seals a credential, inserts the standby's own node
-// (public_key + endorsement), and persists a reserved SIF + series, all under one
-// `withTransaction`. This suite exercises that round-trip and its behavioural assertions.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -55,25 +59,27 @@ describe("establishReservedStandbyIdentity", () => {
     NIF = t.rows[0]!.tax_id;
   });
 
-  it("establishes a dormant identity: sealed key, reserved node, reserved SIF, reserved series", async () => {
+  it("establishes a dormant reservation and opens its supplied SIF and series only at takeover", async () => {
     const standby = generateStandbyIdentity();
-    await establishReservedStandbyIdentity(
-      { ownerDb: suite.db, ring: RING },
-      {
-        locationId,
-        standby,
-        nodeName: "cloud",
-        filingModule: "verifactu",
-        taxModule: "vat",
-        modules: ALL_MODULES,
-        reserved: {
-          modules: {
-            "fiscal-verifactu": { nif: NIF, idSistemaInformatico: "W1", numeroInstalacion: 7 },
+    const fixture = await preparedReservation(standby);
+    await fixture.authorised("establish", (operation) =>
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db, ring: RING },
+        {
+          locationId,
+          standby,
+          nodeName: "cloud",
+          filingModule: "verifactu",
+          taxModule: "vat",
+          modules: allocatedStandbyModules(ALL_MODULES, fixture),
+          moduleOperations: new Map([["fiscal-verifactu", operation]]),
+          reserved: {
+            modules: { "fiscal-verifactu": fixture.state },
+            series: [],
+            endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
           },
-          series: [{ code: "FA-7", purpose: "standard" }],
-          endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
         },
-      },
+      ),
     );
     // sealed private key present
     const cred = await withTransaction(suite.db, (tx) =>
@@ -82,18 +88,34 @@ describe("establishReservedStandbyIdentity", () => {
       }),
     );
     expect(cred?.privateKey).toBe(standby.privateKey);
-    // reserved SIF is the cloud node's live identity with the supplied number
-    const sif = await withTransaction(suite.db, (tx) =>
-      currentSif(tx, brandNodeId(standby.nodeId)),
-    );
-    expect(sif.numeroInstalacion).toBe(7);
-    // reserved series landed for the standby's node
+    const reservations = await suite.db.select().from(fiscalReservations);
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0]?.installationIdentity).toBe("P000042");
+    expect(reservations[0]?.taxpayerNif).toBe(NIF);
+    await expect(
+      withTransaction(suite.db, (tx) => currentSif(tx, brandNodeId(standby.nodeId))),
+    ).rejects.toMatchObject({ code: "sif.not_registered" });
     const series = await withTransaction(suite.db, (tx) =>
       tx.execute<{ n: number }>(
         sql`select cast(count(*) as int) as n from invoice_series where node_id = ${standby.nodeId}`,
       ),
     );
-    expect(series.rows[0]!.n).toBe(1);
+    expect(series.rows[0]!.n).toBe(0);
+    await fixture.transaction(suite.db, "promote", (tx, operation) =>
+      ALLOCATED_FISCAL_STANDBY.activate!(
+        tx,
+        { nodeId: brandNodeId(standby.nodeId), locationId },
+        operation,
+      ),
+    );
+    const sif = await withTransaction(suite.db, (tx) =>
+      currentSif(tx, brandNodeId(standby.nodeId)),
+    );
+    expect(sif.numeroInstalacion).toBe("P000042");
+    const active = await suite.db.execute<{ code: string; purpose: string }>(sql`
+      select code, purpose from invoice_series where node_id = ${standby.nodeId} and retired_at is null order by code
+    `);
+    expect(active.rows).toEqual([{ code: "FA-P000042", purpose: "standard" }]);
   });
 
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
@@ -151,22 +173,36 @@ describe("establishReservedStandbyIdentity", () => {
 
   it("refuses a bundle whose fiscal reservation is missing, before writing the node", async () => {
     const standby = generateStandbyIdentity();
+    const fixture = await preparedReservation(standby);
     await expect(
-      establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
-        {
-          locationId,
-          standby,
-          nodeName: "cloud",
-          filingModule: "verifactu",
-          taxModule: "vat",
-          modules: ALL_MODULES,
-          reserved: { modules: {}, series: [], endorsement: ENDORSEMENT },
-        },
+      fixture.authorised("establish", (operation) =>
+        establishReservedStandbyIdentity(
+          { ownerDb: suite.db, ring: RING },
+          {
+            locationId,
+            standby,
+            nodeName: "cloud",
+            filingModule: "verifactu",
+            taxModule: "vat",
+            modules: allocatedStandbyModules(ALL_MODULES, fixture),
+            moduleOperations: new Map([["fiscal-verifactu", operation]]),
+            reserved: { modules: {}, series: [], endorsement: ENDORSEMENT },
+          },
+        ),
       ),
-    ).rejects.toMatchObject({ code: "sif.reservation_invalid" });
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_mismatch" },
+    });
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
-    expect(node.rows).toEqual([]); // the one transaction rolled back
+    expect(node.rows).toEqual([]);
+    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    const series = await suite.db.execute(
+      sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
+    );
+    expect(series.rows).toEqual([]);
   });
 
   it("refuses a bundle carrying no `modules` key at all, before writing the node", async () => {
@@ -174,22 +210,36 @@ describe("establishReservedStandbyIdentity", () => {
     // `series`) keys are absent entirely. The carrier must still reach the module's own refusal —
     // an unguarded index would throw a bare TypeError here instead.
     const standby = generateStandbyIdentity();
+    const fixture = await preparedReservation(standby);
     await expect(
-      establishReservedStandbyIdentity(
-        { ownerDb: suite.db, ring: RING },
-        {
-          locationId,
-          standby,
-          nodeName: "cloud",
-          filingModule: "verifactu",
-          taxModule: "vat",
-          modules: ALL_MODULES,
-          reserved: { endorsement: ENDORSEMENT } as unknown as ReservedIdentity,
-        },
+      fixture.authorised("establish", (operation) =>
+        establishReservedStandbyIdentity(
+          { ownerDb: suite.db, ring: RING },
+          {
+            locationId,
+            standby,
+            nodeName: "cloud",
+            filingModule: "verifactu",
+            taxModule: "vat",
+            modules: allocatedStandbyModules(ALL_MODULES, fixture),
+            moduleOperations: new Map([["fiscal-verifactu", operation]]),
+            reserved: { endorsement: ENDORSEMENT } as unknown as ReservedIdentity,
+          },
+        ),
       ),
-    ).rejects.toMatchObject({ code: "sif.reservation_invalid" });
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_mismatch" },
+    });
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
-    expect(node.rows).toEqual([]); // the one transaction rolled back
+    expect(node.rows).toEqual([]);
+    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    const series = await suite.db.execute(
+      sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
+    );
+    expect(series.rows).toEqual([]);
   });
   it("establishes the node with no reserved series when the bundle carries no `series` key and no module reserves", async () => {
     const standby = generateStandbyIdentity();
@@ -214,4 +264,21 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(series.rows[0]!.n).toBe(0);
   });
+  async function preparedReservation(standby: StandbyIdentity) {
+    const primary = {
+      nodeId: brandNodeId(crypto.randomUUID()),
+      locationId: brandLocationId(locationId),
+    };
+    await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
+    await suite.db.insert(nodes).values({ id: primary.nodeId, locationId, name: "Primary" });
+    await withTransaction(suite.db, (tx) =>
+      registerSif(tx, { nodeId: primary.nodeId, nif: NIF, idSistemaInformatico: "W1" }),
+    );
+    await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: primary.nodeId, code: "FA", purpose: "standard" });
+    return standbyContract(suite.db, primary, standby.nodeId, [
+      { code: "FA", purpose: "standard" },
+    ]);
+  }
 });

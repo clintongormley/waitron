@@ -15,6 +15,13 @@ import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
+import {
+  standbyContract,
+  allocatedStandbyModules,
+  prepareStandbyDatabase,
+  takenOverSeries,
+} from "./testing/allocated-contract.js";
+import { locationId, nodeId } from "@waitron/shared";
 
 // A mutable copy, so one case can add a module for its own duration.
 vi.mock("./modules.js", async (importOriginal) => {
@@ -34,6 +41,10 @@ const STANDBY_PUB = generateNodeKeyPair().publicKey;
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
+  timeoutMs: 60_000,
+});
+const spare = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
 // Never stamped, for `mirror.not_provisioned`.
@@ -139,7 +150,7 @@ describe("assembleMirrorBundle (primary side)", () => {
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
-    const bundle = await assembleMirrorBundle({ ...baseDeps(), designated, standby });
+    const { bundle, fixture } = await allocatedBundle(standby);
 
     expect(bundle.designated).toEqual(designated);
     expect(bundle.environment).toBe("preproduction");
@@ -155,20 +166,24 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(bundle.primaryNode.filingModule).toBe("verifactu");
 
     const r = bundle.reservedIdentity;
-    const fiscal = r.modules["fiscal-verifactu"] as {
-      nif: string;
-      idSistemaInformatico: string;
-      numeroInstalacion: number;
-    };
-    expect(fiscal.numeroInstalacion).toBeGreaterThan(0);
-    expect(fiscal.idSistemaInformatico).toBe("W1");
-    expect(r.series.map((s) => s.code).sort()).toEqual(
-      [
-        `FA-${fiscal.numeroInstalacion}`,
-        `FF-${fiscal.numeroInstalacion}`,
-        `RF-${fiscal.numeroInstalacion}`,
-      ].sort(),
-    );
+    const fiscal = r.modules["fiscal-verifactu"] as typeof fixture.state;
+    const allocation = fiscal.evidence.block.payload.allocations[0]!;
+    expect(allocation.installationIdentity).toBe("P000042");
+    expect(allocation.taxpayerNif).toBe(bundle.tenant.taxId);
+    expect(allocation.softwareId).toBe("W1");
+    expect(fiscal).toEqual(fixture.state);
+    expect(r.series).toEqual([]);
+    expect(allocation.series).toEqual([
+      { code: "FA-P000042", purpose: "standard" },
+      { code: "FF-P000042", purpose: "full" },
+      { code: "RF-P000042", purpose: "rectificative" },
+    ]);
+    await prepareStandbyDatabase(db, spare.db, primaryNode());
+    expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
+      { code: "FA-P000042", purpose: "standard" },
+      { code: "FF-P000042", purpose: "full" },
+      { code: "RF-P000042", purpose: "rectificative" },
+    ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
     const primaryPub = (await readMembershipTrustSet(db))[designated.nodeId]!;
@@ -238,21 +253,24 @@ describe("assembleMirrorBundle (primary side)", () => {
     } as unknown as WaitronModule;
     (ALL_MODULES as WaitronModule[]).push(seriesless);
     try {
-      const bundle = await assembleMirrorBundle({
-        ...baseDeps(),
-        designated,
-        standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
-      });
+      const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+      const { bundle, fixture } = await allocatedBundle(standby);
       const r = bundle.reservedIdentity;
       expect(r.modules["test-standby-without-series"]).toEqual({ marker: "reserved" });
-      const fiscal = r.modules["fiscal-verifactu"] as { numeroInstalacion: number };
-      expect(r.series.map((s) => s.code).sort()).toEqual(
-        [
-          `FA-${fiscal.numeroInstalacion}`,
-          `FF-${fiscal.numeroInstalacion}`,
-          `RF-${fiscal.numeroInstalacion}`,
-        ].sort(),
-      );
+      const fiscal = r.modules["fiscal-verifactu"] as typeof fixture.state;
+      expect(fiscal).toEqual(fixture.state);
+      expect(r.series).toEqual([]);
+      expect(fiscal.evidence.block.payload.allocations[0]!.series).toEqual([
+        { code: "FA-P000042", purpose: "standard" },
+        { code: "FF-P000042", purpose: "full" },
+        { code: "RF-P000042", purpose: "rectificative" },
+      ]);
+      await prepareStandbyDatabase(db, spare.db, primaryNode());
+      expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
+        { code: "FA-P000042", purpose: "standard" },
+        { code: "FF-P000042", purpose: "full" },
+        { code: "RF-P000042", purpose: "rectificative" },
+      ]);
     } finally {
       (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
     }
@@ -269,3 +287,33 @@ describe("assembleMirrorBundle (primary side)", () => {
     ).rejects.toMatchObject({ code: "mirror.not_provisioned" });
   });
 });
+
+function primaryNode() {
+  return { nodeId: nodeId(designated.nodeId), locationId: locationId(designated.locationId) };
+}
+async function allocatedBundle(standby: { nodeId: string; publicKey: string }) {
+  const fixture = await standbyContract(db, primaryNode(), standby.nodeId, [
+    { code: "FA", purpose: "standard" },
+    { code: "FF", purpose: "full" },
+    { code: "RF", purpose: "rectificative" },
+  ]);
+  const original = [...ALL_MODULES];
+  (ALL_MODULES as WaitronModule[]).splice(
+    0,
+    ALL_MODULES.length,
+    ...allocatedStandbyModules(ALL_MODULES, fixture),
+  );
+  try {
+    const bundle = await fixture.authorised("reserve", (operation) =>
+      assembleMirrorBundle({
+        ...baseDeps(),
+        designated,
+        standby,
+        moduleOperations: new Map([["fiscal-verifactu", operation]]),
+      }),
+    );
+    return { bundle, fixture };
+  } finally {
+    (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
+  }
+}

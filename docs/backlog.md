@@ -311,10 +311,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **2026-10-13, Task 4 decisions settled:** cold restore checks the selected backup's
   node key, and you must keep its older paper key until no older backup remains. The owner
   approved the [nine remaining test ports](superpowers/plans/2026-10-13-w41s4-current-key-and-remaining-checks.md).
-  **2026-10-14, further exact test approval pending:** six isolated controls reproduced
-  differences between the old hook results and the prepared restore/standby hooks.
-  The [remaining return-field and refusal-code ports](superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md)
-  await approval before Task 4 switches its defaults. Earlier approvals remain in force.
+  **2026-10-14, hook-contract ports approved and qualified on the branch:** the owner
+  approved the [seven remaining return-field and refusal-code ports](superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+  Their tests select the prepared hooks explicitly, compare complete signed reservations and
+  persisted series, and check malformed carriers with valid preparation. The default-hook,
+  text-SIF and counter-retirement transition remains coupled work before publication.
   New keys now have stored issue-date/four-character names, shown in the handover language
   with the secret and in canonical form in selected-copy restore
   output. Printed recovery packs and the backup chooser's name display remain Task 6 work.

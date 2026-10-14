@@ -931,3 +931,26 @@ names each expression and the retained complete-series, rollback, permission and
 checks. Six isolated controls reproduced the old/new interface differences and passed
 with the proposed comparisons; no production code or original assertion was changed.
 Task 4 is parked on that exact approval before the coupled default/text/counter switch.
+
+
+**2026-10-14 approved hook-contract qualification:** the owner approved option A of the
+supplemental request at checkpoint `410bb946be0172d688f142265d6c9df4cbd5064e`. The six named
+suites now explicitly select the prepared hooks for those cases. Complete signed allocations
+and persisted active series replace the old return-field checks; the former series field is
+asserted absent or empty. Malformed carrier cases retain valid preparation and check the
+specific reservation-mismatch cause, no target SIF/series and unchanged credentials and reservation
+rows. The server's missing-carrier cases also retain the no-node check and assert no sealed key.
+Sold-record, chain-head, sequence, purpose, endorsement, response and rollback checks remain.
+
+An independently installed candidate failed each deliberate return-field, carrier-validation,
+purpose, missing-series, premature-SIF and adoption-rollback control. Its restored six-file run
+passed 67 cases. The feature's related fiscal run passed 113 cases, including the unedited golden
+hash and immutability suites. These runs qualify the explicitly selected hooks and test fixtures;
+they do not qualify the default switch or a complete restored-box journey. The source fixture
+initially failed on a missing catalogue referenced by its copied location, then included that
+catalogue and passed.
+
+Next: replace default seed/restore/standby hooks together with text SIF/counter retirement and
+all remaining consumers. Rebase and regenerate the final migrations, repeat the populated upgrade,
+check the Cloud operator contract, and complete both FULL reviews, the normal hook, current-head
+CI and authorised landing. Task 4 remains incomplete; this checkpoint is not for publication.

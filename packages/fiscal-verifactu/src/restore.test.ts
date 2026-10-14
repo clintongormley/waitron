@@ -1,9 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
+import { allocationFixture } from "../test/allocation-fixture.js";
+import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 import { appendToChain } from "./chain.js";
@@ -71,7 +73,7 @@ describe("restoreFiscal", () => {
     await seedTenants(db);
   });
 
-  it("revokes the live SIF, mints a floored number, resets the chain head, keeps the ledger, returns disjoint series", async () => {
+  it("activates the supplied restore identity and complete series, resets the head and keeps the ledger", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {
       locationId: TENANT_A.locationId,
@@ -82,12 +84,20 @@ describe("restoreFiscal", () => {
       huella: "C".repeat(64),
     });
 
-    const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
+    await db.insert(deployment).values({ id: 1, environment: "preproduction" });
+    const fixture = recoveryFixture([
+      { code: "FA", purpose: "standard" },
+      { code: "RE", purpose: "rectificative" },
+      { code: "S7", purpose: "standard" },
+    ]);
+    const outcome = await fixture.transaction(db, "restore", (tx, operation) =>
+      ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
+    );
 
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.id).not.toBe(first.id);
-    expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(FLOOR);
-    expect(fresh.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
+    expect(fresh.numeroInstalacion).toBe("P000042");
+    expect(fresh.numeroInstalacion).not.toBe(first.numeroInstalacion);
     const { rows: old } = await db.execute<{ revocado_en: string | null }>(
       sql`select revocado_en from registro_sif where id = ${first.id}`,
     );
@@ -103,14 +113,14 @@ describe("restoreFiscal", () => {
     expect(ledger[0]?.n).toBe(1); // the seeded S7/1 registro is untouched
     // seedSoldRegistro also opened an `S7` series on the node — it is live, so it is re-derived too.
     const n = fresh.numeroInstalacion;
-    expect(outcome.series).toEqual([
-      { code: `FA-${n}`, purpose: "standard" },
-      { code: `RE-${n}`, purpose: "rectificative" },
-      { code: `S7-${n}`, purpose: "standard" },
+    expect(outcome.series).toBeUndefined();
+    expect(await activeSeriesWithPurposes()).toEqual([
+      { code: "FA-P000042", purpose: "standard" },
+      { code: "RE-P000042", purpose: "rectificative" },
+      { code: "S7-P000042", purpose: "standard" },
     ]);
     expect(outcome.report).toContain(`installation ${n}`);
-    // The hook writes NO series itself — the orchestrator does.
-    expect(await liveSeriesCodes()).toEqual(["FA", "RE", "S7"]);
+    expect(await liveSeriesCodes()).toEqual(["FA-P000042", "RE-P000042", "S7-P000042"]);
   });
 
   it("THE REUSE EXPERIMENT: restoring an older artifact cannot re-mint a number a later restore used", async () => {
@@ -181,11 +191,15 @@ describe("restoreFiscal", () => {
     await db.execute(
       sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`,
     );
-    const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
+    await db.insert(deployment).values({ id: 1, environment: "preproduction" });
+    const fixture = recoveryFixture([{ code: "FA", purpose: "standard" }]);
+    const outcome = await fixture.transaction(db, "restore", (tx, operation) =>
+      ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
+    );
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
-    expect(outcome.series).toEqual([
-      { code: `FA-${fresh.numeroInstalacion}`, purpose: "standard" },
-    ]);
+    expect(fresh.numeroInstalacion).toBe("P000042");
+    expect(outcome.series).toBeUndefined();
+    expect(await activeSeriesWithPurposes()).toEqual([{ code: "FA-P000042", purpose: "standard" }]);
   });
 
   it("refuses a base code that cannot carry a suffix within the 60-character invoice-number cap, rolling back the restore", async () => {
@@ -249,3 +263,19 @@ describe("restoreFiscal", () => {
     expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(before);
   });
 });
+
+function recoveryFixture(bases: readonly { code: string; purpose: string }[]) {
+  return allocationFixture({
+    node: NODE,
+    bases,
+    identity: "P000042",
+    softwareId: SIF.idSistemaInformatico,
+  });
+}
+async function activeSeriesWithPurposes() {
+  const { rows } = await db.execute<{ code: string; purpose: string }>(sql`
+    select code, purpose from invoice_series
+    where node_id = ${NODE.nodeId} and retired_at is null order by code
+  `);
+  return rows;
+}
