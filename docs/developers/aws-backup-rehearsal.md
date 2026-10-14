@@ -127,11 +127,14 @@ supervisor's question to the bucket; once the rule is removed the stream resumes
 generation, and a sale made during the pause must be in a restore of it.
 
 **How the bucket is held.** Amazon S3 cannot be frozen, so the scenario holds the rehearsal's own
-connections to it instead, through two small proxies on 127.0.0.1 that the test starts and closes
-(`apps/server/src/testing/transport-gate.ts`). Litestream reaches the bucket through one of them:
+connections to it instead, through three small proxies on 127.0.0.1 that the test starts and
+closes (`apps/server/src/testing/transport-gate.ts`), one per client, so a connection a proxy sees
+can only be its own client's. Litestream reaches the bucket through the first:
 `HTTPS_PROXY` is added to the environment of the Litestream processes the server starts, and to no
-other process. The server's own bucket calls, and the scenario's, go through the other, by a request
-handler the test gives the server's store. While held, a new connection waits unanswered and is
+other process. The server's own bucket calls go through the second, and the scenario's own calls
+through the third, each by a request handler the test gives that store. The server's store does not
+reuse connections (keep-alive is off), so every server call opens its own connection to the proxy,
+and a server call held there is always a held connection the proxy counts. While held, a new connection waits unanswered and is
 never passed on to AWS, and an open one moves no bytes; releasing passes the waiting ones on in
 order. Each proxy lets through only port 443 of the owned bucket's own name in the run's region,
 `<bucket>.s3.<region>.amazonaws.com`, and refuses every other host, including the shared
@@ -191,12 +194,24 @@ to last, so its question is still waiting when the rule is in place. The
 its release. After the refusal, the stream is given the supervisor's one-minute interval, plus 60
 seconds for the rule's removal to reach AWS, plus 30 seconds, to resume.
 
+Compared with the local test, the AWS run adds, while paused, the wait for the held question (5 seconds
+at most), the two controls and the wait for the logged refusal (60 seconds each at most), and,
+after it, 120 seconds more of resume wait: 305 seconds in all
+(`STREAM_PAUSE_AWS_EXTRA_MS`, `apps/server/src/testing/stream-pause-scenario.ts`, the module the
+test reads these waits from). A unit test holds the local test's waits plus these within the
+rehearsal's 15-minute scenario deadline: 526 + 305 = 831 seconds, leaving 69 seconds, which also
+has to cover creating and checking the bucket.
+
 Its other recorded steps are the scenario's stages (`probe`, `boot`, `baseline`, `freeze-control`,
 `restart-held`, `fill`, `fold-back`, `paused-sales`, `while-paused`, `resume`, `restore-sale`),
 `restart-through-gate` (a connection reached the held Litestream proxy after the kill, so the
-replacement Litestream really went through it), `pause-check-held` (how many connections the
-server's proxy held before the release; the scenario's own listing from the freeze check shares
-that proxy, so this does not single out the supervisor's), and the rule's `listing-denial` steps.
+replacement Litestream really went through it), `pause-check-held`, and the rule's
+`listing-denial` steps. `pause-check-held` waits, after the server has logged `stream.paused`, up to
+5 seconds for the server's proxy to hold at least one connection, and records how many it holds
+and how long the wait took; no held connection fails the run. It shows that a server bucket call was
+waiting at the proxy, not which call: the connection is encrypted end to end, so the proxy cannot
+see that it is the pause check. What ties the refusal to the pause check is the later logged
+`stream.pause_check_failed` with a 403 (`pause-check-denied`).
 Its working folder is `waitron-aws-stream-pause-<random>` under your temporary folder.
 
 ## When teardown fails: the cleanup command

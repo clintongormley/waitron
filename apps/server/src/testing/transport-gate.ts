@@ -284,11 +284,11 @@ class GatedAgent extends Agent {
  */
 export function gatedRequestHandler(
   gate: TransportGate,
-  options: { socketTimeoutMs: number; ca?: string },
+  options: { socketTimeoutMs: number; ca?: string; keepAlive?: boolean },
 ): NodeHttpHandler {
   return new NodeHttpHandler({
     httpsAgent: new GatedAgent(gate.url, {
-      keepAlive: true,
+      keepAlive: options.keepAlive ?? true,
       ...(options.ca === undefined ? {} : { ca: options.ca }),
     }),
     socketTimeout: options.socketTimeoutMs,

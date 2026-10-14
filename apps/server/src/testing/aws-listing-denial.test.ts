@@ -532,6 +532,41 @@ describe("withListingDenied", () => {
     );
   });
 
+  it.each([
+    ["an empty prefix", ""],
+    ["the label prefix alone", LABEL_PREFIX],
+  ])(
+    "refuses %s at the policy put, before any listing or work, even with its own lister",
+    async (_, prefix) => {
+      const log: string[] = [];
+      const h = harness(log);
+      const l = lister([DENIED, OK], log);
+      let seen: string[] = [];
+      const error = await rejection(
+        withAwsRehearsal(async (ctx) => {
+          ctx.prefix("pause");
+          try {
+            await withListingDenied(
+              ctx,
+              prefix,
+              async () => {
+                log.push("work");
+              },
+              l.deps,
+            );
+          } finally {
+            seen = [...log];
+          }
+        }, h.deps),
+      );
+      expect(error).toBeInstanceOf(AwsRehearsalRefused);
+      expect((error as AwsRehearsalRefused).reason).toBe("policy-refused");
+      expect(seen).toEqual([]);
+      expect(l.prefixes).toEqual([]);
+      expect(h.fake.names()).not.toContain("PutBucketPolicy");
+    },
+  );
+
   it("stops polling when the rehearsal's signal aborts", async () => {
     const outside = new AbortController();
     const log: string[] = [];

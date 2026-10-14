@@ -172,6 +172,27 @@ describe("startTransportGate", () => {
     client.destroy();
   });
 
+  it("reuses one CONNECT for two sequential requests by default", async () => {
+    const g = await gate();
+    const handler = handlerFor(g);
+    expect(await get(handler, "/first")).toBe("200 answered");
+    expect(await get(handler, "/second")).toBe("200 answered");
+    expect(g.seen()).toHaveLength(1);
+  });
+
+  it("opens a new CONNECT for each request when keep-alive is off", async () => {
+    const g = await gate();
+    const handler = gatedRequestHandler(g, {
+      socketTimeoutMs: 20_000,
+      ca: tls.caCertPem,
+      keepAlive: false,
+    });
+    expect(await get(handler, "/first")).toBe("200 answered");
+    expect(await get(handler, "/second")).toBe("200 answered");
+    expect(g.seen().map((connect) => connect.sequence)).toEqual([1, 2]);
+    expect(g.forwarded()).toBe(2);
+  });
+
   it("holds a new CONNECT unanswered and undialled until release", async () => {
     const g = await gate();
     g.hold();

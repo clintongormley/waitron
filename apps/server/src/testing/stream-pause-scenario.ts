@@ -85,7 +85,7 @@ const BOOT_MS = 30_000;
 /** CI run 36210908359 had not reached the limit after 30 s (testing-guide.md, the pause test). */
 const FILL_WAIT_MS = 180_000;
 const FOLD_SLACK_MS = 15_000;
-const RESUME_WAIT_MS = 30_000;
+export const STREAM_PAUSE_RESUME_WAIT_MS = 30_000;
 const UPLOAD_WAIT_MS = 30_000;
 const RESTORE_MS = 30_000;
 const UNTIMED_MS = 60_000;
@@ -122,17 +122,37 @@ export const STREAM_PAUSE_SCENARIO_MS =
   FILL_WAIT_MS +
   TICK_MS +
   FOLD_SLACK_MS +
-  RESUME_WAIT_MS +
+  STREAM_PAUSE_RESUME_WAIT_MS +
   UPLOAD_WAIT_MS +
   RESTORE_MS +
   UNTIMED_MS;
 
 /**
- * What the AWS run adds: the listing denial's two controls, and a resume wait of a supervisor tick
- * after a refused check plus a minute for the policy's removal to take effect.
+ * The AWS run's wait, while paused, for the server's pause check to be held at its gate. The
+ * supervisor asks once the side file is folded back (`#pause`, packages/stream/src/supervisor.ts),
+ * which the scenario waits for before the paused sales, so the check is normally held already.
+ */
+export const STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS = 5_000;
+
+/** The AWS run's wait, while paused, for the supervisor to log its refused pause check. */
+export const STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS = AWS_REHEARSAL_LIMITS.denialControlMs;
+
+/**
+ * The AWS run's resume wait: after a refused check the supervisor asks again only after TICK_MS,
+ * and the rule's removal may take up to the control budget to reach every AWS front end.
+ */
+export const STREAM_PAUSE_AWS_RESUME_WAIT_MS =
+  TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + STREAM_PAUSE_RESUME_WAIT_MS;
+
+/**
+ * What the AWS run adds: inside the pause, the wait for the held check, the listing denial's two
+ * controls and the wait for the refused check; after it, the longer resume wait.
  */
 export const STREAM_PAUSE_AWS_EXTRA_MS =
-  2 * AWS_REHEARSAL_LIMITS.denialControlMs + TICK_MS + 60_000;
+  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS +
+  2 * AWS_REHEARSAL_LIMITS.denialControlMs +
+  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS +
+  (STREAM_PAUSE_AWS_RESUME_WAIT_MS - STREAM_PAUSE_RESUME_WAIT_MS);
 
 export const STREAM_PAUSE_PHASES = [
   "probe",
@@ -770,8 +790,10 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     //     and a sale made while the bucket was frozen and Litestream stopped reaches it.
     freeze.resume();
     const resumedAt = performance.now();
-    await waitFor("the stream to resume", fixture.resumeWaitMs ?? RESUME_WAIT_MS, async () =>
-      stream().state === "streaming" ? true : undefined,
+    await waitFor(
+      "the stream to resume",
+      fixture.resumeWaitMs ?? STREAM_PAUSE_RESUME_WAIT_MS,
+      async () => (stream().state === "streaming" ? true : undefined),
     );
     console.log(
       `stream pause: streaming again ${(performance.now() - resumedAt).toFixed(0)} ms after the bucket was let run`,

@@ -3,7 +3,9 @@
 //   "If the key that you specify in a policy condition is not present in the request context, the
 //   values do not match and the condition is false." Whether S3 leaves `s3:prefix` out of a listing
 //   with no prefix or sends it empty is not established; neither is denied. Absent, the condition is
-//   false by that sentence; empty, `""` cannot match `<P>*` because `<P>` is never empty.
+//   false by that sentence; empty, `""` cannot match `<P>*` because `<P>` is never empty:
+//   `ctx.bucketPolicy.put` refuses (`policy-refused`) any `<P>` not longer than an issued label
+//   prefix, before a listing or the work runs.
 // - https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
 //   "An explicit deny in either of these policies overrides the allow." So the rehearsal key's own
 //   S3 allow does not outrank this bucket policy's Deny.

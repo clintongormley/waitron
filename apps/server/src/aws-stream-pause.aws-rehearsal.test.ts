@@ -6,7 +6,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createS3ObjectStore, TICK_MS } from "@waitron/stream";
+import { createS3ObjectStore } from "@waitron/stream";
 import {
   allowOwnedBucket,
   awaitDeniedPauseCheck,
@@ -14,9 +14,13 @@ import {
 } from "./testing/aws-pause-gate.js";
 import { withListingDenied } from "./testing/aws-listing-denial.js";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
-import { AWS_REHEARSAL_LIMITS } from "./testing/aws-rehearsal-limits.js";
 import { resolveLitestream } from "./testing/s3-test-server.js";
-import { runStreamPauseScenario } from "./testing/stream-pause-scenario.js";
+import {
+  runStreamPauseScenario,
+  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS,
+  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS,
+  STREAM_PAUSE_AWS_RESUME_WAIT_MS,
+} from "./testing/stream-pause-scenario.js";
 import {
   gatedRequestHandler,
   gatedSpawn,
@@ -26,15 +30,12 @@ import {
 
 // The supervisor logs a refused pause check once per pause (`stream.pause_check_failed`,
 // packages/stream/src/supervisor.ts), so its held listing must not give up before the bucket rule
-// refuses it. It is held from the pause through the paused sales, the rule's put and its negative
-// control (60 s at most), so 120 s of inactivity exceeds the expected hold; a held request has been
-// measured to be given up later than the setting, never earlier (transport-gate.ts). Should the hold
-// pass the supervisor's 5-minute READ_DEADLINE_MS, it logs a timeout without using that once-only slot.
+// refuses it. It is held from the pause through the paused sales, the wait for it at the gate
+// (5 s at most), the rule's put and its negative control (60 s at most), so 120 s of inactivity
+// exceeds the expected hold; a held request has been measured to be given up later than the
+// setting, never earlier (transport-gate.ts). Should the hold pass the supervisor's 5-minute
+// READ_DEADLINE_MS, it logs a timeout without using that once-only slot.
 const SOCKET_TIMEOUT_MS = 120_000;
-
-// After a refused check the supervisor asks again only after TICK_MS, and the rule's removal may
-// take up to the control budget to reach every AWS front end.
-const RESUME_WAIT_MS = TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + 30_000;
 
 /** Slice 8a saw Litestream's first CONNECT one second after it started. */
 const RESTART_CONNECT_WAIT_MS = 60_000;
@@ -68,16 +69,26 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
       const allow = allowOwnedBucket(ctx.bucket, ctx.region);
       const gates: TransportGate[] = [];
       try {
-        // The stores share one gate and Litestream has its own, so a CONNECT the second one sees
-        // can only be Litestream's.
-        const storeGate = await startTransportGate({ allow });
-        gates.push(storeGate);
+        // One gate per client, so a CONNECT a gate sees can only be its own client's.
+        const serverGate = await startTransportGate({ allow });
+        gates.push(serverGate);
+        const scenarioGate = await startTransportGate({ allow });
+        gates.push(scenarioGate);
         const litestreamGate = await startTransportGate({ allow });
         gates.push(litestreamGate);
-        const gatedStore = () =>
-          createS3ObjectStore(bucket, {
-            requestHandler: gatedRequestHandler(storeGate, { socketTimeoutMs: SOCKET_TIMEOUT_MS }),
-          });
+        const scenarioStore = createS3ObjectStore(bucket, {
+          requestHandler: gatedRequestHandler(scenarioGate, {
+            socketTimeoutMs: SOCKET_TIMEOUT_MS,
+          }),
+        });
+        // Without keep-alive every server call opens its own CONNECT, so a server call held at the
+        // gate is always a held CONNECT; a reused tunnel would hold it without the gate counting it.
+        const serverStore = createS3ObjectStore(bucket, {
+          requestHandler: gatedRequestHandler(serverGate, {
+            socketTimeoutMs: SOCKET_TIMEOUT_MS,
+            keepAlive: false,
+          }),
+        });
         const spawned: number[] = [];
 
         // Started as step 7 kills Litestream: the one the supervisor starts in its place must reach
@@ -117,23 +128,21 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
           },
           freeze: {
             pause: async () => {
-              storeGate.hold();
-              litestreamGate.hold();
+              for (const gate of gates) gate.hold();
             },
             resume: () => {
-              storeGate.release();
-              litestreamGate.release();
+              for (const gate of gates) gate.release();
             },
           },
-          store: gatedStore(),
+          store: scenarioStore,
           serverSeams: {
-            store: gatedStore(),
+            store: serverStore,
             spawn: gatedSpawn(litestreamGate, (pid) => {
               spawned.push(pid);
               ctx.trackChild(pid);
             }),
           },
-          resumeWaitMs: RESUME_WAIT_MS,
+          resumeWaitMs: STREAM_PAUSE_AWS_RESUME_WAIT_MS,
           whilePaused: async (paused) => {
             const restart = await restartCheck;
             if (restart === undefined) throw new Error("step 7's restart was never watched");
@@ -144,22 +153,29 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
             });
             if (!restart.ok) throw restart.error;
 
-            // Weaker than it reads: the step-6 control's listing shares this gate and may still be
-            // held, so this cannot single out the supervisor's.
-            const held = storeGate.heldCount();
+            // A held server call, not necessarily the pause check: TLS hides which call it is. The
+            // logged 403 that follows the rule is what ties the refusal to the pause check.
+            const events = await paused.streamEvents();
+            const pausedAt = events.find((line) => line.event === "stream.paused")?.at;
+            if (pausedAt === undefined) throw new Error("the server never logged stream.paused");
+            const heldStarted = Date.now();
+            const heldWait = await serverGate
+              .waitForHeld(1, STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS)
+              .then(
+                () => undefined,
+                (error: unknown) => error,
+              );
+            const held = serverGate.heldCount();
             record({
               phase: "pause-check-held",
               count: held,
-              outcome: held >= 1 ? "ok" : "failed",
+              elapsedMs: Date.now() - heldStarted,
+              outcome: heldWait === undefined ? "ok" : "failed",
             });
-            expect(held, "no bucket call is held at the gate while paused").toBeGreaterThanOrEqual(
-              1,
-            );
+            if (heldWait !== undefined) throw heldWait;
 
-            const events = await paused.streamEvents();
-            const pausedAt = events.find((line) => line.event === "stream.paused")?.at;
             await withListingDenied(ctx, paused.pauseListingPrefix, async () => {
-              storeGate.release();
+              serverGate.release();
               const heldMs = Date.now() - Date.parse(String(pausedAt));
               record({
                 phase: "held-pause-check",
@@ -168,7 +184,7 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
               });
               await awaitDeniedPauseCheck({
                 streamEvents: paused.streamEvents,
-                timeoutMs: AWS_REHEARSAL_LIMITS.denialControlMs,
+                timeoutMs: STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS,
                 record,
                 signal: ctx.signal,
               });
