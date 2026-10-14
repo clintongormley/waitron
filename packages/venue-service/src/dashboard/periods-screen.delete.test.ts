@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -534,6 +534,74 @@ it("with live data, reads the impact again when today's kept-open period changes
   liveData.invalidate([{ type: "period_extensions" }]);
   await expect.poll(() => body(dialog)).toContain("Today's later opening of it ends.");
   expect(reads).toBe(2);
+});
+
+it("with live data, an impact read that answers while the page is detached does not stop a later changed-clock refusal reloading", async () => {
+  const liveData = new LiveData();
+  const data = model();
+  data.clockRevision = 3;
+  let server = 3;
+  const sent: unknown[] = [];
+  let reads = 0;
+  let held!: (impact: PeriodDeleteImpact) => void;
+  const request = fake({
+    data: () => data,
+    impact: () => {
+      reads++;
+      return reads === 2
+        ? new Promise<PeriodDeleteImpact>((done) => {
+            held = done;
+          })
+        : impactOf();
+    },
+    write: (_path, _method, body) => {
+      const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
+      sent.push(revision);
+      if (revision !== server) throw { code: "hours.clock_changed" };
+    },
+  });
+  // Another screen on the same live data keeps both queries' models while this page is detached.
+  const other = new OpeningHoursApi(request, liveData);
+  const stops = [
+    other.watchOpeningHours(
+      () => {},
+      () => {},
+      () => {},
+    ),
+    other.watchPaintedIn(
+      () => {},
+      () => {},
+      () => {},
+    ),
+  ];
+  onTestFinished(() => stops.forEach((stop) => stop()));
+  const el = await mount(request, document.body, liveData);
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  liveData.invalidate([{ type: "period_extensions" }]);
+  await expect.poll(() => reads).toBe(2);
+  el.remove();
+  held(impactOf());
+  await new Promise((done) => setTimeout(done, 0));
+  document.body.append(el);
+  await expect.poll(() => reads, "the dropped answer is read again on re-attaching").toBe(3);
+  await new Promise((done) => setTimeout(done, 50));
+  expect(reads, "once, for both watches").toBe(3);
+  await el.updateComplete;
+  await dialog.updateComplete;
+
+  server = 4;
+  data.clockRevision = 4;
+  const before = reads;
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3]);
+  await expect.poll(() => reads, "the refusal reads the impact again").toBeGreaterThan(before);
+  await expect.poll(() => confirm(dialog).loading).toBe(false);
+  await new Promise((done) => setTimeout(done, 0));
+  await dialog.updateComplete;
+  confirm(dialog).click();
+  await expect.poll(() => sent).toEqual([3, 4]);
+  await expect.poll(() => deleteDialog(el)).toBeNull();
 });
 
 it("ignores a departed delete confirmation after another period's dialog opened", async () => {

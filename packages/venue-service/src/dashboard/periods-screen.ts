@@ -432,8 +432,12 @@ export class PeriodsScreen extends LitElement {
     deletion.readError = "";
     this.requestUpdate();
   }
+  /** An answer that arrives while the page is detached is dropped unseen, so the first model the
+   *  page applies once attached again reads the impact again, even a live query's kept model. */
   private current(deletion: Deletion, generation: number) {
-    return this.deleting === deletion && deletion.generation === generation && this.isConnected;
+    if (this.deleting !== deletion || deletion.generation !== generation) return false;
+    if (!this.isConnected) deletion.readAfter = 0;
+    return this.isConnected;
   }
 
   private async confirmDelete(
