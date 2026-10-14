@@ -183,9 +183,9 @@ const partyOrder: ExpoOrder = {
   ],
 };
 
-function stubApi(): TillApi {
+function stubApi(orders: ExpoOrder[] = queue): TillApi {
   return {
-    getExpoQueue: vi.fn().mockResolvedValue(queue),
+    getExpoQueue: vi.fn().mockResolvedValue(orders),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     bumpCourseReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
@@ -317,6 +317,18 @@ describe.each(["light", "dark"] as const)("till-expo-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a card whose dishes were sent under other numbers", async () => {
+    const moved = queue.map((order) => ({ ...order, formerNumbers: [28, 30] }));
+    const { el, host } = await mountWidget<TillExpoScreen>(
+      "till-expo-screen",
+      { api: stubApi(moved), fireControl: "expo", runsPass: true },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(".order-head .was")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

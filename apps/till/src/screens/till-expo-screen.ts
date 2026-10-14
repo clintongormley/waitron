@@ -30,6 +30,7 @@ import type {
   WatcherCourse,
   WatcherGroup,
 } from "../api/client.js";
+import { orderNumber, orderNumberStyles } from "../widgets/order-number.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
 function courseOrder(course: ExpoCourse): number {
@@ -87,6 +88,7 @@ export class TillExpoScreen extends LitElement {
     baseStyles,
     dietBadgeStyles,
     unavailableStyles,
+    orderNumberStyles,
     css`
       :host {
         display: block;
@@ -865,7 +867,7 @@ export class TillExpoScreen extends LitElement {
     const band = this.#orderBand(order);
     return html`<article class="order ${this.#accentClasses(band)}" data-order=${order.orderNumber}>
       <div class="order-head">
-        <span class="number">#${order.orderNumber}</span>
+        <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
         ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>

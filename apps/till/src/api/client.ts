@@ -1079,6 +1079,9 @@ export interface CounterWaitingOrder {
   /** A paid order's dishes that can still move to another station, in line order; empty on a
    * placed one. */
   movableDishes: { lineId: string; stationId: string }[];
+  /** The numbers the order's dishes were sent under before they moved to it, lowest first;
+   *  absent when there are none. */
+  formerNumbers?: number[];
 }
 
 /**
@@ -1101,6 +1104,9 @@ export interface HeldOrderSummary {
   openedAt: string;
   /** The bill's own dishes ready at a station, and its long wait. */
   signals: KitchenSignal[];
+  /** The numbers the order's dishes were sent under before they moved to it, lowest first;
+   *  absent when there are none. */
+  formerNumbers?: number[];
 }
 
 /**
@@ -1399,6 +1405,9 @@ export interface StationQueueGroup {
   /** Present only when one of this bill's tickets for the station was not printed after the
    *  server's `JOBS_WAITING_MS`, or was given up on. */
   printProblem?: true;
+  /** The numbers the order's dishes were sent under before they moved to it, lowest first;
+   *  absent when there are none. */
+  formerNumbers?: number[];
   items: StationQueueItem[];
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
@@ -1656,6 +1665,9 @@ export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
+  /** The numbers the order's dishes were sent under before they moved to it, lowest first;
+   *  absent when there are none. */
+  formerNumbers?: number[];
   openedMinutes: number;
   /** Absent on a bill with no party. */
   party?: QueueParty;

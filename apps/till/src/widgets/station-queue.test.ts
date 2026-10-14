@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
@@ -322,6 +323,94 @@ describe("till-station-queue", () => {
     const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]')!;
     expect(cell.textContent).toContain("2× Paella");
     expect(cell.textContent).toContain("5");
+  });
+
+  describe("the numbers an order's dishes were sent to the kitchen under", () => {
+    const moved = (formerNumbers?: number[]): StationQueueGroup => ({
+      ...groupA,
+      orderNumber: 27,
+      label: null,
+      ...(formerNumbers ? { formerNumbers } : {}),
+    });
+    const flat = (el: Element) => el.textContent!.replace(/\s+/g, " ").trim();
+
+    it.each([
+      ["en-GB", [28], "#27 (was 28)"],
+      ["es-ES", [28], "#27 (antes 28)"],
+      ["en-GB", [28, 30], "#27 (was 28, 30)"],
+    ])(
+      "follow the number on the ticket head and on each kanban cell (%s, %j)",
+      async (locale, formerNumbers, text) => {
+        const previousLocale = currentLocale();
+        setLocale(locale);
+        try {
+          const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [moved(formerNumbers)],
+            view: "rail",
+            stationId: "st-1",
+          });
+          expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe(text);
+          const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [moved(formerNumbers)],
+            view: "kanban",
+            stationId: "st-1",
+          });
+          for (const id of ["ti-1", "ti-2"])
+            expect(flat(kanban.el.shadowRoot!.querySelector(`[data-item="${id}"] .number`)!)).toBe(
+              text,
+            );
+        } finally {
+          setLocale(previousLocale);
+        }
+      },
+    );
+
+    it("leave a plain number on an order that never moved", async () => {
+      const rail = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [moved()],
+        view: "rail",
+        stationId: "st-1",
+      });
+      expect(flat(rail.el.shadowRoot!.querySelector(".ticket-head .number")!)).toBe("#27");
+      const kanban = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [moved()],
+        view: "kanban",
+        stationId: "st-1",
+      });
+      expect(flat(kanban.el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!)).toBe("#27");
+    });
+
+    it.each([
+      [390, undefined],
+      [390, [28, 30]],
+      [1024, undefined],
+      [1024, [28, 30]],
+    ])(
+      "leave a kanban cell's dish name uncut at %s px wide (former numbers %j)",
+      async (width, formerNumbers) => {
+        const previous = { width: innerWidth, height: innerHeight };
+        await page.viewport(width, 844);
+        try {
+          const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+            groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
+            view: "kanban",
+            stationId: "st-1",
+          });
+          const name = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"] .line-name')!;
+          expect(flat(name)).toBe("2× Paella");
+          expect(name.clientWidth).toBeGreaterThan(0);
+          expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+          if (width === 1024) {
+            const tag = el.shadowRoot!.querySelector('[data-item="ti-1"] .number')!;
+            expect(tag.getBoundingClientRect().top).toBeLessThan(
+              name.getBoundingClientRect().bottom,
+            );
+          }
+        } finally {
+          await page.viewport(previous.width, previous.height);
+        }
+      },
+    );
   });
 
   it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {

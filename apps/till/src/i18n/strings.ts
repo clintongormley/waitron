@@ -348,6 +348,7 @@ export const en = {
   "station.view_merged": "Merged",
   "station.view_stacked": "Stacked",
   "station.min": "min",
+  "order.was_numbers": "(was {numbers})",
   // A suffix word, like `station.min`.
   "station.overdue_count": "overdue",
   "station.advance": "Advance",
@@ -1642,6 +1643,7 @@ export const es: Record<StringKey, string> = {
   "station.view_merged": "Todo junto",
   "station.view_stacked": "Por estación",
   "station.min": "min",
+  "order.was_numbers": "(antes {numbers})",
   "station.overdue_count": "atrasados",
   "station.advance": "Avanzar",
   "station.bump_ticket": "Avanzar comanda",

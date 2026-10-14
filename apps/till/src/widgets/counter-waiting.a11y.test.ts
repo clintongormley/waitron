@@ -51,6 +51,16 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("an order whose dishes were sent under other numbers has no violations", async () => {
+    const { el, host } = await mountWidget<TillCounterWaiting>(
+      "till-counter-waiting",
+      { orders: [{ ...sent, formerNumbers: [40] }, ...orders.slice(1)] },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector(".number .was")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("an invoiced, unpaid order with Cancel and credit has no violations", async () => {
     const { el, host } = await mountWidget<TillCounterWaiting>(
       "till-counter-waiting",

@@ -50,6 +50,34 @@ describe("till-held-orders", () => {
     expect(second.matches(":focus")).toBe(true);
   });
 
+  describe("the numbers an order's dishes were sent to the kitchen under", () => {
+    const number = (el: TillHeldOrders) =>
+      el.shadowRoot!.querySelector(".summary .number")!.textContent!.replace(/\s+/g, " ").trim();
+
+    it.each([
+      ["en-GB", "#41 (was 40)"],
+      ["es-ES", "#41 (antes 40)"],
+    ])("follow the order's number (%s)", async (locale, text) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+          orders: [{ ...mesa, orderNumber: 41, formerNumbers: [40] }],
+        });
+        expect(number(el)).toBe(text);
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
+
+    it("leave a plain number on an order that never moved", async () => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...mesa, orderNumber: 41 }],
+      });
+      expect(number(el)).toBe("#41");
+    });
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-held-orders")).toBe(TillHeldOrders);
   });

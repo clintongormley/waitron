@@ -177,6 +177,24 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row).toEqual({ madeHere: false });
   });
 
+  it("carries a nullable sent_order_number, unset on a new kitchen item", async () => {
+    const meta = suite.db
+      .all<{ name: string; type: string; notnull: number; dflt_value: string | null }>(
+        sql`select name, type, "notnull", dflt_value from pragma_table_info('ticket_items')
+             where name = 'sent_order_number'`,
+      )
+      .map((c) => ({ ...c }));
+    expect(meta).toEqual([
+      { name: "sent_order_number", type: "INTEGER", notnull: 0, dflt_value: null },
+    ]);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const [row] = suite.db.all<{ sent_order_number: number | null }>(
+      sql`select sent_order_number from ticket_items where id = ${id}`,
+    );
+    expect(row).toEqual({ sent_order_number: null });
+  });
+
   it("indexes the items of an order", () => {
     const indexes = suite.db.all<{ name: string }>(
       sql`select name from pragma_index_list('ticket_items')`,

@@ -1,6 +1,7 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
+import { readFormerNumbers } from "./former-numbers.js";
 import {
   checkedInvoiceChoiceDelivery,
   reserveStagedInvoiceDelivery,
@@ -3201,7 +3202,11 @@ export async function moveOrderLines(
     throw new AppError("tab.merge_self", { tabId: fromTabId });
   }
   const both = await tx
-    .select({ id: workingOrders.id, status: workingOrders.status })
+    .select({
+      id: workingOrders.id,
+      status: workingOrders.status,
+      orderNumber: workingOrders.orderNumber,
+    })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)));
   const from = both.find((r) => r.id === fromTabId);
@@ -3254,18 +3259,54 @@ export async function moveOrderLines(
       );
   }
   if (source.length > 0) {
+    const lineIds = source.map((line) => line.id);
+    await stampSentOrderNumber(tx, lineIds, from.orderNumber);
     await tx
       .update(ticketItems)
       .set({ workingOrderId: toTabId })
-      .where(
-        inArray(
-          ticketItems.workingOrderLineId,
-          source.map((line) => line.id),
-        ),
-      );
+      .where(inArray(ticketItems.workingOrderLineId, lineIds));
     await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
   return source.map((line) => line.id);
+}
+
+/**
+ * Give the ticket items of these lines, as they leave order number `fromNumber`, that number as the
+ * one they were sent under — only those the kitchen has seen (fired, or in a held group whose HOLD
+ * ticket printed), never one made here, and never over a number they already carry. A held item
+ * whose HOLD ticket never printed first prints on the order it is on when it fires.
+ */
+async function stampSentOrderNumber(
+  tx: Transaction,
+  lineIds: string[],
+  fromNumber: number,
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(ticketItems)
+    .set({ sentOrderNumber: fromNumber })
+    .where(
+      and(
+        inArray(ticketItems.workingOrderLineId, lineIds),
+        isNull(ticketItems.sentOrderNumber),
+        eq(ticketItems.madeHere, false),
+        or(
+          isNotNull(ticketItems.firedAt),
+          exists(
+            tx
+              .select({ id: workingOrderLines.id })
+              .from(workingOrderLines)
+              .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+              .where(
+                and(
+                  eq(workingOrderLines.id, ticketItems.workingOrderLineId),
+                  isNotNull(orderGroups.holdPrintedAt),
+                ),
+              ),
+          ),
+        ),
+      ),
+    );
 }
 
 /** Assert a working order is OPEN, else `tab.not_open`; its revision. */
@@ -3692,8 +3733,10 @@ async function carveLines(
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
       groupState: orderGroups.state,
+      orderNumber: workingOrders.orderNumber,
     })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
@@ -3821,6 +3864,7 @@ async function carveLines(
 
   const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
+  const copiedLineIds: string[] = [];
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -3911,6 +3955,7 @@ async function carveLines(
               child.moved,
             );
             splitFrom.set(splitTicketId, child.row.ticketItemId);
+            copiedLineIds.push(splitChildId);
             await copyKitchenJobLines(tx, child.row.id, splitChildId);
             movedLineIds.push(child.row.id);
           }
@@ -3925,6 +3970,7 @@ async function carveLines(
             quantity,
           );
           splitFrom.set(splitTicketId, line.ticketItemId);
+          copiedLineIds.push(splitLineId);
           await copyKitchenJobLines(tx, line.id, splitLineId);
           movedLineIds.push(line.id);
         }
@@ -3939,6 +3985,9 @@ async function carveLines(
     }
   }
   if (fromTabId !== toTabId) {
+    if (partials.length > 0) {
+      await stampSentOrderNumber(tx, copiedLineIds, partials[0]!.line.orderNumber);
+    }
     await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
     // Whole lines were checked as they moved (`moveOrderLines`); the parts split off were not.
     if (partials.length > 0) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
@@ -4088,6 +4137,8 @@ export interface HeldOrderSummary {
   hasPayments: boolean;
   /** The bill's own dishes ready or waiting long, which the counter's list shows. */
   signals: KitchenSignal[];
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   /** Null for a counter order; a party's bill is listed here too. */
   partyId: string | null;
   openedAt: string;
@@ -4198,6 +4249,7 @@ export async function listHeldOrders(
     const ids = rows.map((row) => row.id);
     const { received, holding } = await readPaymentsByBill(tx, ids);
     const signals = await readBillSignals(tx, ids, Date.now());
+    const former = await readFormerNumbers(tx, ids);
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
@@ -4206,6 +4258,7 @@ export async function listHeldOrders(
         outstanding: outstandingOf(total, received.get(row.id)),
         hasPayments: holding.has(row.id),
         signals: signals.get(row.id)!,
+        ...optional("formerNumbers", former.get(row.id)),
       };
     });
   });
@@ -6119,6 +6172,8 @@ export interface CounterWaitingOrder {
   /** A settled order's top-level dishes that `stillMovable` accepts, in line order; empty on a
    * placed one. */
   movableDishes: { lineId: string; stationId: string }[];
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
 }
 
 /**
@@ -6195,6 +6250,10 @@ export async function listCounterWaiting(
               ),
             )
             .orderBy(workingOrderLines.lineNo);
+    const former = await readFormerNumbers(
+      tx,
+      rows.map((row) => row.id),
+    );
     const movable = new Map<string, { lineId: string; stationId: string }[]>();
     for (const dish of dishes) {
       if (!stillMovable(dish, dish)) continue;
@@ -6224,6 +6283,7 @@ export async function listCounterWaiting(
         serviceMode: placed ? (modes.get(row.id) ?? "prepay") : null,
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
         movableDishes: movable.get(row.id) ?? [],
+        ...optional("formerNumbers", former.get(row.id)),
       });
     }
     return waiting;
@@ -6437,6 +6497,8 @@ export interface StationQueueGroup {
   /** Present only when one of this bill's tickets for the station was not printed after
    *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
   printProblem?: true;
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   items: StationQueueItem[];
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
@@ -6730,6 +6792,7 @@ export async function listStationQueues(
     orderIds,
     new Date(nowMs),
   );
+  const former = await readFormerNumbers(tx, orderIds);
   // Each Map keeps insertion order, so groups come out oldest-first.
   const groupsAt = new Map(stationIds.map((id) => [id, new Map<string, StationQueueGroup>()]));
   for (const row of rows) {
@@ -6753,6 +6816,7 @@ export async function listStationQueues(
           "printProblem",
           printProblems.get(stationId)!.has(row.orderId) ? true : undefined,
         ),
+        ...optional("formerNumbers", former.get(row.orderId)),
         items: [],
         ...optional(
           "elsewhere",
@@ -6881,6 +6945,8 @@ export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   openedMinutes: number;
   party?: QueueParty;
   courses: ExpoCourse[];
@@ -6997,6 +7063,10 @@ export async function readPassBoard(
     tx,
     rows.map((row) => row.lineId),
   );
+  const former = await readFormerNumbers(
+    tx,
+    rows.map((row) => row.orderId),
+  );
   const tableLabels = await orderTableLabels(
     tx,
     locationId,
@@ -7021,6 +7091,7 @@ export async function readPassBoard(
       order = {
         orderId: row.orderId,
         orderNumber: row.orderNumber,
+        ...optional("formerNumbers", former.get(row.orderId)),
         openedMinutes: minutesSince(row.openedAt, nowMs),
         ...optional("party", queueParty(row)),
         courses: [],

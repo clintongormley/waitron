@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import { orderNumber, orderNumberStyles } from "./order-number.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder } from "../api/client.js";
 
@@ -28,6 +29,7 @@ export function waitingScope(order: CounterWaitingOrder): string {
 export class TillCounterWaiting extends LitElement {
   static override styles = [
     baseStyles,
+    orderNumberStyles,
     css`
       :host {
         display: block;
@@ -97,7 +99,7 @@ export class TillCounterWaiting extends LitElement {
     return html`
       <div class="order" data-waiting-order=${order.id}>
         <div class="summary">
-          <span class="number">#${order.orderNumber}</span>
+          <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
           ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
           <span class="state" data-waiting-state>${t(this.#state(order))}</span>
           <span class="meta">${formatMoney(order.total, currentLocale())}</span>

@@ -5,6 +5,9 @@ build is four pull requests (§7); three small questions (§8) each carry the de
 proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
 — pictures 1 to 4 are the design as it stood before the rulings, pictures 5 to 7 are this plan.
 
+2026-10-14: Part 1 landed in #1706, and Part 2 adds `ticket_items.sent_order_number` (migration
+`0153_sent_order_number.sql`); §5's account of what is stored describes the code before Part 2.
+
 The file keeps its old name (`…-design.md`) so the links to it from the backlog stay good.
 
 ## 0. Owner rulings, 2026-10-14

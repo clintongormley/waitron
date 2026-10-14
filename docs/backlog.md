@@ -1964,6 +1964,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   object across `packages/module/src/module.ts`, `packages/venue-service/src/kitchen-notices.ts`
   and the callers in `apps/server/src/kitchen-print.ts`. Left open by A650 Part 1.
 
+- **A683 — The party's name prints on every kitchen ticket, as on MOVED slips (owner, 2026-10-14;
+  open).** The owner wants "Order 5 · Ana" on ordinary kitchen tickets too, not only
+  on MOVED slips, so the cook meets the name on the first ticket. Reference: picture 5 in
+  [the A650 mockups](backlog/mockups/a650-moved-slips/).
+
 ### The till, devices and table service
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec written, awaiting the owner's
@@ -1977,11 +1982,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
-  Part 1 built, Parts 2 to 4 to build).** Part 1, the rule and the slip, is built. Left: Part 2,
-  the till shows "#27 (was 28)" wherever it shows an order number (a migration); Part 3, printing
-  MOVED slips becomes a venue setting (default on); Part 4, each prep station can follow or
-  override it (after Parts 2 and 3 and lane A's a506-12). Three small owner questions carry
-  defaults. [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
+  Parts 3 and 4 to build).** Left: Part 3, printing MOVED slips becomes a venue setting (default
+  on); Part 4, each prep station can follow or override it (after Part 3). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
   [mockups](backlog/mockups/a650-moved-slips/)
 
 - **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand

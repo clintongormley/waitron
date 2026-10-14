@@ -44,6 +44,16 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("an order whose dishes were sent under other numbers has no violations", async () => {
+    const { el, host } = await mountWidget<TillHeldOrders>(
+      "till-held-orders",
+      { orders: [{ ...orders[0]!, formerNumbers: [40] }, orders[1]!] },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector(".number .was")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("a list whose orders carry signals has no violations", async () => {
     const signalled: HeldOrderSummary[] = [
       {

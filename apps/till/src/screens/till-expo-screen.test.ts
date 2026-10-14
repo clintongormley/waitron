@@ -1321,6 +1321,32 @@ describe("till-expo-screen", () => {
       vi.useRealTimers();
     }
   });
+  describe("the numbers an order's dishes were sent to the kitchen under", () => {
+    const head = (el: TillExpoScreen) =>
+      orderCard(el, 27)!.querySelector(".order-head .number")!.textContent!.replace(/\s+/g, " ");
+
+    it.each([
+      ["en-GB", [28], "#27 (was 28)"],
+      ["es-ES", [28], "#27 (antes 28)"],
+      ["en-GB", [28, 30], "#27 (was 28, 30)"],
+    ])("follow the card's number (%s, %j)", async (locale, formerNumbers, text) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const order: ExpoOrder = { ...threeCourseOrder, orderNumber: 27, formerNumbers };
+        const el = await mount({ api: stubApi([order]) });
+        expect(head(el)).toBe(text);
+      } finally {
+        setLocale(previousLocale);
+      }
+    });
+
+    it("leave a plain number on an order that never moved", async () => {
+      const el = await mount({ api: stubApi([{ ...threeCourseOrder, orderNumber: 27 }]) });
+      expect(head(el)).toBe("#27");
+    });
+  });
+
   it("keeps dish and modifier receipt snapshots visible with an unrelated content default", async () => {
     const previousLocale = currentLocale();
     setLocale("en-GB");
