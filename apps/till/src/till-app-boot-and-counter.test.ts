@@ -3403,8 +3403,8 @@ describe("department transfers across operator lifetimes", () => {
       },
     };
   }
-  async function signIn(el: TillApp, permissions = ["sale.take_payment"]) {
-    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions });
+  async function signIn(el: TillApp, permissions = ["sale.take_payment"], displayName = "Ana") {
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName, permissions });
     await vi.waitFor(() => expect(shell(el)).not.toBeNull());
     await flush(el);
   }
@@ -3967,7 +3967,7 @@ describe("department transfers across operator lifetimes", () => {
                 ),
             });
             host.setAttribute("data-theme", theme);
-            await signIn(el);
+            await signIn(el, ["sale.take_payment"], "Ana Isabel García López");
             setLocale(locale);
             await flush(el);
             await vi.waitFor(() => expect(pendingCount(el)).not.toBeNull());

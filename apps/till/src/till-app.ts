@@ -64,6 +64,13 @@ import {
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
+import "./screens/till-clock-in-screen.js";
+import {
+  ClockingController,
+  type ClockingSnapshot,
+  type TillClockAction,
+} from "./state/clocking.js";
+import type { TillClockState } from "./api/client.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
@@ -1624,6 +1631,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#stopClocking();
     this.#equipmentNfc.stop();
     this.#pendingNfc = undefined;
     this.#reloadAsked = false;
@@ -1954,6 +1962,26 @@ export class TillApp extends LitElement {
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
   #signIns = 0;
+  #clockingAvailable = false;
+  #clocking?: ClockingController;
+  #clockNeedsInitialRead = false;
+  #clockAccessLost = false;
+  @state() private clockPage = false;
+  @state() private clockedOut = false;
+  @state() private clockSnapshot: ClockingSnapshot = {
+    state: null,
+    reading: false,
+    busy: false,
+    error: null,
+    refusal: null,
+  };
+  #clockIntent?: {
+    action: TillClockAction;
+    signIn: number;
+    session: number;
+    api: TillApi;
+    continueFromPage: boolean;
+  };
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
   readonly #partylessOwner = {};
@@ -2590,6 +2618,7 @@ export class TillApp extends LitElement {
 
   /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
   async #boot(from?: KitchenScreenKind): Promise<void> {
+    this.#stopClocking();
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
@@ -2777,6 +2806,140 @@ export class TillApp extends LitElement {
     }
   }
 
+  #stopClocking(): void {
+    const controller = this.#clocking;
+    this.#clocking = undefined;
+    this.#clockIntent = undefined;
+    this.#clockNeedsInitialRead = false;
+    this.clockPage = false;
+    controller?.stop();
+    this.clockSnapshot = { state: null, reading: false, busy: false, error: null, refusal: null };
+  }
+
+  #startClocking(personId: string, signIn: number, session: number, prompt: boolean): void {
+    const api = this.api;
+    this.#clockNeedsInitialRead = prompt;
+    this.clockPage = prompt;
+    let controller!: ClockingController;
+    const current = () =>
+      this.isConnected &&
+      api === this.api &&
+      signIn === this.#signIns &&
+      session === this.#operatorSession &&
+      controller === this.#clocking;
+    controller = new ClockingController(
+      api,
+      (snapshot) => {
+        if (!current()) return;
+        this.clockSnapshot = snapshot;
+        const code = snapshot.refusal?.code;
+        if (code === "session.required" || code === "session.not_open") {
+          void this.#onLogout();
+          return;
+        }
+        if (
+          code === "device.forbidden_action" ||
+          code === "attendance.not_permitted" ||
+          code === "device.unauthorized"
+        ) {
+          this.#clockAccessLost = true;
+          this.#clocking = undefined;
+          this.#clockIntent = undefined;
+          this.#clockNeedsInitialRead = false;
+          this.clockPage = false;
+          controller.stop();
+          return;
+        }
+        if (this.#clockNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
+          this.#clockNeedsInitialRead = false;
+          this.clockPage = snapshot.state.state === "out" && snapshot.state.firstClockIn;
+        }
+      },
+      (action, state) => {
+        if (current()) this.#settleClockAction(action, state);
+      },
+    );
+    this.#clocking = controller;
+    void controller.start(personId);
+  }
+
+  #clockMessage(): string {
+    if (this.clockSnapshot.refusal !== null) return codeMessage(this.clockSnapshot.refusal.code);
+    const error = this.clockSnapshot.error;
+    return error === null
+      ? ""
+      : t(
+          error === "read"
+            ? "clock.read_error"
+            : error === "write"
+              ? "clock.write_error"
+              : "clock.uncertain",
+        );
+  }
+
+  async #onClockAction(event: CustomEvent<{ action: TillClockAction }>): Promise<void> {
+    const controller = this.#clocking;
+    if (controller === undefined || this.clockSnapshot.busy || this.clockSnapshot.state === null)
+      return;
+    const action = event.detail.action;
+    this.#clockIntent = {
+      action,
+      signIn: this.#signIns,
+      session: this.#operatorSession,
+      api: this.api,
+      continueFromPage: this.clockPage,
+    };
+    await controller.act(action);
+  }
+
+  #settleClockAction(action: TillClockAction, state: TillClockState | null): void {
+    const intent = this.#clockIntent;
+    if (
+      intent === undefined ||
+      intent.action !== action ||
+      intent.signIn !== this.#signIns ||
+      intent.session !== this.#operatorSession ||
+      intent.api !== this.api
+    )
+      return;
+    this.#clockIntent = undefined;
+    if (state === null) return;
+    if (action === "in" && intent.continueFromPage) void this.#continueAfterClockIn();
+    if (action === "out") {
+      this.clockedOut = true;
+      void this.#onLogout();
+    }
+  }
+
+  async #continueAfterClockIn(): Promise<void> {
+    this.#clockNeedsInitialRead = false;
+    this.clockPage = false;
+    const tab = this.#activeTab();
+    if (
+      this.#inShell() &&
+      !this.#floorLoaded &&
+      tab !== undefined &&
+      this.#tabNeedsFloorData(tab)
+    ) {
+      const signIn = this.#signIns;
+      const session = this.#operatorSession;
+      const api = this.api;
+      await this.#loadFloorData(
+        () =>
+          !this.isConnected ||
+          signIn !== this.#signIns ||
+          session !== this.#operatorSession ||
+          api !== this.api,
+      );
+    }
+  }
+
+  async #cancelClockIn(): Promise<void> {
+    if (this.clockSnapshot.busy) return;
+    this.#clockIntent = undefined;
+    await this.#continueAfterClockIn();
+  }
+
   async #onLoggedIn(event: Event): Promise<void> {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
@@ -2790,12 +2953,28 @@ export class TillApp extends LitElement {
     switched = false,
   ): Promise<void> {
     this.#stopDepartmentTransfers();
+    this.#stopClocking();
+    this.clockedOut = false;
     this.#loginPending = true;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
+    const api = this.api;
     // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
     // shell once it shows) or a server move can end this one.
-    const replaced = () => signIn !== this.#signIns || session !== this.#operatorSession;
+    const replaced = () =>
+      signIn !== this.#signIns ||
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      !this.isConnected;
+    const clocking =
+      this.#clockingAvailable && this.capabilities.includes("clock-in") && !this.#clockAccessLost;
+    if (clocking) {
+      this.operatorName = displayName;
+      this.operatorPersonId = personId;
+      this.permissions = permissions;
+      this.#configureSessionActivity();
+      this.#startClocking(personId, signIn, session, !switched);
+    }
     this.#polledDefaults.clear();
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
@@ -2868,7 +3047,7 @@ export class TillApp extends LitElement {
     this.permissions = permissions;
     this.#syncDepartmentTransfers();
     this.errorKey = offerLoadFailed === false ? undefined : offerLoadFailed;
-    this.#configureSessionActivity();
+    if (!clocking) this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
     this.#equipmentPoll.start();
@@ -5327,7 +5506,10 @@ export class TillApp extends LitElement {
     }
     try {
       await this.api.switchDeviceProfile(profileId);
-      if (session === this.#operatorSession) this.#stopDepartmentTransfers();
+      if (session === this.#operatorSession) {
+        this.#stopClocking();
+        this.#stopDepartmentTransfers();
+      }
       this.#equipmentChanged++;
     } catch (error) {
       if (session !== this.#operatorSession) return;
@@ -5351,6 +5533,8 @@ export class TillApp extends LitElement {
 
   /** The parts of the till's setup that come from the device's profile. */
   #applyProfileSetup(till: TillInfo): void {
+    this.#clockingAvailable = till.clockingAvailable === true;
+    this.#clockAccessLost = false;
     this.canvas = till.canvas;
     this.capabilities = till.capabilities;
     this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
@@ -8774,6 +8958,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#stopClocking();
     this.#readerPayments.clear();
     this.#stopDepartmentTransfers();
     this.#resetPartylessDraft();
@@ -9441,6 +9626,8 @@ export class TillApp extends LitElement {
     this.#configureSessionActivity();
     // The server takes the person from the session, so the draft is saved before the session ends.
     const signIns = this.#signIns;
+    const session = this.#operatorSession;
+    const api = this.api;
     const sync = this.#draftSync;
     if (sync !== undefined) {
       this.#draftSync = undefined;
@@ -9448,15 +9635,21 @@ export class TillApp extends LitElement {
       await this.#holdingReload(() => sync.close());
       sync.drop();
     }
-    if (signIns !== this.#signIns) return;
+    if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     try {
-      await this.api.logout();
+      await api.logout();
     } catch {
       // The device is already locked locally.
     }
     // After the round trip, so guarded: a detached till must not change a live sibling's module-global
     // locale.
-    if (!this.isConnected) return;
+    if (
+      !this.isConnected ||
+      signIns !== this.#signIns ||
+      session !== this.#operatorSession ||
+      api !== this.api
+    )
+      return;
     setLocale(this.#preLoginLocale());
   }
 
@@ -9485,7 +9678,7 @@ export class TillApp extends LitElement {
   /** The front-door screens are handled ahead of this in {@link render}, and guarded here too so the
    * predicate does not depend on render order. */
   #shellActive(): boolean {
-    return this.screen !== "lock" && this.frontDoor === undefined;
+    return this.screen !== "lock" && this.frontDoor === undefined && !this.clockPage;
   }
 
   /** Falls back to the first tab, so a stale key never leaves the shell without a body. */
@@ -9803,6 +9996,10 @@ export class TillApp extends LitElement {
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+        @clock-action=${(event: CustomEvent<{ action: TillClockAction }>) => void this.#onClockAction(event)}
+        @clock-in=${() => void this.#onClockAction(new CustomEvent("clock-action", { detail: { action: "in" } }))}
+        @cancel-clock-in=${() => void this.#cancelClockIn()}
+        @retry-clock-read=${() => void this.#clocking?.refresh()}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
         @choose-invoice=${() => this.#askInvoiceRecipientForOrder()}
         @choose-receipt-language=${() => {
@@ -9962,6 +10159,8 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.errorKey ? html`<p class="error" role="alert">${errorMessage}</p>` : nothing}
+        ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
+        ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
         <wt-toast
           class="submitted-toast"
           data-submitted-toast
@@ -10167,67 +10366,79 @@ export class TillApp extends LitElement {
               ></till-device-chooser>`
             : this.frontDoor === "enrol"
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
-                // screen also shows after a boot failure, rather than an empty shell.
-                shellCanvas !== undefined
-                ? keyed(
-                    currentLocale(),
-                    html`<till-tab-shell
-                      .tabs=${shellCanvas.tabs}
-                      .activeTabKey=${this.activeTabKey}
-                      .operatorName=${this.operatorName}
-                      .affordances=${this.#affordanceList}
-                      .kiosk=${this.deviceMode}
-                      .canSwitchProfile=${this.approvedProfiles.length > 1}
-                      .transferAvailable=${this.transferSnapshot !== undefined}
-                      @open-transfers=${() => {
-                        this.transferQueueOpen = true;
-                      }}
-                      .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
-                      .loadLocales=${this.#loadLocales}
-                      @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                        if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
-                        if (e.detail.key === this.activeTabKey && this.drill === undefined) return;
-                        this.#requestLeave(() => this.#onTabSelect(e.detail.key));
-                      }}
-                    >
-                      ${
-                        this.transferSnapshot === undefined
-                          ? nothing
-                          : html`<till-department-transfers
-                              .currentTabId=${this.#currentTransferTabId()}
-                              .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
-                              .serviceZones=${this.counterServiceZones}
-                              @transfer-changed=${() => this.#departmentTransfers?.refresh()}
-                              .api=${this.api}
-                              .snapshot=${this.transferSnapshot}
-                              .open=${this.transferQueueOpen}
-                              @close-transfers=${() => {
-                                this.transferQueueOpen = false;
-                              }}
-                              @dismiss-transfer=${(event: CustomEvent<{ requestId: string }>) => {
-                                event.stopPropagation();
-                                this.#departmentTransfers?.dismiss(event.detail.requestId);
-                              }}
-                            ></till-department-transfers>`
-                      }
-                      ${this.#activeTabBody()}
-                      ${this.#drillBody() /* the drill overlay, when one is open */}
-                    </till-tab-shell>`,
-                  )
-                : keyed(
-                    `${currentLocale()}:${this.#operatorSession}`,
-                    html`<till-lock-screen
-                      .api=${this.api}
-                      .deviceName=${this.deviceName}
-                      .deviceId=${this.deviceId}
-                      .devMode=${this.devTab}
-                      .serverStatuses=${this.router?.statuses() ?? []}
-                      .serverCurrent=${this.router?.current ?? ""}
-                      .serverWaiting=${this.router?.waiting ?? false}
-                      @check-again=${() => void this.router?.probeNow()}
-                    ></till-lock-screen>`,
-                  )
+              : this.clockPage
+                ? html`<till-clock-in-screen
+                    .busy=${this.clockSnapshot.busy}
+                    .reading=${this.clockSnapshot.reading}
+                    .canClockIn=${this.clockSnapshot.state?.state === "out"}
+                    .error=${this.#clockMessage()}
+                  ></till-clock-in-screen>`
+                : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
+                  // screen also shows after a boot failure, rather than an empty shell.
+                  shellCanvas !== undefined
+                  ? keyed(
+                      currentLocale(),
+                      html`<till-tab-shell
+                        .tabs=${shellCanvas.tabs}
+                        .activeTabKey=${this.activeTabKey}
+                        .operatorName=${this.operatorName}
+                        .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
+                        .clockState=${this.clockSnapshot.state}
+                        .clockBusy=${this.clockSnapshot.busy}
+                        .clockError=${this.#clockMessage()}
+                        .affordances=${this.#affordanceList}
+                        .kiosk=${this.deviceMode}
+                        .canSwitchProfile=${this.approvedProfiles.length > 1}
+                        .transferAvailable=${this.transferSnapshot !== undefined}
+                        @open-transfers=${() => {
+                          this.transferQueueOpen = true;
+                        }}
+                        .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
+                        .loadLocales=${this.#loadLocales}
+                        @tab-select=${(e: CustomEvent<{ key: string }>) => {
+                          if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
+                          if (e.detail.key === this.activeTabKey && this.drill === undefined)
+                            return;
+                          this.#requestLeave(() => this.#onTabSelect(e.detail.key));
+                        }}
+                      >
+                        ${
+                          this.transferSnapshot === undefined
+                            ? nothing
+                            : html`<till-department-transfers
+                                .currentTabId=${this.#currentTransferTabId()}
+                                .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
+                                .serviceZones=${this.counterServiceZones}
+                                @transfer-changed=${() => this.#departmentTransfers?.refresh()}
+                                .api=${this.api}
+                                .snapshot=${this.transferSnapshot}
+                                .open=${this.transferQueueOpen}
+                                @close-transfers=${() => {
+                                  this.transferQueueOpen = false;
+                                }}
+                                @dismiss-transfer=${(event: CustomEvent<{ requestId: string }>) => {
+                                  event.stopPropagation();
+                                  this.#departmentTransfers?.dismiss(event.detail.requestId);
+                                }}
+                              ></till-department-transfers>`
+                        }
+                        ${this.#activeTabBody()}
+                        ${this.#drillBody() /* the drill overlay, when one is open */}
+                      </till-tab-shell>`,
+                    )
+                  : keyed(
+                      `${currentLocale()}:${this.#operatorSession}`,
+                      html`<till-lock-screen
+                        .api=${this.api}
+                        .deviceName=${this.deviceName}
+                        .deviceId=${this.deviceId}
+                        .devMode=${this.devTab}
+                        .serverStatuses=${this.router?.statuses() ?? []}
+                        .serverCurrent=${this.router?.current ?? ""}
+                        .serverWaiting=${this.router?.waiting ?? false}
+                        @check-again=${() => void this.router?.probeNow()}
+                      ></till-lock-screen>`,
+                    )
         }
       </div>
     `;
