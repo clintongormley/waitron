@@ -1,5 +1,6 @@
 import "./errors.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { basename } from "node:path";
 import { open, rename, rm, type FileHandle } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isUuid } from "@waitron/shared";
@@ -41,6 +42,8 @@ async function update(
   let file: FileHandle | undefined;
   let next: FileHandle | undefined;
   let parent: FileHandle | undefined;
+  let printable: FileHandle | undefined;
+  let ownsPrintable = false;
   let ownsNext = false;
   try {
     // A crash may leave this event locked. A fresh event spends a fresh identity instead.
@@ -80,6 +83,31 @@ async function update(
     await next.sync();
     await rename(`${path}.next`, path);
     ownsNext = false;
+    const handover = `Emergency recovery / Recuperación de emergencia
+
+Keep this record outside the box and its backups.
+Guarda este registro fuera del equipo y sus copias de seguridad.
+
+An interrupted attempt never releases this identity. Check the current outside record and the exact local result before retrying.
+Una interrupción no libera esta identidad. Antes de reintentar, comprueba el registro externo actual y el resultado local exacto.
+
+Check the local activation separately from this attempt result.
+Comprueba la activación local aparte del resultado de este intento.
+
+Compare the SHA-256 below with the JSON file before using this copy; a crash may leave this printout out of date.
+Compara el SHA-256 siguiente con el archivo JSON antes de usar esta copia; una interrupción puede dejarla desactualizada.
+
+${basename(path)}
+SHA-256: ${createHash("sha256").update(text).digest("hex")}
+
+${JSON.stringify(JSON.parse(text), null, 2)}
+`;
+    printable = await open(`${path}.txt.next`, "wx", 0o600);
+    ownsPrintable = true;
+    await printable.writeFile(handover);
+    await printable.sync();
+    await rename(`${path}.txt.next`, `${path}.txt`);
+    ownsPrintable = false;
     await parent.sync();
   } catch {
     refuse();
@@ -87,6 +115,8 @@ async function update(
     await file?.close();
     await next?.close();
     await parent?.close();
+    await printable?.close();
+    if (ownsPrintable) await rm(`${path}.txt.next`);
     if (ownsNext) await rm(`${path}.next`);
     if (lock !== undefined) {
       await lock.close();

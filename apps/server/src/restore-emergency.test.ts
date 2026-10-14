@@ -176,8 +176,10 @@ it.each(["archive", "stream"] as const)(
       expect(
         await copy.venue.select().from(invoiceSeries).where(eq(invoiceSeries.code, "A")),
       ).toMatchObject([{ nextNumber: 1, retiredAt: expect.any(Date) }]);
-      const names = await readdir(outside);
+      const files = await readdir(outside);
+      const names = files.filter((name) => name.endsWith(".json"));
       expect(names).toHaveLength(1);
+      expect(files.sort()).toEqual([names[0]!, `${names[0]!}.txt`].sort());
       const retained = await readFile(join(outside, names[0]!), "utf8");
       expect(JSON.parse(retained).allocation).toEqual(rows[0]?.allocation);
       expect(retained).not.toContain(nodeKey);

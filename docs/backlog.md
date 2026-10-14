@@ -335,6 +335,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exercise and the Cloud registry adapter remain queued. The Cloud service has its own workstream;
   paper allocation does not require a subscription. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
+  The candidate also retains a bilingual readable emergency incident before activation and after
+  its outcome. Setup-screen presentation and the full interruption exercise remain open.
+
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** The bundle can reserve a signed identity, but the public adopter refuses that
   allocation module before writing; no shipped entry point establishes its standby identity.

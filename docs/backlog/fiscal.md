@@ -1087,3 +1087,14 @@ history. Exception messages and parameters are omitted. See the current
 [emergency procedure](../developers/emergency-recovery.md) for the record and lock-file meanings.
 The operator handover, keep-identity path and complete interruption and first-sale exercise
 remain unfinished; the prior two checkpoints describe their captured versions.
+
+
+**2026-10-14 emergency readable-record checkpoint (candidate only):** each outside emergency
+incident now has a bilingual printable text copy containing the actual generated identity,
+checksum, series, selected source and attempt history. Its SHA-256 identifies the corresponding
+JSON bytes so an older printout can be recognised after an interrupted update. Both the initial
+handover and final outcome are flushed before their caller can proceed. A readable-copy refusal
+prevents staged archive and prepared-stream trading-settings publication, including after a local
+activation commit. This is a retained operator record, not proof of reading, printing or current
+allocation authority. Setup-screen presentation, keep-identity recovery and the complete
+interruption/first-sale journeys remain unfinished.

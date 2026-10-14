@@ -86,8 +86,10 @@ function attempt(
   );
 }
 async function incident() {
-  const names = (await readdir(outside)).filter((name) => name !== "current.json");
+  const files = await readdir(outside);
+  const names = files.filter((name) => name !== "current.json" && name.endsWith(".json"));
   expect(names).toHaveLength(1);
+  expect(files.sort()).toEqual(["current.json", names[0]!, `${names[0]!}.txt`].sort());
   const path = join(outside, names[0]!);
   return { path, data: JSON.parse(await readFile(path, "utf8")) };
 }
@@ -341,7 +343,7 @@ it("leaves a burned event behind and uses a new draw for the next fresh event", 
   const [stored] = await suite.db.select().from(fiscalAllocations);
   expect(stored?.installationIdentity).not.toBe(first.allocation.installationIdentity);
   expect(stored?.eventKey).toBe("emergency-restore-2");
-  expect((await readdir(outside)).filter((name) => name !== "current.json")).toHaveLength(2);
+  expect((await readdir(outside)).filter((name) => name !== "current.json")).toHaveLength(4);
 });
 
 it("allows only one of two concurrent attempts to consume the same event", async () => {

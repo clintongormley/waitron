@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -262,3 +262,79 @@ it("retains a thrown archive attempt after the real hook transaction rolls back"
     await copy.close();
   }
 });
+
+it.each(["archive", "stream"] as const)(
+  "retains the readable %s incident before activation and its final outcome before trading settings",
+  async (kind) => {
+    await stage(kind);
+    const path = join(
+      outside,
+      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
+    );
+    let seenBeforeCommit = false;
+    await runStagedRestore({
+      stateDir,
+      venueDir: join(root, "venue"),
+      migrationsRoot: null,
+      log: (_level, event, fields) => {
+        if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
+          const text = readFileSync(`${path}.txt`, "utf8");
+          expect(text).toContain('"outcome": "started"');
+          expect(text).toContain('"finishedAt": null');
+          expect(text).toContain('"sourceId":');
+          expect(text).not.toContain(nodeKey);
+          expect(text).not.toContain(encryptionKey);
+          expect(existsSync(join(stateDir, "trading.env"))).toBe(false);
+          seenBeforeCommit = true;
+        }
+      },
+    });
+    expect(seenBeforeCommit).toBe(true);
+    const json = await readFile(path, "utf8");
+    const text = await readFile(`${path}.txt`, "utf8");
+    expect(text).toContain(createHash("sha256").update(json).digest("hex"));
+    expect(text).toContain(JSON.stringify(JSON.parse(json), null, 2));
+    expect(text).toContain('"outcome": "returned"');
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(
+      `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
+    );
+  },
+);
+
+it.each(["archive", "stream"] as const)(
+  "refuses %s trading publication when the readable result cannot be retained after local activation",
+  async (kind) => {
+    await stage(kind);
+    const path = join(
+      outside,
+      `${createHash("sha256").update("emergency-offline-restore").digest("hex")}.json`,
+    );
+    await expect(
+      runStagedRestore({
+        stateDir,
+        venueDir: join(root, "venue"),
+        migrationsRoot: null,
+        log: (_level, event, fields) => {
+          if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
+            unlinkSync(`${path}.txt`);
+            mkdirSync(`${path}.txt`);
+          }
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    const record = JSON.parse(await readFile(path, "utf8"));
+    expect(record.attempts[0].outcome).toBe("returned");
+    const copy = await openVenueDatabase(join(root, "venue"));
+    try {
+      const rows = await copy.venue.select().from(fiscalAllocations);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.allocation).toEqual(record.allocation);
+    } finally {
+      await copy.close();
+    }
+  },
+);

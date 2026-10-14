@@ -126,7 +126,7 @@ it("retains an unfinished attempt before activation and its returned result afte
     (await suite.db.select().from(fiscalAllocations))[0]?.allocation,
   );
   expect((await fs.stat(incidentPath)).mode & 0o777).toBe(0o600);
-  expect(await fs.readdir(outside)).toHaveLength(2);
+  expect(await fs.readdir(outside)).toHaveLength(3);
 });
 
 it("records a thrown attempt without storing its message or claiming local rollback", async () => {
@@ -282,7 +282,7 @@ it.each(["oversized", "directory", "duplicate-attempt"])(
     else if (kind === "oversized")
       expect(await fs.readFile(incidentPath, "utf8")).toBe(" ".repeat(65537));
     else expect((await incident()).attempts).toEqual([attempts[0], attempts[0]]);
-    expect(await fs.readdir(outside)).toHaveLength(2);
+    expect(await fs.readdir(outside)).toHaveLength(3);
   },
 );
 
@@ -374,7 +374,7 @@ it.each([
     params: { reason: "outside_confirmation_missing" },
   });
   expect(await fs.readFile(incidentPath, "utf8")).toBe(before);
-  expect(await fs.readdir(outside)).toHaveLength(2);
+  expect(await fs.readdir(outside)).toHaveLength(3);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 

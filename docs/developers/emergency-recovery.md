@@ -101,3 +101,32 @@ do not remove them to spend the same name again.
 
 The complete operator confirmation and handover remain part of the unfinished Task 6
 procedure. No network service or subscription supplies authority to this path.
+
+
+## Read and retain the generated incident
+
+The candidate writes a readable bilingual copy beside each incident JSON file, using the same
+name followed by `.txt`. It includes the selected source, actual generated identity, checksum,
+complete series and attempt history. Open or print this file from your outside storage and keep
+it with the JSON. It contains the incident record, not your node or archive key.
+
+The host saves and flushes the readable copy before entering activation, then refreshes it after
+that attempt returns or throws. If either publication fails, recovery refuses success. The staged
+archive and prepared-stream paths leave trading settings unpublished even when local activation
+has already committed. Saving this file does not establish that you have read or printed it;
+the full setup-screen handover remains unfinished.
+
+A crash can update the JSON without updating its readable copy. Before relying on a saved
+printout, compare its SHA-256 line with the current JSON file. On the machine holding that outside
+record, run this with your event's filename:
+
+```sh
+shasum -a 256 /outside/incidents/event.json
+cat /outside/incidents/event.json.txt
+```
+
+The hash must match the line printed in the readable copy. If it differs, keep both files as
+incident evidence and reconcile the current outside record with the exact local activation.
+A matching hash identifies the same bytes; it grants no permission to activate or reuse a name.
+An existing `.txt.next` file refuses another publication rather than being overwritten. Retain
+it after an interrupted writer, just as you retain the JSON journal's helper files.
