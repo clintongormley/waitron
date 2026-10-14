@@ -118,7 +118,7 @@ A506-9 landed in #1651: the special-day painter replaces the special-day dialog 
 edits one special day's name, dates, Every year and each date's department and zone paint in a
 full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
 saves only the paint the draft changed. An old `/view/date` address opens the month instead.
-A506-11 landed in #NNNN: a Periods page (`/manage/periods`) lists each department's periods with
+A506-11 landed in #1694: a Periods page (`/manage/periods`) lists each department's periods with
 their menus and where they are painted, and adds, edits and deletes them through a new period
 dialog and a delete dialog that can hand the period's paint to another period; the painters' + New
 period and ✎ open the same dialog; the Opening hours Periods tab, the period editor and the old
