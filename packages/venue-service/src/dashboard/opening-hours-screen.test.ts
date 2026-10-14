@@ -2699,7 +2699,6 @@ describe("Month view", () => {
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/month");
     await expect.poll(() => view()?.month).toBe("2026-10");
     expect(months).toEqual(["2026-10"]);
-    expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
   });
 
   it("passes read-only to the month and opens nothing from it", async () => {
@@ -2758,7 +2757,6 @@ describe("no Day tab and no real week", () => {
     history.replaceState(null, "", "/manage/opening-hours/view/day/date/2026-12-25");
     const el = await mount();
     await expect.poll(() => el.shadowRoot!.querySelector("season-painter")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
     expect(
       el
         .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!

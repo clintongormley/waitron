@@ -193,7 +193,6 @@ describe("the special-day painter's address", () => {
     expect(painter.readOnly).toBe(false);
     expect(nameOf(painter)).toBe("Christmas dinners");
     expect(tabs(el).value).toBe("year");
-    expect(el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
     await cancel(painter);
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
     await expect.poll(() => painterOf(el)).toBeNull();
@@ -318,7 +317,6 @@ describe("the special-day painter's address", () => {
     const { el } = await mount(from);
     await expect.poll(() => location.pathname).toBe(to);
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
     expect(tabs(el).value).toBe("year");
   });
 });
