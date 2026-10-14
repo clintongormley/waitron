@@ -326,12 +326,15 @@ async function buildTicketItems(
 async function readStations(
   tx: Transaction,
   stationIds: string[],
-): Promise<Map<string, { name: string; showsRestOfOrder: boolean }>> {
+): Promise<
+  Map<string, { name: string; showsRestOfOrder: boolean; printMovedSlips: boolean | null }>
+> {
   const rows = await tx
     .select({
       id: kitchenStations.id,
       name: kitchenStations.name,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
+      printMovedSlips: kitchenStations.printMovedSlips,
     })
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, stationIds));
@@ -1089,8 +1092,8 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
 /**
  * Tell the kitchen of sent work that moved; nothing when `before` is null. When the kitchen is to
  * be told ({@link kitchenToBeTold}), each of `before`'s items on paper now on `toOrderId` gets a
- * `moved` notice, at the quantity its ticket asks for, and, unless the venue has turned MOVED slips
- * off, each station with an active printer gets one MOVED slip listing those items. `splitFrom` maps
+ * `moved` notice, at the quantity its ticket asks for, and each station with an active printer that
+ * prints MOVED slips ({@link readMovedSlipPrinting}) gets one listing those items. `splitFrom` maps
  * a ticket item a split made to the one it copied.
  */
 export async function enqueueMovedSlips(
@@ -1275,8 +1278,8 @@ interface MovedSlipPrinting {
 }
 
 /**
- * {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints or
- * the venue does not print MOVED slips.
+ * {@link MovedSlipPrinting} for every slip of `items`, read once, keeping only the stations that
+ * print MOVED slips: by their own choice, else the venue's. Null when no station prints.
  */
 async function readMovedSlipPrinting(
   tx: Transaction,
@@ -1284,12 +1287,20 @@ async function readMovedSlipPrinting(
   items: readonly MovedItem[],
 ): Promise<MovedSlipPrinting | null> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
-  const byStation = mappingsByStation(await printerMappings(tx, stationIds));
-  if (byStation.size === 0 || !(await VENUE_SERVICE.readPrintMovedSlips(tx))) return null;
+  const withPrinters = mappingsByStation(await printerMappings(tx, stationIds));
+  if (withPrinters.size === 0) return null;
+  const stationNames = await readStations(tx, stationIds);
+  const following = [...withPrinters.keys()].some(
+    (id) => stationNames.get(id)!.printMovedSlips === null,
+  );
+  const venue = following && (await VENUE_SERVICE.readPrintMovedSlips(tx));
+  const byStation: MappingsByStation = new Map(
+    [...withPrinters].filter(([id]) => stationNames.get(id)!.printMovedSlips ?? venue),
+  );
+  if (byStation.size === 0) return null;
   const itemsByLine = await buildTicketItems(tx, cfg, [
     ...new Set(items.map((item) => item.workingOrderLineId)),
   ]);
-  const stationNames = await readStations(tx, stationIds);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
   return { byStation, itemsByLine, stationNames, grouping };
 }

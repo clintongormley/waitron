@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   floorTodayJoinTables,
@@ -31,7 +31,12 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import { addTabRound, moveOrderLines } from "./working-order.js";
+import {
+  addTabRound,
+  listStationQueues,
+  moveOrderLines,
+  updateHeldOrder,
+} from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import {
   kitchenNotices,
@@ -40,12 +45,13 @@ import {
   writePrintHeldWork,
   writePrintMovedSlips,
 } from "@waitron/venue-service";
-import { createStation } from "./kitchen.js";
+import { createStation, updateStation } from "./kitchen.js";
 import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   OPERATOR,
+  billRow,
   commandFor,
   inTx,
   join,
@@ -1428,5 +1434,103 @@ describe("the venue's print-MOVED-slips setting", () => {
     expect(slips).toHaveLength(1);
     expect(slips[0]).not.toContain("*** MOVIDO ***");
     expect(slips[0]).toContain("BURG");
+  });
+});
+
+describe("a prep station's own print-MOVED-slips choice", () => {
+  afterEach(() => withTransaction(db, (tx) => writePrintMovedSlips(tx, true)));
+
+  async function stationIdOf(v: PartyVenue, name: string): Promise<string> {
+    const [station] = await db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(and(eq(kitchenStations.locationId, v.cfg.locationId), eq(kitchenStations.name, name)));
+    return station!.id;
+  }
+
+  async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean | null) {
+    const id = await stationIdOf(v, name);
+    await inTx(v, (tx) => updateStation(tx, v.cfg, id, { printMovedSlips }));
+  }
+
+  /** Burger at the Grill and Flan at Postres, both fired at Mesa 31; Move guests takes them to Mesa 32. */
+  async function moveGuestsWithBurgerAndFlan(
+    venue: boolean,
+    grill: boolean | null,
+    postres: boolean | null,
+  ) {
+    const v = await setupPartyVenue(db);
+    const grillPrinter = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const postresPrinter = await stationWithPrinter(v, "Postres", ["Flan"]);
+    await inTx(v, (tx) => writePrintMovedSlips(tx, venue));
+    await stationPrints(v, "Grill", grill);
+    await stationPrints(v, "Postres", postres);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 31"));
+    await orderForParty(v, partyId, ["Burger", "Flan"], tabId);
+    const printed = {
+      grill: (await printedBy(grillPrinter)).length,
+      postres: (await printedBy(postresPrinter)).length,
+    };
+    const mesa32 = await v.table("Mesa 32");
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa32, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    return {
+      tabId,
+      grill: (await printedBy(grillPrinter)).slice(printed.grill),
+      postres: (await printedBy(postresPrinter)).slice(printed.postres),
+    };
+  }
+
+  it("venue on, Grill off, Postres following: Move guests prints at Postres only and records notices at both", async () => {
+    const { tabId, grill, postres } = await moveGuestsWithBurgerAndFlan(true, false, null);
+
+    expect(grill).toEqual([]);
+    expect(postres).toHaveLength(1);
+    expect(postres[0]).toContain("*** MOVIDO ***");
+    expect(postres[0]).toContain("FLAN");
+    expect(byDish(await noticesOf([tabId]))).toEqual([
+      ["BURG", tabId, "Mesa 32"],
+      ["FLAN", tabId, "Mesa 32"],
+    ]);
+  });
+
+  it("venue off, Grill on: Move guests prints at the Grill only", async () => {
+    const { grill, postres } = await moveGuestsWithBurgerAndFlan(false, true, null);
+
+    expect(grill).toHaveLength(1);
+    expect(grill[0]).toContain("*** MOVIDO ***");
+    expect(grill[0]).toContain("BURG");
+    expect(postres).toEqual([]);
+  });
+
+  it("after Merge bills with every station off, no slip prints and the station queue still shows the merged bill's number", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    await stationPrints(v, "Grill", false);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 33"));
+    await updateHeldOrder({ db: v.db }, v.cfg, tabId, {
+      revision: (await billRow(v, tabId)).revision,
+      lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
+      operatorId: OPERATOR,
+    });
+    const second = await split(v, partyId, tabId, [1]);
+    await order(v, tabId, "Paella");
+    await order(v, second, "Burger");
+    const n28 = (await numbersOf([second])).get(second);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, tabId, second, command));
+
+    expect(await slipsSince(grill, before)).toEqual([]);
+    const grillId = await stationIdOf(v, "Grill");
+    const queues = await inTx(v, (tx) => listStationQueues(tx, [grillId]));
+    expect(queues.get(grillId)!.find((group) => group.orderId === tabId)).toMatchObject({
+      formerNumbers: [n28],
+    });
   });
 });
