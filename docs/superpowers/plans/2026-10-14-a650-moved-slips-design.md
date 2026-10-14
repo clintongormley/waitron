@@ -23,12 +23,14 @@ Given about 14:10–14:15, relayed by the campaign watcher. Each line says what 
 4. **Only the order number changed (same table): a slip prints.** The owner's reason: "the cook
    finishes and says 'order 28 is ready', how does the waiter match it up with order 27?" The slip
    reads "Order 28 -> 27 / From: Mesa 91 / To: Mesa 91", **and the till shows the old number beside
-   the order, "Order 27 (was 28)"**, so a cook still calling 28 is found. _Changes:_ §3 gains a
+   the order, "Order 27 (was 28)"**, so a cook still calling 28 is found. Reading taken: the till
+   writes an order number as `#27` everywhere it shows one (§5), so the plan draws `#27 (was 28)`
+   in the till's own style rather than adding the word "Order". _Changes:_ §3 gains a
    third reason to print (the dishes are now on an order with another number), which reverses the
    design's "no" for path 7's other bill and for path 16 (Merge bills, Transfer items, Split the
    bill); §5 is new and designs "(was 28)".
 5. **Held dishes already on a HOLD ticket: option (a)** — listed on the same MOVED slip under
-   `HOLD`, with the party's name per ruling 3. _Changes:_ §4's HOLD section; §7 Part 1 task 6.
+   `HOLD`, with the party's name per ruling 3. _Changes:_ §4's HOLD section; §7 task 1.6.
 6. **New: printing MOVED slips is a setting** — a venue-wide default with a per-prep-station
    override. A station set to off prints no MOVED slip, and the till's "(was N)" still shows.
    _Changes:_ §6 is new; §7 Parts 3 and 4.
@@ -57,8 +59,10 @@ table Y to table Z".
 Nothing moved in that case: the guests sat at Bar and Counter 3, 4 and 5 before and after. Only the
 name changed. Today the server prints a MOVED slip whenever the place name it would print for an
 order changes, and for no other reason (`apps/server/src/kitchen-print.ts:1034` and `:1193` compare
-the two label strings; moving a bill to the counter is the one path that prints whatever the names
-read, the `force` option at `apps/server/src/move-bill.ts:154`).
+the two label strings). Move this bill prints whatever the names read when the bill goes to the
+counter or a counter order goes into a party: the `force` option at
+`apps/server/src/move-bill.ts:153-155` is `source === null || result.partyId === null`, where
+`source` is null for a bill that had no party.
 
 ## 2. What happens today, path by path (history: measured before the rulings)
 
@@ -148,13 +152,15 @@ that station: fired dishes, and held dishes already printed on a HOLD ticket (ru
 | 5 | Move guests onto another party's table, bills merge | Mesa 31 → Mesa 32 | yes (a)(c) | `Order 8 -> 9 · Luis` | all of order 8's; order 9's own get none |
 | 5' | the same, bills kept separate | Mesa 31 → Mesa 32 | yes (a) | `Order 8 · Luis` | all |
 | 6 | Join a table, or push a free table on | Mesa 71 → Mesa 71, Mesa 72 | no | — | — |
+| 6b | **A join that changes the party's shown names**: a joined table broken into its parts (Bar pushed onto "Long table", made of Counter 3, 4 and 5; the party ends at Bar and Counter 3, 4, 5, as `floor-today-flatten-api.test.ts:270-292` shows), or the party's own table taken into a named group | Long table → Bar, Counter 3, 4, 5 | yes (a)(b): Long table and its name are gone | `Order 1` | all |
+| 6c | A free table pushed onto a named group the party sits at | Fiesta → Fiesta | no: the name stays | — | — |
 | 7 | Join another party's table, the joining party's bills | Mesa 73 → Mesa 73, Mesa 74 | no | — | — |
 | 7 | the same, the other party's bill **when bills merge** | Mesa 74 → Mesa 73, Mesa 74 | **yes (c)** — was "no" in the design | `Order 25 -> 24` | all of order 25's |
 | 7' | the same, the other party's bill, bills kept separate | Mesa 74 → Mesa 73, Mesa 74 | no | — | — |
 | 8, 10 | Split a table (no bill chosen), Split tables… on a seated group | Mesa 51, Mesa 52 → Mesa 51 | yes (a), ruling 1 | `Order 15` | all |
 | 9 | Split a table, a bill chosen | the chosen bill: → Mesa 52; the rest: → Mesa 51 | yes (a), both | each its own | all |
 | 11 | Split tables… on a joined table, down to one part | Barra larga → Taburete 3 | yes (a)(b) | `Order 21` | all |
-| 11' | the same, two parts left | not re-derived; §7 task 1.4 pins it with a test | | | |
+| 11' | the same, two parts left | not re-derived; §7 task 1.4a pins it with a test | | | |
 | 12 | Move this bill to a free table / onto another party | Mesa 41 → Mesa 42 | yes (a); (c) too when it merges into the main bill | `Order 11` / `Order 11 -> 10` | all |
 | 12b | Move this bill between two tables of the group Terraza | Terraza (Mesa 77) → Terraza (Mesa 78) | yes (a) | `Order 40` | all |
 | 13 | Move this bill to the counter | Mesa 43 → the counter | yes (a) | `Order 13 · Ana` (the party it left) | all |
@@ -204,7 +210,11 @@ GROUP 2                                GROUP 2
   dishes are now on an order with another number: `Order N -> M`. Then, when the order's party has
   its own name (Name the party, `parties.name`, `packages/db/src/schema/parties.ts:47`), ` · name`
   (ruling 3). The name is that of the party the order belongs to after the action; a bill moved to
-  the counter belongs to none and takes the name of the party it left. No name, nothing added. A
+  the counter belongs to none and takes the name of the party it left. No name, nothing added.
+  **Stated default:** a counter order's own label (`working_orders.label`, the name typed at the
+  counter, or the party name copied in by `counterLabel`, `apps/server/src/move-bill.ts:268-270`)
+  is not printed on the order line; for a counter order delivered to no table it already reads in
+  later tickets' place line. A
   long line wraps with its continuation under the text after `Order N · `. The middle dot is in the
   printer's glyph table (`packages/printing/src/glyphs.ts:136`, code point `0x00b7`), so
   `prepareText` keeps it (`packages/printing/src/text.ts:33-46`); read, not printed.
@@ -233,9 +243,14 @@ GROUP 2                                GROUP 2
   (`apps/server/src/kitchen-ticket.ts:283-317`): Spanish for an `es` locale, else English. Words:
   `MOVED`/`MOVIDO`, `Order`/`Pedido`, `From:`/`De:`, `To:`/`A:`, `(counter)`/`(mostrador)`.
 - **The kitchen display's notice**: each dish still gets a `moved` notice, one per dish as today
-  (the station screen lists notices per dish). Its `moved_to` is the slip's To text; for the counter
-  it stays empty and the till shows a new sentence, "Moved to the counter" / "Pasado al mostrador",
-  where today it shows nothing (`apps/till/src/widgets/station-queue.ts:841-848`). When the number
+  (the station screen lists notices per dish). Today its `moved_to` is the destination's header
+  label (`apps/server/src/kitchen-print.ts:1100-1107` passes `header.tableLabel`), which for a bill
+  moved to the counter is the counter order's own label: `party-move-bill.test.ts:1222-1233` pins
+  `moved_to: "Mesa aviso 2 A"`, and the screen shows "Moved to Mesa aviso 2 A"
+  (`apps/till/src/widgets/station-queue.ts:841-848`). The build makes `moved_to` the slip's To text,
+  which is the same as today's header label except in the bracket case and for the counter; for the
+  counter it is stored empty and the till shows a new sentence, "Moved to the counter" / "Pasado al
+  mostrador". That test changes (§7 task 1.8). When the number
   changed, the notice's order reads `#28 → #27` instead of `#27` (the label is built in
   `recordKitchenNotices`, `packages/venue-service/src/kitchen-notices.ts:142-144`).
 - **A station set not to print MOVED slips** (§6) gets no slip; its notices are still recorded.
@@ -262,7 +277,22 @@ number (`apps/till/src/api/client.ts:1780-1805`). The Find bill window shows num
 of guests who left (`apps/till/src/widgets/find-bill-dialog.ts:354-375`), which the kitchen never
 calls; it is left alone.
 
-So **"(was N)" is shown in the four places above**: `#27 (was 28)` / `#27 (antes 28)`, the bracket
+Other places show an order number too, each with a decision:
+
+- **The kitchen screen's kanban cell** (`apps/till/src/widgets/station-queue.ts:1059-1064`, "a cell
+  keeps the order number beside the dish"): **shows "(was N)"**, because the cook reads the number
+  there as on the ticket head.
+- **The unprinted-tickets banner** on the kitchen screen (`station-queue.ts:976-985`, "orders whose
+  tickets have not printed"): **left alone**. It names orders to reprint, and a Reprint prints the
+  current number.
+- **The card name in a kitchen screen's message** (`apps/till/src/screens/till-station-screen.ts:701-706`,
+  the card's label, else `#N`) and **the expediter's refusal message**
+  (`apps/till/src/screens/till-expo-screen.ts:746-753`): **left alone**. They point at a card on the
+  same screen, whose head already shows "(was N)".
+- **Department transfers' "Tab {number}"** (`apps/till/src/widgets/department-transfers.ts:471`):
+  **left alone**. A transfer between departments is not a call from the kitchen.
+
+So **"(was N)" is shown in the four places of the table above, and in the kanban cell**: `#27 (was 28)` / `#27 (antes 28)`, the bracket
 part in the muted text colour after the bold number. Several numbers read `#27 (was 28, 30)`,
 lowest first. Whether the table screen should start showing order numbers at all is §8 question A.
 
@@ -280,9 +310,13 @@ an order id, not a number, and its links are moved too (`moveKitchenPrintLinks`,
 
 **The stored fact: `ticket_items.sent_order_number`** — a new nullable whole-number column in the
 core `@waitron/db` migration set (`ticket_items` lives in `packages/db/src/schema/ticket-items.ts`).
-It is null while the dish never left the order it was sent on. When a dish the kitchen has (one
-with a kitchen item, fired or held) moves to another order, it is set to the number of the order it
-leaves, **unless it already holds one**: the first number is the one on the dish's kitchen paper.
+It is null while the dish never left the order it was sent on. When a dish the kitchen has seen
+moves to another order, it is set to the number of the order it leaves, **unless it already holds
+one**: the first number is the one on the dish's kitchen paper. "Seen" means fired (`fired_at`
+set), or held in a group already printed on a HOLD ticket (`order_groups.hold_printed_at` set,
+`packages/db/src/schema/order-groups.ts:33`). A held dish whose HOLD ticket never printed is left
+null: its first ticket prints under the order it is on when it fires, so "(was 28)" would name a
+number the kitchen never saw.
 The write goes where kitchen items change order: `moveOrderLines`
 (`apps/server/src/working-order.ts:3257-3266`) and the copy of a kitchen item that `carveLines`
 makes when part of a line moves (`splitTicketItem`, `apps/server/src/working-order.ts:4027-4050`,
@@ -311,6 +345,9 @@ on, and chains of merges, with one rule. A bill's "(was …)" list is the distin
 - **Split the bill** (dishes from 28 onto a new 29): 29 shows `(was 28)`. For a counter order, the
   same on the Waiting list.
 - **Move guests / Move this bill without a merge**: the number does not change; nothing shows.
+- **Stated default: the list is the whole bill's.** A station's kitchen screen shows "(was 28)" on
+  order 27 even when that station never had one of the dishes that came from 28. A per-station list
+  would need the reader to filter by station; the plan keeps one list per order.
 - **How long**: as long as the order is on that screen. No timer and no clearing: an order leaves
   the station rail once abandoned or collected (`apps/till/src/api/client.ts:1382-1383`), and the
   other lists drop it when it is done. A Reprint does not clear it: the old paper may still be on
@@ -341,9 +378,13 @@ Drawing: picture 7.
 - **Default for a new venue: on**, today's behaviour. Provisioning inserts the row with only
   `id: 1` (`packages/venue-service/src/provisioning.ts:180-183`), so the column default decides it,
   and an existing venue reads on after migrating too.
-- **Configuration transfer**: `service_settings` is in the venue-service export list
-  (`packages/venue-service/src/configuration-transfer.ts:672`); whether it copies every column or a
-  named list was not read — Part 3 task 1 checks and adds the column if the list is named.
+- **Configuration transfer**: `service_settings` is in the venue-service export list with no
+  `omit` (`packages/venue-service/src/configuration-transfer.ts:672`), and the export copies each
+  row whole except the declaration's `omit` columns (`apps/server/src/configuration-transfer.ts:319-327`;
+  read, not run). **Decision:** the new column travels with a configuration transfer, as
+  `print_held_work` does; no change needed. The same holds for the station column in §6's override:
+  `kitchen_stations` is exported omitting only its three retired timing columns
+  (`packages/db/src/configuration-transfer.ts:27-32`).
 - **Reads and writes**: `readPrintMovedSlips` and `writePrintMovedSlips` beside
   `readPrintHeldWork`/`writePrintHeldWork` (`packages/venue-service/src/kitchen-notices.ts:307-321`),
   exported through the service the server calls (`VENUE_SERVICE`, as `readPrintHeldWork` is read at
@@ -383,8 +424,11 @@ Drawing: picture 7.
   choice, "Print", "Don't print" / "Como el local (imprimir)", "Como el local (no imprimir)",
   "Imprimir", "No imprimir". It is part of the window's draft, saved with its Save, which stays
   quiet and disabled until something changes (design-system.md → Forms; the window already uses
-  `draftScopeFor`/`saveActionState`). The New station window keeps today's fields; a new station
-  follows the venue.
+  `draftScopeFor`/`saveActionState`). The window learns the venue's choice from the routing view
+  the prep stations screen already loads (`GET /management-api/venue-service/routing`,
+  `packages/venue-service/src/routes.ts:639`, read by `PrepStationsApi.load`,
+  `packages/venue-service/src/dashboard/routing-client.ts:73-81`), which gains the venue's value.
+  The New station window keeps today's fields; a new station follows the venue.
 
 ### What it does
 
@@ -395,16 +439,21 @@ MOVED TO a station) are not affected.
 
 ## 7. The build: four parts, one pull request each
 
-Each part leaves `main` green and correct on its own. Order: Part 1 and Part 2 are independent and
-may run in parallel lanes (both touch `apps/till/src/i18n/strings.ts` and, for Part 1's notice
-sentence, `apps/till/src/widgets/station-queue.ts`; whichever lands second rebases). Part 3 after
-Part 1 (both change the MOVED printing in `kitchen-print.ts`). Part 4 after Part 3 **and after lane
-A's `feat/a506-12-station-times` lands**: `git diff --stat origin/main...feat/a506-12-station-times`
-(run 2026-10-14) lists `prep-stations-screen.ts`, `prep-stations-screen.test.ts`,
-`station-table.ts`, `packages/venue-service/src/dashboard/strings.ts` and
-`packages/venue-service/src/routes.ts` among its 42 files, and Part 4 must change the first, the
-fourth and the fifth. Part 3 adds strings and a route in the last two as well, so start it after
-that branch lands too, or expect a small rebase.
+Each part leaves `main` green and correct on its own. Order:
+
+- **Part 1 and Part 2 are independent** and may run in parallel lanes (both touch
+  `apps/till/src/i18n/strings.ts` and `apps/till/src/widgets/station-queue.ts`; whichever lands
+  second rebases).
+- **Part 3 after Part 1** (both change the MOVED printing in `kitchen-print.ts`).
+- **Part 4 after Parts 2 and 3, and after lane A's `feat/a506-12-station-times` lands.** After Part
+  2, so its test that a station set not to print still shows "(was 28)" (ruling 6) is unconditional.
+  After lane A: `git diff --stat origin/main...feat/a506-12-station-times` (re-run 2026-10-14 after
+  the review, branch tip `b02f96aa5`) reports 47 files, among them `prep-stations-screen.ts`,
+  `prep-stations-screen.test.ts`, `prep-stations-screen.a11y.test.ts`, `station-table.ts`,
+  `packages/venue-service/src/dashboard/strings.ts` and `packages/venue-service/src/routes.ts`; Part
+  4 changes `prep-stations-screen.ts`, `strings.ts` and `routes.ts` (task 4.3). Part 3 adds strings
+  and a route to the last two, so start it after that branch lands too, or expect a small rebase.
+  **Whoever dispatches Part 3 or Part 4 re-runs that diff first**: the branch is still moving.
 
 Every task is test-first: write the failing test, run it and see it fail for the stated reason,
 then the code. Commands run from the worktree root. Package test runs:
@@ -420,11 +469,15 @@ under `packages/fiscal*`. `grep -l fiscal` over the main server files (`kitchen-
 Each PR states that the huella tests (`packages/fiscal-verifactu/src/*.huella.test.ts`) and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts` pass unedited.
 
+**Changed test checks.** Each PR lists, under that heading, every existing assertion it changes and
+every fixture it adds a field to; the owner's rulings are why they change. The lists below are what
+reading the tests predicts; the implementer works out each case from the rule in §3 and lists what
+actually changed.
+
 ### Part 1 — the new rule and the new slip (server, plus the notice sentence on the till)
 
 Review path: **FULL** (it changes what every MOVED slip prints, and `recordKitchenNotices` is a
-cross-package contract). No migration. Each PR lists every existing assertion it changes under
-"Changed test checks"; the owner's rulings are why they change.
+cross-package contract). No migration.
 
 **Task 1.1 — the slip's layout (pure).** Files: `apps/server/src/kitchen-ticket.ts`,
 `apps/server/src/kitchen-ticket.test.ts`. Replace the MOVED branch of `CorrectionSlip` and
@@ -460,31 +513,44 @@ gains the places from 1.2 and the party name. `notifyMoved` groups the moved ite
 prints one 1.1 slip per station; notices stay one per dish. The decision is unchanged in this task.
 Failing test first in `apps/server/src/move-merge.test.ts`: a party with orders 5 (Burger ×2, Chips
 at Grill; Flan at Postres) and 6 (Burger at Grill) moving Mesa 11 → Mesa 12 queues three slips —
-Grill `Order 5` with both dishes, Grill `Order 6`, Postres `Order 5` (today four). Update the text
-checks that pin the old layout: `today-names.test.ts` (the `${name} -> …` expectations at lines
-260, 429, 445-446, 495, 527, 544, 559), `move-merge.test.ts:396-399`,
-`split-bill.test.ts:967` and `:1051` (`movedSlip("T1 -> T2", …)`), `made-here.routes.test.ts:864`
-if its count changes. Run each changed file.
+Grill `Order 5` with both dishes, Grill `Order 6`, Postres `Order 5` (today four). Changed checks
+expected (text or count of slips): `today-names.test.ts` (the `${name} -> …` expectations at lines
+260, 429, 445-446, 495, 527, 544, 559), `move-merge.test.ts:396-399`, `split-bill.test.ts:967` and
+`:1051` (`movedSlip("T1 -> T2", …)`), `made-here.routes.test.ts:864` if its count changes,
+`split-off-extras.split.test.ts:213-224` if its slip text is checked beyond `MOVED` and the dish.
+Run each changed file.
 
-**Task 1.4 — the new decision.** Files: `kitchen-print.ts` (`enqueueMovedSlips`,
-`enqueueMovedSlipsFor`), `apps/server/src/move-bill.ts` (drop `force`, `:153-155`). Print when a
-table was lost, a name was lost, or the number changed (§3); follow `mergedInto` to the end of its
-chain; brackets for the Terraza case only. Failing tests: the owner's group-of-four case prints
-nothing; Cumple Ana prints `From: Cumple Ana` / `To: Mesa 6, 9`; a join of a free table prints
-nothing; a join of another party's table with bills merging prints `Order 25 -> 24` / `From: Mesa
-74` / `To: Mesa 73, 74` and nothing for order 24; Split a table prints for the bills that stay; the
-Terraza move prints the brackets; Merge bills at Mesa 91 prints `Order 28 -> 27` with From and To
-both `Mesa 91`; Transfer items prints only the dishes moved; a bill to the counter prints `To:
-(counter)`; path 11 with two parts left — pin whatever the rule gives, with the reason in the test
-name. Changed test checks expected (confirm each): `today-names.test.ts:235` ("the same push onto
-an unnamed seated group prints one MOVED slip" — now none) and `:547` ("Bar back … prints one
-MOVED slip from the name to Bar and the name" — now none); `party-bill-actions.test.ts:1061-1064`
-(the helper's control expects the join to print; a join that only gains a table no longer does —
-give the control another path), `:1068` ("tells the kitchen nothing of a merge" — now a slip) and
-`:1080` (part of a sent line transferred — now a slip); the join cases in
-`party-table-actions.test.ts` (`:768`, `:1296`, `:1314`, `:1332`) and
-`floor-today-flatten-api.test.ts` (`:295`, `:367`, `:438`, `:463`, `:492`), and
-`move-merge.test.ts:355`, where a party only gains a table. Run each file named.
+**Task 1.4a — the new decision: tables and names lost.** Files: `kitchen-print.ts`
+(`enqueueMovedSlips`, `enqueueMovedSlipsFor`). Print when a table was lost or a name was lost (§3);
+brackets for the Terraza case only. Failing tests: the owner's group-of-four case prints nothing;
+Cumple Ana prints `From: Cumple Ana` / `To: Mesa 6, 9`; a join of a free table prints nothing;
+pushing Bar onto the joined table "Long table" prints, because Long table and its name are gone
+(§3 row 6b); Split a table with no bill chosen prints exactly `From: Mesa 51, 52` / `To: Mesa 51`
+for the bills that stay; the Terraza move prints the brackets; path 11 with two parts left — pin
+whatever the rule gives, with the reason in the test name. Changed checks expected:
+`today-names.test.ts:235` ("the same push onto an unnamed seated group prints one MOVED slip" —
+now none) and `:547` ("Bar back … prints one MOVED slip from the name to Bar and the name" — now
+none); `split-off-extras.split.test.ts:203-224` (joins a free table with bills kept separate and
+expects one slip each at Grill and Fryer — now none); `party-bill-actions.test.ts:1061-1064` (the
+helper's control expects a join that only gains a table to print — give the control a path that
+still prints). Work out from the rule, and list, the join cases in `party-table-actions.test.ts`
+(`:768`, `:1296`, `:1314`, `:1332`) and `move-merge.test.ts:355`. The five cases in
+`floor-today-flatten-api.test.ts` (`:295`, `:367`, `:438`, `:463`, `:492`) all break up the joined
+table "Long table" (the party ends at Bar and Counter 3, 4, 5, `:284-289`), so they are expected
+to keep their notice. `floor-today-split.test.ts:519-532` and `floor-today-split-group.test.ts:878-892`
+pin `moved_to` values that equal today's header label (`kitchen-print.ts:1100-1107` passes
+`header.tableLabel`), which the To text keeps outside the bracket and counter cases, so they are
+expected unchanged; run them. Run each file named.
+
+**Task 1.4b — the new decision: number changes.** Files: `kitchen-print.ts`,
+`apps/server/src/move-bill.ts` (drop `force`, `:153-155`). Print when dishes are now on an order
+with another number; follow `mergedInto` to the end of its chain. Failing tests: a join of another
+party's table with bills merging prints `Order 25 -> 24` / `From: Mesa 74` / `To: Mesa 73, 74` and
+nothing for order 24; Merge bills at Mesa 91 prints `Order 28 -> 27` with From and To both `Mesa
+91`; Transfer items prints only the dishes moved; a bill to the counter prints `To: (counter)`; a
+counter order moved into a party prints `From: (counter)`. Changed checks expected:
+`party-bill-actions.test.ts:1068` ("tells the kitchen nothing of a merge" — now a slip) and `:1080`
+(part of a sent line transferred — now a slip). Run each file named.
 
 **Task 1.5 — Split the bill tells the kitchen.** File: `apps/server/src/bill-actions.ts`
 (`splitBill`, `:131-155`): read the sent work before `carveOffLines` and call
@@ -510,8 +576,8 @@ delivered there, before renaming, and calls `enqueueMovedSlipsFor` after. Failin
 `apps/server/src/today-names.test.ts`): renaming the seated group Fiesta to Fiesta 2 prints `From:
 Fiesta` / `To: Fiesta 2`; renaming a table nobody sits at prints nothing; a counter order delivered
 to Mesa 6 prints `From: Cumple Ana` / `To: Mesa 6` when that group ends by Back to saved place.
-Changed check expected: the rename-prints-nothing default recorded in `docs/backlog/till.md`'s
-decisions (A606 entry) — reword that entry in the same PR. Run the file.
+Reword the A606 decision in `docs/backlog/till.md`, which says a rename prints nothing, in the same
+PR. Run the file.
 
 **Task 1.8 — the kitchen screen's notice.** Files:
 `packages/venue-service/src/kitchen-notices.ts` (`recordKitchenNotices` takes an optional number
@@ -521,10 +587,18 @@ text as `movedTo`, null for the counter), `apps/till/src/widgets/station-queue.t
 "Pasado al mostrador"). Failing tests: `packages/venue-service/src/kitchen-notices.test.ts` — a
 moved notice recorded with a from number 28 on order 27 has `orderLabel` `#28 → #27`;
 `apps/till/src/widgets/station-queue.test.ts` — a `moved` notice with `movedTo: null` shows "Moved
-to the counter"; add that state to `station-queue.a11y.test.ts`. Run
-`pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts` and
+to the counter"; add that state to `station-queue.a11y.test.ts` and
+`apps/till/src/screens/till-station-screen.a11y.test.ts` (whose moved notice, `:148`, carries
+`movedTo: "Terraza 2"`). Changed check expected: `party-move-bill.test.ts:1222-1233` (a bill moved
+to the counter pins `moved_to: "Mesa aviso 2 A"`, the counter order's label — now null); the other
+notice cases there (`:1208`, `:1235`, `:1253`) pin table names that stay. `till-station-screen.test.ts`
+has no `moved` notice (its notices are `kind: "void"`, e.g. `:1236-1247`), so it is expected
+unchanged; run it. Run
+`pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts`,
+`pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts` and
 `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts
-src/widgets/station-queue.a11y.test.ts`.
+src/widgets/station-queue.a11y.test.ts src/screens/till-station-screen.test.ts
+src/screens/till-station-screen.a11y.test.ts`.
 
 Guards for Part 1: `scripts/english-only.test.ts` (Spanish words in `packages/`),
 `scripts/errors-reachable.test.ts` (if any error code is added or dropped),
@@ -539,64 +613,90 @@ server-to-till contract). Independent of Part 1.
 `sentOrderNumber: count("sent_order_number")`, nullable, with a one-line comment saying what it
 holds), a generated migration (`pnpm --filter @waitron/db db:generate`). Check the generated SQL is
 a single ``ALTER TABLE `ticket_items` ADD …`` and no rebuild. Failing test first:
-`packages/db/src/schema/ticket-items.test.ts` inserting a kitchen item
-and reading `sent_order_number` as null. Guards: `scripts/migrations-match-schema.test.ts`,
+`packages/db/src/schema/ticket-items.test.ts` inserting a kitchen item and reading
+`sent_order_number` as null. Guards: `scripts/migrations-match-schema.test.ts`,
 `scripts/schema-constraints.test.ts`, `scripts/journal-monotonic.test.ts`,
 `scripts/migration-upgrade.test.ts`, `scripts/append-only-triggers.test.ts`,
 `scripts/behavioural-triggers.test.ts`, `scripts/column-vocabulary.test.ts`,
-`scripts/module-graph-honesty.test.ts`. A rebase onto a newer migration is fixed by regeneration
-(CLAUDE.md §3).
+`scripts/module-graph-honesty.test.ts`, `scripts/classification-complete.test.ts`. A rebase onto a
+newer migration is fixed by regeneration (CLAUDE.md §3).
 
 **Task 2.2 — writing it.** File: `apps/server/src/working-order.ts` (`moveOrderLines` around
-`:3257-3266`, and `splitTicketItem`, `:4027-4050`). Failing tests (new
-`apps/server/src/sent-order-number.test.ts`, `useVenueDb`): after Merge bills of 28 into 27, 28's
-sent Burger's kitchen item holds 28 and 27's own Paella holds null; after a second merge of 27 into
-26, the Burger still holds 28 and the Paella holds 27; Transfer items of part of a sent line gives
-the moved copy 28 and leaves the part kept on order 28 null; Split the bill
-gives the split-off copy 28; a carve within one order (`working-order.ts:4004`, `:4017`) leaves
-null; a dish with no kitchen item has no row to write. Run the file.
+`:3257-3266`, and `splitTicketItem`, `:4027-4050`). Written only for a kitchen item the kitchen
+has seen: fired (`fired_at` set), or in a held group already printed on a HOLD ticket
+(`order_groups.hold_printed_at` set, `packages/db/src/schema/order-groups.ts:33`). Failing tests
+(new `apps/server/src/sent-order-number.test.ts`, `useVenueDb`): after Merge bills of 28 into 27,
+28's sent Burger's kitchen item holds 28 and 27's own Paella holds null; after a second merge of 27
+into 26, the Burger still holds 28 and the Paella holds 27; Transfer items of part of a sent line
+gives the moved copy 28 and leaves the part kept on order 28 null; Split the bill gives the
+split-off copy 28; a held dish whose group never printed stays null when it moves, and one whose
+HOLD ticket printed gets 28; a carve within one order (`working-order.ts:4004`, `:4017`) leaves
+null. Run the file.
 
-**Task 2.3 — the four reads.** Files: `apps/server/src/working-order.ts` (`listStationQueues`
-`:6636`, `listExpoQueue` `:6899`, `listCounterWaiting` `:6128`, `listHeldOrders` `:4169`),
-`apps/server/src/pass-board.ts` (if it builds its own orders), one shared reader in a new
-`apps/server/src/former-numbers.ts`, and `apps/till/src/api/client.ts` (the four types gain
-`formerNumbers?: number[]`). Failing tests in `apps/server/src/working-order-reads.sqlite.test.ts`
-(or one new file): after Merge bills of 28 into 27 at Mesa 91, the expo queue's order 27 has
-`formerNumbers: [28]` and order 28 is gone; a station queue group likewise; after two merges,
-`[28, 30]`; an order that never merged has no `formerNumbers` key. Before finishing, run the server
-files that call these lists with whole-object checks: `till-api.test.ts`, `made-here.test.ts`,
-`order-groups.test.ts`, `station-move.test.ts`, `party-arriving-dishes.test.ts`,
-`table-signals.test.ts` (`grep -l "listExpoQueue\|listStationQueue\|listCounterWaiting\|listHeldOrders"`
-found them).
+**Task 2.3a — the kitchen-side reads.** Files: `apps/server/src/working-order.ts`
+(`listStationQueues` `:6636`, `listExpoQueue` `:6899`), `apps/server/src/pass-board.ts` (if it
+builds its own orders), one shared reader in a new `apps/server/src/former-numbers.ts`, and
+`apps/till/src/api/client.ts` (`ExpoOrder`, `StationQueueGroup` gain `formerNumbers?: number[]`).
+Failing tests in `apps/server/src/working-order-reads.sqlite.test.ts` (or one new file): after
+Merge bills of 28 into 27 at Mesa 91, the expo queue's order 27 has `formerNumbers: [28]` and order
+28 is gone; a station queue group likewise, including at a station that never had the moved dish
+(the list is the whole bill's, §5); after two merges, `[28, 30]`; an order that never merged has no
+`formerNumbers` key. Before finishing, run the server files that call these lists with whole-object
+checks: `till-api.test.ts`, `made-here.test.ts`, `order-groups.test.ts`, `station-move.test.ts`,
+`party-arriving-dishes.test.ts`, `table-signals.test.ts` (`grep -l
+"listExpoQueue\|listStationQueue\|listCounterWaiting\|listHeldOrders"` found them).
 
-**Task 2.4 — drawing it.** Files: a small helper in `apps/till/src/widgets/` (for example
-`order-number.ts`) rendering `#27` plus a muted `(was 28, 30)`; `till-expo-screen.ts:868`,
-`station-queue.ts:887`, `counter-waiting.ts:100`, `held-orders.ts:197`; strings
+**Task 2.3b — the counter reads.** Files: `apps/server/src/working-order.ts` (`listCounterWaiting`
+`:6128`, `listHeldOrders` `:4169`), `apps/till/src/api/client.ts` (`CounterWaitingOrder`,
+`HeldOrderSummary`). Failing tests: a counter order split with Split the bill (sent dishes from 40
+onto 41) lists 41 with `formerNumbers: [40]` on the Waiting list; a held counter order that never
+split has no key. Run the files task 2.3a names again.
+
+**Task 2.4a — drawing it on the Pass and kitchen screens.** Files: a small helper in
+`apps/till/src/widgets/` (for example `order-number.ts`) rendering `#27` plus a muted `(was 28,
+30)`; `till-expo-screen.ts:868` (card head), `station-queue.ts:887` (ticket head) and
+`station-queue.ts:1059-1064` (the kanban cell, which keeps the number beside each dish); strings
 `order.was_numbers`: "(was {numbers})" / "(antes {numbers})". Failing tests:
-`apps/till/src/screens/till-expo-screen.test.ts`, `apps/till/src/widgets/station-queue.test.ts`,
-`counter-waiting.test.ts`, `held-orders.test.ts` — an order with `formerNumbers: [28]` shows `#27
-(was 28)` in English and `#27 (antes 28)` in Spanish; `[28, 30]` shows `(was 28, 30)`; none shows
-plain `#27`. Add the state to each widget's `*.a11y.test.ts` in both themes. Guards:
-`scripts/style-token-names.test.ts`. Run each file.
+`apps/till/src/screens/till-expo-screen.test.ts`, `apps/till/src/widgets/station-queue.test.ts` —
+an order with `formerNumbers: [28]` shows `#27 (was 28)` in English and `#27 (antes 28)` in
+Spanish, on the ticket head and on its kanban cells; `[28, 30]` shows `(was 28, 30)`; none shows
+plain `#27`. Add the state to `till-expo-screen.a11y.test.ts` and `station-queue.a11y.test.ts` in
+both themes. Guards: `scripts/style-token-names.test.ts`. Run each file.
+
+**Task 2.4b — drawing it on the counter lists.** Files: `counter-waiting.ts:100`,
+`held-orders.ts:197`, using 2.4a's helper. Failing tests: `counter-waiting.test.ts`,
+`held-orders.test.ts` — `#41 (was 40)` / `#41 (antes 40)`, and plain `#41` with none. Add the state
+to `counter-waiting.a11y.test.ts` and `held-orders.a11y.test.ts`. Run each file.
 
 ### Part 3 — the venue default
 
 Review path: **FULL** (a migration in the venue-service set, and a new function on the service the
 server calls, a cross-package contract). After Part 1; preferably after lane A's a506-12 (above).
 
-**Task 3.1 — store, read, write.** Files: `packages/venue-service/src/schema/settings.ts`, a
-generated migration (`pnpm --filter @waitron/venue-service db:generate`; check it is a single `ALTER
-TABLE … ADD … DEFAULT true NOT NULL`), `packages/venue-service/src/kitchen-notices.ts`
-(`readPrintMovedSlips`, `writePrintMovedSlips`), `packages/venue-service/src/service.ts` (export),
-`packages/venue-service/src/routes.ts` (view field and save route beside `printHeldWork`'s,
-`:703-708` and `:760-768`), `configuration-transfer.ts:672` if it names columns. Failing tests: a new venue reads
-`true`; writing `false` reads `false`; the route refuses a non-boolean with
-`management.request_invalid` naming `printMovedSlips`; the settings view carries the field. Fixtures
-that list every setting (`packages/venue-service/test/service-delete-test-helpers.ts:38`,
-`packages/venue-service/src/testing/department-zones-fixture.ts:112`) gain it. Guards: the
-migration guards of task 2.1, plus `scripts/classification-complete.test.ts` and
-`scripts/live-subscriptions.test.ts` (the settings view is a live query,
-`packages/venue-service/src/dashboard/live-queries.ts:81`).
+**Task 3.1a — store and service.** Files: `packages/venue-service/src/schema/settings.ts`, a
+generated migration (`pnpm --filter @waitron/venue-service db:generate`; check it is a single
+`ALTER TABLE … ADD … DEFAULT true NOT NULL`), `packages/venue-service/src/kitchen-notices.ts`
+(`readPrintMovedSlips`, `writePrintMovedSlips`), `packages/venue-service/src/service.ts` (export).
+Failing tests in `packages/venue-service/src/kitchen-notices.test.ts`: a new venue reads `true`;
+writing `false` reads `false`. Guards: the migration guards of task 2.1.
+
+**Task 3.1b — route, view and fixtures.** Files: `packages/venue-service/src/routes.ts` (view field
+and save route beside `printHeldWork`'s, `:703-708` and `:760-768`),
+`packages/venue-service/src/dashboard/client.ts` (`VenueServiceModel` and
+`VenueServiceSettingsView`, `:95-118`, gain a required `printMovedSlips: boolean` — the server
+always sends it), and every fixture the type check then rejects. `grep -rl printHeldWork apps
+packages --include='*.ts'` (run 2026-10-14) lists 33 files: 20 dashboard tests in
+`packages/venue-service/src/dashboard/`, `apps/dashboard/src/dashboard-app.test.ts`,
+`apps/dashboard/src/dashboard-app.receipt-dialog.test.ts`,
+`packages/venue-service/test/service-delete-test-helpers.ts`,
+`packages/venue-service/src/testing/department-zones-fixture.ts`, and the server and venue-service
+files that read or write the setting. Find the ones that need the field with
+`pnpm --filter @waitron/venue-service typecheck` and `pnpm --filter @waitron/dashboard typecheck`;
+adding the field a fixture lacks is allowed, and each fixture is named in the PR. Failing tests in
+`packages/venue-service/src/routes.test.ts`: the settings view carries `printMovedSlips: true`; the
+save route stores `false`; it refuses a non-boolean with `management.request_invalid` naming
+`printMovedSlips`. Guards: `scripts/live-subscriptions.test.ts` (the settings view is a live
+query, `packages/venue-service/src/dashboard/live-queries.ts:81`).
 
 **Task 3.2 — the server obeys it.** File: `apps/server/src/kitchen-print.ts` (Part 1's
 `printMovedSlips`). Failing test (in `move-merge.test.ts` or a new
@@ -606,16 +706,17 @@ file.
 
 **Task 3.3 — the dashboard switch.** Files:
 `packages/venue-service/src/dashboard/service-settings-panel.ts` (`Field` union, `#kitchen`),
-`packages/venue-service/src/dashboard/client.ts` (view field, `savePrintMovedSlips`),
+`packages/venue-service/src/dashboard/client.ts` (`savePrintMovedSlips`),
 `packages/venue-service/src/dashboard/strings.ts` (label and hint, §6). Failing tests in
-`packages/venue-service/src/dashboard/service-settings-panel.test.ts`: the switch renders checked from the view, flipping it calls `savePrintMovedSlips(false)`,
-a failed save shows the field's error; read-only disables it. Add it to `service-settings-panel.a11y.test.ts`.
-Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`.
+`packages/venue-service/src/dashboard/service-settings-panel.test.ts`: the switch renders checked
+from the view, flipping it calls `savePrintMovedSlips(false)`, a failed save shows the field's
+error; read-only disables it. Add it to `service-settings-panel.a11y.test.ts`. Guards:
+`scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`.
 
 ### Part 4 — the prep station's override
 
-Review path: **FULL** (a migration in the core set). After Part 3 and after lane A's
-`feat/a506-12-station-times` has landed.
+Review path: **FULL** (a migration in the core set). After Parts 2 and 3 and after lane A's
+`feat/a506-12-station-times` has landed (above).
 
 **Task 4.1 — store and write.** Files: `packages/db/src/schema/kitchen-stations.ts` (nullable
 `printMovedSlips: flag("print_moved_slips")`, no default, no CHECK), a generated migration (check
@@ -623,26 +724,31 @@ it is a single ``ALTER TABLE `kitchen_stations` ADD …`` — a rebuild here wou
 children's rows), `apps/server/src/kitchen.ts` (station read and update, `:131`, `:196`),
 `apps/server/src/management-api.ts:1878-1910`. Failing tests: the station update accepts `true`,
 `false` and `null` and reads them back; refuses `"yes"` with `management.request_invalid` naming
-`printMovedSlips`; a new station reads null. Guards: the migration guards of task 2.1, plus
-`scripts/two-file-foreign-keys.test.ts`.
+`printMovedSlips`; a new station reads null. Guards: the migration guards of task 2.1 (with
+`scripts/classification-complete.test.ts`), plus `scripts/two-file-foreign-keys.test.ts`.
 
 **Task 4.2 — the server obeys it.** File: `apps/server/src/kitchen-print.ts` (effective setting =
 the station's, else the venue's, read with the stations it already reads, `readStations`,
 `kitchen-print.ts:300-313`). Failing tests: venue on, Grill off, Postres following — Move guests
 prints at Postres only and records notices at both; venue off, Grill on — prints at Grill only;
-with Part 2 landed, after Merge bills with every station off, the station queue still shows
-`formerNumbers: [28]`. Run the file.
+after Merge bills with every station off, no slip prints and the station queue still shows
+`formerNumbers: [28]` (ruling 6; Part 2 has landed). Run the file.
 
 **Task 4.3 — the Edit station window.** Files:
-`packages/venue-service/src/dashboard/station-editor.ts` (draft field, the combobox after "Show the
-rest of the order", the changed-fields patch at `:366-368`'s pattern), `prep-stations-screen.ts`
-(passes the field in, `:889-897`), `packages/venue-service/src/dashboard/client.ts`, `strings.ts`.
-Failing tests: `packages/venue-service/src/dashboard/station-editor.test.ts` — the combobox shows "As the venue (print)" when the station is
-null and the venue on, "As the venue (don't print)" when the venue is off; choosing "Don't print"
-enables Save and sends `printMovedSlips: false`; choosing back the stored value disables Save
-again; `station-editor.unsaved.test.ts` — a changed choice asks before closing. Add the combobox's
-states to `station-editor.a11y.test.ts`, and check `station-editor.save-state.test.ts`. Guards: `scripts/native-form-fields.test.ts`,
-`scripts/english-only.test.ts`.
+`packages/venue-service/src/routes.ts` (the routing view the prep stations screen loads,
+`GET /management-api/venue-service/routing`, `:639`, also returns the venue's `printMovedSlips`, so
+the window can name it), `packages/venue-service/src/dashboard/routing-client.ts` (`PrepStationsApi.load`,
+`:73-81`, and the station type), `packages/venue-service/src/dashboard/station-editor.ts` (draft
+field, the combobox after "Show the rest of the order", the changed-fields patch at `:366-368`'s
+pattern), `prep-stations-screen.ts` (passes the station's value and the venue's in, `:889-897`),
+`strings.ts`. Failing tests: `packages/venue-service/src/dashboard/station-editor.test.ts` — the
+combobox shows "As the venue (print)" when the station is null and the venue on, "As the venue
+(don't print)" when the venue is off; choosing "Don't print" enables Save and sends
+`printMovedSlips: false`; choosing back the stored value disables Save again;
+`station-editor.unsaved.test.ts` — a changed choice asks before closing;
+`packages/venue-service/src/routes.test.ts` — the routing view carries the venue's value. Add the
+combobox's states to `station-editor.a11y.test.ts`, and check `station-editor.save-state.test.ts`.
+Guards: `scripts/native-form-fields.test.ts`, `scripts/english-only.test.ts`.
 
 ## 8. Questions for the owner (the build proceeds on each default)
 

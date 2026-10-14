@@ -1778,8 +1778,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   From: Mesa 11 / To: Mesa 12", translated, held dishes on a HOLD ticket listed under HOLD; the
   till shows "#27 (was 28)" wherever it shows an order number; and printing MOVED slips becomes a
   venue setting (default on) that each prep station can follow or override. Parts: 1 the rule and
-  slip, 2 "(was N)" (a migration), 3 the venue switch, 4 the station override (after lane A's
-  a506-12). Three small owner questions carry defaults. Once built, it also settles two open points
+  slip, 2 "(was N)" (a migration), 3 the venue switch, 4 the station override (after Parts 2
+  and 3 and lane A's a506-12). Three small owner questions carry defaults. Once built, it also settles two open points
   in this file: a HOLD ticket that goes stale when its guests move (the kitchen area), and a bill
   moved to the counter whose slip names the same table on both sides (the table actions plan's
   Task 7 point). [Plan](superpowers/plans/2026-10-14-a650-moved-slips-design.md) ·
