@@ -11,9 +11,9 @@ under the limits below. If the deadline passes before AWS answers the create, th
 whether the bucket exists: the receipt records it as `unowned-candidate` with no cleanup command,
 and a person checks it.
 
-As of 2026-10-14 the loop and pause scenarios exist and neither has run against Amazon S3; later
-tasks of the A538 plan (`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`) add the delete and
-archive scenarios (task 9) and the first live run (task 10).
+As of 2026-10-14 the loop, pause, delete-many, archive round trip and archive abort scenarios exist
+and none has run against Amazon S3; task 10 of the A538 plan
+(`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`) is the first live run.
 
 ## What it is, and what it is not
 
@@ -29,7 +29,8 @@ archive scenarios (task 9) and the first live run (task 10).
   Before any scenario starts it checks that the new bucket uses Amazon's own encryption (SSE-S3) and
   has versioning off.
 - **Synthetic data only.** The loop and pause scenarios each provision a made-up venue ("Stream Loop
-  SL", "Stream Pause SL") and record test sales in it. No real venue, customer or fiscal data goes near the bucket.
+  SL", "Stream Pause SL") and record test sales in it; the delete and archive scenarios upload
+  made-up bytes. No real venue, customer or fiscal data goes near the bucket.
 - **Bounded.** The runner refuses a fixture past its limits before sending it: a 32 MiB archive,
   1,005 objects for the delete scenario, and 128 MiB uploaded in total. Creating and checking the
   bucket and then the scenario get 15 minutes together, and teardown gets 2 minutes on top; the
@@ -62,7 +63,8 @@ Two limits matter if something goes wrong:
   box's) and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
   base64url, not encrypted.
   Delete that folder as well, and the pause scenario's `waitron-aws-stream-pause-<random>`, which
-  holds its box's `secrets.env`.
+  holds its box's `secrets.env`, and any `waitron-aws-delete-<random>` or
+  `waitron-aws-archive-<random>`.
 
 ## Running it
 
@@ -223,6 +225,53 @@ waiting at the proxy, not which call: the connection is encrypted end to end, so
 see that it is the pause check. What ties the refusal to the pause check is the later logged
 `stream.pause_check_failed` with a 403 (`pause-check-denied`).
 Its working folder is `waitron-aws-stream-pause-<random>` under your temporary folder.
+
+## The delete and archive scenarios
+
+Each scenario has its own label prefix in the run's bucket and goes through the product's own S3
+backend (`buildBackupBackend`), so the requests are the ones the product sends.
+
+- **`delete-many`** (`apps/server/src/aws-delete.aws-rehearsal.test.ts`, steps in
+  `apps/server/src/testing/s3-delete-scenario.ts`): puts 1,005 tiny objects, about 28 KB in all,
+  lists them, deletes them through the backend's `deleteMany`, and checks from the recorded requests
+  that two DeleteObjects calls of 1,000 and 5 keys were answered and that a listing then finds
+  nothing. Its phases are `put`, `listed-before`, `deleted` and `listed-after`.
+- **`archive-roundtrip`** and **`archive-abort`** (`apps/server/src/aws-archive.aws-rehearsal.test.ts`,
+  steps in `apps/server/src/testing/s3-archive-scenario.ts`) run one after the other in one run, so
+  in one bucket under one 128 MiB budget. The round trip uploads a synthetic encrypted archive of
+  32 MiB in four 8 MiB parts, lists it, downloads it using only a recovery pack that has been encoded
+  and decoded, checks the decrypted bytes match, and checks that a wrong key and a flipped byte are
+  each refused (phases `uploaded`, `listed`, `downloaded`, `decrypted-match`, `wrong-key-refused`,
+  `tamper-refused`). The abort starts a 24 MiB archive upload, cancels it once one part has been
+  answered, and checks that an AbortMultipartUpload was sent, no completion was, and neither an
+  unfinished upload nor an object is left (phases `aborted`, `uploads-after`, `listed-after`).
+  Together they reserve 56 MiB of the budget.
+
+**What the receipt records.** Besides the phases, every S3 request these scenarios send is one
+`request` row: the API name, HTTP status, attempts, elapsed time and outcome, and for DeleteObjects
+the number of keys sent, for PutObject and UploadPart the bytes sent. A row never holds a key, a
+body or a URL. A request to an API outside the receipt's list (`RECEIPT_APIS`,
+`apps/server/src/testing/aws-rehearsal-receipt.ts`) throws in the recorder, and the store fails that
+request with what was thrown, so the scenario fails.
+
+**Observed or source-only.** The receipt's action table lists each API on that list once. An API is
+`observed` when some recorded step names it with an HTTP status (teardown steps do not count); otherwise it is `source-only`
+when the runner lists it as known only from reading the code (GetBucketLocation, HeadObject,
+CreateMultipartUpload, UploadPart, CompleteMultipartUpload), and `not-exercised` otherwise. So a
+live run of the archive scenarios is what can move the multipart APIs to `observed`.
+
+**Unfinished uploads.** Each archive scenario tells the runner the id of every multipart upload it
+starts, which teardown cancels. The abort scenario's "no unfinished upload" check asks the runner
+(`ownedUploads`), which lists the bucket's unfinished uploads under a prefix this run issued, or a
+path below one, and refuses any other prefix.
+
+**Local evidence only.** The same scenarios run against versitygw in
+`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
+2026-10-14 on a Mac, all 6 cases passed. The requests each scenario recorded were: delete-many,
+1,005 PutObject, 3 ListObjectsV2 and 2 DeleteObjects, all 200; the round trip, 1
+CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 and 1 GetObject, all
+200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1
+AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does.
 
 ## When teardown fails: the cleanup command
 
