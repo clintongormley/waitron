@@ -12,6 +12,8 @@ import {
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
+import { SetupApi, type ApiError } from "../api/client.js";
+import "./recovery-copy.js";
 import { t, format } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -62,6 +64,7 @@ export class SetupRestoreBucketScreen extends LitElement {
     `,
   ];
 
+  @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property() errorMessage?: string;
   /** The field `errorMessage` is about. */
   @property() invalidField?: BucketField;
@@ -82,6 +85,9 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
 
+  @state() private previewField?: "kit" | "environment";
+  @state() private previewLiveSince?: string;
+  @state() private previewLiveUnknown = false;
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -172,6 +178,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   #edited(field: BucketField): void {
     if (field === "kit" || field === "environment") this.#scope?.changed();
+    if (field === this.previewField) this.previewField = undefined;
     if (field === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
@@ -184,7 +191,13 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   get #askingOldBox(): boolean {
-    return !this.#kitReplaced && (this.liveSince !== undefined || this.liveUnknown);
+    return (
+      !this.#kitReplaced &&
+      (this.liveSince !== undefined ||
+        this.liveUnknown ||
+        this.previewLiveSince !== undefined ||
+        this.previewLiveUnknown)
+    );
   }
 
   get #venue(): RestoredVenue | undefined {
@@ -193,6 +206,9 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   #setKit(kit: string): void {
     ++this.#fileRead;
+    this.previewLiveSince = undefined;
+    this.previewLiveUnknown = false;
+    this.oldBoxGone = false;
     this.kit = kit;
     this.#edited("kit");
     if (this.#kitReplaced) {
@@ -281,10 +297,17 @@ export class SetupRestoreBucketScreen extends LitElement {
     const kitError =
       this.attempted && this.#kitMissing
         ? t("restore_bucket.kit_missing")
-        : refused === "kit"
+        : this.previewField === "kit"
+          ? t("restore.preview_kit_error")
+          : refused === "kit"
+            ? this.errorMessage
+            : undefined;
+    const environmentError =
+      this.previewField === "environment"
+        ? t("restore.preview_environment_error")
+        : refused === "environment"
           ? this.errorMessage
           : undefined;
-    const environmentError = refused === "environment" ? this.errorMessage : undefined;
     const acknowledgeInvalid = this.attempted && !this.acknowledged;
     const fieldsInvalid = this.attempted && this.#incomplete;
     const bottom = [
@@ -294,7 +317,9 @@ export class SetupRestoreBucketScreen extends LitElement {
       !this.#shows(this.invalidField)
         ? [this.errorMessage]
         : []),
-      ...(fieldsInvalid || refused !== undefined ? [t("restore_bucket.fix_fields")] : []),
+      ...(fieldsInvalid || refused !== undefined || this.previewField !== undefined
+        ? [t("restore_bucket.fix_fields")]
+        : []),
     ].join(" ");
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
@@ -370,8 +395,8 @@ export class SetupRestoreBucketScreen extends LitElement {
       </label>
       ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${t("restore_bucket.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
-        liveSince: this.#askingOldBox ? this.liveSince : undefined,
-        liveUnknown: this.#askingOldBox && this.liveUnknown,
+        liveSince: this.#askingOldBox ? (this.liveSince ?? this.previewLiveSince) : undefined,
+        liveUnknown: this.#askingOldBox && (this.liveUnknown || this.previewLiveUnknown),
         checked: this.oldBoxGone,
         invalid: this.attempted && this.#oldBoxUnanswered,
         refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
@@ -380,6 +405,26 @@ export class SetupRestoreBucketScreen extends LitElement {
           this.#edited("oldBoxGone");
         },
       })}
+      <setup-recovery-copy
+        .api=${this.api}
+        .bucketKit=${this.kit}
+        .environment=${this.environment}
+        .oldBoxGone=${this.oldBoxGone}
+        @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
+          event.stopPropagation();
+          const error = event.detail.cause;
+          this.previewField =
+            event.detail.field === "kit" || event.detail.field === "environment"
+              ? event.detail.field
+              : undefined;
+          if (error?.code === "restore.stream_source_live")
+            this.previewLiveSince =
+              typeof error.params?.lastChangeAt === "string"
+                ? error.params.lastChangeAt
+                : undefined;
+          if (error?.code === "restore.stream_source_unchecked") this.previewLiveUnknown = true;
+        }}
+      ></setup-recovery-copy>
       ${this.#renderVenue()}
       <wt-form-actions .error=${bottom}>
         <wt-button

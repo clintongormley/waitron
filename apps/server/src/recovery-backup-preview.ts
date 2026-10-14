@@ -7,10 +7,13 @@ import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import {
   readArtifactIdentity,
+  validateDatabaseEntries,
+  type EntryValidationDeps,
   validateArtifact,
   type ValidationDeps,
   type ValidatedArtifact,
 } from "./restore.js";
+import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import "./errors.js";
 
 export interface RecoveryBackupPreview {
@@ -68,5 +71,21 @@ export async function previewRecoveryArchive(deps: ValidationDeps): Promise<Reco
     );
   } finally {
     await copy.discard();
+  }
+}
+
+export async function previewRecoveryStream(
+  deps: PrepareStreamDeps & EntryValidationDeps,
+): Promise<RecoveryBackupPreview> {
+  const prepared = await prepareStreamRestore(deps);
+  try {
+    const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, deps);
+    return await readRecoveryCopyPreview(
+      copy,
+      `stream:${deps.kit.venueId}:${prepared.generation}`,
+      deps,
+    );
+  } finally {
+    await prepared.discard();
   }
 }

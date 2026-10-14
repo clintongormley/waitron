@@ -160,7 +160,7 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
-import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import {
   clearStagedConfigurationImport,
@@ -924,20 +924,21 @@ async function bootServer(
     const ownerDatabaseName = config.venueDir;
     const openBoundedBucket = (bucket: BucketConfig) =>
       boundObjectStore(createS3ObjectStore(bucket));
+    const cloudRecovery =
+      cloudOrigin && config.environment === "preproduction"
+        ? createCloudRecoveryClient({
+            stateDir: config.stateDir,
+            origin: cloudOrigin,
+            environment: config.environment,
+          })
+        : undefined;
     mountSetup(
       app,
       {
         environment: config.environment,
         devMode: config.devMode,
         operations: createSetupOperationStore(config.stateDir),
-        cloudRecovery:
-          cloudOrigin && config.environment === "preproduction"
-            ? createCloudRecoveryClient({
-                stateDir: config.stateDir,
-                origin: cloudOrigin,
-                environment: config.environment,
-              })
-            : undefined,
+        cloudRecovery,
         previewRestore: (request) =>
           previewRecoveryArchive({
             ...request,
@@ -945,6 +946,35 @@ async function bootServer(
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
             modules: ALL_MODULES,
+          }),
+        previewCloudRestore:
+          cloudRecovery === undefined
+            ? undefined
+            : (pointId) =>
+                cloudRecovery.preview(
+                  (request) =>
+                    previewRecoveryArchive({
+                      ...request,
+                      stateDir: config.stateDir,
+                      stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+                      migrationsRoot: config.migrationsRoot,
+                      modules: ALL_MODULES,
+                    }),
+                  pointId,
+                ),
+        previewBucketRestore: async ({ kit, environment, oldBoxGone }) =>
+          previewRecoveryStream({
+            kit: parseRecoveryKit(kit),
+            stateDir: config.stateDir,
+            stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+            migrationsRoot: config.migrationsRoot,
+            modules: ALL_MODULES,
+            environment,
+            litestreamBin: config.litestreamBin,
+            oldBoxGone,
+            now,
+            log,
+            openStore: openBoundedBucket,
           }),
         stageRestore: (request, { oldBoxGone }) =>
           stageRestoreRequest(config.stateDir, request, async (candidate) => {

@@ -1005,3 +1005,14 @@ copy; an archive predating named keys says the name is absent. Changing the file
 or environment clears the preview. Its warning keeps the node credential separate from archive
 encryption and tells you to retain older paper keys. Bucket/Cloud chooser integration, offline
 allocation collection and interrupted activation remain open; this is not the completed Task 6.
+
+
+**2026-10-14 bucket/Cloud chooser checkpoint:** setup's candidate now reviews the downloaded
+bucket database or approved Cloud archive before staging. Both show the selected copy's saved
+node-key name, stored manifest date and source reference. Cloud preview checks the downloaded
+archive's digest and rechecks approval; it does not mark the request staged. Bucket preview
+retains the old-box check and asks for confirmation when it refuses. Kit/environment edits and
+Cloud request/point changes discard late metadata. Archive encryption and node authentication
+remain separate. The bucket reference currently names a generation, not an immutable snapshot;
+Task 6's activation binding must still identify the actual selected bytes. Offline allocation
+collection, staged node credentials and interruption qualification remain open.

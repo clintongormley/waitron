@@ -1476,6 +1476,7 @@ export class SetupApp extends LitElement {
       case "restore-bucket":
         return html`<setup-restore-bucket-screen
           data-test="screen-restore-bucket"
+          .api=${this.api}
           .errorMessage=${this.bucketRestoreError?.()}
           .invalidField=${this.bucketInvalidField}
           .liveSince=${this.bucketLiveSince}
@@ -1486,6 +1487,7 @@ export class SetupApp extends LitElement {
       case "cloud-restore":
         return html`<setup-cloud-restore-screen
           data-test="screen-cloud-restore"
+          .api=${this.api}
           .view=${this.cloudRecoveryView}
           .errorMessage=${this.cloudRecoveryError?.()}
           .invalidField=${this.cloudInvalidField}

@@ -3,6 +3,7 @@
 export const restoreEn = {
   "restore.preview_action": "Review backup",
   "restore.preview_heading": "Selected backup",
+  "restore.preview_source": "Source",
   "restore.preview_business": "Business",
   "restore.preview_location": "Location",
   "restore.preview_date": "Backup date",
@@ -11,6 +12,7 @@ export const restoreEn = {
   "restore.preview_older_key": "An older backup reinstates its older node key.",
   "restore.preview_keep_keys": "Keep older paper keys until no older backup remains.",
   "restore.preview_key_separate": "The node key is separate from the backup file's encryption key.",
+  "restore.preview_kit_error": "Check the recovery kit.",
   "restore.preview_key_error": "Check the backup file's encryption key.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
@@ -153,6 +155,7 @@ export const restoreEn = {
 export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_action": "Revisar copia",
   "restore.preview_heading": "Copia seleccionada",
+  "restore.preview_source": "Origen",
   "restore.preview_business": "Negocio",
   "restore.preview_location": "Local",
   "restore.preview_date": "Fecha de la copia",
@@ -163,6 +166,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Conserva las claves en papel antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate":
     "La clave del nodo es distinta de la clave de cifrado del archivo de copia.",
+  "restore.preview_kit_error": "Revisa el kit de recuperación.",
   "restore.preview_key_error": "Revisa la clave de cifrado del archivo de copia.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",

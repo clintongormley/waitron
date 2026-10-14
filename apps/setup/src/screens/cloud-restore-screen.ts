@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { SetupApi } from "../api/client.js";
+import "./recovery-copy.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
@@ -24,16 +26,17 @@ export class SetupCloudRestoreScreen extends LitElement {
         display: block;
       }
       .code {
-        font-size: 1.8rem;
-        letter-spacing: 0.15em;
-        font-weight: 700;
+        font-size: var(--wt-font-size-xl);
+        letter-spacing: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-bold);
       }
       .warning {
-        border-left: 4px solid currentColor;
-        padding: 0.5rem 1rem;
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
+        padding: var(--wt-space-2) var(--wt-space-4);
       }
     `,
   ];
+  @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) view?: CloudRecoveryView;
   @property() errorMessage?: string;
   /** The field `errorMessage` is about. */
@@ -208,6 +211,11 @@ export class SetupCloudRestoreScreen extends LitElement {
                     ? html`
                         <h2>${t("cloud_restore.approved_heading")}</h2>
                         <p>${t("cloud_restore.captured")} <time>${approved.capturedAt}</time></p>
+                        <setup-recovery-copy
+                          .api=${this.api}
+                          .cloudPointId=${approved.id}
+                          .selectionId=${this.#currentApprovalBinding()}
+                        ></setup-recovery-copy>
                         <p class="warning">${t("cloud_restore.later_changes")}</p>
                         <label class="field"
                           ><input

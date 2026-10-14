@@ -108,6 +108,10 @@ export interface SetupDeps {
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
+  previewBucketRestore?: (
+    input: Omit<BucketRestoreInput, "venueConfirmed">,
+  ) => Promise<RecoveryBackupPreview>;
+  previewCloudRestore?: (pointId: string) => Promise<RecoveryBackupPreview>;
   /** Checks the owner's bucket and stages a rebuild from it for the entrypoint to write after
    * restart. Rejects with the refusal, having staged nothing. */
   stageBucketRestore?: (input: BucketRestoreInput) => Promise<void>;
@@ -116,7 +120,7 @@ export interface SetupDeps {
   /** Fresh replacement's private Cloud snapshot recovery client. */
   cloudRecovery?: Omit<
     ReturnType<typeof createCloudRecoveryClient>,
-    "replacementIdentity" | "replacementApproval"
+    "replacementIdentity" | "replacementApproval" | "preview"
   >;
   /** Validates and stages a configuration export before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
@@ -1021,6 +1025,58 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } catch (error) {
         provisioning = false;
         throw error;
+      }
+    });
+  });
+
+  app.post("/setup-api/restore-bucket/preview", async (c) => {
+    const preview = deps.previewBucketRestore;
+    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
+      return directError(c, log, "setup.already_provisioning", 409);
+    provisioning = true;
+    return runBucketRestore(c, log, async () => {
+      try {
+        const body = await readJsonBody<{
+          kit?: unknown;
+          environment?: unknown;
+          oldBoxGone?: unknown;
+        }>(c);
+        const kit = asString(body.kit, "kit");
+        if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
+        const environment = body.environment;
+        if (environment !== "production" && environment !== "preproduction")
+          invalidRequest("environment");
+        if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean")
+          invalidRequest("oldBoxGone");
+        c.header("Cache-Control", "no-store");
+        return c.json(
+          await preview({ kit, environment, oldBoxGone: body.oldBoxGone === true }),
+          200,
+        );
+      } finally {
+        provisioning = false;
+      }
+    });
+  });
+  app.post("/setup-api/cloud-recovery/preview", async (c) => {
+    const preview = deps.previewCloudRestore;
+    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
+      return directError(c, log, "setup.already_provisioning", 409);
+    provisioning = true;
+    return runRestore(c, log, async () => {
+      try {
+        const body = await readJsonBody<{ pointId?: unknown }>(c);
+        if (
+          typeof body.pointId !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
+        )
+          invalidRequest("pointId");
+        c.header("Cache-Control", "no-store");
+        return c.json(await preview(body.pointId), 200);
+      } finally {
+        provisioning = false;
       }
     });
   });

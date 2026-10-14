@@ -291,6 +291,21 @@ export class SetupApi {
     return JSON.parse(await res.text()) as RestoreOutcome;
   }
 
+  previewBucketRestore(
+    kit: string,
+    environment: "production" | "preproduction",
+    oldBoxGone = false,
+  ): Promise<RecoveryBackupPreview> {
+    return this.#request("/setup-api/restore-bucket/preview", "POST", {
+      kit,
+      environment,
+      oldBoxGone,
+    });
+  }
+  previewCloudRestore(pointId: string): Promise<RecoveryBackupPreview> {
+    return this.#request("/setup-api/cloud-recovery/preview", "POST", { pointId });
+  }
+
   async previewRestore(
     artifact: Blob,
     recoveryKey: string,

@@ -41,9 +41,13 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ attribute: false }) artifact?: File;
   @property({ attribute: false }) recoveryKey = "";
   @property() environment: "production" | "preproduction" = "production";
+  @property({ attribute: false }) bucketKit?: string;
+  @property({ attribute: false }) cloudPointId?: string;
+  @property({ attribute: false }) selectionId?: string;
+  @property({ type: Boolean }) oldBoxGone = false;
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
-  @state() private error?: "key" | "environment" | "file" | "failed";
+  @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
   #attempt = 0;
 
   constructor() {
@@ -53,7 +57,18 @@ export class SetupRecoveryCopy extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (
-      (["api", "artifact", "recoveryKey", "environment"] as const).some((key) => changed.has(key))
+      (
+        [
+          "api",
+          "artifact",
+          "recoveryKey",
+          "environment",
+          "bucketKit",
+          "cloudPointId",
+          "selectionId",
+          "oldBoxGone",
+        ] as const
+      ).some((key) => changed.has(key))
     )
       this.#invalidate();
   }
@@ -68,7 +83,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.busy = false;
     this.#notifyRefusal();
   }
-  #notifyRefusal(): void {
+  #notifyRefusal(cause?: ApiError): void {
     const field =
       this.error === "key"
         ? "recoveryKey"
@@ -76,24 +91,44 @@ export class SetupRecoveryCopy extends LitElement {
           ? "environment"
           : this.error === "file"
             ? "artifact"
-            : undefined;
+            : this.error === "kit"
+              ? "kit"
+              : undefined;
     this.dispatchEvent(
-      new CustomEvent("preview-refusal", { detail: { field }, bubbles: true, composed: true }),
+      new CustomEvent("preview-refusal", {
+        detail: { field, cause },
+        bubbles: true,
+        composed: true,
+      }),
     );
   }
   get #canReview(): boolean {
-    return this.artifact !== undefined && this.recoveryKey !== "";
+    return this.bucketKit !== undefined
+      ? this.bucketKit.trim() !== ""
+      : this.cloudPointId !== undefined
+        ? this.cloudPointId !== ""
+        : this.artifact !== undefined && this.recoveryKey !== "";
   }
 
   async #review(): Promise<void> {
     if (!this.#canReview || this.busy) return;
-    const artifact = this.artifact!;
+    const artifact = this.artifact;
+    const bucketKit = this.bucketKit;
+    const cloudPointId = this.cloudPointId;
+    const selectionId = this.selectionId;
+    const oldBoxGone = this.oldBoxGone;
+    const api = this.api;
     const recoveryKey = this.recoveryKey;
     const environment = this.environment;
     const attempt = ++this.#attempt;
     const current = () =>
       this.isConnected &&
       attempt === this.#attempt &&
+      this.api === api &&
+      this.bucketKit === bucketKit &&
+      this.cloudPointId === cloudPointId &&
+      this.selectionId === selectionId &&
+      this.oldBoxGone === oldBoxGone &&
       this.artifact === artifact &&
       this.recoveryKey === recoveryKey &&
       this.environment === environment;
@@ -102,7 +137,12 @@ export class SetupRecoveryCopy extends LitElement {
     this.preview = undefined;
     this.#notifyRefusal();
     try {
-      const preview = await this.api.previewRestore(artifact, recoveryKey, environment);
+      const preview =
+        bucketKit !== undefined
+          ? await api.previewBucketRestore(bucketKit, environment, oldBoxGone)
+          : cloudPointId !== undefined
+            ? await api.previewCloudRestore(cloudPointId)
+            : await api.previewRestore(artifact!, recoveryKey, environment);
       if (current()) this.preview = preview;
     } catch (cause) {
       if (current()) {
@@ -117,8 +157,10 @@ export class SetupRecoveryCopy extends LitElement {
                   error?.code === "backup.archive_invalid" ||
                   field === "artifact"
                 ? "file"
-                : "failed";
-        this.#notifyRefusal();
+                : error?.code === "backup.stream_kit_invalid" || field === "kit"
+                  ? "kit"
+                  : "failed";
+        this.#notifyRefusal(error);
       }
     } finally {
       if (current()) this.busy = false;
@@ -131,6 +173,7 @@ export class SetupRecoveryCopy extends LitElement {
       key: "restore.preview_key_error",
       environment: "restore.preview_environment_error",
       file: "restore.preview_file_error",
+      kit: "restore.preview_kit_error",
       failed: "restore.preview_failed",
     } as const;
     return html` ${
@@ -139,6 +182,8 @@ export class SetupRecoveryCopy extends LitElement {
           : html` <section aria-label=${t("restore.preview_heading")} data-test="selected-copy">
               <h2>${t("restore.preview_heading")}</h2>
               <dl>
+                <dt>${t("restore.preview_source")}</dt>
+                <dd>${preview.sourceId}</dd>
                 <dt>${t("restore.preview_business")}</dt>
                 <dd>${preview.taxpayer.legalName} (${preview.taxpayer.taxId})</dd>
                 <dt>${t("restore.preview_location")}</dt>

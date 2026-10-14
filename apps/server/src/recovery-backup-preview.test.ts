@@ -15,6 +15,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
+import * as previewModule from "./recovery-backup-preview.js";
+import { decryptArtifact } from "./artifact-cipher.js";
+import { unpackArchive } from "./backup-archive.js";
+import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { signPointer, writePointer } from "@waitron/stream";
+import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
+import { copyFile } from "node:fs/promises";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { startServer, type StartedServer } from "./boot.js";
@@ -159,6 +167,128 @@ it("the real setup listener previews the selected copy without restarting or pub
     expect(await status.json()).toMatchObject({ provisioned: false, environment: "preproduction" });
     expect(await readFile(join(scratch, "logs/waitron.log"), "utf8")).not.toContain(
       "archive-key-separate",
+    );
+  } finally {
+    await closeClient?.();
+    await server?.close();
+  }
+});
+
+it("reviews the downloaded bucket database's saved key name without staging or changing the live key", async () => {
+  const signer = generateNodeKeyPair();
+  const store = createMemoryObjectStore();
+  const generation = `gen-0-${NODE}-20261001T080000Z`;
+  await writePointer(
+    store,
+    LOCATION,
+    signPointer(
+      {
+        venueId: LOCATION,
+        term: 0,
+        nodeId: NODE,
+        generation,
+        writtenAt: "2026-10-01T08:00:00.000Z",
+      },
+      signer.privateKey,
+    ),
+    null,
+  );
+  const entries = unpackArchive(decryptArtifact(artifact, "archive-key-separate")).filter(
+    (entry) => entry.name !== "db.dump",
+  );
+  await writeSealedStateRow(
+    suite.db,
+    NODE,
+    await sealNodeState(entries, "bucket-key-separate"),
+    new Date("2026-10-01T08:00:00.000Z"),
+  );
+  const database = join(scratch, "bucket-copy.db");
+  await suite.db.archiveTo(database);
+  await mintBreakGlassSecret(suite.db, NODE);
+  const liveName = await readBreakGlassKeyName(suite.db, NODE);
+  const stateDir = join(scratch, "bucket-preview");
+  const preview = (
+    previewModule as unknown as { previewRecoveryStream: (deps: unknown) => Promise<unknown> }
+  ).previewRecoveryStream;
+  expect(typeof preview).toBe("function");
+  const result = await preview({
+    kit: {
+      version: 1,
+      venueId: LOCATION,
+      bucket: {
+        region: "local",
+        bucket: "copy",
+        prefix: "",
+        accessKeyId: "unused",
+        secretAccessKey: "unused",
+      },
+      recoveryKey: "bucket-key-separate",
+      pointerSignerPublicKey: signer.publicKey,
+    },
+    stateDir,
+    stagingDir: stateDir,
+    migrationsRoot: null,
+    modules,
+    environment: "preproduction",
+    litestreamBin: "/unused",
+    oldBoxGone: true,
+    now: () => new Date("2026-10-14T12:00:00Z"),
+    log: () => {},
+    openStore: () => store,
+    restoreGeneration: async ({ outPath }: { outPath: string }) => {
+      await copyFile(database, outPath);
+    },
+  });
+  expect(result).toMatchObject({
+    sourceId: `stream:${LOCATION}:${generation}`,
+    createdAt: "2026-10-01T08:00:00.000Z",
+    nodeId: NODE,
+    nodeRecoveryKeyName: oldName,
+    taxpayer: { legalName: "Old venue", taxId: "89890001K" },
+  });
+  expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(liveName);
+  expect(await readdir(stateDir)).toEqual([]);
+});
+
+it("the real setup listener reaches both private download previews without staging a restore", async () => {
+  const [port] = await freePorts(1);
+  const stateDir = join(scratch, "remote-replacement");
+  await copyMigrationsRoot(join(scratch, "remote-migrations"));
+  let server: StartedServer | undefined;
+  let closeClient: (() => Promise<void>) | undefined;
+  try {
+    server = await startServer({
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_MIGRATIONS_DIR: join(scratch, "remote-migrations"),
+      WAITRON_VENUE_DIR: join(scratch, "remote-empty"),
+      WAITRON_LOG_DIR: join(scratch, "remote-logs"),
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_ENV: "dev",
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+    });
+    await awaitListening(port!);
+    const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
+    closeClient = client.close;
+    const bucket = await fetch(`https://127.0.0.1:${port}/setup-api/restore-bucket/preview`, {
+      ...client.via,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kit: "synthetic-invalid-private-kit", environment: "preproduction" }),
+    });
+    expect(bucket.status).toBe(400);
+    expect((await bucket.json()).error.code).toBe("backup.stream_kit_invalid");
+    const cloud = await fetch(`https://127.0.0.1:${port}/setup-api/cloud-recovery/preview`, {
+      ...client.via,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pointId: "047bacd4-df70-4881-a835-c6dd75ae7ecf" }),
+    });
+    expect(cloud.status).toBe(500);
+    expect((await cloud.json()).error.code).toBe("server.internal");
+    expect(await readdir(stateDir)).not.toContain("restore-request.json");
+    expect(await readFile(join(scratch, "remote-logs/waitron.log"), "utf8")).not.toContain(
+      "synthetic-invalid-private-kit",
     );
   } finally {
     await closeClient?.();
