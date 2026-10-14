@@ -180,6 +180,7 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
+        colour: "red",
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
