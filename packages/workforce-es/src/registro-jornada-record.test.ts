@@ -351,3 +351,46 @@ it("exports an admin's self-approval after their role changes", async () => {
     autoaprobada: false,
   });
 });
+
+it("identifies pending and declined closed-period history without changing the frozen hours", async () => {
+  const target = await day();
+  const frozen = await close();
+  const request = await proposal(target, false);
+  const pending = exportTimeRecord(await record(), period);
+  expect(pending.cambiosPeriodosCerrados).toEqual([
+    {
+      closureId: frozen.id,
+      personId: worker,
+      beforeWorkedMinutes: 480,
+      afterWorkedMinutes: 480,
+      deltaWorkedMinutes: 0,
+    },
+  ]);
+  expect(pending.entradas!.find((e) => e.entryId === request)).toMatchObject({
+    estadoCorreccion: "requested",
+    direccionCorreccion: "worker_request",
+    corrigeEntradaId: target,
+    motivo: "Later departure",
+    efectiva: false,
+    periodosCerrados: [frozen.id],
+  });
+  const answer = await run((tx) =>
+    backend.declineCorrection(tx, {
+      nodeId,
+      correctionId: request,
+      actorPersonId: manager,
+      origin,
+    }),
+  );
+  const declined = exportTimeRecord(await record(), period);
+  expect(declined.cambiosPeriodosCerrados).toEqual(pending.cambiosPeriodosCerrados);
+  expect(declined.entradas!.find((e) => e.entryId === answer)).toMatchObject({
+    estadoCorreccion: "declined",
+    respondeEntradaId: request,
+    efectiva: false,
+    periodosCerrados: [frozen.id],
+    autor: { kind: "manager", personId: manager },
+  });
+  expect(declined.cierres![0]!.snapshot).toEqual(frozen.snapshot);
+  expect(declined.lineas[0]!.minutosTrabajados).toBe(480);
+});

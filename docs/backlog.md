@@ -4123,6 +4123,16 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   with a stored flag. Part 1 is under owner review in #1638; the remaining app work waits for it.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
+- **Workforce period reads still load complete history.** Narrow them without losing late or
+  cross-period corrections; retain the new latest-instant and person-scoped reads. A10-1’s
+  four-year synthetic measurement and the remaining query paths are in
+  [workforce detail](backlog/workforce.md#a10-period-read-cost).
+
+- **A10 correction screens must derive which requests are still waiting.** An answered request’s
+  immutable row stays `requested`; an overtaken target cannot be settled. Use response links and
+  effective targets rather than the row’s status alone; preserve stale requests in history.
+  Carry this into part 4’s plan.
+
 - **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),

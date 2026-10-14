@@ -37,3 +37,22 @@ pay-period closure, scoped frozen records and the Spanish history export. The li
 route or screen yet. Reset/reseed old workforce venue folders before installing the nullable-recorder
 constraint migration (owner decision, 2026-10-13). The populated old-record migration test checks
 the refused rebuild and unchanged rows/head after rollback; the empty old-schema test upgrades.
+
+
+## A10 period read cost
+
+A10-1 narrows ordinary clock state to the latest live instant, targets and acknowledgments to their
+ids, and own records to that person before projection. Period summaries, location planned-versus-actual
+and pay-period closure still load their scoped complete history; future bounded reads must retain
+late answers and corrections that move a session across period boundaries.
+
+Measured 2026-10-14 on Node v26.7.0, macOS, a temporary real venue store with ten synthetic workers
+and four years of weekday in/out events: 20,860 entries (2,086 per worker), with their real computed
+hashes verified by `verifyChain`. Current code took 2.8 ms to clock in, 22.1 ms for the person's
+September record, 16.9 ms for their summary, 99.4 ms for location planned-versus-actual and 354.2 ms
+for closure. September assertions checked 10,560 minutes per worker and 105,600 location minutes.
+This measures this fixture on this laptop, not a box, large venues or all possible corrections.
+The command was `pnpm --filter @waitron/workforce exec vitest run
+src/zz-read-performance-probe.test.ts --reporter=verbose` in an independently installed disposable
+checkout; the probe and log are retained with PR #1638’s review receipts. Optimise the remaining period paths with their cross-window
+and frozen-history assertions intact; do not replace them with a bare event-time filter.

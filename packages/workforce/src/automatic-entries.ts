@@ -1,3 +1,5 @@
+import { and, eq } from "drizzle-orm";
+import { timeEntries } from "./schema/time-entries.js";
 import type { Transaction } from "@waitron/db";
 import { AppError, SOURCES, type JobOrigin, type Origin } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
@@ -102,23 +104,27 @@ export async function confirmAutomaticEntry(
   tx: Transaction,
   input: AutomaticConfirmationInput,
 ): Promise<string> {
-  const entries = await readRecordedEntries(tx, { personId: input.workerPersonId });
-  const target = entries.find((e) => e.entryId === input.entryId);
-  if (target === undefined) {
-    const all = await readRecordedEntries(tx, {});
-    if (all.some((e) => e.entryId === input.entryId))
-      throw new AppError("attendance.not_permitted", { personId: input.workerPersonId });
+  const [target] = await readRecordedEntries(tx, { entryId: input.entryId });
+  if (target === undefined)
     throw new AppError("attendance.not_pending", { entryId: input.entryId });
-  }
+  if (target.personId !== input.workerPersonId)
+    throw new AppError("attendance.not_permitted", { personId: input.workerPersonId });
+  const [answer] = await tx
+    .select({ id: timeEntries.id })
+    .from(timeEntries)
+    .where(
+      and(
+        eq(timeEntries.personId, input.workerPersonId),
+        eq(timeEntries.entryKind, "confirmation"),
+        eq(timeEntries.authorKind, "worker"),
+        eq(timeEntries.respondsToEntryId, input.entryId),
+      ),
+    )
+    .limit(1);
   if (
     target.entryKind !== "out" ||
     target.extension?.authorKind !== "automatic" ||
-    entries.some(
-      (e) =>
-        e.entryKind === "confirmation" &&
-        e.extension?.authorKind === "worker" &&
-        e.extension.respondsToEntryId === input.entryId,
-    )
+    answer !== undefined
   )
     throw new AppError("attendance.not_pending", { entryId: input.entryId });
   const { id } = await appendToChain(

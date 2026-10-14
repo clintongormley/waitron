@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
 import { assertLocationExists, assertPersonExists } from "./body-ids.js";
@@ -7,7 +7,6 @@ import { readRecordedEntries } from "./record-reads.js";
 import { compareEvents, effectiveClockEntries, isClockEntry } from "./effective-entries.js";
 import type { ClockEntryKind, RecordExtension } from "./record-types.js";
 import type { CorrectionStatus, TimeEntryRecord } from "./projection.js";
-import { timeEntries } from "./schema/time-entries.js";
 import "./errors.js";
 
 export type CorrectionTarget =
@@ -85,12 +84,9 @@ function reasonFor(reason: unknown): string {
   return reason.trim();
 }
 export async function recordEntryById(tx: Transaction, id: string): Promise<TimeEntryRecord> {
-  const [row] = await tx
-    .select({ personId: timeEntries.personId })
-    .from(timeEntries)
-    .where(eq(timeEntries.id, id));
+  const [row] = await readRecordedEntries(tx, { entryId: id });
   if (row === undefined) throw new AppError("correction.target_not_found", { entryId: id });
-  return (await readRecordedEntries(tx, { personId: row.personId })).find((e) => e.entryId === id)!;
+  return row;
 }
 function correctionInvalid(reason: string): never {
   throw new AppError("correction.invalid", { reason });
