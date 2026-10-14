@@ -1,16 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { TICK_MS } from "@waitron/stream";
-import {
-  AWS_REHEARSAL_LIMITS,
-  AWS_REHEARSAL_SCENARIO_DEADLINE_MS,
-} from "./aws-rehearsal-limits.js";
+import { AWS_REHEARSAL_SCENARIO_DEADLINE_MS } from "./aws-rehearsal-limits.js";
 import { sanitizeEvent } from "./aws-rehearsal-receipt.js";
+import { STREAM_PAUSE_AWS_EXTRA_MS } from "./aws-pause-gate.js";
 import {
-  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS,
-  STREAM_PAUSE_AWS_EXTRA_MS,
-  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS,
-  STREAM_PAUSE_AWS_RESUME_WAIT_MS,
-  STREAM_PAUSE_RESUME_WAIT_MS,
   STREAM_PAUSE_PHASES,
   STREAM_PAUSE_SCENARIO_MS,
   pauseListingPrefix,
@@ -26,19 +18,6 @@ describe("the stream pause scenario's fit to the AWS rehearsal", () => {
         elapsedMs: 2081.1565,
       });
     }
-  });
-
-  it("counts as the AWS run's extra its four paused waits and its longer resume wait", () => {
-    expect(STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS).toBe(AWS_REHEARSAL_LIMITS.denialControlMs);
-    expect(STREAM_PAUSE_AWS_RESUME_WAIT_MS).toBe(
-      TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + STREAM_PAUSE_RESUME_WAIT_MS,
-    );
-    expect(STREAM_PAUSE_AWS_EXTRA_MS).toBe(
-      STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS +
-        2 * AWS_REHEARSAL_LIMITS.denialControlMs +
-        STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS +
-        (STREAM_PAUSE_AWS_RESUME_WAIT_MS - STREAM_PAUSE_RESUME_WAIT_MS),
-    );
   });
 
   it("its waits, with the AWS run's extra waits, fit inside the rehearsal's scenario deadline", () => {

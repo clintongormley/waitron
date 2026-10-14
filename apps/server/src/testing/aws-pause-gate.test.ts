@@ -81,7 +81,7 @@ describe("awaitDeniedPauseCheck", () => {
       api: "ListObjectsV2",
       httpStatus: 403,
       errorName: "AccessDenied",
-      elapsedMs: 2 * 250,
+      elapsedMs: 2_000,
       outcome: "ok",
     });
   });
@@ -150,12 +150,12 @@ describe("awaitDeniedPauseCheck", () => {
     const record = vi.fn();
     const streamEvents = vi.fn(async () => [{ event: "stream.paused" }]);
     await expect(
-      awaitDeniedPauseCheck({ streamEvents, timeoutMs: 1_000, record, ...clock }),
-    ).rejects.toThrow(/no refused pause check was logged within 1000 ms/);
+      awaitDeniedPauseCheck({ streamEvents, timeoutMs: 4_000, record, ...clock }),
+    ).rejects.toThrow(/no refused pause check was logged within 4000 ms/);
     expect(record).toHaveBeenCalledWith({
       phase: "pause-check-denied",
       api: "ListObjectsV2",
-      elapsedMs: 1_000,
+      elapsedMs: 4_000,
       outcome: "failed",
     });
     expect(streamEvents).toHaveBeenCalledTimes(5);

@@ -200,8 +200,8 @@ seconds for the rule's removal to reach AWS, plus 30 seconds, to resume.
 Compared with the local test, the AWS run plans to add, while paused, the wait for the held question
 (5 seconds at most), the two controls (each starts no new listing after 60 seconds) and the wait for
 the logged refusal (up to 60 seconds), and, after it, 120 seconds more of resume wait: 305 seconds in
-all (`STREAM_PAUSE_AWS_EXTRA_MS`, `apps/server/src/testing/stream-pause-scenario.ts`, the module the
-test reads these waits from). That is a planned budget, not an upper bound. It leaves out how long a
+all (`STREAM_PAUSE_AWS_EXTRA_MS`, `apps/server/src/testing/aws-pause-gate.ts`, the module the test
+reads these waits from). That is a planned budget, not an upper bound. It leaves out how long a
 control's last listing runs once started (the store makes up to three attempts, each with a
 30-second silence limit, `packages/stream/src/s3-client.ts`), the calls that put and remove the
 rule, and, in a failing run, the wait of up to 60 seconds from the kill for the restarted Litestream

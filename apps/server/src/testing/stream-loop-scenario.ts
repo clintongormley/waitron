@@ -47,6 +47,7 @@ import { runRestore } from "../restore-command.js";
 import { unsealNodeState } from "../sealed-state.js";
 import { streamSettingsPayload } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
+import { stageClock, waitUntil } from "./scenario-stages.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -112,25 +113,6 @@ export interface StreamLoopFixture {
   record?(event: StreamLoopEvent): void;
 }
 
-/** One event per stage: a stage ends when the next begins, or when `end` names its outcome. */
-function stageClock(record: StreamLoopFixture["record"], signal: AbortSignal | undefined) {
-  let current: { phase: StreamLoopPhase; started: number } | undefined;
-  const end = (outcome: StreamLoopEvent["outcome"]): void => {
-    if (current === undefined) return;
-    const { phase, started } = current;
-    current = undefined;
-    record?.({ phase, outcome, elapsedMs: performance.now() - started });
-  };
-  return {
-    begin(phase: StreamLoopPhase): void {
-      end("ok");
-      signal?.throwIfAborted();
-      current = { phase, started: performance.now() };
-    },
-    end,
-  };
-}
-
 interface BoxDirs {
   root: string;
   state: string;
@@ -142,23 +124,6 @@ async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
   const dirs = { root, state: join(root, "state"), venue: join(root, "state", "venue") };
   await mkdir(dirs.venue, { recursive: true });
   return dirs;
-}
-
-async function waitUntil<T>(
-  what: string,
-  timeoutMs: number,
-  probe: () => Promise<T | undefined>,
-  signal: AbortSignal | undefined,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    signal?.throwIfAborted();
-    const value = await probe();
-    if (value !== undefined) return value;
-    if (Date.now() >= deadline)
-      throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
-    await delay(POLL_MS, undefined, signal === undefined ? {} : { signal });
-  }
 }
 
 /** Keys in the bucket containing `fragment`, whether the store returns them with its prefix or without. */
@@ -229,7 +194,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   const { bucket, scratch, litestreamBin, signal } = fixture;
   const clock = stageClock(fixture.record, signal);
   const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
-    waitUntil(what, timeoutMs, probe, signal);
+    waitUntil(what, timeoutMs, probe, signal, POLL_MS);
   // Each server leaves the set before it is closed, so an abort and the body never close one twice.
   const running = new Set<StartedServer>();
   const closeRunning = async (): Promise<unknown[]> => {

@@ -72,7 +72,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       }
 
       scratch = await mkdtemp(join(tmpdir(), "waitron-stream-pause-"));
-      // 1. The bucket.
       const server = await startS3TestServer({ bin: versitygw.bin, root: join(scratch, "s3") });
       s3 = server;
       await runStreamPauseScenario({

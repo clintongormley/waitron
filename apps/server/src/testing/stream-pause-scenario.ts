@@ -10,7 +10,8 @@
 //     waiting on the frozen bucket is shown to exceed;
 //   - once the bucket answers again the pause ends, streaming resumes into the same generation,
 //     and a sale made while the bucket was frozen is in it.
-// `stream-pause.e2e.test.ts` runs it against versitygw.
+// `stream-pause.e2e.test.ts` runs it against versitygw; `aws-stream-pause.aws-rehearsal.test.ts`
+// against Amazon S3, by opt-in only.
 import { cp, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
@@ -58,8 +59,8 @@ import { seedTermZeroMembership } from "../membership-seed.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
-import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
 import { freePort } from "./free-ports.js";
+import { stageClock, waitUntil } from "./scenario-stages.js";
 import { framesUnderHeader, readSideFile } from "./stream-pause-diagnostics.js";
 import { offerProducts } from "./zone-offers.js";
 
@@ -127,38 +128,6 @@ export const STREAM_PAUSE_SCENARIO_MS =
   RESTORE_MS +
   UNTIMED_MS;
 
-/**
- * The AWS run's wait, while paused, for the server's pause check to be held at its gate. The
- * supervisor asks once the side file is folded back (`#pause`, packages/stream/src/supervisor.ts),
- * which the scenario waits for before the paused sales, so the check is normally held already.
- */
-export const STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS = 5_000;
-
-/** The AWS run's wait, while paused, for the supervisor to log its refused pause check. */
-export const STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS = AWS_REHEARSAL_LIMITS.denialControlMs;
-
-/**
- * The AWS run's resume wait: after a refused check the supervisor asks again only after TICK_MS,
- * and the rule's removal may take up to the control budget to reach every AWS front end.
- */
-export const STREAM_PAUSE_AWS_RESUME_WAIT_MS =
-  TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + STREAM_PAUSE_RESUME_WAIT_MS;
-
-/**
- * What the AWS run plans to add: inside the pause, the wait for the held check, the listing
- * denial's two controls and the wait for the refused check; after it, the longer resume wait. This
- * is a budget, not an upper bound. A control's limit stops it STARTING a listing; a listing
- * already started can run on past it, the store making up to three attempts, each with a 30 s
- * silence limit (packages/stream/src/s3-client.ts). Also left out: the bucket policy's put and
- * delete calls, and in a failing run the AWS test's wait for the restarted Litestream to reach its
- * gate.
- */
-export const STREAM_PAUSE_AWS_EXTRA_MS =
-  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS +
-  2 * AWS_REHEARSAL_LIMITS.denialControlMs +
-  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS +
-  (STREAM_PAUSE_AWS_RESUME_WAIT_MS - STREAM_PAUSE_RESUME_WAIT_MS);
-
 export const STREAM_PAUSE_PHASES = [
   "probe",
   "boot",
@@ -181,8 +150,6 @@ export interface StreamPauseEvent {
 }
 
 export interface StreamPauseWhilePaused {
-  generation: string;
-  venueId: string;
   /** The full key prefix the supervisor's pause check lists, the bucket's prefix included. */
   pauseListingPrefix: string;
   streamEvents(): Promise<{ event: string; [field: string]: unknown }[]>;
@@ -204,6 +171,8 @@ export interface StreamPauseFixture {
   store?: ObjectStore;
   /** Handed to the server with the side-file limit. */
   serverSeams?: Pick<StreamHostDeps, "spawn" | "store">;
+  /** Called just before step 7 kills Litestream. */
+  beforeRestart?(): void;
   /** Runs once the paused sales are checked, before the bucket is let run again. */
   whilePaused?(paused: StreamPauseWhilePaused): Promise<void>;
   /** Replaces how long the stream is given to resume once the bucket answers. */
@@ -217,42 +186,6 @@ export function pauseListingPrefix(
   generation: string,
 ): string {
   return bucketKey(bucket, `${generationPrefix(venueId, generation)}${levelFolder(0)}`);
-}
-
-/** One event per stage: a stage ends when the next begins, or when `end` names its outcome. */
-function stageClock(record: StreamPauseFixture["record"], signal: AbortSignal | undefined) {
-  let current: { phase: StreamPausePhase; started: number } | undefined;
-  const end = (outcome: StreamPauseEvent["outcome"]): void => {
-    if (current === undefined) return;
-    const { phase, started } = current;
-    current = undefined;
-    record?.({ phase, outcome, elapsedMs: performance.now() - started });
-  };
-  return {
-    begin(phase: StreamPausePhase): void {
-      end("ok");
-      signal?.throwIfAborted();
-      current = { phase, started: performance.now() };
-    },
-    end,
-  };
-}
-
-async function waitUntil<T>(
-  what: string,
-  timeoutMs: number,
-  probe: () => Promise<T | undefined>,
-  signal: AbortSignal | undefined,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    signal?.throwIfAborted();
-    const value = await probe();
-    if (value !== undefined) return value;
-    if (Date.now() >= deadline)
-      throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
-    await delay(POLL_MS, undefined, signal === undefined ? {} : { signal });
-  }
 }
 
 async function fileBytes(path: string): Promise<number> {
@@ -296,7 +229,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
   const { bucket, scratch, litestreamBin, signal, freeze } = fixture;
   const clock = stageClock(fixture.record, signal);
   const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
-    waitUntil(what, timeoutMs, probe, signal);
+    waitUntil(what, timeoutMs, probe, signal, POLL_MS);
   const sleep = (ms: number) => delay(ms, undefined, signal === undefined ? {} : { signal });
   let server: StartedServer | undefined;
   let dispatcher: Agent | undefined;
@@ -673,6 +606,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     const firstLitestream = await readPid();
     expect(firstLitestream, "no Litestream PID recorded").toBeDefined();
     const exitsBefore = await exits();
+    fixture.beforeRestart?.();
     process.kill(firstLitestream!, "SIGKILL");
     await waitFor("the supervisor to start a new Litestream", RESTART_WAIT_MS, async () => {
       const pid = await readPid();
@@ -783,8 +717,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       clock.end("skipped");
     } else {
       await fixture.whilePaused({
-        generation,
-        venueId: box.venueId,
         pauseListingPrefix: pauseListingPrefix(bucket, box.venueId, generation),
         streamEvents: () => streamEvents(logDir),
       });

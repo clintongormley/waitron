@@ -2,9 +2,46 @@
 // be tested without a bucket: which hosts its gates let through, and how it reads the server's log
 // and the gate's record.
 import { setTimeout as delay } from "node:timers/promises";
+import { TICK_MS } from "@waitron/stream";
+import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
+import { STREAM_PAUSE_RESUME_WAIT_MS } from "./stream-pause-scenario.js";
 import type { SeenConnect } from "./transport-gate.js";
 
 const POLL_MS = 250;
+/** The supervisor asks at most once per TICK_MS, so the server's log is read less often. */
+const DENIED_CHECK_POLL_MS = 1_000;
+
+/**
+ * The AWS run's wait, while paused, for the server's pause check to be held at its gate. The
+ * supervisor asks once the side file is folded back (`#pause`, packages/stream/src/supervisor.ts),
+ * which the scenario waits for before the paused sales, so the check is normally held already.
+ */
+export const STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS = 5_000;
+
+/** The AWS run's wait, while paused, for the supervisor to log its refused pause check. */
+export const STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS = AWS_REHEARSAL_LIMITS.denialControlMs;
+
+/**
+ * The AWS run's resume wait: after a refused check the supervisor asks again only after TICK_MS,
+ * and the rule's removal may take up to the control budget to reach every AWS front end.
+ */
+export const STREAM_PAUSE_AWS_RESUME_WAIT_MS =
+  TICK_MS + AWS_REHEARSAL_LIMITS.denialControlMs + STREAM_PAUSE_RESUME_WAIT_MS;
+
+/**
+ * What the AWS run plans to add: inside the pause, the wait for the held check, the listing
+ * denial's two controls and the wait for the refused check; after it, the longer resume wait. This
+ * is a budget, not an upper bound. A control's limit stops it STARTING a listing; a listing
+ * already started can run on past it, the store making up to three attempts, each with a 30 s
+ * silence limit (packages/stream/src/s3-client.ts). Also left out: the bucket policy's put and
+ * delete calls, and in a failing run the AWS test's wait for the restarted Litestream to reach its
+ * gate.
+ */
+export const STREAM_PAUSE_AWS_EXTRA_MS =
+  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS +
+  2 * AWS_REHEARSAL_LIMITS.denialControlMs +
+  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS +
+  (STREAM_PAUSE_AWS_RESUME_WAIT_MS - STREAM_PAUSE_RESUME_WAIT_MS);
 
 interface Clock {
   now?(): number;
@@ -15,11 +52,12 @@ const realSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
   delay(ms, undefined, signal === undefined ? {} : { signal });
 
 /**
- * The only host the gates admit: the owned bucket's virtual-hosted name in its region. Both of
- * the rehearsal's clients address it there: Litestream 0.5.17 did in slice 8a's local experiment
- * (no AWS packet), and the S3 store sets `forcePathStyle` only when an endpoint is given
- * (`packages/stream/src/s3-client.ts`), which the rehearsal's bucket has not. The path-style name
- * `s3.<region>.amazonaws.com` is left out because it serves every bucket.
+ * The only host the gates admit: the owned bucket's virtual-hosted name in its region. Every
+ * client the gates serve addresses it there: Litestream 0.5.17 did in a local experiment on
+ * 2026-10-14 (no AWS packet), and the S3 store, which the server and the scenario both use, sets
+ * `forcePathStyle` only when an endpoint is given (`packages/stream/src/s3-client.ts`), which the
+ * rehearsal's bucket has not. The path-style name `s3.<region>.amazonaws.com` is left out because
+ * it serves every bucket.
  */
 export function ownedBucketHosts(bucket: string, region: string): string[] {
   return [`${bucket}.s3.${region}.amazonaws.com`.toLowerCase()];
@@ -90,7 +128,7 @@ export async function awaitDeniedPauseCheck(
         `no refused pause check was logged within ${options.timeoutMs} ms of the gate's release`,
       );
     }
-    await sleep(POLL_MS, options.signal);
+    await sleep(DENIED_CHECK_POLL_MS, options.signal);
   }
 }
 

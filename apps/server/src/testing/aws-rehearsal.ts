@@ -1295,18 +1295,13 @@ async function runOwned<T>(
       },
       async remove() {
         refuseOnceTearingDown();
-        const result = await call(
-          client,
-          new DeleteBucketPolicyCommand({ Bucket: bucket }),
-          "DeleteBucketPolicy",
-          "listing-denial",
-          callDeps,
-          {},
-          signal,
+        const entry = await removePolicy(
+          sender(client, "listing-denial", callDeps, signal),
+          bucket,
         );
-        if (result.error !== undefined && nameOf(result.error) !== "NoSuchBucketPolicy") {
+        if (entry.outcome !== "ok") {
           throw new AwsRehearsalFailed(
-            `DeleteBucketPolicy failed: ${receiptErrorName(nameOf(result.error))}`,
+            `DeleteBucketPolicy failed: ${receiptErrorName(entry.errorName!)}`,
           );
         }
       },

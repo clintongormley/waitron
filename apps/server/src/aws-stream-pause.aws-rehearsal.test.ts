@@ -12,16 +12,14 @@ import {
   awaitDeniedPauseCheck,
   gateRefusedEvents,
   restartWatch,
+  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS,
+  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS,
+  STREAM_PAUSE_AWS_RESUME_WAIT_MS,
 } from "./testing/aws-pause-gate.js";
 import { withListingDenied } from "./testing/aws-listing-denial.js";
 import { rehearsalLifecycle } from "./testing/aws-rehearsal.js";
 import { resolveLitestream } from "./testing/s3-test-server.js";
-import {
-  runStreamPauseScenario,
-  STREAM_PAUSE_AWS_DENIED_CHECK_WAIT_MS,
-  STREAM_PAUSE_AWS_HELD_CHECK_WAIT_MS,
-  STREAM_PAUSE_AWS_RESUME_WAIT_MS,
-} from "./testing/stream-pause-scenario.js";
+import { runStreamPauseScenario } from "./testing/stream-pause-scenario.js";
 import {
   gatedRequestHandler,
   gatedSpawn,
@@ -40,7 +38,7 @@ import {
 // 5-minute READ_DEADLINE_MS, it logs a timeout without using that once-only slot.
 const SOCKET_TIMEOUT_MS = 120_000;
 
-/** Slice 8a saw Litestream's first CONNECT one second after it started. */
+/** Measured 2026-10-14: Litestream's first CONNECT came one second after it started. */
 const RESTART_CONNECT_WAIT_MS = 60_000;
 
 describe("AWS rehearsal: the stream pause against Amazon S3", () => {
@@ -115,11 +113,8 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
           litestreamBin: litestream.bin,
           describeTransport: () => `Amazon S3, region ${ctx.region}, through a local gate`,
           signal: ctx.signal,
-          record: (event) => {
-            record(event);
-            // The scenario records the freeze control as it starts step 7, just before the kill.
-            if (event.phase === "freeze-control" && event.outcome === "ok") watchRestart();
-          },
+          record,
+          beforeRestart: watchRestart,
           freeze: {
             pause: async () => {
               for (const [, gate] of named) gate.hold();
