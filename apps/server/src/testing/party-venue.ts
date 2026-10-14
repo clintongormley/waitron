@@ -265,11 +265,6 @@ export async function split(
   return split.billId;
 }
 
-/**
- * Waits until the clock reads a later millisecond. `joined_at` is stamped to the millisecond and a
- * tie orders by random id, so a test that expects tables in the order they joined calls this before
- * each later join.
- */
 export async function nextMillisecond(): Promise<void> {
   const start = Date.now();
   while (Date.now() <= start) await new Promise((resolve) => setTimeout(resolve, 1));

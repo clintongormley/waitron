@@ -257,8 +257,6 @@ export async function combineParties(
     await leaveForClearing(tx, tables, at);
   } else if (tables.length > 0) {
     await leaveTables(tx, tables, at);
-    // One millisecond apart, in the order they joined `from`: the display name lists a party's
-    // tables by join time, and a tie falls back to the membership's random id.
     const joinedAt = (i: number) => new Date(Date.parse(at) + i).toISOString();
     await tx
       .insert(partyTables)
