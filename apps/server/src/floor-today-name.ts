@@ -9,6 +9,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
 import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
+import { enqueueMovedSlipsFor, readSentWorkAt } from "./kitchen-print.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -16,7 +17,11 @@ export function sameName(a: string, b: string): boolean {
   return a.normalize("NFC").toLowerCase() === b.normalize("NFC").toLowerCase();
 }
 
-/** Today's name for the table, or for its group when it is in one; null clears it. */
+/**
+ * Today's name for the table, or for its group when it is in one; null clears it. The kitchen is
+ * told of each bill of a party at those tables, and each counter order with food on its way to one
+ * of them, when `kitchenToBeTold` (kitchen-print.ts) says so.
+ */
 export async function nameToday(
   tx: Transaction,
   cfg: TillConfig,
@@ -36,7 +41,12 @@ export async function nameToday(
       .where(eq(floorTodayJoins.id, joinId));
     if (wanted === group!.name) return;
     if (wanted !== null) await refuseInUse(tx, cfg, wanted, { joinId });
+    const before = await readSentWorkAt(
+      tx,
+      today.merge.members.map((member) => member.tableId),
+    );
     await tx.update(floorTodayJoins).set({ name: wanted }).where(eq(floorTodayJoins.id, joinId));
+    await enqueueMovedSlipsFor(tx, cfg, before);
     return;
   }
 
@@ -47,10 +57,12 @@ export async function nameToday(
   if (wanted !== null && sameName(wanted, own!.label)) wanted = null;
   if (wanted === today.row.name) return;
   if (wanted !== null) await refuseInUse(tx, cfg, wanted, { tableId });
+  const before = await readSentWorkAt(tx, [tableId]);
   await tx
     .update(floorTodayTables)
     .set({ name: wanted })
     .where(eq(floorTodayTables.id, today.row.id));
+  await enqueueMovedSlipsFor(tx, cfg, before);
 }
 
 /**

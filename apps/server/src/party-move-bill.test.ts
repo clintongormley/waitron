@@ -10,6 +10,7 @@ import {
   floorZones,
   ticketItems,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { writeClearingWorkflow } from "@waitron/venue-service";
@@ -55,6 +56,9 @@ import {
   zoneOf,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { createPrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 
 // Move a bill to another party, a table or the counter (table actions plan, Task 7; spec §7, §8,
@@ -204,7 +208,12 @@ function lastGroupOf(partyId: string): string {
 }
 
 function noticesOn(billIds: string[]) {
-  return v.db.all<{ working_order_id: string; kind: string; line_name: string; moved_to: string }>(
+  return v.db.all<{
+    working_order_id: string;
+    kind: string;
+    line_name: string;
+    moved_to: string | null;
+  }>(
     sql`
       select working_order_id, kind, line_name, moved_to from kitchen_notices
       where working_order_id in (${sql.join(
@@ -213,6 +222,35 @@ function noticesOn(billIds: string[]) {
       )})
       order by rowid`,
   );
+}
+
+/** A new printer at every station the bill's sent work went to; answers its id. */
+async function printerFor(billId: string): Promise<string> {
+  const stations = v.db.all<{ stationId: string }>(sql`
+    select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`);
+  return inTx(v, async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      },
+    );
+    for (const { stationId } of stations)
+      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
+    return id;
+  });
+}
+
+/** What each job enqueued for the printer prints, oldest first. */
+function printedBy(printerId: string): string[][] {
+  return v.db
+    .all<{ payload: Uint8Array }>(
+      sql`select payload from print_jobs where printer_id = ${printerId} order by rowid`,
+    )
+    .map((job) => printedLines(job.payload));
 }
 
 /** Sends each group as `placeGroups` does, in one transaction: dish names per group. */
@@ -1202,32 +1240,34 @@ describe("MOVED notices", () => {
     const second = await splitOff(ana.partyId, ana.tabId, [2, 3, 4]);
     expect((await ticketsOf(second)).map((t) => t.firedAt !== null)).toEqual([true, true]);
     expect((await ticketsOf(ana.tabId)).map((t) => t.firedAt !== null)).toEqual([true]);
-    return { ana, second, mainNotices: noticesOn([ana.tabId]) };
+    return { ana, second, mainNotices: noticesOn([ana.tabId]), splitNotices: noticesOn([second]) };
   }
 
   it("tells the kitchen of each sent dish of a bill moved to another party, naming its tables", async () => {
-    const { ana, second, mainNotices } = await sentSplit("Mesa aviso 1");
+    const { ana, second, mainNotices, splitNotices } = await sentSplit("Mesa aviso 1");
     const luisTable = await v.table("Mesa aviso 7");
     await seat(v, luisTable);
 
     await move(second, { tableId: luisTable }, { bills: "separate" });
 
     expect(noticesOn([second])).toEqual([
+      ...splitNotices,
       { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 7" },
       { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 7" },
     ]);
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
   });
 
-  it("tells the kitchen of each sent dish of a bill moved to the counter, though its label reads the same", async () => {
-    const { ana, second, mainNotices } = await sentSplit("Mesa aviso 2");
+  it("tells the kitchen of each sent dish of a bill moved to the counter, as the bill left its table", async () => {
+    const { ana, second, mainNotices, splitNotices } = await sentSplit("Mesa aviso 2");
 
     await move(second, { counter: { zoneId: v.counter.zoneId } });
 
     expect((await billRow(v, second)).label).toBe("Mesa aviso 2 A");
     expect(noticesOn([second])).toEqual([
-      { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 2 A" },
-      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 2 A" },
+      ...splitNotices,
+      { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: null },
+      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: null },
     ]);
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
   });
@@ -1237,13 +1277,13 @@ describe("MOVED notices", () => {
     const luisTable = await v.table("Mesa aviso 8");
     const luis = await seat(v, luisTable);
     await order(v, luis.tabId, "Paella");
-    const luisNotices = noticesOn([luis.tabId]);
+    const notices = noticesOn([second, luis.tabId]);
 
     const result = await move(second, { tableId: luisTable });
 
     expect(result).toEqual({ partyId: luis.partyId, billId: luis.tabId, merged: true });
     expect(noticesOn([second, luis.tabId])).toEqual([
-      ...luisNotices,
+      ...notices,
       { working_order_id: luis.tabId, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 8" },
       { working_order_id: luis.tabId, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 8" },
     ]);
@@ -1265,6 +1305,43 @@ describe("MOVED notices", () => {
       { working_order_id: placed, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 3" },
     ]);
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
+  });
+
+  it("prints a counter order moved into a party from the counter to the party's table, as the counter is gone", async () => {
+    const mesa = await v.table("Mesa aviso 5");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Paella");
+    const placed = await placedCounterOrder("Burger");
+    const printerId = await printerFor(placed);
+
+    await move(placed, { tableId: mesa });
+
+    expect(printedBy(printerId).map((lines) => lines.slice(0, 5))).toEqual([
+      [
+        "*** MOVIDO ***",
+        expect.any(String),
+        `Pedido ${(await billRow(v, placed)).orderNumber}`,
+        "De: (mostrador)",
+        "A:  Mesa aviso 5",
+      ],
+    ]);
+  });
+
+  it("tells the kitchen nothing of a counter order delivered to a table, moved into the party there and kept separate: its table and name stay", async () => {
+    const mesa = await v.table("Mesa aviso 6");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Paella");
+    const placed = await placedCounterOrder("Burger");
+    await inTx(v, (tx) =>
+      tx.update(workingOrders).set({ deliveryTableId: mesa }).where(eq(workingOrders.id, placed)),
+    );
+    const printerId = await printerFor(placed);
+
+    await move(placed, { tableId: mesa }, { bills: "separate" });
+
+    expect((await billRow(v, placed)).partyId).toBe(ana.partyId);
+    expect(printedBy(printerId)).toEqual([]);
+    expect(noticesOn([placed])).toEqual([]);
   });
 });
 

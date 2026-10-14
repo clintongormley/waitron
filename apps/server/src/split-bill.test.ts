@@ -578,8 +578,7 @@ async function splitToT2(
 /**
  * The owner's decision of 2026-09-26, overturning plan D10 where they conflict: a partial split gives
  * the moved row its own ticket item, copied from the original, whose own quantity drops by the part
- * moved; a line the kitchen has started may be split; and a split onto a check, at the same table,
- * tells the kitchen nothing.
+ * moved; and a line the kitchen has started may be split.
  */
 describe("splitting a line the kitchen has", () => {
   it("gives the split row a ticket of its own, copied from the original, and takes the part moved off the original's", async () => {
@@ -732,7 +731,7 @@ describe("splitting a line the kitchen has", () => {
     });
   });
 
-  it("tells the kitchen nothing when the split goes onto a check: no notice and no print job", async () => {
+  it("tells the kitchen of the part split onto a check that it is on another order: one notice and one MOVED slip", async () => {
     const seeded = await setupVenue();
     const { cfg } = seeded;
     const stationId = await withKitchen(cfg);
@@ -747,8 +746,14 @@ describe("splitting a line the kitchen has", () => {
       splitPartyBill(tx, cfg, from, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    expect(await printedBy(printerId)).toEqual(printed);
-    expect(await noticesOn(from, checkId)).toEqual([]);
+    const numbers = `${await orderNumberOf(from)} -> ${await orderNumberOf(checkId)}`;
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip("T1", "T1", numbers, "1.000 x Agua"),
+    ]);
+    expect(await noticesOn(from, checkId)).toEqual([
+      { orderId: checkId, kind: "moved", quantity: 1000 },
+    ]);
     expect(await queueAt(cfg, stationId)).toEqual({
       [from]: [thousandthsToDecimal(3000)],
       [checkId]: [thousandthsToDecimal(1000)],
@@ -766,6 +771,7 @@ describe("splitting a line the kitchen has", () => {
     await asApp(cfg, (tx) => cancelLine(tx, cfg, to, 1));
 
     expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "void", quantity: 1000 },
     ]);
@@ -785,6 +791,7 @@ describe("splitting a line the kitchen has", () => {
     await asApp(cfg, (tx) => cancelLine(tx, cfg, from, 1));
 
     expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: to, kind: "moved", quantity: 1000 },
       { orderId: from, kind: "void", quantity: 1000 },
     ]);
@@ -852,7 +859,10 @@ describe("splitting a line the kitchen has", () => {
     expect(slip).toContain("*** VOID ***");
     expect(slip).toContain("T1");
     expect(slip).toContain("1.000 x Agua");
-    expect(await noticesOn(checkId)).toEqual([{ orderId: checkId, kind: "void", quantity: 1000 }]);
+    expect(await noticesOn(checkId)).toEqual([
+      { orderId: checkId, kind: "moved", quantity: 2000 },
+      { orderId: checkId, kind: "void", quantity: 1000 },
+    ]);
   });
 
   it("names the origin's table for the check on the pass board", async () => {
@@ -962,12 +972,13 @@ async function orderNumberOf(orderId: string): Promise<number> {
 }
 
 /** A MOVED slip's printed lines, its time matched by shape. */
-function movedSlip(tables: string, orderNumbers: string, item: string): unknown[] {
+function movedSlip(from: string, to: string, orderNumber: string, item: string): unknown[] {
   return [
-    "*** MOVED ***",
+    "*** MOVIDO ***",
     "Cocina",
-    tables,
-    orderNumbers,
+    `Pedido ${orderNumber}`,
+    `De: ${from}`,
+    `A:  ${to}`,
     expect.stringMatching(/^\d\d:\d\d$/),
     item,
     "",
@@ -976,11 +987,10 @@ function movedSlip(tables: string, orderNumbers: string, item: string): unknown[
 
 /**
  * The owner's decision of 2026-09-26 (lane C questions, menus Task 7b item 4): moving sent work to
- * another table is allowed, and the kitchen is told. The table compared is the one a correction slip
- * names for the order (`readOrderHeader`), read before the move and after it.
+ * another table is allowed, and the kitchen is told.
  */
 describe("moving sent work to another table tells the kitchen", () => {
-  it("tells the kitchen nothing when a check merges back into the tab it was split from", async () => {
+  it("tells the kitchen, when a check merges back into the tab it was split from, that its dishes are on another order", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
@@ -1003,8 +1013,25 @@ describe("moving sent work to another table tells the kitchen", () => {
       });
     });
 
-    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([]);
-    expect(await printedBy(printerId)).toEqual(printed);
+    const [tabNumber, checkNumber] = [await orderNumberOf(tabId), await orderNumberOf(checkId)];
+    const notice = {
+      stationId,
+      kind: "moved",
+      lineName: "Agua",
+      quantity: thousandthsToDecimal(1000),
+      unitName: { es: EACH_UNIT.abbreviation.es },
+      note: null,
+      wasStarted: false,
+      movedTo: "T1",
+    };
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      { ...notice, workingOrderId: checkId, orderLabel: `#${tabNumber} → #${checkNumber} · T1` },
+      { ...notice, workingOrderId: tabId, orderLabel: `#${checkNumber} → #${tabNumber}` },
+    ]);
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip("T1", "T1", `${checkNumber} -> ${tabNumber}`, "1.000 x Agua"),
+    ]);
     expect(await queueAt(cfg, stationId)).toEqual({
       [tabId]: [thousandthsToDecimal(1000), thousandthsToDecimal(1000)],
     });
@@ -1048,6 +1075,6 @@ describe("moving sent work to another table tells the kitchen", () => {
     ]);
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(2);
-    expect(printed[1]).toEqual(movedSlip("T1 -> T2", `${number}`, "2.000 x Agua"));
+    expect(printed[1]).toEqual(movedSlip("T1", "T2", `${number}`, "2.000 x Agua"));
   });
 });

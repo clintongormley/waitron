@@ -18,7 +18,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { transferItems } from "./bill-actions.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { moveGuests } from "./table-actions.js";
 import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { splitPartyBill } from "./testing/serve-line.js";
@@ -163,7 +163,7 @@ describe("splitting a dish with split-off extras", () => {
     });
   });
 
-  it("a whole burger transferred between bills tells Grill and Fryer when the party joins another table", async () => {
+  it("a whole burger transferred between bills tells Grill and Fryer when the party moves to another table", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, (tx) =>
       addTabRound(tx, venue.cfg, venue.party.tabId, [picked(venue, "burger", "1")]),
@@ -202,7 +202,7 @@ describe("splitting a dish with split-off extras", () => {
     const before = await jobCounts();
     await withTransaction(db, async (tx) => {
       const party = await partyRevisionOfOrder(tx, venue.party.tabId);
-      await joinTables(tx, venue.cfg, venue.party.partyId, otherTable.id, {
+      await moveGuests(tx, venue.cfg, venue.party.partyId, otherTable.id, {
         expectedPartyRevision: party!.revision,
         operatorId: randomUUID(),
         bills: "separate",
@@ -217,10 +217,10 @@ describe("splitting a dish with split-off extras", () => {
       .get(venue.printers.fryer)!
       .slice(before.get(venue.printers.fryer)!.length);
     expect(grillSlips).toHaveLength(1);
-    expect(grillSlips[0]).toContain("MOVED");
+    expect(grillSlips[0]).toContain("*** MOVIDO ***");
     expect(grillSlips[0]).toContain("BURG");
     expect(fryerSlips).toHaveLength(1);
-    expect(fryerSlips[0]).toContain("MOVED");
+    expect(fryerSlips[0]).toContain("*** MOVIDO ***");
     expect(fryerSlips[0]).toContain("CHIPS");
     const moved = await withTransaction(db, (tx) =>
       tx

@@ -153,7 +153,7 @@ import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
-import type { TableActionOptions } from "./table-actions.js";
+import type { SlipsLater, TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -192,6 +192,7 @@ import {
   listPrintProblems,
   readPartiesSentWork,
   reprintOrderTickets,
+  type SentWork,
 } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -2680,17 +2681,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
             // A merge can pass guests on after the join, so the kitchen is told once, at the end.
-            const slipsLater =
-              merge === null ? undefined : { mergedInto: new Map<string, string>() };
-            const holder = slipsLater === undefined ? null : await holderOf(tx, tableId);
-            const before =
-              slipsLater === undefined
-                ? null
-                : await readPartiesSentWork(
-                    tx,
-                    sendCfg,
-                    holder === null ? [partyId] : [partyId, holder],
-                  );
+            let later: { slips: SlipsLater; before: ReadonlyMap<string, SentWork> } | undefined;
+            if (merge !== null) {
+              const holder = await holderOf(tx, tableId);
+              const parties = holder === null ? [partyId] : [partyId, holder];
+              const before = await readPartiesSentWork(tx, parties, [merge.moving, merge.target]);
+              later = { slips: { mergedInto: new Map<string, string>() }, before };
+            }
+            const slipsLater = later?.slips;
             const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
             await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {
@@ -2704,8 +2702,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 free: false,
               });
             }
-            if (before !== null) {
-              await enqueueMovedSlipsFor(tx, sendCfg, before, slipsLater!.mergedInto);
+            if (later !== undefined) {
+              await enqueueMovedSlipsFor(tx, sendCfg, later.before, later.slips.mergedInto);
             }
             // Last, so the route's own refusals answer first.
             await refuseTakenOff(tx, [tableId]);

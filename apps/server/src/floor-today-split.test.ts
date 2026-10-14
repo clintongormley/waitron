@@ -482,6 +482,16 @@ describe("guests at a joined table that is split", () => {
     expect((await billRow(v, guests.tabId)).partyId).toBe(guests.partyId);
   });
 
+  it("tells the kitchen nothing while two parts remain: the guests keep Long table and its name, so no table or name is lost (A650 §3 row 11')", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const guests = await seat(v, table.long!);
+    await order(v, guests.tabId, "Burger");
+
+    await split(table.long!, [table.c5!], 6);
+
+    expect(noticesOn([guests.tabId])).toEqual([]);
+  });
+
   it("a split down to one passes the guests to the part left, and Long table needs no clearing", async () => {
     await withClearing(async () => {
       const { table } = await LONG_PLUS_BAR();

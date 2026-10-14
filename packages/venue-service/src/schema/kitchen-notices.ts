@@ -40,7 +40,7 @@ export const kitchenNotices = table(
     quantity: quantity("quantity").notNull(),
     note: label("note"),
     wasStarted: flag("was_started").notNull().default(false),
-    /** On a `moved` notice, the table the work now belongs to; null where it has none. */
+    /** On a `moved` notice, the MOVED slip's To text; null when the work went to the counter. */
     movedTo: label("moved_to"),
     /** On a `changed` notice, whether the quantity was added to or taken from the work. */
     direction: kitchenNoticeDirection("direction"),

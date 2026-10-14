@@ -7,9 +7,11 @@ import {
   crossRefText,
   formatCorrectionSlip,
   formatKitchenTicket,
+  formatMovedSlip,
   joinKitchenTickets,
+  movedPlaceText,
 } from "./kitchen-ticket.js";
-import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
+import type { KitchenTicket, KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import {
   commandNames,
   decodeTicket,
@@ -620,58 +622,194 @@ describe("formatCorrectionSlip", () => {
   });
 });
 
-describe("formatCorrectionSlip for work moved to another table", () => {
-  it("prints the table and order number the kitchen had, then the ones the work moved to", () => {
+describe("formatMovedSlip", () => {
+  const sameNumberNoName: MovedSlip = {
+    stationName: "Grill",
+    fromNumber: "28",
+    fromText: "Mesa 91",
+    toText: "Mesa 91",
+    at: new Date(2026, 9, 14, 13, 24).toISOString(),
+    items: [{ qty: "1.000", name: "BURG" }],
+    held: [],
+    locale: "en-GB",
+  };
+  const slip: MovedSlip = { ...sameNumberNoName, toNumber: "27", partyName: "Ana" };
+
+  it("prints the English slip at 80 mm: header, order line with the new number and the party, From, To, time, dishes", () => {
+    const bytes = formatMovedSlip(slip, KITCHEN_80);
+    expect(printedLines(bytes)).toEqual([
+      "*** MOVED ***",
+      "Grill",
+      "Order 28 -> 27 · Ana",
+      "From: Mesa 91",
+      "To:   Mesa 91",
+      "13:24",
+      "1.000 x BURG",
+      "",
+    ]);
+    expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
+  });
+
+  it("prints the Spanish words at 58 mm", () => {
+    expect(printedLines(formatMovedSlip({ ...slip, locale: "es-ES" }, KITCHEN_58))).toEqual([
+      "*** MOVIDO ***",
+      "Grill",
+      "Pedido 28 -> 27 · Ana",
+      "De: Mesa 91",
+      "A:  Mesa 91",
+      "13:24",
+      "1.000 x BURG",
+      "",
+    ]);
+  });
+
+  it("prints the order number alone when it did not change and the party has no name", () => {
     const lines = printedLines(
-      formatCorrectionSlip(
+      formatMovedSlip(
+        { ...sameNumberNoName, fromNumber: "26", fromText: "Fiesta", toText: "Fiesta 2" },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines.slice(0, 5)).toEqual([
+      "*** MOVED ***",
+      "Grill",
+      "Order 26",
+      "From: Fiesta",
+      "To:   Fiesta 2",
+    ]);
+  });
+
+  it.each([
+    ["en-GB", ["From: Cumpleaños de la abuela", "      García", "To:   Mesa 6, 9"]],
+    ["es-ES", ["De: Cumpleaños de la abuela", "    García", "A:  Mesa 6, 9"]],
+  ])("wraps a long From name under itself at 58 mm for %s", (locale, expected) => {
+    const lines = printedLines(
+      formatMovedSlip(
+        { ...slip, locale, fromText: "Cumpleaños de la abuela García", toText: "Mesa 6, 9" },
+        KITCHEN_58,
+      ),
+    );
+    expect(lines.slice(3, 6)).toEqual(expected);
+  });
+
+  it("wraps a long order line under the text after the order number at 58 mm", () => {
+    const lines = printedLines(
+      formatMovedSlip(
         {
-          kind: "MOVED",
-          stationName: "Cocina",
-          tableLabel: "Mesa 7",
-          orderNumber: "15",
-          movedFrom: { tableLabel: "Mesa 3", orderNumber: "12" },
-          at: new Date(2026, 7, 17, 14, 30).toISOString(),
-          item: { qty: 2, name: "Tiramisu", note: "sin nata" },
+          ...sameNumberNoName,
+          fromNumber: "7",
+          partyName: "Cumpleaños de la abuela",
+          locale: "es-ES",
+        },
+        KITCHEN_58,
+      ),
+    );
+    expect(lines.slice(2, 5)).toEqual([
+      "Pedido 7 · Cumpleaños de la",
+      "           abuela",
+      "De: Mesa 91",
+    ]);
+  });
+
+  it("lists held dishes after the fired ones under HOLD, each group under its GROUP line", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          ...slip,
+          locale: "es-ES",
+          held: [
+            { group: 2, items: [{ qty: "1.000", name: "STEAK" }] },
+            { group: 3, items: [{ qty: "2.000", name: "FLAN", note: "sin nata" }] },
+          ],
         },
         KITCHEN_80,
       ),
     );
-    expect(lines).toEqual([
-      "*** MOVED ***",
-      "Cocina",
-      "Mesa 3 -> Mesa 7",
-      "12 -> 15",
-      "14:30",
-      "2 x Tiramisu",
+    expect(lines.slice(5)).toEqual([
+      "13:24",
+      "1.000 x BURG",
+      "HOLD",
+      "GROUP 2",
+      "1.000 x STEAK",
+      "GROUP 3",
+      "2.000 x FLAN",
       "  * sin nata",
       "",
     ]);
   });
 
-  it("prints the order number once when the order moved with its work, and a dash for no table", () => {
+  it("starts the dishes with HOLD when every dish is held", () => {
     const lines = printedLines(
-      formatCorrectionSlip(
+      formatMovedSlip(
+        { ...slip, items: [], held: [{ group: 1, items: [{ qty: "1.000", name: "STEAK" }] }] },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines.slice(5)).toEqual(["13:24", "HOLD", "GROUP 1", "1.000 x STEAK", ""]);
+  });
+
+  it("prints the place text the caller gives, such as the counter", () => {
+    const lines = printedLines(
+      formatMovedSlip({ ...slip, fromText: "Mesa 43", toText: "(counter)" }, KITCHEN_80),
+    );
+    expect(lines.slice(3, 5)).toEqual(["From: Mesa 43", "To:   (counter)"]);
+  });
+
+  it("heads each group's run of fired dishes with GROUP n when they span groups", () => {
+    const lines = printedLines(
+      formatMovedSlip(
         {
-          kind: "MOVED",
-          stationName: "Cocina",
-          tableLabel: null,
-          orderNumber: "12",
-          movedFrom: { tableLabel: "Mesa 3", orderNumber: "12" },
-          at: new Date(2026, 7, 17, 9, 5).toISOString(),
-          item: { qty: 1, name: "Chips" },
+          ...slip,
+          items: [
+            { qty: "1.000", name: "BURG", group: 1 },
+            { qty: "2.000", name: "CHIPS", group: 1 },
+            { qty: "1.000", name: "STEAK", group: 2 },
+          ],
         },
         KITCHEN_80,
       ),
     );
-    expect(lines).toEqual([
-      "*** MOVED ***",
-      "Cocina",
-      "Mesa 3 -> -",
-      "12",
-      "09:05",
-      "1 x Chips",
+    expect(lines.slice(5)).toEqual([
+      "13:24",
+      "GROUP 1",
+      "1.000 x BURG",
+      "2.000 x CHIPS",
+      "GROUP 2",
+      "1.000 x STEAK",
       "",
     ]);
+  });
+
+  it("prints no GROUP line when every fired dish is in one group", () => {
+    const lines = printedLines(
+      formatMovedSlip(
+        {
+          ...slip,
+          items: [
+            { qty: "1.000", name: "BURG", group: 1 },
+            { qty: "2.000", name: "CHIPS", group: 1 },
+          ],
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines.slice(5)).toEqual(["13:24", "1.000 x BURG", "2.000 x CHIPS", ""]);
+  });
+});
+
+describe("movedPlaceText", () => {
+  it.each([
+    ["en-GB", "(counter)"],
+    ["es-ES", "(mostrador)"],
+  ])("words a counter order for %s", (locale, expected) => {
+    expect(movedPlaceText({ counter: true, names: [] }, locale)).toBe(expected);
+  });
+
+  it("joins an order's place names as its tickets name them", () => {
+    expect(movedPlaceText({ counter: false, names: ["Mesa 6", "Mesa 9"] }, "es-ES")).toBe(
+      "Mesa 6, 9",
+    );
+    expect(movedPlaceText({ counter: false, names: ["Cumple Ana"] }, "en-GB")).toBe("Cumple Ana");
   });
 });
 

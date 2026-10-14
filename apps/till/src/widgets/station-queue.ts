@@ -815,7 +815,7 @@ export class TillStationQueue extends LitElement {
     const line = `${sign}${dishLine(notice, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
     const { movedTo, reroutedTo, cancelledExtra } = notice;
-    // A replacer function, so a `$` in the name is never read as a pattern.
+    // Replacer functions, so a `$` in a name is never read as a pattern.
     const extra =
       cancelledExtra === null
         ? null
@@ -824,6 +824,12 @@ export class TillStationQueue extends LitElement {
       reroutedTo === null
         ? null
         : t("station.notice.rerouted_to").replace("{station}", () => reroutedTo);
+    const moved =
+      notice.kind !== "moved"
+        ? null
+        : movedTo === null
+          ? t("station.notice.moved_to_counter")
+          : t("station.notice.moved_to").replace("{table}", () => movedTo);
     const station = this.stationNames?.get(notice.stationId);
     return html`<li class="notice kind-${notice.kind}" data-notice=${notice.id}>
       <span class="notice-kind"><wt-icon name=${`notice-${notice.kind}`}></wt-icon>${kind}</span>
@@ -837,16 +843,7 @@ export class TillStationQueue extends LitElement {
             : nothing
         }
         ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
-        ${
-          movedTo === null
-            ? nothing
-            : html`<span class="notice-moved"
-                >${
-                  // A replacer function, so a `$` in the typed label is never read as a pattern.
-                  t("station.notice.moved_to").replace("{table}", () => movedTo)
-                }</span
-              >`
-        }
+        ${moved === null ? nothing : html`<span class="notice-moved">${moved}</span>`}
         ${rerouted === null ? nothing : html`<span class="notice-rerouted">${rerouted}</span>`}
         ${
           station === undefined

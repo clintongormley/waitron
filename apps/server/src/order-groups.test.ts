@@ -3991,7 +3991,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("prints nothing when a Steak of the printed mains is split onto a check, then one FIRE slip from each bill for its own dishes", async () => {
+    it("prints a MOVED slip listing the Steak under HOLD when one of the printed mains is split onto a check, then one FIRE slip from each bill for its own dishes", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
@@ -4013,12 +4013,28 @@ describe("advance HOLD tickets (Task 6)", () => {
         MIA,
       );
 
-      expect(await printedSince(v, 5)).toEqual([]);
-      expect(await noticesAt(v)).toEqual([]);
+      const [station, table, tabNumber, at] = await head(v, s);
+      const checkNumber = (await billHead(v, s, checkId))[2];
+      expect(await printedSince(v, 5)).toEqual([
+        [
+          "*** MOVIDO ***",
+          station,
+          `Pedido ${tabNumber} -> ${checkNumber}`,
+          `De: ${table}`,
+          `A:  ${table}`,
+          at,
+          "HOLD",
+          "GROUP 4",
+          `1.000 x ${DISHES.steak.kitchen}`,
+        ],
+      ]);
+      expect(await noticesAt(v)).toEqual([
+        { kind: "moved", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: null },
+      ]);
 
       await fire(v, s.partyId, s.mains);
 
-      expect(await printedSince(v, 5)).toEqual([
+      expect(await printedSince(v, 6)).toEqual([
         [
           "*** FIRE ***",
           ...(await head(v, s)),
@@ -4033,7 +4049,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           `1.000 x ${DISHES.steak.kitchen}`,
         ],
       ]);
-      const [tabSlip, checkSlip] = (await jobIds(v)).slice(5);
+      const [tabSlip, checkSlip] = (await jobIds(v)).slice(6);
       const linksOf = async (billId: string) =>
         (
           await db

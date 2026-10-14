@@ -576,6 +576,56 @@ describe("recordKitchenNotices", () => {
       expect(await db.select().from(kitchenNotices)).toEqual([]);
     });
 
+    it.each(["recalled", "void", "changed"] as const)(
+      "a came-from order number on a %s notice, which only a moved notice carries",
+      async (kind) => {
+        const v = await venue();
+        const order = await seedOrder(v.locationId, 1, null);
+        await expect(
+          inTx((tx) =>
+            recordKitchenNotices(
+              tx,
+              v.cfg,
+              order.orderId,
+              [item(order.burgerLineId, v.grill)],
+              kind,
+              null,
+              null,
+              null,
+              null,
+              28,
+            ),
+          ),
+        ).rejects.toMatchObject({
+          code: "kitchen_notice.invalid",
+          params: { field: "fromNumber" },
+        });
+        expect(await db.select().from(kitchenNotices)).toEqual([]);
+      },
+    );
+
+    it("a came-from order number on a rerouted notice", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      await expect(
+        inTx((tx) =>
+          recordKitchenNotices(
+            tx,
+            v.cfg,
+            order.orderId,
+            [item(order.burgerLineId, v.grill)],
+            "rerouted",
+            null,
+            null,
+            null,
+            "Grill",
+            28,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "fromNumber" } });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
     it("a direction other than added or removed", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
@@ -778,6 +828,63 @@ describe("recordKitchenNotices", () => {
         reroutedTo: null,
         createdAt: expect.any(String),
       },
+    ]);
+  });
+
+  it("labels a moved notice by the number the dishes came from and the one they are on, when the two differ", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 27, null);
+    const labelled = await seedOrder(v.locationId, 30, "Table 4");
+    const burger = (o: { burgerLineId: string }) => [
+      { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
+    ];
+    await inTx(async (tx) => {
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        burger(order),
+        "moved",
+        "Mesa 7",
+        null,
+        null,
+        null,
+        28,
+      );
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        burger(order),
+        "moved",
+        "Mesa 7",
+        null,
+        null,
+        null,
+        27,
+      );
+      await recordKitchenNotices(
+        tx,
+        v.cfg,
+        labelled.orderId,
+        burger(labelled),
+        "moved",
+        null,
+        null,
+        null,
+        null,
+        28,
+      );
+    });
+    expect(
+      (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
+        notice.orderLabel,
+        notice.movedTo,
+      ]),
+    ).toEqual([
+      ["#28 → #27", "Mesa 7"],
+      ["#27", "Mesa 7"],
+      ["#28 → #30 · Table 4", null],
     ]);
   });
 

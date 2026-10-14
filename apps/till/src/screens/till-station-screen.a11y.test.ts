@@ -146,6 +146,15 @@ const notices: KitchenNotice[] = [
   { ...baseNotice, id: "kn-recalled", kind: "recalled", wasStarted: false },
   { ...baseNotice, id: "kn-changed", kind: "changed", wasStarted: false, note: "no onions" },
   { ...baseNotice, id: "kn-moved", kind: "moved", wasStarted: false, movedTo: "Terraza 2" },
+  // Moved to the counter, onto an order with another number.
+  {
+    ...baseNotice,
+    id: "kn-moved-counter",
+    kind: "moved",
+    wasStarted: false,
+    movedTo: null,
+    orderLabel: "#28 → #27",
+  },
 ];
 
 afterEach(cleanupWidgets);

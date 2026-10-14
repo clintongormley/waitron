@@ -42,7 +42,7 @@ import {
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables, moveGuests } from "./table-actions.js";
 import { overridePinAttempts } from "./till-api.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -1030,10 +1030,29 @@ describe("sent work moved between a party's bills at two of its tables", () => {
       order by rowid`);
   }
 
+  async function numberOf(billId: string): Promise<number> {
+    return (await billRow(v, billId)).orderNumber;
+  }
+
+  /** A MOVED slip at the station, the party at `label`'s two tables before and after. */
+  function movedSlip(numbers: string, label: string, dishes: string[]): unknown[] {
+    const tables = `Patio ${label}, Terraza ${label}`;
+    return [
+      "*** MOVIDO ***",
+      expect.any(String),
+      `Pedido ${numbers}`,
+      `De: ${tables}`,
+      `A:  ${tables}`,
+      expect.stringMatching(/^\d\d:\d\d$/),
+      ...dishes,
+      "",
+    ];
+  }
+
   /**
    * A party at `label` whose main bill has `burgers` Burgers sent to the kitchen and whose second
-   * bill holds a sent Vino, and which has then joined a second table. The printer is at the station
-   * of `watched`'s work.
+   * bill holds a sent Vino, which has then moved to `Patio label` and joined a second table. The
+   * printer is at the station of `watched`'s work.
    */
   async function atTwoTables(label: string, burgers: string, watched: "main" | "second") {
     const { partyId, tabId: main } = await seat(v, await v.table(label));
@@ -1053,34 +1072,53 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     );
     const second = await splitOff(partyId, main, [2]);
     const printerId = await printerFor(watched === "main" ? main : second);
+    const patio = await v.table(`Patio ${label}`);
+    const moving = await commandFor(v, partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, patio, { ...moving, bills: "merge", otherPartyId: null }),
+    );
     const terraza = await v.table(`Terraza ${label}`);
     const sent = await commandFor(v, partyId);
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, partyId, terraza, { ...sent, bills: "merge", otherPartyId: null }),
     );
-    // The control: this printer does print the MOVED slips the join makes.
+    // The control: this printer does print the MOVED slips the move makes.
     const control = await printedBy(printerId);
     expect(control.length).toBeGreaterThan(0);
-    expect(new Set(control.map((slip) => slip[0]))).toEqual(new Set(["*** MOVED ***"]));
+    expect(new Set(control.map((slip) => slip[0]))).toEqual(new Set(["*** MOVIDO ***"]));
     return { partyId, main, second, printerId };
   }
 
-  it("tells the kitchen nothing of a merge, whose bills share the party's tables", async () => {
+  it("tells the kitchen of a merge, whose bills share the party's tables, that the merged dishes are on another order", async () => {
     const { partyId, main, second, printerId } = await atTwoTables("Mesa 50", "1", "second");
     const printed = await printedBy(printerId);
     const notices = noticesOn([main, second]);
+    const [mainNumber, secondNumber] = [await numberOf(main), await numberOf(second)];
 
     await merge(partyId, main, second);
 
     expect((await linesOf(v, main)).map((l) => l.name)).toEqual(["Burger", "Vino"]);
-    expect(await printedBy(printerId)).toEqual(printed);
-    expect(noticesOn([main, second])).toEqual(notices);
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip(`${secondNumber} -> ${mainNumber}`, "Mesa 50", ["1.000 x TINTO"]),
+    ]);
+    expect(noticesOn([main, second])).toEqual([
+      ...notices,
+      {
+        working_order_id: main,
+        kind: "moved",
+        line_name: "TINTO",
+        quantity: 1000,
+        moved_to: "Patio Mesa 50, Terraza Mesa 50",
+      },
+    ]);
   });
 
-  it("tells the kitchen nothing of part of a sent line transferred, whose bills share the party's tables", async () => {
+  it("tells the kitchen of part of a sent line transferred, whose bills share the party's tables, that the part moved is on another order", async () => {
     const { partyId, main, second, printerId } = await atTwoTables("Mesa 51", "2", "main");
     const printed = await printedBy(printerId);
     const notices = noticesOn([main, second]);
+    const [mainNumber, secondNumber] = [await numberOf(main), await numberOf(second)];
     const command = await commandFor(v, partyId);
 
     await inTx(v, (tx) =>
@@ -1091,8 +1129,20 @@ describe("sent work moved between a party's bills at two of its tables", () => {
       ["Vino", 1000],
       ["Burger", 1000],
     ]);
-    expect(await printedBy(printerId)).toEqual(printed);
-    expect(noticesOn([main, second])).toEqual(notices);
+    expect(await printedBy(printerId)).toEqual([
+      ...printed,
+      movedSlip(`${mainNumber} -> ${secondNumber}`, "Mesa 51", ["1.000 x BURG"]),
+    ]);
+    expect(noticesOn([main, second])).toEqual([
+      ...notices,
+      {
+        working_order_id: second,
+        kind: "moved",
+        line_name: "BURG",
+        quantity: 1000,
+        moved_to: "Patio Mesa 51, Terraza Mesa 51",
+      },
+    ]);
   });
 });
 
