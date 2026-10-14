@@ -10730,6 +10730,23 @@ describe("office printers in discovery", () => {
       office: { ...printable, resourcePath: path },
     });
 
+  it("A576 a raw receipt row with IPP metadata still shows its raw print address", async () => {
+    const { el } = await mountWith([
+      office({
+        host: "192.168.1.31",
+        port: 9100,
+        name: "Counter",
+        pagePrinter: undefined,
+        office: undefined,
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+      }),
+    ]);
+    const details = text(el, "[data-test='discovered-row-192.168.1.31:9100']")!;
+    expect(details).toContain("192.168.1.31:9100");
+    expect(details).not.toContain("192.168.1.31:631/ipp/print");
+    expect(q(el, "[data-test='register-192.168.1.31:9100']")).not.toBeNull();
+  });
+
   it("A576 gives two queues independent rows and Add payloads with their advertised server name", async () => {
     const kitchen = sharedOffice("/printers/kitchen", "Kitchen A4");
     const reception = sharedOffice("/printers/reception", "Reception A4");

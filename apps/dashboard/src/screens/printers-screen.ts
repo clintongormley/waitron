@@ -3670,6 +3670,14 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
+  #discoveredAddress(device: DiscoveredPrinter): string {
+    if (!device.host) return device.localKey ?? "—";
+    if (!device.ippOnly && device.office === undefined)
+      return `${device.host}:${device.port ?? 9100}`;
+    const queue = device.office ?? device.ipp;
+    return `${device.host}:${queue?.port ?? device.port ?? 9100}${queue?.resourcePath ?? ""}`;
+  }
+
   #discoveredLabel(device: DiscoveredPrinter): string {
     if (device.name != null && device.name !== "")
       return device.ippOnly && device.host
@@ -3958,9 +3966,7 @@ export class PrintersScreen extends LitElement {
             <strong>${this.#discoveredLabel(d)}</strong>
             <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
-              <div>
-                ${d.host ? `${d.host}:${d.office?.port ?? d.ipp?.port ?? d.port ?? 9100}${d.office?.resourcePath ?? d.ipp?.resourcePath ?? ""}` : (d.localKey ?? "—")}
-              </div>
+              <div>${this.#discoveredAddress(d)}</div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
               ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
               ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}

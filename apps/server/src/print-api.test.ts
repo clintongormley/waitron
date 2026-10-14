@@ -5019,6 +5019,61 @@ describe("office printers in discovery and the receipt-printer create route", ()
     office,
   });
 
+  it("A576 one queue's office mark never classifies a sibling queue", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.7";
+    await pull(app, a.token, {
+      scanned: [
+        { ...queueEntry(host, "/printers/kitchen"), pagePrinter: true },
+        queueEntry(host, "/printers/labels", { ...UNANSWERED, resourcePath: "/printers/labels" }),
+      ],
+    });
+    const rows = await discoveredRows(app);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/kitchen"),
+    ).toHaveProperty("pagePrinter", true);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/labels"),
+    ).not.toHaveProperty("pagePrinter");
+  });
+
+  it("A576 mixed-case hosts share one queue's fresh mark without borrowing its registration authority", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Lending agent");
+    const b = await joinAndAccept(app, "Borrowing agent");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    try {
+      await pull(app, b.token, {
+        scanned: [
+          queueEntry("office.local", "/printers/kitchen", {
+            ...UNANSWERED,
+            resourcePath: "/printers/kitchen",
+          }),
+        ],
+      });
+      clock.mockReturnValue(Date.now() + 1000);
+      await pull(app, a.token, {
+        scanned: [{ ...queueEntry("OFFICE.local", "/printers/kitchen"), pagePrinter: true }],
+      });
+      const borrowed = (await discoveredRows(app)).find((r) => r.agentId === b.agentId);
+      expect(borrowed).toMatchObject({
+        officeLent: true,
+        pagePrinter: true,
+        office: { ...PRINTABLE, resourcePath: "/printers/kitchen" },
+      });
+      const response = await send(app, "POST", "/management-api/page-printers", {
+        cookie: managerCookie,
+        body: { agentId: b.agentId, host: "office.local", port: 631, path: "/printers/kitchen" },
+      });
+      expect(await response.json()).toMatchObject({
+        error: { code: "page_printer.not_printable" },
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("A576 retains distinct queues and the advertised server name through repeated pulls", async () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Office agent");

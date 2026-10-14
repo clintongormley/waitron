@@ -437,9 +437,11 @@ returns `null`. This checks those readers, not every sale path.
 - **Printer details follow the dashboard's own language, not the venue's** (ruling I) — a
   recorded departure from the spec, which asked for the venue language.
 
-- **One failed office-printer query can flip a marked printer back to addable** until the next query
-  30 seconds later, because the server keeps only each agent's latest report — unless another agent
-  reporting the same known queue has marked it. Accepted as the fail-open cost.
+- **A raw device can become addable after its office-printer query fails.** The server keeps each
+  agent's latest report; another agent's fresh office mark at the same raw address keeps the raw
+  row classified. Capability reports are lent only between agents reporting the same known IPP
+  queue. IPP-only rows remain office rows when their query is unanswered. This fail-open cost for
+  an unknown raw device is accepted.
 
 - **Two review suggestions on #335 were deliberately not taken** and would be relitigated otherwise:
   renaming the error code `printer.probe_busy` (kept under the domain-naming rule, per #335's

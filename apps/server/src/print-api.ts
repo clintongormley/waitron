@@ -963,12 +963,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
             null);
       const pagePrinterAddresses = new Set<string>();
+      const pagePrinterQueues = new Set<string>();
       const reportsByQueue = new Map<string, { agentId: string; office: OfficePrinterReport }[]>();
       for (const e of discovered.values()) {
         if (e.host === undefined) continue;
         const address = addressOf(e.host, e.port);
         if (e.pagePrinter) pagePrinterAddresses.add(address);
         const queue = queueKeyOf(e);
+        if (e.pagePrinter && queue !== undefined) pagePrinterQueues.add(queue);
         if (queue !== undefined && e.office?.printable) {
           const reports = reportsByQueue.get(queue) ?? [];
           reports.push({ agentId: e.agentId, office: e.office });
@@ -989,6 +991,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           const printerId = printerIdOf(e);
           const address = e.transport === "bluetooth" ? e.localKey : undefined;
           const office = officeOf(e);
+          const queue = queueKeyOf(e);
+          const pagePrinter = e.ippOnly
+            ? queue !== undefined && pagePrinterQueues.has(queue)
+            : e.host !== undefined && pagePrinterAddresses.has(addressOf(e.host, e.port));
           return {
             agentId: e.agentId,
             agentName: names.get(e.agentId) ?? null,
@@ -1000,10 +1006,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             model: e.model,
             name: e.name,
             serverName: e.serverName,
-            pagePrinter:
-              e.host !== undefined && pagePrinterAddresses.has(addressOf(e.host, e.port))
-                ? (true as const)
-                : undefined,
+            pagePrinter: pagePrinter ? (true as const) : undefined,
             ipp: e.ipp,
             ippOnly: e.ippOnly,
             office,
