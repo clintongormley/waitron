@@ -68,6 +68,7 @@ import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-l
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import {
+  isJournalUploadKey,
   journalFileName,
   type JournalPid,
   type JournalState,
@@ -1375,7 +1376,7 @@ async function runOwned<T>(
           "an upload id the receipt could not carry is not tracked",
         );
       }
-      if (carriesKeyPair(key, profile)) {
+      if (!isJournalUploadKey(key) || carriesKeyPair(key, profile)) {
         throw new AwsRehearsalRefused(
           "upload-id-refused",
           "an upload key the journal could not carry is not tracked",
@@ -1512,10 +1513,13 @@ async function runOwned<T>(
   // After every refusal that can come before CreateBucket, so a refused run leaves no journal.
   try {
     writeChecked();
-  } catch {
+  } catch (error) {
+    const keyPair = error instanceof AwsRehearsalRefused && error.reason === "journal-refused";
     throw new AwsRehearsalRefused(
       "journal-unwritable",
-      "the journal could not be written in the receipt folder; nothing was created",
+      keyPair
+        ? "the journal would hold the key pair; nothing was created"
+        : "the journal could not be written in the receipt folder; nothing was created",
     );
   }
   const journalPath = join(receiptDir, journalFileName(runId));

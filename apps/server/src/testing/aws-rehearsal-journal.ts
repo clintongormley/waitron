@@ -172,20 +172,20 @@ function receiptDir(value: unknown): string {
   return value;
 }
 
+/** The upload keys the journal's reader accepts. */
+export function isJournalUploadKey(key: unknown): key is string {
+  return (
+    typeof key === "string" && key.length > 0 && key.length <= S3_KEY_MAX && !CONTROL.test(key)
+  );
+}
+
 function uploads(value: unknown): JournalUpload[] {
   if (!Array.isArray(value)) throw refused("uploads");
   return value.map((upload) => {
     if (!isRecord(upload)) throw refused("uploads");
     onlyKeys(upload, ["key", "uploadId"], "uploads.");
     const { key, uploadId } = upload;
-    if (
-      typeof key !== "string" ||
-      key.length === 0 ||
-      key.length > S3_KEY_MAX ||
-      CONTROL.test(key)
-    ) {
-      throw refused("uploads");
-    }
+    if (!isJournalUploadKey(key)) throw refused("uploads");
     if (!isReceiptUploadId(uploadId)) throw refused("uploads");
     return { key, uploadId };
   });

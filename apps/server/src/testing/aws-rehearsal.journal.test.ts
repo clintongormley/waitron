@@ -244,6 +244,24 @@ describe("a kill can only find a journal naming every tracked pid, upload and sc
     expect(JSON.stringify(h.journals)).not.toContain(SECRET);
   });
 
+  it("refuses to track an upload whose key holds a control character, which the journal's reader refuses", async () => {
+    const h = harness();
+    await withAwsRehearsal(async (ctx) => {
+      const key = `${ctx.prefix("up")}a\u0001.enc`;
+      let error: unknown;
+      try {
+        ctx.trackUpload(key, "upload-1");
+      } catch (caught) {
+        error = caught;
+      }
+      expect((error as AwsRehearsalRefused).reason).toBe("upload-id-refused");
+      expect((error as Error).message).toContain(
+        "an upload key the journal could not carry is not tracked",
+      );
+    }, h.deps);
+    expect(h.journals.every((journal) => journal.uploads.length === 0)).toBe(true);
+  });
+
   it("names the scratch root before the folder is made, and not before scratch is asked for", async () => {
     const root = join(scratchBase, `waitron-aws-rehearsal-${RUN_ID}`);
     let madeWhenNamed: boolean | undefined;
@@ -409,6 +427,31 @@ describe("a journal that cannot be written, round 1", () => {
     expect((error as AwsRehearsalRefused).reason).toBe("journal-unwritable");
     expect(h.journals).toEqual([]);
     expect(h.fake.calls).toEqual([]);
+  });
+});
+
+describe("a journal refused at its first write", () => {
+  it("says the journal would hold the key pair, not that it could not be written", async () => {
+    const h = harness({}, { endpoint: `http://127.0.0.1:7070/${KEY_ID}` });
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(error.message).toContain("the journal would hold the key pair; nothing was created");
+    expect(error.message).not.toContain("could not be written");
+    expect(error.message).not.toContain(KEY_ID);
+  });
+
+  it("still says a journal the writer failed on could not be written", async () => {
+    const h = harness(
+      {},
+      {
+        journal: () => {
+          throw new Error("disk full");
+        },
+      },
+    );
+    const error = await rejection(withAwsRehearsal(async () => undefined, h.deps));
+    expect(error.message).toContain(
+      "the journal could not be written in the receipt folder; nothing was created",
+    );
   });
 });
 
