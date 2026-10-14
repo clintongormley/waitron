@@ -1,5 +1,5 @@
 import { stampDeployment } from "@waitron/db";
-import type {} from "@waitron/fiscal-verifactu";
+import "../src/errors.js";
 import {
   applyVenue,
   throwawayApplyInput,
