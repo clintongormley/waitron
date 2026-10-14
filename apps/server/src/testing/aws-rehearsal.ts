@@ -79,6 +79,7 @@ import {
 import { type KeeperHandle, keeperEnv, startKeeper } from "./aws-rehearsal-keeper-start.js";
 import { AWS_REHEARSAL_NONCE_KEY, createRequestPlan } from "./aws-request-plan.js";
 import {
+  apiOf,
   currentRequestScope,
   installSendGate,
   markRunnerClient,
@@ -395,11 +396,7 @@ export async function call<T>(
   const scope = currentRequestScope();
   if (scope !== undefined) {
     try {
-      scope.check(
-        "runner",
-        command.constructor.name.replace(/Command$/, ""),
-        command.input as Record<string, unknown>,
-      );
+      scope.check("runner", apiOf(command), command.input as Record<string, unknown>);
     } catch (refusal) {
       return { error: refusal };
     }
