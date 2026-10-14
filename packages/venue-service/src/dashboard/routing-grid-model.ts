@@ -263,6 +263,15 @@ export function usedStations(model: RoutingModel): RoutingModel["stations"] {
   return model.stations.filter((station) => station.active && named.has(station.id));
 }
 
+/** Where a cell sends work during one period: the line holding it, else its plain target. */
+export function stationDuring(
+  lines: readonly Pick<PeriodLineText, "periodIds" | "target">[],
+  periodId: string,
+  plain: RouteTarget | null,
+): RouteTarget | null {
+  return lines.find(({ periodIds }) => periodIds.includes(periodId))?.target ?? plain;
+}
+
 export function routingLookups(model: RoutingModel): RoutingLookups {
   return {
     rules: selectionRulesFromModel(model),

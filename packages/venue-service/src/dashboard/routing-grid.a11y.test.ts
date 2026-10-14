@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -198,6 +198,8 @@ const states: Record<
     styles?: Record<string, string>;
     /** How many different station colours the cells must be painted in before the scan. */
     painted?: number;
+    /** Chosen in the Period field before the scan; no period line may then be drawn. */
+    period?: string;
   }
 > = {
   "flagged period line": {
@@ -254,6 +256,22 @@ const states: Record<
       message: "This station was disabled. Choose another.",
     },
   },
+  "one period chosen": {
+    model: everyColour,
+    expand: true,
+    period: "lunch",
+    painted: 12,
+    styles: {
+      'td[data-row="c:c3"][data-zone="every"]': "set",
+      'td[data-row="p:p3"][data-zone="every"]': "inherited",
+      'td[data-row="c:c4"][data-zone="terrace"]': "differs",
+      'td[data-row="c:c3"][data-zone="inside"]': "set",
+    },
+    refusal: {
+      address: { row: { kind: "category", categoryId: "c5" }, zoneId: null },
+      message: "This station was disabled. Choose another.",
+    },
+  },
   refusal: {
     model: routing(),
     refusal: {
@@ -291,6 +309,18 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
           throw new Error("the editor did not open");
       });
       await el.shadowRoot!.querySelector("routing-cell-editor")!.updateComplete;
+    }
+    if (state.period !== undefined) {
+      el.shadowRoot!.querySelector('wt-combobox[name="period"]')!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: state.period },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      const lines = el.shadowRoot!.querySelectorAll(".line").length;
+      if (lines !== 0) throw new Error(`drew ${lines} period lines`);
     }
     for (const [selector, carries] of Object.entries(state.flags ?? {})) {
       const flag = el.shadowRoot!.querySelector(`${selector} [data-test="period-flag"]`);
@@ -449,4 +479,33 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     expect(hovered.outlineStyle).toBe("solid");
     expect(contrastRatio(hovered.outlineColor, blue)).toBeGreaterThanOrEqual(3);
   });
+});
+
+describe("the toolbar", () => {
+  afterEach(async () => {
+    await page.viewport(1280, 800);
+  });
+
+  test.each([390, 1280])(
+    "at %i px the search and the Period field fit without overflow",
+    async (width) => {
+      await page.viewport(width, 800);
+      await mountThemed("<div></div>", "light");
+      const el = document.createElement("venue-routing-grid");
+      Object.assign(el, { model: everyColour });
+      host.append(el);
+      await el.updateComplete;
+      const toolbar = el.shadowRoot!.querySelector<HTMLElement>(".toolbar")!;
+      const bounds = toolbar.getBoundingClientRect();
+      for (const selector of ['wt-input[name="search"]', 'wt-combobox[name="period"]']) {
+        const box = el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+        expect(box.width, selector).toBeGreaterThan(0);
+        expect(box.left, selector).toBeGreaterThanOrEqual(bounds.left);
+        expect(box.right, selector).toBeLessThanOrEqual(bounds.right);
+      }
+      expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+    },
+  );
 });

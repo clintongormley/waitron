@@ -1870,3 +1870,256 @@ describe("station colours", () => {
     expect(root(empty.el).querySelector(".key")).toBeNull();
   });
 });
+
+describe("one period", () => {
+  const restaurant = {
+    departmentId: "restaurant",
+    departmentName: "Restaurant",
+    colour: "blue" as const,
+  };
+  const lunch: RoutingPeriod = { id: "lunch", ...restaurant, name: "Lunch", productIds: [] };
+  const dinner: RoutingPeriod = { id: "dinner", ...restaurant, name: "Dinner", productIds: [] };
+  const breakfast: RoutingPeriod = {
+    id: "breakfast",
+    departmentId: "bar",
+    departmentName: "Bar",
+    colour: "green",
+    name: "Breakfast",
+    productIds: [],
+  };
+  const brunch: RoutingPeriod = {
+    id: "brunch",
+    departmentId: "events",
+    departmentName: "Events",
+    colour: "red",
+    name: "Brunch",
+    productIds: [],
+    departmentInactive: true,
+  };
+  /**
+   * Restaurant runs Lunch and Dinner in the Terrace; Bar runs Breakfast at the Counter. PIZZAS go
+   * to the Kitchen, and to the Pizza oven at Lunch and Dinner; POSTRES on the Terrace go to the
+   * Kitchen, and to the Grill at Lunch; Margherita on the Terrace is set to the Kitchen.
+   */
+  const twoDepartments = (overrides: Partial<RoutingView> = {}) =>
+    routing({
+      stationTimes: [],
+      periods: [lunch, dinner, breakfast, brunch],
+      zones: [
+        { id: "counter", name: "Counter", departmentId: "bar" },
+        { id: "terrace", name: "Terrace", departmentId: "restaurant" },
+      ],
+      categories: [
+        { id: "pizzas", name: "PIZZAS", parentId: null },
+        { id: "postres", name: "POSTRES", parentId: null },
+      ],
+      products: [
+        { id: "margherita", name: "Margherita", categoryId: "pizzas" },
+        { id: "flan", name: "Flan", categoryId: "postres" },
+      ],
+      cells: [
+        {
+          row: { kind: "category", categoryId: "pizzas" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [
+            { periodId: "lunch", target: station("oven") },
+            { periodId: "dinner", target: station("oven") },
+          ],
+        },
+        {
+          row: { kind: "category", categoryId: "postres" },
+          zoneId: "terrace",
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("grill") }],
+        },
+        {
+          row: { kind: "product", productId: "margherita" },
+          zoneId: "terrace",
+          target: station("kitchen"),
+        },
+      ] as RoutingCell[],
+      stations: [
+        { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+        { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+        { id: "grill", name: "Grill", active: true, colour: "purple" },
+      ],
+      ...overrides,
+    });
+  const periodField = (el: RoutingGrid) =>
+    root(el).querySelector<Combo>('wt-combobox[name="period"]');
+  async function choosePeriod(el: RoutingGrid, value: string) {
+    periodField(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  }
+  async function mountExpanded(model = twoDepartments()) {
+    const mounted = await mount(model);
+    root(mounted.el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await mounted.el.updateComplete;
+    return mounted;
+  }
+  /** The station a cell draws, the look it is drawn in, and the colour it is painted. */
+  const drawn = (el: RoutingGrid, row: string, zone: string) => {
+    const box = combo(el, row, zone)!;
+    return {
+      text: shown(box).text,
+      style: styleOf(box),
+      colour: cell(el, row, zone).dataset.stationColour,
+    };
+  };
+  const lineCount = (el: RoutingGrid) => root(el).querySelectorAll(".line").length;
+
+  it("the Period field sits after the search, opens on All periods and offers each active department's periods, grouped by department", async () => {
+    const { el } = await mount(twoDepartments());
+    const box = periodField(el)!;
+    expect(box.label).toBe("Period");
+    expect(box.hideLabel).toBe(false);
+    expect(box.search).toBe("auto");
+    expect(box.value).toBe("");
+    expect(box.showEmptyOption).toBe(true);
+    expect(box.options).toEqual([
+      { value: "", label: "All periods" },
+      { value: "lunch", label: "Lunch", group: "Restaurant" },
+      { value: "dinner", label: "Dinner", group: "Restaurant" },
+      { value: "breakfast", label: "Breakfast", group: "Bar" },
+    ]);
+    const toolbar = [...root(el).querySelector(".toolbar")!.children];
+    const search = root(el).querySelector('wt-input[name="search"]')!;
+    expect(toolbar.indexOf(box)).toBe(toolbar.indexOf(search) + 1);
+    expect(toolbar.indexOf(box)).toBeLessThan(
+      toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
+    );
+    const one = await mount(twoDepartments({ periods: [lunch, dinner, brunch] }));
+    expect(periodField(one.el)!.options).toEqual([
+      { value: "", label: "All periods" },
+      { value: "lunch", label: "Lunch" },
+      { value: "dinner", label: "Dinner" },
+    ]);
+    const none = await mount(twoDepartments({ periods: [brunch] }));
+    expect(periodField(none.el)).toBeNull();
+    const escaped: Event[] = [];
+    el.addEventListener("wt-change", (event) => escaped.push(event));
+    await choosePeriod(el, "lunch");
+    expect(escaped).toEqual([]);
+  });
+
+  it("choosing a period shows each cell's station during it: the line's station where the cell has one, the plain station otherwise", async () => {
+    const { el } = await mountExpanded();
+    expect(lineCount(el)).toBeGreaterThan(0);
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Pizza oven",
+      style: "set",
+      colour: "pink",
+    });
+    expect(drawn(el, "p:margherita", "every")).toEqual({
+      text: "Pizza oven",
+      style: "inherited",
+      colour: "pink",
+    });
+    expect(drawn(el, "c:postres", "terrace")).toEqual({
+      text: "Grill",
+      style: "set",
+      colour: "purple",
+    });
+    expect(drawn(el, "p:margherita", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+    expect(lineCount(el)).toBe(0);
+    expect(root(el).querySelectorAll('[data-test="period-flag"]')).toHaveLength(0);
+    expect(combo(el, "c:pizzas", "every")!.getAttribute("aria-label")).toBe(
+      "PIZZAS, Every zone: Pizza oven, set here",
+    );
+    await choosePeriod(el, "dinner");
+    expect(drawn(el, "c:postres", "terrace")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+  });
+
+  it("a zone of another department shows its plain station, and is named where its row's Every zone shows another", async () => {
+    const { el } = await mountExpanded();
+    expect(styleOf(combo(el, "c:pizzas", "counter")!)).toBe("blank");
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "Kitchen",
+      style: "differs",
+      colour: "orange",
+    });
+    expect(drawn(el, "c:pizzas", "every").text).toBe("Pizza oven");
+    await choosePeriod(el, "breakfast");
+    expect(drawn(el, "c:pizzas", "counter")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "orange",
+    });
+  });
+
+  it("a cell that follows its row's Every zone stays nameless in the period view, and takes its colour", async () => {
+    const { el } = await mountExpanded();
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "orange",
+    });
+    await choosePeriod(el, "lunch");
+    expect(drawn(el, "c:pizzas", "terrace")).toEqual({
+      text: "",
+      style: "blank",
+      colour: "pink",
+    });
+  });
+
+  it("going back to All periods draws the lines and dots again", async () => {
+    const { el } = await mountExpanded();
+    const before = lineCount(el);
+    const dots = root(el).querySelectorAll(".dot").length;
+    await choosePeriod(el, "lunch");
+    expect(lineCount(el)).toBe(0);
+    await choosePeriod(el, "");
+    expect(periodField(el)!.value).toBe("");
+    expect(lineCount(el)).toBe(before);
+    expect(root(el).querySelectorAll(".dot")).toHaveLength(dots);
+    expect(drawn(el, "c:pizzas", "every")).toEqual({
+      text: "Kitchen",
+      style: "set",
+      colour: "orange",
+    });
+  });
+
+  it("a chosen period that a refresh removes goes back to All periods", async () => {
+    const { el } = await mountExpanded();
+    await choosePeriod(el, "lunch");
+    el.model = twoDepartments({ periods: [dinner, breakfast] });
+    await el.updateComplete;
+    expect(periodField(el)!.value).toBe("");
+    expect(lineCount(el)).toBeGreaterThan(0);
+    await choosePeriod(el, "dinner");
+    el.model = twoDepartments();
+    await el.updateComplete;
+    expect(periodField(el)!.value).toBe("dinner");
+  });
+
+  it("a new grid opens on All periods", async () => {
+    const address = location.href;
+    const first = await mount(twoDepartments());
+    await choosePeriod(first.el, "dinner");
+    expect(periodField(first.el)!.value).toBe("dinner");
+    first.el.remove();
+    const { el } = await mount(twoDepartments());
+    expect(periodField(el)!.value).toBe("");
+    expect(location.href).toBe(address);
+  });
+
+  it("reads in Spanish", async () => {
+    setLocale("es");
+    const { el } = await mount(twoDepartments());
+    expect(periodField(el)!.label).toBe("Periodo");
+    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+  });
+});

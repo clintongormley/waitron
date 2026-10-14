@@ -25,6 +25,7 @@ import {
   pruneExpanded,
   rowInModel,
   searchRows,
+  stationDuring,
   usedStations,
   visibleRoutingRows,
   type SearchRow,
@@ -1479,5 +1480,20 @@ describe("usedStations", () => {
     expect(usedStations({ ...model([], []), defaultStationId: "kitchen" })).toEqual([
       { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
     ]);
+  });
+});
+
+describe("stationDuring", () => {
+  it("stationDuring takes the line holding the period, else the plain station", () => {
+    const kitchen: RouteTarget = { kind: "station", stationId: "kitchen" };
+    const oven: RouteTarget = { kind: "station", stationId: "oven" };
+    const lines = [
+      { periodIds: ["lunch", "dinner"], target: oven, text: "Lunch, Dinner: Pizza oven" },
+      { periodIds: ["late"], target: { kind: "no_preparation" } as const, text: "" },
+    ];
+    expect(stationDuring(lines, "dinner", kitchen)).toEqual(oven);
+    expect(stationDuring(lines, "late", kitchen)).toEqual({ kind: "no_preparation" });
+    expect(stationDuring(lines, "breakfast", kitchen)).toBe(kitchen);
+    expect(stationDuring([], "lunch", null)).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { currentLocale } from "@waitron/dashboard-kit";
 import { isStationColour, type StationColour } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import {
@@ -42,6 +43,7 @@ import {
   routingLookups,
   routingSearch,
   rowInModel,
+  stationDuring,
   usedStations,
   visibleRoutingRows,
   type CellPeriodLines,
@@ -89,8 +91,14 @@ const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b
  */
 type CellStyle = "set" | "inherited" | "differs" | "blank";
 
-/** A cell's content and the colour of the station its drawn value sends to, if it is painted. */
-type DrawnCell = { colour: StationColour | undefined; content: unknown };
+/** A cell's content, the target its drawn value sends to, and that station's colour, if painted. */
+type DrawnCell = {
+  target: RouteTarget | null;
+  colour: StationColour | undefined;
+  content: unknown;
+};
+
+type ComboboxOption = HTMLElementTagNameMap["wt-combobox"]["options"][number];
 
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
@@ -123,6 +131,10 @@ export class RoutingGrid extends LitElement {
       .toolbar wt-input {
         flex: 1 1 calc(var(--wt-space-6) * 8);
         max-inline-size: calc(var(--wt-space-6) * 12);
+      }
+      .toolbar wt-combobox {
+        flex: 0 1 calc(var(--wt-space-6) * 6);
+        min-inline-size: 0;
       }
       .count {
         color: var(--wt-color-text-muted);
@@ -358,6 +370,8 @@ export class RoutingGrid extends LitElement {
   @state() private query = "";
   /** The categories open in the search view; `null` until the person opens or closes one. */
   @state() private searchOpen: ReadonlySet<string> | null = null;
+  /** The period whose stations the cells show; `null` shows every period's lines. */
+  @state() private period: string | null = null;
   /** The cell whose editor is open. */
   @state() private editing: CellAddress | null = null;
 
@@ -398,6 +412,9 @@ export class RoutingGrid extends LitElement {
     this.#searchOf = routingSearch(model);
     this.#searched = null;
     this.expanded = pruneExpanded(model, this.expanded);
+    if (this.period !== null && !offeredPeriods(model).some(({ id }) => id === this.period)) {
+      this.period = null;
+    }
     const editing = this.editing;
     if (
       editing !== null &&
@@ -579,7 +596,8 @@ export class RoutingGrid extends LitElement {
     </button>`;
   }
 
-  #cell(entry: GridRow, zone: Zone): DrawnCell {
+  /** `every` is what the row's Every zone cell draws, which a blank zone cell repeats. */
+  #cell(entry: GridRow, zone: Zone, every: RouteTarget | null): DrawnCell {
     const address: CellAddress = { row: entry.row, zoneId: zone.id };
     const own = this.#cells.get(cellKey(address));
     const selected = this.#inherited(entry.row, zone.id);
@@ -592,7 +610,13 @@ export class RoutingGrid extends LitElement {
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
-    const text = this.#targetText(shown ?? inherited);
+    const period = this.period;
+    const target =
+      period === null
+        ? (shown ?? inherited)
+        : stationDuring(periodLines.lines, period, shown ?? inherited);
+    const lines = period === null ? periodLines.lines : [];
+    const text = this.#targetText(target);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
         row: this.#rowName(entry),
@@ -600,17 +624,19 @@ export class RoutingGrid extends LitElement {
         value: text,
         state: t(shown === null ? "routing.inherited" : "routing.set_here"),
       }),
-      ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
+      ...lines.flatMap((line) => [line.text, line.flagText ?? null]),
     );
     const style: CellStyle =
       shown !== null
         ? "set"
         : zone.id === null
           ? "inherited"
-          : this.#blank!(entry.row, zone.id, selected)
-            ? "blank"
-            : "differs";
-    const content = this.#button(address, label, shown, style, text, periodLines.lines, [
+          : !this.#blank!(entry.row, zone.id, selected)
+            ? "differs"
+            : period !== null && targetKey(target) !== targetKey(every)
+              ? "differs"
+              : "blank";
+    const content = this.#button(address, label, shown, style, text, lines, [
       this.#error(address),
       disabled === null
         ? null
@@ -621,7 +647,7 @@ export class RoutingGrid extends LitElement {
             ${this.#fallbackSentence(disabled.stationId)}</span
           >`,
     ]);
-    return { colour: this.#colourOf(shown ?? inherited), content };
+    return { target, colour: this.#colourOf(target), content };
   }
 
   #defaultTarget(): RouteTarget | null {
@@ -647,6 +673,7 @@ export class RoutingGrid extends LitElement {
           >`;
     if (!model.canMakeDefault) {
       return {
+        target,
         colour,
         content: html`${name !== null ? html`<span>${name}</span> ` : nothing}${repair}
           <span class="note">${t("routing.default_read_only")}</span>`,
@@ -662,6 +689,7 @@ export class RoutingGrid extends LitElement {
       }),
     );
     return {
+      target,
       colour,
       content: this.#button(
         address,
@@ -869,6 +897,7 @@ export class RoutingGrid extends LitElement {
     search: RoutingSearch | undefined,
   ) {
     const heading = entry.row.kind === "no_category";
+    let every: RouteTarget | null = null;
     return html`<tr class=${heading ? "heading" : ""}>
       <th
         scope=${heading ? "rowgroup" : "row"}
@@ -882,10 +911,11 @@ export class RoutingGrid extends LitElement {
         zones,
         (zone) => zoneKey(zone.id),
         (zone) => {
-          const { colour, content } =
+          const { target, colour, content } =
             entry.row.kind === "all" && zone.id === null
               ? this.#defaultCell()
-              : this.#cell(entry, zone);
+              : this.#cell(entry, zone, every);
+          if (zone.id === null) every = target;
           return html`<td
             data-row=${rowKey(entry.row)}
             data-zone=${zoneKey(zone.id)}
@@ -925,6 +955,30 @@ export class RoutingGrid extends LitElement {
     </ul>`;
   }
 
+  #periodField(model: RoutingModel) {
+    const periods = offeredPeriods(model);
+    if (periods.length === 0) return nothing;
+    const grouped = new Set(periods.map(({ departmentId }) => departmentId)).size > 1;
+    const options: ComboboxOption[] = [
+      { value: "", label: t("routing.all_periods") },
+      ...periods.map(({ id, name, departmentName }) =>
+        grouped ? { value: id, label: name, group: departmentName } : { value: id, label: name },
+      ),
+    ];
+    return html`<wt-combobox
+      name="period"
+      label=${t("routing.period")}
+      search="auto"
+      show-empty-option
+      .options=${options}
+      .value=${this.period ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.period = event.detail.value === "" ? null : event.detail.value;
+      }}
+    ></wt-combobox>`;
+  }
+
   override render() {
     const model = this.model;
     if (model === null) return nothing;
@@ -952,7 +1006,7 @@ export class RoutingGrid extends LitElement {
             this.searchOpen = null;
           }}
         ></wt-input
-        ><wt-button
+        >${this.#periodField(model)}<wt-button
           variant="secondary"
           data-test="expand-all"
           @click=${() => this.#setOpen(search, expandAll(model))}
@@ -999,6 +1053,11 @@ export class RoutingGrid extends LitElement {
       ></wt-form-actions>
       ${this.#editorDialog()}`;
   }
+}
+
+/** The periods the Period field offers: those of an active department, in the model's order. */
+function offeredPeriods(model: RoutingModel): RoutingModel["periods"] {
+  return model.periods.filter((period) => period.departmentInactive !== true);
 }
 
 function matchCount(count: number): string {
