@@ -561,6 +561,11 @@ describe("choosing where backups go", () => {
       t("backup.destination.stream_snapshot"),
     );
     expect(q(el, "[data-test=stream-replaces]")).toBeNull();
+    const shown = el.shadowRoot!.textContent ?? "";
+    expect(shown).not.toContain("Backups go only to this bucket, not to a folder on this box.");
+    expect(shown).not.toContain(
+      "Las copias van solo a este bucket, no a una carpeta de esta caja.",
+    );
     expect(text(q(el, "[data-test=stream-location]")!)).toContain(
       `stream-bucket/venues/archives/${VENUE}/`,
     );
@@ -842,6 +847,13 @@ describe("opening a stored folder and bucket", () => {
 
   it("a stored folder alone opens with the switch on and no bucket", async () => {
     const { el } = await openEdit(LOCAL_ONLY);
+    expect(folderSwitch(el)!.checked).toBe(true);
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+    expect(choice(el)!.value).toBe("none");
+  });
+
+  it("a stored folder alone opens, on turning stored-off settings back on, with the switch on and no bucket", async () => {
+    const { el } = await openStoredOff(LOCAL_ONLY);
     expect(folderSwitch(el)!.checked).toBe(true);
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
     expect(choice(el)!.value).toBe("none");
