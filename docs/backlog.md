@@ -2882,10 +2882,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   done report remains “printing”, with no resend or automatic expiry.
   [Detail](backlog/printers.md#make-an-unreported-drawer-outcome-explicit-without-repeating-its-pulse)
 
-- **A printer rethrow test calls a different CHECK a non-CHECK error** — reconcile the
-  `carrier_pigeon` case name in `packages/printing/src/printers.test.ts` with its own comment.
-  [Detail](backlog/printers.md#a-printer-rethrow-test-calls-a-different-check-a-non-check-error)
-
 - **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** — C70, #866. A refused report still rolls back its job claim when the caller's transaction rolls back, so that job can print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-production-caller-in-the-tree)
 
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small. Switch the three
