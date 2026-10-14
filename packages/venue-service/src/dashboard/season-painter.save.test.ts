@@ -10,6 +10,7 @@ import {
   painterApi,
   painterModel,
   pick,
+  readNumbers,
   settle,
   withBar,
   type Write,
@@ -751,4 +752,106 @@ it("a save that lands after its edited zone was removed leaves nothing to save",
   expect(frame(painter).dirty).toBe(false);
   expect(saveButton(painter).disabled).toBe(true);
   expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
+});
+
+type Slot = { periodId: string; startsAt: string; endsAt: string };
+/** `model` with the given days of one department's week in one season replaced. */
+function withDays(
+  model: OpeningHoursModel,
+  departmentId: string,
+  days: Record<number, Slot[]>,
+  seasonId = "winter",
+): OpeningHoursModel {
+  const season = model.departments
+    .find(({ id }) => id === departmentId)!
+    .seasonWeeks.find((week) => week.seasonId === seasonId)!;
+  season.week = season.week.map(({ weekday, slots }) => ({
+    weekday,
+    slots: days[weekday] ?? slots,
+  }));
+  return model;
+}
+const slot = (periodId: string, startsAt: string, endsAt: string): Slot => ({
+  periodId,
+  startsAt,
+  endsAt,
+});
+const mondayLunch = [slot("p1", "13:00", "16:00")];
+const mondayDinner = [slot("p2", "18:00", "21:00")];
+const earlyWednesday = [slot("p1", "07:00", "09:00")];
+const earlyThursday = [slot("p1", "07:00", "09:00")];
+
+it("a save's weeks follow the first model read after it, keeping only paint added since it was sent", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => (succeed = resolve));
+  const { painter, writes } = await mount(withBar(), [late]);
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  painter.model = withDays(withBar(), "d1", { 1: mondayDinner, 3: [slot("p1", "13:00", "15:00")] });
+  await settle(painter);
+  succeed();
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  expect(frame(painter).dirty).toBe(false);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
+
+  await drag(painter, "4", 60, 180);
+  painter.model = after(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }));
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayDinner);
+  expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
+  expect(grid(painter).days.get("4")).toEqual(earlyThursday);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  await save(painter, writes);
+  const days = (writes[1]!.body as { departments: { days: { weekday: number }[] }[] })
+    .departments[0]!.days;
+  expect(days.find(({ weekday }) => weekday === 1)).toEqual({ weekday: 1, slots: mondayDinner });
+});
+
+it("a model that a watch read before the save never counts as the one after it", async () => {
+  const { painter, writes, reread } = await mount();
+  const { at } = readNumbers(painter);
+  reread.mockReturnValue(10);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  await drag(painter, "4", 60, 180);
+  painter.model = at(withDays(withBar(), "d1", { 1: mondayDinner, 3: earlyWednesday }), 5);
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual(mondayLunch);
+  expect(grid(painter).days.get("3")).toEqual(earlyWednesday);
+  expect(grid(painter).days.get("4")).toEqual(earlyThursday);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("stepping to another season before the model after a save forgets that save", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  button(painter, "next-season").click();
+  await settle(painter);
+  painter.model = after(withDays(withBar(), "d1", { 1: [slot("p1", "12:00", "14:00")] }, "spring"));
+  await settle(painter);
+  expect(grid(painter).days.get("1")).toEqual([slot("p1", "12:00", "14:00")]);
+  expect(frame(painter).dirty).toBe(false);
+});
+
+it("an edited week the save did not send still stays whole", async () => {
+  const { painter, writes } = await mount();
+  const { after } = readNumbers(painter);
+  await drag(painter, "3", 60, 180);
+  await save(painter, writes);
+  await pick(painter, "d3");
+  await drag(painter, "1", 60, 180);
+  painter.model = after(
+    withDays(withDays(withBar(), "d1", { 3: earlyWednesday }), "d3", {
+      2: [slot("q1", "10:00", "12:00")],
+    }),
+  );
+  await settle(painter);
+  expect(grid(painter).days.get("2")).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: ["d3"], zones: [] });
 });

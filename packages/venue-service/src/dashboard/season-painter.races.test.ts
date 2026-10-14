@@ -3,6 +3,7 @@ import { applyTokens } from "@waitron/ui";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { drag, frame, grid, painterModel, settle } from "../testing/season-painter-fixture.js";
 import type { SeasonPainter } from "./season-painter.js";
 import "./season-painter.js";
@@ -30,17 +31,18 @@ afterEach(() => {
  * A painter on a real `OpeningHoursApi` whose server the test drives: once the painter holds a
  * model, every GET is held until answered, and a PUT is stored and answered in separate steps so
  * another manager's write can land between them. A held GET answers with the store as it was
- * when the read started, unless the test hands it another model.
+ * when the read started, unless the test hands it another model. `server.hold = false` answers
+ * GETs at once. Without live data, `timer` fakes the watch's interval so the test can fire it.
  */
-async function racingPainter(live: boolean) {
+async function racingPainter(live: boolean, { timer = false } = {}) {
   setLocale("en");
-  const server = { stored: painterModel() };
+  const server = { stored: painterModel(), hold: true };
   const reads: HeldRead[] = [];
   const puts: HeldPut[] = [];
   const request = (async (_path: string, method: string, body: unknown) => {
     if (method === "GET") {
       const snapshot = structuredClone(server.stored);
-      if (!host?.model) return snapshot;
+      if (!host?.model || !server.hold) return snapshot;
       return new Promise<OpeningHoursModel>((resolve) =>
         reads.push({ snapshot, answer: (model = snapshot) => resolve(model) }),
       );
@@ -62,13 +64,15 @@ async function racingPainter(live: boolean) {
     );
   }) as DashboardRequest;
   host = document.createElement("season-painter");
-  host.api = new OpeningHoursApi(request, live ? new LiveData() : undefined);
+  const liveData = live ? new LiveData() : undefined;
+  host.api = new OpeningHoursApi(request, liveData);
   host.seasonId = "winter";
   host.departmentId = "d1";
   host.open = true;
   applyTokens(host);
   document.body.append(host);
   const painter = host;
+  if (timer) vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   detach = painter.api.watchOpeningHours(
     (model) => {
       painter.model = model;
@@ -84,12 +88,13 @@ async function racingPainter(live: boolean) {
     await expect.poll(() => puts.length).toBe(before + 1);
     return puts[before]!;
   };
-  return { painter, server, reads, puts, save };
+  return { painter, server, reads, puts, save, liveData };
 }
 
 const slotsOn = (body: WeeksBody, weekday: number) =>
   body.departments[0]!.days.find((day) => day.weekday === weekday)!.slots;
 const wednesday = [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }];
+const mondayDinner = [{ periodId: "p2", startsAt: "18:00", endsAt: "21:00" }];
 
 it.each([
   ["live data", true],
@@ -116,6 +121,41 @@ it.each([
     await new Promise((resolve) => setTimeout(resolve, 50));
     await settle(painter);
     const second = await save();
+    expect(slotsOn(second.body, 3)).toEqual(wednesday);
+  },
+);
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "another manager's change stored after a save shows one read after the save, and the next save keeps it, even when painted before that read (%s)",
+  async (_, live) => {
+    const { painter, server, reads, save, liveData } = await racingPainter(live, { timer: !live });
+    await drag(painter, "3", 60, 180);
+    const first = await save();
+    first.store();
+    server.stored.departments[0]!.seasonWeeks.find(
+      ({ seasonId }) => seasonId === "winter",
+    )!.week.find(({ weekday }) => weekday === 1)!.slots = mondayDinner;
+    const before = painter.model;
+    server.hold = false;
+    if (liveData) liveData.invalidate([{ type: QUERY_DEPENDENCIES["opening-hours"][0]! }]);
+    else vi.advanceTimersByTime(60_000);
+    await expect.poll(() => painter.model !== before).toBe(true);
+    server.hold = true;
+    const held = reads.length;
+    first.answer();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await drag(painter, "4", 60, 180);
+    await expect.poll(() => reads.length).toBe(held + 1);
+    reads[held]!.answer();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settle(painter);
+    expect(grid(painter).days.get("1")).toEqual(mondayDinner);
+
+    const second = await save();
+    expect(slotsOn(second.body, 1)).toEqual(mondayDinner);
     expect(slotsOn(second.body, 3)).toEqual(wednesday);
   },
 );

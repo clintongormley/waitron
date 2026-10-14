@@ -4,6 +4,7 @@ import {
   copyDay,
   deleteBlock,
   paintStretch,
+  rebaseDays,
   stepAt,
   stepMinuteAt,
   type Paint,
@@ -242,5 +243,36 @@ describe("stepAt", () => {
     expect(stepAt(40, 0, "06:00")).toBe("06:00");
     expect(stepAt(40, 0, "05:50")).toBe("06:00");
     expect(stepAt(40, -10, "06:00")).toBe("06:00");
+  });
+});
+
+describe("rebaseDays", () => {
+  it("rebaseDays takes the stored days, keeping only the days painted differently from what was sent", () => {
+    const stored = new Map([
+      ["1", [paint("dinner", "18:00", "21:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", []],
+    ]);
+    const sent = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", []],
+    ]);
+    const current = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+      ["4", [paint(AFTERNOON, "15:00", "17:00")]],
+    ]);
+    const rebased = rebaseDays(stored, sent, current);
+    expect(rebased).toEqual(
+      new Map([
+        ["1", [paint("dinner", "18:00", "21:00")]],
+        ["3", [paint(LUNCH, "07:00", "09:00")]],
+        ["4", [paint(AFTERNOON, "15:00", "17:00")]],
+      ]),
+    );
+    const inputs = [stored, sent, current].flatMap((days) => [...days.values()].flat());
+    for (const day of rebased.values())
+      for (const block of day) expect(inputs).not.toContain(block);
   });
 });

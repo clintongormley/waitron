@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import { WEEK_DISPLAY_ORDER } from "../hours-types.js";
-import { samePaint, type Paint } from "../paint-model.js";
+import { rebaseDays, samePaint, type Paint } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
@@ -293,6 +293,8 @@ export class SeasonPainter extends LitElement {
   private seededSeason?: string;
   /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
   private followed?: Model;
+  /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`). */
+  private confirming?: { sent: Draft; barrier: number };
   /** A period just created, chosen in its own department until the model lists it. */
   private created?: { id: string; departmentId: string };
   /** Edits a refresh dropped because what they belonged to is gone; shown beside Save. */
@@ -330,7 +332,9 @@ export class SeasonPainter extends LitElement {
     if (this.seededSeason !== this.seasonId) this.reseed();
     else if (changes.has("model") || (this.followed !== this.model && !this.anyEdited())) {
       const before = shownIn(previous, this.departmentId, this.zoneId);
-      this.refresh(previous);
+      const confirmed = this.confirmable() ? this.confirming!.sent : undefined;
+      if (confirmed) this.confirming = undefined;
+      this.refresh(previous, confirmed);
       const after = shownIn(this.model, this.departmentId, this.zoneId);
       if (before.departmentId !== after.departmentId || before.zoneId !== after.zoneId) {
         this.departmentId = after.departmentId;
@@ -391,6 +395,11 @@ export class SeasonPainter extends LitElement {
   private forget() {
     this.generation = {};
     this.saving = false;
+    this.confirming = undefined;
+  }
+  private confirmable(): boolean {
+    const read = this.confirming && this.api.readNumberOf(this.model);
+    return read !== undefined && read > this.confirming!.barrier;
   }
   private reseed() {
     this.forget();
@@ -404,9 +413,20 @@ export class SeasonPainter extends LitElement {
   }
   /** Weeks not edited follow the fresh model; an edited week, and its baseline, stay — unless
    *  its department or zone is gone or inactive, when its edits are dropped with a notice. */
-  private refresh(previous: Model) {
+  private refresh(previous: Model, confirmed?: Draft) {
     if (!this.anyEdited()) this.revision = this.model.clockRevision;
     const fresh = seed(this.model, this.seasonId);
+    if (confirmed) {
+      this.draft = new Map(this.draft);
+      this.baseline = new Map(this.baseline);
+    }
+    for (const [key, sent] of confirmed ?? []) {
+      const stored = fresh.get(key);
+      const current = this.draft.get(key);
+      if (!stored || !current) continue;
+      this.draft.set(key, rebaseDays(stored, sent, current));
+      this.baseline.set(key, stored);
+    }
     const draft: Draft = new Map();
     const baseline: Draft = new Map();
     const gone: string[] = [];
@@ -568,7 +588,7 @@ export class SeasonPainter extends LitElement {
     for (const [key, week] of sent) if (baseline.has(key)) baseline.set(key, week);
     this.commitBaseline(baseline);
     this.followed = this.model;
-    this.api.rereadWatches();
+    this.confirming = { sent, barrier: this.api.rereadWatches() };
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {

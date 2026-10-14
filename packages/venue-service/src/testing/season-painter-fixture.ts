@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
@@ -152,4 +153,15 @@ export function withBar(model = painterModel()): OpeningHoursModel {
       },
     ],
   };
+}
+
+/** Gives models set by hand a watch's read number: `after` places one after any save's reread. */
+export function readNumbers(el: SeasonPainter) {
+  const numbers = new WeakMap<object, number>();
+  vi.spyOn(el.api, "readNumberOf").mockImplementation((model) => numbers.get(model));
+  const at = <M extends object>(model: M, number: number): M => {
+    numbers.set(model, number);
+    return model;
+  };
+  return { at, after: <M extends object>(model: M) => at(model, Number.MAX_SAFE_INTEGER) };
 }
