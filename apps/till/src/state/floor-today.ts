@@ -13,7 +13,7 @@ import {
   inNumberOrder,
   mergeLabel,
 } from "@waitron/ui";
-import type { TableParty, TableState, TodayPlacement } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TodayPlacement } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
@@ -179,6 +179,18 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
     merge,
     heading,
   };
+}
+
+/** Whether guests may be seated at a free table in `zone`: the server's `openTab` refuses any area
+ * but table service. A zone the till has not read is left to the server. */
+export function seatsGuests(zone: FloorZone | undefined): boolean {
+  return zone === undefined || zone.serviceMode === "table_tab";
+}
+
+/** Whether the drop seats guests at a free table, which `openTab` (a seat) and `refuseUnseatable`
+ * (a party joined onto a free table) refuse outside table service. */
+export function seatsAtFreeTable(action: DropAction): boolean {
+  return action.kind === "seat" || (action.kind === "join" && action.other === null);
 }
 
 /** The name for today a lone joined table gives the group a drop makes, as `writeMerge` does. */

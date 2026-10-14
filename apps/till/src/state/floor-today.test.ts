@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { freeSide, touchingPlace } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
+import type {
+  FloorZone,
+  TableParty,
+  TableState,
+  TableToday,
+  TodayPlacement,
+} from "../api/client.js";
 import {
   dropAction,
   groupName,
@@ -11,6 +17,8 @@ import {
   outOfServiceJoined,
   pendingPlaces,
   resetTableOf,
+  seatsAtFreeTable,
+  seatsGuests,
   sheetActions,
   shownName,
   spareSpot,
@@ -293,6 +301,50 @@ describe("dropAction", () => {
         dropAction([m1, m2, target], { tableId: "m1", x: 1, y: 0, targetId: target.id }),
       ).toEqual({ kind: "none" });
     }
+  });
+});
+
+describe("seatsGuests", () => {
+  const zone = (serviceMode: FloorZone["serviceMode"]): FloorZone => ({
+    id: "z1",
+    name: "Bar",
+    displayOrder: 0,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan: true,
+    serviceMode,
+  });
+
+  it("seats guests only in a table-service zone, or one the till has not read", () => {
+    expect(seatsGuests(undefined)).toBe(true);
+    expect(seatsGuests(zone("table_tab"))).toBe(true);
+    expect(seatsGuests(zone("prepay"))).toBe(false);
+    expect(seatsGuests(zone("ticket_then_pay"))).toBe(false);
+    expect(seatsGuests(zone(null))).toBe(false);
+  });
+});
+
+describe("seatsAtFreeTable", () => {
+  const someone = { id: "p" } as TableParty;
+  const join = (other: TableParty | null) =>
+    ({ kind: "join", party: someone, tableId: "t", other, merge: null, heading: "h" }) as const;
+
+  it("is true for seating two free tables and for joining a party onto a free one", () => {
+    expect(
+      seatsAtFreeTable({ kind: "seat", tableId: "t", withTableIds: ["u"], heading: "h" }),
+    ).toBe(true);
+    expect(seatsAtFreeTable(join(null))).toBe(true);
+  });
+
+  it("is false for every action that seats no one at a free table", () => {
+    expect(seatsAtFreeTable(join(someone))).toBe(false);
+    expect(
+      seatsAtFreeTable({ kind: "merge", tableId: "t", targetId: "u", side: "left", heading: "h" }),
+    ).toBe(false);
+    expect(seatsAtFreeTable({ kind: "move", tableId: "t", x: 1, y: 2 })).toBe(false);
+    expect(seatsAtFreeTable({ kind: "say", message: "no" })).toBe(false);
+    expect(seatsAtFreeTable({ kind: "none" })).toBe(false);
   });
 });
 

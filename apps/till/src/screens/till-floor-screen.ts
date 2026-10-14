@@ -71,6 +71,8 @@ import {
   type ResetTablePlan,
   sheetActions,
   savedNameUnder,
+  seatsAtFreeTable,
+  seatsGuests,
   shownName,
   shownUnder,
   spareSpot,
@@ -724,7 +726,7 @@ export class TillFloorScreen extends LitElement {
     }
     if (table.party === null && !table.hasOpenTab) {
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
-      if (zone?.closed) {
+      if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
         this.refusedZoneId = zone.id;
         return;
       }
@@ -903,6 +905,11 @@ export class TillFloorScreen extends LitElement {
     return { zoneId, revision: this.#revision(zoneId) };
   }
 
+  #dropZone(tableId: string): FloorZone | undefined {
+    const { zoneId } = this.#zone.visible.find((each) => each.id === tableId)!;
+    return this.zones.find((zone) => zone.id === zoneId);
+  }
+
   /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
    * route accepts null. */
   #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
@@ -917,6 +924,10 @@ export class TillFloorScreen extends LitElement {
   #onDrop(drop: FloorMapDrop): void {
     this.refusal = null;
     const action = dropAction(this.#zone.visible, drop);
+    if (seatsAtFreeTable(action) && !seatsGuests(this.#dropZone(drop.tableId))) {
+      this.refusal = codeMessage("service_zone.mode_incompatible");
+      return;
+    }
     switch (action.kind) {
       case "say":
         this.refusal = action.message;
@@ -1674,7 +1685,9 @@ export class TillFloorScreen extends LitElement {
         name: zone.closed ? `${zone.name} · ${t("floor.closed")}` : zone.name,
       })),
     );
-    const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
+    const refusedZone = this.zones.find(
+      (zone) => zone.id === this.refusedZoneId && (zone.closed || !seatsGuests(zone)),
+    );
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
@@ -1742,7 +1755,17 @@ export class TillFloorScreen extends LitElement {
               </nav>`
             : nothing
         }
-        ${refusedZone === undefined ? nothing : html`<p data-zone-closed role="status">${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}</p>`}
+        ${
+          refusedZone === undefined
+            ? nothing
+            : refusedZone.closed
+              ? html`<p data-zone-closed role="status">
+                  ${t("menu.zone_closed").replace("{zone}", () => refusedZone.name)}
+                </p>`
+              : html`<p data-zone-no-seating role="status">
+                  ${codeMessage("service_zone.mode_incompatible")}
+                </p>`
+        }
         ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);

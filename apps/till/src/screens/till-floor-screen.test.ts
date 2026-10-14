@@ -590,3 +590,65 @@ it("opens the first zone for an address with an empty zone segment", async () =>
   await el.updateComplete;
   expect(location.pathname).toBe("/tabs/floor/zone/z2");
 });
+
+describe("floor zones that seat no one", () => {
+  it.each(["en-GB", "es-ES"])("refuses a free table in a prepay zone in %s", async (locale) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+      const open = vi.fn();
+      el.addEventListener("open-table", open);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+      const notice = el.shadowRoot!.querySelector("[data-zone-no-seating]");
+      expect(notice?.textContent?.trim()).toBe(
+        locale === "en-GB"
+          ? "That table is in an area that does not seat guests. Choose another table"
+          : "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
+      );
+      expect(notice?.getAttribute("role")).toBe("status");
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("refuses a free table in a zone with no service mode", async () => {
+    const { el } = await mount({ zones: [zone({ serviceMode: null })] });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).not.toBeNull();
+  });
+
+  it("still resumes a seated table there", async () => {
+    const { el } = await mount({
+      zones: [zone({ serviceMode: "prepay" })],
+      tables: [table({ hasOpenTab: true, state: "open-tab", tabTotal: "12.00", tabLineCount: 1 })],
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(seen.detail).toEqual({ tableId: "t1", seated: true });
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
+  });
+
+  it("leaves a table whose zone the till has not read to the server", async () => {
+    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+    const card = el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!;
+    el.zones = [];
+    card.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+  });
+
+  it("still seats a free table in a table-service zone", async () => {
+    const { el } = await mount({ zones: [zone({ serviceMode: "table_tab" })] });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
+  });
+});
