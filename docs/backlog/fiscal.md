@@ -990,3 +990,11 @@ register still makes an allocation available.
 The printable handover, selected-backup key name, allocation screen, paper/emergency/phone input
 collection across restore entry points, and interrupted-recovery exercise remain to be built.
 This checkpoint is not the completed offline recovery journey or a usable paper-custodian tool.
+
+**2026-10-14 printable-pack checkpoint:** the candidate adds `sign-register`, a Backups card and
+offline JSON/HTML downloads with the supplied current node key's stored name. Printing retains the
+signed register and public custodian fingerprint; it neither changes the current outside master nor
+establishes consumption authority. The selected-copy preview reader reads the key name from the
+decrypted backup and qualifies a live-key replacement, but has no public chooser consumer yet.
+The chooser, paper/emergency/phone collection, restore-screen integration and interruption exercise
+remain open. The custodian still needs the repository command and a separate master register.

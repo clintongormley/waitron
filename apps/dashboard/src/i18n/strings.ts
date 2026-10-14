@@ -1459,6 +1459,26 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
+  "node_pack.create": "Create pack",
+  "node_pack.key_error": "The node recovery key is not valid.",
+  "node_pack.title": "Node recovery pack",
+  "node_pack.key": "Node recovery key",
+  "node_pack.register": "Allocation register",
+  "node_pack.secret_warning": "Keep this secret pack outside the server and its backups.",
+  "node_pack.old_key_warning":
+    "Older backups restore their older node key. Keep that paper until no older backup remains.",
+  "node_pack.archive_key_warning":
+    "This is the node key. The backup file has a separate encryption key.",
+  "node_pack.snapshot_warning":
+    "This register is a snapshot and may be out of date. Reprinting never frees used names. Consult the current outside register before recovery.",
+  "node_pack.file": "Signed allocation register",
+  "node_pack.file_error": "Choose a valid signed register file.",
+  "node_pack.download": "Download pack",
+  "node_pack.print": "Printable copy",
+  "node_pack.failed": "The recovery pack could not be created.",
+  "node_pack.intro":
+    "Use the current node key and the signed register from its custodian. No bucket or subscription is needed.",
+  "node_pack.clear": "Clear pack",
   "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
     "Download an encrypted copy of menus, layouts, staff profiles and settings to set up a new venue. Sales, fiscal records and credentials stay behind.",
@@ -4339,6 +4359,27 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
+  "node_pack.create": "Crear kit",
+  "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
+  "node_pack.title": "Kit de recuperación del nodo",
+  "node_pack.key": "Clave de recuperación del nodo",
+  "node_pack.register": "Registro de asignaciones",
+  "node_pack.secret_warning":
+    "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
+  "node_pack.old_key_warning":
+    "Las copias antiguas restauran su clave de nodo anterior. Conserva ese papel hasta que no quede ninguna copia antigua.",
+  "node_pack.archive_key_warning":
+    "Esta es la clave del nodo. El archivo de copia tiene otra clave de cifrado.",
+  "node_pack.snapshot_warning":
+    "Este registro es una instantánea y puede estar desactualizado. Reimprimirlo no libera nombres usados. Consulta el registro externo actual antes de recuperar.",
+  "node_pack.file": "Registro de asignaciones firmado",
+  "node_pack.file_error": "Elige un archivo de registro firmado válido.",
+  "node_pack.download": "Descargar kit",
+  "node_pack.print": "Copia para imprimir",
+  "node_pack.failed": "No se pudo crear el kit de recuperación.",
+  "node_pack.intro":
+    "Usa la clave actual del nodo y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
+  "node_pack.clear": "Borrar kit",
   "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":
     "Descarga una copia cifrada de cartas, planos, perfiles del personal y ajustes para crear un local nuevo. Las ventas, los registros fiscales y las credenciales no se copian.",

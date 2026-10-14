@@ -318,8 +318,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **W41s. Fiscal prevention and offline recovery** — remaining recovery and resolution work.
   Allocation validation and local activation use outside signed identities, with a dormant standby
-  reservation and authenticated takeover. The recovery-pack download is being built in W41s-6;
-  printable packs, the backup chooser and offline recovery screens, automatic conflict recovery,
+  reservation and authenticated takeover. W41s-6's candidate has a signed-register command,
+  named-key pack downloads and printable handovers; the backup chooser and offline recovery screens,
+  automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence/fencing, the complete offline
   exercise and the Cloud registry adapter remain queued. The Cloud service has its own workstream;
   paper allocation does not require a subscription. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).

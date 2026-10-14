@@ -5,8 +5,13 @@ current master register outside venue backups, with a named custodian. Reserve e
 before signing it, and cross out an entry there before signing its consumption receipt. The
 signature records the custodian's evidence; it does not establish that the register is current.
 
-The command below prepares signed evidence. Allocation activation and recovery-pack integration
-remain open in W41s Task 4 and Task 6. It does not update your master register.
+The command below prepares signed evidence. It does not update your master register.
+
+**2026-10-14 status:** Task 4's allocation activation, default fiscal hooks and text identities
+landed in #1700. Earlier paragraphs below describing those as unfinished refer to its development
+checkpoints. Successful allocated standby adoption still needs the primary's venue copy and fresh
+establishment authority. Task 6 adds the pack handover below; its recovery screens and complete
+offline exercise remain unfinished.
 
 ## Create the custodian's key
 
@@ -148,6 +153,38 @@ The flag records your confirmation that reservation happened outside the venue. 
 not check or write the master register. Its output contains the validated payload and signature.
 It refuses an existing output file. Reprinting it does not create fresh names or clear consumption
 marks; the pack still identifies its generation and block and states that its snapshot may be stale.
+
+## Download and print a node recovery pack
+
+To give the venue a signed register file it can upload, use the same reserved block and signing
+key on the custodian's machine:
+
+```sh
+node packages/fiscal-verifactu/dist/paper-custodian.js sign-register \
+  --key /secure/master/custodian-2026.pem \
+  --input block.json --output recovery-register.json --reserved-outside
+```
+
+The output combines the signed block with the custodian's public key and fingerprint. Keep the
+private signing key with the custodian. This command signs the reserved block again; it does not
+allocate another block or clear any entry's consumption history.
+
+In the dashboard, open **Backups**, enter the current **Node recovery key**, choose
+`recovery-register.json`, and select **Create pack**. You need management permission and the node
+key you already hold. You do not need bucket settings or a subscription. A wrong node key or a
+register for a different taxpayer, environment, venue or series set is refused.
+
+Download the JSON pack and the **Printable copy**. Open the downloaded HTML file in your browser
+and print it using the browser's Print action. It has no external assets. It includes the node
+key's stored name and secret, the signed register and the custodian's public fingerprint. Keep
+both downloads and the paper outside the server and its backups. Choose **Clear pack** to remove
+the screen's download links; this does not delete files you already downloaded.
+
+The printed register is a snapshot. Compare its custodian fingerprint with the current outside
+master before trusting it for recovery, and consult that master before consuming an entry.
+Reprinting a pack cannot establish that a name remains free. Keep paper keys needed by older
+backups even after you replace the live node key. The archive encryption key opens a backup file;
+the node recovery key authenticates the node operation. They remain separate credentials.
 
 ## Reserve an entry for a named standby
 
