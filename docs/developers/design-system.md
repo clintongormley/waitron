@@ -2394,8 +2394,6 @@ Where the two differ, and why:
   that arrives after the person has left the menu or the tab, or after its row has left the list,
   is said in the Menus screen's own message above the tabs or the menus list instead
   (`memberError`, `apps/dashboard/src/screens/menus-screen.ts`).
-  Closing the price message or using its Undo returns keyboard focus to that save's field when
-  the message held focus; expiry leaves focus where it is.
 
 #### The field box
 
