@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -15,7 +16,12 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import {
+  VENUE_SERVICE_MIGRATIONS,
+  departments,
+  specialDayDates,
+  specialDays,
+} from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
@@ -23,6 +29,7 @@ import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
 import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { StaffRole } from "./staffing-types.js";
+import type { AreaRef, StaffingBlock } from "./slots.js";
 
 registerModulePermissions(STAFFING_PERMISSIONS);
 
@@ -67,13 +74,13 @@ async function routed() {
     { db: suite.db, cfg, core: {} as ModuleRouteContext["core"] },
     noopLog,
   );
-  const send = (
+  const call = (
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     cookie: string,
     body?: unknown,
   ) =>
-    app.request(`${BASE}${path}`, {
+    app.request(path, {
       method,
       headers: {
         cookie,
@@ -81,12 +88,18 @@ async function routed() {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+  const send = (
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    path: string,
+    cookie: string,
+    body?: unknown,
+  ) => call(method, `${BASE}${path}`, cookie, body);
   const create = async (name: string) => {
     const response = await send("POST", "", cookies.manager, { name, colour: "blue" });
     expect(response.status).toBe(201);
     return (await response.json()) as StaffRole;
   };
-  return { ...venue, ...cookies, send, create };
+  return { ...venue, ...cookies, call, send, create };
 }
 
 async function answers(response: Response, status: number, body?: unknown) {
@@ -356,5 +369,436 @@ describe("the staff-role routes", () => {
     await answers(await r.send("GET", "", r.manager), 200, {
       staffRoles: [{ ...a, name: "A2", colour: "red", position: 1, holderIds: [r.ana] }],
     });
+  });
+});
+
+const STAFFING = "/management-api/staffing";
+
+/** The routed venue with a staff role and a special day of two dates. */
+async function painted() {
+  const r = await routed();
+  const waiter = await r.create("Waiter");
+  const special = await withTransaction(suite.db, async (tx) => {
+    const [day] = await tx
+      .insert(specialDays)
+      .values({ locationId: r.cfg.locationId, name: "Fiesta" })
+      .returning({ id: specialDays.id });
+    const dates = await tx
+      .insert(specialDayDates)
+      .values([
+        { specialDayId: day!.id, locationId: r.cfg.locationId, date: "2026-08-14" },
+        { specialDayId: day!.id, locationId: r.cfg.locationId, date: "2026-08-15" },
+      ])
+      .returning({ id: specialDayDates.id, date: specialDayDates.date });
+    return {
+      specialDayId: day!.id,
+      aug14: dates.find((d) => d.date === "2026-08-14")!.id,
+      aug15: dates.find((d) => d.date === "2026-08-15")!.id,
+    };
+  });
+  const dept: AreaRef = { kind: "department", id: r.departmentId };
+  const grill: AreaRef = { kind: "station", id: r.stationId };
+  const block = (over: Partial<StaffingBlock> = {}): StaffingBlock => ({
+    staffRoleId: waiter.id,
+    headcount: 2,
+    startsAt: "12:00",
+    endsAt: "16:00",
+    ...over,
+  });
+  return { ...r, ...special, waiter: waiter.id, dept, grill, block };
+}
+
+const week = (over: Record<number, StaffingBlock[]> = {}) => ({
+  0: [],
+  1: [],
+  2: [],
+  3: [],
+  4: [],
+  5: [],
+  6: [],
+  ...over,
+});
+
+async function setActive(area: AreaRef, active: boolean) {
+  await withTransaction(suite.db, async (tx) => {
+    if (area.kind === "department")
+      await tx.update(departments).set({ active }).where(eq(departments.id, area.id));
+    else await tx.update(kitchenStations).set({ active }).where(eq(kitchenStations.id, area.id));
+  });
+}
+
+describe("the staffing paint routes", () => {
+  it("lists the active areas to a viewer, leaving out a switched-off department and station until they are back on", async () => {
+    const p = await painted();
+    const all = {
+      areas: [
+        { area: p.dept, name: "Dining room" },
+        { area: p.grill, name: "Grill" },
+      ],
+    };
+    await answers(await p.call("GET", `${STAFFING}/areas`, p.supervisor), 200, all);
+    await setActive(p.dept, false);
+    await setActive(p.grill, false);
+    await answers(await p.call("GET", `${STAFFING}/areas`, p.manager), 200, { areas: [] });
+    await setActive(p.dept, true);
+    await setActive(p.grill, true);
+    await answers(await p.call("GET", `${STAFFING}/areas`, p.manager), 200, all);
+  });
+
+  it("saves a season's week and reads it back", async () => {
+    const p = await painted();
+    const lunch = p.block();
+    const night = p.block({ headcount: 1, startsAt: "20:00", endsAt: "02:00" });
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.dept, weekday: 0, blocks: [lunch] },
+          { area: p.grill, weekday: 6, blocks: [night] },
+        ],
+      }),
+      204,
+    );
+    await answers(await p.call("GET", path, p.supervisor), 200, {
+      areas: [
+        { area: p.dept, name: "Dining room", weekdays: week({ 0: [lunch] }) },
+        { area: p.grill, name: "Grill", weekdays: week({ 6: [night] }) },
+      ],
+      guides: {
+        [`department:${p.departmentId}`]: week(),
+        [`station:${p.stationId}`]: week(),
+      },
+    });
+    await answers(
+      await p.call("PUT", path, p.manager, { edits: [{ area: p.dept, weekday: 0, blocks: [] }] }),
+      204,
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { weekdays: unknown }[];
+    };
+    expect(read.areas.map((a) => a.weekdays)).toEqual([week(), week({ 6: [night] })]);
+  });
+
+  it("refuses a malformed season edit as staffing.invalid naming the field", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const ok = { area: p.dept, weekday: 1, blocks: [p.block()] };
+    const invalid = async (body: unknown, field: string) =>
+      answers(
+        await p.call("PUT", path, p.manager, body),
+        400,
+        refusal("staffing.invalid", { field }),
+      );
+    await invalid({}, "edits");
+    await invalid({ edits: "x" }, "edits");
+    await invalid({ edits: [ok, 3] }, "edits.1");
+    await invalid({ edits: [ok, null] }, "edits.1");
+    await invalid({ edits: [ok, []] }, "edits.1");
+    await invalid({ edits: [{ ...ok, extra: 1 }] }, "edits.0.extra");
+    await invalid({ edits: [ok, { ...ok, weekday: 7 }] }, "edits.1.weekday");
+    await invalid({ edits: [ok, { ...ok, weekday: -1 }] }, "edits.1.weekday");
+    await invalid({ edits: [ok, { ...ok, weekday: 1.5 }] }, "edits.1.weekday");
+    await invalid({ edits: [ok, { ...ok, weekday: "1" }] }, "edits.1.weekday");
+    await invalid({ edits: [{ area: p.dept, blocks: [] }] }, "edits.0.weekday");
+    await invalid(
+      { edits: [{ ...ok, area: { kind: "zone", id: p.departmentId } }] },
+      "edits.0.area.kind",
+    );
+    await invalid({ edits: [{ area: p.dept, weekday: 1 }] }, "edits.0.blocks");
+    await invalid(
+      { edits: [{ ...ok, blocks: [p.block(), p.block(), p.block({ headcount: 51 })] }] },
+      "edits.0.blocks.2.headcount",
+    );
+    // With the default 06:00 changeover, 05:00–07:00 crosses from one business day into the next.
+    await invalid(
+      { edits: [{ ...ok, blocks: [p.block({ startsAt: "05:00", endsAt: "07:00" })] }] },
+      "edits.0.blocks.0.endsAt",
+    );
+    await answers(
+      await p.call("PUT", path, p.manager, { edits: [ok], extra: true }),
+      400,
+      refusal("management.request_invalid", { field: "extra" }),
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { weekdays: unknown }[];
+    };
+    expect(read.areas.map((a) => a.weekdays)).toEqual([week(), week()]);
+  });
+
+  it("validates a block against the location's own changeover", async () => {
+    const p = await painted();
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(locations)
+        .set({ dayCutover: "03:00:00" })
+        .where(eq(locations.id, p.cfg.locationId)),
+    );
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const late = p.block({ startsAt: "05:00", endsAt: "07:00" });
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ area: p.dept, weekday: 2, blocks: [late] }],
+      }),
+      204,
+    );
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.dept, weekday: 2, blocks: [p.block({ startsAt: "02:00", endsAt: "04:00" })] },
+        ],
+      }),
+      400,
+      refusal("staffing.invalid", { field: "edits.0.blocks.0.endsAt" }),
+    );
+  });
+
+  it("answers a season elsewhere with 404, and an area or staff role the body names that is not the venue's with 400", async () => {
+    const p = await painted();
+    const other = await seedVenue(suite.db);
+    const theirs = `${STAFFING}/seasons/${other.seasonId}`;
+    await answers(
+      await p.call("GET", theirs, p.manager),
+      404,
+      refusal("season.not_found", { seasonId: other.seasonId }),
+    );
+    await answers(
+      await p.call("PUT", theirs, p.manager, { edits: [] }),
+      404,
+      refusal("season.not_found", { seasonId: other.seasonId }),
+    );
+    await answers(
+      await p.call("GET", `${STAFFING}/seasons/not-a-uuid`, p.manager),
+      400,
+      refusal("shared.invalid_id", { kind: "SeasonId", value: "not-a-uuid" }),
+    );
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const theirStation: AreaRef = { kind: "station", id: other.stationId };
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ area: theirStation, weekday: 1, blocks: [p.block()] }],
+      }),
+      400,
+      refusal("staffing_area.not_found", { area: `station:${other.stationId}` }),
+    );
+    await setActive(p.dept, false);
+    await answers(
+      await p.call("PUT", path, p.manager, { edits: [{ area: p.dept, weekday: 1, blocks: [] }] }),
+      400,
+      refusal("staffing_area.not_found", { area: `department:${p.departmentId}` }),
+    );
+    const stranger = randomUUID();
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ area: p.grill, weekday: 1, blocks: [p.block({ staffRoleId: stranger })] }],
+      }),
+      400,
+      refusal("staff_role.not_found", { staffRoleId: stranger }),
+    );
+  });
+
+  it("saves a special day's dates as blocks, an empty row or the season, and reads them back", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/special-days/${p.specialDayId}`;
+    const lunch = p.block();
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.dept, dateId: p.aug14, blocks: [lunch] },
+          { area: p.dept, dateId: p.aug15, blocks: [] },
+          { area: p.grill, dateId: p.aug15, blocks: [lunch] },
+        ],
+      }),
+      204,
+    );
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ area: p.grill, dateId: p.aug15, blocks: null }],
+      }),
+      204,
+    );
+    await answers(await p.call("GET", path, p.supervisor), 200, {
+      areas: [
+        {
+          area: p.dept,
+          name: "Dining room",
+          dates: [
+            { dateId: p.aug14, date: "2026-08-14", blocks: [lunch] },
+            { dateId: p.aug15, date: "2026-08-15", blocks: [] },
+          ],
+        },
+        {
+          area: p.grill,
+          name: "Grill",
+          dates: [
+            { dateId: p.aug14, date: "2026-08-14", blocks: null },
+            { dateId: p.aug15, date: "2026-08-15", blocks: null },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("refuses a malformed special-day edit, a date not of the special day, an area elsewhere and an unknown staff role with 400, and a special day elsewhere with 404", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/special-days/${p.specialDayId}`;
+    const ok = { area: p.dept, dateId: p.aug14, blocks: null };
+    const invalid = async (body: unknown, field: string) =>
+      answers(
+        await p.call("PUT", path, p.manager, body),
+        400,
+        refusal("staffing.invalid", { field }),
+      );
+    await invalid({ edits: null }, "edits");
+    await invalid({ edits: [ok, "x"] }, "edits.1");
+    await invalid({ edits: [{ ...ok, weekday: 1 }] }, "edits.0.weekday");
+    await invalid({ edits: [{ area: p.dept, dateId: p.aug14 }] }, "edits.0.blocks");
+    await invalid({ edits: [{ ...ok, blocks: "none" }] }, "edits.0.blocks");
+    await invalid({ edits: [{ ...ok, dateId: "2026-08-14" }] }, "edits.0.dateId");
+    await invalid({ edits: [{ ...ok, dateId: 5 }] }, "edits.0.dateId");
+    await invalid({ edits: [{ area: p.dept, blocks: null }] }, "edits.0.dateId");
+    await invalid({ edits: [{ ...ok, area: { kind: "station" } }] }, "edits.0.area.id");
+    await invalid(
+      { edits: [{ ...ok, blocks: [p.block({ startsAt: "12:10" })] }] },
+      "edits.0.blocks.0.startsAt",
+    );
+    await answers(
+      await p.call("PUT", path, p.manager, { edits: [], more: 1 }),
+      400,
+      refusal("management.request_invalid", { field: "more" }),
+    );
+
+    await invalid(
+      { edits: [ok, { ...ok, dateId: randomUUID() }, { ...ok, dateId: randomUUID() }] },
+      "edits.1.dateId",
+    );
+    const elsewhere = await seedVenue(suite.db);
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ ...ok, area: { kind: "station", id: elsewhere.stationId } }],
+      }),
+      400,
+      refusal("staffing_area.not_found", { area: `station:${elsewhere.stationId}` }),
+    );
+    const stranger = randomUUID();
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ ...ok, blocks: [p.block({ staffRoleId: stranger })] }],
+      }),
+      400,
+      refusal("staff_role.not_found", { staffRoleId: stranger }),
+    );
+    const [theirs] = await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(specialDays)
+        .values({ locationId: elsewhere.cfg.locationId, name: "Elsewhere" })
+        .returning({ id: specialDays.id }),
+    );
+    const other = theirs!.id;
+    await answers(
+      await p.call("GET", `${STAFFING}/special-days/${other}`, p.manager),
+      404,
+      refusal("special_day.not_found", { specialDayId: other }),
+    );
+    await answers(
+      await p.call("PUT", `${STAFFING}/special-days/${other}`, p.manager, { edits: [] }),
+      404,
+      refusal("special_day.not_found", { specialDayId: other }),
+    );
+    await answers(
+      await p.call("PUT", `${STAFFING}/special-days/nope`, p.manager, { edits: [] }),
+      400,
+      refusal("shared.invalid_id", { kind: "SpecialDayId", value: "nope" }),
+    );
+  });
+
+  it("keeps the later of two season edits for the same area and weekday", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/seasons/${p.seasonId}`;
+    const later = p.block({ headcount: 5, startsAt: "18:00", endsAt: "23:00" });
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.dept, weekday: 5, blocks: [p.block()] },
+          { area: p.dept, weekday: 5, blocks: [later] },
+        ],
+      }),
+      204,
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { weekdays: unknown }[];
+    };
+    expect(read.areas[0]!.weekdays).toEqual(week({ 5: [later] }));
+  });
+
+  it("keeps the later of two special-day edits for the same area and date", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/special-days/${p.specialDayId}`;
+    const later = p.block({ headcount: 5, startsAt: "18:00", endsAt: "23:00" });
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [
+          { area: p.grill, dateId: p.aug14, blocks: [p.block()] },
+          { area: p.grill, dateId: p.aug14, blocks: [later] },
+        ],
+      }),
+      204,
+    );
+    const read = (await (await p.call("GET", path, p.manager)).json()) as {
+      areas: { dates: { blocks: unknown }[] }[];
+    };
+    expect(read.areas[1]!.dates[0]!.blocks).toEqual([later]);
+  });
+
+  it("accepts upper-case spellings of every id", async () => {
+    const p = await painted();
+    const upperArea = (area: AreaRef): AreaRef => ({ ...area, id: area.id.toUpperCase() });
+    const lunch = p.block();
+    const shouted = { ...lunch, staffRoleId: lunch.staffRoleId.toUpperCase() };
+    await answers(
+      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId.toUpperCase()}`, p.manager, {
+        edits: [{ area: upperArea(p.dept), weekday: 3, blocks: [shouted] }],
+      }),
+      204,
+    );
+    const season = (await (
+      await p.call("GET", `${STAFFING}/seasons/${p.seasonId.toUpperCase()}`, p.manager)
+    ).json()) as { areas: { weekdays: unknown }[] };
+    expect(season.areas[0]!.weekdays).toEqual(week({ 3: [lunch] }));
+    const specialPath = `${STAFFING}/special-days/${p.specialDayId.toUpperCase()}`;
+    await answers(
+      await p.call("PUT", specialPath, p.manager, {
+        edits: [{ area: upperArea(p.grill), dateId: p.aug15.toUpperCase(), blocks: [shouted] }],
+      }),
+      204,
+    );
+    const special = (await (await p.call("GET", specialPath, p.manager)).json()) as {
+      areas: { dates: { blocks: unknown }[] }[];
+    };
+    expect(special.areas[1]!.dates[1]!.blocks).toEqual([lunch]);
+  });
+
+  it("lets a supervisor read the paint but not save it, and refuses staff and anonymous callers", async () => {
+    const p = await painted();
+    const notPermitted = async (response: Response) => {
+      expect(response.status).toBe(403);
+      const { error } = (await response.json()) as { error: { code: string } };
+      expect(error.code).toBe("authorization.not_permitted");
+    };
+    const season = `${STAFFING}/seasons/${p.seasonId}`;
+    const special = `${STAFFING}/special-days/${p.specialDayId}`;
+    for (const path of [`${STAFFING}/areas`, season, special]) {
+      await answers(await p.call("GET", path, p.supervisor), 200);
+      await notPermitted(await p.call("GET", path, p.staff));
+      await answers(await p.call("GET", path, ""), 401);
+    }
+    // The body is checked only once the caller is authorised, so a bad one is still a 403.
+    await notPermitted(await p.call("PUT", season, p.supervisor, { edits: "x" }));
+    await notPermitted(await p.call("PUT", special, p.supervisor, { edits: "x" }));
+    await notPermitted(
+      await p.call("PUT", season, p.supervisor, {
+        edits: [{ area: p.dept, weekday: 1, blocks: [p.block()] }],
+      }),
+    );
+    await answers(await p.call("PUT", season, "", { edits: [] }), 401);
   });
 });

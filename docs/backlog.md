@@ -4123,7 +4123,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
   Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
-  (#1681); parts 2–8 are open, in the order of the
+  (#1681); part 2 (staffing paint storage and routes, the slot and matching library) is built on
+  `feat/a585-2-staffing-paint`; parts 3–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
 - **A636. The Staff roles list re-reads when any person changes.** Its live query `staff-roles`
   (`packages/staffing/src/dashboard/live-queries.ts`) depends on `persons`, but the list read

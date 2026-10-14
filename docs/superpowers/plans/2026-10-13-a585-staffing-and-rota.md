@@ -622,6 +622,17 @@ it("reorders by the given ids and refuses a list that is not exactly the venue's
 
 ## Part A585-2 — staffing paint storage and the slot library
 
+> **Built 2026-10-14 on `feat/a585-2-staffing-paint`, with six things later parts should know.**
+> `placeShift` measures `start` from its business day's own changeover, so when the changeover
+> moves later between two days a shift can start past minute 1440 (`slotsForDay` still ends every
+> slot by 1440). `resolveStaffing` answers an area whose special-day row is empty with `[]`, not by
+> leaving it out. `parseArea`/`parseBlocks` lower-case ids; `paint-rules.ts` also exports `record`
+> and `uuid`. `listStaffingAreas` is exported for `GET /areas`. Staffing depends on
+> `@waitron/reporting` for `readLocationClock`. On a paint save, an area or staff role the body
+> names that is not the venue's answers 400 (`staffing_area.not_found`, `staff_role.not_found`),
+> and a date that is not one of the special day's is `staffing.invalid` on `edits.<i>.dateId`; only
+> the season or special day in the path answers 404.
+
 Branch `feat/a585-2-staffing-paint`. Waits for A585-1.
 
 ### Task 2.1: venue-service exports what staffing reads
@@ -831,7 +842,7 @@ export function matchAreaDay(slots: readonly Slot[], shifts: readonly PlacedShif
   row; a staff role from another location or an unknown area is refused
   (`staff_role.not_found`, `staffing_area.not_found`); a special day's edit with `blocks: null`
   removes the date's row and `[]` keeps an empty row; `resolveStaffing` returns the season's blocks
-  on an ordinary date, the special day's blocks on its date, nothing on a special-day date whose row
+  on an ordinary date, the special day's blocks on its date, `[]` for an area whose special-day row
   is empty, and the season's blocks for an area the special day did not paint. **Switched-off
   areas** (Review Focus 5): after `update departments set active = 0` (what
   `service-delete.ts:329` does) and the same for a station (`station-delete.ts:215`), the area is
@@ -854,10 +865,12 @@ export function matchAreaDay(slots: readonly Slot[], shifts: readonly PlacedShif
   that apply, then their blocks, one query after another, and assembles the map by the rule: an
   area's special-day row wins; otherwise its season-weekday row; otherwise no entry.
 
-- [ ] **Step 4: Routes and their tests** (status codes as Task 1.2 plus `staffing_area.not_found`
-  404; the season and special-day routes answer `season.not_found` / `special_day.not_found` 404
-  when the id is not at the location — reuse venue-service's codes, which its `errors.ts` already
-  declares).
+- [ ] **Step 4: Routes and their tests** (status codes as Task 1.2, except that on a save an area
+  or staff role the body names that is not the venue's answers 400 — `staffing_area.not_found`,
+  `staff_role.not_found` — and a date that is not one of the special day's is `staffing.invalid` on
+  `edits.<i>.dateId`; the season and special day in the path answer `season.not_found` /
+  `special_day.not_found` 404 when the id is not at the location — reuse venue-service's codes,
+  which its `errors.ts` already declares).
 
 - [ ] **Step 5: Run** `pnpm --filter @waitron/staffing test:coverage`; expected PASS.
 - [ ] **Step 6: Commit** `git commit -s -m "A585-2: staffing paint storage and routes"`.

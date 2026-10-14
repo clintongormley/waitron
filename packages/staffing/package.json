@@ -22,6 +22,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/reporting": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
