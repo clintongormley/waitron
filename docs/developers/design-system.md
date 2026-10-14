@@ -3633,7 +3633,7 @@ or to storage, so the page opens on All periods, and a chosen period that a refr
 back to All periods. With one period chosen, each cell shows only where it sends work during that
 period — the period line holding it, otherwise its plain station (`stationDuring`,
 `routing-grid-model.ts`) — and its fill follows that station; no period lines or "Not on … menus"
-flags are drawn, while refusals and a disabled station's warning are. Names follow the rules above,
+flags are drawn, while refusals are, and so is a disabled station's warning, for the station the cell itself sends to during the period — its own line for the period, otherwise its own station — never for one it inherits. Names follow the rules above,
 with one addition: a cell those rules leave blank is named, muted and in italics, when its station
 for the period differs from its row's Every zone's saved station for the period.
 

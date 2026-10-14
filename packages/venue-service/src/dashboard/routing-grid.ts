@@ -621,7 +621,7 @@ export class RoutingGrid extends LitElement {
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
     const period = this.period;
-    /** The station this cell itself sends to in the shown view; inherited ones are not warned about. */
+    // An inherited cell's period lines are the deciding cell's, not this cell's to warn about.
     const setHere =
       period === null || periodLines.inherited
         ? shown
