@@ -4,8 +4,8 @@ import { getCountryPack } from "@waitron/country-packs";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
-import { ALL_MODULES } from "../../src/modules.js";
-import { applyDevelopmentVenue } from "./apply.js";
+import { ALL_MODULES } from "../src/modules.js";
+import { applyDevelopmentVenue } from "./throwaway-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -89,6 +89,38 @@ describe("applyDevelopmentVenue", () => {
       code: "sif.throwaway_allocation_refused",
       params: { environment: "production" },
     });
+    expect(facts()).toEqual(before);
+  });
+
+  it("refuses two modules offering a throwaway allocation before writing anything", async () => {
+    const fiscal = ALL_MODULES.find((module) => module.name === "fiscal-verifactu")!;
+    const modules = [...ALL_MODULES, { ...fiscal, name: "fiscal-twin" }];
+    const before = facts();
+    await expect(
+      applyDevelopmentVenue(
+        planVenue(request(real), ALL_MODULES),
+        { db: suite.db, modules },
+        { WAITRON_ENV: "dev" },
+      ),
+    ).rejects.toMatchObject({
+      code: "module.throwaway_allocation_ambiguous",
+      params: { candidates: ["fiscal-verifactu", "fiscal-twin"] },
+    });
+    expect(facts()).toEqual(before);
+  });
+
+  it("refuses a plan with no taxpayer with a named error, before writing anything", async () => {
+    const actions = planVenue(request(real), ALL_MODULES).filter(
+      (action) => action.kind !== "ensure-tenant",
+    );
+    const before = facts();
+    await expect(
+      applyDevelopmentVenue(
+        actions,
+        { db: suite.db, modules: ALL_MODULES },
+        { WAITRON_ENV: "dev" },
+      ),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "taxId" } });
     expect(facts()).toEqual(before);
   });
 

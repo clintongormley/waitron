@@ -1,7 +1,7 @@
 import { getCountryPack } from "@waitron/country-packs";
 import type { VenueAction, VenueApplyDeps } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import { applyDevelopmentVenue } from "../dev-custodian/apply.js";
+import { applyDevelopmentVenue } from "../throwaway-venue.js";
 import { demoSeedEnvironment } from "./seed-sales.js";
 
 export async function applyDeveloperDemoVenue(
