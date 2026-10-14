@@ -226,36 +226,70 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
   }, S3_READY_MS + 10_000);
 
   afterEach(async () => {
-    try {
-      s3?.resume();
-    } catch {
-      // It has exited; afterAll says nothing more about it.
-    }
-    await started.proxy?.close();
-    if (started.driver?.pid !== undefined) stopPid(started.driver.pid, true);
-    // Each only while it is still the process the run started. A keeper whose start time this case
-    // never read is not signalled.
-    const pids = new Set([started.sleepPid]);
-    const { keeperPid, keeperStartTime } = started;
-    if (keeperPid !== undefined && keeperStartTime !== undefined && keeperStartTime !== null) {
-      if (processStartTime(keeperPid) === keeperStartTime) pids.add(keeperPid);
-    }
-    // A case that failed before the driver's RUN line knows its tracked pids only from the journal.
-    for (const journal of await journalsIn(started.receiptDir)) {
-      for (const { pid, startTime } of journal.pids) {
-        if (startTime !== null && processStartTime(pid) === startTime) pids.add(pid);
+    const was = started;
+    started = {};
+    const failures: unknown[] = [];
+    for (const cleanup of [
+      () => {
+        try {
+          s3?.resume();
+        } catch {
+          // It has exited; afterAll says nothing more about it.
+        }
+      },
+      () => was.proxy?.close(),
+      () => {
+        if (was.driver?.pid !== undefined) stopPid(was.driver.pid, true);
+      },
+      // Each only while it is still the process the run started. A keeper whose start time this
+      // case never read is not signalled.
+      () => {
+        stopPid(was.sleepPid);
+        const { keeperPid, keeperStartTime } = was;
+        if (keeperPid !== undefined && keeperStartTime !== undefined && keeperStartTime !== null) {
+          if (processStartTime(keeperPid) === keeperStartTime) stopPid(keeperPid);
+        }
+      },
+      // A case that failed before the driver's RUN line knows its tracked pids only from the journal.
+      async () => {
+        for (const journal of await journalsIn(was.receiptDir)) {
+          for (const { pid, startTime } of journal.pids) {
+            if (startTime !== null && processStartTime(pid) === startTime) stopPid(pid);
+          }
+        }
+      },
+      // A failed case's leftover buckets would fail each later case's bucket count.
+      async () => {
+        if (client !== undefined) await removeCaseBuckets(client);
+      },
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
       }
     }
-    for (const pid of pids) stopPid(pid);
-    started = {};
-    // A failed case's leftover buckets would fail each later case's bucket count.
-    if (client !== undefined) await removeCaseBuckets(client);
+    if (failures.length > 0) throw new AggregateError(failures, "interrupt case teardown failed");
   });
 
   afterAll(async () => {
-    client?.destroy();
-    if (s3 !== undefined) await s3.stop();
-    if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+    const failures: unknown[] = [];
+    for (const cleanup of [
+      () => client?.destroy(),
+      async () => {
+        if (s3 !== undefined) await s3.stop();
+      },
+      async () => {
+        if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+      },
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "interrupt suite teardown failed");
   });
 
   function requireServer(ctx: { skip(note: string): never }): {
