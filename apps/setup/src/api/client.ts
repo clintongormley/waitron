@@ -144,6 +144,16 @@ export interface CloudRecoveryView {
   point?: { id: string; venueId: string; capturedAt: string; modules: Record<string, number> };
 }
 
+export interface RecoveryBackupPreview {
+  sourceId: string;
+  createdAt: string;
+  environment: "production" | "preproduction";
+  nodeId: string;
+  nodeRecoveryKeyName: string | null;
+  taxpayer: { legalName: string; taxId: string };
+  locationName: string;
+}
+
 export interface ConfigurationPreview {
   venue: Omit<ProvisionBody["venue"], "admin"> & {
     location: ProvisionBody["venue"]["location"] & { id: string };
@@ -279,6 +289,26 @@ export class SetupApi {
     });
     if (!res.ok) throw await apiError(res);
     return JSON.parse(await res.text()) as RestoreOutcome;
+  }
+
+  async previewRestore(
+    artifact: Blob,
+    recoveryKey: string,
+    environment: "production" | "preproduction",
+  ): Promise<RecoveryBackupPreview> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/setup-api/restore/preview", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": recoveryKey,
+        "x-waitron-restore-environment": environment,
+      },
+      body: artifact,
+    });
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as RecoveryBackupPreview;
   }
 
   /** `POST /setup-api/restore-bucket` — check the owner's bucket and stage a rebuild from it.

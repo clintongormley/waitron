@@ -16,6 +16,8 @@ import {
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
+import { SetupApi } from "../api/client.js";
+import "./recovery-copy.js";
 
 interface RestoreForm {
   artifact?: File;
@@ -50,6 +52,7 @@ export class SetupRestoreScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  @property({ attribute: false }) api: SetupApi = new SetupApi();
   /** The field `errorMessage` is about; the message then shows under it, not above Restore. */
   @property() invalidField?: RestoreField;
   /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
@@ -68,6 +71,7 @@ export class SetupRestoreScreen extends LitElement {
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
+  @state() private previewRefusal?: RestoreField;
 
   #baseline?: RestoreForm;
   #scope?: DraftScope<RestoreForm>;
@@ -160,12 +164,22 @@ export class SetupRestoreScreen extends LitElement {
   #edited(field: RestoreField): void {
     this.#scope?.changed();
     if (field === this.invalidField) this.fieldRefusalDismissed = true;
+    this.previewRefusal = undefined;
   }
 
   /** The message under `field`: the client's own when it is missing, else a refusal about it. */
   #fieldError(field: RestoreField, missing: string | undefined): string | undefined {
     if (missing !== undefined) return missing;
-    return this.#refusalUnder() === field ? this.errorMessage : undefined;
+    if (this.#refusalUnder() === field) return this.errorMessage;
+    if (this.previewRefusal === field) {
+      const messages = {
+        artifact: "restore.preview_file_error",
+        recoveryKey: "restore.preview_key_error",
+        environment: "restore.preview_environment_error",
+      } as const;
+      return t(messages[field]);
+    }
+    return undefined;
   }
 
   /** The owner chose another file than the one the shell's old-server refusal was about. */
@@ -193,6 +207,7 @@ export class SetupRestoreScreen extends LitElement {
   #restore(): void {
     this.attempted = true;
     this.refusalDismissed = true;
+    this.previewRefusal = undefined;
     const artifact = this.artifact;
     if (artifact === undefined || this.#incomplete) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
@@ -224,7 +239,9 @@ export class SetupRestoreScreen extends LitElement {
       this.invalidField === undefined
         ? [this.errorMessage]
         : []),
-      ...(fieldsInvalid || refused !== undefined ? [t("restore.fix_fields")] : []),
+      ...(fieldsInvalid || refused !== undefined || this.previewRefusal !== undefined
+        ? [t("restore.fix_fields")]
+        : []),
     ].join(" ");
     return html`
       <h1>${t("restore.heading")}</h1>
@@ -311,6 +328,16 @@ export class SetupRestoreScreen extends LitElement {
           >${t("restore.environment_help")}</wt-help-tooltip
         >
       </wt-combobox>
+      <setup-recovery-copy
+        .api=${this.api}
+        .artifact=${this.artifact}
+        .recoveryKey=${this.recoveryKey}
+        .environment=${this.environment}
+        @preview-refusal=${(event: CustomEvent<{ field?: RestoreField }>) => {
+          event.stopPropagation();
+          this.previewRefusal = event.detail.field;
+        }}
+      ></setup-recovery-copy>
       <label class="field">
         <input
           name="no-running-server"

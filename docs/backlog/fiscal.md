@@ -998,3 +998,10 @@ establishes consumption authority. The selected-copy preview reader reads the ke
 decrypted backup and qualifies a live-key replacement, but has no public chooser consumer yet.
 The chooser, paper/emergency/phone collection, restore-screen integration and interruption exercise
 remain open. The custodian still needs the repository command and a separate master register.
+
+**2026-10-14 archive-chooser checkpoint:** setup can review the selected archive's business,
+location, date and saved node-key name before staging it. The preview upgrades only its private
+copy; an archive predating named keys says the name is absent. Changing the file, encryption key
+or environment clears the preview. Its warning keeps the node credential separate from archive
+encryption and tells you to retain older paper keys. Bucket/Cloud chooser integration, offline
+allocation collection and interrupted activation remain open; this is not the completed Task 6.

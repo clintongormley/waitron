@@ -37,6 +37,7 @@ import type {
   SetupOperationStore,
 } from "./setup-operation.js";
 import type { ArchiveRestoreRequest } from "./restore-request.js";
+import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -106,6 +107,7 @@ export interface SetupDeps {
     request: ArchiveRestoreRequest,
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
+  previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
   /** Checks the owner's bucket and stages a rebuild from it for the entrypoint to write after
    * restart. Rejects with the refusal, having staged nothing. */
   stageBucketRestore?: (input: BucketRestoreInput) => Promise<void>;
@@ -1019,6 +1021,34 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } catch (error) {
         provisioning = false;
         throw error;
+      }
+    });
+  });
+
+  app.post("/setup-api/restore/preview", async (c) => {
+    const preview = deps.previewRestore;
+    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
+      return directError(c, log, "setup.already_provisioning", 409);
+    provisioning = true;
+    return runRestore(c, log, async () => {
+      try {
+        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
+          invalidRequest("artifact");
+        const declaredLength = Number(c.req.header("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_RESTORE_UPLOAD_BYTES)
+          invalidRequest("artifact");
+        const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const environment = c.req.header("x-waitron-restore-environment");
+        if (environment !== "production" && environment !== "preproduction")
+          invalidRequest("environment");
+        const artifact = new Uint8Array(await c.req.arrayBuffer());
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES)
+          invalidRequest("artifact");
+        c.header("Cache-Control", "no-store");
+        return c.json(await preview({ artifact, recoveryKey, environment }), 200);
+      } finally {
+        provisioning = false;
       }
     });
   });

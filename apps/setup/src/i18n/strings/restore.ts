@@ -1,6 +1,20 @@
 // The restore, restore-bucket, cloud-restore, live-source, configuration-preview and fiscal-test screens.
 
 export const restoreEn = {
+  "restore.preview_action": "Review backup",
+  "restore.preview_heading": "Selected backup",
+  "restore.preview_business": "Business",
+  "restore.preview_location": "Location",
+  "restore.preview_date": "Backup date",
+  "restore.preview_node_key": "Node recovery key",
+  "restore.preview_unnamed": "This backup's node key has no stored name.",
+  "restore.preview_older_key": "An older backup reinstates its older node key.",
+  "restore.preview_keep_keys": "Keep older paper keys until no older backup remains.",
+  "restore.preview_key_separate": "The node key is separate from the backup file's encryption key.",
+  "restore.preview_key_error": "Check the backup file's encryption key.",
+  "restore.preview_environment_error": "Check the backup environment.",
+  "restore.preview_file_error": "Check the backup file.",
+  "restore.preview_failed": "Couldn't review this backup.",
   "restore.heading": "Restore from backup",
   "restore.cloud_restore": "Restore from Waitron Cloud",
   "restore.intro":
@@ -137,6 +151,22 @@ export const restoreEn = {
 } as const;
 
 export const restoreEs: Record<keyof typeof restoreEn, string> = {
+  "restore.preview_action": "Revisar copia",
+  "restore.preview_heading": "Copia seleccionada",
+  "restore.preview_business": "Negocio",
+  "restore.preview_location": "Local",
+  "restore.preview_date": "Fecha de la copia",
+  "restore.preview_node_key": "Clave de recuperación del nodo",
+  "restore.preview_unnamed": "La clave del nodo de esta copia no tiene nombre guardado.",
+  "restore.preview_older_key": "Una copia antigua restablece la clave del nodo de entonces.",
+  "restore.preview_keep_keys":
+    "Conserva las claves en papel antiguas mientras queden copias que las necesiten.",
+  "restore.preview_key_separate":
+    "La clave del nodo es distinta de la clave de cifrado del archivo de copia.",
+  "restore.preview_key_error": "Revisa la clave de cifrado del archivo de copia.",
+  "restore.preview_environment_error": "Revisa el entorno de la copia.",
+  "restore.preview_file_error": "Revisa el archivo de copia.",
+  "restore.preview_failed": "No se ha podido revisar esta copia.",
   "restore.heading": "Restaurar desde una copia de seguridad",
   "restore.cloud_restore": "Restaurar desde Waitron Cloud",
   "restore.intro":

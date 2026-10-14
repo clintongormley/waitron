@@ -1466,6 +1466,7 @@ export class SetupApp extends LitElement {
       case "restore":
         return html`<setup-restore-screen
           data-test="screen-restore"
+          .api=${this.api}
           .errorMessage=${this.restoreError?.()}
           .invalidField=${this.restoreInvalidField}
           .liveSince=${this.restoreLiveSince}

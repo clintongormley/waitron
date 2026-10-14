@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import { eq } from "drizzle-orm";
 import { locations, openVenueDatabase, readTenant, readBreakGlassKeyName } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets } from "@waitron/module";
 import {
   readArtifactIdentity,
   validateArtifact,
@@ -24,9 +26,16 @@ export interface RecoveryBackupPreview {
 export async function readRecoveryCopyPreview(
   copy: ValidatedArtifact,
   sourceId: string,
+  deps: Pick<ValidationDeps, "modules" | "migrationsRoot">,
 ): Promise<RecoveryBackupPreview> {
   const { node } = readArtifactIdentity(copy.secretEntries);
-  const store = await openVenueDatabase(dirname(copy.databasePath));
+  const directory = dirname(copy.databasePath);
+  // Only the validated private copy is upgraded; the source and live venue retain their bytes.
+  await applyMigrations(
+    directory,
+    migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+  );
+  const store = await openVenueDatabase(directory);
   try {
     const tenant = await readTenant(store.venue);
     const [location] = await store.venue
@@ -55,6 +64,7 @@ export async function previewRecoveryArchive(deps: ValidationDeps): Promise<Reco
     return await readRecoveryCopyPreview(
       copy,
       createHash("sha256").update(deps.artifact).digest("hex"),
+      deps,
     );
   } finally {
     await copy.discard();

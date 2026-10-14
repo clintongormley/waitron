@@ -17,6 +17,9 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { startServer, type StartedServer } from "./boot.js";
+import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
+import { freePorts } from "./testing/free-ports.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const NODE = "d0000000-0000-4000-8000-000000000001";
@@ -110,4 +113,55 @@ it("refuses a wrong archive encryption key without treating it as the node crede
   await expect(previewRecoveryArchive(args("wrong-node-key"))).rejects.toMatchObject({
     code: "recovery.passphrase_invalid",
   });
+});
+
+it("the real setup listener previews the selected copy without restarting or publishing its identity", async () => {
+  await mintBreakGlassSecret(suite.db, NODE);
+  const stateDir = join(scratch, "replacement");
+  await copyMigrationsRoot(join(scratch, "migrations"));
+  const [port] = await freePorts(1);
+  let server: StartedServer | undefined;
+  let closeClient: (() => Promise<void>) | undefined;
+  try {
+    server = await startServer({
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: join(scratch, "empty-venue"),
+      WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
+      WAITRON_LOG_DIR: join(scratch, "logs"),
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_ENV: "dev",
+    });
+    await awaitListening(port!);
+    const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
+    closeClient = client.close;
+    const response = await fetch(`https://127.0.0.1:${port}/setup-api/restore/preview`, {
+      ...client.via,
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "archive-key-separate",
+        "x-waitron-restore-environment": "preproduction",
+      },
+      body: new Uint8Array(artifact),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      nodeId: NODE,
+      nodeRecoveryKeyName: oldName,
+      taxpayer: { legalName: "Old venue", taxId: "89890001K" },
+    });
+    const stateFiles = await readdir(stateDir);
+    expect(stateFiles).not.toContain("restore-request.json");
+    expect(stateFiles).not.toContain("trading.env");
+    const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, client.via);
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ provisioned: false, environment: "preproduction" });
+    expect(await readFile(join(scratch, "logs/waitron.log"), "utf8")).not.toContain(
+      "archive-key-separate",
+    );
+  } finally {
+    await closeClient?.();
+    await server?.close();
+  }
 });

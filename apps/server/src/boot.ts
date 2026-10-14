@@ -160,6 +160,7 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
+import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import {
   clearStagedConfigurationImport,
@@ -937,6 +938,14 @@ async function bootServer(
                 environment: config.environment,
               })
             : undefined,
+        previewRestore: (request) =>
+          previewRecoveryArchive({
+            ...request,
+            stateDir: config.stateDir,
+            stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+            migrationsRoot: config.migrationsRoot,
+            modules: ALL_MODULES,
+          }),
         stageRestore: (request, { oldBoxGone }) =>
           stageRestoreRequest(config.stateDir, request, async (candidate) => {
             const validated = await validateArtifact({
