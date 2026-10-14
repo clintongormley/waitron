@@ -703,6 +703,23 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   recolours one, and it can be changed or cleared like any other. No data migration (CLAUDE.md §3:
   venues are reset). [Mockup](backlog/mockups/a648-pale-default-colours/1-pale-defaults.png)
 
+- **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
+  spec written, awaiting the owner's review).** A "Contains none of the 14" choice, so a dish stops
+  reading "not reviewed" for ever; "may contain" dropped; Gluten and Nuts say which cereals and nuts;
+  one wording per state, a variant's inherited values in italic, implied diets shown, the Products
+  list reading a variant's allergens; unreviewed dishes warned about (never blocked) when a menu is
+  published now or scheduled, each linking to its product. On the till the Allergens screen is
+  deleted; product buttons carry an "i" with a long-press info window, the order list shows allergen
+  icons after the name, and the kitchen's "not reviewed" warning goes. Erudus icons. Fixes a defect
+  read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. After
+  A647 (same file). [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)
+
+- **A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
+  A printed menu carries each dish's allergen icons after its name and a key on the page naming
+  every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
+  online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
+  till's Allergens screen goes.
+
 - **A651 — drop photos to upload them, and tidy the image library and its picker (owner,
   2026-10-14; open).** Photos dropped anywhere on the library page upload at once, several at a
   time, each named in the default language from its file name; one dropped in the upload window
@@ -1206,29 +1223,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
   category that the effective category and the editor's read then ignore.
 
-- **The same "nothing" still reads two ways in one window** — left open by A211 (#1096): the
-  course dropdown says "— none —", and on a variant's page the hints under the open Nutritional
-  info say "None" (`editor.allergens_none`, `editor.diet_none`) where the closed line says "None
-  specified". At 390 wide a two-field line can wrap inside a value ("Dietary preferences: None" /
-  "specified"). Whether the Pricing fold should also name an empty base price or VAT is a question
-  for the owner.
+- **The course dropdown says "— none —" where the folded lines say "None specified"** — left
+  open by A211 (#1096); the Nutritional info half of this entry is A668's. Whether the Pricing fold
+  should also name an empty base price or VAT is a question for the owner.
 
 - **The catalogue-screen test "ignores the closed window's late close…" catches its guard's
   removal only through an unhandled error** — left open by A212 (#1087): because the late close
   throws before it changes anything a state assertion could see.
   [Detail](backlog/catalogue.md#catalogue-course-window-late-close-guard)
-
-- **On a variant's page an empty line reads "None specified" while the grey hint under it gives
-  the parent's values** — left open by A213 (#1079), raised in its review: which reads as a
-  contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
-  it.
-  [Detail](backlog/catalogue.md#allergens-and-dietary-preferences-are-edited-in-place-a213-what-1079-left-open)
-
-- **On a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
-  (`allergens: null`) both read "None specified"** — left open by A213 (#1079), raised in its
-  review. The variant hint already tells the two apart ("Not yet reviewed",
-  `editor.allergens_unreviewed`); the product line does not.
-  [Detail](backlog/catalogue.md#allergens-and-dietary-preferences-are-edited-in-place-a213-what-1079-left-open)
 
 - **Each list still reads "Extra bread · Extras", and under its heading the " · Extras" is now
   said twice** — left open by A218 (#1082).
@@ -1309,9 +1311,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   product shape and a variant shape, derive `InheritedValues` from the product type, and write a
   parent's variant republishes in one statement. Nothing waits on them.
 
-- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
-  `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
-  allergens. [Detail](backlog/catalogue.md#the-product-list)
+- **The product list.** A variant's name may sit a few pixels low at 390px, and
+  `listedVariantsOfProducts` repeats `variantsOfProducts`' grouping (its allergen cell is A668's).
+  [Detail](backlog/catalogue.md#the-product-list)
 
 - **A variant image usage's `productId` has no reader in the dashboard**
   (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
@@ -1363,19 +1365,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   can mix languages when a locale exists on one half only.
   [Detail](backlog/catalogue.md#smaller-things-379-surfaced-and-did-not-take)
 
-- **Pass 2 — icons — is not started.** Pass 1 renders allergens and diets as text pills; pass 2
-  replaces them with Material Design icons across the dashboard, waiter basket and kitchen/expo
-  screens. **Next action:** write the pass-2 spec when the icon work is picked up.
-
-- **"May contain" survives in the data with no way to see or set it.** **Next action:** decide
-  whether "may contain" stays a real product claim — if it does, the picker needs a control for it;
-  if not, the field and its readers go.
-  [Detail](backlog/catalogue.md#may-contain-survives-in-the-data-with-no-way-to-see-or-set-it)
-
-- **The product editor summarises the same values twice.** **Next action:** whoever adopts the
-  shared picker for ingredients and the till picks ONE shape, and decides whether the product editor
-  keeps both summaries.
-  [Detail](backlog/catalogue.md#the-product-editor-summarises-the-same-values-twice)
+- **The kitchen and expo screens still show allergens as text chips.** A668 brings icons to the
+  editor, the till's buttons and its order list, not to these screens.
 
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
@@ -1767,6 +1758,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A669 — an allergy at the table (owner, 2026-10-14; spec written, awaiting the owner's
+  review).** At a table's first Send the waiter answers "Any allergies at this table?"; for
+  Allergies, who (free text), what they avoid and a note, then ticks the dishes that guest eats. A
+  clash turns red and can still be sent. Kitchen paper prints an allergy block under the guest's
+  dish and a heading on the ticket; the screens match. The answer belongs to the party, shows as a
+  banner with Change, and is in Actions → Allergies; a change to a dish the kitchen has sends a
+  notice; the floor plan marks the table. Every table send path runs it; the counter does not.
+  After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
+  [mockups](backlog/mockups/a669-allergy-at-the-table/)
+
 - **A650 — MOVED slips say which order moved, from which table, to which table (owner, 2026-10-14;
   design written, waiting for the owner's answers).** Today a MOVED slip prints whenever an order's
   printed place name changes, one slip per kitchen line, so sending Bar back from the named group of four
@@ -2106,7 +2107,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay)
 
 - **A509. Online ordering for collection at the counter (owner, 2026-10-11).** A customer orders
-  from the venue's online menu and collects at the counter. Needs the internet, as A508 does.
+  from the venue's online menu and collects at the counter. Needs the internet, as A508 does. Its
+  menu shows allergen icons after each dish with a key on the page, and lets the customer hide
+  dishes with chosen allergens or show only a chosen diet (owner, 2026-10-14; A668).
   Backlog only, not queued to a lane.
   [Detail](backlog/till.md#a509-online-ordering-for-collection-at-the-counter)
 
@@ -2895,11 +2898,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve
   (`liveByProduct` in `#onRetrieveOrder`). **Next action:** delete both, since no
   backwards-compatibility code is owed before production (CLAUDE.md §3), or say what keeps them.
-
-- **The basket's "not fully reviewed" allergen warning depends on whether an option was picked**
-  (`#allergenRow`, `apps/till/src/widgets/basket.ts`), a leftover of the old dish-and-extras fold.
-  **Next action (owner decision):** whether an unreviewed dish shows that warning always, then make
-  `#allergenRow` depend on the review state alone and update the test.
 
 - **A till's automatic reload after a box update clears a notice its lock screen was showing**, such
   as "Moved to another server. Enter your PIN." (`server.switched`, held only in the page's memory;

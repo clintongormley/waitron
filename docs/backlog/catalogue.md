@@ -614,18 +614,7 @@ anything a state assertion could see. Left open by A212 (#1087).
 
 ## Allergens and dietary preferences are edited in place (A213): what #1079 left open
 
-**Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079
-(raised in its review, not changed there):** on a variant's page an empty
-line reads "None specified" while the grey hint under it gives the parent's values, which reads as
-a contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
-it. And on a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
-(`allergens: null`) both read "None specified"; before #1079 both read "None selected", so this
-predates it (checked against the old code in #1079's review). The variant hint already tells the
-two apart ("Not yet reviewed", `editor.allergens_unreviewed`); the product line does not.
-(2026-10-03, A211: a variant's closed Nutritional info line now shows the parent's values in
-italic, but the open line still reads "None specified" above the hint, so the first point stands;
-on a product's own page the closed line reads both cases as "None specified" too, as the open line
-does, so the second stands.)
+Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
 ## Left open by #1188's review, none started (the pricing unit dialog, W66)
 
@@ -658,9 +647,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](../developers/products.md), under _Variants_.
 
-- **The product list.** It leaves a variant's allergen cell empty (`ListedVariant`,
-  `packages/catalogue/src/product-types.ts`) — decide whether it should read a variant's effective
-  allergens; a variant's name may sit a few pixels low in its row at 390px, not yet looked at;
+- **The product list.** A variant's allergen cell is [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md)'s. A variant's name may sit a few pixels low in its row at 390px, not yet looked at;
   `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
 
@@ -719,30 +706,11 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## "May contain" survives in the data with no way to see or set it
 
-From **Allergens and nutrition (#370, #377, #385) — what is left open.**
-
-- **"May contain" survives in the data with no way to see or set it.** A product's stored
-  allergens carry a `presence` field that can read `may_contain`, and the compact picker cannot
-  show or set it; an allergen a manager adds is written as `contains`. Ingredients and the till
-  still carry the old contains/may-contain distinction and the reviewed toggle; the old
-  `dashboard-allergen-picker`'s one non-test consumer is the ingredient form
-  (`apps/dashboard/src/widgets/ingredient-form.ts`). **Next action:** decide whether "may contain"
-  stays a real product claim — if it does, the picker needs a control for it; if not, the field and
-  its readers go. Decide in the same change whether to show again the dietary labels that follow
-  from the ones picked (vegan implies vegetarian), which the old editor showed as "inferred" badges;
-  the derivation still runs (`expandDietaryDeclarations`,
-  `packages/catalogue/src/dietary-declarations.ts`).
+Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
 ## The product editor summarises the same values twice
 
-From **Allergens and nutrition (#370, #377, #385) — what is left open.**
-
-- **The product editor summarises the same values twice.** `renderNutrition`
-  (`apps/dashboard/src/widgets/product-editor.ts`) renders a `wt-disclosure` whose `summary` joins
-  the allergen and dietary names, and puts `<dashboard-allergen-dietary-picker>` inside it, which
-  summarises the same two fields again; the ingredient form renders the older picker expanded.
-  **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
-  and decides whether the product editor keeps both summaries.
+Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
 ## A647 — tidy the product editor
 

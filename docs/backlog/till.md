@@ -537,6 +537,11 @@ To decide before building:
 - How the customer learns the order is ready, and how the counter finds it when they arrive.
 - When the fiscal record is made: when the customer pays online, or when the order is handed over.
 
+**Allergens on the online menu (owner, 2026-10-14).** Each dish shows its allergen icons after its
+name, with a key on the page naming every icon; the customer can hide dishes containing chosen
+allergens, or show only dishes matching a chosen diet. Icons and words as in
+[A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md).
+
 ## Small floor-plan refusals still missing
 
 - **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).
