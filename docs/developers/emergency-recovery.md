@@ -1,9 +1,9 @@
 # Retain an emergency allocation outside the box
 
 When you cannot establish the current short-name register, an emergency allocation uses a fresh
-random identity. It does not declare a short paper name free. This W41s-6 candidate collector
+random identity. It does not declare a short paper name free. This collector
 requires a separately configured outside confirmation file and an existing writable incident
-directory. It does not provide the complete paper-only operator journey.
+directory. Your outside record remains the authority for consumption; a downloaded request is not an activation result.
 
 Keep the incident directory on storage outside the box and outside its backups. Configure its
 mount yourself; the collector does not establish that a configured path is outside the machine.
@@ -99,13 +99,14 @@ identity when you cannot reconcile it. The collector refuses a locked event or m
 oversized history instead of truncating or replacing it. Retain these files with the incident;
 do not remove them to spend the same name again.
 
-The complete operator confirmation and handover remain part of the unfinished Task 6
-procedure. No network service or subscription supplies authority to this path.
+The setup form asks you to keep the public request with your outside records. The generated
+incident is retained separately by the collector. Neither confirmation replaces the current
+outside evidence. No network service or subscription supplies authority to this path.
 
 
 ## Read and retain the generated incident
 
-The candidate writes a readable bilingual copy beside each incident JSON file, using the same
+The collector writes a readable bilingual copy beside each incident JSON file, using the same
 name followed by `.txt`. It includes the selected source, actual generated identity, checksum,
 complete series and attempt history. Open or print this file from your outside storage and keep
 it with the JSON. It contains the incident record, not your node or archive key.
@@ -113,8 +114,9 @@ it with the JSON. It contains the incident record, not your node or archive key.
 The host saves and flushes the readable copy before entering activation, then refreshes it after
 that attempt returns or throws. If either publication fails, recovery refuses success. The staged
 archive and prepared-stream paths leave trading settings unpublished even when local activation
-has already committed. Saving this file does not establish that you have read or printed it;
-the full setup-screen handover remains unfinished.
+has already committed. Saving this file does not establish that you have read or printed it. The setup download is
+the submitted request; open the generated text on your outside storage for the actual identity
+and attempt history.
 
 A crash can update the JSON without updating its readable copy. Before relying on a saved
 printout, compare its SHA-256 line with the current JSON file. On the machine holding that outside
@@ -130,3 +132,37 @@ incident evidence and reconcile the current outside record with the exact local 
 A matching hash identifies the same bytes; it grants no permission to activate or reuse a name.
 An existing `.txt.next` file refuses another publication rather than being overwritten. Retain
 it after an interrupted writer, just as you retain the JSON journal's helper files.
+
+
+## Resume an interrupted staged restore
+
+A stopped restore may already have activated its allocation. Replacing its placed database with
+the old backup again would erase the local result needed to recognise that activation. The staged
+archive and prepared-stream paths flush the started-placement marker and its directory before
+placement. A stream also flushes its retained source.
+A stream uses a separate placement copy, so leave room for that additional database file.
+
+On restart, a started request uses the placed database. It still needs the selected source's exact
+bytes, the staged node key, current outside confirmation and a matching locally committed event.
+The module checks the event, node and source before its activation hook. Its existing replay
+checks then compare the allocation, approval, active SIF and complete series. A stage marker alone
+permits no new activation. A newer image's database is refused before migration or outside
+consumption.
+
+Set `priorActivation` to `committed` only after checking the outside record and local result.
+An uncertain result refuses recovery. A refusal while resuming keeps the staged request and its
+owner-only key file for another checked attempt. A completed restore removes those files. A venue
+lock refusal before placement leaves a fresh request, rather than declaring it interrupted.
+
+If no local activation committed, the name stays burned. Prepare a new event against current
+outside history and submit a fresh restore request; do not delete the old incident to free it.
+A deliberate fresh request can restore the old backup again. It is different from retrying the
+interrupted request.
+
+Qualification on 2026-10-14: `pnpm --filter @waitron/server exec vitest run
+src/restore-emergency-crash.e2e.test.ts` kills owned child processes after staging, after outside
+consumption, before the transaction commits, after activation but before trading-settings
+publication, and after restore before the first sale. Archive and prepared-stream cases check
+burned names, exact committed replay and retained earlier invoice records. The sale following a
+committed retry uses the new series at number 1 without resolving a network client. These are
+local process-interruption checks, not a power-loss or physical-printer measurement.

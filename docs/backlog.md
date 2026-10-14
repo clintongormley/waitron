@@ -326,17 +326,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   block/consumption files and separate current outside evidence; the host rereads that evidence
   at restart. Emergency recovery has a candidate host collector with a separately configured outside journal,
   fresh draws, conservative consumption and exact committed-result replay. Its outside incident
-  retains each callback's start and returned or thrown result; missing result storage refuses
+  retains a readable bilingual record of each callback's start and returned or thrown result; missing result storage refuses
   trading-settings publication. Focused archive and prepared-stream restart cases and a process
-  killed inside its callback pass; paper-only operator handover and the complete interrupted
-  activation exercise remain unqualified;
+  killed at staging, consumption, transaction and publication boundaries qualify conservative
+  burn and exact replay. The setup form offers a public request download and resets retention
+  on edits; the generated incident stays on the outside storage. The complete operator flow
+  through deployed entry points and whole-task review remain open;
   automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence/fencing, the complete offline
   exercise and the Cloud registry adapter remain queued. The Cloud service has its own workstream;
   paper allocation does not require a subscription. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
-
-  The candidate also retains a bilingual readable emergency incident before activation and after
-  its outcome. Setup-screen presentation and the full interruption exercise remain open.
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** The bundle can reserve a signed identity, but the public adopter refuses that

@@ -1,6 +1,8 @@
 import { packArchive } from "./backup-archive.js";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import nativeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -26,6 +28,8 @@ async function fresh() {
   return dir;
 }
 afterEach(async () => {
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 function archive() {
@@ -40,6 +44,31 @@ function archive() {
 function deps(stateDir: string) {
   return { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() };
 }
+
+it.each(["marker", "directory"])(
+  "refuses placement when its %s cannot be flushed",
+  async (part) => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, archive());
+    const originalOpen = nativeFs.open;
+    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args);
+      if (
+        String(args[0]) === (part === "marker" ? join(stateDir, "restore-request.json") : stateDir)
+      )
+        handle.sync = async () => {
+          throw new Error("injected placement sync failure");
+        };
+      return handle;
+    });
+    syncBuiltinESMExports();
+    const restore = vi.fn(async () => {});
+    await expect(runStagedRestore(deps(stateDir), restore)).rejects.toThrow(
+      "injected placement sync failure",
+    );
+    expect(restore).not.toHaveBeenCalled();
+  },
+);
 
 it.each(["archive", "stream"])(
   "stages a %s node credential separately from its public marker and archive key",
@@ -136,6 +165,21 @@ it("keeps the node credential when the venue lock refuses before placement", asy
     "nodeRecoveryKey",
     true,
   );
+});
+
+it("a lock refusal leaves the next attempt as a fresh placement", async () => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, archive());
+  await expect(
+    runStagedRestore(deps(stateDir), async () => {
+      throw new AppError("provisioning.database_in_use", { database: "venue" });
+    }),
+  ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+  let resumed: unknown = "not called";
+  await runStagedRestore(deps(stateDir), async (args) => {
+    resumed = args.resumeOperation;
+  });
+  expect(resumed).toBeUndefined();
 });
 
 it("restaging without a node credential removes the old credential", async () => {

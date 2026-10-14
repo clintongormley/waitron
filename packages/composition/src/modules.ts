@@ -28,6 +28,7 @@ import {
   FISCAL_OPERATIONS,
   FISCAL_RESTORE,
   FISCAL_RECOVERY_PACK,
+  assertFiscalRestoreCommitted,
   FISCAL_SLOT,
   FISCAL_VOCABULARY,
 } from "@waitron/fiscal-verifactu";
@@ -242,7 +243,11 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: FISCAL_PROVISIONING,
     operations: FISCAL_OPERATIONS,
     fiscal: FISCAL_SLOT,
-    backup: { restore: FISCAL_RESTORE, recoveryPack: FISCAL_RECOVERY_PACK },
+    backup: {
+      restore: FISCAL_RESTORE,
+      recoveryPack: FISCAL_RECOVERY_PACK,
+      assertRestoreCommitted: assertFiscalRestoreCommitted,
+    },
     alerts: FISCAL_ALERTS,
     configurationTransfer: { kind: "none" },
   },

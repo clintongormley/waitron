@@ -1,4 +1,4 @@
-import { chmod, open, readFile, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -39,10 +39,20 @@ const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
 const STREAM_DB = "restore-request.db";
 const STREAM_ENTRIES = "restore-request.entries";
+const STREAM_PLACEMENT = "restore-request.placement.db";
 const MARKER = "restore-request.json";
 const SETUP_OPERATION = "setup-operation.json";
 const NODE_KEY = "restore-request.node-key";
 const MAX_NODE_KEY_BYTES = 4096;
+
+async function flushPath(path: string): Promise<void> {
+  const file = await open(path, "r");
+  try {
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+}
 
 async function clearNodeKey(stateDir: string): Promise<void> {
   const path = join(stateDir, NODE_KEY);
@@ -251,6 +261,7 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
     clearNodeKey(stateDir),
     rm(join(stateDir, STREAM_DB), { force: true }),
     rm(join(stateDir, STREAM_ENTRIES), { force: true }),
+    rm(join(stateDir, STREAM_PLACEMENT), { force: true }),
   ]);
 }
 
@@ -273,6 +284,8 @@ export async function runStagedRestore(
     throw error;
   }
   let managedCloud: { requestId: string; pointId: string } | undefined;
+  let resuming = false;
+  let markedStarted = false;
   try {
     const marker = JSON.parse(raw) as {
       version?: unknown;
@@ -281,9 +294,12 @@ export async function runStagedRestore(
       managedCloud?: unknown;
       recoveryOperation?: unknown;
       nodeRecoveryKey?: unknown;
+      placementStarted?: unknown;
     };
     if (
       marker.version !== 1 ||
+      (marker.placementStarted !== undefined &&
+        (marker.placementStarted !== true || marker.nodeRecoveryKey !== true)) ||
       (marker.nodeRecoveryKey !== undefined &&
         (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
       (marker.environment !== "production" && marker.environment !== "preproduction") ||
@@ -302,6 +318,7 @@ export async function runStagedRestore(
     ) {
       throw new Error("invalid staged restore request");
     }
+    resuming = marker.placementStarted === true;
     const environment: DeploymentEnvironment = marker.environment;
     const operation =
       marker.recoveryOperation === undefined
@@ -340,14 +357,21 @@ export async function runStagedRestore(
       environment,
       log: deps.log,
       ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
+      ...(resuming && operation !== undefined ? { resumeOperation: operation.binding } : {}),
     };
     let run: () => Promise<void>;
     if (marker.kind === "stream") {
       const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
+      let databasePath = join(deps.stateDir, STREAM_DB);
+      if (marker.nodeRecoveryKey === true && !resuming) {
+        databasePath = join(deps.stateDir, STREAM_PLACEMENT);
+        await copyFile(join(deps.stateDir, STREAM_DB), databasePath);
+        await chmod(databasePath, 0o600);
+      }
       run = () =>
         restoreStream({
           ...common,
-          databasePath: join(deps.stateDir, STREAM_DB),
+          databasePath,
           entries: unpackArchive(packed),
         });
     } else {
@@ -363,11 +387,24 @@ export async function runStagedRestore(
         });
     }
     managedCloud = marker.managedCloud as typeof managedCloud;
+    if (marker.nodeRecoveryKey === true && !resuming) {
+      if (marker.kind === "stream") await flushPath(join(deps.stateDir, STREAM_DB));
+      await writeFileAtomic(
+        join(deps.stateDir, MARKER),
+        JSON.stringify({ ...marker, placementStarted: true }),
+        0o600,
+      );
+      await flushPath(join(deps.stateDir, MARKER));
+      await flushPath(deps.stateDir);
+      markedStarted = true;
+    }
     await run();
   } catch (error) {
     // The lock refuses before the restore places the database or touches the identity, so the
     // request stays for a boot that gets the folder.
-    if (!(isAppError(error) && error.code === "provisioning.database_in_use")) {
+    if (!resuming && isAppError(error) && error.code === "provisioning.database_in_use") {
+      if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
+    } else if (!resuming) {
       await clearStagedRestore(deps.stateDir);
     }
     throw error;

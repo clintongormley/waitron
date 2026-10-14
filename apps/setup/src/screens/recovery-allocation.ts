@@ -1,4 +1,4 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
@@ -52,6 +52,23 @@ export class SetupRecoveryAllocation extends LitElement {
       h3 {
         font-size: var(--wt-font-size-lg);
       }
+      .review {
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-4);
+        margin-block: var(--wt-space-4);
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: inherit;
+      }
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+      }
     `,
   ];
   @property({ attribute: false }) preview?: RecoveryBackupPreview;
@@ -61,6 +78,7 @@ export class SetupRecoveryAllocation extends LitElement {
   @state() private draft = empty();
   @state() private attempted = false;
   #scope?: DraftScope<Draft>;
+  #review?: { text: string; url: string };
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -68,6 +86,7 @@ export class SetupRecoveryAllocation extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
     if (changed.has("preview")) this.#clear();
+    this.#reviewRequest();
     this.#registerScope();
   }
   override connectedCallback(): void {
@@ -97,13 +116,18 @@ export class SetupRecoveryAllocation extends LitElement {
     super.disconnectedCallback();
   }
   #clear(): void {
+    this.#releaseReview();
     this.draft = empty();
     this.attempted = false;
     this.#scope?.commit(empty());
     this.#notify();
   }
   #edit<K extends keyof Draft>(key: K, value: Draft[K]): void {
-    this.draft = { ...this.draft, [key]: value };
+    this.draft = {
+      ...this.draft,
+      ...(key === "record" && value !== this.draft.record ? { retained: false } : {}),
+      [key]: value,
+    };
     const field =
       key === "record" ? "recoveryOperation" : key === "nodeKey" ? "nodeRecoverySecret" : undefined;
     if (field !== undefined && field === this.refusedField) {
@@ -118,6 +142,32 @@ export class SetupRecoveryAllocation extends LitElement {
     }
     this.#scope?.changed();
     this.#notify();
+  }
+  #releaseReview(): void {
+    if (this.#review) URL.revokeObjectURL(this.#review.url);
+    this.#review = undefined;
+  }
+  #reviewRequest(): void {
+    const operation = this.#operation();
+    const text = operation
+      ? JSON.stringify(
+          {
+            version: 1,
+            kind: "recovery-request",
+            selectedBackup: this.preview,
+            recoveryOperation: operation,
+          },
+          null,
+          2,
+        )
+      : undefined;
+    if (text === this.#review?.text) return;
+    this.#releaseReview();
+    if (text !== undefined && this.isConnected)
+      this.#review = {
+        text,
+        url: URL.createObjectURL(new Blob([text], { type: "application/json" })),
+      };
   }
   #notify(): void {
     this.dispatchEvent(
@@ -219,6 +269,25 @@ export class SetupRecoveryAllocation extends LitElement {
           this.#edit("nodeKey", event.detail.value);
         }}
       ></wt-input>
+      ${
+        this.#review
+          ? html`<section
+              class="review"
+              data-test="request-review"
+              aria-labelledby="request-heading"
+            >
+              <h4 id="request-heading">${t("restore.allocation_review")}</h4>
+              <p>${t("restore.allocation_request_warning")}</p>
+              <pre>${this.#review.text}</pre>
+              <a
+                data-test="download-request"
+                href=${this.#review.url}
+                download="waitron-recovery-request.json"
+                >${t("restore.allocation_download")}</a
+              >
+            </section>`
+          : nothing
+      }
       <label class="field"
         ><input
           name="recovery-isolated"

@@ -1098,3 +1098,27 @@ prevents staged archive and prepared-stream trading-settings publication, includ
 activation commit. This is a retained operator record, not proof of reading, printing or current
 allocation authority. Setup-screen presentation, keep-identity recovery and the complete
 interruption/first-sale journeys remain unfinished.
+
+
+**2026-10-14 operator-request and interrupted-restart qualification (candidate only):** the
+selected-copy form shows and downloads its public request with the selected backup metadata,
+without adding the separately entered node key. Editing the request clears its retention
+confirmation; source changes, discard and disconnection revoke its download. The confirmation
+names the request, since an emergency identity has not yet been drawn.
+
+A killed staged archive restore previously replaced its already activated database with the
+old backup; a streamed restore had consumed its source file. The candidate retains the source,
+records started placement and resumes against the placed database. A module checks that the
+matching event already committed before running its ordinary authenticated replay. Current
+outside evidence, key authentication and exact active-state checks still apply. A marker alone
+cannot activate, and a newer-image database refuses before migration. A lock refusal before
+placement remains a fresh attempt. Process-kill cases cover staging, outside consumption,
+uncommitted activation, settings publication and before the first sale. An uncommitted event
+stays burned; a fresh event uses a different identity. Retrying a committed event preserves earlier
+invoice records and supports a first sale in the new series without a network client.
+
+Keeping the stopped box's existing node and location identifiers uses the ordinary cold-restore
+path with a fresh fiscal allocation. The generic `skipSecrets` rejoin path remains unchanged and
+has no production caller in the tracked tree (`rg -n skipSecrets apps packages --glob
+'!*.test.ts'`). These checks do not introduce a selling route through that flag. The complete operator
+flow through deployed entry points, final task review and current-head CI remain open.

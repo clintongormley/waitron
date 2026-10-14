@@ -438,6 +438,9 @@ still receive the node key and reread the current outside evidence. The key is n
 the marker. Inputs that would change when saved as JSON are refused before replacing a staged
 request.
 
+**2026-10-14 reading note:** the following qualification paragraph records the earlier Task 4
+checkpoint. The status at the top and the staged-input section below describe the later host.
+
 The host qualification uses the allocated hooks explicitly and source-tree migrations. Default
 fiscal hooks, packaged boot, text schema/counter retirement and the complete setup screen remain
 unfinished. This is branch development guidance, not a qualified venue recovery procedure.
@@ -448,8 +451,9 @@ unfinished. This is branch development guidance, not a qualified venue recovery 
 The restart backend can stage a node recovery key separately from the archive encryption key.
 The candidate public restore forms collect this credential. A host request supplies
 `nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
-`restore-request.node-key` with mode `0600`, not into the JSON marker. After restart, the selected
-backup's verifier checks it again and the module rereads current outside evidence. A missing or
+`restore-request.node-key` with mode `0600`, not into the JSON marker. On the first attempt, the selected
+backup's verifier checks it again. An interrupted attempt uses the placed database's verifier.
+Both reread current outside evidence. A missing or
 invalid staged credential refuses recovery rather than falling back to an environment key.
 
 For requests carrying a staged node key, bind `recoveryOperation.binding.sourceId` to the selected
@@ -460,10 +464,12 @@ a downloaded SQLite database changes its journal-mode header, so `activationSour
 the prepared file rather than the untouched bucket object. A later download with different bytes
 needs a fresh review and matching outside recovery evidence.
 
-The backend checks this binding before replacing a staged request and again at restart. It removes
-the staged node key after success or a refused restore, and when restaging. A venue-lock refusal
-keeps the request and credential for another attempt; that attempt still authenticates the key and
-collects outside evidence. An interrupted write with no marker leaves no runnable request, and the
+The backend checks this binding before replacing a staged request and again at restart. A fresh
+attempt removes the staged key after success or refusal; a venue-lock refusal keeps it for another
+fresh attempt. After an interrupted placement, a refused resume keeps the request and key for
+another checked attempt, and success removes them. Restaging replaces the credential. Each attempt
+still authenticates the key and collects current outside evidence. See
+[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). An interrupted write with no marker leaves no runnable request, and the
 next entry pass removes the orphaned node-key file. These rules do not establish that a copied
 marker proves an allocation can be reused. Environment-only command inputs retain their existing
 contract.

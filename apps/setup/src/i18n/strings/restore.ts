@@ -11,11 +11,14 @@ export const restoreEn = {
   "restore.allocation_key_missing": "Enter the node recovery key from the selected backup’s paper.",
   "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
   "restore.allocation_isolation_missing": "Confirm that this is the only recovery.",
-  "restore.allocation_retained":
-    "I have retained the consumed allocation and incident record outside this box.",
+  "restore.allocation_retained": "I have kept this request with the outside recovery records.",
   "restore.allocation_retention_missing":
-    "Retain the allocation and incident record before continuing.",
+    "Keep the request with the outside recovery records before continuing.",
   "restore.allocation_clear": "Clear recovery details",
+  "restore.allocation_review": "Keep this recovery request",
+  "restore.allocation_request_warning":
+    "This request does not confirm activation. Keep the resulting outside incident record too.",
+  "restore.allocation_download": "Save request",
 
   "restore.preview_action": "Review backup",
   "restore.preview_heading": "Selected backup",
@@ -181,10 +184,14 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "El equipo anterior está desconectado y no hay otra recuperación en curso.",
   "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
   "restore.allocation_retained":
-    "He guardado la asignación consumida y el registro del incidente fuera de este equipo.",
+    "He guardado esta solicitud con los registros externos de recuperación.",
   "restore.allocation_retention_missing":
-    "Guarda la asignación y el registro del incidente antes de continuar.",
+    "Guarda la solicitud con los registros externos de recuperación antes de continuar.",
   "restore.allocation_clear": "Borrar datos de recuperación",
+  "restore.allocation_review": "Guarda esta solicitud de recuperación",
+  "restore.allocation_request_warning":
+    "Esta solicitud no confirma la activación. Guarda también el registro externo del resultado.",
+  "restore.allocation_download": "Guardar solicitud",
 
   "restore.preview_action": "Revisar copia",
   "restore.preview_heading": "Copia seleccionada",
