@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import type { TableState } from "../api/client.js";
-import type { ApartReason } from "../state/floor-today.js";
+import { type ApartReason, shownName } from "../state/floor-today.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -176,7 +176,7 @@ export class TillResetTableDialog extends LitElement {
     const footError = seatsMessage !== "" ? t("form.fix_fields") : refusalText;
     const actionState = saveActionState(this.#scope);
     const withTable = (key: "floor.reset_table_title" | "floor.seats_title") =>
-      t(key).replace("{table}", () => this.joined.label);
+      t(key).replace("{table}", () => shownName(this.joined));
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -202,7 +202,7 @@ export class TillResetTableDialog extends LitElement {
           ({ table, reason }) =>
             html`<p data-stays-apart>
               ${t("floor.stays_apart").replace(/\{(table|reason)\}/g, (_, key: string) =>
-                key === "table" ? table.label : t(REASON_KEYS[reason]),
+                key === "table" ? shownName(table) : t(REASON_KEYS[reason]),
               )}
             </p>`,
         )}

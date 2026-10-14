@@ -612,6 +612,7 @@ export const en = {
   "floor.needs_clearing": "Needs clearing",
   "floor.mark_cleared": "Mark cleared",
   "floor.clear_title": "Table {table} needs clearing",
+  "floor.clear_title_named": "{table} needs clearing",
   "floor.clear_body": "Mark it cleared once it is ready for the next party.",
   "floor.ready_title": "Ready to serve",
   "floor.station_tables": "{station}: {tables}",
@@ -620,6 +621,7 @@ export const en = {
   "floor.status_seated": "Seated",
   "floor.map_label": "Tables",
   "floor.table_title": "Table {table}",
+  "floor.saved_as": "Saved as {name}",
   "floor.seats": "{n} seats",
   "floor.seats_one": "1 seat",
   "floor.seats_title": "Seats for {table}",
@@ -638,6 +640,7 @@ export const en = {
   "signal.unavailable": "Unavailable: {items}",
   "signal.bill_requested": "Bill requested",
   "seat.title": "Seat table {table}",
+  "seat.title_named": "Seat {table}",
   "seat.guest_count": "Guests",
   "seat.guest_count_invalid": "Enter a whole number of guests from 1 to 999, or leave it empty",
   "seat.confirm": "Seat",
@@ -767,8 +770,11 @@ export const en = {
     "{line} is no longer on this bill: it was changed on another device. The bill has been read again.",
   // `{line}`, `{table}` and `{reason}` are substituted at the call site; `t()` does not interpolate.
   "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
+  "table.change_not_saved_named": "Your change to {line} on {table} was not saved. {reason}",
   "table.change_unconfirmed":
     "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
+  "table.change_unconfirmed_named":
+    "The server did not answer your change to {line} on {table}. Open that table and check whether it was saved.",
   "table.change_not_saved_no_table": "Your change to {line} was not saved. {reason}",
   "table.change_unconfirmed_no_table":
     "The server did not answer your change to {line}. Open its table and check whether it was saved.",
@@ -1204,7 +1210,9 @@ export const en = {
     "The card refund of {amount} did not go through, so nothing was given back.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
+  "party.changed_named": "Another device changed {table}, so it has been reloaded.",
   "party.changed_tables": "The party is now at tables {tables}.",
+  "party.changed_tables_named": "The party is now at {tables}.",
   "party.changed_bills": "Its bills changed, and {amount} is left to pay.",
   "party.changed_gone": "The party is no longer at this table.",
   "party.changed_other": "Its items or bills were changed.",
@@ -1856,6 +1864,7 @@ export const es: Record<StringKey, string> = {
   "floor.needs_clearing": "Por recoger",
   "floor.mark_cleared": "Marcar recogida",
   "floor.clear_title": "La mesa {table} está por recoger",
+  "floor.clear_title_named": "{table} está por recoger",
   "floor.clear_body": "Márcala como recogida cuando esté lista para los siguientes clientes.",
   "floor.ready_title": "Listo para servir",
   "floor.station_tables": "{station}: {tables}",
@@ -1864,6 +1873,7 @@ export const es: Record<StringKey, string> = {
   "floor.status_seated": "Ocupada",
   "floor.map_label": "Mesas",
   "floor.table_title": "Mesa {table}",
+  "floor.saved_as": "Guardada como {name}",
   "floor.seats": "{n} plazas",
   "floor.seats_one": "1 plaza",
   "floor.seats_title": "Plazas para {table}",
@@ -1881,6 +1891,7 @@ export const es: Record<StringKey, string> = {
   "signal.unavailable": "No disponible: {items}",
   "signal.bill_requested": "Cuenta pedida",
   "seat.title": "Sentar en la mesa {table}",
+  "seat.title_named": "Sentar en {table}",
   "seat.guest_count": "Comensales",
   "seat.guest_count_invalid":
     "Escribe un número entero de comensales entre 1 y 999, o déjalo vacío",
@@ -2006,8 +2017,11 @@ export const es: Record<StringKey, string> = {
   "adjust.changed_line_gone":
     "{line} ya no está en esta cuenta: se ha cambiado en otro dispositivo. Se ha vuelto a leer la cuenta.",
   "table.change_not_saved": "Tu cambio en {line} de la mesa {table} no se ha guardado. {reason}",
+  "table.change_not_saved_named": "Tu cambio en {line} de {table} no se ha guardado. {reason}",
   "table.change_unconfirmed":
     "El servidor no ha respondido a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se ha guardado.",
+  "table.change_unconfirmed_named":
+    "El servidor no ha respondido a tu cambio en {line} de {table}. Abre esa mesa y comprueba si se ha guardado.",
   "table.change_not_saved_no_table": "Tu cambio en {line} no se ha guardado. {reason}",
   "table.change_unconfirmed_no_table":
     "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
@@ -2438,7 +2452,9 @@ export const es: Record<StringKey, string> = {
   "bill_refund.failed":
     "La devolución de {amount} con tarjeta no se completó, así que no se ha devuelto nada.",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",
+  "party.changed_named": "Otro dispositivo ha cambiado {table}, así que se ha vuelto a cargar.",
   "party.changed_tables": "Los clientes están ahora en las mesas {tables}.",
+  "party.changed_tables_named": "Los clientes están ahora en {tables}.",
   "party.changed_bills": "Sus cuentas han cambiado y quedan {amount} por pagar.",
   "party.changed_gone": "Los clientes ya no están en esta mesa.",
   "party.changed_other": "Se han cambiado sus artículos o cuentas.",

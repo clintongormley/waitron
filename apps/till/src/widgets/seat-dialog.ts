@@ -36,6 +36,8 @@ export class TillSeatDialog extends LitElement {
   ];
 
   @property() tableLabel = "";
+  /** `tableLabel` is a name for today, which the heading says without the word "table". */
+  @property({ type: Boolean }) named = false;
 
   @state() private value = "";
   @state() private attempted = false;
@@ -140,7 +142,10 @@ export class TillSeatDialog extends LitElement {
       ${trackDialog()}
       .open=${this.active}
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
-      .heading=${t("seat.title").replace("{table}", () => this.tableLabel)}
+      .heading=${t(this.named ? "seat.title_named" : "seat.title").replace(
+        "{table}",
+        () => this.tableLabel,
+      )}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">

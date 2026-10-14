@@ -530,6 +530,40 @@ describe("till-app: seating a party", () => {
     expect(tableOrder(el)!.party!.tableIds).toEqual(["t9", "t11"]);
   });
 
+  it.each([
+    ["a table renamed for today by its name", { name: "Window" }, "Window"],
+    [
+      "a table in a group named for today by the group's name",
+      { joinId: "j1", joinName: "García birthday" },
+      "García birthday",
+    ],
+  ])("names %s until the floor is read again", async (_name, names, shown) => {
+    const today = {
+      placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 0,
+      ...names,
+    };
+    const getTablesState = vi
+      .fn()
+      .mockResolvedValueOnce([table({ id: "t9", label: "Counter 4", today })])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    expect(tableOrder(el)!.party!.displayName).toBe(shown);
+  });
+
   it("says the table needs clearing when seating it is refused for that, and re-reads the floor", async () => {
     const { el } = await mountApp({
       seatTable: vi.fn().mockRejectedValue({ code: "table.needs_clearing", tableId: "t9" }),
@@ -1764,6 +1798,43 @@ describe("till-app: reads and refusals around the party", () => {
     expect(banner(el)!.textContent).toContain(
       t("party.changed_tables").replace("{tables}", "4, 9"),
     );
+  });
+
+  it("names the party's tables by their names for today when a stale refusal describes it", async () => {
+    const named = (name: string): TableState["today"] => ({
+      placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 1,
+      name,
+    });
+    const reads = floorThat(
+      [seated({ today: named("Window") }), { ...mesa9, today: named("Arch") }],
+      [
+        seated({ today: named("Window") }, { revision: 5, tableIds: ["t4", "t9"] }),
+        { ...mesa9, today: named("Arch") },
+      ],
+    );
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "move-guests", { toTableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      "Another device changed Window, so it has been reloaded.",
+    );
+    expect(banner(el)!.textContent).toContain("The party is now at Window, Arch.");
   });
 
   it("says the table changed, in general words, when a stale refusal names a party the floor did not show", async () => {

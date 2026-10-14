@@ -12,7 +12,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { splitsGroup } from "../state/floor-today.js";
+import { shownName, splitsGroup } from "../state/floor-today.js";
 
 export interface SplitJoinedDetail {
   partIds: string[];
@@ -58,7 +58,7 @@ export class TillSplitJoinedDialog extends LitElement {
 
   @property({ attribute: false }) joined!: TableState;
   @property({ attribute: false }) parts: TableState[] = [];
-  /** The window's heading names this: the joined table's label, or the group's name. */
+  /** The window's heading names this: the joined table's shown name, or the group's name. */
   @property() name = "";
   /** Whether the tables left would need their seats, given their ids. */
   @property({ attribute: false }) asksSeats: (staying: readonly string[]) => boolean = (staying) =>
@@ -229,7 +229,7 @@ export class TillSplitJoinedDialog extends LitElement {
     const guestsMove = splitsGroup(this.joined)
       ? this.guestsMoveTo(this.#chosen())
       : this.joined.party !== null && left.length === 1
-        ? [left[0]!.label]
+        ? [shownName(left[0]!)]
         : [];
     const heading = (key: "floor.split_title" | "floor.seats_title") =>
       t(key).replace("{table}", () => this.name);
@@ -250,10 +250,10 @@ export class TillSplitJoinedDialog extends LitElement {
           .options=${this.parts.map((part) => {
             const seats = part.today?.seats ?? null;
             return seats === null
-              ? { value: part.id, label: part.label }
+              ? { value: part.id, label: shownName(part) }
               : {
                   value: part.id,
-                  label: part.label,
+                  label: shownName(part),
                   description: countText(seats, "floor.seats", "floor.seats_one"),
                 };
           })}

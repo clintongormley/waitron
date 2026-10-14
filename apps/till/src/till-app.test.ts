@@ -15704,6 +15704,54 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(alert(el)).toBeNull();
   });
 
+  const todayAs = (over: Partial<NonNullable<TableState["today"]>>): TableState["today"] => ({
+    placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+    inJoinedTable: null,
+    joined: null,
+    splitOffFrom: null,
+    zoneRevision: 1,
+    ...over,
+  });
+
+  it("says where a counter order went by the table's name for today", async () => {
+    const { el, c } = await counterWith({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa7, { ...mesa9, today: todayAs({ name: "Window" }) }]),
+    });
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+
+    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Window"));
+  });
+
+  it("says where a counter order went by its group's name for today", async () => {
+    const group = { joinId: "j1", joinSeats: 8, joinName: "García birthday" };
+    const { el, c } = await counterWith({
+      getTablesState: vi.fn().mockResolvedValue([
+        { ...mesa7, party: null, condition: "free", today: todayAs(group) },
+        { ...mesa9, today: todayAs({ name: "Window", ...group }) },
+      ]),
+    });
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+
+    expect(toast(el).message).toBe(
+      t("counter.moved_to_table").replace("{table}", "García birthday"),
+    );
+  });
+
   it("sends the party it read at a seated table, with that party's revision", async () => {
     const { el, c } = await counterWith();
     emit(c, "move-held-order-open", { orderId: "wo-12" });

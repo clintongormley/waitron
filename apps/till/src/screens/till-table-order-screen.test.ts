@@ -4085,6 +4085,120 @@ describe("till-table-order-screen", () => {
       ]);
     });
 
+    /** `table` renamed `name` for today. */
+    const renamed = (table: TableState, name: string): TableState => ({
+      ...table,
+      today: {
+        placement: { x: 0, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+        seats: null,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable: null,
+        joined: null,
+        splitOffFrom: null,
+        zoneRevision: 1,
+        name,
+      },
+    });
+
+    it("Move guests names a table renamed for today by its name, among the targets and the party's tables", async () => {
+      const floor = partyTables(true);
+      const tables = floor.tables.map((table) =>
+        table.id === "t5"
+          ? renamed(table, "Terrace")
+          : table.id === "t9"
+            ? renamed({ ...table, label: "Counter 4" }, "Window")
+            : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, tables });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.move_guests_heading").replace("{party}", "Ana (Mesa 4, Terrace)"),
+      );
+      expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
+    });
+
+    it("Move guests lists its tables in the order of the names they show for today", async () => {
+      const floor = partyTables();
+      const tables = floor.tables.map((table) =>
+        table.id === "t7"
+          ? renamed(table, "Zinc")
+          : table.id === "t9"
+            ? renamed(table, "Arch")
+            : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, tables });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target-picker] [data-target]")].map(
+          (row) => [row.dataset.target, row.querySelector(".target-label")!.textContent!.trim()],
+        ),
+      ).toEqual([
+        ["t9", "Arch"],
+        ["t6", "Mesa 6"],
+        ["t7", "Zinc"],
+      ]);
+    });
+
+    it("Move guests names an unnamed party at a group named for today by the group's name once, its targets by their own names", async () => {
+      const floor = partyTables(true);
+      const party = { ...floor.party, name: null, displayName: "García birthday" };
+      const inGroup = (table: TableState): TableState => {
+        const named = renamed(table, "");
+        return {
+          ...named,
+          party,
+          today: { ...named.today!, name: null, joinId: "j1", joinName: "García birthday" },
+        };
+      };
+      const tables = floor.tables.map((table) =>
+        table.id === "t4" || table.id === "t5" ? inGroup(table) : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", party, tables });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.move_guests_heading").replace("{party}", "García birthday"),
+      );
+      expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Mesa 5");
+    });
+
+    it("Split a table names a table renamed for today by its name, in its choices and its heading", async () => {
+      const floor = partyTables(true);
+      const tables = floor.tables.map((table) =>
+        table.id === "t5" ? renamed({ ...table, label: "Counter 4" }, "Window") : table,
+      );
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...floor,
+        tables,
+        bills: partyBills().bills,
+      });
+      await toMenu(el);
+      click(el, '[data-action="split-table"]');
+      await el.updateComplete;
+      expect(target(el, "t5")!.textContent!.trim()).toBe("Window");
+
+      click(el, '[data-target="t5"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-split-table] h2")!.textContent!.trim()).toBe(
+        t("table.split_table_bill_heading")
+          .replace("{table}", "Window")
+          .replace("{party}", "Ana (Mesa 4, Window)"),
+      );
+    });
+
     it("Back from choosing Split a table's bill returns to its tables", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
       await toMenu(el);

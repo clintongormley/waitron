@@ -120,7 +120,7 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
-import { outOfServiceJoined } from "../state/floor-today.js";
+import { outOfServiceJoined, shownName as tableShownName } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -4327,7 +4327,7 @@ export class TillTableOrderScreen extends LitElement {
     const keepOwn = this.actionVerb === "move" && own.size > 1;
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
-      .sort((a, b) => inNumberOrder(a.label, b.label));
+      .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];
   }
@@ -4503,7 +4503,7 @@ export class TillTableOrderScreen extends LitElement {
             : [
                 {
                   id,
-                  name: row.label,
+                  name: tableShownName(row),
                   pick: () => {
                     this.splitTableId = id;
                     this.actionStep = "split-table-bill";
@@ -4517,7 +4517,7 @@ export class TillTableOrderScreen extends LitElement {
         ${
           choosingBill
             ? t("table.split_table_bill_heading")
-                .replace("{table}", () => table.label)
+                .replace("{table}", () => tableShownName(table))
                 .replace("{party}", () => scope)
             : t("table.split_table_heading").replace("{party}", () => scope)
         }

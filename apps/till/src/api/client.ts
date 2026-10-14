@@ -1884,6 +1884,10 @@ export interface TableToday {
   splitOffFrom: string | null;
   /** The revision of this table's room, sent back with each change to today's floor. */
   zoneRevision: number;
+  /** This table's name for today. Optional so hand-built fixtures need not say it; the server always does. */
+  name?: string | null;
+  /** Its group's name for today, on every member. */
+  joinName?: string | null;
 }
 
 /** A change to today's floor answers its room's new revision. */

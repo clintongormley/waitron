@@ -95,6 +95,11 @@ export class TillTableDetailsSheet extends LitElement {
         margin-top: var(--wt-space-3);
       }
 
+      .saved-name {
+        margin: 0 0 var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+      }
+
       .fire-due {
         font-weight: var(--wt-font-weight-bold);
       }
@@ -105,6 +110,8 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) table: TableState | null = null;
   /** The caller supplies the table, merge or party heading. */
   @property() heading = "";
+  /** The table's saved name, said under a heading that is a name for today; null says nothing. */
+  @property({ attribute: false }) savedName: string | null = null;
   /** Injectable clock for Time to fire; unset reads `Date.now()` on each render. */
   @property({ attribute: false }) now?: number;
   /** Today's changes are offered on the floor only; the order screen's status pin leaves this off. */
@@ -196,6 +203,13 @@ export class TillTableDetailsSheet extends LitElement {
         html`<li data-seats>${countText(seats, "floor.seats", "floor.seats_one")}</li>`,
       );
     return html`${
+        this.savedName === null
+          ? nothing
+          : html`<p class="saved-name" data-saved-name>
+              ${t("floor.saved_as").replace("{name}", () => this.savedName!)}
+            </p>`
+      }
+      ${
         lines.length === 0
           ? nothing
           : html`<ul class="lines">

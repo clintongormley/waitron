@@ -786,3 +786,90 @@ describe("till-floor-screen: Reset table and the room's revision", () => {
     );
   });
 });
+
+describe("till-floor-screen: Reset table names tables by today's names", () => {
+  const renamed = (tables: TableState[], names: Record<string, Partial<TableToday>>) =>
+    tables.map((each) =>
+      names[each.id] === undefined
+        ? each
+        : { ...each, today: { ...each.today!, ...names[each.id] } },
+    );
+
+  it("heads the window with the joined table's name for today and names a table staying apart by its own", async () => {
+    const el = await mount(
+      renamed(counter3Busy(), { long: { name: "Window table" }, c3: { name: "Corner" } }),
+      stubApi(),
+    );
+    const opened = (await pressResetTable(el, "c4"))!;
+    await opened.updateComplete;
+    expect(opened.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Reset Window table");
+    expect(
+      opened.shadowRoot!.querySelector("[data-stays-apart]")!.textContent!.replace(/\s+/g, " "),
+    ).toContain("Corner stays apart");
+  });
+
+  it("names the table standing in a renamed joined table's place by their names for today", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "table.place_taken",
+      status: 409,
+      tableId: "long",
+      standingId: "t9",
+    });
+    const el = await mount(
+      renamed(standingInPlace(), { long: { name: "Window table" }, t9: { name: "Patio" } }),
+      api,
+    );
+    await pressResetTable(el);
+    expect(floorRefusal(el)).toBe(
+      "Patio is standing in Window table's place. Move Patio, then Reset table again.",
+    );
+  });
+
+  it("names a renamed table in a renamed group by its own name and the group's", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "joined_table.tables_in_group",
+      status: 409,
+      tableId: "long",
+      partIds: ["c4"],
+    });
+    const group = { joinName: "García birthday" };
+    const el = await mount(
+      renamed(inBarGroup(), {
+        c3: group,
+        c4: { ...group, name: "Window" },
+        bar: group,
+      }),
+      api,
+    );
+    await pressResetTable(el, "c5");
+    expect(floorRefusal(el)).toBe(
+      "Window is in García birthday. Split it off first, then Reset table.",
+    );
+  });
+
+  it("names the renamed joined table a table was split off from", async () => {
+    const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
+    let refuse!: (refusal: unknown) => void;
+    api.backToSavedToday.mockImplementationOnce(
+      () => new Promise<FloorAnswer>((_, reject) => (refuse = reject)),
+    );
+    const name = { long: { name: "Window table" } };
+    const el = await mount(
+      renamed([longTable(["c3", "c4"], []), table("c5", "Counter 5", 30)], name),
+      api,
+    );
+    send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "c5" });
+    await el.updateComplete;
+    const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+    await sheet.updateComplete;
+    sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
+    await settle(el);
+    el.tables = renamed(oneFree(), name);
+    await settle(el);
+    refuse({ code: "table.split_off", status: 409, tableId: "c5" });
+    await settle(el);
+    expect(floorRefusal(el)).toBe("That table was split off. Reset Window table first.");
+  });
+});

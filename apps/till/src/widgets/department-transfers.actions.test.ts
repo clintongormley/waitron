@@ -536,3 +536,29 @@ it("refuses a retained accept action after its request disappears from the snaps
   save.click();
   expect(writes).toEqual([]);
 });
+
+it("offers a table renamed for today by its name, sorted by it", async () => {
+  const [, counter4, , , stool2] = joinedFloor();
+  const window = {
+    ...counter4!,
+    today: { ...counter4!.today!, inJoinedTable: null, name: "Window" },
+  };
+  const { el } = await mount(undefined, [window, stool2!]);
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { options: { value: string; label: string }[] }>(
+      "[name=tableId]",
+    )!.options,
+  ).toEqual([
+    { value: "", label: expect.any(String) },
+    { value: "stool-2", label: "Stool 2" },
+    { value: "c4", label: "Window" },
+  ]);
+});

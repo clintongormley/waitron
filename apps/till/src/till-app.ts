@@ -172,12 +172,12 @@ import type { StringKey } from "./i18n/strings.js";
 import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import { otherPartyRead } from "./widgets/table-targets.js";
+import { otherPartyRead, shownTableNames } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { mergeMembersOf, nextFloorMoment } from "./state/floor-today.js";
+import { mergeMembersOf, nextFloorMoment, shownUnder } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -513,21 +513,26 @@ function takeOverRefusalError(code: string): CounterError {
   return tableWriteError({ code });
 }
 
+/** The tables' shown names, and whether those differ from their saved names. */
+interface TableNames {
+  names: string;
+  named: boolean;
+}
+
 /** What another device changed about a party, worked out by comparing the floor before and after.
  * `tables` names the party's tables as they were. */
-type PartyChange = { tables: string } & (
+type PartyChange = { tables: TableNames } & (
   | { kind: "gone" }
-  | { kind: "tables"; now: string }
+  | { kind: "tables"; now: TableNames }
   | { kind: "bills"; outstanding: string }
   | { kind: "bill_request"; requested: boolean }
   | { kind: "other" }
 );
 
-function tableLabels(tables: TableState[], ids: readonly string[]): string {
-  return ids
-    .map((id) => tables.find((table) => table.id === id)?.label)
-    .filter((label): label is string => label !== undefined)
-    .join(", ");
+function tableLabels(tables: TableState[], ids: readonly string[]): TableNames {
+  const names = shownTableNames(ids, tables).join(", ");
+  const saved = ids.flatMap((id) => tables.find((table) => table.id === id)?.label ?? []);
+  return { names, named: names !== saved.join(", ") };
 }
 
 function partyOf(tables: TableState[], partyId: string): TableParty | undefined {
@@ -560,7 +565,10 @@ function partyChangeDetail(change: PartyChange): string {
     case "gone":
       return t("party.changed_gone");
     case "tables":
-      return t("party.changed_tables").replace("{tables}", () => change.now);
+      return t(change.now.named ? "party.changed_tables_named" : "party.changed_tables").replace(
+        "{tables}",
+        () => change.now.names,
+      );
     case "bills":
       return t("party.changed_bills").replace("{amount}", () =>
         formatMoney(change.outstanding, currentLocale()),
@@ -577,7 +585,10 @@ function partyChangeDetail(change: PartyChange): string {
 function partyChangeMessage(change: PartyChange): string {
   const detail = partyChangeDetail(change);
   return [
-    t("party.changed").replace("{table}", () => change.tables),
+    t(change.tables.named ? "party.changed_named" : "party.changed").replace(
+      "{table}",
+      () => change.tables.names,
+    ),
     detail,
     t("party.try_again"),
   ].join(" ");
@@ -792,6 +803,8 @@ interface LateChange {
   lineName: string;
   /** Absent when the floor no longer lists the table. */
   tableLabel?: string;
+  /** `tableLabel` is a name for today. */
+  tableNamed?: true;
   /** The server gave no answer, so the change may have been saved. */
   unanswered: boolean;
   code?: string;
@@ -800,13 +813,18 @@ interface LateChange {
 function lateChangeMessage(late: LateChange): string {
   // Replacer functions, so a `$` in a name is never read as a replacement pattern.
   const { tableLabel } = late;
+  const named = late.tableNamed === true;
   const key = late.unanswered
     ? tableLabel === undefined
       ? "table.change_unconfirmed_no_table"
-      : "table.change_unconfirmed"
+      : named
+        ? "table.change_unconfirmed_named"
+        : "table.change_unconfirmed"
     : tableLabel === undefined
       ? "table.change_not_saved_no_table"
-      : "table.change_not_saved";
+      : named
+        ? "table.change_not_saved_named"
+        : "table.change_not_saved";
   const text = t(key)
     .replace("{line}", () => late.lineName)
     .replace("{table}", () => tableLabel ?? "");
@@ -5929,7 +5947,7 @@ export class TillApp extends LitElement {
           guestCount,
           state: "open",
           name: null,
-          displayName: table?.label ?? "",
+          displayName: table === undefined ? "" : shownUnder(table),
           mainBillId: tabId,
           outstanding: "0.00",
           billCount: 1,
@@ -7505,12 +7523,14 @@ export class TillApp extends LitElement {
     }
     const code = (outcome.error as { code?: string } | undefined)?.code;
     if (left()) {
-      const tableLabel = this.tables.find((table) => table.id === tableId)?.label;
+      const table = this.tables.find((each) => each.id === tableId);
+      const tableLabel = table === undefined ? undefined : shownUnder(table);
       this.errorKey = {
         lateChange: {
           lineName,
           unanswered: isNetworkFailure(outcome.error),
           ...(tableLabel === undefined ? {} : { tableLabel }),
+          ...(table !== undefined && tableLabel !== table.label ? { tableNamed: true } : {}),
           ...(code === undefined ? {} : { code }),
         },
       };
@@ -7867,7 +7887,8 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const basket = this.#basketPayload();
     const generation = this.#store.loadGeneration;
-    const label = this.tables.find((table) => table.id === tableId)?.label ?? "";
+    const moveTo = this.tables.find((table) => table.id === tableId);
+    const label = moveTo === undefined ? "" : shownUnder(moveTo);
     this.errorKey = undefined;
     try {
       const zoneId = this.tables.find((table) => table.id === tableId)?.zoneId;

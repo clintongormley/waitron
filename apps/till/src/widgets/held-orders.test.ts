@@ -353,6 +353,41 @@ describe("till-held-orders: moving a counter order to a table", () => {
     ).toEqual(["t1", "t2", "t10"]);
   });
 
+  it("lists the tables in the order of the names they show for today", async () => {
+    const named = (name: string) => ({
+      placement: null,
+      seats: 2,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 0,
+      name,
+    });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables: [
+        tableRow("t1", "T1", { today: named("Zinc") }),
+        tableRow("t2", "T2", { today: named("Arch") }),
+      ],
+    });
+
+    await openPicker(el);
+
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map((row) => [
+        row.dataset.target,
+        row.querySelector(".target-label")!.textContent!.trim(),
+      ]),
+    ).toEqual([
+      ["t2", "Arch"],
+      ["t1", "Zinc"],
+    ]);
+  });
+
   it("Move to table lists no part of a joined table", async () => {
     const spare = (inJoinedTable: string | null) => ({
       placement: null,

@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FloorMapDrop, WtFloorMap } from "@waitron/ui";
+import type { FloorMapDrop, WtDialog, WtFloorMap } from "@waitron/ui";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type {
+  FloorAnswer,
+  FloorZone,
+  TableParty,
+  TableState,
+  TableToday,
+  TillApi,
+} from "../api/client.js";
+import type { TillTableDetailsSheet } from "../widgets/table-details-sheet.js";
 import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
@@ -549,5 +558,415 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     expect(refusal(el)).toBe("The floor has changed. Check and try again");
     expect(drawnAt(el, "t1")).toBe(2);
     expect(refreshes.count).toBe(1);
+  });
+});
+
+describe("till-floor-screen: today's names", () => {
+  const party = (displayName: string, tableIds: string[]): TableParty => ({
+    id: "p1",
+    revision: 1,
+    guestCount: null,
+    state: "open",
+    name: null,
+    displayName,
+    mainBillId: null,
+    outstanding: "10.00",
+    billCount: 1,
+    tableIds,
+    unsentDrafts: [],
+    reminder: null,
+  });
+  const seatedAt = (displayName: string, tableIds: string[]): Partial<TableState> => ({
+    state: "open-tab",
+    condition: "held",
+    hasOpenTab: true,
+    party: party(displayName, tableIds),
+  });
+
+  /** Counter 4 named Window for today. */
+  const counter4 = (over: Partial<TableState> = {}, todayOver: Partial<TableToday> = {}) => ({
+    ...planned("t4", 2, { name: "Window", ...todayOver }),
+    label: "Counter 4",
+    ...over,
+  });
+  const counter5 = (todayOver: Partial<TableToday> = {}) => ({
+    ...planned("t5", 4, todayOver),
+    label: "Counter 5",
+  });
+  const bar = (todayOver: Partial<TableToday> = {}) => ({
+    ...planned("tb", 20, todayOver),
+    label: "Bar",
+  });
+  const inGroup = (joinName: string | null): Partial<TableToday> => ({
+    joinId: "j1",
+    joinSeats: 10,
+    joinName,
+  });
+
+  async function details(el: TillFloorScreen, tableId: string): Promise<TillTableDetailsSheet> {
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-details", { detail: { tableId }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    const sheet = el.shadowRoot!.querySelector<TillTableDetailsSheet>("till-table-details-sheet")!;
+    await sheet.updateComplete;
+    return sheet;
+  }
+
+  const savedLine = (sheet: TillTableDetailsSheet) =>
+    sheet.shadowRoot!.querySelector("[data-saved-name]")?.textContent?.trim() ?? null;
+
+  async function listView(el: TillFloorScreen): Promise<void> {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+  }
+
+  const card = (el: TillFloorScreen, tableId: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`.card[data-table="${tableId}"]`)!;
+
+  it("heads a renamed table's details with today's name and says its saved name beneath", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    const sheet = await details(el, "t4");
+    expect(sheet.heading).toBe("Window");
+    expect(savedLine(sheet)).toBe("Saved as Counter 4");
+  });
+
+  it("heads an unrenamed table's details as before, with no saved name", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    const sheet = await details(el, "tb");
+    expect(sheet.heading).toBe("Table Bar");
+    expect(savedLine(sheet)).toBeNull();
+  });
+
+  it("heads a renamed group's details with the group's name and the tapped table's saved name", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: null, ...inGroup("García birthday") }),
+        counter5(inGroup("García birthday")),
+      ],
+      stubApi(),
+    );
+    const sheet = await details(el, "t5");
+    expect(sheet.heading).toBe("García birthday");
+    expect(savedLine(sheet)).toBe("Saved as Counter 5");
+  });
+
+  it("names an unnamed group from its tables' shown names, with no saved name", async () => {
+    const el = await mount([counter4({}, inGroup(null)), bar(inGroup(null))], stubApi());
+    const sheet = await details(el, "t4");
+    expect(sheet.heading).toBe("Bar+Window");
+    expect(savedLine(sheet)).toBeNull();
+  });
+
+  it("the list card shows today's name with the saved name small after it", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await listView(el);
+    expect(card(el, "t4").querySelector(".label")!.textContent!.trim()).toBe("Window");
+    expect(card(el, "t4").querySelector("[data-saved-label]")!.textContent!.trim()).toBe(
+      "Counter 4",
+    );
+    expect(card(el, "tb").querySelector(".label")!.textContent!.trim()).toBe("Bar");
+    expect(card(el, "tb").querySelector("[data-saved-label]")).toBeNull();
+  });
+
+  it("the list card's saved name never breaks inside itself", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await listView(el);
+    const saved = card(el, "t4").querySelector("[data-saved-label]")!;
+    expect(getComputedStyle(saved).whiteSpace).toBe("nowrap");
+  });
+
+  it("a party named after its renamed table shows no second name", async () => {
+    const el = await mount([counter4(seatedAt("Window", ["t4"])), bar()], stubApi());
+    await listView(el);
+    expect(card(el, "t4").querySelector("[data-party-name]")).toBeNull();
+  });
+
+  it("a party named after its renamed group shows no second name", async () => {
+    const seated = seatedAt("García birthday", ["t4", "t5"]);
+    const el = await mount(
+      [
+        counter4(seated, { name: null, ...inGroup("García birthday") }),
+        { ...counter5(inGroup("García birthday")), ...seated },
+      ],
+      stubApi(),
+    );
+    await listView(el);
+    expect(card(el, "t4").querySelector("[data-party-name]")).toBeNull();
+    expect(card(el, "t5").querySelector("[data-party-name]")).toBeNull();
+  });
+
+  it("the seat window for a free renamed group is headed with the group's name", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: null, ...inGroup("García birthday") }),
+        counter5(inGroup("García birthday")),
+      ],
+      stubApi(),
+    );
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId: "t5" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("García birthday");
+  });
+
+  async function press(el: TillFloorScreen, tableId: string, action: string): Promise<void> {
+    el.canChangeToday = true;
+    await el.updateComplete;
+    const sheet = await details(el, tableId);
+    sheet.shadowRoot!.querySelector<HTMLElement>(`[data-today-action="${action}"]`)!.click();
+    await settle(el);
+  }
+
+  const clearingTitle = async (el: TillFloorScreen, tableId: string) => {
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    return el.shadowRoot!.querySelector<WtDialog>("[data-clear-dialog]")!.heading;
+  };
+  const needsClearing = { condition: "needs_clearing" as const };
+
+  it("the clearing window names a renamed table by today's name", async () => {
+    const el = await mount([counter4(needsClearing), bar()], stubApi());
+    expect(await clearingTitle(el, "t4")).toBe("Window needs clearing");
+  });
+
+  it("the clearing window names a renamed table by today's name in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount([counter4(needsClearing), bar()], stubApi());
+      expect(await clearingTitle(el, "t4")).toBe("Window está por recoger");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("the clearing window names a table in a group by its own saved name", async () => {
+    const el = await mount(
+      [counter4(needsClearing, { name: null, ...inGroup(null) }), bar(inGroup(null))],
+      stubApi(),
+    );
+    expect(await clearingTitle(el, "t4")).toBe("Table Counter 4 needs clearing");
+  });
+
+  it("Change seats on a renamed table is headed with today's name", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await press(el, "t4", "seats");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-today-seats-dialog"]>(
+        "till-today-seats-dialog",
+      )!.heading,
+    ).toBe("Seats for Window");
+  });
+
+  it("Join with… names a linked party with a renamed table by the shown names", async () => {
+    const linked = seatedAt("Bar, Window", ["tb", "t4"]);
+    const el = await mount(
+      [counter5(), { ...bar({ fixed: true }), ...linked }, counter4(linked, { fixed: true })],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([["tb", "Bar+Window"]]);
+  });
+
+  it("Join with… lists a renamed group and a renamed table by their names and is headed with the joining table's name for today", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: null, ...inGroup("García birthday") }),
+        bar(inGroup("García birthday")),
+        counter5({ name: "Corner" }),
+        { ...planned("t6", 30, { name: "Patio" }), label: "Counter 6" },
+      ],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    expect(dialog.heading).toBe("Join Corner with");
+    expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([
+      ["tb", "García birthday"],
+      ["t6", "Patio"],
+    ]);
+  });
+
+  it("Join with… lists its targets in the order of the names they show", async () => {
+    const el = await mount(
+      [counter5(), bar({ name: "Zinc" }), { ...planned("t6", 30), label: "Counter 6" }],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([
+      ["t6", "Counter 6"],
+      ["tb", "Zinc"],
+    ]);
+  });
+
+  const drawnTargets = async (el: TillFloorScreen) => {
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    await dialog.updateComplete;
+    return [...dialog.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map((target) => [
+      target.dataset.target,
+      target.querySelector(".target-label")!.textContent!.trim(),
+    ]);
+  };
+
+  it("Join with… draws a named group by its name when its first table has its own name for today", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday")), bar()],
+      stubApi(),
+    );
+    await press(el, "tb", "join-with");
+    expect(await drawnTargets(el)).toEqual([["t4", "García birthday"]]);
+  });
+
+  it("Join with… draws an unnamed group by its tables' shown names when its first table has its own name for today", async () => {
+    const el = await mount(
+      [counter4({}, inGroup(null)), counter5(inGroup(null)), bar()],
+      stubApi(),
+    );
+    await press(el, "tb", "join-with");
+    expect(await drawnTargets(el)).toEqual([["t4", "Counter 5+Window"]]);
+  });
+
+  it("Join with… keeps a group under its first table by saved name, whatever its tables are called today", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: "Alpha", ...inGroup(null) }),
+        bar({ name: "Zed", ...inGroup(null) }),
+        counter5(),
+      ],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    expect(await drawnTargets(el)).toEqual([["tb", "Alpha+Zed"]]);
+  });
+
+  const splitWindow = (el: TillFloorScreen) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-split-joined-dialog"]>(
+      "till-split-joined-dialog",
+    )!;
+
+  it("Split tables… on a renamed group is headed with its name and lists its tables by their shown names", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday"))],
+      stubApi(),
+    );
+    await press(el, "t5", "split-off");
+    expect(splitWindow(el).name).toBe("García birthday");
+    await splitWindow(el).updateComplete;
+    const options =
+      splitWindow(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "[name=split-off]",
+      )!.options;
+    expect(options.map((option) => option.label)).toEqual(["Window", "Counter 5"]);
+  });
+
+  it("Split tables… on a renamed joined table is headed with its name for today", async () => {
+    const part = (id: string, label: string) => ({
+      ...planned(id, 0, { placement: null, inJoinedTable: "Long table" }),
+      label,
+    });
+    const long = {
+      ...planned("tl", 2, {
+        name: "Window table",
+        joined: { parts: ["t3", "t6"], splitOff: [], apart: false },
+      }),
+      label: "Long table",
+    };
+    const el = await mount([long, part("t3", "Counter 3"), part("t6", "Counter 6")], stubApi());
+    await press(el, "tl", "split-off");
+    expect(splitWindow(el).name).toBe("Window table");
+  });
+
+  it("the tray under the map names a renamed table with no place by today's name", async () => {
+    const el = await mount(
+      [counter4(seatedAt("Window", ["t4"]), { placement: null }), bar()],
+      stubApi(),
+    );
+    const token = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-table-token"]>(
+      "[data-tray-table=t4] wt-table-token",
+    )!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelector(".label")!.textContent!.trim()).toBe("Window");
+  });
+
+  const seatTitle = async (el: TillFloorScreen) => {
+    const seat = el.shadowRoot!.querySelector("till-seat-dialog")!;
+    await seat.updateComplete;
+    return seat.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.heading;
+  };
+  const tap = async (el: TillFloorScreen, tableId: string) => {
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+
+  it("the seat window says a renamed table's name without the word table", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    await tap(el, "t4");
+    expect(await seatTitle(el)).toBe("Seat Window");
+  });
+
+  it("the seat window says a renamed table's name without the word table in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount([counter4(), bar()], stubApi());
+      await tap(el, "t4");
+      expect(await seatTitle(el)).toBe("Sentar en Window");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("the seat window says a named group's name without the word table", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday"))],
+      stubApi(),
+    );
+    await tap(el, "t5");
+    expect(await seatTitle(el)).toBe("Seat García birthday");
+  });
+
+  it("the seat window still says table for a table with no name for today", async () => {
+    const el = await mount([counter4(), counter5()], stubApi());
+    await tap(el, "t5");
+    expect(await seatTitle(el)).toBe("Seat table Counter 5");
+  });
+
+  it("the seat window for two fixed tables dropped together says their names for today without the word table", async () => {
+    const el = await mount([counter4({}, { fixed: true }), bar({ fixed: true })], stubApi());
+    await drop(el, { tableId: "tb", x: 3, y: 3, targetId: "t4" });
+    expect(await seatTitle(el)).toBe("Seat Bar+Window");
+  });
+
+  it("the seat window for two fixed tables with no names for today still says table", async () => {
+    const el = await mount([counter5({ fixed: true }), bar({ fixed: true })], stubApi());
+    await drop(el, { tableId: "tb", x: 5, y: 3, targetId: "t5" });
+    expect(await seatTitle(el)).toBe("Seat table Bar+Counter 5");
+  });
+
+  it("the seat window for a renamed table on its own is headed with today's name", async () => {
+    const el = await mount([counter4(), bar()], stubApi());
+    mapOf(el).dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId: "t4" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("Window");
   });
 });

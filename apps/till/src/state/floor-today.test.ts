@@ -4,12 +4,15 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
 import {
   dropAction,
+  groupName,
   groupSplitOf,
+  normalGroupName,
   onTodaysPlan,
   outOfServiceJoined,
   pendingPlaces,
   resetTableOf,
   sheetActions,
+  shownName,
   spareSpot,
   sparesOf,
   takenOffOf,
@@ -983,6 +986,158 @@ describe("Split tables… on a group", () => {
     ];
     expect(dropAction(tables, { tableId: "bar", x: 16, y: 20, targetId: "long" })).toMatchObject({
       heading: "Bar+Counter 3+Counter 4+Counter 5",
+    });
+  });
+});
+
+describe("today's names", () => {
+  const bar = table("bar", "Bar", { today: today({ joinId: "j" }) });
+  const c4 = table("c4", "Counter 4", { today: today({ joinId: "j" }) });
+  const window4 = table("c4", "Counter 4", { today: today({ joinId: "j", name: "Window" }) });
+  const named = (each: TableState): TableState => ({
+    ...each,
+    today: { ...each.today!, joinName: "García birthday" },
+  });
+
+  it("shows a table's own name for today, else its saved label", () => {
+    expect(shownName(window4)).toBe("Window");
+    expect(shownName(c4)).toBe("Counter 4");
+    expect(shownName(table("c4", "Counter 4", { today: today({ name: null }) }))).toBe("Counter 4");
+    expect(shownName(table("c4", "Counter 4", { today: null }))).toBe("Counter 4");
+  });
+
+  it("names a group by its own name, else its tables' shown names in number order", () => {
+    expect(groupName([named(bar), named(window4)])).toBe("García birthday");
+    expect(groupName([window4, bar])).toBe("Bar+Window");
+    expect(groupName([c4, bar])).toBe("Bar+Counter 4");
+    expect(groupName([{ ...bar, today: { ...bar.today!, joinName: null } }, c4])).toBe(
+      "Bar+Counter 4",
+    );
+    expect(groupName([])).toBe("");
+  });
+
+  it("names a group's normal name from its tables' shown names, never its own name", () => {
+    expect(normalGroupName([named(bar), named(window4)])).toBe("Bar+Window");
+    expect(normalGroupName([c4, bar])).toBe("Bar+Counter 4");
+  });
+});
+
+describe("today's names on a drop and a group split", () => {
+  const garcia = (id: string, label: string, x: number, over: Partial<TableToday> = {}) =>
+    table(id, label, {
+      today: today({ placement: place(x, 0), joinId: "g", joinName: "García birthday", ...over }),
+    });
+  const c6 = table("c6", "Counter 6", { today: today({ placement: place(20, 0) }) });
+
+  it("heads a drop on a group with a name for today with that name", () => {
+    const zone = [garcia("c4", "Counter 4", 0, { fixed: true }), garcia("c5", "Counter 5", 4), c6];
+    expect(dropAction(zone, { tableId: "c6", x: 8, y: 0, targetId: "c5" })).toEqual({
+      kind: "seat",
+      tableId: "c6",
+      withTableIds: ["c4", "c5"],
+      heading: "García birthday",
+    });
+  });
+
+  it("heads a drop on a renamed table with its tables' shown names", () => {
+    const window4 = table("c4", "Counter 4", {
+      today: today({ placement: place(0, 0), fixed: true, name: "Window" }),
+    });
+    const bar = table("bar", "Bar", { today: today({ placement: place(20, 0) }) });
+    expect(dropAction([window4, bar], { tableId: "bar", x: 4, y: 0, targetId: "c4" })).toEqual({
+      kind: "seat",
+      tableId: "bar",
+      withTableIds: ["c4"],
+      heading: "Bar+Window",
+    });
+  });
+
+  describe("a renamed joined table hands its name to the group", () => {
+    const joined = (id: string, label: string, x: number, name: string | null, parts: string[]) =>
+      table(id, label, {
+        today: today({
+          placement: place(x, 0),
+          name,
+          joined: { parts, splitOff: [], apart: false },
+        }),
+      });
+    const part = (id: string, label: string) =>
+      table(id, label, {
+        today: today({ placement: null, inJoinedTable: "x", name: `${label} today` }),
+      });
+    const parts = [part("c3", "Counter 3"), part("c4", "Counter 4"), part("t1", "Terrace 1")];
+    const long = joined("long", "Long table", 0, "Window table", ["c3", "c4"]);
+    const terrace = joined("terrace", "Terrace", 20, "Sunny side", ["t1"]);
+    const bar = table("bar", "Bar", { today: today({ placement: place(40, 0) }) });
+    const heading = (zone: TableState[], tableId: string, targetId: string) =>
+      (dropAction(zone, { tableId, x: 6, y: 0, targetId }) as { heading: string }).heading;
+
+    it("the target's name first, then the one dropped", () => {
+      const zone = [long, terrace, bar, ...parts];
+      expect(heading(zone, "bar", "long")).toBe("Window table");
+      expect(heading(zone, "long", "bar")).toBe("Window table");
+      expect(heading(zone, "terrace", "long")).toBe("Window table");
+      expect(heading(zone, "long", "terrace")).toBe("Sunny side");
+    });
+
+    it("a joined table with no name gives none, and a group's own name wins", () => {
+      const plain = joined("long", "Long table", 0, null, ["c3", "c4"]);
+      expect(heading([plain, terrace, ...parts], "long", "terrace")).toBe("Sunny side");
+      expect(heading([plain, bar, ...parts], "bar", "long")).toBe(
+        "Bar+Counter 3 today+Counter 4 today",
+      );
+      const zone = [garcia("g1", "Counter 7", 0), garcia("g2", "Counter 8", 4), terrace, ...parts];
+      expect(heading(zone, "terrace", "g1")).toBe("García birthday");
+    });
+
+    it("a renamed table that is not a joined table gives none", () => {
+      const window4 = table("w", "Counter 9", {
+        today: today({ placement: place(0, 0), name: "Window" }),
+      });
+      expect(heading([window4, bar], "bar", "w")).toBe("Bar+Window");
+    });
+  });
+
+  describe("a group split by its name for today", () => {
+    const seatedAt = (...ids: string[]) => {
+      const p = party("p", ids);
+      return (id: string, label: string, x: number, name: string | null = null) => {
+        const each = garcia(id, label, x, { name });
+        return ids.includes(id) ? { ...each, ...seatedBy(p) } : each;
+      };
+    };
+
+    it("is headed with the group's name, and guests kept in the group while two or more tables stay move to its name once", () => {
+      const seated = seatedAt("c3", "c4", "c5");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+      ];
+      const split = groupSplitOf(zone[0]!, zone)!;
+      expect(split.name).toBe("García birthday");
+      expect(split.guestsMoveTo(["c3"])).toEqual(["García birthday"]);
+    });
+
+    it("names the group once for guests keeping one of its tables while others stay", () => {
+      const seated = seatedAt("c3", "c4");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+        seated("bar", "Bar", 12),
+      ];
+      expect(groupSplitOf(zone[0]!, zone)!.guestsMoveTo(["c3"])).toEqual(["García birthday"]);
+    });
+
+    it("names the one table that stays by its own shown name, the group ending", () => {
+      const seated = seatedAt("c3", "c4");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+      ];
+      expect(groupSplitOf(zone[0]!, zone)!.guestsMoveTo(["c3", "c5"])).toEqual(["Window"]);
     });
   });
 });

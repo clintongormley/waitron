@@ -4,13 +4,13 @@ import { baseStyles, inNumberOrder } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { FloorZone, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { sparesOf, takenOffOf } from "../state/floor-today.js";
+import { shownName, sparesOf, takenOffOf } from "../state/floor-today.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Dialog = "spares" | "taken-off" | "reset";
 
-const inLabelOrder = (tables: TableState[]): TableState[] =>
-  tables.sort((a, b) => inNumberOrder(a.label, b.label));
+const inNameOrder = (tables: TableState[]): TableState[] =>
+  tables.sort((a, b) => inNumberOrder(shownName(a), shownName(b)));
 
 @customElement("till-floor-zone-menu")
 export class TillFloorZoneMenu extends LitElement {
@@ -73,7 +73,7 @@ export class TillFloorZoneMenu extends LitElement {
   }
 
   #spares(): TemplateResult {
-    const spares = inLabelOrder(sparesOf(this.tables));
+    const spares = inNameOrder(sparesOf(this.tables));
     return html`${
       spares.length === 0
         ? html`<p class="empty" data-empty>${t("floor.no_spares")}</p>`
@@ -85,7 +85,7 @@ export class TillFloorZoneMenu extends LitElement {
                   variant="secondary"
                   @click=${() => this.#emit("zone-place-spare", { tableId: table.id })}
                 >
-                  ${table.label}
+                  ${shownName(table)}
                 </wt-button>`,
             )}
           </div>`
@@ -94,7 +94,7 @@ export class TillFloorZoneMenu extends LitElement {
   }
 
   #takenOff(): TemplateResult {
-    const takenOff = inLabelOrder(takenOffOf(this.tables));
+    const takenOff = inNameOrder(takenOffOf(this.tables));
     return html`${
       takenOff.length === 0
         ? html`<p class="empty" data-empty>${t("floor.none_taken_off")}</p>`
@@ -102,7 +102,7 @@ export class TillFloorZoneMenu extends LitElement {
             ${takenOff.map(
               (table) =>
                 html`<div class="row" data-taken-off=${table.id}>
-                  <span data-label>${table.label}</span>
+                  <span data-label>${shownName(table)}</span>
                   <wt-button
                     data-put-back
                     variant="secondary"

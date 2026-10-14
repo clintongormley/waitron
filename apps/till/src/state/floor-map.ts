@@ -183,6 +183,8 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
       joinId: today.joinId,
       fixed: today.fixed,
       linkId: linkOf(table),
+      ...(today.name == null ? {} : { name: today.name }),
+      ...(today.joinName == null ? {} : { groupName: today.joinName }),
     };
   });
 }

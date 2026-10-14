@@ -52,6 +52,45 @@ export function nextFloorMoment(): number {
   return ++floorMoments;
 }
 
+export function shownName(table: TableState): string {
+  return table.today?.name ?? table.label;
+}
+
+/** Its group's name for today, else its own name for today, else its saved label, as `shown()` in
+ * `packages/db/src/party-table-labels.ts`. */
+export function shownUnder(table: TableState): string {
+  return table.today?.joinName ?? shownName(table);
+}
+
+export function withoutTodaysNames(table: TableState): TableState {
+  return table.today === null
+    ? table
+    : { ...table, today: { ...table.today, name: null, joinName: null } };
+}
+
+/** The details sheet's heading: the merge's name, else the table's own name for today, else
+ * "Table 4". */
+export function detailsHeading(table: TableState, mergeName: string | null): string {
+  return (
+    mergeName ?? table.today?.name ?? t("floor.table_title").replace("{table}", () => table.label)
+  );
+}
+
+/** The table's saved name when its sheet's heading is a name for today, else null. */
+export function savedNameUnder(table: TableState, heading: string): string | null {
+  const shown = shownUnder(table);
+  return shown !== table.label && shown === heading ? table.label : null;
+}
+
+/** What the group is called with no name of its own: its tables' shown names in number order. */
+export function normalGroupName(members: readonly TableState[]): string {
+  return mergeLabel(members.map(shownName));
+}
+
+export function groupName(members: readonly TableState[]): string {
+  return members[0]?.today?.joinName ?? normalGroupName(members);
+}
+
 /** `table` and every other member of its merge, in `tables`' order; `table` alone in none. */
 export function mergeMembersOf(tables: readonly TableState[], table: TableState): TableState[] {
   const joinId = table.today?.joinId ?? null;
@@ -101,7 +140,11 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   if (draggedGroup.members.length > 1) return { kind: "say", message: t("floor.drop_merge") };
 
   const both = [...draggedGroup.members, ...targetGroup.members];
-  const heading = mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
+  const heading =
+    targetGroup.members[0]!.today?.joinName ??
+    handedName(targetGroup) ??
+    handedName(draggedGroup) ??
+    mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -138,11 +181,21 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   };
 }
 
-/** A joined table's still-joined tables' labels; any other table's own label. */
+/** The name for today a lone joined table gives the group a drop makes, as `writeMerge` does. */
+function handedName(group: Group): string | null {
+  const [table] = group.members;
+  if (group.members.length !== 1 || (table!.today?.joined?.parts.length ?? 0) === 0) return null;
+  return table!.today?.name ?? null;
+}
+
+/** A joined table's still-joined tables' shown names; any other table's own. */
 function joinedLabels(zoneTables: readonly TableState[], table: TableState): string[] {
   const parts = table.today?.joined?.parts ?? [];
-  const labels = parts.flatMap((id) => zoneTables.find((each) => each.id === id)?.label ?? []);
-  return labels.length === 0 ? [table.label] : labels;
+  const names = parts.flatMap((id) => {
+    const part = zoneTables.find((each) => each.id === id);
+    return part === undefined ? [] : [shownName(part)];
+  });
+  return names.length === 0 ? [shownName(table)] : names;
 }
 
 /** The placed member whose centre is nearest `point`; the first on a tie. */
@@ -388,15 +441,22 @@ export function groupSplitOf(
       party.tableIds.filter((id) => !ticked.includes(id)),
     );
   };
-  const guestsMoveTo = (ticked: readonly string[]): string[] =>
-    keptBy(ticked).flatMap((kept) => {
+  /** As the party will read its tables: the group keeps its row and name only while two or more
+   * of its tables stay (`leaveAsGroup`), and a named group is read once. */
+  const guestsMoveTo = (ticked: readonly string[]): string[] => {
+    const groupStays = members.filter((each) => !ticked.includes(each.id)).length >= 2;
+    return keptBy(ticked).flatMap((kept) => {
       const tables = zoneTables.filter((each) => kept.includes(each.id));
       if (kept.length === 0 || tables.length !== kept.length) return [];
-      return [mergeLabel(tables.map((each) => each.label).sort(inNumberOrder))];
+      const names = tables.map((each) =>
+        groupStays || !members.includes(each) ? shownUnder(each) : shownName(each),
+      );
+      return [mergeLabel([...new Set(names)].sort(inNumberOrder))];
     });
+  };
   return {
     members,
-    name: mergeLabel(members.map((each) => each.label)),
+    name: groupName(members),
     asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
     guestsMoveTo,
     strandsGuests: (ticked) => keptBy(ticked).some((kept) => kept.length === 0),
