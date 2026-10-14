@@ -314,7 +314,7 @@ export interface TeardownDeps {
   teardownMs: number;
   /** How long the runner waits for tracked children after SIGTERM, and again after SIGKILL; 5 s when unset. */
   childGraceMs?: number;
-  /** False once `pid` is no longer the process that was tracked: it is then gone, and never signalled. */
+  /** Answering false makes `stopChildren` neither signal `pid` nor count it as still running. */
   sameProcess?(pid: number): boolean;
   record?(event: unknown): void;
 }
@@ -1588,8 +1588,11 @@ async function runOwned<T>(
             record,
             sameProcess: (pid) => {
               const tracked = journalPids.find((entry) => entry.pid === pid);
-              // A pid whose start time could not be read when tracked cannot be told from another.
-              return tracked?.startTime == null || deps.processStartTime(pid) === tracked.startTime;
+              // Only a different, readable start time shows another process; one unreadable when
+              // tracked or now cannot be told from ours, so the pid is still signalled while alive.
+              if (tracked?.startTime == null) return true;
+              const now = deps.processStartTime(pid);
+              return now === null || now === tracked.startTime;
             },
           },
         );

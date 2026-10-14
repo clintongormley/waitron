@@ -256,10 +256,14 @@ function journalLeft(journal: RehearsalJournal): Left {
 }
 
 function liveTracked(journal: RehearsalJournal, deps: KeeperDeps): number[] {
-  const same = sameProcess(journal, deps);
-  return matchingPids(journal, deps, { say: () => {}, note: () => {} }).filter(
-    (pid) => deps.isAlive(pid) && same(pid),
-  );
+  const { pids, unreadable } = matchingPids(journal, deps, { say: () => {}, note: () => {} });
+  return stillOurs(journal, deps, [...pids, ...unreadable]);
+}
+
+/** The live pids among `pids` that are not shown to be another process now. */
+function stillOurs(journal: RehearsalJournal, deps: KeeperDeps, pids: readonly number[]): number[] {
+  const identity = processIdentity(journal, deps);
+  return pids.filter((pid) => deps.isAlive(pid) && identity(pid) !== "other");
 }
 
 /**
@@ -271,9 +275,9 @@ async function stopTracked(
   deps: KeeperDeps,
   lines: Lines,
 ): Promise<{ entry: TeardownEntry; stopped: number[]; left: number[] }> {
-  const pids = matchingPids(journal, deps, lines);
-  const same = sameProcess(journal, deps);
-  const entry = await stopChildren(
+  const { pids, unreadable } = matchingPids(journal, deps, lines);
+  const identity = processIdentity(journal, deps);
+  const stoppedBy = await stopChildren(
     pids,
     {
       isAlive: deps.isAlive,
@@ -282,12 +286,16 @@ async function stopTracked(
       now: deps.now,
       teardownMs: journal.teardownMs,
       ...(deps.childGraceMs === undefined ? {} : { childGraceMs: deps.childGraceMs }),
-      sameProcess: same,
+      sameProcess: (pid) => identity(pid) === "same",
     },
     AbortSignal.timeout(journal.teardownMs),
   );
-  const left =
-    entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid) && same(pid)) : [];
+  // `stopChildren` counts a process it could not identify as gone; the keeper counts it as left.
+  const left = stillOurs(journal, deps, [...pids, ...unreadable]);
+  const entry: TeardownEntry =
+    left.length > 0 && stoppedBy.outcome !== "failed"
+      ? { step: "stop-child", outcome: "failed", count: left.length }
+      : stoppedBy;
   return { entry, stopped: pids.filter((pid) => !left.includes(pid)), left };
 }
 
@@ -486,26 +494,48 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
   }
 }
 
-/** Whether `pid` still has the start time the journal recorded for it. */
-function sameProcess(journal: RehearsalJournal, deps: KeeperDeps): (pid: number) => boolean {
+/**
+ * Whether `pid` still has the start time the journal recorded for it: "unreadable" when its start
+ * time cannot be read now, and "other" when a readable one differs from the recorded one.
+ */
+function processIdentity(
+  journal: RehearsalJournal,
+  deps: KeeperDeps,
+): (pid: number) => "same" | "other" | "unreadable" {
   return (pid) => {
     const startTime = journal.pids.find((entry) => entry.pid === pid)?.startTime;
-    return startTime != null && deps.processStartTime(pid) === startTime;
+    const now = deps.processStartTime(pid);
+    if (now === null) return "unreadable";
+    return now === startTime ? "same" : "other";
   };
 }
 
-/** A pid is signalled only while its start time still matches the one the journal recorded. */
-function matchingPids(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): number[] {
-  const same = sameProcess(journal, deps);
+/**
+ * A pid is signalled only while its start time still matches the one the journal recorded;
+ * `unreadable` holds live ones whose start time cannot be read now, never signalled.
+ */
+function matchingPids(
+  journal: RehearsalJournal,
+  deps: KeeperDeps,
+  lines: Lines,
+): { pids: number[]; unreadable: number[] } {
+  const identity = processIdentity(journal, deps);
   const pids: number[] = [];
+  const unreadable: number[] = [];
   for (const { pid, startTime } of journal.pids) {
     if (startTime === null) {
       lines.note(`pid ${pid} has no recorded start time; not signalled`);
-    } else if (!same(pid)) {
-      lines.note(`pid ${pid} is gone or is another process now; not signalled`);
-    } else {
+      continue;
+    }
+    const found = identity(pid);
+    if (found === "same") {
       pids.push(pid);
+    } else if (found === "unreadable" && deps.isAlive(pid)) {
+      lines.note(`pid ${pid}'s start time cannot be read now; not signalled`);
+      unreadable.push(pid);
+    } else {
+      lines.note(`pid ${pid} is gone or is another process now; not signalled`);
     }
   }
-  return pids;
+  return { pids, unreadable };
 }

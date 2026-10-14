@@ -424,6 +424,28 @@ describe("withAwsRehearsal — teardown after a failure", () => {
     expect(h.killed).toEqual([[4242, "SIGTERM"]]);
   });
 
+  it("still signals a tracked child whose start time cannot be read again, and does not call it stopped", async () => {
+    const h = harness(
+      {},
+      {
+        isAlive: (pid) => pid === 4242,
+        processStartTime: vi.fn().mockReturnValueOnce(START_TIME).mockReturnValue(null),
+      },
+    );
+    await withAwsRehearsal(async (ctx) => {
+      ctx.trackChild(4242);
+    }, h.deps).catch(() => {});
+    expect(h.killed).toEqual([
+      [4242, "SIGTERM"],
+      [4242, "SIGKILL"],
+    ]);
+    expect((await receipt()).parsed.teardown).toContainEqual({
+      step: "stop-child",
+      outcome: "failed",
+      count: 1,
+    });
+  });
+
   it("stops only live tracked children and aborts tracked and listed uploads", async () => {
     const alive = new Set([4242, 999]);
     const h = harness(

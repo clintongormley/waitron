@@ -486,6 +486,22 @@ describe("runKeeper", () => {
     expect(h.kill).not.toHaveBeenCalled();
   });
 
+  it("at the ceiling names a live tracked process whose start time cannot be read now", async () => {
+    await writeJournalFile(journal({ pids: [{ pid: 101, startTime: START_TIME }] }));
+    const h = harness(bucketWithObjects(), {
+      waitForRunnerEnd: () => NEVER,
+      sleep: async () => {},
+      processStartTime: () => null,
+    });
+    withAlive(h, [101]);
+
+    expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+    const may = h.printed.slice(h.printed.indexOf("may be left:") + 1);
+    expect(may).toEqual([`bucket ${BUCKET}`, "process 101"]);
+    expect(h.kill).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["a bucket outside the rehearsal pattern", { bucket: "someone-elses-bucket" }, "bucket"],
     ["a scratch folder outside tmpdir", { scratchRoot: "/etc/waitron" }, "scratchRoot"],
@@ -832,6 +848,44 @@ describe("runKeeper", () => {
       expect(await runKeeper(journalPath, h.deps)).toBe(0);
 
       expect(h.kill).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        "once it has been matched",
+        () => vi.fn().mockReturnValueOnce(START_TIME).mockReturnValue(null),
+      ],
+      ["from the first read", () => vi.fn().mockReturnValue(null)],
+    ])(
+      "names a live process whose start time cannot be read %s as left, signals it not, and exits 1",
+      async (_when, startTimes) => {
+        await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+        const h = harness(new FakeAdmin(), {
+          isAlive: (p) => p === 4242,
+          processStartTime: startTimes(),
+        });
+
+        expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+        expect(h.kill).not.toHaveBeenCalled();
+        expect(h.printed).toEqual([interruptedPath(), "left behind:", "process 4242"]);
+        expect((await receipt()).teardown).toContainEqual({
+          step: "stop-child",
+          outcome: "failed",
+          count: 1,
+        });
+      },
+    );
+
+    it("finds nothing left of a tracked process that has exited, though its start time cannot be read", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), { processStartTime: () => null });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(h.kill).not.toHaveBeenCalled();
+      expect(h.printed).toEqual([interruptedPath(), "nothing left behind"]);
+      expect((await logLines()).join("\n")).toContain("pid 4242 is gone");
     });
 
     it("names a process that would not stop on deleted, and exits 1", async () => {
