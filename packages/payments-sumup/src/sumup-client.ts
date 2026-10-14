@@ -93,7 +93,6 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     path: string,
     signal: AbortSignal,
     body?: unknown,
-    redirect?: RequestRedirect,
   ): Promise<Response> =>
     doFetch(`${base}${path}`, {
       method,
@@ -103,8 +102,8 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         accept: "application/json",
       },
       signal,
+      redirect: "manual",
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      ...(redirect === undefined ? {} : { redirect }),
     });
   const call = async (
     method: "GET" | "POST",
@@ -119,7 +118,8 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     // nothing external may freeze a sale).
     try {
       const res = await send(method, path, controller.signal, body);
-      if (res.status >= 500) {
+      if ((res.status >= 300 && res.status < 400) || res.status >= 500) {
+        res.body?.cancel().catch(() => undefined);
         if (answerServerErrors) return { status: res.status, json: null };
         throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
       }
@@ -129,14 +129,11 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       clearTimeout(timer);
     }
   };
-  /** The answer's status alone: the body is never read, so a body that is not JSON or that breaks
-   * off cannot change what the status says. A redirect is not followed: whatever its target answers
-   * is not SumUp's answer to this DELETE. */
   const callForStatus = async (method: "DELETE", path: string): Promise<number> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await send(method, path, controller.signal, undefined, "manual");
+      const res = await send(method, path, controller.signal);
       res.body?.cancel().catch(() => undefined);
       return res.status;
     } finally {
