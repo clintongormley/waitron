@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PeriodDeleteImpact } from "./opening-hours-client.js";
@@ -90,9 +90,13 @@ function fake(options: {
   }) as DashboardRequest;
 }
 
-async function mount(request: DashboardRequest = fake({}), into: HTMLElement = document.body) {
+async function mount(
+  request: DashboardRequest = fake({}),
+  into: HTMLElement = document.body,
+  liveData?: LiveData,
+) {
   const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
-  el.api = new OpeningHoursApi(request);
+  el.api = new OpeningHoursApi(request, liveData);
   applyTokens(el);
   if (into === document.body) hosts.push(el);
   into.append(el);
@@ -503,6 +507,33 @@ it("reads the impact actively for Delete… and Retry, and passively when a live
   fail = false;
   retry(dialog)!.click();
   await expect.poll(() => reads).toEqual(["active", "passive", "passive", "passive", "active"]);
+});
+
+it("with live data, reads the impact again when today's kept-open period changes, and not on a change the impact does not read", async () => {
+  const liveData = new LiveData();
+  let keptOpen = false;
+  let reads = 0;
+  const el = await mount(
+    fake({
+      impact: () => {
+        reads++;
+        return impactOf({ keptOpenToday: keptOpen });
+      },
+    }),
+    document.body,
+    liveData,
+  );
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  expect(body(dialog)).not.toContain("Today's later opening");
+  liveData.invalidate([{ type: "printers" }]);
+  await new Promise((done) => setTimeout(done, 50));
+  expect(reads).toBe(1);
+
+  keptOpen = true;
+  liveData.invalidate([{ type: "period_extensions" }]);
+  await expect.poll(() => body(dialog)).toContain("Today's later opening of it ends.");
+  expect(reads).toBe(2);
 });
 
 it("ignores a departed delete confirmation after another period's dialog opened", async () => {

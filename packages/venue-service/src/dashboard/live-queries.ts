@@ -163,6 +163,9 @@ export const QUERY_DEPENDENCIES = {
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
+    // Painted in does not read it: the Periods page reads an open delete dialog's impact again on
+    // this query's answers, and the impact's kept-open-today line reads it.
+    "period_extensions",
   ],
   "opening-hours": [
     "menu_periods",

@@ -122,6 +122,7 @@ describe("OpeningHoursApi", () => {
         "locations",
         "location_business_day_settings",
         "location_day_cutover_changes",
+        "period_extensions",
       ];
       expect(QUERY_DEPENDENCIES["menu-periods-painted-in"]).toEqual(tables);
       expect(live.interests).toEqual(tables.map((type) => ({ type })));
