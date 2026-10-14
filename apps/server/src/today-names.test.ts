@@ -527,6 +527,23 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${both}`));
   });
 
+  it("Table 9 back to its saved place ends a group of two tables with their own names for today and prints one MOVED slip from the name to both own names", async () => {
+    const own = suffixed("Window");
+    const nine = suffixed("Patio");
+    const { table, guests } = await seatedPair({ own, nine });
+    const name = suffixed("García birthday");
+    await rename(table.c6!, name);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(() => backToSavedPlace(table.t9!));
+
+    expect((await floorRow(v, table.c6!)).today?.name).toBe(own);
+    expect((await floorRow(v, table.t9!)).today?.name).toBe(nine);
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(prepareText(`${name} -> ${own}, ${nine}`));
+  });
+
   it("Bar back to its saved place leaves the named group of three and prints one MOVED slip from the name to Bar and the name", async () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
@@ -548,7 +565,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
 
     const printed = await jobsFrom(() => backToSavedPlace(table.t9!));
 
-    expect((await floorRow(v, table.c6!)).today?.joinName ?? null).toBeNull();
+    expect((await floorRow(v, table.c6!)).today?.joinName).toBeNull();
     expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
@@ -561,6 +578,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
 
     const printed = await jobsFrom(() => backToSavedPlace(table.c6!));
 
+    expect((await floorRow(v, table.c6!)).today?.name).toBe(own);
     expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 });
