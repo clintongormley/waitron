@@ -22,7 +22,8 @@ export interface TeardownEntry {
     | "remove-policy"
     | "delete-objects"
     | "delete-bucket"
-    | "inventory";
+    | "inventory"
+    | "remove-scratch";
   outcome: "ok" | "failed" | "skipped";
   count?: number;
   errorName?: string;
@@ -135,8 +136,13 @@ const TEARDOWN_STEPS = [
   "delete-objects",
   "delete-bucket",
   "inventory",
+  "remove-scratch",
 ] as const;
-const OWNED_TEARDOWN_STEPS = TEARDOWN_STEPS.filter((step) => step !== "inventory");
+const OWNED_TEARDOWN_STEPS = {
+  run: TEARDOWN_STEPS.filter((step) => step !== "inventory"),
+  // A cleanup runs later, from another process, and never removes the run's scratch.
+  cleanup: TEARDOWN_STEPS.filter((step) => step !== "inventory" && step !== "remove-scratch"),
+} as const;
 const OWNERSHIP_STATES = ["owned", "not-created", "collision", "unowned-candidate"] as const;
 
 /** The receipt's shape rule for an upload id; the key-pair check is separate. */
@@ -407,6 +413,7 @@ export function actionTable(
 export function createReceiptLog(
   header: Omit<AwsReceiptHeader, "finishedAt">,
   keys: ReceiptKeyPair,
+  kind: "run" | "cleanup" = "run",
 ): ReceiptLog {
   const forbidden = forbiddenFrom(keys);
   const cleanHeader = sanitizeHeader(header, forbidden);
@@ -432,7 +439,7 @@ export function createReceiptLog(
       const remaining = sanitizeRemaining(parts.remaining, forbidden);
       if (
         ownership.state === "owned" &&
-        !OWNED_TEARDOWN_STEPS.every((step) => teardown.some((entry) => entry.step === step))
+        !OWNED_TEARDOWN_STEPS[kind].every((step) => teardown.some((entry) => entry.step === step))
       ) {
         throw refused("teardown");
       }

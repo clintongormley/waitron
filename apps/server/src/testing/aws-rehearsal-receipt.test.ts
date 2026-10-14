@@ -46,7 +46,7 @@ function runnerCommand(region: string, receiptPath: string): string {
   );
 }
 
-/** An owned bucket's receipt is refused without these steps, so a log that finishes one carries them. */
+/** An owned bucket's run receipt is refused without these steps, so a log that finishes one carries them. */
 function tornDown(log: ReceiptLog): ReceiptLog {
   for (const step of [
     "stop-child",
@@ -54,6 +54,7 @@ function tornDown(log: ReceiptLog): ReceiptLog {
     "remove-policy",
     "delete-objects",
     "delete-bucket",
+    "remove-scratch",
   ] as const) {
     log.teardown({ step, outcome: "ok" });
   }
@@ -552,7 +553,7 @@ describe("an owned bucket's teardown", () => {
   ] as const;
 
   function logWith(steps: readonly (typeof STEPS)[number][]) {
-    const log = createReceiptLog(header, KEYS);
+    const log = createReceiptLog(header, KEYS, "cleanup");
     for (const step of steps) log.teardown({ step, outcome: "ok" });
     return log;
   }
@@ -578,5 +579,51 @@ describe("an owned bucket's teardown", () => {
       ownership: { bucket: null, state: "not-created" },
     });
     expect(receipt.teardown).toEqual([]);
+  });
+});
+
+describe("the remove-scratch teardown step", () => {
+  const BUCKET_STEPS = [
+    "stop-child",
+    "abort-upload",
+    "remove-policy",
+    "delete-objects",
+    "delete-bucket",
+  ] as const;
+
+  it("refuses an owned run receipt without it", () => {
+    const log = createReceiptLog(header, KEYS, "run");
+    for (const step of BUCKET_STEPS) log.teardown({ step, outcome: "ok" });
+    expect(() => log.finish(finishParts)).toThrow("receipt field refused: teardown");
+  });
+
+  it.each(["ok", "failed", "skipped"] as const)(
+    "accepts an owned run receipt whose remove-scratch is %s",
+    (outcome) => {
+      const log = createReceiptLog(header, KEYS, "run");
+      for (const step of BUCKET_STEPS) log.teardown({ step, outcome: "ok" });
+      log.teardown({ step: "remove-scratch", outcome });
+      expect(log.finish(finishParts).teardown.at(-1)).toEqual({ step: "remove-scratch", outcome });
+    },
+  );
+
+  it.each(BUCKET_STEPS)("refuses an owned run receipt missing its %s step", (missing) => {
+    const log = createReceiptLog(header, KEYS, "run");
+    for (const step of BUCKET_STEPS) if (step !== missing) log.teardown({ step, outcome: "ok" });
+    log.teardown({ step: "remove-scratch", outcome: "ok" });
+    expect(() => log.finish(finishParts)).toThrow("receipt field refused: teardown");
+  });
+
+  it("does not require it in a cleanup receipt", () => {
+    const log = createReceiptLog(header, KEYS, "cleanup");
+    for (const step of BUCKET_STEPS) log.teardown({ step, outcome: "ok" });
+    expect(log.finish(finishParts).teardown).toHaveLength(5);
+  });
+
+  it("accepts it on a run that never owned a bucket", () => {
+    const log = createReceiptLog(header, KEYS, "run");
+    log.teardown({ step: "remove-scratch", outcome: "skipped" });
+    const receipt = log.finish({ ...finishParts, ownership: { bucket: null, state: "collision" } });
+    expect(receipt.teardown).toEqual([{ step: "remove-scratch", outcome: "skipped" }]);
   });
 });

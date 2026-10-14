@@ -3,9 +3,6 @@
 // runbook is docs/developers/aws-backup-rehearsal.md. The bucket cannot be frozen, so the
 // rehearsal's clients reach it through local gates that hold their calls; while the stream is
 // paused a bucket rule refuses the supervisor's pause check, and the gate then lets that check go.
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createS3ObjectStore } from "@waitron/stream";
 import {
   allowOwnedBucket,
@@ -44,16 +41,10 @@ const RESTART_CONNECT_WAIT_MS = 60_000;
 
 describe("AWS rehearsal: the stream pause against Amazon S3", () => {
   const rehearsal = rehearsalLifecycle({ apis: PAUSE_APIS });
-  let scratch: string | undefined;
 
-  // A test that hit its time limit is still running: stop it and wait for its teardown and receipt
-  // before its working folder goes.
+  // A test that hit its time limit is still running: stop it and wait for its teardown and receipt.
   afterAll(async () => {
-    try {
-      await rehearsal?.stop();
-    } finally {
-      if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
-    }
+    await rehearsal?.stop();
   });
 
   it("a paused stream's held bucket check is refused by a bucket rule, and streaming resumes once it goes", async () => {
@@ -63,9 +54,8 @@ describe("AWS rehearsal: the stream pause against Amazon S3", () => {
         `the AWS stream pause rehearsal cannot run: ${litestream.reason}. Install with: node scripts/setup-litestream.mjs`,
       );
     }
-    const folder = await mkdtemp(join(tmpdir(), "waitron-aws-stream-pause-"));
-    scratch = folder;
     await rehearsal.run(async (ctx) => {
+      const folder = await ctx.scratch("pause");
       const record = (event: object) => ctx.record({ scenario: "pause", ...event });
       const bucket = ctx.bucketConfig(ctx.prefix("pause"));
       const allow = allowOwnedBucket(ctx.bucket, ctx.region);

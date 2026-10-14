@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -251,6 +251,8 @@ export interface AwsRehearsal {
   region: string;
   signal: AbortSignal;
   prefix(label: string): string;
+  /** Makes and returns `<scratchBase>/waitron-aws-rehearsal-<runId>/<label>/`; teardown removes the root. */
+  scratch(label: string): Promise<string>;
   bucketConfig(prefix: string): BucketConfig;
   reserveUpload(bytes: number, role: string): void;
   reserveObjects(count: number): void;
@@ -291,6 +293,9 @@ export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   print(line: string): void;
   /** The S3 APIs the scenario's own clients send; a run without this list is refused. */
   apis?: readonly string[];
+  /** The folder a run's scratch root is made in. */
+  scratchBase: string;
+  removeDir(path: string): Promise<void>;
 }
 
 export interface TeardownTarget {
@@ -781,6 +786,8 @@ function defaultDeps(env: Env): AwsRehearsalDeps {
     settleMs: AWS_REHEARSAL_SETTLE_MS,
     teardownMs: AWS_REHEARSAL_LIMITS.teardownMs,
     print: (line) => process.stdout.write(`${line}\n`),
+    scratchBase: tmpdir(),
+    removeDir: (path) => rm(path, { recursive: true, force: true }),
   };
 }
 
@@ -1195,6 +1202,10 @@ async function runOwned<T>(
   );
   const issued = new Set<string>();
   const labels = new Set<string>();
+  const scratchRoot = join(deps.scratchBase, `waitron-aws-rehearsal-${runId}`);
+  const scratchLabels = new Set<string>();
+  const scratchMaking: Promise<unknown>[] = [];
+  let scratchMade = false;
   const requests = runScope(
     createRequestPlan({ bucket, apis, prefixes: () => issued }),
     record,
@@ -1213,6 +1224,19 @@ async function runOwned<T>(
       const prefix = `rehearsal-${runId}/${label}/`;
       issued.add(prefix);
       return prefix;
+    },
+    async scratch(label) {
+      refuseOnceTearingDown();
+      if (!LABEL.test(label) || scratchLabels.has(label)) {
+        throw new AwsRehearsalRefused("label-refused", "a scratch label is new and a token");
+      }
+      scratchLabels.add(label);
+      scratchMade = true;
+      const folder = join(scratchRoot, label);
+      const making = mkdir(scratchRoot, { recursive: true }).then(() => mkdir(folder));
+      scratchMaking.push(making.catch(() => undefined));
+      await making;
+      return folder;
     },
     bucketConfig(prefix) {
       if (!issued.has(prefix)) {
@@ -1385,6 +1409,16 @@ async function runOwned<T>(
       for (const entry of teardown.entries) contained.teardown(entry);
     }
   });
+  tearingDown = true;
+  // A run that never owned a bucket records this step only if it made scratch.
+  const scratchEntries: TeardownEntry[] = [];
+  if (created?.state === "owned" || scratchMade) {
+    await Promise.all(scratchMaking);
+    const entry = await removeScratch(scratchMade, scratchRoot, deps.removeDir);
+    contained.teardown(entry);
+    scratchEntries.push(entry);
+  }
+  const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed");
   const ownership: CreateOutcome = created ?? {
     state: "unowned-candidate",
     bucket: null,
@@ -1396,7 +1430,7 @@ async function runOwned<T>(
     profile,
     contained,
   );
-  const failed = failedSteps(teardown?.entries ?? []);
+  const failed = failedSteps([...(teardown?.entries ?? []), ...scratchEntries]);
   let receiptFailure: AwsRehearsalFailed | undefined;
   requests.finished();
   try {
@@ -1428,6 +1462,7 @@ async function runOwned<T>(
       ? undefined
       : new AwsRehearsalFailed(
           `teardown failed at ${failed}` +
+            (scratchLeft ? `; scratch folder not removed: ${scratchRoot}` : "") +
             (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
         );
   const problems = [
@@ -1465,6 +1500,20 @@ async function runOwned<T>(
     );
   }
   return result as T;
+}
+
+async function removeScratch(
+  made: boolean,
+  root: string,
+  removeDir: AwsRehearsalDeps["removeDir"],
+): Promise<TeardownEntry> {
+  if (!made) return { step: "remove-scratch", outcome: "skipped" };
+  try {
+    await removeDir(root);
+    return { step: "remove-scratch", outcome: "ok" };
+  } catch (error) {
+    return failedEntry("remove-scratch", error);
+  }
 }
 
 /**
@@ -1623,6 +1672,7 @@ export async function cleanupFromReceipt(
   const log = createReceiptLog(
     receiptHeader(deps, runId, region, { teardownMs: deps.teardownMs }),
     profile,
+    "cleanup",
   );
   const contained = containedLog(log);
   const { record } = contained;
