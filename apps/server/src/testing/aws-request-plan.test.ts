@@ -272,3 +272,47 @@ describe("planRefusal — a scenario", () => {
     expect(planRefusal(plan(), "scenario", "GetBucketLocation", { Bucket: BUCKET })).toBeNull();
   });
 });
+
+describe("planRefusal — a scenario's dot path segments", () => {
+  const DOT_KEYS = [
+    `${PREFIX}../x`,
+    `${PREFIX}./x`,
+    `${PREFIX}a/../b`,
+    `${PREFIX}a/..`,
+    `${PREFIX}.`,
+  ];
+
+  it.each(DOT_KEYS)("refuses the key %s, which starts under an issued prefix", (key) => {
+    const detail = refusedDetail(
+      planRefusal(plan(), "scenario", "PutObject", { Bucket: BUCKET, Key: key }),
+    );
+    expect(detail).toBe("no key in a scenario's PutObject may have a . or .. path segment");
+    expect(detail).not.toContain(key);
+  });
+
+  it("refuses a DeleteObjects list with one dot-segment key", () => {
+    const detail = planRefusal(plan(), "scenario", "DeleteObjects", {
+      Bucket: BUCKET,
+      Delete: { Objects: [{ Key: `${PREFIX}a` }, { Key: `${PREFIX}../b` }] },
+    });
+    expect(detail).toBe("no key in a scenario's DeleteObjects may have a . or .. path segment");
+  });
+
+  it.each(["ListObjectsV2", "ListMultipartUploads"])(
+    "refuses a %s prefix with a dot segment",
+    (api) => {
+      const detail = planRefusal(plan(), "scenario", api, {
+        Bucket: BUCKET,
+        Prefix: `${PREFIX}../`,
+      });
+      expect(detail).toBe(`no prefix in a scenario's ${api} may have a . or .. path segment`);
+    },
+  );
+
+  it.each([`${PREFIX}a..b`, `${PREFIX}.hidden`, `${PREFIX}...`, `${PREFIX}a./b`])(
+    "allows the key %s, whose dots are not a whole segment",
+    (key) => {
+      expect(planRefusal(plan(), "scenario", "PutObject", { Bucket: BUCKET, Key: key })).toBeNull();
+    },
+  );
+});

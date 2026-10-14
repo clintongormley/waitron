@@ -55,6 +55,10 @@ export interface RequestPlanInput {
 const LISTING_APIS: ReadonlySet<string> = new Set(["ListObjectsV2", "ListMultipartUploads"]);
 const UNKEYED_APIS: ReadonlySet<string> = new Set([...LISTING_APIS, "GetBucketLocation"]);
 const MARKER_ONLY_APIS: ReadonlySet<string> = new Set(["PutObject", "GetObject"]);
+// Refused whatever a server makes of them: the SDK sends `.` and `..` segments as written.
+const DOT_SEGMENT = /(?:^|\/)\.{1,2}(?:\/|$)/;
+const hasDotSegment = (value: unknown): boolean =>
+  typeof value === "string" && DOT_SEGMENT.test(value);
 
 export function createRequestPlan(input: RequestPlanInput): RequestPlan {
   for (const api of input.apis) {
@@ -114,12 +118,18 @@ export function planRefusal(
     typeof value === "string" && issued.some((prefix) => value.startsWith(prefix));
 
   if (LISTING_APIS.has(api)) {
+    if (hasDotSegment(input.Prefix)) {
+      return `no prefix in a scenario's ${api} may have a . or .. path segment`;
+    }
     return underIssued(input.Prefix)
       ? null
       : `a scenario's ${api} must list under a prefix this run issued`;
   }
   if (UNKEYED_APIS.has(api)) return null;
   const keys = keysOf(api, input);
+  if (keys?.some(hasDotSegment) === true) {
+    return `no key in a scenario's ${api} may have a . or .. path segment`;
+  }
   if (keys === undefined || !keys.every(underIssued)) {
     return `every key in a scenario's ${api} must be under a prefix this run issued`;
   }
