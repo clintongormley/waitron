@@ -48,7 +48,7 @@ beforeEach(() =>
   }),
 );
 afterEach(() => {
-  for (const c of controllers.splice(0)) c.stop();
+  for (const c of controllers.splice(0)) c?.stop();
   vi.useRealTimers();
 });
 async function flush() {
