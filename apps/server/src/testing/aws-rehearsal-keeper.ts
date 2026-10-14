@@ -359,7 +359,8 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
             return { ownership: owned, remaining: NOTHING, unknown: null };
           }
           // No marker: a run killed between its create's answer and the marker's write.
-          if (read.error === undefined || nameOf(read.error) !== "NoSuchKey") {
+          const markerMissing = read.error !== undefined && nameOf(read.error) === "NoSuchKey";
+          if (!markerMissing) {
             let text: string | undefined;
             try {
               text = await read.output?.Body?.transformToString();
@@ -373,7 +374,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
           }
           const teardown = await teardownOwnedBucket(
             client,
-            { bucket, runId, uploads: journal.uploads, pids: [] },
+            { bucket, runId, uploads: journal.uploads, pids: [], markerMissing },
             {
               isAlive: deps.isAlive,
               kill: deps.kill,

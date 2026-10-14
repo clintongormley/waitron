@@ -20,6 +20,7 @@ import {
 import { journalFileName, type RehearsalJournal } from "./aws-rehearsal-journal.js";
 import { type KeeperDeps, keeperLogPath, runKeeper } from "./aws-rehearsal-keeper.js";
 import { type AwsReceipt, cleanupCommandFor } from "./aws-rehearsal-receipt.js";
+import { cleanupFromReceipt } from "./aws-rehearsal.js";
 import {
   currentRequestScope,
   installSendGate,
@@ -539,6 +540,34 @@ describe("runKeeper", () => {
         bucket: null,
         candidate: BUCKET,
       });
+    });
+
+    it("puts the marker back when it was never written and the bucket outlives teardown, so the cleanup command works", async () => {
+      await writeJournalFile(journal());
+      const failing = () => {
+        throw sdkError("InternalError", 500);
+      };
+      const fake = new FakeAdmin({
+        objects: [[`rehearsal-${RUN_ID}/loop/a`, "x"]],
+        answers: { DeleteObjects: failing, DeleteBucket: failing },
+      });
+      const h = harness(fake);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.printed).toEqual([interruptedPath(), "left behind:", `bucket ${BUCKET}`]);
+      expect((await receipt()).cleanupCommand).toBe(
+        cleanupCommandFor("eu-north-1", interruptedPath()),
+      );
+      const after = new FakeAdmin({ objects: fake.objects });
+      const cleaned = await cleanupFromReceipt(interruptedPath(), {
+        env: profileEnv({ credentialsFile, configFile }),
+        createAdminClient: () => after,
+        print: () => {},
+      });
+      expect(cleaned.ok).toBe(true);
+      expect(after.names()).toContain("DeleteBucket");
+      expect(after.objects.size).toBe(0);
     });
 
     it("tears down when the marker was never written", async () => {

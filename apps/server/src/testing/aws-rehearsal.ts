@@ -345,6 +345,8 @@ export interface TeardownTarget {
   runId: string;
   uploads: readonly TrackedUpload[];
   pids: readonly number[];
+  /** The marker was never written; a bucket that survives teardown gets one, objects left or not. */
+  markerMissing?: boolean;
 }
 
 export interface TeardownResult {
@@ -680,6 +682,7 @@ async function deleteBucket(
   bucket: string,
   runId: string,
   objectsDeleted: boolean,
+  markerMissing: boolean,
 ): Promise<TeardownEntry> {
   // The nonce stays while any other object may remain: it is the proof the cleanup command reads.
   if (objectsDeleted) {
@@ -694,7 +697,7 @@ async function deleteBucket(
   if (result.error === undefined || nameOf(result.error) === "NoSuchBucket") {
     return { step: "delete-bucket", outcome: "ok" };
   }
-  if (objectsDeleted) {
+  if (objectsDeleted || markerMissing) {
     // The bucket outlived its marker; put the marker back so the cleanup command can prove ownership.
     const body = ownershipNonce(runId);
     await restoreNonce(
@@ -736,6 +739,7 @@ export async function teardownOwnedBucket(
       bucket,
       target.runId,
       objects.outcome === "ok",
+      target.markerMissing === true,
     ),
   );
   const clean = entries.every((entry) => entry.outcome !== "failed");
