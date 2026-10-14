@@ -117,9 +117,9 @@ interface LabelledOrder {
 /**
  * The table each order belongs to, keyed by order. A party bill names the tables
  * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
- * when that list is empty. Any other order names the shown name, as {@link partyTableLabels} reads it, of the
- * table of `locationId` it is delivered to, else the name kept when that table was let go, else its
- * own label; null for an unlabelled walk-up.
+ * when that list is empty. Any other order names the shown name, as {@link partyTableLabels} reads
+ * it, of the table of `locationId` it is delivered to, else the name kept when that table was let
+ * go, else its own label; null for an unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,

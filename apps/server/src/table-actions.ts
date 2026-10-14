@@ -116,10 +116,7 @@ export async function moveGuests(
   return { partyId, mainBillId, merged: false };
 }
 
-/**
- * Each of `held` other than `tableId` in `tableId`'s today's merge leaves it: only a party staying
- * on part of its merge breaks it up; a merge left whole stays, free.
- */
+/** Only a party staying on part of its merge breaks it up; a merge left whole stays, free. */
 async function leaveMergeOf(
   tx: Transaction,
   tableId: string,
