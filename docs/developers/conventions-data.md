@@ -1713,6 +1713,12 @@ parts it takes back in `catchUpPass`, Reset table, and Split tables… putting a
 A group's name goes with its row, however the group ends. A joined table's name goes when it is split
 down to one table or pushed into a group, which takes that name if it has none, the table pushed
 onto first (`writeMerge`). The room's print reads both columns, so a rename moves the revision.
+Bills, receipts, kitchen tickets and MOVED slips, the expo board, overdue orders and the floor's
+party name read a table's shown name — its group's today's name, else its own, else its saved
+name, a group's name once per party (`partyTableLabels` and `orderTableLabels`,
+`packages/db/src/party-table-labels.ts`). A bill taken to the counter or split off a party bill
+stores the shown name of that moment; an issued bill keeps the label it was issued with. The
+closing party's `table_names`, the orders list and its table filter keep saved names.
 
 Back to its saved place and Take off for today refuse a table split off (`table.split_off`, `refuseSplitOff`,
 `apps/server/src/floor-today-store.ts`).
