@@ -38,6 +38,231 @@ async function signOut(el: TillApp) {
 }
 
 describe("NFC throughout the till", () => {
+  it.each(["continue", "cancel"])(
+    "holds a tap while a named operator's profile loads, and respects %s",
+    async (action) => {
+      const identity = {
+        deviceId: "nfc-till",
+        name: "Terrace handheld",
+        formFactor: "handheld",
+        profileId: "counter",
+        approvedProfiles: [
+          { id: "counter", name: "Counter", formFactor: "handheld" },
+          { id: "terrace", name: "Terrace", formFactor: "handheld" },
+        ],
+      };
+      const { el, api, requests } = await mountEquipmentApp({
+        getDeviceIdentity: vi.fn(async () => identity),
+        switchDeviceProfile: vi.fn(async () => {
+          identity.profileId = "terrace";
+          return { activeProfileId: "terrace" };
+        }),
+      });
+      await signIn(el);
+      const offers = await api.listDefaultZoneOffers();
+      let release!: () => void;
+      vi.mocked(api.listDefaultZoneOffers).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(offers);
+          }),
+      );
+      emit(el.shadowRoot!.querySelector("till-tab-shell")!, "open-profile");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
+      );
+      emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+        profileId: "terrace",
+      });
+      await vi.waitFor(() => expect(release).toBeDefined());
+      (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+      await el.updateComplete;
+      expect(requests).toEqual([]);
+      if (action === "cancel") await signOut(el);
+      release();
+      if (action === "continue") await vi.waitFor(() => expect(requests).toHaveLength(1));
+      else {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await signIn(el);
+        await el.updateComplete;
+        expect(requests).toEqual([]);
+        (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+        await vi.waitFor(() => expect(requests).toHaveLength(1));
+      }
+    },
+  );
+  it("a failed sign-in equipment read keeps the cached list but displays the server's binding refusal", async () => {
+    const calls: unknown[] = [];
+    const client = new TillApi("", async (_url, init) => {
+      calls.push(JSON.parse(init!.body as string));
+      return new Response(
+        JSON.stringify({
+          error: { code: "device.binding_invalid", params: { field: "cardReaderId" } },
+        }),
+        { status: 400 },
+      );
+    });
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(NFC_EQUIPMENT)
+      .mockRejectedValue(new TypeError("offline"));
+    const { el } = await mountEquipmentApp({
+      getDeviceEquipment,
+      setDeviceEquipment: client.setDeviceEquipment.bind(client),
+    });
+    await signIn(el);
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalledTimes(1));
+    await signOut(el);
+    (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await signIn(el);
+    await vi.waitFor(() => expect(notice(el)?.tone).toBe("error"));
+    expect(notice(el)?.message).toBe(codeMessage("device.binding_invalid"));
+    expect(calls).toEqual([{ kind: "reader", selection: { id: READER_ID }, via: "scan" }]);
+  });
+  it.each(["success", "lost answer"])(
+    "a late pickup %s refreshes the new operator's displayed reader without an old notice",
+    async (outcome) => {
+      let stored = NFC_EQUIPMENT;
+      let finish!: () => void;
+      const getDeviceEquipment = vi.fn(async () => stored);
+      const setDeviceEquipment = vi.fn(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = () => {
+              stored = {
+                roles: NFC_EQUIPMENT.roles.map((role) =>
+                  role.role === "card_terminal"
+                    ? {
+                        ...role,
+                        selection: "item",
+                        chosenId: READER_ID,
+                        chosen: role.choices[0]!,
+                        resolved: {
+                          id: READER_ID,
+                          name: "Portable reader",
+                          available: true,
+                          provider: "stripe",
+                        },
+                      }
+                    : role,
+                ),
+              };
+              if (outcome === "success") resolve(stored);
+              else reject(new TypeError("lost answer"));
+            };
+          }),
+      );
+      const { el } = await mountEquipmentApp({ getDeviceEquipment, setDeviceEquipment });
+      await signIn(el);
+      (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(1));
+      (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
+      await signOut(el);
+      await signIn(el);
+      const counter = () =>
+        el.shadowRoot!.querySelector<
+          HTMLElement & { activeReaders: { id: string; name: string; provider: string }[] }
+        >("till-counter-screen")!;
+      expect(counter().activeReaders).toEqual([]);
+      finish();
+      await vi.waitFor(() =>
+        expect(counter().activeReaders).toEqual([
+          { id: READER_ID, name: "Portable reader", provider: "stripe_terminal" },
+        ]),
+      );
+      expect(notice(el)?.open).toBe(false);
+      expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("does not send a prior operator's queued tap after another sign-in", async () => {
+    let finish!: (value: typeof NFC_EQUIPMENT) => void;
+    const setDeviceEquipment = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue(NFC_EQUIPMENT);
+    const { el } = await mountEquipmentApp({ setDeviceEquipment });
+    await signIn(el);
+    const nfc = await reader();
+    nfc.read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(1));
+    nfc.read(`waitron-equipment:printer:${PRINTER_ID}`);
+    await signOut(el);
+    await signIn(el);
+    finish(NFC_EQUIPMENT);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(notice(el)?.open).toBe(false);
+    nfc.read(`waitron-equipment:printer:${PRINTER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+  });
+  it("a refusal arriving after logout shows no old operator notice", async () => {
+    let refuse!: (error: unknown) => void;
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountEquipmentApp({ setDeviceEquipment });
+    await signIn(el);
+    (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(1));
+    await signOut(el);
+    refuse({ code: "reader.payment_in_progress", status: 409 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(notice(el)?.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
+  });
+  it("granting NFC in the dialog ends with one live reader and one selection per tap", async () => {
+    const permission = installNfc("prompt");
+    const { el, requests } = await mountEquipmentApp();
+    await signIn(el);
+    await openEquipment(el);
+    const dialog = el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog")!;
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.querySelector("[data-equipment-nfc-allow]")).not.toBeNull(),
+    );
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-equipment-nfc-allow]")!.click();
+    await reader();
+    Object.assign(permission, { state: "granted" });
+    permission.dispatchEvent(new Event("change"));
+    await Promise.resolve();
+    const live = FakeNdefReader.instances.filter((nfc) => !nfc.signal!.aborted);
+    for (const nfc of live) nfc.read(`waitron-equipment:reader:${READER_ID}`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect({ live: live.length, requests: requests.length }).toEqual({ live: 1, requests: 1 });
+  });
+  it("an identical pickup gives a fresh notice countdown", async () => {
+    const setDeviceEquipment = vi.fn().mockResolvedValue(NFC_EQUIPMENT);
+    const { el } = await mountEquipmentApp({ setDeviceEquipment });
+    await signIn(el);
+    const nfc = await reader();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      nfc.read(`waitron-equipment:reader:${READER_ID}`);
+      await vi.waitFor(() => expect(notice(el)?.open).toBe(true));
+      vi.advanceTimersByTime(4000);
+      nfc.read(`waitron-equipment:reader:${READER_ID}`);
+      await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2));
+      await el.updateComplete;
+      await notice(el)!.updateComplete;
+      vi.advanceTimersByTime(4000);
+      await el.updateComplete;
+      await notice(el)!.updateComplete;
+      expect(notice(el)?.open).toBe(true);
+      expect(notice(el)?.message).toBe("Picked up Portable reader");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("counts a valid equipment tap as activity, while passive permission updates do not", async () => {
     const permission = installNfc();
     const { el, requests } = await mountEquipmentApp();

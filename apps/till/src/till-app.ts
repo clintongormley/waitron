@@ -2516,6 +2516,11 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
+  override updated(changed: PropertyValues): void {
+    if (changed.has("nfcNotice") && this.nfcNotice !== null)
+      this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
+  }
+
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("equipmentOpen")) this.#syncEquipmentNfc();
     if (
@@ -5384,14 +5389,18 @@ export class TillApp extends LitElement {
       (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
     if (!current()) {
       this.#equipmentWaiting--;
+      void this.#rereadIfStale();
       return;
     }
     const reads = this.#equipmentReads;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const stored = await this.api.setDeviceEquipment(change, { signal: limit.signal });
-      if (!current()) return;
       this.#equipmentChanged++;
+      if (!current()) {
+        this.#equipmentStale = true;
+        return;
+      }
       if (opening === this.#equipmentOpenings) this.equipmentError = null;
       if (reads === this.#equipmentReads) {
         this.#equipmentStale = false;
@@ -5405,7 +5414,10 @@ export class TillApp extends LitElement {
           tone: "info",
         };
     } catch (error) {
-      if (!current()) return;
+      if (!current()) {
+        this.#equipmentStale = true;
+        return;
+      }
       const { code, field, status } = (error ?? {}) as {
         code?: unknown;
         field?: unknown;
@@ -5437,9 +5449,9 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
       this.#equipmentWaiting--;
+      // The device can keep a choice after its operator leaves; refresh without their notice.
+      void this.#rereadIfStale();
     }
-    // Not awaited: a read with no answer must not hold back the next choice.
-    void this.#rereadIfStale();
   }
 
   /** The picker is the server's list of authorizers; the client holds no policy or role knowledge. */
