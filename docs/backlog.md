@@ -3102,7 +3102,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Ruled
-  sections, a large TOTAL (ask the asesor first), one row per item on a full invoice, the registered
+  sections, a large TOTAL, one row per item on a full invoice, the registered
   address once or labelled, "× 2" for quantities, VAT rates like "10%" and "17,5%", guests and per
   person, and an optional drink/food subtotal. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/)

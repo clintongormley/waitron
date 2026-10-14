@@ -404,10 +404,14 @@ just a green typecheck.
      - A ruled line between every section.
      - The business block one fact per line, with the trading name in bold.
      - Table, order and time on one line, and the number labelled "Factura simplificada".
-     - TOTAL drawn double size straight after the items, then the VAT, then the payment. **Ask the
-       asesor before building the large TOTAL:** the same §3 asks for the caption and the
-       VERI\*FACTU line in a size no smaller than the rest of the invoice's data (paraphrased in
-       `docs/compliance/verifactu-findings.md`, beside the QR-position quote).
+     - TOTAL drawn double size straight after the items, then the VAT, then the payment. No asesor
+       question needed (owner, 2026-10-14): Orden HAC/1177/2024 art. 20.1.b asks for the
+       VERI\*FACTU phrase in «un tipo de letra y tamaño bien visibles, similares a los del resto de
+       datos de la factura» (quoted from the BOE in
+       `docs/compliance/regional-language-rules.md`), and with only the TOTAL enlarged the rest of
+       the data keeps the caption's size. The same call as the till screen's larger TOTAL on
+       2026-10-01 (`docs/compliance/verifactu-findings.md`, C115). The VERI\*FACTU line may be
+       printed in bold for margin.
      - With one VAT rate, one line «IVA 10% incluido». Art. 7.1.f asks for the rate only, and for the
        base of each rate only when there are several, which keep their Base lines.
   2. **The full invoice.**
