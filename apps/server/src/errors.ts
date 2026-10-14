@@ -214,8 +214,8 @@ declare module "@waitron/shared" {
      */
     "deployment.demo_data_refused": { environment: string };
     /**
-     * The development custodian was asked to sign an allocation on a production host; refused
-     * before any key is made. `environment` is always `production`, and not a secret.
+     * The development custodian was asked to make a key or sign an allocation on a production
+     * host; refused before either happens. `environment` is always `production`, and not a secret.
      */
     "deployment.development_custodian_refused": { environment: string };
     /**
