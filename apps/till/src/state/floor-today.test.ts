@@ -1098,19 +1098,46 @@ describe("today's names on a drop and a group split", () => {
     });
   });
 
-  it("names a group split by its name for today and the guests' tables by their shown names", () => {
-    const p = party("p", ["c3", "c4", "c5"]);
-    const seated = (id: string, label: string, x: number, name: string | null) => ({
-      ...garcia(id, label, x, { name }),
-      ...seatedBy(p),
+  describe("a group split by its name for today", () => {
+    const seatedAt = (...ids: string[]) => {
+      const p = party("p", ids);
+      return (id: string, label: string, x: number, name: string | null = null) => {
+        const each = garcia(id, label, x, { name });
+        return ids.includes(id) ? { ...each, ...seatedBy(p) } : each;
+      };
+    };
+
+    it("is headed with the group's name, and guests kept in the group while two or more tables stay move to its name once", () => {
+      const seated = seatedAt("c3", "c4", "c5");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+      ];
+      const split = groupSplitOf(zone[0]!, zone)!;
+      expect(split.name).toBe("García birthday");
+      expect(split.guestsMoveTo(["c3"])).toEqual(["García birthday"]);
     });
-    const zone = [
-      seated("c3", "Counter 3", 0, null),
-      seated("c4", "Counter 4", 4, "Window"),
-      seated("c5", "Counter 5", 8, null),
-    ];
-    const split = groupSplitOf(zone[0]!, zone)!;
-    expect(split.name).toBe("García birthday");
-    expect(split.guestsMoveTo(["c3"])).toEqual(["Counter 5+Window"]);
+
+    it("names the group once for guests keeping one of its tables while others stay", () => {
+      const seated = seatedAt("c3", "c4");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+        seated("bar", "Bar", 12),
+      ];
+      expect(groupSplitOf(zone[0]!, zone)!.guestsMoveTo(["c3"])).toEqual(["García birthday"]);
+    });
+
+    it("names the one table that stays by its own shown name, the group ending", () => {
+      const seated = seatedAt("c3", "c4");
+      const zone = [
+        seated("c3", "Counter 3", 0),
+        seated("c4", "Counter 4", 4, "Window"),
+        seated("c5", "Counter 5", 8),
+      ];
+      expect(groupSplitOf(zone[0]!, zone)!.guestsMoveTo(["c3", "c5"])).toEqual(["Window"]);
+    });
   });
 });

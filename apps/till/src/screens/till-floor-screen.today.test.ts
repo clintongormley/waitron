@@ -13,7 +13,7 @@ import type {
   TillApi,
 } from "../api/client.js";
 import type { TillTableDetailsSheet } from "../widgets/table-details-sheet.js";
-import { nextFloorMoment, shownName } from "../state/floor-today.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -790,6 +790,22 @@ describe("till-floor-screen: today's names", () => {
     ]);
   });
 
+  it("Join with… lists its targets in the order of the names they show", async () => {
+    const el = await mount(
+      [counter5(), bar({ name: "Zinc" }), { ...planned("t6", 30), label: "Counter 6" }],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    expect(dialog.targets.map((table) => [table.id, table.label])).toEqual([
+      ["t6", "Counter 6"],
+      ["tb", "Zinc"],
+    ]);
+  });
+
   const splitWindow = (el: TillFloorScreen) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-split-joined-dialog"]>(
       "till-split-joined-dialog",
@@ -802,7 +818,12 @@ describe("till-floor-screen: today's names", () => {
     );
     await press(el, "t5", "split-off");
     expect(splitWindow(el).name).toBe("García birthday");
-    expect(splitWindow(el).parts.map(shownName)).toEqual(["Window", "Counter 5"]);
+    await splitWindow(el).updateComplete;
+    const options =
+      splitWindow(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "[name=split-off]",
+      )!.options;
+    expect(options.map((option) => option.label)).toEqual(["Window", "Counter 5"]);
   });
 
   it("Split tables… on a renamed joined table is headed with its name for today", async () => {

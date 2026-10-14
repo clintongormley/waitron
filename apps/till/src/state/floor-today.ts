@@ -421,12 +421,19 @@ export function groupSplitOf(
       party.tableIds.filter((id) => !ticked.includes(id)),
     );
   };
-  const guestsMoveTo = (ticked: readonly string[]): string[] =>
-    keptBy(ticked).flatMap((kept) => {
+  /** As the party will read its tables: the group keeps its row and name only while two or more
+   * of its tables stay (`leaveAsGroup`), and a named group is read once. */
+  const guestsMoveTo = (ticked: readonly string[]): string[] => {
+    const groupStays = members.filter((each) => !ticked.includes(each.id)).length >= 2;
+    return keptBy(ticked).flatMap((kept) => {
       const tables = zoneTables.filter((each) => kept.includes(each.id));
       if (kept.length === 0 || tables.length !== kept.length) return [];
-      return [mergeLabel(tables.map(shownName).sort(inNumberOrder))];
+      const names = tables.map((each) =>
+        groupStays || !members.includes(each) ? shownUnder(each) : shownName(each),
+      );
+      return [mergeLabel([...new Set(names)].sort(inNumberOrder))];
     });
+  };
   return {
     members,
     name: groupName(members),

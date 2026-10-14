@@ -973,7 +973,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * One per group of the zone on today's plan, a party linked across groups counting once, its first member
-   * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with.
+   * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with,
+   * sorted by those names.
    */
   #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
     const zoneTables = this.#zone.visible;
@@ -990,7 +991,7 @@ export class TillFloorScreen extends LitElement {
       const label = linkId === null ? this.#mergeName(each) : this.#linkName(linkId);
       targets.push({ ...each, label: label ?? shownName(each) });
     }
-    return targets;
+    return targets.sort((a, b) => inNumberOrder(a.label, b.label));
   }
 
   /** The dialog is drawn only while `#joining` finds its table, so the pick finds it too. */
