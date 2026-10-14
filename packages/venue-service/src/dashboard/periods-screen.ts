@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
+import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import type { OpeningHoursApi, PaintedInRow, PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
@@ -22,8 +23,6 @@ type Period = Department["periods"][number];
 export type PeriodRow =
   | ({ kind: "department" } & Department)
   | ({ kind: "period"; departmentId: string; departmentName: string } & Period);
-
-const at = encodeURIComponent;
 
 type Deletion = {
   period: Period;
@@ -210,14 +209,12 @@ export class PeriodsScreen extends LitElement {
         (season) =>
           html`<a
             part=${`chip tint-${tints.get(season.id) ?? "1"}`}
-            href=${`/manage/opening-hours/view/season/season/${at(season.id)}/department/${at(row.departmentId)}`}
+            href=${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}
             >${season.name}</a
           >`,
       )}${painted.specialDays.map(
         (day) =>
-          html`<a
-            part="chip special-day"
-            href=${`/manage/opening-hours/view/special-day/special-day/${at(day.id)}`}
+          html`<a part="chip special-day" href=${specialDayPainterPath({ specialDayId: day.id })}
             >${day.name}</a
           >`,
       )}</span
@@ -228,9 +225,7 @@ export class PeriodsScreen extends LitElement {
     return html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })} align="end"
       ><wt-button variant="secondary" data-test="edit-period" @click=${() => this.edit(row)}
         >${t("menu.edit")}</wt-button
-      ><a
-        data-test="open-hours"
-        href=${`/manage/opening-hours/view/season/department/${at(row.departmentId)}`}
+      ><a data-test="open-hours" href=${seasonPainterPath({ departmentId: row.departmentId })}
         >${t("period.open_hours")}</a
       ><wt-button variant="danger" data-test="delete-period" @click=${() => this.askDelete(row)}
         >${t("menu.delete")}</wt-button

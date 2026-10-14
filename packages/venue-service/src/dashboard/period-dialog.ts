@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import { format } from "./hours-view.js";
+import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
@@ -411,17 +412,13 @@ export class PeriodDialog extends LitElement {
               ${painted.seasons.map((season) =>
                 chip(
                   season.name,
-                  `/manage/opening-hours/view/season/season/${encodeURIComponent(season.id)}/department/${encodeURIComponent(this.departmentId)}`,
+                  seasonPainterPath({ seasonId: season.id, departmentId: this.departmentId }),
                   false,
                   tints.get(season.id),
                 ),
               )}
               ${painted.specialDays.map((day) =>
-                chip(
-                  day.name,
-                  `/manage/opening-hours/view/special-day/special-day/${encodeURIComponent(day.id)}`,
-                  true,
-                ),
+                chip(day.name, specialDayPainterPath({ specialDayId: day.id }), true),
               )}
             </div>`
           : html`<span data-test="not-painted">${t("period.not_painted")}</span>`

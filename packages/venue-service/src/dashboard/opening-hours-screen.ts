@@ -21,6 +21,7 @@ import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
 import type { OrdinaryDateOpen } from "./opening-hours-month.js";
 import { seasonTints } from "./season-tint.js";
+import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import "./special-day-painter.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
@@ -561,13 +562,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private painterUrl({ seasonId, departmentId, zoneId }: PainterAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    const parts = [
-      ["view", "season"],
-      ["season", seasonId],
-      ["department", departmentId],
-      ["zone", zoneId],
-    ].filter(([, value]) => value);
-    url.pathname = `/manage/opening-hours/${parts.map(([key, value]) => `${key}/${encodeURIComponent(value!)}`).join("/")}`;
+    url.pathname = seasonPainterPath({ seasonId, departmentId, zoneId });
     url.searchParams.delete("station");
     return url;
   }
@@ -590,12 +585,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private specialUrl({ specialDayId, date }: SpecialAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    const parts = [
-      ["view", "special-day"],
-      ["special-day", specialDayId],
-      ["date", date],
-    ].filter(([, value]) => value);
-    url.pathname = `/manage/opening-hours/${parts.map(([key, value]) => `${key}/${encodeURIComponent(value!)}`).join("/")}`;
+    url.pathname = specialDayPainterPath({ specialDayId, date });
     url.searchParams.delete("station");
     return url;
   }
