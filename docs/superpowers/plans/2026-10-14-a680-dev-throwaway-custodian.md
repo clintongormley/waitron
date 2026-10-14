@@ -1,4 +1,510 @@
-# A680: a throwaway preproduction custodian for development and test setups
+# A680: a throwaway preproduction allocation for Demo, Preparation and development setups
+
+> **Status:** Revision 2, written 2026-10-14 after the owner's ruling below. It SUPERSEDES
+> Revision 1, which is kept unchanged at the end of this file as the record of what was built in
+> commits `4aec9f84e..4dd990b93`. Its reproduction section is still the reproduction for this item.
+>
+> **For the implementer:** run each task with `superpowers:test-driven-development` (failing test
+> first, watch it fail, then the smallest change). Dispatch each task as `subagent_type:
+> "implementer"`. Review path: FULL — this changes how a fiscal identity reaches a venue, and adds
+> a seat to a cross-package contract. Work only in
+> `/Users/clintongormley/workspace/worktrees/waitron-fix-a680-dev-throwaway-custodian` (branch
+> `fix/a680-dev-throwaway-custodian`). Run straight through; the owner wants this landed before
+> morning.
+
+**Goal:** a box installed from `main` and set up through the real wizard in **Demo** or
+**Preparation** reaches a working Veri\*Factu venue with no custodian kit, by making its own
+throwaway allocation. Every production path refuses it. The development scripts and the
+onboarding dev stack use the same path.
+
+## Owner decisions
+
+The ruling, verbatim from `~/waitron-campaign-b/questions.md` (watcher entries of 2026-10-14):
+
+> **~22:00 — OWNER RULING for A680: Demo and Preparation on a SHIPPED box need no kit; the
+> throwaway signer ships, refused in production.** The owner, in the watcher session: "for demos
+> we shouldn't need a kit at all. for preparation, maybe the same?" The watcher pointed out that
+> Preparation is preproduction too (`apps/server/src/setup-api.ts:496`), and the owner confirmed:
+> **"y"**.
+> - **A680 widens:** the throwaway preproduction allocation is no longer development-only. A real
+>   box set up from the wizard in **Demo or Preparation** makes its own throwaway allocation,
+>   clearly marked as throwaway, and the box refuses it whenever the environment is `production`
+>   (keep your production refusal and its deletion control; it becomes the main guard). The
+>   development scripts and onboarding stack keep using the same path.
+> - **Drop Task 7's "the signer never ships" bundle check.** Replace it with a check that the
+>   shipped path refuses in production: `WAITRON_ENV=production`, and `live` mode on a non-dev
+>   box. Update the plan (docs-only push), with this ruling in its owner-decisions section, and
+>   note the changed task in the PR.
+> - **Lane E's A679 builds on your seam** for Demo and Preparation, and covers only Live (the real
+>   custodian kit or a signed file). […] Your plan's note that "the owner's box loader against a
+>   shipped box waits for A679" — re-check it against this ruling.
+> - Review path stays FULL.
+>
+> **~22:05 —** "i only need the demo to be fixed by morning". […]
+>
+> **~22:08 — OWNER: Preparation is needed by morning too — both, on the owner's own box.** The
+> owner: "so i can continue testing the latest code on my demo/preparation box". […] **Demo AND
+> Preparation must both work by morning**, on a shipped box installed from the latest `main`, set
+> up through the real wizard, with no kit. Test both modes on a real box-shaped install in the PR:
+> the image, or the closest you can run, with the commands and what you saw. In the PR, say exactly
+> what the owner must do on the box to take the fix: install the landed commit, then run the
+> wizard, or the box loader, in Demo or Preparation.
+
+Earlier decisions this revision keeps: the demo seed keeps its own fictional-identity refusal
+(2026-10-14 "W41s-4 … demo decision", answer A); the new code imports nothing from a `test/` or
+`testing/` directory ("do not use a test helper as the release implementation").
+
+**The PR must say:** Revision 1's Task 7 ("the signer never ships") was dropped by the owner's
+ruling and replaced by Task R4's production refusals; the onboarding stack's dev-server signer,
+the `dev:custodian` command and `dev:onboard`'s custodian settings were removed (Task R6).
+
+## Decisions, with reasons
+
+### D1. Where the shipped signer lives: in the regime package, reached through a new seat
+
+`apps/server/src` may not import `@waitron/fiscal-verifactu`: `scripts/module-seams.test.ts`
+("apps/server imports the Spanish regime only from the deferred runtime pass") holds an EMPTY
+allowlist that CLAUDE.md says to shrink, never grow. Generic code reaches a regime only through the
+module descriptor's seats (CLAUDE.md §3). So:
+
+- The signer moves (with `git mv`, to keep its history) from
+  `apps/server/scripts/dev-custodian/sign.ts` to
+  **`packages/fiscal-verifactu/src/throwaway-allocation.ts`**, a NEW file. No existing file of the
+  real custodian path, the allocation validation or any fiscal assertion changes. Existing
+  fiscal-verifactu files touched: `errors.ts` (one code added) and `index.ts` (one export line).
+- A new optional seat, **`ModuleProvisioning.throwawayAllocation`**, is declared in
+  `packages/module/src/provisioning.ts` (a file lane E's branch does not edit) and wired for the
+  fiscal module in `packages/composition/src/modules.ts`
+  (`provisioning: { ...FISCAL_PROVISIONING, throwawayAllocation: FISCAL_THROWAWAY_ALLOCATION }`).
+- The generic step that turns a venue plan into apply inputs lives in
+  **`packages/provisioning/src/throwaway-allocation.ts`** (new), naming no regime: it finds the one
+  enabled module offering the seat. `provisionVenue` and the development scripts both call it.
+- Coverage: `packages/fiscal-verifactu` and `packages/provisioning` measure `src/**/*.ts` at
+  98/98/98/95 (`packages/fiscal-verifactu/vitest.config.ts:19,27`); both new files must be covered
+  by their own package's tests, with no exclude. No Stryker config exists for either package
+  (`ls packages/fiscal-verifactu/stryker*`: no match), so no mutation floor applies.
+
+### D2. Where the server decides, and why Live is not weakened
+
+**The seam, by name and shape** (this is the text to give lane E):
+
+```ts
+// packages/module/src/provisioning.ts
+export interface ThrowawayAllocation {
+  /** Refuses (sif.throwaway_allocation_refused) when any environment given is "production". */
+  prepare(request: {
+    readonly environments: readonly ("production" | "preproduction")[];
+    readonly taxpayerNif: string;
+    readonly bases: readonly { readonly code: string; readonly purpose: string }[];
+    readonly nodeId: string;
+    readonly administratorId: string;
+  }): {
+    readonly eventId: string;
+    readonly sourceId: string;
+    readonly input: unknown;
+    readonly operations: ModuleOperationPreparation;
+  };
+}
+export interface ModuleProvisioning { /* … */ readonly throwawayAllocation?: ThrowawayAllocation; }
+
+// apps/server/src/provision.ts
+export interface ProvisionRequest {
+  /* … */
+  /** Set ONLY by the setup route, for mode "demo" or "prepare" with no initialOperations. */
+  initialAllocation?: { readonly kind: "throwaway"; readonly hostEnvironment: DeploymentEnvironment };
+}
+```
+
+How it flows:
+
+1. **The setup route decides.** `parseProvisionPayload` (`apps/server/src/setup-api.ts:459`) sets
+   `request.initialAllocation = { kind: "throwaway", hostEnvironment: deps.environment }` exactly
+   when `mode` is `"demo"` or `"prepare"` AND the body carries no `initialOperations`. It never sets
+   it for `"live"`, on any box. `deps.environment` is the box's own `config.environment`
+   (`apps/server/src/boot.ts:928`).
+2. **`provisionVenue` acts** (`apps/server/src/provision.ts`). If the request carries both
+   `initialAllocation` and `initialOperations` it refuses `setup.request_invalid`
+   (`field: "initialOperations"`). After the foreign-taxpayer and already-provisioned checks and
+   BEFORE `stampDeployment` (so a refusal writes nothing), it calls the provisioning helper with
+   `environments: [hostEnvironment, request.environment]`. The helper returns
+   `initialNodeId`, `initialAdministratorId`, `moduleInputs` and the module list with that one
+   module's `operations` replaced by the seat's in-memory evidence source, for this call only.
+   If no enabled module offers the seat (a territory whose fiscal slot is `fiscal-none`), the
+   helper returns nothing and the venue is provisioned as today.
+3. **The seat signs** (`FISCAL_THROWAWAY_ALLOCATION.prepare`): its first statement refuses when
+   any environment given is `"production"`; then it makes a fresh ed25519 key in memory, signs a
+   preproduction allocation for that taxpayer and those bases, and returns the input plus a
+   `createAllocationPreparation` over that evidence — the swap the demo seed already uses
+   (`apps/server/scripts/demo-seed/allocation.ts:93-133` on main). The key is never written
+   anywhere.
+
+**Why Live is not weakened.** Live gets the throwaway only if the route sets the marker, and the
+route never sets it for `"live"` (Task R4 tests this, with a deletion control that makes the
+route set it for Live and watches the test fail). Live keeps `FISCAL_OPERATIONS` and
+`allocation-paper-source.ts` exactly as they are: the swap replaces the fiscal module's
+`operations` in a COPY of the module list built inside one `provisionVenue` call, the same way the
+demo seed and the test helpers do; `ALL_MODULES` itself is never mutated (Task R3 asserts
+`toBe` identity after a call). Everything after the evidence source — `createAllocationPreparation`,
+the envelope validation, the signature checks, the environment-against-stamp check
+(`packages/fiscal-verifactu/src/allocation-envelope.ts:267`) — runs unchanged for the throwaway
+allocation too. And a request that does carry `initialOperations` (lane E's Live, or any caller
+with its own kit) never gets the marker, so a supplied allocation always goes through the real
+custodian path.
+
+**Live on a dev box (`WAITRON_ENV=dev`) gets no throwaway either.** On such a box Live is
+preproduction (`setup-api.ts:496`), so the throwaway would technically be accepted. Decided
+against: the owner ruled Demo and Preparation, Live is lane E's A679, and deciding on the mode the
+operator chose — not on the box's dev flag — means a dev stack takes exactly the path a shipped
+box takes, so the dev-stack LOOK is evidence about the box. Cost: on the onboarding stack, Live
+stays refused (`sif.allocation_invalid`, `reauthentication_required`) until A679 supplies an
+allocation, as it is on main today. Revision 1's dev-server signer, which did sign Live there, is
+removed (D5).
+
+### D3. What "clearly marked as throwaway" means
+
+Every identifier the signer chooses says so; nothing that enters a hash, the chain or AEAT's
+fields changes (CLAUDE.md §5: never put our own metadata into a hash):
+
+| Field | Value | Where an operator can see it |
+| --- | --- | --- |
+| custodian id (block, trust) | `waitron-throwaway-preproduction` | `fiscal_allocations.allocation` JSON (the signed block) |
+| allocation id | `throwaway-<uuid>` | `fiscal_allocations.allocation_key` and the JSON |
+| recipient venue, generation, block ids | `throwaway-preproduction`, `throwaway-<uuid>`, `throwaway-<uuid>` | the JSON |
+| setup source id (binding, approval, consumption) | `throwaway-preproduction` | `fiscal_allocations.approval` JSON |
+| incident evidence | `throwaway-preproduction-allocation` | approval and consumption JSON |
+| log line at setup | `setup.throwaway_allocation` (info), params `{ allocationId }` | the box log / recovery page tail |
+
+Unchanged on purpose: the installation number stays `S000001` and the series stay `<code>-S000001`
+(they reach AEAT as `NumeroInstalacion` and `NumSerieFactura`, and are what the demo seed and the
+test fixtures already use); the allocation's `source` stays `"initial-paper"` and its `environment`
+`"preproduction"` (both are checked by the unchanged validation). No registro, `computeHuella`
+input, chain or `registros_facturacion` row carries any marker. Before writing the log line, check
+whether server log event names are registered anywhere (grep `"setup.mode_active"`); if they are,
+register it there.
+
+### D4. The refusal matrix — one test per cell
+
+| # | Box | Mode / request | Expected | Test (task) |
+| --- | --- | --- | --- | --- |
+| 1 | `WAITRON_ENV=production` | demo | `sif.throwaway_allocation_refused` `{environment:"production"}`; nothing written, deployment unstamped | R3 (provisionVenue), R4 (route) |
+| 2 | `WAITRON_ENV=production` | prepare | same as 1 | R3, R4 |
+| 3 | `WAITRON_ENV=production` | live, no initialOperations | no marker reaches `provision`; refused as on main (`setup.fiscal_test_required` or the existing allocation refusal — record which) | R4 |
+| 4 | not dev (`preproduction`) | live, no initialOperations | no marker; environment is `production`; refused as on main | R4 |
+| 5 | dev | live, no initialOperations | no marker; `sif.allocation_invalid` `reauthentication_required` (as on main) | R4 |
+| 6 | any non-production | demo or prepare WITH initialOperations | no marker; the supplied allocation goes through the real custodian path (existing `provision-allocation-input.test.ts:324` stays green, unedited) | R4 |
+| 7 | (direct call) | `provisionVenue` with BOTH marker and initialOperations | `setup.request_invalid` `{field:"initialOperations"}`, nothing written | R3 |
+| 8 | (direct call) | marker with `request.environment: "production"` | `sif.throwaway_allocation_refused`, nothing written | R3 |
+| 9 | (seat) | `environments` containing `"production"` in any position | refused before any key is made | R1 |
+| 10 | (third lock) | throwaway-signed input against a PRODUCTION-stamped database | `sif.allocation_invalid` `environment_mismatch` | R1 (moved from Revision 1's Task 1) |
+| 11 | any non-production | demo or prepare, no initialOperations, territory whose slot is `fiscal-none` | venue provisioned, no allocation row | R3 |
+| 12 | non-production | demo / prepare, no initialOperations | **succeeds**: one `registro_sif` `S000001`, `fiscal_allocations` with the typed NIF and `preproduction`, three `-S000001` series | R3, R4 end to end |
+| 13 | non-production | demo, committed venue, first response lost, same body re-sent | replays to 200 through `recoverProvisionedVenue` (which ignores the marker) | R4 |
+
+**Deletion controls.** (a) Delete the production throw in the seat: cells 1, 2, 8 and 9 must fail;
+cell 10 must still pass (it is the independent lock). (b) Make the route set the marker for
+`"live"` too: cells 3, 4 and 5 must fail. Restore after each.
+
+### D5. What Revision 1 code goes, and what it costs
+
+| Removed | Why it is dead | Cost |
+| --- | --- | --- |
+| `apps/server/scripts/dev-custodian/setup-proxy.ts` (+ test) and its registration in `apps/setup/vite.config.ts` | the server now signs Demo and Preparation itself | Live on the onboarding stack is no longer signed (D2); `git diff main -- apps/setup` becomes empty |
+| `dev:custodian` command: `cli.ts`, `files.ts`, `cli.test.ts`, the `apps/server/package.json` script | nothing calls it once the dev-server signer is gone; the box loader no longer needs it (D7) | no way left to exercise `allocation-paper-source.ts` on a dev stack with a throwaway key file until A679; the package tests still do through fixtures |
+| `dev:onboard`'s custodian: the key directory, the three `WAITRON_FISCAL_*` `.env` lines | the server no longer needs them for Demo/Preparation | none for Demo/Prepare. `dev-onboard.test.ts`'s `.env` line list and its test name go back to main's three keys |
+| `apps/server/scripts/dev-custodian/not-shipped.test.ts` | asserts the opposite of the ruling | none |
+| `apps/server/scripts/dev-custodian/sign.ts` (+ test) | moved into the package (D1) | none |
+
+Kept: `applyDevelopmentVenue`, moved to `apps/server/scripts/throwaway-venue.ts` (+ test) and
+rebuilt on the provisioning helper, because `santet-setup.ts` and `dev-setup.ts` (through
+`applyDeveloperDemoVenue`) provision in-process with no server. `dev:onboard`'s and
+`dev:reset:onboard`'s production refusal (Revision 1 Task 5 review fix, `fe4b82c0d`) stays — it
+stops `--reset` deleting a venue folder under `WAITRON_ENV=production` — but throws a plain
+`Error` naming `WAITRON_ENV=production`, as `dev-setup.ts`'s own refusals do, since there is no
+custodian there any more.
+
+### D6. The error code is renamed
+
+`deployment.development_custodian_refused` is no longer development-only. It becomes
+**`sif.throwaway_allocation_refused`** with params `{ environment: "production" }`, beside
+`sif.allocation_invalid` in `packages/fiscal-verifactu/src/errors.ts` (the package that throws
+it), and leaves `apps/server/src/errors.ts`. Error codes name the domain concept, and before
+go-live a rename is free (owner decision 2026-09-26). Every copy moves in the same change:
+`grep -rn development_custodian_refused apps packages docs scripts` must be empty afterwards. The
+setup wizard gets no text for it: it is reachable only on a box running `WAITRON_ENV=production`,
+and the wizard has no text for `sif.allocation_invalid` either (`grep -rn allocation_invalid
+apps/setup/src`: no match).
+
+### D7. The owner's box loader: same path, no edit
+
+`local/square/box-setup.mjs` POSTs `mode: "prepare"` with no `initialOperations` to
+`/setup-api/provision` — exactly the request the wizard's Preparation sends. Under D2 the route
+marks it throwaway, so on a box running this commit it needs **no edit**:
+`node local/square/box-setup.mjs --base https://waitron.local` for the owner's box, or
+`--base https://localhost:<server port>` for a laptop onboarding stack (the server's port, not the
+wizard's, so its readiness poll reaches `/management-api/session`). Revision 1's two-line
+`--server` edit and the `sign` pipe are withdrawn. Task R9 runs the unedited script against the
+box-shaped install to prove it. `santet-setup.ts`'s change is still needed (it calls `applyVenue`
+in-process): import `applyDevelopmentVenue` from `./throwaway-venue.js` and use it in place of
+`applyVenue` at its line 53.
+
+## Existing checks this changes
+
+Searched on the branch base (`1cd3b14bf`): no test on main pins a refusal for a Demo or
+Preparation setup without an allocation. `grep -rn "sif.allocation_invalid" apps/server/src`
+outside the fiscal operation suites finds only `reserved-identity.test.ts:198` and `:235`
+(reservations); the setup-route harness in `boot.setup-routes.test.ts:414-431` and
+`boot.test.ts:1460,1621,1640` SUPPLY `initialOperations` for every first provision, so under cell
+6 they keep taking the real custodian path, unchanged. This is a read, not a run: Task R4 runs
+every setup and provision suite and lists in the PR's "Changed test checks" any assertion on main
+that had to change, with `file:line`. If one is a fiscal assertion, STOP and ask.
+
+Checks of this branch's own Revision 1 that change (not on main): `dev-onboard.test.ts` returns to
+main's three-key list; the Revision 1 tests that named `deployment.development_custodian_refused`
+move with their code (R1, R5) or are deleted (R6).
+
+## Unsure points (each also goes in the PR)
+
+1. **Live on a dev box gets no throwaway (D2).** The owner may want the onboarding stack's Live to
+   work before A679 lands; if so, the route rule widens to "Live when `deps.devMode`" — one line,
+   and cells 5 and the Live control change.
+2. **What "the environment is production" means on a fresh shipped box.** `deploy/compose.yml`
+   does not set `WAITRON_ENV` (`deploy/README.md`: "`WAITRON_ENV` is deliberately NOT in this
+   file"), so a box in setup mode is preproduction, and production enters through Live's request
+   environment. The seat refuses both; a box someone started with `WAITRON_ENV=production` is
+   refused in every mode.
+3. **Whether a Preparation box sends anything to AEAT.** `box-setup.mjs`'s header says Preparation
+   sends nothing; this branch does not change what a box submits and has not checked it.
+4. **Lane E overlap.** Lane E's `feat/w41s6-offline-recovery-pack` edits
+   `packages/fiscal-verifactu/src/index.ts` (+1 line) and the fiscal entry of
+   `packages/composition/src/modules.ts` (the `backup` line, two lines below ours), and both
+   branches edit `docs/backlog.md` and `docs/backlog/fiscal.md`. Expect a small rebase for whichever
+   lands second.
+5. **Docker Desktop and the box compose.** `deploy/compose.yml` names its project `waitron`, the
+   same name `wa-wt` gives the shared dev mailpit; R9 runs under its own project name to avoid
+   touching it. Whether the box's mailpit and print agent start cleanly beside the dev one on this
+   Mac is not yet known.
+
+## Tasks
+
+### R1: the seat and the shipped signer
+
+**Files:** `packages/module/src/provisioning.ts`;
+`packages/fiscal-verifactu/src/throwaway-allocation.ts` (`git mv` from
+`apps/server/scripts/dev-custodian/sign.ts`), `throwaway-allocation.test.ts` (`git mv` from
+`sign.test.ts`), `errors.ts`, `index.ts`; `packages/composition/src/modules.ts`;
+`apps/server/src/errors.ts` (remove the old code).
+
+- [ ] `git mv` both files first and commit that alone ("move, no change"), so review sees the
+  real diff next.
+- [ ] Tests first, in `throwaway-allocation.test.ts`, reached through the seat
+  (`FISCAL_THROWAWAY_ALLOCATION.prepare`), never through `test/allocation-fixture.ts`:
+  - **signs for any taxpayer:** `B12345674`, bases A/FF/R. Run the returned `operations.prepare`
+    around `FISCAL_PROVISIONING.seed.run` inside `withOperationAuthority` on a real
+    `useVenueDb` database with the tenant, node and series rows the seed expects (follow
+    `default-lifecycle.test.ts:54-64`), stamped `preproduction`. Assert the `registro_sif` row
+    (`S000001`), the `fiscal_allocations` row (`B12345674`, `preproduction`), and that the series
+    resolve to `A-S000001`, `FF-S000001`, `R-S000001`. (No `@waitron/provisioning` import:
+    provisioning depends on composition, which depends on this package, so a test-only edge would
+    close a loop — `scripts/workspace-cycles.test.ts`.)
+  - **is marked throwaway (D3):** every value in D3's table, exactly; and the `registro_sif` row's
+    columns contain no `throwaway` text.
+  - **refuses production:** `it.each` over `["production"]`, `["preproduction","production"]`,
+    `["production","preproduction"]` → `{ code: "sif.throwaway_allocation_refused", params:
+    { environment: "production" } }`, and (spy on `generateKeyPairSync` or count keys) no key made.
+  - **accepts preproduction:** `[]`, `["preproduction"]`, `["preproduction","preproduction"]`.
+  - **third lock (cell 10):** a `production`-stamped database refuses the signed input
+    `environment_mismatch`; no `registro_sif` row.
+  - **each call makes a new key and new ids:** two calls give different fingerprints and ids.
+- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/throwaway-allocation.test.ts`
+  → RED (missing export), then on assertions after a stub.
+- [ ] Implement: the seat type in `packages/module/src/provisioning.ts` (D2's shape, with a
+  one-line doc comment per member); `FISCAL_THROWAWAY_ALLOCATION` in the moved file, built from
+  the Revision 1 signer with D3's values, the environment check FIRST, the key in memory only;
+  the code in `packages/fiscal-verifactu/src/errors.ts` (a doc comment in its neighbours' style);
+  `export { FISCAL_THROWAWAY_ALLOCATION } from "./throwaway-allocation.js";` in `index.ts`; the
+  composition wiring. Remove `deployment.development_custodian_refused` from
+  `apps/server/src/errors.ts`.
+- [ ] GREEN. `pnpm --filter @waitron/fiscal-verifactu test:coverage` — read the per-file row for
+  `throwaway-allocation.ts` (100% expected; the package bar must hold). Typecheck module,
+  fiscal-verifactu, composition. **Deletion control (a)** for this file's cases. Commit.
+
+### R2: the generic step in `@waitron/provisioning`
+
+**Files:** `packages/provisioning/src/throwaway-allocation.ts`, `.test.ts`, `index.ts`.
+
+- [ ] Tests first: `throwawayApplyInput(plan, modules, environments)` with `ALL_MODULES` from
+  `@waitron/composition`:
+  - returns `initialNodeId`, `initialAdministratorId`, a `moduleInputs` entry for the seat's module
+    and a module list in which only that module's `operations` differs — and `ALL_MODULES`' own
+    entry is unchanged (`toBe`);
+  - end to end: `applyVenue(plan, { db, ...result })` on a `useVenueDb` database stamped
+    preproduction gives cell 12's facts for `B12345674` and for the demo NIF with legal name
+    "SANTET DELI CO S.L.";
+  - takes the taxpayer from the plan's `ensure-tenant` and the bases from `create-series`;
+  - a module list with no seat (fiscal-none selected) → `undefined`;
+  - production in `environments` → `sif.throwaway_allocation_refused` (the seat's refusal passes
+    through);
+  - a plan with no `ensure-tenant` → `setup.request_invalid` (not a `TypeError`; Revision 1's
+    deferred minor).
+- [ ] RED → implement → GREEN with
+  `pnpm --filter @waitron/provisioning exec vitest run src/throwaway-allocation.test.ts`; the
+  package's coverage row for the file at 100%. Run `pnpm exec vitest run scripts/module-seams.test.ts`
+  (the file names no regime). Commit.
+
+### R3: `provisionVenue` uses it
+
+**Files:** `apps/server/src/provision.ts`, new `apps/server/src/provision-throwaway.test.ts`.
+
+- [ ] Tests first, calling the real `provisionVenue` with `venueModuleConfig(parseModuleConfig({},
+  ALL_MODULES), "ES-common")` on a `useVenueDb` database: cells 1, 2 (as `hostEnvironment:
+  "production"`), 7, 8, 11 (select the fiscal-none territory the country packs offer; if none is
+  selectable through `venueModuleConfig`, build the config by hand and say so), 12 (cell 12's facts
+  plus the deployment stamp `preproduction`). For every refusal: the `facts()` snapshot
+  (`demo-seed/allocation.test.ts:43-51`'s shape plus `deployment`) is unchanged. Also: after a
+  call, `ALL_MODULES`' fiscal entry's `operations` is the same object (`toBe`).
+- [ ] RED → implement D2 step 2 → GREEN:
+  `pnpm --filter @waitron/server exec vitest run src/provision-throwaway.test.ts src/provision.test.ts src/provision-allocation-input.test.ts`.
+  Run the deletion control (a) over this file. Commit.
+
+### R4: the setup route sets the marker
+
+**Files:** `apps/server/src/setup-api.ts` (`parseProvisionPayload` and its one caller passing
+`deps.environment`), new `apps/server/src/setup-throwaway.route.test.ts`.
+
+- [ ] Tests first:
+  - **route-level, with a recording fake `provision`** (the `makeDeps` pattern of
+    `setup-api.test.ts:2890`): cells 1–6 assert the exact `initialAllocation` the fake received
+    (present with the right `hostEnvironment`, or absent);
+  - **end to end, with the real `provisionVenue`** mounted as
+    `provision-allocation-input.test.ts:324` mounts it: Demo and Prepare without
+    `initialOperations` → 200 and cell 12's facts; cell 3/4/5 refusals with their exact codes;
+    cell 13 (follow `provision-allocation-input.test.ts:399` "resumes the actual persisted setup
+    request after a committed venue lost its first response").
+- [ ] RED → implement D2 step 1 → GREEN. Then run every setup and provision suite and record
+  counts: `pnpm --filter @waitron/server exec vitest run src/setup-api src/setup-email-provision src/boot.setup-routes src/boot.test.ts src/provision src/fiscal-readiness src/demo-seed`.
+  Any assertion on MAIN that had to change goes in the PR's "Changed test checks" with `file:line`;
+  a fiscal assertion is a STOP. **Deletion control (b).** Commit.
+
+### R5: the development scripts on the same path
+
+**Files:** `apps/server/scripts/throwaway-venue.ts` (+ test; `git mv` from
+`dev-custodian/apply.ts` and `apply.test.ts`), `apps/server/scripts/demo-seed/allocation.ts`.
+
+- [ ] Rebuild `applyDevelopmentVenue(actions, deps, environment = process.env)` on
+  `throwawayApplyInput(actions, deps.modules, [deploymentEnvironment(environment)])` plus
+  `stampDeployment(deps.db, "preproduction")` and `applyVenue`. Its tests keep their cases, with the
+  refusal code now `sif.throwaway_allocation_refused`. `applyDeveloperDemoVenue` keeps
+  `demoSeedEnvironment` and the demo-identity check first; **`demo-seed/allocation.test.ts` stays
+  unedited** (`git diff main -- apps/server/scripts/demo-seed/allocation.test.ts` empty).
+- [ ] `pnpm --filter @waitron/server exec vitest run scripts/throwaway-venue.test.ts scripts/demo-seed/allocation.test.ts scripts/dev-setup.test.ts`
+  GREEN; typecheck. Commit.
+
+### R6: remove what Revision 1 no longer needs (D5)
+
+- [ ] Delete `apps/server/scripts/dev-custodian/` entirely (setup-proxy, cli, files,
+  not-shipped and their tests — `sign` and `apply` already moved), the `dev:custodian` script in
+  `apps/server/package.json`, and the plugin registration in `apps/setup/vite.config.ts`
+  (`git diff main -- apps/setup` must print nothing).
+- [ ] `dev-onboard.ts`: remove the custodian directory, the three `.env` keys and the restored
+  stale comment question (put back main's `DevOnboardOptions` comment only if it is true again);
+  keep the production refusal before `--reset`, as a plain `Error`. `dev-onboard.test.ts`: main's
+  three-key list and test name come back; the production-refusal cases assert the new message.
+- [ ] `grep -rn "dev-custodian\|dev:custodian\|development_custodian\|WAITRON_FISCAL_" apps/server/scripts apps/setup docs/developers/workflow-guide.md`
+  → only what D5 keeps. `pnpm --filter @waitron/server exec vitest run scripts/` GREEN;
+  `pnpm --filter @waitron/setup build` succeeds; typecheck; lint. Commit.
+
+### R7: guards and the branch-wide controls
+
+Each must print a `Tests` count and pass; none of the first two files may be edited.
+
+```sh
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad
+pnpm --filter @waitron/fiscal-verifactu test:coverage
+pnpm --filter @waitron/provisioning test:coverage
+pnpm --filter @waitron/composition exec vitest run
+pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts scripts/workspace-cycles.test.ts scripts/english-only.test.ts scripts/deploy-image-env.test.ts scripts/manifest-commands.test.ts scripts/claude-md-pointers.test.ts scripts/apply-migrations-callers.test.ts
+pnpm -r --filter @waitron/module --filter @waitron/fiscal-verifactu --filter @waitron/composition --filter @waitron/provisioning --filter @waitron/server --filter @waitron/setup typecheck && pnpm lint && pnpm format:check
+git diff --stat main -- packages/fiscal-verifactu/src/allocation-configuration.ts packages/fiscal-verifactu/src/allocation-paper-source.ts packages/fiscal-verifactu/src/allocation.ts packages/fiscal-verifactu/src/allocation-envelope.ts packages/fiscal-verifactu/src/allocation-preparation.ts packages/fiscal-verifactu/src/paper-evidence.ts packages/fiscal-verifactu/src/paper-custodian.ts docs/developers/paper-custodian.md apps/server/scripts/demo-seed/allocation.test.ts apps/setup
+```
+
+The last command must print nothing. Then run **both deletion controls once more on the finished
+branch** (D4) and record which cases failed. `apps/server`'s coverage is CI's
+(`test:coverage` there takes the whole package); run it locally only if R3/R4 changed coverage
+in a way the per-file reading of `provision.ts` and `setup-api.ts` can't settle:
+`pnpm --filter @waitron/server exec vitest run --coverage src/provision-throwaway.test.ts src/setup-throwaway.route.test.ts`
+reads those two files' rows (a partial run's totals are not the package's).
+
+### R8: docs and backlog (folds in the Task 9 docs review)
+
+- [ ] Rewrite the workflow-guide section Revision 1 added ("A Veri\*Factu venue on a development
+  stack") for Revision 2, in plain English: Demo and Preparation make their own throwaway
+  allocation on any box, development or shipped; it is refused on a box running
+  `WAITRON_ENV=production` and never used for Live; how to recognise it (D3's markers); local
+  scripts use `applyDevelopmentVenue` (`apps/server/scripts/throwaway-venue.ts`); Live needs a
+  supplied allocation (A679). Remove every sentence about the dev-server signer, `dev:custodian`,
+  `confirmation.json` rewrites and "a shipped box cannot be pointed at a custodian" (the review
+  found the last an overclaim, and it is now moot). Apply the review's wording fixes in
+  `.superpowers/sdd/2026-10-14-a680-dev-throwaway-custodian/` to whatever text survives.
+- [ ] Backlog: delete Revision 1's entries (a) "the owner's box loader cannot set up a Veri\*Factu
+  venue on a shipped box" (false under D7), (b) "a retried wizard submission … is a new setup"
+  (cell 13 replays it; delete only once R4's cell-13 test passes) and (d) "a relative
+  `WAITRON_STATE_DIR` means two different folders" (its code is gone), with their detail sections
+  in `docs/backlog/fiscal.md`. Keep (c) (`pnpm dev:reset` deletes before refusing; unrelated). Add
+  one entry: "Live on a development stack has no throwaway allocation (A680 decision D2); revisit
+  if the owner wants it before A679." Commit.
+
+### R9: Demo and Preparation on a box-shaped install
+
+Docker is available here (`docker info`: 29.3.0, Docker Desktop, 18 CPUs, 32 GB, checked
+2026-10-14). Record every command and what it printed in the PR.
+
+- [ ] Check headroom (`memory_pressure | grep free`). Build the image from this branch, in the
+  background, recording the time: `docker build -f deploy/Dockerfile -t waitron:a680 .` (the tag is
+  this branch's own; never `waitron:dev`, which other lanes use).
+- [ ] Run it in the Mac's bridge shape (`deploy/README.md`, "Building and running the image
+  locally") under its own project, from a scratch directory outside the repo holding copies of
+  `deploy/compose.yml` and an override that sets `app.network_mode: bridge`, `ports:
+  ["8443:443"]`, `WAITRON_IMAGE=waitron:a680`, `WAITRON_BOX_ADDRESSES=<the Mac's LAN address>`,
+  `WAITRON_MANAGEMENT_RP_ID=localhost`, `WAITRON_MANAGEMENT_ORIGIN=https://localhost:8443`:
+  `docker compose -p a680box -f compose.yml -f compose.a680.yml up -d app mailpit`. If the box's
+  mailpit or port clashes with the dev stack, record it and adjust only this scratch override.
+  Stop it at the end with `docker compose -p a680box … down -v` — this project only.
+- [ ] **Demo:** open `https://localhost:8443` in the workspace's Playwright Chromium
+  (`ignoreHTTPSErrors`), walk the wizard's Demo to the end, screenshot each screen and the first
+  trading screen into `~/waitron-campaign-b/a680-shots/box-demo-*`. Check `/setup-api/status` stops
+  answering, the container restarts into trading, and (via `docker compose -p a680box exec app`)
+  the venue database has cell 12's facts and D3's markers in `fiscal_allocations`.
+- [ ] **Preparation:** `down -v`, `up` again (a fresh box), walk Preparation with taxpayer
+  `B12345674`, same checks, `box-prep-*` screenshots.
+- [ ] **The owner's loader, unedited:** `down -v`, `up`, then
+  `node ~/workspace/worktrees/waitron-local-santet-data/local/square/box-setup.mjs --base https://localhost:8443`
+  → it prints `ready: dashboard login … works`. (Read-only use of that worktree; edit nothing
+  there.)
+- [ ] **Fallback if the image cannot run here:** the same three walks on
+  `wa-wt onboarding waitron-fix-a680-dev-throwaway-custodian` (the server path is identical; say
+  in the PR that this is the fallback and why), stopping only that instance afterwards.
+
+### R10: owner note, lane E, finish
+
+- [ ] Append to `~/waitron-campaign-b/questions.md`: (1) for lane E, D2's seam block and the rule
+  "the route sets `initialAllocation` only for demo/prepare without `initialOperations`; Live with
+  supplied `initialOperations` is untouched"; (2) for the owner, the Santet changes (D7) and the
+  box steps below.
+- [ ] The PR body says, plainly: what changed for a box; Revision 1's Task 7 dropped by the
+  owner's ruling (and what replaced it); the removed Revision 1 pieces; "Changed test checks" from
+  R4; the unsure points above; R9's commands and results; and **what the owner does on the box**:
+  after this PR lands and `main`'s image is published, run `sudo bash waitron.sh install` on the
+  box (no ref returns it to `:main`); if the box already holds a venue, first
+  `sudo bash waitron.sh reset` (check the exact flags in `deploy/README.md` at the time); then open
+  `https://waitron.local` and run the wizard in Demo or Preparation, or run
+  `node local/square/box-setup.mjs --base https://waitron.local` for the Santet Preparation box.
+- [ ] Update the ledger, then `/finish-branch` (FULL: the Codex run-it seat twice).
+
+---
+
+# Revision 1 (superseded by Revision 2 above; built as commits `4aec9f84e..4dd990b93`)
+
 
 > **For the implementer:** run each task with `superpowers:test-driven-development` (failing test
 > first, watch it fail, then the smallest change). Dispatch each task as `subagent_type:
