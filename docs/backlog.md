@@ -1982,8 +1982,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
   table was released as the counter, a known edge A650 Part 1 deferred and has not yet put to
-  the owner, while `orderTableLabels` (`packages/db/src/party-table-labels.ts`, used by tickets and correction slips) names it by its
-  kept `delivery_table_label`; only `orderTableLabels` limits the tables it reads to the venue's
+  the owner, while `orderTableLabels` (`packages/db/src/party-table-labels.ts`, used by
+  tickets and correction slips) names it by its kept `delivery_table_label`; only `orderTableLabels` limits the tables it reads to the venue's
   location. Once the edge is decided, one reader in `packages/db`. Left open by A650 Part 1.
 
 - **The comment above `fitPlaceholder` (`apps/till/src/widgets/fit-placeholder.ts`) says whole

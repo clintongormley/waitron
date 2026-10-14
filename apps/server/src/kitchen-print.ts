@@ -1292,8 +1292,8 @@ async function readMovedSlipPrinting(
 }
 
 /**
- * One MOVED slip per station of `items`, to its printers, listing its fired items as its tickets
- * do and its held ones under HOLD, group by group. The ticket grouping lays out each line on its
+ * One MOVED slip per station of `items`, to its printers, listing its fired items and its held
+ * ones under HOLD, group by group. The ticket grouping lays out each line on its
  * own and never adds two lines together: a link {@link writeLinksAfter} moves or copies loses its
  * reprint mark, so which ticket last carried a line cannot be told.
  */
