@@ -526,9 +526,9 @@ describe("clearProvisionFixture", () => {
   });
   it("clears a venue's special days, their dates and paint before the venue", async () => {
     const db = ownerDb();
-    const result = await provisionVenue(
-      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
-      { environment: "preproduction", venue: venueRequest(nextNif()) },
+    const result = await applyHistoricalTestVenue(
+      planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     const [fiesta, date, day] = [randomUUID(), randomUUID(), randomUUID()];
     await withTransaction(db, async (tx) => {

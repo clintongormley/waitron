@@ -9,7 +9,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
+import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import {
