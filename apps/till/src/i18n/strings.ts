@@ -814,7 +814,7 @@ export const en = {
   "table.split_no_bill": "No bill, start an empty one",
   "table.name_title": "Name the party at {tables}",
   "table.name_label": "Name",
-  "table.name_hint": "Leave it empty to call the party by its tables",
+  "table.name_hint": "Leave empty for the table names",
   "table.name_too_long": "Use at most 40 characters",
   "table.name_save": "Save",
   "table.no_other_bills": "No other bill of this party to choose",

@@ -58,7 +58,7 @@ describe("till-party-name-dialog", () => {
         setLocale(locale);
         const { el } = await mountWidget<TillPartyNameDialog>(
           "till-party-name-dialog",
-          { tables: "4, 5" },
+          { tables: "4" },
           theme,
         );
         const dialog = el
@@ -72,6 +72,14 @@ describe("till-party-name-dialog", () => {
         expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
         expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
         expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        const input = nativeInput(el);
+        const control = getComputedStyle(input);
+        const placeholder = getComputedStyle(input, "::placeholder");
+        const context = document.createElement("canvas").getContext("2d")!;
+        context.font = placeholder.font;
+        const textWidth =
+          input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight);
+        expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(textWidth);
       } finally {
         setLocale(previousLocale);
         await page.viewport(1280, 900);
