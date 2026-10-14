@@ -244,7 +244,8 @@ backend (`buildBackupBackend`), so the requests are the ones the product sends.
   each refused (phases `uploaded`, `listed`, `downloaded`, `decrypted-match`, `wrong-key-refused`,
   `tamper-refused`). The abort starts a 24 MiB archive upload, cancels it once one part has been
   answered, and checks that an AbortMultipartUpload was sent, no completion was, and neither an
-  unfinished upload nor an object is left (phases `aborted`, `uploads-after`, `listed-after`).
+  unfinished upload nor an object, at any key, is left under its archive folder (phases `aborted`,
+  `uploads-after`, `listed-after`).
   Together they reserve 56 MiB of the budget.
 
 **What the receipt records.** Besides the phases, every S3 request these scenarios send is one
@@ -267,7 +268,7 @@ path below one, and refuses any other prefix.
 
 **Local evidence only.** The same scenarios run against versitygw in
 `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
-2026-10-14 on a Mac, all 6 cases passed. The requests each scenario recorded were: delete-many,
+2026-10-14 on a Mac, all 8 cases passed. The requests each scenario recorded were: delete-many,
 1,005 PutObject, 3 ListObjectsV2 and 2 DeleteObjects, all 200; the round trip, 1
 CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 and 1 GetObject, all
 200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1

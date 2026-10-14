@@ -3,7 +3,13 @@ import { createReadStream } from "node:fs";
 import { access, copyFile, mkdtemp, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { hasCode, isAppError } from "@waitron/shared";
-import { createS3FileStore, nameOf, statusOf, type CommandObservation } from "@waitron/stream";
+import {
+  createS3FileStore,
+  nameOf,
+  statusOf,
+  type CommandObservation,
+  type S3FileStoreOptions,
+} from "@waitron/stream";
 import { expect } from "vitest";
 import {
   decodeArchiveRecoveryPack,
@@ -16,6 +22,7 @@ import { decryptArtifactFile, encryptArtifactFile } from "../artifact-cipher-fil
 import { buildBackupBackend } from "../backup-backends.js";
 import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
+import type { StorageBackend } from "../storage-backend.js";
 import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
 import { receiptErrorName } from "./aws-rehearsal-receipt.js";
 import { requestRecorder } from "./aws-request-recorder.js";
@@ -143,6 +150,29 @@ function trackCreated(fixture: S3ScenarioFixture, observation: CommandObservatio
   if (typeof key === "string" && typeof uploadId === "string") fixture.trackUpload(key, uploadId);
 }
 
+/** Runs `body` with a new work folder and a backend over the fixture's bucket; removes and closes both. */
+async function withBackend<T>(
+  fixture: S3ScenarioFixture,
+  scenario: string,
+  observe: S3FileStoreOptions["observe"],
+  body: (backend: StorageBackend, work: string) => Promise<T>,
+): Promise<T> {
+  const work = await mkdtemp(join(fixture.scratch, `${scenario}-`));
+  try {
+    const backend = buildBackupBackend(
+      { kind: "s3", id: "rehearsal", bucket: fixture.bucket, venueId: fixture.venueId },
+      { observe },
+    );
+    try {
+      return await body(backend, work);
+    } finally {
+      backend.close();
+    }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
 function requestsTo(requests: Recorded[], api: string): Recorded[] {
   return requests.filter((event) => event.phase === "request" && event.api === api);
 }
@@ -169,12 +199,7 @@ export async function runArchiveRoundTrip(
     },
     (observation) => trackCreated(fixture, observation),
   );
-  const backend = buildBackupBackend(
-    { kind: "s3", id: "rehearsal", bucket: fixture.bucket, venueId: fixture.venueId },
-    { observe },
-  );
-  const work = await mkdtemp(join(fixture.scratch, `${SCENARIO}-`));
-  try {
+  return withBackend(fixture, SCENARIO, observe, async (backend, work) => {
     const recoveryKey = checkedRecoveryKey(RECOVERY_KEY)!;
     const archive = await syntheticArchive(work, bytes, SCENARIO, signal);
     const key = backupArchiveKey(new Date());
@@ -263,10 +288,7 @@ export async function runArchiveRoundTrip(
       await downloaded.dispose();
     }
     return { bytes, parts, partBytes };
-  } finally {
-    backend.close();
-    await rm(work, { recursive: true, force: true });
-  }
+  });
 }
 
 /** A decryption that must be refused as a wrong passphrase, leaving nothing at `out`. */
@@ -282,7 +304,7 @@ async function refusedDecrypt(out: string, decrypt: () => Promise<void>): Promis
 /**
  * Starts a 24 MiB multipart upload and cancels it once one part has been answered 2xx, then checks
  * that the store abandoned the upload: an AbortMultipartUpload was sent, no completion was, and
- * neither an unfinished upload nor an object is left under the archive folder.
+ * neither an unfinished upload nor an object, at any key, is left under the archive folder.
  */
 export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<ArchiveAbortSummary> {
   const SCENARIO = "archive-abort";
@@ -308,12 +330,7 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
       }
     },
   );
-  const backend = buildBackupBackend(
-    { kind: "s3", id: "rehearsal", bucket: fixture.bucket, venueId: fixture.venueId },
-    { observe },
-  );
-  const work = await mkdtemp(join(fixture.scratch, `${SCENARIO}-`));
-  try {
+  return withBackend(fixture, SCENARIO, observe, async (backend, work) => {
     const archive = await syntheticArchive(work, ABORT_ARCHIVE_BYTES, SCENARIO, fixture.signal);
     const key = backupArchiveKey(new Date());
     expect(parseBackupArchiveKey(key)).not.toBeNull();
@@ -344,7 +361,7 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
     fixture.record({
       scenario: SCENARIO,
       phase: "aborted",
-      errorName: receiptErrorName(nameOf(error)),
+      errorName: receiptErrorName(error.params.name),
       outcome: "ok",
     });
 
@@ -366,24 +383,21 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
 
     const folder = archiveNamespace(fixture.bucket.prefix, fixture.venueId);
     const left = await step("uploads-after", () => fixture.ownedUploads(folder));
-    const leftForKey = left.filter((upload) => upload.key === folder + key);
-    phase("uploads-after", { count: leftForKey.length });
-    expect(leftForKey).toEqual([]);
+    phase("uploads-after", { count: left.length });
+    expect(left).toEqual([]);
 
-    const listed = await step("listed-after", () =>
-      backend.list("waitron-", { signal: fixture.signal }),
+    // The backend lists only names directly inside the folder; this store sees deeper keys too.
+    const files = createS3FileStore({ ...fixture.bucket, prefix: folder }, { observe });
+    const objects = await step("listed-after", () =>
+      files.list("", { signal: fixture.signal }).finally(() => files.close()),
     );
-    const objects = listed.filter((object) => object.key === key);
     phase("listed-after", { count: objects.length });
     expect(objects).toEqual([]);
 
     return {
       partsBeforeAbort,
       abortStatus: typeof aborts[0]!.httpStatus === "number" ? aborts[0]!.httpStatus : null,
-      uploadsAfter: leftForKey.length,
+      uploadsAfter: left.length,
     };
-  } finally {
-    backend.close();
-    await rm(work, { recursive: true, force: true });
-  }
+  });
 }

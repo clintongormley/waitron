@@ -7,8 +7,9 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { S3Client } from "@aws-sdk/client-s3";
+import { CreateMultipartUploadCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { archiveNamespace } from "./archive-settings.js";
 import { localS3Fixture, type LocalS3Fixture } from "./testing/local-s3-fixture.js";
 import {
   ARCHIVE_SCENARIO_MS,
@@ -257,7 +258,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       expect(summary.partsBeforeAbort).toBeGreaterThanOrEqual(1);
       expect(summary.uploadsAfter).toBe(0);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
-        { scenario: "archive-abort", phase: "aborted", errorName: "AppError", outcome: "ok" },
+        { scenario: "archive-abort", phase: "aborted", errorName: "AbortError", outcome: "ok" },
         { scenario: "archive-abort", phase: "uploads-after", count: 0, outcome: "ok" },
         { scenario: "archive-abort", phase: "listed-after", count: 0, outcome: "ok" },
       ]);
@@ -265,5 +266,34 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       expect(await readdir(local.fixture.scratch)).toEqual([]);
     },
     ARCHIVE_SCENARIO_MS,
+  );
+
+  it.for([
+    {
+      left: "an unfinished upload",
+      leave: (admin: S3Client, bucket: string, folder: string) =>
+        admin.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: `${folder}stray.bin` })),
+      after: { phase: "uploads-after", count: 1 },
+    },
+    {
+      left: "an object in a deeper folder",
+      leave: (admin: S3Client, bucket: string, folder: string) =>
+        admin.send(
+          new PutObjectCommand({ Bucket: bucket, Key: `${folder}nested/stray.bin`, Body: "x" }),
+        ),
+      after: { phase: "listed-after", count: 1 },
+    },
+  ])(
+    "the abort fails when $left is under its archive folder at another key",
+    { timeout: ARCHIVE_SCENARIO_MS },
+    async ({ leave, after }, ctx) => {
+      const local = await scenarioFixture(ctx, "archive-abort");
+      const { client: admin } = requireServer(ctx);
+      const { bucket, prefix } = local.fixture.bucket;
+      const folder = archiveNamespace(prefix, local.fixture.venueId);
+      await leave(admin, bucket, folder);
+      await expect(runArchiveAbort(local.fixture)).rejects.toThrow();
+      expect(local.events).toContainEqual({ scenario: "archive-abort", ...after, outcome: "ok" });
+    },
   );
 });

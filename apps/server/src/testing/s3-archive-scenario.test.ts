@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,10 +13,14 @@ afterEach(async () => {
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
 });
 
-/** A local fixture whose byte budget has room for less than `archiveBytes` more. */
+/**
+ * A local fixture whose byte budget has room for less than `archiveBytes` more, and whose `scratch`
+ * does not exist, so a scenario that writes a file before its reservation fails with ENOENT.
+ */
 async function spentFixture() {
-  const scratch = await mkdtemp(join(tmpdir(), "waitron-archive-scenario-"));
-  folders.push(scratch);
+  const parent = await mkdtemp(join(tmpdir(), "waitron-archive-scenario-"));
+  folders.push(parent);
+  const scratch = join(parent, "missing");
   const send = vi.fn();
   const local = localS3Fixture({
     bucket: {
@@ -33,12 +37,12 @@ async function spentFixture() {
     send,
   });
   local.fixture.reserveUpload(AWS_REHEARSAL_LIMITS.uploadedBytes - 16 * MiB, "delete-object");
-  return { local, send, scratch };
+  return { local, send };
 }
 
 describe("the archive scenarios' budget", () => {
   it("the round trip refuses its 32 MiB archive before it writes a file or sends a request", async () => {
-    const { local, send, scratch } = await spentFixture();
+    const { local, send } = await spentFixture();
     await expect(runArchiveRoundTrip(local.fixture)).rejects.toThrow(/fixture-limit/);
     expect(local.events).toEqual([
       {
@@ -50,11 +54,10 @@ describe("the archive scenarios' budget", () => {
       },
     ]);
     expect(send).not.toHaveBeenCalled();
-    expect(await readdir(scratch)).toEqual([]);
   });
 
   it("the abort refuses its 24 MiB archive before it writes a file or sends a request", async () => {
-    const { local, send, scratch } = await spentFixture();
+    const { local, send } = await spentFixture();
     await expect(runArchiveAbort(local.fixture)).rejects.toThrow(/fixture-limit/);
     expect(local.events).toEqual([
       {
@@ -66,6 +69,5 @@ describe("the archive scenarios' budget", () => {
       },
     ]);
     expect(send).not.toHaveBeenCalled();
-    expect(await readdir(scratch)).toEqual([]);
   });
 });
