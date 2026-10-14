@@ -32,7 +32,12 @@ import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import { kitchenNotices, setRoutingCell, writePrintHeldWork } from "@waitron/venue-service";
+import {
+  kitchenNotices,
+  setRoutingCell,
+  writeKitchenTicketGrouping,
+  writePrintHeldWork,
+} from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { placeGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -1153,6 +1158,84 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     expect(byDish(await noticesOf([second]))).toEqual([
       ["BURG", second, "Mesa 117"],
       ["PAELLA", second, "Mesa 117"],
+    ]);
+  });
+});
+
+describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets did (§4)", () => {
+  afterEach(() =>
+    withTransaction(db, async (tx) => {
+      await writeKitchenTicketGrouping(tx, "combined");
+      await writePrintHeldWork(tx, false);
+    }),
+  );
+  const dishLines = (lines: readonly string[]) => lines.filter((text) => / x [A-Z]+$/.test(text));
+
+  it("with separate quantities, a fired 3 Burger and a held 2 Paella print one entry of 1 each, as their tickets did", async () => {
+    const v = await setupPartyVenue(db);
+    await inTx(v, async (tx) => {
+      await writeKitchenTicketGrouping(tx, "separate");
+      await writePrintHeldWork(tx, true);
+    });
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const mesa122 = await v.table("Mesa 122");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 121"));
+    const tickets = (await printedBy(grill)).length;
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [
+          { lines: [{ menuItemId: v.item("Burger"), quantity: "3" }], release: "fire" },
+          { lines: [{ menuItemId: v.item("Paella"), quantity: "2" }], release: "hold" },
+        ],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual(
+      expect.arrayContaining([
+        ["1.000 x BURG", "1.000 x BURG", "1.000 x BURG"],
+        ["1.000 x PAELLA", "1.000 x PAELLA"],
+      ]),
+    );
+    const numbers = await numbersOf([tabId]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa122, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
+        "1.000 x BURG",
+        "1.000 x BURG",
+        "1.000 x BURG",
+        "HOLD",
+        "GROUP 2",
+        "1.000 x PAELLA",
+        "1.000 x PAELLA",
+      ]),
+    ]);
+  });
+
+  it("with combined quantities, two lines of one Burger print as one entry of 2, as their ticket did", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
+    const mesa124 = await v.table("Mesa 124");
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 123"));
+    const tickets = (await printedBy(grill)).length;
+    await order(v, tabId, "Burger", "Burger");
+    expect((await slipsSince(grill, tickets)).map(dishLines)).toEqual([["2.000 x BURG"]]);
+    const numbers = await numbersOf([tabId]);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa124, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    expect(await slipsSince(grill, before)).toEqual([
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", ["2.000 x BURG"]),
     ]);
   });
 });

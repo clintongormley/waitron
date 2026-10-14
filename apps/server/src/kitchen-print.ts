@@ -1296,6 +1296,7 @@ async function printMovedSlips(
     ...new Set(items.map((item) => item.workingOrderLineId)),
   ]);
   const stationNames = await readStations(tx, stationIds);
+  const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
   const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
 
@@ -1320,13 +1321,18 @@ async function printMovedSlips(
       if (last !== undefined && last.group === item.group) last.items.push(item);
       else held.push({ group: item.group!, items: [item] });
     }
+    const fired = arrangeTicketItems(
+      listed.filter((entry) => !entry.held).map((entry) => entry.item),
+      grouping,
+    );
+    for (const run of held) run.items = arrangeTicketItems(run.items, grouping);
     for (const group of groupByLayout(targets)) {
       const bytes = formatMovedSlip(
         {
           ...slip,
           stationName: stationNames.get(stationId)!.name,
           at,
-          items: listed.filter((entry) => !entry.held).map((entry) => entry.item),
+          items: fired,
           held,
           locale: cfg.locale,
         },
