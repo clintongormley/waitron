@@ -1960,6 +1960,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Not known to be reachable. Found reading, not run, in A579 part 4b's review.
   [Detail](backlog/till.md#a604-a-split-off-table-the-tills-read-leaves-out-could-make-reset-table-refuse-as-out-of-date)
 
+- **A606. Back to its saved place on a seated group with today's name prints no MOVED slip
+  (2026-10-14).** The group ends, so the party's tickets and bill go from the group's name back to its
+  tables' names, and the kitchen is told nothing — treated like a rename (A581 default 5). Owner
+  question in lane C's questions.md, "A581 part 2 (#1649)": answer (b) to print a slip on that path.
+
 - **A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
   (2026-10-13).** Reset table refuses `table.place_taken`; Reset to saved plan has no such check.
   Found reading, not run, by the A579 design.
