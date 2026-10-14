@@ -145,6 +145,7 @@ export interface CloudRecoveryView {
 }
 
 export interface RecoveryBackupPreview {
+  readonly activationSourceId?: string;
   sourceId: string;
   createdAt: string;
   environment: "production" | "preproduction";

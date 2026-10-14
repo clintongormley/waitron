@@ -1016,3 +1016,19 @@ Cloud request/point changes discard late metadata. Archive encryption and node a
 remain separate. The bucket reference currently names a generation, not an immutable snapshot;
 Task 6's activation binding must still identify the actual selected bytes. Offline allocation
 collection, staged node credentials and interruption qualification remain open.
+
+
+**2026-10-14 staged-key checkpoint:** the candidate restart backend stores a supplied node key in
+an owner-only temporary file, separate from the archive encryption key and public marker. The
+selected database still authenticates it, and module preparation still collects outside evidence.
+An archive request with a staged node key binds its operation to the encrypted archive's digest;
+a bucket request binds to the prepared closed database and unlocked entries before preview
+migrations. A bucket preview carries that digest separately from its generation display reference.
+Opening the downloaded database switches its journal-mode header, so the digest identifies the
+prepared file, not the untouched downloaded object. Staging and restart reject a different source.
+Cleanup, missing-key refusal and lock-preserving retry are covered by the focused restore suites.
+
+Public restore forms still need the offline allocation/key collection and forwarding. Paper,
+emergency and phone input, current outside confirmations, keeping an existing identity, and
+crashes around consumption/activation still need their complete operator journeys. This checkpoint
+does not complete Task 6 or change the environment-only command input contract.

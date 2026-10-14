@@ -1,10 +1,13 @@
+import { stageStreamRestore } from "./restore-request.js";
+import { recoveryStreamSourceId } from "./recovery-source.js";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  openVenueDatabase,
   readBreakGlassKeyName,
   nodes,
   locations,
@@ -174,7 +177,7 @@ it("the real setup listener previews the selected copy without restarting or pub
   }
 });
 
-it("reviews the downloaded bucket database's saved key name without staging or changing the live key", async () => {
+it("reviews the downloaded bucket key before explicitly staging its selected bytes and credential", async () => {
   const signer = generateNodeKeyPair();
   const store = createMemoryObjectStore();
   const generation = `gen-0-${NODE}-20261001T080000Z`;
@@ -211,7 +214,7 @@ it("reviews the downloaded bucket database's saved key name without staging or c
     previewModule as unknown as { previewRecoveryStream: (deps: unknown) => Promise<unknown> }
   ).previewRecoveryStream;
   expect(typeof preview).toBe("function");
-  const result = await preview({
+  const selection = {
     kit: {
       version: 1,
       venueId: LOCATION,
@@ -238,7 +241,22 @@ it("reviews the downloaded bucket database's saved key name without staging or c
     restoreGeneration: async ({ outPath }: { outPath: string }) => {
       await copyFile(database, outPath);
     },
-  });
+  } as const;
+  const result = await preview(selection);
+  const preparedDirectory = join(scratch, "prepared-baseline");
+  await mkdir(preparedDirectory);
+  const preparedDatabase = join(preparedDirectory, "venue.db");
+  await copyFile(database, preparedDatabase);
+  const beforeOpen = await readFile(preparedDatabase);
+  const preparedStore = await openVenueDatabase(preparedDirectory);
+  await preparedStore.close();
+  const afterOpen = await readFile(preparedDatabase);
+  expect([...beforeOpen.subarray(18, 20)]).toEqual([1, 1]);
+  expect([...afterOpen.subarray(18, 20)]).toEqual([2, 2]);
+  expect(result).toHaveProperty(
+    "activationSourceId",
+    await recoveryStreamSourceId(preparedDatabase, entries),
+  );
   expect(result).toMatchObject({
     sourceId: `stream:${LOCATION}:${generation}`,
     createdAt: "2026-10-01T08:00:00.000Z",
@@ -248,6 +266,25 @@ it("reviews the downloaded bucket database's saved key name without staging or c
   });
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(liveName);
   expect(await readdir(stateDir)).toEqual([]);
+  const recoveryOperation = {
+    binding: {
+      module: "fiscal-verifactu",
+      action: "restore",
+      eventId: "bucket-event",
+      targetNodeId: NODE,
+      sourceId: await recoveryStreamSourceId(preparedDatabase, entries),
+    },
+    input: { allocation: "opaque", approval: "opaque" },
+  };
+  const credential = { recoveryOperation, nodeRecoverySecret: "synthetic staged node key" };
+  await stageStreamRestore({ ...selection, ...credential, venueConfirmed: "89890001K" });
+  expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
+    "synthetic staged node key",
+  );
+  expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toMatchObject({
+    recoveryOperation,
+    nodeRecoveryKey: true,
+  });
 });
 
 it("the real setup listener reaches both private download previews without staging a restore", async () => {

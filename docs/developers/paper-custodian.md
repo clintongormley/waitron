@@ -375,3 +375,29 @@ request.
 The host qualification uses the allocated hooks explicitly and source-tree migrations. Default
 fiscal hooks, packaged boot, text schema/counter retirement and the complete setup screen remain
 unfinished. This is branch development guidance, not a qualified venue recovery procedure.
+
+
+## Staged node keys on the Task 6 candidate
+
+The restart backend can stage a node recovery key separately from the archive encryption key.
+The public restore forms do not collect or send this credential yet. A host request supplies
+`nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
+`restore-request.node-key` with mode `0600`, not into the JSON marker. After restart, the selected
+backup's verifier checks it again and the module rereads current outside evidence. A missing or
+invalid staged credential refuses recovery rather than falling back to an environment key.
+
+For requests carrying a staged node key, bind `recoveryOperation.binding.sourceId` to the selected
+copy. For an archive, use the preview's `sourceId`, the SHA-256 digest of its encrypted bytes. For a
+bucket, use `activationSourceId`, which covers the prepared closed database and unlocked entries
+before preview migrations. The displayed bucket `sourceId` is only a generation reference. Opening
+a downloaded SQLite database changes its journal-mode header, so `activationSourceId` identifies
+the prepared file rather than the untouched bucket object. A later download with different bytes
+needs a fresh review and matching outside recovery evidence.
+
+The backend checks this binding before replacing a staged request and again at restart. It removes
+the staged node key after success or a refused restore, and when restaging. A venue-lock refusal
+keeps the request and credential for another attempt; that attempt still authenticates the key and
+collects outside evidence. An interrupted write with no marker leaves no runnable request, and the
+next entry pass removes the orphaned node-key file. These rules do not establish that a copied
+marker proves an allocation can be reused. Environment-only command inputs retain their existing
+contract.

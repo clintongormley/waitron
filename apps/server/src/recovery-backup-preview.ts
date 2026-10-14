@@ -15,9 +15,12 @@ import {
 } from "./restore.js";
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import "./errors.js";
+import { recoveryStreamSourceId } from "./recovery-source.js";
 
 export interface RecoveryBackupPreview {
   readonly sourceId: string;
+  /** A bucket generation can contain several points; activation binds the bytes before migration. */
+  readonly activationSourceId?: string;
   readonly createdAt: string;
   readonly environment: "preproduction" | "production";
   readonly nodeId: string;
@@ -80,11 +83,16 @@ export async function previewRecoveryStream(
   const prepared = await prepareStreamRestore(deps);
   try {
     const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, deps);
-    return await readRecoveryCopyPreview(
+    const activationSourceId = await recoveryStreamSourceId(
+      prepared.databasePath,
+      prepared.entries,
+    );
+    const preview = await readRecoveryCopyPreview(
       copy,
       `stream:${deps.kit.venueId}:${prepared.generation}`,
       deps,
     );
+    return { ...preview, activationSourceId };
   } finally {
     await prepared.discard();
   }

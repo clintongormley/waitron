@@ -1,9 +1,9 @@
-import { chmod, readFile, rename, rm } from "node:fs/promises";
+import { chmod, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import {
@@ -29,6 +29,11 @@ import {
   type RecoveryOperationInput,
 } from "./recovery-module-operation.js";
 import { isUnset } from "./env-value.js";
+import {
+  recoveryArchiveSourceId,
+  recoveryArchiveFileSourceId,
+  recoveryStreamSourceId,
+} from "./recovery-source.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
@@ -36,6 +41,60 @@ const STREAM_DB = "restore-request.db";
 const STREAM_ENTRIES = "restore-request.entries";
 const MARKER = "restore-request.json";
 const SETUP_OPERATION = "setup-operation.json";
+const NODE_KEY = "restore-request.node-key";
+const MAX_NODE_KEY_BYTES = 4096;
+
+async function clearNodeKey(stateDir: string): Promise<void> {
+  const path = join(stateDir, NODE_KEY);
+  await rm(path, { force: true });
+  await rm(stagedPath(path), { force: true });
+}
+
+function invalidNodeKey(): never {
+  throw new AppError("server.config_invalid", {
+    variable: "WAITRON_NODE_RECOVERY_KEY",
+    reason: "invalid_credential",
+  });
+}
+
+function assertSource(operation: RecoveryOperationInput, sourceId: string): void {
+  if (operation.binding.sourceId !== sourceId)
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_RECOVERY_OPERATION_FILE",
+      reason: "source_mismatch",
+    });
+}
+
+function nodeKey(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    Buffer.byteLength(value) > MAX_NODE_KEY_BYTES
+  )
+    return invalidNodeKey();
+  return value;
+}
+
+async function readStagedNodeKey(stateDir: string): Promise<string> {
+  let file;
+  try {
+    file = await open(join(stateDir, NODE_KEY), "r");
+    if (!(await file.stat()).isFile()) return invalidNodeKey();
+    const buffer = Buffer.alloc(MAX_NODE_KEY_BYTES + 1);
+    let count = 0;
+    while (count < buffer.length) {
+      const { bytesRead } = await file.read(buffer, count, buffer.length - count, null);
+      if (bytesRead === 0) break;
+      count += bytesRead;
+    }
+    if (count > MAX_NODE_KEY_BYTES) return invalidNodeKey();
+    return nodeKey(buffer.subarray(0, count).toString("utf8"));
+  } catch {
+    return invalidNodeKey();
+  } finally {
+    await file?.close();
+  }
+}
 
 export interface ArchiveRestoreRequest {
   kind?: "archive";
@@ -44,6 +103,7 @@ export interface ArchiveRestoreRequest {
   environment: DeploymentEnvironment;
   managedCloud?: { requestId: string; pointId: string };
   recoveryOperation?: RecoveryOperationInput;
+  nodeRecoverySecret?: string;
 }
 
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
@@ -53,6 +113,7 @@ export interface StreamRestoreRequest {
   entries: ArchiveEntry[];
   environment: DeploymentEnvironment;
   recoveryOperation?: RecoveryOperationInput;
+  nodeRecoverySecret?: string;
 }
 
 export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
@@ -78,36 +139,49 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       variable: "WAITRON_RECOVERY_OPERATION_FILE",
       reason: "invalid_operation",
     });
+  const secret =
+    request.nodeRecoverySecret === undefined ? undefined : nodeKey(request.nodeRecoverySecret);
+  if (secret !== undefined && recoveryOperation === undefined) invalidNodeKey();
   await validate?.(request);
+  if (secret !== undefined && recoveryOperation !== undefined) {
+    assertSource(
+      recoveryOperation,
+      request.kind === "stream"
+        ? await recoveryStreamSourceId(request.databasePath, request.entries)
+        : recoveryArchiveSourceId(request.artifact),
+    );
+  }
   await rm(join(stateDir, MARKER), { force: true });
-  if (request.kind === "stream") {
-    await rename(request.databasePath, join(stateDir, STREAM_DB));
-    await chmod(join(stateDir, STREAM_DB), 0o600);
-    await writeFileAtomic(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
+  await clearNodeKey(stateDir);
+  try {
+    if (request.kind === "stream") {
+      await rename(request.databasePath, join(stateDir, STREAM_DB));
+      await chmod(join(stateDir, STREAM_DB), 0o600);
+      await writeFileAtomic(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
+    } else {
+      await writeFileAtomic(join(stateDir, ARTIFACT), request.artifact, 0o600);
+      await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
+    }
+    if (secret !== undefined) await writeFileAtomic(join(stateDir, NODE_KEY), secret, 0o600);
     await writeFileAtomic(
       join(stateDir, MARKER),
       JSON.stringify({
         version: 1,
         environment: request.environment,
-        kind: "stream",
+        ...(request.kind === "stream"
+          ? { kind: "stream" }
+          : request.managedCloud === undefined
+            ? {}
+            : { managedCloud: request.managedCloud }),
         ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
+        ...(secret === undefined ? {} : { nodeRecoveryKey: true }),
       }),
       0o600,
     );
-    return;
+  } catch (error) {
+    await clearNodeKey(stateDir);
+    throw error;
   }
-  await writeFileAtomic(join(stateDir, ARTIFACT), request.artifact, 0o600);
-  await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
-  await writeFileAtomic(
-    join(stateDir, MARKER),
-    JSON.stringify({
-      version: 1,
-      environment: request.environment,
-      ...(request.managedCloud ? { managedCloud: request.managedCloud } : {}),
-      ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
-    }),
-    0o600,
-  );
 }
 
 /**
@@ -120,6 +194,8 @@ export async function stageStreamRestore(
     Omit<EntryValidationDeps, "skipSecrets"> & {
       /** The tax id the owner confirmed; null until they have seen one. */
       venueConfirmed: string | null;
+      recoveryOperation?: RecoveryOperationInput;
+      nodeRecoverySecret?: string;
     },
 ): Promise<void> {
   const prepared = await prepareStreamRestore(deps);
@@ -134,6 +210,8 @@ export async function stageStreamRestore(
         databasePath: prepared.databasePath,
         entries: prepared.entries,
         environment: deps.environment,
+        recoveryOperation: deps.recoveryOperation,
+        nodeRecoverySecret: deps.nodeRecoverySecret,
       },
       async (request) => {
         const validated = await validateDatabaseEntries(
@@ -170,6 +248,7 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
     rm(join(stateDir, SETUP_OPERATION), { force: true }),
     rm(join(stateDir, ARTIFACT), { force: true }),
     rm(join(stateDir, KEY), { force: true }),
+    clearNodeKey(stateDir),
     rm(join(stateDir, STREAM_DB), { force: true }),
     rm(join(stateDir, STREAM_ENTRIES), { force: true }),
   ]);
@@ -186,78 +265,104 @@ export async function runStagedRestore(
   try {
     raw = await readFile(join(deps.stateDir, MARKER), "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      await clearNodeKey(deps.stateDir);
+      return false;
+    }
+    await clearNodeKey(deps.stateDir);
     throw error;
   }
-  const marker = JSON.parse(raw) as {
-    version?: unknown;
-    environment?: unknown;
-    kind?: unknown;
-    managedCloud?: unknown;
-    recoveryOperation?: unknown;
-  };
-  if (
-    marker.version !== 1 ||
-    (marker.environment !== "production" && marker.environment !== "preproduction") ||
-    (marker.kind !== undefined && marker.kind !== "stream") ||
-    (marker.kind === "stream" && marker.managedCloud !== undefined) ||
-    (marker.managedCloud !== undefined &&
-      (marker.environment !== "preproduction" ||
-        typeof marker.managedCloud !== "object" ||
-        marker.managedCloud === null ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-          String((marker.managedCloud as { requestId?: unknown }).requestId),
-        ) ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-          String((marker.managedCloud as { pointId?: unknown }).pointId),
-        )))
-  ) {
-    throw new Error("invalid staged restore request");
-  }
-  const environment: DeploymentEnvironment = marker.environment;
-  const operation =
-    marker.recoveryOperation === undefined
-      ? isUnset(deps.recoveryOperationPath)
-        ? undefined
-        : await readRecoveryOperationFile(deps.recoveryOperationPath)
-      : parseRecoveryOperationInput(marker.recoveryOperation);
-  if (operation === null) throw new Error("invalid staged restore request");
-  const withModuleOperations =
-    operation === undefined
-      ? deps.withModuleOperations
-      : createRecoveryRestoreRunner(ALL_MODULES, operation, deps.recoverySecret);
-  const common = {
-    venueDir: deps.venueDir,
-    stateDir: deps.stateDir,
-    stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
-    migrationsRoot: deps.migrationsRoot,
-    modules: ALL_MODULES,
-    environment,
-    log: deps.log,
-    ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
-  };
-  let run: () => Promise<void>;
-  if (marker.kind === "stream") {
-    const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
-    run = () =>
-      restoreStream({
-        ...common,
-        databasePath: join(deps.stateDir, STREAM_DB),
-        entries: unpackArchive(packed),
-      });
-  } else {
-    const recoveryKey = await readFile(join(deps.stateDir, KEY), "utf8");
-    run = () =>
-      restore({
-        ...common,
-        artifactPath: join(deps.stateDir, ARTIFACT),
-        recoveryKey,
-        ...(marker.managedCloud
-          ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
-          : {}),
-      });
-  }
+  let managedCloud: { requestId: string; pointId: string } | undefined;
   try {
+    const marker = JSON.parse(raw) as {
+      version?: unknown;
+      environment?: unknown;
+      kind?: unknown;
+      managedCloud?: unknown;
+      recoveryOperation?: unknown;
+      nodeRecoveryKey?: unknown;
+    };
+    if (
+      marker.version !== 1 ||
+      (marker.nodeRecoveryKey !== undefined &&
+        (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
+      (marker.environment !== "production" && marker.environment !== "preproduction") ||
+      (marker.kind !== undefined && marker.kind !== "stream") ||
+      (marker.kind === "stream" && marker.managedCloud !== undefined) ||
+      (marker.managedCloud !== undefined &&
+        (marker.environment !== "preproduction" ||
+          typeof marker.managedCloud !== "object" ||
+          marker.managedCloud === null ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+            String((marker.managedCloud as { requestId?: unknown }).requestId),
+          ) ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+            String((marker.managedCloud as { pointId?: unknown }).pointId),
+          )))
+    ) {
+      throw new Error("invalid staged restore request");
+    }
+    const environment: DeploymentEnvironment = marker.environment;
+    const operation =
+      marker.recoveryOperation === undefined
+        ? isUnset(deps.recoveryOperationPath)
+          ? undefined
+          : await readRecoveryOperationFile(deps.recoveryOperationPath)
+        : parseRecoveryOperationInput(marker.recoveryOperation);
+    if (operation === null) throw new Error("invalid staged restore request");
+    if (marker.nodeRecoveryKey === true && operation !== undefined) {
+      assertSource(
+        operation,
+        marker.kind === "stream"
+          ? await recoveryStreamSourceId(
+              join(deps.stateDir, STREAM_DB),
+              unpackArchive(await readFile(join(deps.stateDir, STREAM_ENTRIES))),
+            )
+          : await recoveryArchiveFileSourceId(join(deps.stateDir, ARTIFACT)),
+      );
+    }
+    // The file bridges the restart; the selected database and current outside source still
+    // authenticate each attempt. A marker cannot substitute an environment key for a lost file.
+    const secret =
+      marker.nodeRecoveryKey === true
+        ? await readStagedNodeKey(deps.stateDir)
+        : deps.recoverySecret;
+    const withModuleOperations =
+      operation === undefined
+        ? deps.withModuleOperations
+        : createRecoveryRestoreRunner(ALL_MODULES, operation, secret);
+    const common = {
+      venueDir: deps.venueDir,
+      stateDir: deps.stateDir,
+      stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+      migrationsRoot: deps.migrationsRoot,
+      modules: ALL_MODULES,
+      environment,
+      log: deps.log,
+      ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
+    };
+    let run: () => Promise<void>;
+    if (marker.kind === "stream") {
+      const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
+      run = () =>
+        restoreStream({
+          ...common,
+          databasePath: join(deps.stateDir, STREAM_DB),
+          entries: unpackArchive(packed),
+        });
+    } else {
+      const recoveryKey = await readFile(join(deps.stateDir, KEY), "utf8");
+      run = () =>
+        restore({
+          ...common,
+          artifactPath: join(deps.stateDir, ARTIFACT),
+          recoveryKey,
+          ...(marker.managedCloud
+            ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
+            : {}),
+        });
+    }
+    managedCloud = marker.managedCloud as typeof managedCloud;
     await run();
   } catch (error) {
     // The lock refuses before the restore places the database or touches the identity, so the
@@ -268,9 +373,6 @@ export async function runStagedRestore(
     throw error;
   }
   await clearStagedRestore(deps.stateDir);
-  if (marker.managedCloud)
-    await deps
-      .onManagedCloudRestored?.(marker.managedCloud as { requestId: string; pointId: string })
-      .catch(() => {});
+  if (managedCloud) await deps.onManagedCloudRestored?.(managedCloud).catch(() => {});
   return true;
 }

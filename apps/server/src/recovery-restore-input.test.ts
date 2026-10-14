@@ -18,6 +18,8 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { AppError } from "@waitron/shared";
+import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
@@ -443,3 +445,112 @@ it.each(["invalid", "wrong-action"])(
     );
   },
 );
+
+it.each(["archive", "stream"] as const)(
+  "authenticates a browser-staged %s node key against the selected copy after a live-key change",
+  async (kind) => {
+    request.binding.sourceId =
+      kind === "stream"
+        ? await recoveryStreamSourceId(databasePath, [
+            { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            ...secretEntries,
+          ])
+        : recoveryArchiveSourceId(await readFile(archivePath));
+    await stageRestoreRequest(
+      stateDir,
+      kind === "stream"
+        ? {
+            kind: "stream",
+            databasePath,
+            entries: [
+              { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+              ...secretEntries,
+            ],
+            environment: "preproduction",
+            recoveryOperation: request,
+            nodeRecoverySecret: nodeKey,
+          }
+        : {
+            artifact: await readFile(archivePath),
+            recoveryKey: kit.recoveryKey,
+            environment: "preproduction",
+            recoveryOperation: request,
+            nodeRecoverySecret: nodeKey,
+          },
+    );
+    const replacementKey = await mintBreakGlassSecret(suite.db, NODE);
+    const log = vi.fn();
+    await expect(
+      runStagedRestore(
+        { ...target(), log, recoverySecret: replacementKey },
+        (args) =>
+          restoreFromArtifactFile({
+            ...args,
+            ...target(),
+            log,
+            withModuleOperations: args.withModuleOperations,
+          }),
+        (args) =>
+          writeStreamRestore({
+            ...args,
+            ...target(),
+            log,
+            withModuleOperations: args.withModuleOperations,
+          }),
+      ),
+    ).resolves.toBe(true);
+    await restored();
+    expect(collected).toBe(true);
+    expect(hookEntered).toBe(true);
+    await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(nodeKey);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(kit.recoveryKey);
+  },
+);
+
+it.each(["wrong", "outside-refusal"])(
+  "refuses a browser-staged key on %s without publishing a trading identity",
+  async (mode) => {
+    request.binding.sourceId = recoveryArchiveSourceId(await readFile(archivePath));
+    await stageRestoreRequest(stateDir, {
+      artifact: await readFile(archivePath),
+      recoveryKey: kit.recoveryKey,
+      environment: "preproduction",
+      recoveryOperation: request,
+      nodeRecoverySecret: mode === "wrong" ? "wrong-node-key" : nodeKey,
+    });
+    if (mode === "outside-refusal")
+      modules[0] = {
+        ...modules[0]!,
+        operations: {
+          prepare: async () => {
+            collected = true;
+            throw new AppError("module.operation_invalid", { module: "test-regime" });
+          },
+        },
+      };
+    await expect(
+      runStagedRestore({ ...target(), recoverySecret: nodeKey }, (args) =>
+        restoreFromArtifactFile({
+          ...args,
+          ...target(),
+          withModuleOperations: args.withModuleOperations,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: mode === "wrong" ? "promotion.break_glass_invalid" : "module.operation_invalid",
+    });
+    expect(collected).toBe(mode === "outside-refusal");
+    expect(hookEntered).toBe(false);
+    await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
+
+afterEach(() => {
+  request.binding.sourceId = "archive-42";
+});
