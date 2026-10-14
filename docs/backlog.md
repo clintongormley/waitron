@@ -3404,6 +3404,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A625. A row menu wraps its two-word items after the window is resized to phone width.** Seen on
+  the Staff roles page (A585-1's look): after a desktop window was narrowed to 390 px, "Move up" and
+  "Move down" broke onto two centred lines and the menu touched the screen's edge; loaded directly at
+  390 px it was one line per item, three times out of three. Believed to be the shared
+  `wt-row-actions` popover, not that page; not yet reproduced on another screen. Screenshots kept
+  outside the repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
+
 - **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
   OPEN, not started. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
@@ -4136,6 +4143,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
+  Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) is built;
+  parts 2–8 are open, in the order of the
+  [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
 - **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
   (today one `convenio_config` per location); a running total of hours clocked and rostered against
   hours due, annual leave counted, with the yearly overtime cap. After A585; plan with A10
@@ -4842,6 +4852,16 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **A624. The upgrade walk cannot step a new set whose first migration names another set's later
+  table.** `scripts/migration-upgrade.test.ts` applies every set's first migration together at its
+  first step, so a set added now whose first migration has a foreign key to a table another set
+  created later fails there ("no such table: main.special_day_dates", found building A585-1). A585-1
+  fitted the walk by generating `staffing`'s tables in two migrations: `0000` holds the two tables
+  whose targets every first migration creates, `0001` the other three, among them `staffing_days`,
+  whose keys name venue-service's seasons and special days' dates. Next: teach the walk to apply a first migration dated after its floor at its own
+  date (a change to how the guard walks, so the owner decides), then a set like staffing could keep
+  one baseline.
 
 - **Two row-reorder cursor tests leave "help" as the page's cursor when they fail mid-drag (found
   by A580's review).** `reorder-table.test.ts`'s "sets a grabbing cursor on the page body…" and
