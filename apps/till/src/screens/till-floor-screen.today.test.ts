@@ -843,7 +843,7 @@ describe("till-floor-screen: today's names", () => {
     expect(await drawnTargets(el)).toEqual([["t4", "Counter 5+Window"]]);
   });
 
-  it("Join with… sends a group's first table by saved name, whatever its tables are called today", async () => {
+  it("Join with… keeps a group under its first table by saved name, whatever its tables are called today", async () => {
     const el = await mount(
       [
         counter4({}, { name: "Alpha", ...inGroup(null) }),
