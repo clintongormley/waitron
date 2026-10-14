@@ -83,8 +83,13 @@ The local Cloud write routes accept only the configured management origin. Open 
 screen at `WAITRON_MANAGEMENT_ORIGIN`; remote-access setup must configure its staff hostname consistently. An automatic status read leaves your
 session idle time unchanged. Clicking Check connection or Refresh status counts as your activity.
 
-Version 1 returns exactly three services. Adding services requires a negotiated protocol
-version before changing that response. Stopping access permanently retires the key. A stop
+The box signs every `configuration` request with the body `{"servicesVersion":2}`, and Cloud
+answers it with a fourth service, `content_translation`, beside the original three. Renewals and
+reports still answer three. Services are matched by name, in any order. The box keeps the last
+fourth entry it was given when a renewal or report answers three. A Cloud must support version 2
+before a box running this code pairs with it: the contract makes any `configuration` body other
+than `{}` an invalid proof (401), and the box answers that refusal by dropping its lease
+(`apps/server/src/cloud-installation.ts:295-303`). Stopping access permanently retires the key. A stop
 request waits for the local worker, rechecks your permission, and saves the stop intent before
 contacting Cloud. Do not delete the state file to reconnect: pairing again with a new key does
 not take over the existing venue. A test server restored from a Cloud snapshot reconnects to its

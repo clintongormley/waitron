@@ -13,7 +13,10 @@ interface Pending {
   lease: string;
   body: string;
 }
-type Service = "continuous_backup" | "remote_access" | "retained_snapshots";
+type Service = "continuous_backup" | "remote_access" | "retained_snapshots" | "content_translation";
+const ORIGINAL_SERVICES = ["continuous_backup", "remote_access", "retained_snapshots"] as const;
+/** Asks Cloud for the fourth service, `content_translation` (contract, "Translate all, version 1"). */
+export const CONFIGURATION_BODY = JSON.stringify({ servicesVersion: 2 });
 export interface CloudObservation {
   service: Service;
   health: "unknown" | "healthy" | "degraded" | "failed";
@@ -69,14 +72,14 @@ function readView(value: unknown, state: SavedCloudState): View {
     !date(value.lastContactAt) ||
     !date(value.leaseExpiresAt) ||
     !Array.isArray(value.services) ||
-    value.services.length !== 3
+    (value.services.length !== 3 && value.services.length !== 4)
   )
     unavailable();
   const services: ServiceView[] = [];
   for (const s of value.services) {
     if (
       !object(s) ||
-      !["continuous_backup", "remote_access", "retained_snapshots"].includes(String(s.service)) ||
+      ![...ORIGINAL_SERVICES, "content_translation"].includes(String(s.service)) ||
       services.some((v) => v.service === s.service) ||
       !["unconfigured", "provisioning", "ready", "failed"].includes(String(s.state)) ||
       !["unknown", "healthy", "degraded", "failed"].includes(String(s.health)) ||
@@ -98,6 +101,7 @@ function readView(value: unknown, state: SavedCloudState): View {
       observedAt: s.observedAt as string | null,
     });
   }
+  if (!ORIGINAL_SERVICES.every((name) => services.some((s) => s.service === name))) unavailable();
   return {
     ...r,
     environment: state.environment,
@@ -305,6 +309,14 @@ export function installationClient(
             ? readLease((value as Record<string, unknown>).lease, state)
             : undefined;
       if (lease && leaseExpiry(lease) !== Date.parse(view.leaseExpiresAt ?? "")) unavailable();
+      // Only a version-2 `configuration` reply carries the fourth entry; keep it across the others.
+      const kept = c.view?.services.find((s) => s.service === "content_translation");
+      if (
+        p.action !== "configuration" &&
+        kept &&
+        !view.services.some((s) => s.service === "content_translation")
+      )
+        view.services.push(kept);
       c.view = view;
       if (lease) c.lease = lease;
       c.revoked = view.revokedAt !== null;
@@ -329,7 +341,7 @@ export function installationClient(
       if (c.pending) await exchange(signal);
       if (c.revoked) return;
       const needsRenew = leaseExpiry(c.lease) <= Date.now() + 600000;
-      await prepare(needsRenew ? "renew" : "configuration");
+      await prepare(needsRenew ? "renew" : "configuration", needsRenew ? "{}" : CONFIGURATION_BODY);
       await exchange(signal);
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {

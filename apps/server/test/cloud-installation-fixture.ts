@@ -71,9 +71,17 @@ export async function installationFixture(capture?: Parameters<typeof cloudFixtu
         revokedAt: revoked ? new Date().toISOString() : null,
         lastContactAt: new Date().toISOString(),
         leaseExpiresAt: new Date(now + 3600000).toISOString(),
-        services: ["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
+        services: [
+          "continuous_backup",
+          "remote_access",
+          "retained_snapshots",
+          ...(values[2] === "configuration" &&
+          (JSON.parse(String(values[7])) as { servicesVersion?: unknown }).servicesVersion === 2
+            ? ["content_translation"]
+            : []),
+        ].map((service) => ({
           service,
-          state: "unconfigured",
+          state: service === "content_translation" ? "ready" : "unconfigured",
           configuration: { secret: "adapter-only" },
           health: "unknown",
           failure: null,

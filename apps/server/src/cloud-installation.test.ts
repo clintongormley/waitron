@@ -246,3 +246,63 @@ it("cached observations distinguish fresh healthy from stale health and clear st
     await f.close();
   }
 });
+it("asks for the fourth service and keeps it when a renewal or report answers three", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew: no lease yet
+    await f.client.refresh(); // configuration
+    expect(f.requests.at(-1)![2]).toBe("configuration");
+    expect(f.requests.at(-1)![7]).toBe('{"servicesVersion":2}');
+    const services = (await f.client.status()).installation!.services.map((s) => s.service);
+    expect(services).toContain("content_translation");
+    await f.client.report([{ service: "remote_access", health: "healthy", failure: null }]);
+    expect(f.requests.at(-1)![2]).toBe("report");
+    expect((await f.client.status()).installation!.services.map((s) => s.service)).toContain(
+      "content_translation",
+    );
+    const restarted = createCloudConnection(f.options);
+    expect((await restarted.status()).installation!.services).toHaveLength(4);
+  } finally {
+    await f.close();
+  }
+});
+
+it("accepts the four services in any order", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: [four[3], four[2], four[0], four[1]] });
+    const status = await f.client.refresh();
+    expect(status.installation!.services.map((s) => s.service).sort()).toEqual([
+      "content_translation",
+      "continuous_backup",
+      "remote_access",
+      "retained_snapshots",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it.each([
+  [
+    "an unknown fourth service",
+    (s: unknown[]) => [s[0], s[1], s[2], { ...(s[3] as object), service: "telepathy" }],
+  ],
+  ["a service listed twice", (s: unknown[]) => [s[0], s[1], s[2], s[0]]],
+  ["an original service missing", (s: unknown[]) => [s[3], s[1], s[2]]],
+])("refuses a reply with %s", async (_name, change) => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    expect(four).toHaveLength(4);
+    f.patch({ services: change(four) });
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    await f.close();
+  }
+});
