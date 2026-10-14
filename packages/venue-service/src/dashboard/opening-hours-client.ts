@@ -2,6 +2,7 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
 import type { Season } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -26,6 +27,24 @@ export interface SeasonInput {
 export interface SeasonDeleteImpact {
   departments: { id: string; name: string }[];
 }
+
+export type PaintedInRow = { periodId: string } & PaintedIn;
+export type { PeriodDeleteImpact };
+
+/** What the server's `paintedIn` reads, plus the clock for "today" — not the whole
+ *  "opening-hours" list, which would re-read it on every product, category and zone change. */
+const PAINTED_IN_DEPENDENCIES = [
+  "menu_periods",
+  "departments",
+  "seasons",
+  "department_days",
+  "department_day_ranges",
+  "special_days",
+  "special_day_dates",
+  "locations",
+  "location_business_day_settings",
+  "location_day_cutover_changes",
+];
 
 const BASE = "/management-api/venue-service";
 const at = (id: string) => encodeURIComponent(id);
@@ -56,6 +75,26 @@ export class OpeningHoursApi {
       failed,
       recovered,
     );
+  }
+  watchPaintedIn(
+    apply: (rows: PaintedInRow[]) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:menu-periods-painted-in",
+      PAINTED_IN_DEPENDENCIES,
+      () =>
+        this.request<PaintedInRow[]>(`${BASE}/menu-periods/painted-in`, "GET", undefined, {
+          passive: true,
+        }),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  readPaintedIn(): Promise<PaintedInRow[]> {
+    return this.request(`${BASE}/menu-periods/painted-in`, "GET");
   }
   /** On the special-day calendar's dependencies, so a special-day or holiday-area write re-reads it. */
   watchYear(
@@ -191,8 +230,21 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
-  deletePeriod(periodId: string): Promise<void> {
+  deletePeriodIfUnused(periodId: string): Promise<void> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}`, "DELETE");
+  }
+  readPeriodDeleteImpact(periodId: string): Promise<PeriodDeleteImpact> {
+    return this.request(`${BASE}/menu-periods/${at(periodId)}/delete-impact`, "GET");
+  }
+  deletePeriod(
+    periodId: string,
+    replacementPeriodId: string | null,
+    expectedClockRevision: number,
+  ): Promise<void> {
+    return this.request(`${BASE}/menu-periods/${at(periodId)}/delete`, "POST", {
+      replacementPeriodId,
+      expectedClockRevision,
+    });
   }
   saveSeasonWeeks(
     seasonId: string,

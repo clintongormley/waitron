@@ -921,7 +921,7 @@ export class OpeningHoursScreen extends LitElement {
     this.busy = true;
     this.deleteError = "";
     try {
-      await this.api.deletePeriod(period.id);
+      await this.api.deletePeriodIfUnused(period.id);
     } catch (error) {
       if (this.deleting !== deletion || !this.isConnected) return;
       if (codeOf(error) === "menu_period.in_use") {
