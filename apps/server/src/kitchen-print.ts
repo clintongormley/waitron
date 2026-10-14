@@ -24,6 +24,7 @@ import {
   ticketItems,
   ticketState,
   parties,
+  partyTables,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -1331,23 +1332,40 @@ async function printMovedSlips(
 
 /**
  * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
- * them ({@link partyFamilies}), keyed by bill; a bill the kitchen has nothing on paper for is left
- * out. Read before a table action changes which tables those bills belong to.
+ * them ({@link partyFamilies}), and of every such counter order delivered to one of those parties'
+ * tables or to one of `tableIds`, keyed by order; an order the kitchen has nothing on paper for is
+ * left out. Read before a table action changes which tables those bills belong to, or what those
+ * tables are called.
  */
 export async function readPartiesSentWork(
   tx: Transaction,
   partyIds: readonly string[],
+  tableIds: readonly string[] = [],
 ): Promise<Map<string, SentWork>> {
   const ofParties = [...new Set([...(await partyFamilies(tx, partyIds)).values()].flat())];
-  const bills = await tx
+  const sendable = inArray(workingOrders.status, ["open", "placed", "settled"]);
+  const ofTheParties = await tx
+    .select({ id: workingOrders.id, orderNumber: workingOrders.orderNumber })
+    .from(workingOrders)
+    .where(and(sendable, inArray(workingOrders.partyId, ofParties)));
+  const partiesTables = tx
+    .select({ tableId: partyTables.tableId })
+    .from(partyTables)
+    .where(and(inArray(partyTables.partyId, ofParties), isNull(partyTables.leftAt)));
+  const delivered = await tx
     .select({ id: workingOrders.id, orderNumber: workingOrders.orderNumber })
     .from(workingOrders)
     .where(
       and(
-        inArray(workingOrders.status, ["open", "placed", "settled"]),
-        inArray(workingOrders.partyId, ofParties),
+        sendable,
+        isNull(workingOrders.partyId),
+        or(
+          inArray(workingOrders.deliveryTableId, partiesTables),
+          inArray(workingOrders.deliveryTableId, [...tableIds]),
+        ),
       ),
     );
+  const bills = [...ofTheParties, ...delivered];
   const sent = await readSentItems(
     tx,
     bills.map((bill) => bill.id),

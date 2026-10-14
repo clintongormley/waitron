@@ -1500,7 +1500,10 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   `apps/server/src/floor-today-store.ts`). When Bar leaves a named group of four, the other three
   keep the name and the slip reads "García birthday -> Bar, García birthday". That is lane C's
   reading, not the owner's: the owner's example assumed the group ended and read "-> Bar, Counter 3,
-  Counter 4, Counter 5". Owner may overturn it. A plain rename for today still prints nothing. The owner found that slip
+  Counter 4, Counter 5". Owner may overturn it. A rename for today prints too (A650 owner ruling 1,
+  2026-10-14): a MOVED slip for each bill of a party at the table or its group, and each counter
+  order delivered there, with work sent whose place names changed (`nameToday`,
+  `apps/server/src/floor-today-name.ts`). The owner found the Bar slip
   misleading (2026-10-14) and ruled on its replacement the same day (A650): a slip only when an
   order left a table, a name on its kitchen paper is gone (so a rename prints) or its dishes moved
   to an order with another number; the Bar case above then prints nothing. This entry describes the

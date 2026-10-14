@@ -721,8 +721,8 @@ export async function seatsToday(
 /**
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
  * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
- * table's group whose tables now read differently, for example when the table leaves a group named
- * for today.
+ * table's group, and each counter order delivered to one of its tables, whose tables now read
+ * differently, for example when the table leaves a group named for today.
  */
 export async function backToSaved(
   tx: Transaction,
@@ -745,8 +745,14 @@ export async function backToSaved(
     throw new AppError("table.not_on_today_plan", { tableId });
   }
   const members = merge?.members.map((member) => member.tableId) ?? [];
-  const parties = members.length === 0 ? [] : [...new Set((await holdersOf(tx, members)).values())];
-  const before = parties.length === 0 ? null : await readPartiesSentWork(tx, parties);
+  const before =
+    members.length === 0
+      ? null
+      : await readPartiesSentWork(
+          tx,
+          [...new Set((await holdersOf(tx, members)).values())],
+          members,
+        );
   await leaveMerges(tx, [tableId]);
   await tx
     .update(floorTodayTables)
