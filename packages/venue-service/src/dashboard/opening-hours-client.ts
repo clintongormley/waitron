@@ -191,6 +191,9 @@ export class OpeningHoursApi {
   readNumberOf(model: object): number | undefined {
     return this.#watches.readNumberOf(model);
   }
+  nextReadNumber(): number {
+    return this.#watches.nextReadNumber();
+  }
   rereadWithSpecialDays(): void {
     this.specialDays.rereadWatches();
     this.rereadWatches();

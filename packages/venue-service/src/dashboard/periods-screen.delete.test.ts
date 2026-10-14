@@ -68,9 +68,15 @@ function fake(options: {
   data?: () => OpeningHoursModel;
   impact?: (path: string) => unknown;
   write?: (path: string, method: string, body: unknown) => unknown;
+  /** Answers Painted in this many milliseconds late, in a later turn than the page's own read. */
+  paintedInDelay?: number;
 }): DashboardRequest {
   return (async (path, method, body) => {
-    if (method === "GET" && path === PAINTED_IN) return [];
+    if (method === "GET" && path === PAINTED_IN) {
+      if (options.paintedInDelay)
+        await new Promise((done) => setTimeout(done, options.paintedInDelay));
+      return [];
+    }
     if (isImpactRead(path, method))
       return structuredClone(await (options.impact ?? impactOf)(path));
     if (method === "GET") return structuredClone((options.data ?? model)());
@@ -270,6 +276,7 @@ it("ignores an impact read that answers after a newer one, and keeps the shown i
         new Promise<PeriodDeleteImpact>((done) => {
           answers.push(done);
         }),
+      paintedInDelay: 20,
     }),
   );
   const dialog = await removePeriod(el);
@@ -280,16 +287,19 @@ it("ignores an impact read that answers after a newer one, and keeps the shown i
   el.api.rereadWatches();
   await expect.poll(() => answers.length).toBeGreaterThanOrEqual(2);
   await new Promise((done) => setTimeout(done, 50));
-  const reads = answers.length;
+  expect(answers.length, "one page re-read, one impact read").toBe(2);
+  el.api.rereadWatches();
+  await expect.poll(() => answers.length).toBeGreaterThanOrEqual(3);
+  await new Promise((done) => setTimeout(done, 50));
+  expect(answers.length, "one page re-read, one impact read").toBe(3);
   await dialog.updateComplete;
   expect(body(dialog)).toContain("Painted in 1 season.");
-  answers[reads - 1]!(impactOf({ seasons: 3 }));
+  answers[2]!(impactOf({ seasons: 3 }));
   await expect.poll(() => body(dialog)).toContain("Painted in 3 seasons.");
-  for (const answer of answers.slice(1, reads - 1)) answer(impactOf({ seasons: 2 }));
+  answers[1]!(impactOf({ seasons: 2 }));
   await new Promise((done) => setTimeout(done, 0));
   await dialog.updateComplete;
   expect(body(dialog)).toContain("Painted in 3 seasons.");
-  expect(reads, "both watches re-read").toBe(3);
 });
 
 it("a failed impact read shows Retry, and Retry reads it again; a failed re-read keeps the shown impact and offers Retry", async () => {
@@ -359,6 +369,7 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
   await dialog.updateComplete;
   expect(deleteDialog(el)).toBe(dialog);
+  expect(heading(dialog)).toBe("Delete Renamed lunch?");
   expect(bottom(dialog)).toBe("The business-day start changed. Reload hours.");
 });
 
@@ -535,6 +546,12 @@ it("blocks opening a period dialog while a delete dialog is open, and the other 
   expect(el.shadowRoot!.querySelectorAll("period-delete-dialog")).toHaveLength(1);
   expect(deleteDialog(el)).toBe(deletion);
   expect(deletion.period?.id).toBe("p1");
+  const closed = new Promise((done) => deletion.addEventListener("period-delete-close", done));
+  await cancel(deletion).updateComplete;
+  cancel(deletion).click();
+  await closed;
+  await el.updateComplete;
+  expect(deleteDialog(el)).toBeNull();
 
   el.remove();
   add.click();

@@ -30,6 +30,8 @@ type Deletion = {
   clockRevision: number;
   /** The latest impact read; an answer to an earlier one is ignored. */
   generation: number;
+  /** The latest impact read started after every watch read numbered below this. */
+  readAfter: number;
   impact?: PeriodDeleteImpact;
   readError: string;
   busy: boolean;
@@ -156,7 +158,7 @@ export class PeriodsScreen extends LitElement {
         this.paintedRows = rows;
         this.painted = new Map(rows.map(({ periodId, ...painted }) => [periodId, painted]));
         this.paintedInError = "";
-        if (this.deleting) void this.readImpact(this.deleting);
+        this.rereadImpact(rows);
       },
       () => {
         this.paintedInError = t("period.painted_in_error");
@@ -327,11 +329,24 @@ export class PeriodsScreen extends LitElement {
   private followDeletion() {
     const deletion = this.deleting;
     if (!deletion) return;
-    const listed = this.model!.departments.some(
-      ({ active, periods }) => active && periods.some(({ id }) => id === deletion.period.id),
-    );
-    if (listed) void this.readImpact(deletion);
-    else this.deleting = undefined;
+    const period = this.model!.departments.filter(({ active }) => active)
+      .flatMap(({ periods }) => periods)
+      .find(({ id }) => id === deletion.period.id);
+    if (!period) {
+      this.deleting = undefined;
+      return;
+    }
+    deletion.period = period;
+    this.rereadImpact(this.model!);
+  }
+  /** Reads the impact again unless the latest impact read started after the watch read that
+   *  produced `read`, so both watches answering one page re-read cost one impact read. */
+  private rereadImpact(read: object) {
+    const deletion = this.deleting;
+    if (!deletion) return;
+    const number = this.api.readNumberOf(read);
+    if (number !== undefined && number < deletion.readAfter) return;
+    void this.readImpact(deletion);
   }
 
   private askDelete(period: Period) {
@@ -341,6 +356,7 @@ export class PeriodsScreen extends LitElement {
       period,
       clockRevision: this.model.clockRevision,
       generation: 0,
+      readAfter: 0,
       readError: "",
       busy: false,
     };
@@ -350,6 +366,7 @@ export class PeriodsScreen extends LitElement {
 
   private async readImpact(deletion: Deletion) {
     const generation = ++deletion.generation;
+    deletion.readAfter = this.api.nextReadNumber();
     let impact: PeriodDeleteImpact;
     try {
       impact = await this.api.readPeriodDeleteImpact(deletion.period.id);

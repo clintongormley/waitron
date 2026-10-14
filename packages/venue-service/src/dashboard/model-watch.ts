@@ -148,6 +148,11 @@ export class ModelWatches {
     return at;
   }
 
+  /** A number above every read already started and below every read started after this call. */
+  nextReadNumber(): number {
+    return ++ticks;
+  }
+
   /** The number the read that produced `model` took when it started, if a watch applied it. */
   readNumberOf(model: object): number | undefined {
     return this.#readAt.get(model);

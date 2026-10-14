@@ -81,6 +81,26 @@ it.each([
   },
 );
 
+it("nextReadNumber falls between a read started before it and one started after", async () => {
+  const watches = new ModelWatches();
+  const { reads, load } = heldLoad<{ name: string }>();
+  const apply = vi.fn();
+  detaches.push(watches.watch("k", ["t"], load, apply, vi.fn(), vi.fn()));
+  await expect.poll(() => reads.length).toBe(1);
+  const mark = watches.nextReadNumber();
+  const before = { name: "before" };
+  const after = { name: "after" };
+  reads[0]!.resolve(before);
+  await expect.poll(() => apply.mock.calls.length).toBe(1);
+  watches.reread(["t"]);
+  await expect.poll(() => reads.length).toBe(2);
+  reads[1]!.resolve(after);
+  await expect.poll(() => apply.mock.calls.length).toBe(2);
+  expect(watches.readNumberOf(before)).toBeLessThan(mark);
+  expect(watches.readNumberOf(after)).toBeGreaterThan(mark);
+  expect(watches.nextReadNumber()).toBeGreaterThan(watches.readNumberOf(after)!);
+});
+
 it("without live data, a write's reread holds back every watch, whatever its types", async () => {
   const watches = new ModelWatches();
   const { reads, load } = heldLoad<string>();
