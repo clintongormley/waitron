@@ -114,7 +114,7 @@ export {
   type WtComboboxAppearance,
 } from "./components/wt-combobox.js";
 
-export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-color.js";
+export { readableTextColor, isHexColor, CATEGORY_PALETTE, paleSwatch } from "./category-color.js";
 
 export { WtLozenge } from "./components/wt-lozenge.js";
 export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";

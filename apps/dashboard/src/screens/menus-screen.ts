@@ -17,6 +17,7 @@ import {
   setContentLanguages,
   currentContentLanguages,
   UrlStateController,
+  paleSwatch,
   type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -3221,6 +3222,15 @@ export class MenusScreen extends LitElement {
     ></dashboard-include-folder-form>`;
   }
 
+  /** A new top-level section takes the next pale swatch by the menu's own top-level sections. */
+  #newSectionColor(): string | null {
+    const structure = this.structure;
+    if (!structure || this.creatingSection?.listId !== structure.rootSectionId) return null;
+    return paleSwatch(
+      structure.nodes.filter((node) => node.ref.kind === "section" && !node.includedMenuId).length,
+    );
+  }
+
   #renderNewSection() {
     return html`<dashboard-section-details-form
         data-test="section-form"
@@ -3229,6 +3239,7 @@ export class MenusScreen extends LitElement {
         .api=${this.api}
         .languages=${currentContentLanguages()}
         .value=${this.editingSection}
+        .startColor=${this.#newSectionColor()}
         .fieldErrors=${this.newSectionErrors}
         heading=${this.editingSection ? t("menus.edit_section") : fill("menus.new_section_heading", { list: this.creatingSection?.name ?? "" })}
         @wt-close=${{

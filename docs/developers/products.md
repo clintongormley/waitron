@@ -432,7 +432,10 @@ product's own colour goes into the next version's offer in the same way
 earlier document format is not sold from: [product-categories.md](product-categories.md).
 
 A menu section has a colour of its own, set in the section form. It paints the section's own tile
-and nothing else: the products inside the section keep their own colours.
+and nothing else: the products inside the section keep their own colours. The section form for a new
+section at a menu's top level opens on the next pale swatch, picked by how many top-level sections
+of its own the menu has (red first, back to red after magenta); a new section inside another opens
+with none.
 
 On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a section tile with a
 colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
