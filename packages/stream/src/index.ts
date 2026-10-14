@@ -42,6 +42,7 @@ export {
 } from "./litestream.js";
 export { readBucketConfig } from "./bucket-config.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
+export { spawnLitestream } from "./litestream-process.js";
 export {
   DEFAULT_WAL_LIMIT_BYTES,
   L0_RETENTION_MS,
