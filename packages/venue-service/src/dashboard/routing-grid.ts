@@ -619,10 +619,17 @@ export class RoutingGrid extends LitElement {
         ? this.pending
         : undefined;
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
-    const disabled =
-      shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
     const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
     const period = this.period;
+    /** The station this cell itself sends to in the shown view; inherited ones are not warned about. */
+    const setHere =
+      period === null || periodLines.inherited
+        ? shown
+        : stationDuring(periodLines.lines, period, shown);
+    const disabled =
+      setHere?.kind === "station" && this.#station(setHere.stationId)?.active !== true
+        ? setHere
+        : null;
     const target =
       period === null
         ? (shown ?? inherited)

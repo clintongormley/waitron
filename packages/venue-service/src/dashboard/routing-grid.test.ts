@@ -2350,6 +2350,102 @@ describe("one period", () => {
     });
   });
 
+  describe("the disabled-station warning follows the station shown for the period", () => {
+    /**
+     * Flan goes to the Kitchen, and to the disabled Old kitchen at Lunch; Margherita goes to the
+     * Old kitchen, and to the Kitchen at Lunch; PIZZAS go to the Kitchen, and to the Old kitchen
+     * at Dinner; Calzone has no cell of its own.
+     */
+    const withOldKitchen = () => {
+      const model = twoDepartments({
+        stations: [
+          { id: "kitchen", name: "Kitchen", active: true, colour: "orange" },
+          { id: "oven", name: "Pizza oven", active: true, colour: "pink" },
+          { id: "grill", name: "Grill", active: true, colour: "purple" },
+          { id: "old", name: "Old kitchen", active: false, colour: "brown" },
+        ],
+      });
+      model.products = [
+        ...model.products,
+        { id: "calzone", name: "Calzone", categoryId: "pizzas" },
+      ];
+      model.cells = [
+        {
+          row: { kind: "category", categoryId: "pizzas" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "dinner", target: station("old") }],
+        },
+        {
+          row: { kind: "product", productId: "flan" },
+          zoneId: null,
+          target: station("kitchen"),
+          periods: [{ periodId: "lunch", target: station("old") }],
+        },
+        {
+          row: { kind: "product", productId: "margherita" },
+          zoneId: null,
+          target: station("old"),
+          periods: [{ periodId: "lunch", target: station("kitchen") }],
+        },
+      ];
+      return model;
+    };
+    const warningOf = (el: RoutingGrid, row: string, zone: string) =>
+      cell(el, row, zone)
+        .querySelector('[data-test="disabled-target"]')
+        ?.textContent!.replace(/\s+/g, " ")
+        .trim() ?? null;
+
+    it("warns where the cell's own line sends the period to a disabled station", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "lunch");
+      expect(drawn(el, "p:flan", "every").text).toBe("Old kitchen (Disabled)");
+      expect(warningOf(el, "p:flan", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+
+    it("does not warn where the cell's own line sends the period to an active station, though its plain station is disabled", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "lunch");
+      expect(drawn(el, "p:margherita", "every").text).toBe("Kitchen");
+      expect(warningOf(el, "p:margherita", "every")).toBeNull();
+      await choosePeriod(el, "dinner");
+      expect(drawn(el, "p:margherita", "every").text).toBe("Old kitchen (Disabled)");
+      expect(warningOf(el, "p:margherita", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+
+    it("does not warn on a cell that only inherits the disabled station for the period", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      await choosePeriod(el, "dinner");
+      expect(warningOf(el, "c:pizzas", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+      expect(drawn(el, "p:calzone", "every")).toMatchObject({
+        text: "Old kitchen (Disabled)",
+        style: "inherited",
+      });
+      expect(warningOf(el, "p:calzone", "every")).toBeNull();
+    });
+
+    it("All periods still warns only about the cell's plain station", async () => {
+      const { el } = await mountExpanded(withOldKitchen());
+      expect(drawn(el, "p:flan", "every").text).toBe("Kitchen");
+      expect(warningOf(el, "p:flan", "every")).toBeNull();
+      expect(
+        [...cell(el, "p:flan", "every").querySelectorAll(".line")].map((line) =>
+          line.textContent!.trim(),
+        ),
+      ).toEqual(["Lunch: Old kitchen (Disabled)"]);
+      expect(warningOf(el, "p:margherita", "every")).toBe(
+        "Old kitchen: Disabled. Its work goes to Kitchen.",
+      );
+    });
+  });
+
   it("a cell opened from the period view edits the whole cell, its period lines included", async () => {
     const { el } = await mountExpanded();
     await choosePeriod(el, "lunch");
