@@ -7,6 +7,18 @@ export { STAFFING_CLASSIFICATION, STAFFING_CHANGE_SOURCES } from "./classificati
 export { STAFFING_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { STAFFING_PERMISSIONS } from "./permissions.js";
 export { STAFFING_ROUTES } from "./routes.js";
+export { parseArea, parseBlocks } from "./paint-rules.js";
+export {
+  listStaffingAreas,
+  readSeasonStaffing,
+  readSpecialDayStaffing,
+  resolveStaffing,
+  saveSeasonStaffing,
+  saveSpecialDayStaffing,
+  type SeasonStaffingEdit,
+  type SpecialDayStaffingEdit,
+  type StaffingArea,
+} from "./paint.js";
 export {
   createStaffRole,
   deleteStaffRole,
