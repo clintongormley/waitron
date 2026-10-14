@@ -669,6 +669,62 @@ describe("the readiness list warns when two special days come to share a date", 
   });
 });
 
+describe("saving either special day of a pair that came to share a date", () => {
+  const pair = async () => {
+    const v = await venue();
+    const friday = await yearly(v, "Viernes Santo", "2026-04-03");
+    const feria = await rawDay(v, "Feria", "2026-03-26", true);
+    const update = (id: string, input: unknown) =>
+      scoped((tx) => saveSpecialDay(tx, v.cfg, id, input, AT, 0));
+    return { v, friday, feria, update };
+  };
+  const feriaOn = (date: string) => ({
+    name: "Feria",
+    repeatsYearly: true,
+    dates: [{ date, closedAllDay: true }],
+  });
+
+  it("refuses the repeating holiday unchanged, naming the fixed day that holds the shared date", async () => {
+    const { friday, feria, update } = await pair();
+    expect(
+      await refusal(
+        update(friday.id, {
+          name: "Viernes Santo",
+          repeatsYearly: true,
+          dates: dates(["2026-04-03"]),
+        }),
+      ),
+    ).toEqual({
+      code: "special_day.date_taken",
+      params: { date: "2027-03-26", specialDayId: feria.id, name: "Feria" },
+    });
+  });
+
+  it("refuses the fixed yearly day unchanged, naming the holiday that moved onto it", async () => {
+    const { friday, feria, update } = await pair();
+    expect(await refusal(update(feria.id, feriaOn("2026-03-26")))).toEqual({
+      code: "special_day.date_taken",
+      params: { date: "2027-03-26", specialDayId: friday.id, name: "Viernes Santo" },
+    });
+  });
+
+  it("saves the fixed yearly day once it moves off the shared date", async () => {
+    const { v, friday, feria, update } = await pair();
+    const saved = await update(feria.id, feriaOn("2026-03-27"));
+    expect(saved.id).toBe(feria.id);
+    expect(
+      await db
+        .select({ date: specialDayDates.date })
+        .from(specialDayDates)
+        .where(eq(specialDayDates.specialDayId, feria.id)),
+    ).toEqual([{ date: "2026-03-27" }]);
+    expect(await standing(v, ["2027-03-26", "2027-03-27"])).toEqual({
+      "2027-03-26": friday.id,
+      "2027-03-27": feria.id,
+    });
+  });
+});
+
 describe("the clock-change check follows a repeating holiday date to each year's date", () => {
   /** Wednesday's Dinner, 22:00 to 04:30, sends until 07:30; a special day's Thursday opens Lunch
    *  at 07:15. The rows are written raw, as the special-day writer would refuse them under the
