@@ -6,22 +6,38 @@ import type { SpecialDayPainter } from "./special-day-painter.js";
 import {
   drag,
   frame,
+  grid,
   painterModel,
   part,
   pick,
   settle,
   specialDayApi,
   storedDay,
+  type Write,
 } from "../testing/special-day-painter-fixture.js";
 import "./special-day-painter.js";
 
 /** Awaited before a season days read answers, while set. */
 let seasonHold: Promise<unknown> | undefined;
 let seasonReads = 0;
+/** What a read of `sd1` finds. */
+let stored = storedDay();
+let dayReads = 0;
+/** Awaited before a read of `sd1` answers, while set. */
+let dayHold: Promise<unknown> | undefined;
+const writes: Write[] = [];
 class PainterApp extends LitElement {
   readonly leave = new LeaveController(this);
-  readonly api = specialDayApi([], {
-    days: { sd1: storedDay() },
+  readonly api = specialDayApi(writes, {
+    days: {
+      get sd1() {
+        return stored;
+      },
+    },
+    dayAfter: () => {
+      dayReads++;
+      return dayHold;
+    },
     seasonAfter: async () => {
       seasonReads++;
       await seasonHold;
@@ -48,6 +64,9 @@ beforeEach(() => setLocale("en"));
 afterEach(() => {
   app?.remove();
   seasonHold = undefined;
+  stored = storedDay();
+  dayHold = undefined;
+  writes.length = 0;
   setLocale("en");
 });
 async function mount(day: { specialDayId?: string | null; date?: string } = {}) {
@@ -181,4 +200,80 @@ it("a new day whose only edit a refresh drops no longer asks before leaving", as
   await settle(painter);
   expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
   expect(unload()).toBe(false);
+});
+
+const saveButton = (painter: SpecialDayPainter) =>
+  frame(painter).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+async function paintDinner(painter: SpecialDayPainter) {
+  painter.shadowRoot!.querySelector<HTMLElement>('[data-test="paint-p2"]')!.click();
+  await settle(painter);
+  await drag(painter, "2026-12-15", 13 * 60, 16 * 60);
+}
+const dinner = { periodId: "p2", startsAt: "19:00", endsAt: "22:00" };
+
+it("keeps an edited day when a fresh model arrives before the painter, put back on the page, has updated", async () => {
+  const painter = await mount();
+  await paintDinner(painter);
+  expect(grid(painter).days.get("2026-12-15")).toEqual([dinner]);
+  let release!: (value?: unknown) => void;
+  dayHold = new Promise((resolve) => (release = resolve));
+  const reads = dayReads;
+  const parent = painter.parentNode!;
+  painter.remove();
+  painter.model = painterModel();
+  parent.insertBefore(painter, parent.firstChild);
+  await settle(painter);
+  await expect.poll(() => dayReads).toBe(reads + 1);
+  expect(grid(painter).days.get("2026-12-15")).toEqual([dinner]);
+  expect(unload()).toBe(true);
+  expect(saveButton(painter).disabled).toBe(false);
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await settle(painter);
+  expect(grid(painter).days.get("2026-12-15")).toEqual([dinner]);
+  expect(unload()).toBe(true);
+  expect(saveButton(painter).disabled).toBe(false);
+});
+
+it("keeps an edited day when another manager's change to the stored day lands while the painter is off the page", async () => {
+  const painter = await mount();
+  await paintDinner(painter);
+  const reads = dayReads;
+  const parent = painter.parentNode!;
+  painter.remove();
+  stored = storedDay({
+    paint: [
+      {
+        departmentId: "d1",
+        date: "2026-12-14",
+        ranges: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }],
+      },
+    ],
+  });
+  painter.model = painterModel();
+  await expect.poll(() => dayReads).toBe(reads + 1);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await painter.updateComplete;
+  parent.insertBefore(painter, parent.firstChild);
+  await settle(painter);
+  expect(grid(painter).days.get("2026-12-14")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
+  ]);
+  expect(grid(painter).days.get("2026-12-15")).toEqual([dinner]);
+  expect(unload()).toBe(true);
+  expect(saveButton(painter).disabled).toBe(false);
+});
+
+it("an edited day keeps the clock revision it was painted under when a fresh model arrives while the painter is off the page", async () => {
+  const painter = await mount();
+  await paintDinner(painter);
+  const parent = painter.parentNode!;
+  painter.remove();
+  painter.model = { ...painterModel(), clockRevision: 9 };
+  await painter.updateComplete;
+  parent.insertBefore(painter, parent.firstChild);
+  await settle(painter);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect((writes[0]!.body as { expectedClockRevision: number }).expectedClockRevision).toBe(4);
 });

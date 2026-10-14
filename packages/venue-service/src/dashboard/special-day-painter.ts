@@ -491,7 +491,7 @@ export class SpecialDayPainter extends LitElement {
     const key = this.seedKey();
     if (this.open && this.seeded !== key) this.reseed(key);
     else if (changes.has("model")) {
-      if (!this.scope?.isDirty()) this.revision = this.model.clockRevision;
+      if (sameDraft(this.draft, this.baseline)) this.revision = this.model.clockRevision;
       if (!this.saving)
         this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
       if (this.open) this.follow();

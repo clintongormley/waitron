@@ -38,20 +38,25 @@ const at = (clock: string) =>
   (Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3)) - 360 + 1440) % 1440;
 type Body = SpecialDayInput & { expectedClockRevision: number };
 
-/** Reads that wait while `held`, each until its release is called. */
+/** Reads that wait while `held`, each until its release is called, or its `refuse` fails it. */
 function gate() {
-  const waiting: (() => void)[] = [];
+  const waiting: ((() => void) & { refuse: (error: unknown) => void })[] = [];
   const state = {
     held: false,
     waiting,
-    after: () => (state.held ? new Promise<void>((resolve) => waiting.push(resolve)) : undefined),
+    after: () =>
+      state.held
+        ? new Promise<void>((resolve, reject) =>
+            waiting.push(Object.assign(() => resolve(), { refuse: reject })),
+          )
+        : undefined,
   };
   return state;
 }
 
 /**
  * A painter on stored day `sd1`, fed its model by a real opening hours watch, as the screen feeds
- * it. A save is stored as the server would, then answered once `saveGate` lets it; `storedBefore`
+ * it. A save is stored as the server would, then answered once `saves` lets it; `storedBefore`
  * runs once the save is stored and before it answers, as another manager's write landing then.
  */
 async function racingPainter(live: boolean) {
@@ -66,6 +71,11 @@ async function racingPainter(live: boolean) {
     get sd1() {
       return server.day;
     },
+    sd2: storedDay({
+      id: "sd2",
+      name: "New Year's Eve",
+      dates: [{ date: DEC_31, closedAllDay: false }],
+    }),
   };
   const writes: Write[] = [];
   const dayReads = gate();
@@ -261,3 +271,140 @@ it.each([
     expect(body.expectedClockRevision).toBe(5);
   },
 );
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "a failed read after a save keeps the paint, and the next good read is taken in (%s)",
+  async (_, live) => {
+    const { painter, server, dayReads, save } = await racingPainter(live);
+    await paint(painter, "p2", DEC_15, ["19:00", "22:00"]);
+    dayReads.held = true;
+    await save();
+    await expect.poll(() => dayReads.waiting.length).toBe(1);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    dayReads.held = false;
+    await paint(painter, "p1", DEC_14, ["10:00", "11:00"]);
+    dayReads.waiting.shift()!.refuse({ code: "server.internal" });
+    await pause(painter);
+    expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
+    expect(grid(painter).days.get(DEC_14)).toEqual([
+      lunch("10:00", "11:00"),
+      dinner("20:00", "21:00"),
+    ]);
+    expect(frame(painter).refusal).toBe("");
+
+    server.day = {
+      ...server.day,
+      paint: server.day.paint.map((entry) =>
+        entry.date === DEC_15 ? { ...entry, ranges: [dinner("18:00", "22:00")] } : entry,
+      ),
+    };
+    painter.api.rereadWatches();
+    await expect.poll(() => grid(painter).days.get(DEC_15)).toEqual([dinner("18:00", "22:00")]);
+    expect(grid(painter).days.get(DEC_14)).toEqual([
+      lunch("10:00", "11:00"),
+      dinner("20:00", "21:00"),
+    ]);
+    const body = await save();
+    expect(body.paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_14,
+        ranges: [lunch("10:00", "11:00"), dinner("20:00", "21:00")],
+      },
+    ]);
+  },
+);
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "a read after save 1 that lands during save 2 shows no unstored hours as an edit (%s)",
+  async (_, live) => {
+    const { painter, server, dayReads, saves, hooks, save } = await racingPainter(live);
+    await paint(painter, "p2", DEC_15, ["19:00", "22:00"]);
+    // Another manager adds New Year's Eve once save 1 is stored, so the read after it holds that date.
+    hooks.storedBefore = () => {
+      server.day = {
+        ...server.day,
+        dates: [...server.day.dates, { date: DEC_31, closedAllDay: false }],
+        paint: [
+          ...server.day.paint,
+          { departmentId: "d1", date: DEC_31, ranges: [lunch("13:00", "16:00")] },
+        ],
+      };
+    };
+    dayReads.held = true;
+    await save();
+    hooks.storedBefore = undefined;
+    await expect.poll(() => dayReads.waiting.length).toBe(1);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    dayReads.held = false;
+    await paint(painter, "p1", DEC_14, ["10:00", "11:00"]);
+    saves.held = true;
+    const second = await save();
+    expect(second.dates.map(({ date }) => date)).not.toContain(DEC_31);
+    await expect.poll(() => saves.waiting.length).toBe(1);
+    dayReads.waiting.shift()!();
+    await pause(painter);
+    saves.held = false;
+    saves.waiting.shift()!();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await pause(painter);
+    expect(server.day.dates.map(({ date }) => date)).not.toContain(DEC_31);
+    expect(grid(painter).columns.map(({ key }) => key)).not.toContain(DEC_31);
+    expect(grid(painter).days.get(DEC_14)).toEqual([
+      lunch("10:00", "11:00"),
+      dinner("20:00", "21:00"),
+    ]);
+    expect(frame(painter).dirty).toBe(false);
+  },
+);
+
+it.each([
+  ["a new day", { specialDayId: null, date: DEC_31 }, ""],
+  ["another stored day", { specialDayId: "sd2", date: null }, "New Year's Eve"],
+])(
+  "a read of the stored day still pending when the painter moves to %s does not land on it",
+  async (_, target, name) => {
+    const { painter, dayReads } = await racingPainter(false);
+    dayReads.held = true;
+    painter.api.rereadWatches();
+    await expect.poll(() => dayReads.waiting.length).toBe(1);
+    dayReads.held = false;
+    painter.specialDayId = target.specialDayId;
+    painter.date = target.date;
+    await settle(painter);
+    await expect.poll(() => grid(painter).columns.map(({ key }) => key)).toEqual([DEC_31]);
+    dayReads.waiting.shift()!();
+    await pause(painter);
+    expect(grid(painter).columns.map(({ key }) => key)).toEqual([DEC_31]);
+    expect(grid(painter).days.get(DEC_14)).toBeUndefined();
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe(name);
+  },
+);
+
+it("a model read that started before a save and answers before the save's own reread is not applied (no live data)", async () => {
+  const { painter, server, modelReads, save } = await racingPainter(false);
+  const shown = painter.model.clockRevision;
+  server.model = { ...painterModel(), clockRevision: 99 };
+  modelReads.held = true;
+  painter.api.rereadWatches();
+  await expect.poll(() => modelReads.waiting.length).toBe(1);
+  await paint(painter, "p2", DEC_15, ["19:00", "22:00"]);
+  server.model = { ...painterModel(), clockRevision: 5 };
+  await save();
+  await expect.poll(() => modelReads.waiting.length).toBe(2);
+  modelReads.waiting[0]!();
+  await pause(painter);
+  expect(painter.model.clockRevision).toBe(shown);
+  modelReads.held = false;
+  modelReads.waiting[1]!();
+  await expect.poll(() => painter.model.clockRevision).toBe(5);
+});
