@@ -2012,7 +2012,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
   slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
   taken off) — still print the bare order number (`formatCorrectionSlip`,
-  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too?
+  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
   (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
