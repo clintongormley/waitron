@@ -288,22 +288,24 @@ export async function readChain(
       ...row
     }) => ({
       ...row,
-      extension: [
-        authorKind,
-        correctionDirection,
-        missingEntryKind,
-        respondsToEntryId,
-        payPeriodClosureId,
-      ].every((value) => value === null)
-        ? null
-        : {
-            selfApproved,
-            authorKind,
-            direction: correctionDirection,
-            missingEntryKind,
-            respondsToEntryId,
-            payPeriodClosureId,
-          },
+      extension:
+        !selfApproved &&
+        [
+          authorKind,
+          correctionDirection,
+          missingEntryKind,
+          respondsToEntryId,
+          payPeriodClosureId,
+        ].every((value) => value === null)
+          ? null
+          : {
+              selfApproved,
+              authorKind,
+              direction: correctionDirection,
+              missingEntryKind,
+              respondsToEntryId,
+              payPeriodClosureId,
+            },
     }),
   );
 }

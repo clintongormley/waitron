@@ -8,6 +8,8 @@ import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { computeEntryHash, verifyChain, type EntryHashInput } from "./chain-hash.js";
 import { appendToChain, readChain } from "./chain.js";
+import { readRecordedEntries } from "./record-reads.js";
+import { timeEntries } from "./schema/time-entries.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 
 const extension = {
@@ -201,3 +203,28 @@ it("refuses a self-approval flag on an ordinary clock entry without changing the
   expect(suite.db.execute(sql`select id from time_entries`).rows).toEqual([]);
   expect(suite.db.execute(sql`select * from workforce_chains`).rows).toEqual([]);
 });
+
+it.each(["chain", "record"])(
+  "retains a stored self-approval flag added to a basic entry in the %s reader",
+  async (reader) => {
+    const original = { ...content, personId, recordedByPersonId: personId, nodeId, locationId };
+    await suite.db.insert(timeEntries).values({
+      ...original,
+      entryKind: "in",
+      correctionStatus: null,
+      selfApproved: true,
+      isFirstEntry: true,
+      entryHash: computeEntryHash(original),
+    });
+    if (reader === "chain")
+      expect(verifyChain(await readChain(suite.db, { nodeId, locationId }))).toEqual({
+        ok: false,
+        reason: "hash_mismatch",
+        sequenceNo: 1,
+      });
+    else
+      expect((await readRecordedEntries(suite.db, { personId }))[0]!.extension?.selfApproved).toBe(
+        true,
+      );
+  },
+);

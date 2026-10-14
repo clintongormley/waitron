@@ -88,21 +88,23 @@ export async function readRecordedEntries(
     correctionStatus: row.correctionStatus,
     correctionReason: row.correctionReason,
     correctionActorId: row.correctionActorId,
-    extension: [
-      row.authorKind,
-      row.correctionDirection,
-      row.missingEntryKind,
-      row.respondsToEntryId,
-      row.payPeriodClosureId,
-    ].every((v) => v === null)
-      ? null
-      : {
-          selfApproved: row.selfApproved,
-          authorKind: row.authorKind,
-          direction: row.correctionDirection,
-          missingEntryKind: row.missingEntryKind,
-          respondsToEntryId: row.respondsToEntryId,
-          payPeriodClosureId: row.payPeriodClosureId,
-        },
+    extension:
+      !row.selfApproved &&
+      [
+        row.authorKind,
+        row.correctionDirection,
+        row.missingEntryKind,
+        row.respondsToEntryId,
+        row.payPeriodClosureId,
+      ].every((v) => v === null)
+        ? null
+        : {
+            selfApproved: row.selfApproved,
+            authorKind: row.authorKind,
+            direction: row.correctionDirection,
+            missingEntryKind: row.missingEntryKind,
+            respondsToEntryId: row.respondsToEntryId,
+            payPeriodClosureId: row.payPeriodClosureId,
+          },
   }));
 }
