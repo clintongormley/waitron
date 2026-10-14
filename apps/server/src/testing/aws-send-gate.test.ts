@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   CreateBucketCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -28,10 +29,12 @@ const S3_HOSTS = { s3Region: "eu-north-1" } as const;
 function recording(config: ConstructorParameters<typeof S3Client>[0] = {}) {
   let handled = 0;
   const hosts: string[] = [];
+  const sent: { path: string; body: string }[] = [];
   const requestHandler = {
-    async handle(request: { hostname: string }) {
+    async handle(request: { hostname: string; path: string; body?: unknown }) {
       handled += 1;
       hosts.push(request.hostname);
+      sent.push({ path: request.path, body: typeof request.body === "string" ? request.body : "" });
       return {
         response: { statusCode: 200, headers: { etag: '"v1"' }, body: Readable.from([]) },
       };
@@ -43,7 +46,7 @@ function recording(config: ConstructorParameters<typeof S3Client>[0] = {}) {
     requestHandler,
     ...config,
   });
-  return { client, handled: () => handled, hosts: () => hosts };
+  return { client, handled: () => handled, hosts: () => hosts, sent: () => sent };
 }
 
 function plan(): RequestPlan {
@@ -258,6 +261,125 @@ describe("the send gate", () => {
       { sender: "scenario", api: "GetObject" },
       { sender: "runner", api: "CreateBucket" },
     ]);
+    expect(scope.refusals().count).toBe(0);
+  });
+});
+
+describe("the send gate's check of what is serialised", () => {
+  const KEY_REFUSAL = "every key in a scenario's PutObject must be under a prefix this run issued";
+
+  function keyedPlan(): RequestPlan {
+    return createRequestPlan({
+      bucket: BUCKET,
+      apis: ["PutObject", "DeleteObjects"],
+      prefixes: () => new Set([PREFIX]),
+    });
+  }
+
+  async function expectRefused(
+    pending: Promise<unknown>,
+    detail: string,
+    scope: ReturnType<typeof openRequestScope>,
+    handled: () => number,
+  ) {
+    const error = await pending.catch((e: unknown) => e);
+    expect(handled()).toBe(0);
+    expect(error).toBeInstanceOf(AwsRehearsalRefused);
+    expect((error as AwsRehearsalRefused).reason).toBe("request-unplanned");
+    expect((error as Error).message).toContain(detail);
+    expect((error as Error).message).not.toContain(OUTSIDE_KEY);
+    expect(scope.refusals()).toEqual({ count: 1, first: detail });
+  }
+
+  it("refuses a PutObject whose key is changed after send, before the SDK has read it", async () => {
+    const { client, handled } = recording();
+    let reached!: () => void;
+    const waiting = new Promise<void>((resolve) => (reached = resolve));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    client.middlewareStack.add(
+      (next) => async (args) => {
+        reached();
+        await held;
+        return next(args);
+      },
+      { step: "initialize", name: "holdBeforeSerialising" },
+    );
+    const refused: [string, string][] = [];
+    const scope = openRequestScope({
+      plan: keyedPlan(),
+      mode: "enforce",
+      hosts: S3_HOSTS,
+      onRefused: (detail, api) => refused.push([detail, api]),
+    });
+    const command = planned();
+    const pending = scope.run(() => client.send(command));
+    await waiting;
+    command.input.Key = OUTSIDE_KEY;
+    release();
+    await expectRefused(pending, KEY_REFUSAL, scope, handled);
+    expect(refused).toEqual([[KEY_REFUSAL, "PutObject"]]);
+  });
+
+  it("refuses a DeleteObjects whose nested key is changed after send is called", async () => {
+    const { client, handled } = recording();
+    const scope = openRequestScope({ plan: keyedPlan(), mode: "enforce", hosts: S3_HOSTS });
+    const command = new DeleteObjectsCommand({
+      Bucket: BUCKET,
+      Delete: { Objects: [{ Key: `${PREFIX}a` }] },
+    });
+    const pending = scope.run(() => client.send(command));
+    command.input.Delete!.Objects![0]!.Key = OUTSIDE_KEY;
+    await expectRefused(
+      pending,
+      "every key in a scenario's DeleteObjects must be under a prefix this run issued",
+      scope,
+      handled,
+    );
+  });
+
+  it("refuses a request whose key a middleware rewrites before serialisation", async () => {
+    const { client, handled } = recording();
+    client.middlewareStack.add(
+      (next) => async (args) => {
+        (args.input as { Key?: string }).Key = OUTSIDE_KEY;
+        return next(args);
+      },
+      { step: "initialize", name: "rewriteKey" },
+    );
+    const scope = openRequestScope({ plan: keyedPlan(), mode: "enforce", hosts: S3_HOSTS });
+    await expectRefused(
+      scope.run(() => client.send(planned())),
+      KEY_REFUSAL,
+      scope,
+      handled,
+    );
+  });
+
+  it("sends an unchanged planned request, and one a middleware moves to another planned key", async () => {
+    const { client, handled, sent } = recording({ forcePathStyle: true });
+    const scope = openRequestScope({ plan: keyedPlan(), mode: "enforce", hosts: S3_HOSTS });
+    await scope.run(() => client.send(planned()));
+    await scope.run(() =>
+      client.send(
+        new DeleteObjectsCommand({ Bucket: BUCKET, Delete: { Objects: [{ Key: `${PREFIX}a` }] } }),
+      ),
+    );
+    client.middlewareStack.add(
+      (next) => async (args) => {
+        (args.input as { Key?: string }).Key = `${PREFIX}moved`;
+        return next(args);
+      },
+      { step: "initialize", name: "moveKey" },
+    );
+    await scope.run(() => client.send(planned()));
+    expect(handled()).toBe(3);
+    expect(sent().map((request) => request.path)).toEqual([
+      `/${BUCKET}/${PREFIX}a`,
+      `/${BUCKET}/`,
+      `/${BUCKET}/${PREFIX}moved`,
+    ]);
+    expect(sent()[1]!.body).toContain(`<Key>${PREFIX}a</Key>`);
     expect(scope.refusals().count).toBe(0);
   });
 });
