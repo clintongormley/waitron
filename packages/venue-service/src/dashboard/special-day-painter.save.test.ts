@@ -758,7 +758,7 @@ describe("a live update while the day is open", () => {
     });
   });
 
-  it("edited dates and Every year stay, while a name the draft has not changed follows", async () => {
+  it("a date the draft removed stays removed and Every year stays, while a name and a date the draft has not changed follow", async () => {
     const days = { sd1: storedDay() };
     const { painter, writes } = await mount({ days });
     painter

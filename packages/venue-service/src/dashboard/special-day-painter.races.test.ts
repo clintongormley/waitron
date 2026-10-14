@@ -38,7 +38,7 @@ const at = (clock: string) =>
   (Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3)) - 360 + 1440) % 1440;
 type Body = SpecialDayInput & { expectedClockRevision: number };
 
-/** Reads that wait while `held`, each until its release is called, or its `refuse` fails it. */
+/** Calls that wait while `held`, each until it is released or its `refuse` fails it. */
 function gate() {
   const waiting: ((() => void) & { refuse: (error: unknown) => void })[] = [];
   const state = {
@@ -368,7 +368,7 @@ it.each([
   ["a new day", { specialDayId: null, date: DEC_31 }, ""],
   ["another stored day", { specialDayId: "sd2", date: null }, "New Year's Eve"],
 ])(
-  "a read of the stored day still pending when the painter moves to %s does not land on it",
+  "a read of the stored day still pending when the painter moves to %s does not land on it (no live data)",
   async (_, target, name) => {
     const { painter, dayReads } = await racingPainter(false);
     dayReads.held = true;

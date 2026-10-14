@@ -110,8 +110,7 @@ const sameDraft = (a: Draft, b: Draft) =>
   sameDates(a.dates, b.dates) &&
   samePaintMap(a.paint, b.paint);
 
-/** `stored`'s dates, with `current`'s own changes from `sent` laid over them, as `rebaseDays` does
- *  for paint: see `merge`. */
+/** `stored`'s dates, with `current`'s own changes from `sent` laid over them: see `merge`. */
 function rebaseDates(stored: Draft, sent: Draft, current: Draft): DateFacts[] {
   const was = new Map(sent.dates.map((entry) => [entry.date, entry]));
   const now = new Map(current.dates.map((entry) => [entry.date, entry]));
