@@ -37,12 +37,14 @@ import {
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
+  readPrintMovedSlips,
   readReleaseReminderMinutes,
   recordKitchenNotices,
   writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writePrintMovedSlips,
   writeReleaseReminderMinutes,
   type KitchenNoticeItem,
 } from "./kitchen-notices.js";
@@ -1260,6 +1262,7 @@ describe("the edit-sent-lines setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
+        printMovedSlips: true,
         releaseReminderMinutes: 10,
       },
     ]);
@@ -1294,6 +1297,7 @@ describe("the clearing-workflow setting", () => {
         clearingWorkflow: true,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
+        printMovedSlips: true,
         releaseReminderMinutes: 10,
       },
     ]);
@@ -1326,6 +1330,7 @@ describe("the kitchen ticket grouping setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "separate",
         printHeldWork: false,
+        printMovedSlips: true,
         releaseReminderMinutes: 10,
       },
     ]);
@@ -1369,9 +1374,33 @@ describe("the print-held-work setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: true,
+        printMovedSlips: true,
         releaseReminderMinutes: 10,
       },
     ]);
+  });
+});
+
+describe("the print-moved-slips setting", () => {
+  it("reads ON when the venue has no settings row", async () => {
+    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
+  });
+
+  it("reads ON from a row another setting created", async () => {
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
+  });
+
+  it("reads what was written, creating the row when it is missing, and leaves the other settings alone", async () => {
+    await inTx((tx) => writePrintMovedSlips(tx, false));
+    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(false);
+    expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
+    expect(await inTx((tx) => readEditSentLines(tx))).toBe(true);
+    await inTx((tx) => writePrintMovedSlips(tx, true));
+    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(true);
+    // Raw SQL, so the stored value is read without the column's boolean mapping.
+    await db.execute(sql`update service_settings set print_moved_slips = 0`);
+    expect(await inTx((tx) => readPrintMovedSlips(tx))).toBe(false);
   });
 });
 
@@ -1401,6 +1430,7 @@ describe("the release-reminder setting", () => {
         clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
+        printMovedSlips: true,
         releaseReminderMinutes: null,
       },
     ]);

@@ -21,6 +21,7 @@ export const serviceSettings = table(
       .notNull()
       .default("combined"),
     printHeldWork: flag("print_held_work").notNull().default(false),
+    printMovedSlips: flag("print_moved_slips").notNull().default(true),
     // How long after the fired work ahead of a held group is served that the group is due. Null is
     // off. No CHECK on the range: adding one to this table makes drizzle rebuild it (as
     // `0006_kitchen_ticket_grouping_check.sql` did).
