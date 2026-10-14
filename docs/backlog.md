@@ -698,6 +698,21 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   over the demo seed's back-dated sales). Found by A680.
   [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)
 
+- **The throwaway-allocation seat names a Spanish term in a country-neutral contract.**
+  `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
+  (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
+  Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
+  shape, so a rename changes both. Owner's call. Left open by A680 (#1718).
+
+- **A680's route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its
+  plan's table ("cell 1" … "cell 14")**, which goes when plans are deleted at go-live, and the file
+  does not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
+  behaviour. Left open by A680 (#1718).
+
+- **Whether a throwaway venue can get an offline recovery pack is untested.** #1717's recovery pack
+  checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably be
+  refused one, which fits a practice-only venue, but nothing ran it. Left open by A680 (#1718).
+
 ### Menus and the catalogue
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).** The existing
