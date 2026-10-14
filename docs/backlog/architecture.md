@@ -3,6 +3,56 @@
 The open entries are listed in [the backlog](../backlog.md), under "Modules, data and code health". This file holds
 their full text.
 
+## A646 — a Modules page where the administrator switches optional modules on and sets them up
+
+- **A646 — owner, 2026-10-14; open; needs a design (brainstorm and spec) before a plan; not
+  queued.** The owner asked for a system section where an administrator installs and configures
+  optional modules, starting from the Profile → Security tab's Google login row, which today only
+  says "Google login becomes available when it is configured for this installation."
+
+  **What exists today**, read 2026-10-14, not tried on a box:
+  - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
+    only from `WAITRON_GOOGLE_CLIENT_ID` and `WAITRON_GOOGLE_CLIENT_SECRET`
+    (`apps/server/src/config.ts`); no screen sets them. This entry replaces the open point "an
+    operator screen for Google provider credentials" in the #298/#305/#317 list under Users,
+    sign-in and the dashboard shell.
+  - Which modules are on is a `modules.json` file on the box (`apps/server/src/module-config.ts`):
+    every module is on unless the file says `false`, a `mandatory` module cannot be switched off,
+    and nothing in the dashboard edits the file. Every module ships in every image, so "install"
+    means switching on and setting up. Tiers are in `packages/composition/src/modules.ts`.
+  - SumUp and Stripe are separate packages but not modules: they plug into the payments module as
+    card providers (`packages/composition/src/card-providers.ts`, and
+    `packages/dashboard-modules/src/card-providers.ts` for their dashboard panels), so they have no
+    switch of their own today.
+
+  **What the owner asked for:**
+  1. A Modules page listing the optional modules, where the administrator switches each on or off
+     and fills in its settings. The owner called it a "system section"; the dashboard has no System
+     group today (its groups end with Settings), so where it sits is part of the design.
+  2. Google login becomes an optional module, its client ID and secret set on that page. The
+     Profile → Security row shows only when the module is on, and its "becomes available" sentence
+     goes.
+  3. SumUp and Stripe are set up from that page too. Card payments links to the list, filtered to
+     card providers.
+
+  **What the design must settle:**
+  - **How a switch takes effect.** Boot picks the modules it migrates and protects from the module
+    configuration (`apps/server/src/boot.ts`), so today a change takes effect only on the next
+    start. Either the page asks for a restart, or switching applies a module's migrations and
+    protections while the box runs.
+  - **Switching off must stay safe.** A module switched off after its tables exist keeps them, and
+    no start re-protects or checks their append-only triggers —
+    [the open entry below](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+    A switch anyone with the permission can flip from a screen makes that easier to reach, so fix
+    it first or in the same work.
+  - **Whether a card provider becomes a module of its own**, or stays a provider inside payments
+    that the page lists beside the modules.
+  - **Where the Google secret is kept.** A primary streams the whole database to the owner's bucket
+    once one is set up, so a secret stored in the database must be sealed the way the existing
+    provider credentials are (the `credentials` module).
+  - **Who may use the page** — which permission, and whether it is the same one that gates Card
+    payments today.
+
 ## Copies of the patterns A105 and C27 replaced
 
 - **Copies of the patterns A105 and C27 replaced — OPEN.** The same two SQL patterns (the

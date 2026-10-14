@@ -3688,7 +3688,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 
 - **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner
-  2026-10-08: take it from here when a lane has room):** **Remove the passkey name field.**
+  2026-10-08: take it from here when a lane has room):** **Remove the passkey name field**, and
+  (owner, 2026-10-14) tidy the Profile → Security tab: Add passkey moves from the tab bar into the
+  Passkeys row as a quiet button and stays there when passkeys are listed; the row gets its missing
+  padding; the passkey's date says it is when it was added; the Add passkey dialog's "Save" becomes
+  "Add"; and a message box seen cut off at the window's top-right edge is looked into.
   [Detail](backlog/dashboard.md#a403--sign-in-and-passkey-fixes-owner-2026-10-08-open-low-priority-not-queued--owner-2026-10-08-take-it-from-here-when-a-lane-has-room)
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The
@@ -3737,7 +3741,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
 
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
-  passwordless account; an operator screen for Google provider credentials; native passkey prompts on
+  passwordless account; an operator screen for Google provider credentials (now part of A646);
+  native passkey prompts on
   real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
   intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
   from code only; nobody has shown a real pointer can get there.
@@ -5306,6 +5311,14 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 ### Modules, data and code health
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
+
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up
+  (owner, 2026-10-14; open; needs a design first; not queued).** Google login becomes an optional
+  module whose client ID and secret are entered there instead of in environment variables; SumUp
+  and Stripe move their setup there, and Card payments links to the list filtered to card
+  providers. The design must settle how a switch takes effect without a restart, and first fix
+  [a switched-off module's unprotected tables](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+  [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
   second run-it review, deleting the `working_orders` location `exists` clause in
