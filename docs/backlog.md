@@ -1032,6 +1032,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
+  **Designed 2026-10-14, awaiting the owner's review of the specs:** Waitron's side in
+  [the Translate all design](superpowers/specs/2026-10-14-translate-all-design.md), Cloud's side and
+  the wire contract in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md`
+  and `docs/waitron-integration-contract.md`. For now it is free for connected venues, capped per venue.
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
