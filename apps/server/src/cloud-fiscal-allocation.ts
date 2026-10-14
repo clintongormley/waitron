@@ -1,6 +1,6 @@
 import "./errors.js";
-import { createHash, createPrivateKey, sign } from "node:crypto";
-import { open, rm, type FileHandle } from "node:fs/promises";
+import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
+import { link, open, rm, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isUuid } from "@waitron/shared";
@@ -10,6 +10,7 @@ import type { FiscalAllocationTransport } from "./cloud-fiscal-allocation-client
 export interface FiscalAllocationReportOperation {
   readonly operationId: string;
   readonly body: unknown;
+  readonly expectedReceiptId: string | null;
 }
 export interface FiscalAllocationReportAuthentication {
   readonly origin: string;
@@ -62,7 +63,8 @@ function snapshot(body: unknown): unknown {
   }
 }
 export function signCloudFiscalReport(
-  configuration: FiscalAllocationReportAuthentication & FiscalAllocationReportOperation,
+  configuration: FiscalAllocationReportAuthentication &
+    Pick<FiscalAllocationReportOperation, "operationId" | "body">,
 ): { payload: string; signature: string } {
   try {
     loadCloudOrigin({
@@ -140,17 +142,25 @@ async function readJson(path: string): Promise<unknown> {
 async function retain(directory: string, path: string, value: unknown): Promise<void> {
   let file: FileHandle | undefined;
   let parent: FileHandle | undefined;
+  const temporary = `${path}.pending-${randomUUID()}`;
+  let ownsTemporary = false;
   try {
     parent = await open(directory, "r");
-    file = await open(path, "wx", 0o600);
+    file = await open(temporary, "wx", 0o600);
+    ownsTemporary = true;
     await file.writeFile(JSON.stringify(value));
     await file.sync();
+    // Publishing a complete inode preserves exclusive creation without exposing a short write.
+    await link(temporary, path);
+    await rm(temporary);
+    ownsTemporary = false;
     await parent.sync();
   } catch {
     throw new AppError("cloud.state_invalid", {});
   } finally {
     await file?.close();
     await parent?.close();
+    if (ownsTemporary) await rm(temporary);
   }
 }
 
@@ -163,12 +173,18 @@ export async function reconcileCloudFiscalAllocation(configuration: {
 }): Promise<FiscalAllocationReportResult> {
   const { directory, transport, authenticate } = configuration;
   const operation = structuredClone(configuration.operation);
-  if (!exact(operation, ["operationId", "body"]) || !isUuid(operation.operationId))
+  if (
+    !exact(operation, ["operationId", "body", "expectedReceiptId"]) ||
+    !isUuid(operation.operationId) ||
+    (operation.expectedReceiptId !== null &&
+      (typeof operation.expectedReceiptId !== "string" || !isUuid(operation.expectedReceiptId)))
+  )
     throw new AppError("cloud.request_invalid", {});
   const pending = {
     version: 1,
     operationId: operation.operationId,
     body: snapshot(operation.body),
+    expectedReceiptId: operation.expectedReceiptId,
   };
   const path = join(
     directory,
@@ -177,17 +193,18 @@ export async function reconcileCloudFiscalAllocation(configuration: {
   let lock: FileHandle;
   try {
     lock = await open(path + ".lock", "wx", 0o600);
-  } catch {
-    throw new AppError("cloud.busy", {});
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new AppError("cloud.busy", {});
+    throw new AppError("cloud.state_invalid", {});
   }
   try {
     const retained = await readJson(path);
-    if (retained === undefined) await retain(directory, path, pending);
-    else if (!isDeepStrictEqual(retained, pending))
+    if (retained !== undefined && !isDeepStrictEqual(retained, pending))
       throw new AppError("cloud.binding_conflict", {});
     const prior = await readJson(path + ".result.json");
     if (prior !== undefined) {
-      if (!result(prior)) throw new AppError("cloud.state_invalid", {});
+      if (!result(prior) || prior.receiptId !== operation.expectedReceiptId)
+        throw new AppError("cloud.state_invalid", {});
       return prior;
     }
     const authentication = await authenticate();
@@ -196,13 +213,15 @@ export async function reconcileCloudFiscalAllocation(configuration: {
       operationId: operation.operationId,
       body: pending.body,
     });
+    if (retained === undefined) await retain(directory, path, pending);
     let response: unknown;
     try {
       response = await transport.report(proof);
     } catch {
       throw new AppError("cloud.unavailable", {});
     }
-    if (!result(response)) throw new AppError("cloud.unavailable", {});
+    if (!result(response) || response.receiptId !== operation.expectedReceiptId)
+      throw new AppError("cloud.unavailable", {});
     await retain(directory, path + ".result.json", response);
     return response;
   } finally {

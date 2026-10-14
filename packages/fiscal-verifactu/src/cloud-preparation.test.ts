@@ -518,3 +518,69 @@ it("accepts retained public verification keys after signing-key rotation", async
     (await collectReport({ receiptPath: receiptPath(), trust: rotated })).body.receipt,
   ).toEqual(fixture.receipt);
 });
+
+it("refuses a submitted allocation that differs from its signed packet before spending it", async () => {
+  const held = input();
+  held.allocation = { ...held.allocation, installationIdentity: "C000099" };
+  await expect(activate(held)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "reservation_mismatch" },
+  });
+  expect(await readdir(receiptDirectory)).toEqual([]);
+});
+it("refuses a trust file whose fingerprint metadata differs from the confirmed signer", async () => {
+  await configure();
+  await writeFile(
+    join(root, "trust.json"),
+    JSON.stringify({
+      issuer: fixture.trust.issuer,
+      fingerprint: "0".repeat(64),
+      publicKey: fixture.trust.keys.get(fixture.receipt.keyId),
+    }),
+  );
+  await expect(
+    withOperationAuthority(binding, operatorId, (authority) =>
+      FISCAL_OPERATIONS.prepare({ binding, input: input(), authority }, async () => "unverified"),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "reservation_untrusted" },
+  });
+});
+it("refuses a retained report operator that differs from the signed approval", async () => {
+  await activate();
+  const record = JSON.parse(await readFile(receiptPath(), "utf8"));
+  record.operatorId = "Cloud-account";
+  await writeFile(receiptPath(), JSON.stringify(record));
+  await expect(collectReport()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+});
+it("binds a report's expected reply to its signed consumed receipt ID", async () => {
+  await activate();
+  expect((await collectReport()).expectedReceiptId).toBe("10000000-0000-4000-8000-000000000005");
+});
+
+it("keeps an already consumed receipt spent when the local environment refuses activation", async () => {
+  const original = fixture.receipt.payload;
+  fixture = cloudReceiptFixture((payload) => {
+    Object.assign(payload, original, {
+      allocation: { ...original.allocation, environment: "production" },
+      continuity: {
+        ...original.continuity,
+        scope: { ...original.continuity.scope, environment: "production" },
+      },
+    });
+  });
+  await expect(activate()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "environment_mismatch" },
+  });
+  expect(JSON.parse(await readFile(receiptPath(), "utf8")).receipt.payload.state).toBe("consumed");
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  await expect(activate()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "uncertain_prior_activation" },
+  });
+});

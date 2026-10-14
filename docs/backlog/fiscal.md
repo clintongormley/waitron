@@ -235,6 +235,8 @@ A consumed receipt is retained before a local attempt; its stable report is coll
 from a matching committed result. Reporting is an explicit adapter call, without a background
 scheduler. Cloud's separately scheduled joint test and the branch's final reviews/gates remain
 open. No production custody, signing or continuity policy is selected by this checkpoint.
+Cloud's operator correction subsequently landed as [Cloud #132](https://github.com/waitron-io/waitron-cloud/pull/132)
+at `a7a29f4a73e5115a8f2e9c381eab97710dad4645`; the scheduled joint result still gates completion.
 
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.

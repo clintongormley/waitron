@@ -1,5 +1,14 @@
 import { createHash, createPublicKey, generateKeyPairSync, verify } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+  type FileHandle,
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -54,7 +63,11 @@ async function reconcile(
   return api().reconcileCloudFiscalAllocation({
     directory,
     transport,
-    operation: { operationId, body: heldBody },
+    operation: {
+      operationId,
+      body: heldBody,
+      expectedReceiptId: (heldBody as { receipt: unknown }).receipt === null ? null : receiptId,
+    },
     authenticate,
   });
 }
@@ -238,7 +251,7 @@ it("refuses malformed operation IDs without retaining or sending evidence", asyn
   await expect(
     api().reconcileCloudFiscalAllocation({
       directory,
-      operation: { operationId: "invalid", body },
+      operation: { operationId: "invalid", body, expectedReceiptId: receiptId },
       transport: { report },
       authenticate: async () => authentication,
     }),
@@ -301,6 +314,7 @@ it("keeps the same pending operation if retaining the reply fails", async () => 
     version: 1,
     operationId,
     body,
+    expectedReceiptId: receiptId,
   });
   expect((await readdir(directory)).filter((name) => name.endsWith(".lock"))).toEqual([]);
 });
@@ -309,4 +323,102 @@ it("refuses a malformed success without marking its pending operation complete",
     reconcile({ report: async () => ({ version: 1, state: "matched", receiptId: "invalid" }) }),
   ).rejects.toMatchObject({ code: "cloud.unavailable" });
   expect((await readdir(directory)).filter((name) => name.endsWith(".result.json"))).toEqual([]);
+});
+
+it.each([1, 2])(
+  "does not publish a partially written journal file when write %i fails",
+  async (failedWrite) => {
+    const probe = await open(join(directory, "prototype-probe"), "wx");
+    const prototype = Object.getPrototypeOf(probe) as FileHandle;
+    await probe.close();
+    await rm(join(directory, "prototype-probe"));
+    const original = prototype.writeFile;
+    let writes = 0;
+    const interrupted = vi.spyOn(prototype, "writeFile").mockImplementation(async function (
+      this: FileHandle,
+      ...args: Parameters<FileHandle["writeFile"]>
+    ) {
+      if (++writes === failedWrite) {
+        await original.call(this, "{");
+        throw new Error("interrupted file write");
+      }
+      return original.apply(this, args);
+    });
+    const report = vi.fn(async () => ({ version: 1, state: "matched", receiptId }));
+    try {
+      await expect(reconcile({ report })).rejects.toMatchObject({ code: "cloud.state_invalid" });
+    } finally {
+      interrupted.mockRestore();
+    }
+    const finalPath = pendingPath() + (failedWrite === 2 ? ".result.json" : "");
+    await expect(readFile(finalPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await reconcile({ report })).toEqual({ version: 1, state: "matched", receiptId });
+    const sent = report.mock.calls as unknown as [{ payload: string }][];
+    expect(
+      sent.map(
+        ([value]) =>
+          (JSON.parse(Buffer.from(value.payload, "base64url").toString("utf8")) as unknown[])[5],
+      ),
+    ).toEqual(failedWrite === 1 ? [operationId] : [operationId, operationId]);
+  },
+);
+
+it("refuses an oversized signed report before binding its operation ID in the journal", async () => {
+  const report = vi.fn(async () => ({ version: 1, state: "matched", receiptId }));
+  await expect(
+    reconcile({ report }, { ...body, activationEvidence: { text: "x".repeat(13000) } }),
+  ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  expect(await readdir(directory)).toEqual([]);
+  expect(await reconcile({ report })).toEqual({ version: 1, state: "matched", receiptId });
+  expect(report).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a reply for another receipt pending instead of retaining it as matched", async () => {
+  await expect(
+    reconcile({
+      report: async () => ({
+        version: 1,
+        state: "matched",
+        receiptId: "10000000-0000-4000-8000-000000000099",
+      }),
+    }),
+  ).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect((await readdir(directory)).filter((name) => name.endsWith(".result.json"))).toEqual([]);
+});
+it("reports an unavailable journal directory as invalid state rather than another active report", async () => {
+  await rm(directory, { recursive: true });
+  await expect(
+    reconcile({ report: async () => ({ version: 1, state: "matched", receiptId }) }),
+  ).rejects.toMatchObject({ code: "cloud.state_invalid" });
+});
+
+it.each([undefined, 42, "not-a-receipt-id"])(
+  "refuses malformed expected reply metadata %# before a request",
+  async (expectedReceiptId) => {
+    const report = vi.fn();
+    await expect(
+      api().reconcileCloudFiscalAllocation({
+        directory,
+        operation: { operationId, body, expectedReceiptId },
+        transport: { report },
+        authenticate: async () => authentication,
+      }),
+    ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+    expect(await readdir(directory)).toEqual([]);
+    expect(report).toHaveBeenCalledTimes(0);
+  },
+);
+it("refuses a cached reply whose receipt ID differs from the retained expectation", async () => {
+  const report = vi.fn(async () => ({ version: 1, state: "matched", receiptId }));
+  await reconcile({ report });
+  await writeFile(
+    pendingPath() + ".result.json",
+    JSON.stringify({
+      version: 1,
+      state: "matched",
+      receiptId: "10000000-0000-4000-8000-000000000099",
+    }),
+  );
+  await expect(reconcile({ report })).rejects.toMatchObject({ code: "cloud.state_invalid" });
+  expect(report).toHaveBeenCalledTimes(1);
 });

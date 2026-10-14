@@ -229,7 +229,7 @@ it("requires the local node key even for a valid consumed Cloud receipt", async 
   expect(await readdir(outside)).toEqual([]);
   await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("completes a real sale with a throwing network recorder and no registry calls", async () => {
+it("completes a real sale without calling fetch or resolving a filing client", async () => {
   await stage("archive");
   await restore();
   const network = vi.fn(() => {
@@ -463,7 +463,11 @@ it("restores an offline paper allocation and later reports its original signed h
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const directory = join(root, "reports");
     await mkdir(directory);
-    const operation = { operationId: "10000000-0000-4000-8000-000000000007", body };
+    const operation = {
+      operationId: "10000000-0000-4000-8000-000000000007",
+      body,
+      expectedReceiptId: null,
+    };
     const configuration = {
       directory,
       operation,

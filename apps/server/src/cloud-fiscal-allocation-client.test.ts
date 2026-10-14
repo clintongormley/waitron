@@ -311,3 +311,28 @@ describe("Cloud fiscal status and report over real HTTP", () => {
     );
   });
 });
+
+it("refuses a redirect before sending account credentials to another origin", async () => {
+  let redirected = 0;
+  await withServer(
+    (_request, response) => {
+      redirected++;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ version: 1, state: "unknown", receipt: null }));
+    },
+    async (destination) => {
+      await withServer(
+        (_request, response) => {
+          response.writeHead(307, { location: destination + "/forwarded" });
+          response.end();
+        },
+        async (origin) => {
+          await expect((await client(origin)).status(statusBody)).rejects.toMatchObject({
+            code: "cloud.unavailable",
+          });
+        },
+      );
+    },
+  );
+  expect(redirected).toBe(0);
+});

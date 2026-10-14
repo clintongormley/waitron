@@ -61,7 +61,9 @@ The standard Compose file does not supply them.
 
 Before activation, the adapter creates an exclusive receipt file named by the SHA-256 of the
 allocation ID. It retains the signed receipt, local binding, key-event operator and stable report
-operation ID. A failed local transaction does not release that file or the Cloud name. Reuse
+operation ID. Any later refusal, including a local taxpayer, environment or series mismatch, keeps that receipt
+spent in this directory. The outside allocation was already consumed; this path never frees its
+name. Reuse
 requires the current outside confirmation and the exact local committed activation. If either is
 missing, use a fresh allocation and event; do not delete the retained receipt to retry.
 
@@ -72,16 +74,25 @@ the signed retained receipt matches a locally committed allocation and approval.
 committed result rather than inferring activation from consumption. Keep historical public
 verification keys available under your selected compromise and retention policy.
 
-Pass the returned `{operationId, body}` to
+Pass the returned `{operationId, body, expectedReceiptId}` to
 `reconcileCloudFiscalAllocation({directory, operation, transport, authenticate})` from the server
 adapter. The transport is `createCloudFiscalAllocationClient`; `authenticate` supplies the
-current installation ID, private machine key, lease and pinned origin. The proof signs Cloud's
+current installation ID, private machine key, lease and pinned origin. For paper reports, supply
+`expectedReceiptId: null`; Cloud receipt reports use the consumed receipt ID. A reply naming
+another receipt is refused and leaves the report pending. The proof signs Cloud's
 `waitron.fiscal-machine-report` domain, the stable operation ID and the canonical body digest.
 The journal retains public evidence and results; the machine key and lease are not written there.
 
 The adapter also carries a separately prepared public paper-history report unchanged. Cloud
 validates that signed history. A report records evidence; it does not import a register, consume
 an allocation or activate the box. Account-side paper import remains a separate Cloud operation.
+
+The adapter signs and checks the complete request size before retaining a new operation. An
+oversized proof is refused without binding its operation ID; never truncate a signed receipt or
+block to make it fit. Journal files are written privately, flushed and published with an exclusive
+hard link, so a failed short write does not publish a partial final file. Use an existing writable
+report directory on a filesystem that supports hard links. The consumed receipt and its outside
+continuity remain separate from this reporting journal.
 
 A lost reply leaves the same operation and body pending. Renew authentication and retry that
 operation, because a missing reply does not tell you whether Cloud recorded it. A returned result
@@ -109,8 +120,8 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run \
 
 The archive and bucket cases use the real restore entry point and local key authentication.
 They compare retained fiscal rows, check complete series activation and reject an old backup's
-missing local result. The sale case replaces network access with a throwing recorder and checks
-zero calls. The paper case consumes a signed paper allocation offline, then reports its original
+missing local result. The sale case replaces global `fetch` with a throwing recorder and checks zero calls.
+It also uses a filing-client resolver that throws if invoice issuance tries to resolve that client. The paper case consumes a signed paper allocation offline, then reports its original
 history through a controlled HTTP listener. That listener does not qualify Cloud's PostgreSQL
 implementation or a production signing policy.
 

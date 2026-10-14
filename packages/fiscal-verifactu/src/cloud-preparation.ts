@@ -269,6 +269,7 @@ export async function readCloudAllocationReport(
   if (stamp?.environment !== prior.environment) refuse("environment_mismatch");
   return {
     operationId: record.reportOperationId,
+    expectedReceiptId: receipt.payload.receiptId,
     body: {
       venueId: receipt.payload.venueId,
       scope: {
