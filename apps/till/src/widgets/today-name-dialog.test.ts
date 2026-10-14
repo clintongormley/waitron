@@ -185,6 +185,16 @@ describe("till-today-name-dialog", () => {
     expect(seen.named).toEqual([]);
   });
 
+  it("speaks Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDialog({ heading: "Cambiar el nombre de Mesa 4", normalName: "Mesa 4" });
+
+    expect(field(el).label).toBe("Nombre");
+    expect(field(el).hint).toBe("Déjalo vacío para Mesa 4");
+    expect(save(el).textContent!.trim()).toBe("Guardar");
+    expect(cancelButton(el).textContent!.trim()).toBe("Cancelar");
+  });
+
   it.each([1280, 390])(
     "at %ipx gives its field the form width, or most of a narrower screen, and fits the screen",
     async (width) => {
