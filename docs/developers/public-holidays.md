@@ -26,8 +26,9 @@ holiday of that name, and in no year whose shipped data lacks that name, a year 
 data included; any other repeating date falls on the same month and day (`specialDateIn`, same
 file; "applies nothing in a year whose list lacks the name, or that has no list" in
 `special-days.holiday-name.test.ts`). The readiness list warns `special_day.holiday_missing` for
-each such date the venue's current or next year places nowhere (`missingHolidays`,
-`special-days.ts`). A configuration bundle carries no holiday lists, so its import compares such a
+each such date the venue's current or next year places nowhere, and `special_day.date_shared` for
+each date in those years that falls where a different special day applies, naming both
+(`specialDayReadiness`, `special-days.ts`). A configuration bundle carries no holiday lists, so its import compares such a
 date with the others in its first year only (`validateSpecialDays`,
 `packages/venue-service/src/configuration-transfer.ts`).
 

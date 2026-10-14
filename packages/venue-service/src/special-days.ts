@@ -302,24 +302,71 @@ export interface MissingHoliday {
   year: number;
 }
 
-/** Each repeating date following a holiday's name that the list for the venue's current or next
- *  year places nowhere, that year having no holiday of the name or no list. */
-export async function missingHolidays(
+export interface SpecialDayClash {
+  date: LocalDate;
+  /** The special day that applies on `date`. */
+  specialDayId: string;
+  name: string;
+  /** The special day whose date falls on `date` too, and does not apply there. */
+  otherSpecialDayId: string;
+  otherName: string;
+}
+
+/** The special-day readiness warnings for the venue's current and next year: each repeating date
+ *  following a holiday's name that a year's list places nowhere, and each date that falls where a
+ *  different special day applies. The holiday lists are read once for both. */
+export async function specialDayReadiness(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
-): Promise<MissingHoliday[]> {
+): Promise<{ missing: MissingHoliday[]; clashes: SpecialDayClash[] }> {
   const clock = await readLocationClock(tx, cfg.locationId);
   const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
-  const missing = await missingHolidaysIn(tx, cfg, [yearOf(today), yearOf(today) + 1]);
-  return missing.map(({ specialDayId, holidayName, year }) => ({
-    specialDayId,
-    holidayName,
-    year,
-  }));
+  const years = [yearOf(today), yearOf(today) + 1] as const;
+  // Ordered as `specialDaysOn` reads them, so the day named as applying is the one that does.
+  const rows = await tx
+    .select({
+      specialDayId: specialDayDates.specialDayId,
+      name: specialDays.name,
+      date: specialDayDates.date,
+      repeats: specialDays.repeatsYearly,
+      holidayName: specialDayDates.holidayName,
+    })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(eq(specialDayDates.locationId, cfg.locationId))
+    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  const holidays = await holidayDatesFor(tx, cfg, rows, years);
+  const missing = await missingHolidaysIn(tx, cfg, years, holidays);
+  const clashes = new Map<string, SpecialDayClash>();
+  for (const year of years) {
+    const standing = specialDatesStandingIn(rows, year, holidays);
+    for (const row of rows) {
+      const date = specialDateIn(row, year, holidays);
+      if (date === null) continue;
+      const applies = standing.get(date);
+      if (applies === undefined || applies.specialDayId === row.specialDayId) continue;
+      clashes.set(`${date}|${row.specialDayId}`, {
+        date,
+        specialDayId: applies.specialDayId,
+        name: applies.name,
+        otherSpecialDayId: row.specialDayId,
+        otherName: row.name,
+      });
+    }
+  }
+  return {
+    missing: missing.map(({ specialDayId, holidayName, year }) => ({
+      specialDayId,
+      holidayName,
+      year,
+    })),
+    clashes: [...clashes.values()],
+  };
 }
 
-/** `missingHolidays` for the given years, ascending, each naming its special day. `known`, when
+/** Each repeating date following a holiday's name that the list for one of `years`, ascending,
+ *  places nowhere, that year having no holiday of the name or no list, each naming its special day. `known`, when
  *  given, holds the official holidays of every one of `years` and is read instead. */
 export async function missingHolidaysIn(
   tx: Transaction,

@@ -1,6 +1,7 @@
 import { rangeSpanInDay } from "./service-day.js";
 import { readServiceDayPlan } from "./day-resolver.js";
-import { missingHolidays } from "./special-days.js";
+import { specialDayReadiness } from "./special-days.js";
+import type { LocalDate } from "./hours-types.js";
 import {
   closedZoneIdsIn,
   zoneClosureDays,
@@ -259,10 +260,19 @@ export type VenueReadinessIssue =
       specialDayId: string;
       holidayName: string;
       year: number;
+    }
+  | {
+      code: "special_day.date_shared";
+      date: LocalDate;
+      specialDayId: string;
+      name: string;
+      otherSpecialDayId: string;
+      otherName: string;
     };
 
-/** Describe configuration that prevents an active zone from accepting new orders, and each
- *  repeating holiday date that will not apply in the current or next year. */
+/** Describe configuration that prevents an active zone from accepting new orders, and, for the
+ *  current and next year, each repeating holiday date that will not apply and each special-day date
+ *  that falls where another special day applies. */
 export async function listVenueReadiness(
   tx: Transaction,
   cfg: VenueScope,
@@ -279,11 +289,16 @@ export async function listVenueReadiness(
       ),
     )
     .limit(1);
+  const specialDayIssues = await specialDayReadiness(tx, cfg, at);
   const issues: VenueReadinessIssue[] = [
     ...(defaultStation === undefined ? [{ code: "venue.default_station_missing" as const }] : []),
-    ...(await missingHolidays(tx, cfg, at)).map((missing) => ({
+    ...specialDayIssues.missing.map((missing) => ({
       code: "special_day.holiday_missing" as const,
       ...missing,
+    })),
+    ...specialDayIssues.clashes.map((clash) => ({
+      code: "special_day.date_shared" as const,
+      ...clash,
     })),
   ];
   const activeDepartments = await tx
