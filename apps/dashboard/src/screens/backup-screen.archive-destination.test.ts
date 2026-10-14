@@ -674,7 +674,7 @@ describe("choosing where backups go", () => {
     expect(await buttonState(el, "apply")).toEqual(["primary", false]);
   });
 
-  it("after a refused folder, choosing the bucket copy's bucket drops the fix-the-fields sentence", async () => {
+  it("after a refused folder, choosing the bucket copy's bucket keeps the fix-the-fields sentence until the folder changes", async () => {
     const { el } = await openEdit(LOCAL_ONLY, {
       applyBackup: vi
         .fn()
@@ -686,6 +686,8 @@ describe("choosing where backups go", () => {
       expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields")),
     );
     await choose(el, "stream-bucket");
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+    await typeFolder(el, "/mnt/usb/other");
     expect(await bottomOf(el, "settings-actions")).toBeNull();
   });
 
@@ -779,6 +781,146 @@ describe("choosing where backups go", () => {
     expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
     await choose(el, "none");
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+  });
+});
+
+/** Archives on, stored as a folder and the bucket copy's bucket. */
+const FOLDER_AND_STREAM: BackupStatusView = {
+  ...TWO,
+  destinations: [TWO.destinations[0]!, ON_STREAM_BUCKET.destinations[0]!],
+};
+
+async function openStoredOff(status: BackupStatusView, overrides: Partial<DashboardApi> = {}) {
+  const { el, api } = await mount(
+    { ...status, enabled: false, storedDisabled: true },
+    { getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON), ...overrides },
+  );
+  await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+  await vi.waitFor(() => expect(api.getStreamSettings).toHaveBeenCalled());
+  await settle();
+  await el.updateComplete;
+  return { el, api };
+}
+
+describe("opening a stored folder and bucket", () => {
+  it.each([
+    ["Edit", openEdit, "save-settings", ["secondary", true]],
+    ["turning stored-off settings back on", openStoredOff, "apply", ["primary", false]],
+  ] as const)(
+    "a stored folder and another bucket open, on %s, with the switch on, the folder and the bucket's fields",
+    async (_how, open, action, opening) => {
+      const { el } = await open(TWO);
+      expect(folderSwitch(el)!.checked).toBe(true);
+      expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+      expect(choice(el)!.value).toBe("custom-s3");
+      expect(customField(el, "region").value).toBe("eu-north-1");
+      expect(customField(el, "name").value).toBe("owner-bucket");
+      expect(customField(el, "prefix").value).toBe("waitron");
+      expect(customField(el, "access-key-id").value).toBe("AKIAOWNER");
+      expect(customField(el, "secret-access-key").value).toBe("");
+      expect(await buttonState(el, action)).toEqual(opening);
+    },
+  );
+
+  it.each([
+    ["Edit", openEdit, "save-settings", ["secondary", true]],
+    ["turning stored-off settings back on", openStoredOff, "apply", ["primary", false]],
+  ] as const)(
+    "a stored folder and the bucket copy's bucket open, on %s, with the switch on, the folder and that choice",
+    async (_how, open, action, opening) => {
+      const { el } = await open(FOLDER_AND_STREAM);
+      expect(folderSwitch(el)!.checked).toBe(true);
+      expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+      expect(choice(el)!.value).toBe("stream-bucket");
+      expect(await buttonState(el, action)).toEqual(opening);
+    },
+  );
+
+  it("a stored bucket alone opens with the folder switch off and that bucket chosen", async () => {
+    const { el } = await openEdit(ON_STREAM_BUCKET);
+    expect(folderSwitch(el)!.checked).toBe(false);
+    expect(q(el, "[data-test=destination]")).toBeNull();
+    expect(choice(el)!.value).toBe("stream-bucket");
+  });
+
+  it("a stored folder alone opens with the switch on and no bucket", async () => {
+    const { el } = await openEdit(LOCAL_ONLY);
+    expect(folderSwitch(el)!.checked).toBe(true);
+    expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/usb/waitron");
+    expect(choice(el)!.value).toBe("none");
+  });
+});
+
+describe("where a refusal of a folder and a bucket lands", () => {
+  it("a refused folder sent beside a bucket sits under the folder, and stays there when the bucket choice changes", async () => {
+    const { el } = await openEdit(TWO, {
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "dir" } }),
+    });
+    await typeFolder(el, "/mnt/usb\tother");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=destination]") as Field).error).toBe(
+        t("backup.destination.folder_refused"),
+      ),
+    );
+    expect(customField(el, "region").error).toBe("");
+    await choose(el, "stream-bucket");
+    expect((q(el, "[data-test=destination]") as Field).error).toBe(
+      t("backup.destination.folder_refused"),
+    );
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+  });
+
+  it.each([
+    ["the folder switch", (el: BackupScreen) => setFolder(el, false)],
+    ["the folder", (el: BackupScreen) => typeFolder(el, "/mnt/usb/third")],
+  ] as const)("a refused folder's message goes once %s changes", async (_what, act) => {
+    const { el } = await openEdit(TWO, {
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "dir" } }),
+    });
+    await typeFolder(el, "/mnt/usb\tother");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields")),
+    );
+    await act(el);
+    expect(await bottomOf(el, "settings-actions")).toBeNull();
+    await setFolder(el, true);
+    expect((q(el, "[data-test=destination]") as Field).error).toBe("");
+  });
+
+  it("a refused bucket field sent beside a folder sits under that field, not the folder", async () => {
+    const { el } = await openEdit(TWO, {
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "region" } }),
+    });
+    await typeCustom(el, "region", "eu-west-9");
+    await typeCustom(el, "secret-access-key", "SECRET-1");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(customField(el, "region").error).toBe(t("stream.field.check")));
+    expect((q(el, "[data-test=destination]") as Field).error).toBe("");
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+  });
+
+  it("a refusal of the list of destinations itself goes to the bottom message, under no field", async () => {
+    const { el } = await openEdit(TWO, {
+      applyBackup: vi
+        .fn()
+        .mockRejectedValue({ code: "backup.request_invalid", params: { field: "destinations" } }),
+    });
+    await setRetainCount(el, "9");
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "settings-actions")).toBe(codeMessage("backup.request_invalid")),
+    );
+    expect((q(el, "[data-test=destination]") as Field).error).toBe("");
+    expect(customField(el, "region").error).toBe("");
+    expect(banner(el)).toBeNull();
   });
 });
 

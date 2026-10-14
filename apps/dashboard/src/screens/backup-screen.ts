@@ -921,7 +921,11 @@ export class BackupScreen extends LitElement {
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
     if (!afterTurnOff) {
       if (this.#archiveScope?.isDirty()) return;
-      if (sameValue(this.#fieldsFrom(s), this.#fields())) return;
+      const current = this.#archiveValue();
+      if (
+        sameValue(archivePayload({ ...current, ...this.#fieldsFrom(s) }), archivePayload(current))
+      )
+        return;
     }
     this.#prefillAndCommit(s);
   }
@@ -1587,7 +1591,6 @@ export class BackupScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.bucket = e.detail.value as BucketChoice;
-          this.folderRefused = false;
           this.customRefused = null;
         }}
       ></wt-combobox>
