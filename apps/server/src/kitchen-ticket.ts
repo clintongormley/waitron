@@ -88,10 +88,10 @@ function entryKey(item: KitchenTicketItem): string {
  * of 1. A `printedAsSold` entry, or a quantity that is not a whole number, is never merged and never
  * split: two 350 g portions are two pieces to cook, not one of 700 g nor 700 of 1 g.
  */
-export function arrangeTicketItems<T extends KitchenTicketItem>(
-  items: readonly T[],
+export function arrangeTicketItems(
+  items: readonly KitchenTicketItem[],
   grouping: KitchenTicketGrouping,
-): T[] {
+): KitchenTicketItem[] {
   const count = (item: KitchenTicketItem) => stringToThousandths(String(item.qty));
   const countable = (item: KitchenTicketItem, thousandths: number) =>
     item.printedAsSold !== true && thousandths % 1000 === 0;
@@ -105,8 +105,8 @@ export function arrangeTicketItems<T extends KitchenTicketItem>(
       }));
     });
   }
-  const arranged: { item: T; thousandths: number }[] = [];
-  const byKey = new Map<string, { item: T; thousandths: number }>();
+  const arranged: { item: KitchenTicketItem; thousandths: number }[] = [];
+  const byKey = new Map<string, { item: KitchenTicketItem; thousandths: number }>();
   for (const item of items) {
     const thousandths = count(item);
     const key = countable(item, thousandths) ? entryKey(item) : undefined;

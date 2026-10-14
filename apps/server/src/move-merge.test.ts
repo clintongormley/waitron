@@ -1165,7 +1165,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
   });
 });
 
-describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets did (§4)", () => {
+describe("a MOVED slip lays out each line by the ticket grouping and never adds two lines together (§4)", () => {
   afterEach(() =>
     withTransaction(db, async (tx) => {
       await writeKitchenTicketGrouping(tx, "combined");
@@ -1221,7 +1221,7 @@ describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets 
     ]);
   });
 
-  it("with combined quantities, two lines of one Burger print as one entry of 2, as their ticket did", async () => {
+  it("with combined quantities, two lines of one Burger on one ticket print as two entries of 1: lines are never added together", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const mesa124 = await v.table("Mesa 124");
@@ -1238,11 +1238,14 @@ describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets 
     );
 
     expect(await slipsSince(grill, before)).toEqual([
-      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", ["2.000 x BURG"]),
+      movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 123", "Mesa 124", [
+        "1.000 x BURG",
+        "1.000 x BURG",
+      ]),
     ]);
   });
 
-  it("with combined quantities, one Burger sent on each of two tickets prints as two entries of 1, as the two tickets did", async () => {
+  it("with combined quantities, one Burger sent on each of two tickets prints as two entries of 1", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const mesa126 = await v.table("Mesa 126");
@@ -1270,7 +1273,7 @@ describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets 
     ]);
   });
 
-  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as the two tickets did", async () => {
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2 still print as two entries of 1", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const mesa128 = await v.table("Mesa 128");
@@ -1286,6 +1289,51 @@ describe("a MOVED slip lists its dishes at the quantities the kitchen's tickets 
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, partyId, mesa128, { ...command, bills: "merge", otherPartyId: null }),
     );
+
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
+      ["1.000 x BURG", "1.000 x BURG"],
+    ]);
+  });
+
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Transfer items moves both", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 131"));
+    await order(v, tabId, "Paella");
+    const second = await split(v, partyId, tabId, [1]);
+    await order(v, tabId, "Burger");
+    await order(v, tabId, "Burger");
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, tabId));
+    const lineNos = (
+      await db
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+    ).map(({ lineNo }) => ({ lineNo }));
+    expect(lineNos).toHaveLength(2);
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => transferItems(tx, v.cfg, tabId, second, lineNos, command));
+
+    expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
+      ["1.000 x BURG", "1.000 x BURG"],
+    ]);
+  });
+
+  it("with combined quantities, two tickets of one Burger reprinted as one entry of 2, its reprint unprinted, still print as two entries of 1 after Merge bills", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 132"));
+    await order(v, tabId, "Paella");
+    const second = await split(v, partyId, tabId, [1]);
+    await order(v, tabId, "Burger");
+    await order(v, tabId, "Burger");
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, tabId));
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, second, tabId, command));
 
     expect((await slipsSince(grill, before)).map(dishLines)).toEqual([
       ["1.000 x BURG", "1.000 x BURG"],

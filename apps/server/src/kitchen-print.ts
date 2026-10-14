@@ -58,7 +58,7 @@ import {
 import { readRestOfOrder } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import type { KitchenTicketGrouping, KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
+import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -1265,60 +1265,13 @@ type MovedItem = CorrectionItem & { held: boolean };
 
 /**
  * What MOVED slips print with: their stations' printers and names, their lines, the ticket
- * grouping, and the kitchen ticket each line is on ({@link ticketsOfLines}).
+ * grouping.
  */
 interface MovedSlipPrinting {
   byStation: MappingsByStation;
   itemsByLine: Awaited<ReturnType<typeof buildTicketItems>>;
   stationNames: Awaited<ReturnType<typeof readStations>>;
-  grouping: KitchenTicketGrouping;
-  ticketOf: ReadonlyMap<string, string>;
-}
-
-/**
- * The print job of the kitchen ticket each of `lineIds` was last sent on, keyed by line: the
- * latest that was not a reprint, else the latest reprint. A line on no kitchen ticket is absent.
- */
-async function ticketsOfLines(
-  tx: Transaction,
-  lineIds: readonly string[],
-): Promise<Map<string, string>> {
-  const rows = await tx
-    .select({
-      lineId: kitchenPrintJobLines.workingOrderLineId,
-      printJobId: kitchenPrintJobLines.printJobId,
-      reprint: kitchenPrintJobs.reprint,
-    })
-    .from(kitchenPrintJobLines)
-    .innerJoin(kitchenPrintJobs, eq(kitchenPrintJobs.printJobId, kitchenPrintJobLines.printJobId))
-    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobLines.printJobId))
-    .where(inArray(kitchenPrintJobLines.workingOrderLineId, [...lineIds]))
-    .orderBy(sql`${printJobs}.rowid`);
-  const latest = new Map<string, { printJobId: string; reprint: boolean }>();
-  for (const { lineId, printJobId, reprint } of rows) {
-    if (reprint && latest.get(lineId)?.reprint === false) continue;
-    latest.set(lineId, { printJobId, reprint });
-  }
-  return new Map([...latest].map(([lineId, { printJobId }]) => [lineId, printJobId]));
-}
-
-/**
- * `entries`, in their order, laid out by `grouping` one ticket at a time, so the same dish on two
- * tickets is never added up; each laid-out item stands where its first dish stood.
- */
-function arrangePerTicket(
-  entries: readonly { ticket: string; item: KitchenTicketItem }[],
-  grouping: KitchenTicketGrouping,
-): KitchenTicketItem[] {
-  const byTicket = new Map<string, (KitchenTicketItem & { at: number })[]>();
-  entries.forEach(({ ticket, item }, at) => {
-    const items = byTicket.get(ticket) ?? [];
-    items.push({ ...item, at });
-    byTicket.set(ticket, items);
-  });
-  return [...byTicket.values()]
-    .flatMap((items) => arrangeTicketItems(items, grouping))
-    .sort((a, b) => a.at - b.at);
+  grouping: Parameters<typeof arrangeTicketItems>[1];
 }
 
 /** {@link MovedSlipPrinting} for every slip of `items`, read once; null when no station prints. */
@@ -1330,23 +1283,24 @@ async function readMovedSlipPrinting(
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const byStation = mappingsByStation(await printerMappings(tx, stationIds));
   if (byStation.size === 0) return null;
-  const lineIds = [...new Set(items.map((item) => item.workingOrderLineId))];
-  const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const itemsByLine = await buildTicketItems(tx, cfg, [
+    ...new Set(items.map((item) => item.workingOrderLineId)),
+  ]);
   const stationNames = await readStations(tx, stationIds);
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
-  const ticketOf = await ticketsOfLines(tx, lineIds);
-  return { byStation, itemsByLine, stationNames, grouping, ticketOf };
+  return { byStation, itemsByLine, stationNames, grouping };
 }
 
 /**
  * One MOVED slip per station of `items`, to its printers, listing its fired items as its tickets
- * do and its held ones under HOLD, group by group. Dishes are added up or split by the ticket
- * grouping within the ticket each was last sent on, never across two.
+ * do and its held ones under HOLD, group by group. The ticket grouping lays out each line on its
+ * own and never adds two lines together: a link {@link writeLinksAfter} moves or copies loses its
+ * reprint mark, so which ticket last carried a line cannot be told.
  */
 async function printMovedSlips(
   tx: Transaction,
   cfg: TillConfig,
-  { byStation, itemsByLine, stationNames, grouping, ticketOf }: MovedSlipPrinting,
+  { byStation, itemsByLine, stationNames, grouping }: MovedSlipPrinting,
   items: readonly MovedItem[],
   slip: Pick<MovedSlip, "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText">,
 ): Promise<void> {
@@ -1365,25 +1319,18 @@ async function printMovedSlips(
         return {
           held: target.held,
           lineNo: entry.lineNo,
-          ticket: ticketOf.get(target.workingOrderLineId) ?? target.workingOrderLineId,
           item: entry.group === null ? item : { ...item, group: entry.group },
         };
       })
       .sort(byGroupThenLine);
-    const heldRuns: { group: number; entries: typeof listed }[] = [];
-    for (const entry of listed.filter((listing) => listing.held)) {
-      const last = heldRuns.at(-1);
-      if (last !== undefined && last.group === entry.item.group) last.entries.push(entry);
-      else heldRuns.push({ group: entry.item.group!, entries: [entry] });
+    const laidOut = (item: KitchenTicketItem) => arrangeTicketItems([item], grouping);
+    const held: MovedSlip["held"] = [];
+    for (const { item } of listed.filter((entry) => entry.held)) {
+      const last = held.at(-1);
+      if (last !== undefined && last.group === item.group) last.items.push(...laidOut(item));
+      else held.push({ group: item.group!, items: laidOut(item) });
     }
-    const held = heldRuns.map(({ group, entries }) => ({
-      group,
-      items: arrangePerTicket(entries, grouping),
-    }));
-    const fired = arrangePerTicket(
-      listed.filter((entry) => !entry.held),
-      grouping,
-    );
+    const fired = listed.filter((entry) => !entry.held).flatMap((entry) => laidOut(entry.item));
     for (const group of groupByLayout(targets)) {
       const bytes = formatMovedSlip(
         {
