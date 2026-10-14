@@ -311,6 +311,15 @@ describe("party table labels", () => {
       );
     });
 
+    it("lists each of two groups sharing one name, both at one party", async () => {
+      const { s, ids, partyId } = await longTable();
+      await group([ids.bar, ids.c3], `García birthday ${s}`);
+      await group([ids.c4, ids.c5], `García birthday ${s}`);
+      expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
+        new Map([[partyId, [`García birthday ${s}`, `García birthday ${s}`]]]),
+      );
+    });
+
     it("lists both of two tables in no group whose shown names are the same", async () => {
       const { ids, labels, partyId } = await longTable();
       await nameToday(ids.c4, labels.bar);
