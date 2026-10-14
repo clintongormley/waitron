@@ -1026,8 +1026,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **A "Translate all" service from Waitron Cloud — designed, specs approved 2026-10-14; plans next
-  (owner 2026-10-06 ~17:23).** A
+- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; ready to
+  build, Cloud's side first (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
@@ -1035,6 +1035,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [the Translate all design](superpowers/specs/2026-10-14-translate-all-design.md), Cloud's side and
   the wire contract in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md`
   and `docs/waitron-integration-contract.md`. For now it is free for connected venues, capped per venue.
+  **Plans, approved by the owner on 2026-10-14:** Waitron's in
+  [the Translate all plan](superpowers/plans/2026-10-14-translate-all.md) (21 tasks; tasks 1–20 test
+  against a fake Cloud, task 21 needs Cloud's side); Cloud's in its repository's
+  `docs/superpowers/plans/2026-10-14-translate-all.md` (24 tasks; 22–24 are owner-run measurements
+  with the real key), on waitron-cloud PR #131. The approval covers the proposed $5 per venue per
+  month cap and Cloud's submit allowance (4 in flight, 1 per address); Cloud's spec still says
+  "proposed" until its first implementation change updates it.
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
