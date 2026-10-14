@@ -1,5 +1,7 @@
 import { Hono } from "hono";
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as identity from "@waitron/identity";
+import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
@@ -17,6 +19,7 @@ let secret: string;
 let managerToken: string;
 let staffToken: string;
 const logs: unknown[] = [];
+afterEach(() => vi.restoreAllMocks());
 beforeEach(async () => {
   logs.length = 0;
   await stampDeployment(suite.db, "preproduction");
@@ -77,6 +80,63 @@ it("refuses staff even when they hold the node key", async () => {
   const response = await download(staffToken);
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+});
+
+it.each([
+  ["unknown-session", "wrong", 401, "management_session.required"],
+  ["unknown-session", "right", 401, "management_session.required"],
+  ["staff", "wrong", 403, "authorization.not_permitted"],
+  ["staff", "right", 403, "authorization.not_permitted"],
+] as const)(
+  "refuses %s before disclosing whether a %s key matches",
+  async (who, key, status, code) => {
+    const token = who === "staff" ? staffToken : "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const response = await download(token, key === "right" ? secret : "wrong-private-key");
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ error: { code } });
+  },
+);
+
+it("derives a node key for only one concurrent authorised download at a time", async () => {
+  const verify = identity.verifySecretAsync;
+  let active = 0;
+  let peak = 0;
+  vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
+    active++;
+    peak = Math.max(peak, active);
+    try {
+      return await verify(...args);
+    } finally {
+      active--;
+    }
+  });
+  const instance = app();
+  const responses = await Promise.all([
+    download(managerToken, secret, instance),
+    download(managerToken, secret, instance),
+    download(managerToken, secret, instance),
+  ]);
+  expect(responses.map((response) => response.status)).toEqual([200, 200, 200]);
+  expect(peak).toBe(1);
+  expect(active).toBe(0);
+});
+
+it("rechecks permission in the transaction after the key derivation", async () => {
+  const { personId } = await identity.resolveManagementSession(suite.db, managerToken, {
+    touch: false,
+  });
+  const verify = identity.verifySecretAsync;
+  vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
+    const matches = await verify(...args);
+    await withTransaction(suite.db, (tx) =>
+      tx.update(persons).set({ role: "staff" }).where(eq(persons.id, personId)),
+    );
+    return matches;
+  });
+  const response = await download();
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect(JSON.stringify(logs)).not.toContain(secret);
 });
 
 it("downloads a secret-bearing attachment without a subscription, bucket or new key", async () => {

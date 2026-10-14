@@ -316,27 +316,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   full-design approval remain open; Live activation needs real production custody. Detail:
   [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
-- **W41s. Fiscal prevention and offline recovery** — remaining recovery and resolution work.
-  Allocation validation and local activation use outside signed identities, with a dormant standby
-  reservation and authenticated takeover. W41s-6's candidate has a signed-register command,
-  named-key pack downloads, printable handovers and archive/bucket/Cloud choosers showing the
-  selected copy's saved key name and source. Its restart backend stages a separate node key and
-  checks the selected copy's byte identity. The public restore routes, browser client and candidate restore screens carry
-  the public recovery record and separate key. Paper recovery has a checked export from signed
-  block/consumption files and separate current outside evidence; the host rereads that evidence
-  at restart. Emergency recovery has a candidate host collector with a separately configured outside journal,
-  fresh draws, conservative consumption and exact committed-result replay. Its outside incident
-  retains a readable bilingual record of each callback's start and returned or thrown result; missing result storage refuses
-  trading-settings publication. Focused archive and prepared-stream restart cases and a process
-  killed at staging, consumption, transaction and publication boundaries qualify conservative
-  burn and exact replay. The setup form offers a public request download and resets retention
-  on edits; the generated incident stays on the outside storage. The operator procedure now supplies explicit outside Compose mounts and the generated-record
-  handover; packaged archive CLI and staged-start container cases qualify paper/emergency restore
-  without network access. Whole-task review and current-head CI remain open;
-  automatic conflict recovery,
-  corrective-record resolution, filing investigation, outside evidence/fencing, the complete offline
-  exercise and the Cloud registry adapter remain queued. The Cloud service has its own workstream;
-  paper allocation does not require a subscription. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
+- **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
+  corrective-record resolution, filing investigation, outside evidence and fencing, the complete
+  old-backup/new-hardware operational exercise, and the Cloud registry adapter remain queued.
+  The Cloud service has its own workstream; paper allocation does not require a subscription.
+  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** The bundle can reserve a signed identity, but the public adopter refuses that

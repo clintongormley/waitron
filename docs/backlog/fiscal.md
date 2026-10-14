@@ -1138,3 +1138,24 @@ fixture has one venue and its credential-vault key; the two earlier incomplete f
 not successful-start receipts. This is packaged-entry-point qualification, not a new full-image,
 physical-printer or remote-share test. Full task review and current-head CI remain required;
 Task11 retains the later full operational exercise.
+
+
+**2026-10-14 Task6 review qualification (candidate only):** two FULL Claude run-it reviews
+independently reproduced loss of staged credentials after a caught post-commit file error.
+Placement-started requests now retain those files on thrown errors as well as process kills;
+four injected settings/outside-result failures preserve the committed allocation and original
+invoice rows through exact replay. A pack-download probe also distinguished right and wrong
+node keys for unauthorised callers. The route now checks permission without touching the session
+before derivation, serialises downloads by node, and rechecks permission in its transaction.
+A revoked-manager case protects the later check. A copied-event test independently checks the
+recorded node even when the requested target agrees. Installed removal controls each fail their
+owning assertions, with restored suites passing.
+
+The existing outside-confirmation refusal also covers a failed outside result write; the
+[procedure](../developers/emergency-recovery.md) now says explicitly that it does not describe
+local commit status. A double-failure case checks that the storage refusal takes precedence and
+that the failed restore's message stays out of the outside record. No original-main fiscal
+assertion or protected writer changed. A separate pinned Litestream0.5.17/versitygw1.8.0
+experiment restored one stopped generation twice through the normal database opener: row
+values, database bytes and source hashes matched. That checks this synthetic stable generation,
+not all bucket providers or a moving source. Required current-head CI still gates publication.

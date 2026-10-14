@@ -467,9 +467,10 @@ the prepared file rather than the untouched bucket object. A later download with
 needs a fresh review and matching outside recovery evidence.
 
 The backend checks this binding before replacing a staged request and again at restart. A fresh
-attempt removes the staged key after success or refusal; a venue-lock refusal keeps it for another
-fresh attempt. After an interrupted placement, a refused resume keeps the request and key for
-another checked attempt, and success removes them. Restaging replaces the credential. Each attempt
+attempt removes the staged key after success or a refusal before placement is marked started;
+a venue-lock refusal keeps it for another fresh attempt. Once placement is marked started, any
+failure keeps the request and key for a checked resume, including a thrown file-write error after
+activation commits. A successful resume removes them. Restaging replaces the credential. Each attempt
 still authenticates the key and collects current outside evidence. See
 [interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). An interrupted write with no marker leaves no runnable request, and the
 next entry pass removes the orphaned node-key file. These rules do not establish that a copied

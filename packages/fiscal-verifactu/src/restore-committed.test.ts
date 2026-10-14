@@ -91,3 +91,20 @@ it("refuses a different target node even if the event's binding was copied", asy
     params: { reason: "prior_activation_requires_replay" },
   });
 });
+
+it("refuses another node's committed event even when its requested target agrees", async () => {
+  await commit();
+  const otherNodeId = TENANT_A.nodeId2;
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      assertFiscalRestoreCommitted(
+        tx,
+        { ...node, nodeId: otherNodeId },
+        { ...binding, targetNodeId: otherNodeId },
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "prior_activation_requires_replay" },
+  });
+});

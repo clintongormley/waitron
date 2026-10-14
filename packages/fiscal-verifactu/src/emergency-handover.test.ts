@@ -75,6 +75,22 @@ it("presents a thrown result without copying an exception message or describing 
   expect(await handover()).toContain('"outcome": "threw"');
   expect(await handover()).not.toContain("synthetic-secret-not-for-handover");
 });
+it("reports unavailable outside recording when the restore and its result write both fail", async () => {
+  const secretMessage = "synthetic-private-restore-error";
+  await expect(
+    withEmergencyAttempt(directory, path, consumption, async () => {
+      await mkdir(`${path}.next`);
+      throw new Error(secretMessage);
+    }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "outside_confirmation_missing" },
+  });
+  const retained = await readFile(path, "utf8");
+  expect(JSON.parse(retained).attempts).toMatchObject([{ outcome: "started", finishedAt: null }]);
+  expect(retained).not.toContain(secretMessage);
+  expect(await handover()).not.toContain(secretMessage);
+});
 it("refuses activation when the readable record cannot be published, retaining consumed history", async () => {
   await mkdir(`${path}.txt`);
   let entered = false;

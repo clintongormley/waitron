@@ -404,7 +404,8 @@ export async function runStagedRestore(
     // request stays for a boot that gets the folder.
     if (!resuming && isAppError(error) && error.code === "provisioning.database_in_use") {
       if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
-    } else if (!resuming) {
+    } else if (!resuming && !markedStarted) {
+      // A later file error can follow a committed activation; started requests need checked replay.
       await clearStagedRestore(deps.stateDir);
     }
     throw error;

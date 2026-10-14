@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import nativeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -95,6 +97,8 @@ beforeEach(async () => {
   vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", outside);
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
   vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
 });
@@ -222,6 +226,83 @@ it("refuses a resume without a placed database instead of treating the stage mar
   ).rejects.toMatchObject({ code: "module.operation_invalid" });
   expect(await readdir(outside)).toEqual([]);
 });
+
+it.each([
+  ["archive", "settings"],
+  ["stream", "settings"],
+  ["archive", "outside-result"],
+  ["stream", "outside-result"],
+] as const)(
+  "keeps the committed %s activation when the %s write throws before completion",
+  async (kind, fault) => {
+    await stage(kind);
+    const venueDir = join(root, "venue");
+    const failure = Object.assign(new Error("injected post-commit write failure"), { code: "EIO" });
+    const originalWrite = nativeFs.writeFile;
+    const originalOpen = nativeFs.open;
+    let outsideWrites = 0;
+    vi.spyOn(nativeFs, "writeFile").mockImplementation(async (...args) => {
+      if (fault === "settings" && String(args[0]) === join(stateDir, "trading.env.tmp"))
+        throw failure;
+      return originalWrite(...args);
+    });
+    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+      if (
+        fault === "outside-result" &&
+        String(args[0]).endsWith(".json.next") &&
+        ++outsideWrites === 2
+      )
+        throw failure;
+      return originalOpen(...args);
+    });
+    syncBuiltinESMExports();
+    const attempt = () =>
+      runStagedRestore({ stateDir, venueDir, migrationsRoot: null, log: () => {} });
+    const first = attempt();
+    if (fault === "settings") await expect(first).rejects.toBe(failure);
+    else
+      await expect(first).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "outside_confirmation_missing" },
+      });
+    vi.restoreAllMocks();
+    syncBuiltinESMExports();
+    const placed = await openVenueDatabase(venueDir);
+    let committed: (typeof fiscalAllocations.$inferSelect)[];
+    try {
+      committed = await placed.venue.select().from(fiscalAllocations);
+      expect(committed).toHaveLength(1);
+      expect(await placed.venue.select().from(registrosFacturacion)).toEqual(originalRecords);
+    } finally {
+      await placed.close();
+    }
+    expect(await readdir(stateDir)).toContain("restore-request.json");
+    expect(
+      JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("placementStarted", true);
+    expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(nodeKey);
+    await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    const confirmationPath = join(root, "current.json");
+    const confirmation = JSON.parse(await readFile(confirmationPath, "utf8"));
+    await writeFile(
+      confirmationPath,
+      JSON.stringify({ ...confirmation, priorActivation: "committed" }),
+    );
+    await expect(attempt()).resolves.toBe(true);
+    const replayed = await openVenueDatabase(venueDir);
+    try {
+      expect(await replayed.venue.select().from(fiscalAllocations)).toEqual(committed);
+      expect(await replayed.venue.select().from(registrosFacturacion)).toEqual(originalRecords);
+    } finally {
+      await replayed.close();
+    }
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toContain(TENANT_A.nodeId);
+    await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await attempt()).toBe(false);
+  },
+);
 
 it.each(["archive", "stream"] as const)(
   "a %s stage marker cannot substitute for a committed activation",

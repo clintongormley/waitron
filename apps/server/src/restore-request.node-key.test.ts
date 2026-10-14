@@ -138,19 +138,31 @@ it("refuses an unbound staged credential before creating restart files", async (
   expect(await readdir(stateDir)).toEqual([]);
 });
 
-it.each(["success", "refusal"])("clears the node credential after restore %s", async (outcome) => {
-  const stateDir = await fresh();
-  await stageRestoreRequest(stateDir, archive());
-  const restore = async () => {
-    if (outcome === "refusal") throw new AppError("promotion.break_glass_invalid", {});
-  };
-  const context = deps(stateDir);
-  const attempt = runStagedRestore(context, restore);
-  if (outcome === "success") await expect(attempt).resolves.toBe(true);
-  else await expect(attempt).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-  await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(JSON.stringify(context.log.mock.calls)).not.toContain(secret);
-});
+it.each(["success", "refusal"])(
+  "handles the staged credential after restore %s",
+  async (outcome) => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, archive());
+    const restore = async () => {
+      if (outcome === "refusal") throw new AppError("promotion.break_glass_invalid", {});
+    };
+    const context = deps(stateDir);
+    const attempt = runStagedRestore(context, restore);
+    if (outcome === "success") await expect(attempt).resolves.toBe(true);
+    else await expect(attempt).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    if (outcome === "success")
+      await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    else {
+      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+      expect(
+        JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
+      ).toHaveProperty("placementStarted", true);
+    }
+    expect(JSON.stringify(context.log.mock.calls)).not.toContain(secret);
+  },
+);
 
 it("keeps the node credential when the venue lock refuses before placement", async () => {
   const stateDir = await fresh();

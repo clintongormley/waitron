@@ -92,7 +92,11 @@ If the process stops before retaining the result, that attempt stays `"started"`
 outside event and the exact local result before declaring the earlier activation committed.
 A missing result does not release the consumed name. If the outside result cannot be retained,
 the collector refuses success; the staged archive and prepared-stream paths publish their
-trading settings only after the collector returns.
+trading settings only after the collector returns. The refusal `sif.allocation_invalid` with
+`outside_confirmation_missing` also covers failure to retain an outside attempt result. It does
+not establish whether the local activation committed. Consult the outside incident and the
+placed database before choosing a retry. If the restore and its result recording both fail, you
+receive this storage refusal; the earlier error message is not copied into the outside record.
 
 The collector updates the record under an exclusive per-event `.lock` file and publishes a
 flushed `.next` file by renaming it over the record, then flushing the incident directory. A
@@ -152,8 +156,10 @@ permits no new activation. A newer image's database is refused before migration 
 consumption.
 
 Set `priorActivation` to `committed` only after checking the outside record and local result.
-An uncertain result refuses recovery. A refusal while resuming keeps the staged request and its
-owner-only key file for another checked attempt. A completed restore removes those files. A venue
+An uncertain result refuses recovery. Once placement is marked started, a thrown error keeps the
+staged request and its owner-only key file too, even on the first attempt. This includes a failed
+trading-settings write or outside-result publication after activation commits. A refusal while
+resuming keeps them for another checked attempt. A completed restore removes those files. A venue
 lock refusal before placement leaves a fresh request, rather than declaring it interrupted.
 
 If no local activation committed, the name stays burned. Prepare a new event against current

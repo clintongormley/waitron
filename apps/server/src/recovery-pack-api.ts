@@ -3,6 +3,7 @@ import { authorizeManager } from "@waitron/identity";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { createRecoveryPack } from "./recovery-pack.js";
+import { inTurn } from "./attempt-turns.js";
 import "./errors.js";
 
 export function mountRecoveryPackApi(
@@ -27,28 +28,35 @@ export function mountRecoveryPackApi(
   app.post("/api/box/recovery-pack", (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);
-      const request = await readJsonBody<unknown>(c);
-      let personId: string | undefined;
-      const pack = await createRecoveryPack(
-        {
-          ...deps,
-          now: deps.now(),
-          authorize: async (tx) => {
-            personId = (
-              await authorizeManager(tx, {
-                managementSessionId: token,
-                permission: "system.manage",
-              })
-            ).authorizedBy;
+      return inTurn(deps.db, `recovery-pack:${deps.node.nodeId}`, async () => {
+        await authorizeManager(deps.db, {
+          managementSessionId: token,
+          permission: "system.manage",
+          touch: false,
+        });
+        const request = await readJsonBody<unknown>(c);
+        let personId: string | undefined;
+        const pack = await createRecoveryPack(
+          {
+            ...deps,
+            now: deps.now(),
+            authorize: async (tx) => {
+              personId = (
+                await authorizeManager(tx, {
+                  managementSessionId: token,
+                  permission: "system.manage",
+                })
+              ).authorizedBy;
+            },
           },
-        },
-        request,
-      );
-      log("info", "recovery.pack_downloaded", { personId });
-      return c.body(JSON.stringify(pack, null, 2), 200, {
-        "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="waitron-node-recovery-${pack.createdAt.slice(0, 10)}.json"`,
-        "Cache-Control": "no-store",
+          request,
+        );
+        log("info", "recovery.pack_downloaded", { personId });
+        return c.body(JSON.stringify(pack, null, 2), 200, {
+          "Content-Type": "application/json",
+          "Content-Disposition": `attachment; filename="waitron-node-recovery-${pack.createdAt.slice(0, 10)}.json"`,
+          "Cache-Control": "no-store",
+        });
       });
     }),
   );
