@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -316,7 +316,7 @@ it.each(["archive", "stream"] as const)(
         migrationsRoot: null,
         log: (_level, event, fields) => {
           if (event === "restore.hook.done" && fields?.module === "fiscal-verifactu") {
-            unlinkSync(`${path}.txt`);
+            rmSync(`${path}.txt`, { force: true });
             mkdirSync(`${path}.txt`);
           }
         },
