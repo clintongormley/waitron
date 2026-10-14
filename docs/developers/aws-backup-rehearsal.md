@@ -257,6 +257,10 @@ backend (`buildBackupBackend`), so each request is built by the product's own st
   upload).
   Together they reserve 56 MiB of the budget.
 
+A phase is recorded `failed` when its request fails or when one of its checks does not hold; the
+row carries the error's name, which is `AssertionError` when an `expect` failed. Only a phase that
+passed is recorded `ok`.
+
 **What the receipt records.** Besides the phases, every S3 request these scenarios send is one
 `request` row: the API name, HTTP status, attempts, elapsed time and outcome, and for DeleteObjects
 the number of keys sent, for PutObject and UploadPart the bytes sent. A DeleteObjects answer that
@@ -287,7 +291,9 @@ CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 
 200; the abort, 1 CreateMultipartUpload, 1 UploadPart and 1 ListObjectsV2 answered 200 and 1
 AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does. One of
 those 8, the delete-many scenario's refusal of a 1,006th object, has since moved to
-`apps/server/src/testing/s3-delete-scenario.test.ts`, which needs no server, so the file now holds 7.
+`apps/server/src/testing/s3-delete-scenario.test.ts`, which needs no server, and so has its failing
+first listing, so the file now holds 6. Run again the same day after that move, the same command
+passed all 6, and the scenarios sent the same requests and got the same answers.
 
 ## When teardown fails: the cleanup command
 
