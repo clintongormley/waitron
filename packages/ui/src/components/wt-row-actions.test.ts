@@ -663,6 +663,57 @@ describe("a link entry", () => {
       history.replaceState(null, "", before);
     }
   });
+
+  async function clickOutcome(
+    link: HTMLAnchorElement,
+    activate: () => Promise<void>,
+  ): Promise<{ hash: string; defaultPrevented: boolean | undefined }> {
+    const before = location.href;
+    history.replaceState(null, "", "#start");
+    let defaultPrevented: boolean | undefined;
+    const record = (event: Event) => {
+      if (event.target === link) defaultPrevented = event.defaultPrevented;
+    };
+    document.addEventListener("click", record);
+    try {
+      await activate();
+      return { hash: location.hash, defaultPrevented };
+    } finally {
+      document.removeEventListener("click", record);
+      history.replaceState(null, "", before);
+    }
+  }
+
+  it("does not open its page when clicked while marked aria-disabled, and stays open", async () => {
+    const { el, link } = await mountLinkAndButton({ disabled: true });
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const outcome = await clickOutcome(link, () => userEvent.click(link, { force: true }));
+    expect(outcome).toEqual({ hash: "#start", defaultPrevented: true });
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+
+  it("does not open its page on Enter while marked aria-disabled", async () => {
+    const { link } = await mountLinkAndButton({ disabled: true });
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
+    expect(outcome).toEqual({ hash: "#start", defaultPrevented: true });
+  });
+
+  it("opens its page on a real click when not disabled", async () => {
+    const { el, link } = await mountLinkAndButton();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const outcome = await clickOutcome(link, () => userEvent.click(link));
+    expect(outcome).toEqual({ hash: "#wine", defaultPrevented: false });
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("opens its page on Enter when not disabled", async () => {
+    const { link } = await mountLinkAndButton();
+    link.focus();
+    const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
+    expect(outcome).toEqual({ hash: "#wine", defaultPrevented: false });
+  });
 });
 
 test("reinserted after removal while open reports closed and opens normally again", async () => {

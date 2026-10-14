@@ -133,6 +133,7 @@ export class WtRowActions extends LitElement {
   private readonly judgeAction = {
     capture: true,
     handleEvent: (event: MouseEvent) => {
+      if (this.actionOf(event)?.matches('a[href][aria-disabled="true"]')) event.preventDefault();
       if (this.closesMenu(event)) this.closingClicks.add(event);
     },
   };
@@ -150,17 +151,21 @@ export class WtRowActions extends LitElement {
         )
     )
       return false;
-    const action = event
-      .composedPath()
-      .find(
-        (node): node is HTMLElement =>
-          node instanceof HTMLElement && node.matches("button, a[href], wt-button"),
-      );
+    const action = this.actionOf(event);
     return (
       action !== undefined &&
       !action.hasAttribute("disabled") &&
       action.getAttribute("aria-disabled") !== "true"
     );
+  }
+
+  private actionOf(event: MouseEvent): HTMLElement | undefined {
+    return event
+      .composedPath()
+      .find(
+        (node): node is HTMLElement =>
+          node instanceof HTMLElement && node.matches("button, a[href], wt-button"),
+      );
   }
 
   private onAction(event: MouseEvent): void {
