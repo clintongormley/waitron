@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
 import {
   drag,
@@ -96,7 +97,7 @@ it("lists each active department with its zones beneath, and says the zones foll
   );
   const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   expect(link.textContent!.trim()).toBe("Periods");
-  expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/periods/department/d1");
+  expect(link.getAttribute("href")).toBe("/manage/periods");
   expect(chip(painter, "hint")!.textContent!.trim()).toBe(
     "Drag down a day to paint · drag over a block to replace it",
   );
@@ -187,7 +188,7 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   await drag(painter, "3", 14 * 60, 17 * 60);
   chip(painter, "new-period")!.click();
   await settle(painter);
-  const editor = painter.shadowRoot!.querySelector("period-editor")!;
+  const editor = painter.shadowRoot!.querySelector("period-dialog")!;
   await editor.updateComplete;
   expect(editor.period).toBeUndefined();
   const submit = editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!;
@@ -203,7 +204,7 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
       );
   await editor.updateComplete;
   submit.click();
-  await expect.poll(() => painter.shadowRoot!.querySelector("period-editor")).toBeNull();
+  await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
   expect(writes).toHaveLength(1);
   expect(writes[0]!.url).toBe("/management-api/venue-service/departments/d1/menu-periods");
   expect(writes[0]!.method).toBe("POST");
@@ -225,7 +226,7 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   expect(frame(painter).dirty).toBe(true);
 });
 
-it("✎ opens the period editor with that period, and a refusal shows in it", async () => {
+it("✎ opens the period dialog with that period, and a refusal shows in it", async () => {
   const writes: Write[] = [];
   const { painter } = await mount();
   painter.api = painterApi(writes, () => {
@@ -233,7 +234,7 @@ it("✎ opens the period editor with that period, and a refusal shows in it", as
   });
   chip(painter, "edit-p1")!.click();
   await settle(painter);
-  const editor = painter.shadowRoot!.querySelector("period-editor")!;
+  const editor = painter.shadowRoot!.querySelector("period-dialog")!;
   await editor.updateComplete;
   expect(editor.period?.id).toBe("p1");
   editor
@@ -248,7 +249,124 @@ it("✎ opens the period editor with that period, and a refusal shows in it", as
     url: "/management-api/venue-service/menu-periods/p1",
     method: "PATCH",
   });
-  expect(painter.shadowRoot!.querySelector("period-editor")).not.toBeNull();
+  expect(painter.shadowRoot!.querySelector("period-dialog")).not.toBeNull();
+});
+
+const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
+/** An api whose Painted-in read waits on the returned `answer`, counting each read. */
+function paintedInApi() {
+  const reads: string[] = [];
+  let answer!: (rows: unknown) => void;
+  const api = new OpeningHoursApi((async (url: string, method: string) => {
+    if (url === PAINTED_IN) {
+      reads.push(method);
+      return new Promise<unknown>((resolve) => (answer = resolve));
+    }
+    return painterModel();
+  }) as DashboardRequest);
+  return { api, reads, answer: (rows: unknown) => answer(rows) };
+}
+const paintedRows = [
+  {
+    periodId: "p1",
+    seasons: [
+      { id: "winter", name: "Winter" },
+      { id: "autumn", name: "Autumn" },
+    ],
+    specialDays: [{ id: "sd1", name: "Christmas Day" }],
+  },
+  { periodId: "p2", seasons: [{ id: "spring", name: "Spring" }], specialDays: [] },
+];
+const paintedChips = (dialog: HTMLElementTagNameMap["period-dialog"]) =>
+  [...dialog.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=painted-in] .chip")].map(
+    (chip) => ({
+      text: chip.textContent!.trim(),
+      tag: chip.localName,
+      special: chip.hasAttribute("data-special-day"),
+      tinted: chip.hasAttribute("data-tint"),
+    }),
+  );
+
+it("✎ opens the period dialog with where the period is painted, read once, as plain chips", async () => {
+  const { painter } = await mount();
+  const { api, reads, answer } = paintedInApi();
+  painter.api = api;
+  chip(painter, "edit-p1")!.click();
+  await settle(painter);
+  const dialog = painter.shadowRoot!.querySelector("period-dialog")!;
+  await dialog.updateComplete;
+  expect(dialog.period?.id).toBe("p1");
+  expect(reads).toEqual(["GET"]);
+  expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  answer(paintedRows);
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("[data-test=painted-in]"))
+    .not.toBeNull();
+  expect(paintedChips(dialog)).toEqual([
+    { text: "Winter", tag: "span", special: false, tinted: true },
+    { text: "Autumn", tag: "span", special: false, tinted: false },
+    { text: "Christmas Day", tag: "span", special: true, tinted: false },
+  ]);
+  expect(dialog.shadowRoot!.querySelector("[data-test=painted-in] a")).toBeNull();
+  expect(dialog.paintedInLinks).toBe(false);
+  expect(dialog.departmentId).toBe("d1");
+  expect(dialog.seasons).toBe(painter.model.seasons);
+  expect(dialog.shadowRoot!.querySelector("[data-test=delete-period]")).toBeNull();
+  await settle(painter);
+  expect(reads).toEqual(["GET"]);
+});
+
+it("+ New period reads nothing and draws no Painted in; a failed read draws none either", async () => {
+  const { painter } = await mount();
+  const { api, reads } = paintedInApi();
+  painter.api = api;
+  chip(painter, "new-period")!.click();
+  await settle(painter);
+  const dialog = painter.shadowRoot!.querySelector("period-dialog")!;
+  await dialog.updateComplete;
+  expect(reads).toEqual([]);
+  expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
+  const failing = new OpeningHoursApi((async (url: string) => {
+    if (url === PAINTED_IN) throw Object.assign(new Error("down"), { code: "server.unavailable" });
+    return painterModel();
+  }) as DashboardRequest);
+  painter.api = failing;
+  chip(painter, "edit-p1")!.click();
+  await settle(painter);
+  const edit = painter.shadowRoot!.querySelector("period-dialog")!;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await edit.updateComplete;
+  expect(edit.period?.id).toBe("p1");
+  expect(edit.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+});
+
+it("a Painted-in read that answers after the dialog closed changes nothing", async () => {
+  const { painter } = await mount();
+  const first = paintedInApi();
+  painter.api = first.api;
+  chip(painter, "edit-p1")!.click();
+  await settle(painter);
+  const closing = painter.shadowRoot!.querySelector("period-dialog")!;
+  await closing.updateComplete;
+  closing.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
+  const second = paintedInApi();
+  painter.api = second.api;
+  chip(painter, "edit-p2")!.click();
+  await settle(painter);
+  const reopened = painter.shadowRoot!.querySelector("period-dialog")!;
+  await reopened.updateComplete;
+  expect(reopened.period?.id).toBe("p2");
+  first.answer(paintedRows);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await settle(painter);
+  await reopened.updateComplete;
+  expect(reopened.paintedIn).toBeUndefined();
+  expect(reopened.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
+  second.answer(paintedRows);
+  await expect.poll(() => paintedChips(reopened).map(({ text }) => text)).toEqual(["Spring"]);
 });
 
 it("opens with the department's first period chosen, so a drag with no chip clicked paints it", async () => {
@@ -264,7 +382,7 @@ it("opens with the department's first period chosen, so a drag with no chip clic
 async function createPeriod(painter: SeasonPainter) {
   chip(painter, "new-period")!.click();
   await settle(painter);
-  const editor = painter.shadowRoot!.querySelector("period-editor")!;
+  const editor = painter.shadowRoot!.querySelector("period-dialog")!;
   await editor.updateComplete;
   for (const [name, value] of [
     ["name", "Christmas"],
@@ -277,7 +395,7 @@ async function createPeriod(painter: SeasonPainter) {
       );
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
-  await expect.poll(() => painter.shadowRoot!.querySelector("period-editor")).toBeNull();
+  await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
 }
 
 it("a period created in one department is chosen only there; another department chooses its own first period", async () => {
@@ -442,7 +560,7 @@ it("a refresh that moves the current season keeps the season being painted and i
   expect(navigations).toEqual([]);
 });
 
-const editorOf = (el: SeasonPainter) => el.shadowRoot!.querySelector("period-editor");
+const editorOf = (el: SeasonPainter) => el.shadowRoot!.querySelector("period-dialog");
 async function openEditor(painter: SeasonPainter, test: string) {
   chip(painter, test)!.click();
   await settle(painter);
@@ -453,7 +571,7 @@ async function openEditor(painter: SeasonPainter, test: string) {
 }
 async function cancelEditor(
   painter: SeasonPainter,
-  editor: HTMLElementTagNameMap["period-editor"],
+  editor: HTMLElementTagNameMap["period-dialog"],
 ) {
   const closed = new Promise((resolve) => editor.addEventListener("period-close", resolve));
   editor.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();

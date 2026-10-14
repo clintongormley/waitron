@@ -1178,7 +1178,7 @@ export class SpecialDayPainter extends LitElement {
   }
   private linkFor() {
     const department = this.department();
-    return department ? periodsLink(department.id) : nothing;
+    return department ? periodsLink() : nothing;
   }
   private pickerFor() {
     const department = this.department();

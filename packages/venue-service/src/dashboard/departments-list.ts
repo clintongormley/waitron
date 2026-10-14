@@ -216,9 +216,7 @@ export class DepartmentsList extends LitElement {
       if (issue.code === "department.no_periods" && issue.departmentId === row.id)
         return html`<div part="setup-issue">
           ${issue.departmentName} ${t("venue.readiness.department_no_periods")}
-          <a part="link" href=${`/manage/opening-hours/department/${encodeURIComponent(row.id)}`}
-            >${t("venue.set_up_periods")}</a
-          >
+          <a part="link" href="/manage/periods">${t("venue.set_up_periods")}</a>
         </div>`;
       if (
         (issue.code === "zone.menu_unpublished" || issue.code === "zone.menu_empty") &&

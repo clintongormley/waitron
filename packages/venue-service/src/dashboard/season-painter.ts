@@ -617,7 +617,7 @@ export class SeasonPainter extends LitElement {
           this.forget();
         }}
       >
-        ${this.seasonChip()}${this.picker(department)} ${periodsLink(department.id)}
+        ${this.seasonChip()}${this.picker(department)} ${periodsLink()}
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}

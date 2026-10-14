@@ -92,6 +92,7 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
   return new OpeningHoursApi(
     (async (url, method, body) => {
       if (method === "GET") {
+        if (url.endsWith("/menu-periods/painted-in")) return [];
         if (/\/special-days$/.test(url)) {
           await answers.listAfter;
           if (answers.failingList) throw { code: "server.internal" };

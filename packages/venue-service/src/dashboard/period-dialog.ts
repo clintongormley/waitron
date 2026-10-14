@@ -367,12 +367,16 @@ export class PeriodDialog extends LitElement {
     const painted = this.paintedIn;
     if (!this.period || !painted) return nothing;
     const tints = seasonTints(this.seasons);
-    const chip = (text: string, href: string, tint?: string) =>
+    const chip = (text: string, href: string, special: boolean, tint?: string) =>
       this.paintedInLinks
-        ? html`<a class="chip" href=${href} data-tint=${tint || nothing} ?data-special-day=${!tint}
+        ? html`<a
+            class="chip"
+            href=${href}
+            data-tint=${tint || nothing}
+            ?data-special-day=${special}
             >${text}</a
           >`
-        : html`<span class="chip" data-tint=${tint || nothing} ?data-special-day=${!tint}
+        : html`<span class="chip" data-tint=${tint || nothing} ?data-special-day=${special}
             >${text}</span
           >`;
     return html`<div
@@ -389,13 +393,15 @@ export class PeriodDialog extends LitElement {
                 chip(
                   season.name,
                   `/manage/opening-hours/view/season/season/${encodeURIComponent(season.id)}/department/${encodeURIComponent(this.departmentId)}`,
-                  tints.get(season.id) ?? "",
+                  false,
+                  tints.get(season.id),
                 ),
               )}
               ${painted.specialDays.map((day) =>
                 chip(
                   day.name,
                   `/manage/opening-hours/view/special-day/special-day/${encodeURIComponent(day.id)}`,
+                  true,
                 ),
               )}
             </div>`

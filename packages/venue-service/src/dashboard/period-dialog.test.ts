@@ -793,6 +793,20 @@ it("Painted in shows season chips in the order given with their tints, then spec
   ).toBe(true);
 });
 
+it("a season chip whose season is not in seasons stays a season chip, untinted", async () => {
+  const el = await mountEdit((el) => {
+    el.paintedIn = {
+      seasons: [{ id: "autumn", name: "Autumn" }],
+      specialDays: [{ id: "sd1", name: "Company dinners" }],
+    };
+    el.departmentId = "restaurant";
+  });
+  expect(paintedChips(el).map(({ text, tint, special }) => ({ text, tint, special }))).toEqual([
+    { text: "Autumn", tint: null, special: false },
+    { text: "Company dinners", tint: null, special: true },
+  ]);
+});
+
 it("a period painted nowhere says Not painted anywhere", async () => {
   const el = await mountEdit((el) => {
     el.paintedIn = { seasons: [], specialDays: [] };

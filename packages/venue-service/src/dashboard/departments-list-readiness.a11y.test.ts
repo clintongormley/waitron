@@ -156,9 +156,9 @@ describe.each(["light", "dark"] as const)("phone readiness list (%s)", (theme) =
           locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
         );
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
-        expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+        expect(link.getAttribute("href")).toBe("/manage/periods");
         expect(link.textContent!.trim()).toBe(
-          locale === "en" ? "Set up Opening hours" : "Configura los horarios de apertura",
+          locale === "en" ? "Set up periods" : "Configura los periodos",
         );
         const bounds = el.getBoundingClientRect();
         for (const rect of [setup.getBoundingClientRect(), ...link.getClientRects()]) {
@@ -207,9 +207,9 @@ describe.each(["light", "dark"] as const)("desktop Opening hours warning (%s)", 
           locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
         );
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
-        expect(link.getAttribute("href")).toBe("/manage/opening-hours/department/d1");
+        expect(link.getAttribute("href")).toBe("/manage/periods");
         expect(link.textContent!.trim()).toBe(
-          locale === "en" ? "Set up Opening hours" : "Configura los horarios de apertura",
+          locale === "en" ? "Set up periods" : "Configura los periodos",
         );
         const bounds = el.getBoundingClientRect();
         for (const rect of [setup.getBoundingClientRect(), ...link.getClientRects()]) {

@@ -1,32 +1,35 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PaintedIn } from "../period-delete.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintPot } from "./paint-row.js";
-import type { PeriodEditor } from "./period-editor.js";
+import type { PeriodDialog } from "./period-dialog.js";
 import { refusalOf } from "./refusal.js";
 import { t } from "./strings.js";
-import "./period-editor.js";
+import "./period-dialog.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
 
-/** The Periods page of a department, which a painter's bar links to. */
-export function periodsLink(departmentId: string) {
-  return html`<a
-    slot="link"
-    data-test="periods-link"
-    href=${`/manage/opening-hours/view/periods/department/${encodeURIComponent(departmentId)}`}
-    >${t("opening.tab.periods")}</a
+/** The Periods page, which a painter's bar links to. */
+export function periodsLink() {
+  return html`<a slot="link" data-test="periods-link" href="/manage/periods"
+    >${t("nav.periods")}</a
   >`;
 }
 
 /**
- * A painter's ✎ on each period chip and "+ New period": one period editor at a time, saved on its
+ * A painter's ✎ on each period chip and "+ New period": one period dialog at a time, saved on its
  * own. A period just created is chosen, through `chose`, before the model lists it.
  */
 export class PeriodEditing implements ReactiveController {
-  private editor?: { period?: Period; departmentId: string; clockRevision: number };
+  private editor?: {
+    period?: Period;
+    departmentId: string;
+    clockRevision: number;
+    paintedIn?: PaintedIn;
+  };
   private busy = false;
   /** A period just created, chosen in its own department until the model lists it. */
   private created?: { id: string; departmentId: string };
@@ -74,23 +77,38 @@ export class PeriodEditing implements ReactiveController {
 
   open(department: Department, period?: Period) {
     if (this.editor || this.busy) return;
-    this.editor = {
+    const editor = {
       period,
       departmentId: department.id,
       clockRevision: this.options.model().clockRevision,
     };
+    this.editor = editor;
+    this.host.requestUpdate();
+    if (period) void this.readPaintedIn(editor, period.id);
+  }
+
+  private async readPaintedIn(editor: NonNullable<PeriodEditing["editor"]>, periodId: string) {
+    let rows;
+    try {
+      rows = await this.options.api().readPaintedIn();
+    } catch {
+      return;
+    }
+    const row = rows.find((candidate) => candidate.periodId === periodId);
+    if (this.editor !== editor || !row) return;
+    editor.paintedIn = { seasons: row.seasons, specialDays: row.specialDays };
     this.host.requestUpdate();
   }
 
   private async save(event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>) {
     event.stopPropagation();
     const editor = this.editor;
-    const component = event.currentTarget as PeriodEditor;
+    const component = event.currentTarget as PeriodDialog;
     if (
       !editor ||
       this.busy ||
       !this.host.isConnected ||
-      component !== this.host.renderRoot.querySelector("period-editor")
+      component !== this.host.renderRoot.querySelector("period-dialog")
     )
       return;
     const { periodId, input } = event.detail;
@@ -132,9 +150,13 @@ export class PeriodEditing implements ReactiveController {
     if (!editor || !department) return nothing;
     return keyed(
       editor,
-      html`<period-editor
+      html`<period-dialog
         .open=${true}
         .period=${editor.period}
+        .paintedIn=${editor.paintedIn}
+        .paintedInLinks=${false}
+        .seasons=${this.options.model().seasons}
+        .departmentId=${department.id}
         .departmentName=${department.name}
         .usedColours=${department.periods.map(({ colour }) => colour)}
         .menus=${this.options.model().menus}
@@ -146,7 +168,7 @@ export class PeriodEditing implements ReactiveController {
           event.stopPropagation();
           if (this.editor === editor && !this.busy) this.close();
         }}
-      ></period-editor>`,
+      ></period-dialog>`,
     );
   }
 }
