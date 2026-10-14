@@ -27,6 +27,8 @@ declare module "@waitron/shared" {
     /** "No regime" is itself a module, never an empty slot. */
     "module.fiscal_slot_empty": Record<string, never>;
     "module.fiscal_slot_ambiguous": { candidates: readonly string[] };
+    /** More than one enabled module offers `provisioning.throwawayAllocation`. */
+    "module.throwaway_allocation_ambiguous": { candidates: readonly string[] };
     /** The node's stamped filing module (`stamped`) is not the enabled slot's id (`enabled`): a node
      * provisioned under one regime must not boot under another. */
     "module.fiscal_slot_mismatch": { stamped: string; enabled: string };

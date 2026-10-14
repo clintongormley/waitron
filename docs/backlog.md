@@ -313,8 +313,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   phone and desktop drawings. The owner approved current local-network ownership at 22:35;
   the current master register's paper/digital format is the next decision, followed by signing-key
   retention. W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717).
-  Build A679 on A680 before W41s-7. A680 owns kit-free Demo/Preparation and the intended
-  throwaway allocation for Live's separate preproduction readiness test. Joint validation and
+  Build A679 on A680 before W41s-7. A680 gives Demo and Preparation a throwaway allocation with
+  no kit; a throwaway allocation for Live's separate preproduction readiness test is not built yet
+  (the setup route's fiscal test accepts only a production Live request, which never asks for one). Joint validation and
   full-design approval remain open; Live activation needs real production custody. Detail:
   [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
@@ -677,6 +678,25 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The look left a switched-off printer named "A331 look Epson" (the owner's Epson at
   192.168.10.81) in the shared demo venue.** Left open by A331 batch 3b (#1415).
+
+- **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**
+  `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` under `--reset` before
+  `devSetup` reaches `demoSeedEnvironment`, against the file's header. Fix: the same check at the
+  top of `main()` that `dev-onboard.ts` has. Found by A680.
+
+- **The setup wizard has no text for `sif.throwaway_allocation_refused`.** A box started with
+  `WAITRON_ENV=production` still offers Demo and Preparation (`apps/setup/src/screens/mode-screen.ts`
+  shows only a production warning), and either one is refused with that code, so the operator sees
+  the wizard's generic failure. Left open by A680 (its plan's D6).
+
+- **Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
+  #1700.** Neither needs a supplied allocation since A680, so on a shared network a stranger can set
+  up an unconfigured box in either mode before its owner does. Only a preproduction venue can come of
+  it. Left open by A680 (its plan's unsure point 2).
+
+- **A fresh Demo venue opens its dashboard on a red tax-filing alert** (`fiscal.submission_delayed`
+  over the demo seed's back-dated sales). Found by A680.
+  [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)
 
 ### Menus and the catalogue
 

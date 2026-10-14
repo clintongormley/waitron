@@ -70,6 +70,7 @@ import {
   waitForEvent,
   startFakeSmtp,
   seedTradingVenue,
+  fetchHealthOk,
 } from "./testing/boot-harness.js";
 
 const { beforeServerStarts, startServer } = serverFixture();
@@ -379,7 +380,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
    * trusted; `use` runs while it serves. `extraPortCount` more ports are drawn beside the server's own, so none of
-   * them is the server's port. */
+   * them is the server's port. A first provision gets a supplied allocation added to its body unless
+   * `supplyInitialOperations` is false, which sends the body as the wizard does. */
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -388,11 +390,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     env: Record<string, string>,
     use: (ctx: {
       post: (path: string, init: RequestInit) => Promise<Response>;
+      get: (path: string) => Promise<Response>;
       kills: { pid: number; signal: string | number | undefined }[];
       stateDir: string;
       extraPorts: number[];
     }) => Promise<void>,
-    { extraPortCount = 0 } = {},
+    { extraPortCount = 0, supplyInitialOperations = true } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
@@ -411,7 +414,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         try {
           await use({
             post: async (path, init) => {
-              if (path === "/setup-api/provision" && typeof init.body === "string") {
+              if (
+                supplyInitialOperations &&
+                path === "/setup-api/provision" &&
+                typeof init.body === "string"
+              ) {
                 const body = JSON.parse(init.body);
                 const opened = await openVenueDatabase(directory);
                 let committed: boolean;
@@ -432,6 +439,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               }
               return fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init });
             },
+            get: (path) => fetch(`https://127.0.0.1:${port}${path}`, via),
             kills,
             stateDir,
             extraPorts: drawn,
@@ -590,6 +598,138 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(keptStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  /** Cell 12 of the A680 plan's refusal matrix, read from the venue a Demo setup made. */
+  function expectThrowawayVenue(db: Database, taxId: string): void {
+    expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
+      { numero_instalacion: "S000001" },
+    ]);
+    expect(
+      db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
+    ).toEqual([
+      {
+        taxpayer_nif: taxId,
+        environment: "preproduction",
+        allocation_key: expect.stringMatching(/^throwaway-/),
+      },
+    ]);
+    expect(db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
+      { code: "A-S000001", purpose: "standard" },
+      { code: "FF-S000001", purpose: "full" },
+      { code: "R-S000001", purpose: "rectificative" },
+    ]);
+    expect(db.all(sql`select environment from deployment`)).toEqual([
+      { environment: "preproduction" },
+    ]);
+  }
+
+  it("sets up Demo on a preproduction box with no supplied allocation, and the box restarts into trading", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const keptStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-throwaway-state-"));
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_ENV: "preproduction" },
+        async ({ post, kills, stateDir }) => {
+          const response = await post("/setup-api/provision", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000012G") }),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+          await cp(stateDir, keptStateDir, { recursive: true });
+        },
+        { supplyInitialOperations: false },
+      );
+      expectThrowawayVenue(venue.store.venue, "60000012G");
+
+      const port = await freePort();
+      const server = await startServer(
+        await loadBoxEnv(
+          {
+            WAITRON_STATE_DIR: keptStateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_LANDING_PORT: "0",
+          },
+          keptStateDir,
+        ),
+      );
+      const { via, close } = httpsVia(await readFile(join(keptStateDir, "tls", "ca.crt")));
+      try {
+        await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+        // A trading boot does not mount the setup surface: the path falls through to a non-JSON
+        // answer rather than setup's status.
+        const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
+        expect(status.headers.get("content-type") ?? "").not.toContain("application/json");
+      } finally {
+        await close();
+        await server.close();
+      }
+      expectThrowawayVenue(venue.store.venue, "60000012G");
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(keptStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("refuses Demo with no supplied allocation on a WAITRON_ENV=production box, writing nothing and staying in setup", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {
+          WAITRON_ENV: "production",
+          WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+          WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+        },
+        async ({ post, get, kills, stateDir }) => {
+          const response = await post("/setup-api/provision", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000013M") }),
+          });
+          expect(response.status).toBe(400);
+          expect(await response.json()).toEqual({
+            error: {
+              code: "sif.throwaway_allocation_refused",
+              params: { environment: "production" },
+            },
+          });
+          const status = await get("/setup-api/status");
+          expect(status.status).toBe(200);
+          expect(await status.json()).toMatchObject({
+            provisioned: false,
+            environment: "production",
+            needs: ["venue"],
+          });
+          await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+          expect(kills).toEqual([]);
+        },
+        { supplyInitialOperations: false },
+      );
+      for (const table of [
+        "deployment",
+        "tenants",
+        "nodes",
+        "registro_sif",
+        "fiscal_allocations",
+        "invoice_series",
+      ]) {
+        expect(venue.store.venue.all(sql.raw(`select * from ${table}`)), table).toEqual([]);
+      }
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("validates a restore artifact before staging it, refusing one the recovery key cannot open", async () => {
     beforeServerStarts();

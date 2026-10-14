@@ -29,6 +29,11 @@ approval. These are design requirements, not claims of implemented behavior. All
 reproduction and source-read receipts below remain historical evidence from 2026-10-14; this update
 does not rerun or replace them.
 
+**2026-10-15 pointer (A680):** A680 gives Demo and Preparation a throwaway allocation with no
+kit. It does not build the throwaway allocation for Live's separate preproduction readiness test
+described below: the setup route's fiscal test accepts only a production Live request, which
+never asks for one. That allocation is not built yet; see the A679 entry in `docs/backlog.md`.
+
 ## Evidence and source reads
 
 The driver reproduced fresh-reset Prepare on main `641665e4c0be3828a61ec98975bdfd461b5a5edb`:

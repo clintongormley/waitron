@@ -7,7 +7,7 @@
 import { realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { resolveConfigDir } from "../src/config.js";
+import { deploymentEnvironment, resolveConfigDir } from "../src/config.js";
 import {
   defaultDevVenueDir,
   inspectVenues,
@@ -39,7 +39,18 @@ export function renderSetupEnvFile(env: SetupEnv): string {
 }
 
 /** No `stateDir`: a setup-mode box never resolves the fiscal slot, so no `modules.json` is written. */
-export type DevOnboardOptions = Omit<DevSetupOptions, "stateDir">;
+export interface DevOnboardOptions extends Omit<DevSetupOptions, "stateDir"> {
+  environment: NodeJS.ProcessEnv;
+}
+
+function refuseProduction(environment: NodeJS.ProcessEnv): void {
+  if (deploymentEnvironment(environment) === "production") {
+    throw new Error(
+      "dev-onboard: refusing to run under WAITRON_ENV=production — it migrates and can reset a " +
+        "venue folder, which is for a development box only.",
+    );
+  }
+}
 
 export interface DevOnboardResult {
   env: SetupEnv;
@@ -47,8 +58,9 @@ export interface DevOnboardResult {
 
 /** Provisions nothing, and refuses a directory that already holds a venue (CLAUDE.md §5). */
 export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardResult> {
-  const { venueDir, envPath, log = () => {} } = opts;
+  const { venueDir, envPath, environment, log = () => {} } = opts;
 
+  refuseProduction(environment);
   const { hasAny } = await inspectVenues(venueDir, null);
   if (hasAny) {
     throw new Error(
@@ -72,9 +84,11 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   return { env };
 }
 
-/** `--reset` removes the venue directory first. */
+/** `--reset` removes the venue directory first. `WAITRON_DEV_ENV_FILE` moves the settings file (tests). */
 async function main(): Promise<void> {
-  const envPath = fileURLToPath(new URL("../.env", import.meta.url));
+  refuseProduction(process.env);
+  const envPath =
+    process.env.WAITRON_DEV_ENV_FILE?.trim() || fileURLToPath(new URL("../.env", import.meta.url));
 
   // Resolved exactly as `config.ts` does, so this migrates the directory `pnpm dev` opens.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
@@ -90,6 +104,7 @@ async function main(): Promise<void> {
     venueDir,
     envPath,
     httpPort: process.env.WAITRON_HTTP_PORT,
+    environment: process.env,
     log: (line) => void console.log(line),
   });
 

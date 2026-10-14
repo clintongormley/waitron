@@ -63,6 +63,10 @@ declare module "@waitron/shared" {
      * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
     "sif.allocation_invalid": { reason: string };
+    /** A throwaway allocation was asked for where an environment is not exactly "preproduction"
+     * (`environment` describes the first such value), or none was named (`"none"`). Thrown by
+     * ./throwaway-allocation.ts before any key is made. */
+    "sif.throwaway_allocation_refused": { environment: string };
 
     /**
      * Thrown by `appendToChain` (./chain.ts) once `MAX_APPEND_ATTEMPTS` attempts have each lost a
