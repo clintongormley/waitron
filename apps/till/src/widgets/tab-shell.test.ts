@@ -15,6 +15,127 @@ const tabs: TabDef[] = [
 ];
 
 describe("till-tab-shell", () => {
+  it.each([
+    ["working", ["Start break", "Clock out", "Log out"]],
+    ["on_break", ["End break", "Clock out", "Log out"]],
+    ["out", ["Clock in", "Log out"]],
+  ] as const)("the name opens the %s clock actions with a text state", async (state, labels) => {
+    const locale = currentLocale();
+    const width = innerWidth;
+    const height = innerHeight;
+    setLocale("en-GB");
+    await page.viewport(1280, 844);
+    try {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        tabs,
+        operatorName: "Ana",
+        clockAvailable: true,
+        clockState: {
+          personId: "ana",
+          locationId: "venue",
+          businessDay: "2026-10-14",
+          state,
+          activeLocationId: state === "out" ? null : "venue",
+          lastEntryId: "entry",
+          firstClockIn: false,
+        },
+      });
+      const menu = el.shadowRoot!.querySelector<HTMLElement>("wt-row-actions.operator-menu")!;
+      expect(menu).not.toBeNull();
+      await (menu as LitElement).updateComplete;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
+      expect(menu.querySelector('[slot="trigger"]')?.textContent).toContain("Ana");
+      expect(menu.querySelector("[data-clock-state]")?.textContent).toContain(
+        state === "working" ? "Working" : state === "on_break" ? "On a break" : "Clocked out",
+      );
+      await userEvent.click(trigger);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect([...menu.querySelectorAll("wt-button")].map((b) => b.textContent?.trim())).toEqual(
+        labels,
+      );
+      expect(menu.textContent).not.toContain("My hours");
+      const actions: unknown[] = [];
+      el.addEventListener("clock-action", (e) => actions.push((e as CustomEvent).detail));
+      el.addEventListener("clock-action", () => {
+        el.clockBusy = true;
+      });
+      await userEvent.click(menu.querySelector<HTMLElement>("wt-button")!);
+      expect(actions).toEqual([
+        { action: state === "working" ? "break-start" : state === "on_break" ? "break-end" : "in" },
+      ]);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+    } finally {
+      setLocale(locale);
+      await page.viewport(width, height);
+    }
+  });
+
+  it("handheld More contains the same clock actions without a nested menu", async () => {
+    const locale = currentLocale();
+    const width = innerWidth;
+    const height = innerHeight;
+    setLocale("en-GB");
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        tabs,
+        operatorName: "Ana",
+        clockAvailable: true,
+        clockState: {
+          personId: "ana",
+          locationId: "venue",
+          businessDay: "2026-10-14",
+          state: "on_break",
+          activeLocationId: "venue",
+          lastEntryId: "entry",
+          firstClockIn: false,
+        },
+      });
+      const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+      expect(menu.querySelector("wt-row-actions")).toBeNull();
+      expect(menu.textContent).toContain("Ana");
+      expect(menu.querySelector('[data-clock-action="break-end"]')?.textContent).toContain(
+        "End break",
+      );
+      expect(menu.querySelector('[data-clock-action="out"]')?.textContent).toContain("Clock out");
+    } finally {
+      setLocale(locale);
+      await page.viewport(width, height);
+    }
+  });
+
+  it.each([null, "another-venue"])(
+    "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)",
+    async (activeLocation) => {
+      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        tabs,
+        operatorName: "Ana",
+        clockAvailable: true,
+        clockError: "Could not read the clock",
+        clockState:
+          activeLocation === null
+            ? null
+            : {
+                personId: "ana",
+                locationId: "venue",
+                businessDay: "2026-10-14",
+                state: "working",
+                activeLocationId: activeLocation,
+                lastEntryId: "entry",
+                firstClockIn: false,
+              },
+      });
+      expect(
+        el.shadowRoot!.querySelector("[data-clock-action]")?.hasAttribute("disabled") ?? true,
+      ).toBe(true);
+      expect(el.shadowRoot!.querySelector(".logout")?.hasAttribute("disabled")).toBe(false);
+      if (activeLocation === null)
+        expect(el.shadowRoot!.querySelector("[data-clock-state]")?.textContent).toContain(
+          t("clock.unknown"),
+        );
+      else expect(el.shadowRoot!.textContent).toContain(t("clock.other_location"));
+    },
+  );
   it("renders one tab button per profile tab and marks the active one", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
@@ -150,7 +271,7 @@ describe("till-tab-shell", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(chooser).not.toBeNull();
       expect(chooser.parentElement).toBe(el.shadowRoot!.querySelector("header .session"));
-      expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator"));
+      expect(chooser.nextElementSibling).toBe(el.shadowRoot!.querySelector(".operator-menu"));
       expect(chooser.getAttribute("active")).toBe(currentLocale());
     } finally {
       await page.viewport(width, height);
@@ -695,7 +816,8 @@ describe("till-tab-shell at phone width", () => {
   it("draws the wide header whole: brand, and every button straight in the session row in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
-      expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+      expect(el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
       expect(
@@ -716,8 +838,7 @@ describe("till-tab-shell at phone width", () => {
         "department-transfers",
         "data-open-transfers",
         "wt-language-chooser",
-        "operator",
-        "logout",
+        "operator-menu",
       ]);
       for (const button of session.querySelectorAll(":scope > wt-button")) {
         expect(button.getAttribute("variant")).toBe("secondary");
@@ -806,8 +927,7 @@ describe("till-tab-shell above phone width", () => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   }
 
-  /** Each action is in the header exactly once — on the bar and on screen, or in More — and its
-   * click emits its event. */
+  /** Each action is in the header once, on the bar or inside one of its menus, and emits its event. */
   async function expectEachActionOnce(el: TillTabShell): Promise<void> {
     const header = el.shadowRoot!.querySelector("header")!;
     const fired: string[] = [];
@@ -816,12 +936,17 @@ describe("till-tab-shell above phone width", () => {
       const found = [...header.querySelectorAll<HTMLElement>(selector)];
       expect(found, selector).toHaveLength(1);
       const target = found[0]!;
-      const menu = menuOf(el);
-      if (menu?.contains(target)) {
-        await userEvent.click(triggerOf(el));
-        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
+      const menu = target.closest("wt-row-actions");
+      if (menu !== null) {
+        const trigger = menu.shadowRoot!.querySelector("button")!;
+        await userEvent.click(trigger);
+        await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+        const r = target.getBoundingClientRect();
+        expect(r.width, selector).toBeGreaterThan(0);
+        expect(r.left, selector).toBeGreaterThanOrEqual(0);
+        expect(r.right, selector).toBeLessThanOrEqual(window.innerWidth);
         await userEvent.click(target);
-        await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("false"));
+        await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
       } else {
         const r = target.getBoundingClientRect();
         expect(r.width, selector).toBeGreaterThan(0);
@@ -1015,7 +1140,7 @@ describe("till-tab-shell above phone width", () => {
     ["en-GB", "Log out", "Log out"],
     ["es-ES", "Salir", "Cerrar sesión"],
   ] as const)(
-    "labels Log out %s's short word, on the bar and inside More, keeping the counter header's full name",
+    "labels Log out %s's short word, in the name menu and inside More, keeping the counter header's full name",
     async (locale, label, headerName) => {
       await withLocale(locale, async () => {
         expect(t("action.logout")).toBe(headerName);
@@ -1023,8 +1148,10 @@ describe("till-tab-shell above phone width", () => {
           const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
           await settle(el);
           expect(menuOf(el)).toBeNull();
-          const onBar = el.shadowRoot!.querySelector<HTMLElement>("header .session > .logout")!;
+          const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
+          const onBar = nameMenu.querySelector<HTMLElement>(".logout")!;
           expect(onBar.textContent!.trim()).toBe(label);
+          await userEvent.click(nameMenu.shadowRoot!.querySelector("button")!);
           await expect
             .element(page.getByRole("button", { name: label, exact: true }))
             .toBeVisible();

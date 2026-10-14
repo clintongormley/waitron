@@ -202,7 +202,7 @@ export class WtRowActions extends LitElement {
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <wt-icon name=${this.icon} size=${this.iconSize}></wt-icon>
+        <slot name="trigger"><wt-icon name=${this.icon} size=${this.iconSize}></wt-icon></slot>
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>

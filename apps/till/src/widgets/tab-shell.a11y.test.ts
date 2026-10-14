@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TabDef } from "../layout.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -42,6 +42,50 @@ async function atViewport(width: number, height: number, run: () => Promise<void
 }
 
 describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (theme) => {
+  it.each(["en-GB", "es-ES"])(
+    "the name menu in %s, closed and open in each clock state",
+    async (locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(1280, 844, async () => {
+          for (const state of ["working", "on_break", "out", null] as const) {
+            cleanupWidgets();
+            const { el, host } = await mountWidget<TillTabShell>(
+              "till-tab-shell",
+              {
+                tabs,
+                operatorName: "Ana",
+                clockAvailable: true,
+                clockState:
+                  state === null
+                    ? null
+                    : {
+                        personId: "ana",
+                        locationId: "venue",
+                        businessDay: "2026-10-14",
+                        state,
+                        activeLocationId: state === "out" ? null : "venue",
+                        lastEntryId: "entry",
+                        firstClockIn: false,
+                      },
+              },
+              theme,
+            );
+            const menu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
+            expect(menu).not.toBeNull();
+            await (menu as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+            await expectNoA11yViolations(host);
+            await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+            await expectNoA11yViolations(host);
+            await userEvent.keyboard("{Escape}");
+          }
+        });
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
   it("the tab bar + header chrome has no violations", async () => {
     const { host } = await mountWidget<TillTabShell>(
       "till-tab-shell",
@@ -109,7 +153,8 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
   it("the full bar, wide enough for everything, has no violations", async () => {
     await atViewport(2560, 844, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
-      expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+      expect(el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       await expectNoA11yViolations(host);
     });
   });
@@ -121,12 +166,18 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
       setLocale(locale);
       try {
         await atViewport(1280, 844, async () => {
-          const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
+          const { el, host } = await mountWidget<TillTabShell>(
+            "till-tab-shell",
+            { ...full, operatorName: "Ana Isabel García López" },
+            theme,
+          );
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
           await el.updateComplete;
           const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
           expect(menu).not.toBeNull();
-          expect(el.shadowRoot!.querySelector("header .session > .logout")).not.toBeNull();
+          expect(
+            el.shadowRoot!.querySelector("header .session > .operator-menu .logout"),
+          ).not.toBeNull();
           await expectNoA11yViolations(host);
           menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
           await vi.waitFor(() =>
