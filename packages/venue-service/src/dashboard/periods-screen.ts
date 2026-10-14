@@ -97,6 +97,15 @@ export class PeriodsScreen extends LitElement {
       wt-data-table::part(not-painted) {
         color: var(--wt-color-warning);
       }
+      wt-data-table::part(department-cell) {
+        background: var(--wt-color-bg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      wt-data-table::part(no-periods) {
+        margin-inline-start: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-weight: var(--wt-font-weight-normal);
+      }
       wt-data-table::part(chips) {
         display: flex;
         flex-wrap: wrap;
@@ -248,7 +257,10 @@ export class PeriodsScreen extends LitElement {
         key: "period",
         label: t("period.column.period"),
         cell: (row) => {
-          if (row.kind === "department") return row.name;
+          if (row.kind === "department")
+            return row.periods.length
+              ? row.name
+              : html`${row.name}<span part="no-periods">${t("period.no_periods")}</span>`;
           const unpainted = this.unpainted(row);
           return html`<span
               part=${`swatch colour-${row.colour}${unpainted ? " swatch-unpainted" : ""}`}
@@ -320,6 +332,7 @@ export class PeriodsScreen extends LitElement {
                 .rowKey=${(row: PeriodRow) => `${row.kind}:${row.id}`}
                 .rowParent=${(row: PeriodRow) => (row.kind === "period" ? `department:${row.departmentId}` : null)}
                 .rowCollapsible=${() => false}
+                .rowCellParts=${(row: PeriodRow) => (row.kind === "department" ? "department-cell" : "")}
               ></wt-data-table>`
       }
       ${model && !this.readOnly ? this.periods.render() : nothing}

@@ -846,6 +846,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Extra part names for a row's tree toggle button, after `tree-toggle`, so a screen can style
    * one kind of row's toggle apart from another's. */
   @property({ attribute: false }) rowToggleParts?: (row: Row) => string;
+  /** Part names for every cell of a row, so a screen can style one kind of row's cells, a group
+   * heading row's band for one. */
+  @property({ attribute: false }) rowCellParts?: (row: Row) => string;
   @property({ type: Boolean }) initiallyCollapsed = false;
   @property({ type: Boolean }) collapseDescendants = false;
   @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
@@ -2904,12 +2907,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
                 const key = rowKeys[index]!;
                 const clicks = this.rowClick !== undefined && (this.rowClickable?.(row) ?? true);
+                const cellParts = this.rowCellParts?.(row);
                 return html`
                   <tr data-row-key=${key} class=${classMap({ clickable: clicks })}>
                     ${this.#renderSelectCell(key, row, false)}
                     ${shown.map(
                       (column, ci) => html`
                         <td
+                          part=${cellParts || nothing}
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
                           data-actions=${column.key === "actions" ? "" : nothing}
@@ -2987,6 +2992,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     ? this.collapseLabel
                     : this.expandLabel;
                 const joined = depth > 0 && this.rowJoinsParent(row);
+                const cellParts = this.rowCellParts?.(row);
                 const activate = toggles
                   ? () => this.#toggle(key)
                   : clicks
@@ -3004,6 +3010,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     (column, ci) =>
                       html`<td
                         role="gridcell"
+                        part=${cellParts || nothing}
                         data-align=${column.align ?? "start"}
                         data-pinned=${column.pinned ?? nothing}
                         data-actions=${column.key === "actions" ? "" : nothing}

@@ -1513,6 +1513,26 @@ test("a row's toggle carries the extra part names rowToggleParts gives it, after
   );
 });
 
+test("every cell of a row carries the part names rowCellParts gives that row, in a tree and a flat table", async () => {
+  const cellParts = (el: WtDataTable<TreeRow> | WtDataTable<Row>, key: string) =>
+    [...el.shadowRoot!.querySelectorAll(`tr[data-row-key="${key}"] td`)].map((cell) =>
+      cell.getAttribute("part"),
+    );
+  const tree = await treeTable({
+    rowCellParts: (row) => (row.parent === null ? "group-cell" : ""),
+  });
+  expect(cellParts(tree, "food").length).toBeGreaterThan(0);
+  expect(new Set(cellParts(tree, "food"))).toEqual(new Set(["group-cell"]));
+  expect(new Set(cellParts(tree, "break"))).toEqual(new Set([null]));
+  cleanup();
+  const flat = await table({
+    rowKey: (row) => row.id,
+    rowCellParts: (row) => (row.id === "a" ? "first second" : ""),
+  });
+  expect(new Set(cellParts(flat, "a"))).toEqual(new Set(["first second"]));
+  expect(new Set(cellParts(flat, "b"))).toEqual(new Set([null]));
+});
+
 // The width compared is the scroll box's inside its border, which is what clientWidth reports here.
 test("the phone indent starts at a 440px box, not at 441px, and a flat table never takes it", async () => {
   const el = await treeTable();

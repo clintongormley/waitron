@@ -146,6 +146,40 @@ it("groups each active department's periods under it in one table, and leaves ou
   expect(grid.rowCollapsible!(grid.rows[0]!)).toBe(false);
 });
 
+it("M3: department rows are group headings, bold on a shaded band across every cell, and an empty department says No periods", async () => {
+  const data = model();
+  data.departments.push({
+    id: "kiosk",
+    name: "Terrace kiosk",
+    active: true,
+    zones: [],
+    periods: [],
+    seasonWeeks: [],
+  });
+  const el = await mount(answering(() => data));
+  const grid = await loaded(el);
+  const cells = (key: string) => [
+    ...grid.shadowRoot!.querySelectorAll<HTMLElement>(`tr[data-row-key="${key}"] td`),
+  ];
+  for (const key of ["department:restaurant", "department:bar", "department:kiosk"])
+    for (const td of cells(key)) expect(td.part.contains("department-cell"), key).toBe(true);
+  for (const td of cells("period:p1")) expect(td.getAttribute("part")).toBeNull();
+  const band = getComputedStyle(cells("department:bar")[0]!).backgroundColor;
+  expect(band).not.toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(cells("department:bar").at(-1)!).backgroundColor).toBe(band);
+  expect(getComputedStyle(cells("period:p3")[0]!).backgroundColor).not.toBe(band);
+  expect(Number(getComputedStyle(cells("department:bar")[0]!).fontWeight)).toBeGreaterThanOrEqual(
+    600,
+  );
+  expect(cell(grid, "department:kiosk", "period")!.textContent).toContain("No periods");
+  expect(cell(grid, "department:bar", "period")!.textContent).not.toContain("No periods");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await grid.updateComplete;
+  expect(cell(grid, "department:kiosk", "period")!.textContent).toContain("Sin periodos");
+});
+
 it("shows each period's colour, customer menu, staff-only menus and a greyed floor plan", async () => {
   const el = await mount();
   const grid = await loaded(el);
