@@ -552,7 +552,7 @@ describe("the staffing paint routes", () => {
     );
   });
 
-  it("answers a missing season, area or staff role with 404 and its code", async () => {
+  it("answers a season elsewhere with 404, and an area or staff role the body names that is not the venue's with 400", async () => {
     const p = await painted();
     const other = await seedVenue(suite.db);
     const theirs = `${STAFFING}/seasons/${other.seasonId}`;
@@ -577,13 +577,13 @@ describe("the staffing paint routes", () => {
       await p.call("PUT", path, p.manager, {
         edits: [{ area: theirStation, weekday: 1, blocks: [p.block()] }],
       }),
-      404,
+      400,
       refusal("staffing_area.not_found", { area: `station:${other.stationId}` }),
     );
     await setActive(p.dept, false);
     await answers(
       await p.call("PUT", path, p.manager, { edits: [{ area: p.dept, weekday: 1, blocks: [] }] }),
-      404,
+      400,
       refusal("staffing_area.not_found", { area: `department:${p.departmentId}` }),
     );
     const stranger = randomUUID();
@@ -591,7 +591,7 @@ describe("the staffing paint routes", () => {
       await p.call("PUT", path, p.manager, {
         edits: [{ area: p.grill, weekday: 1, blocks: [p.block({ staffRoleId: stranger })] }],
       }),
-      404,
+      400,
       refusal("staff_role.not_found", { staffRoleId: stranger }),
     );
   });
@@ -638,7 +638,7 @@ describe("the staffing paint routes", () => {
     });
   });
 
-  it("refuses a malformed special-day edit, and answers a special day or date elsewhere with 404", async () => {
+  it("refuses a malformed special-day edit, a date not of the special day and an area or staff role elsewhere with 400, and a special day elsewhere with 404", async () => {
     const p = await painted();
     const path = `${STAFFING}/special-days/${p.specialDayId}`;
     const ok = { area: p.dept, dateId: p.aug14, blocks: null };
@@ -667,12 +667,26 @@ describe("the staffing paint routes", () => {
       refusal("management.request_invalid", { field: "more" }),
     );
 
-    await answers(
-      await p.call("PUT", path, p.manager, { edits: [{ ...ok, dateId: randomUUID() }] }),
-      404,
-      refusal("special_day.not_found", { specialDayId: p.specialDayId }),
+    await invalid(
+      { edits: [ok, { ...ok, dateId: randomUUID() }, { ...ok, dateId: randomUUID() }] },
+      "edits.1.dateId",
     );
     const elsewhere = await seedVenue(suite.db);
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ ...ok, area: { kind: "station", id: elsewhere.stationId } }],
+      }),
+      400,
+      refusal("staffing_area.not_found", { area: `station:${elsewhere.stationId}` }),
+    );
+    const stranger = randomUUID();
+    await answers(
+      await p.call("PUT", path, p.manager, {
+        edits: [{ ...ok, blocks: [p.block({ staffRoleId: stranger })] }],
+      }),
+      400,
+      refusal("staff_role.not_found", { staffRoleId: stranger }),
+    );
     const [theirs] = await withTransaction(suite.db, (tx) =>
       tx
         .insert(specialDays)

@@ -50,14 +50,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "staff_role.not_found": 404,
   "staff_role.name_taken": 409,
   "staff_role.in_use": 409,
-  "staffing_area.not_found": 404,
   "season.not_found": 404,
   "special_day.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "staffing.failed");
-// An id in a reorder list that is not one of the venue's roles is a bad request, not a missing page.
+// An id in a request body that is not one of the venue's is a bad request, not a missing page.
 const runReorder = createErrorBoundary(
   { ...STATUS, "staff_role.not_found": 400 },
+  "staffing.failed",
+);
+const runPaintSave = createErrorBoundary(
+  { ...STATUS, "staff_role.not_found": 400, "staffing_area.not_found": 400 },
   "staffing.failed",
 );
 
@@ -160,7 +163,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     );
 
     app.put(`${ROOT}/seasons/:seasonId`, (c) =>
-      run(c, log, async () => {
+      runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
         const body = await readJsonBody<Record<string, unknown>>(c);
@@ -182,7 +185,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     );
 
     app.put(`${ROOT}/special-days/:specialDayId`, (c) =>
-      run(c, log, async () => {
+      runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
         const body = await readJsonBody<Record<string, unknown>>(c);

@@ -361,11 +361,22 @@ describe("special-day staffing", () => {
       await refusal(
         inTx((tx) =>
           saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+            { area: dept(v), dateId: v.aug15, blocks: null },
             { area: dept(v), dateId: other.aug14, blocks: null },
+            { area: dept(v), dateId: randomUUID(), blocks: null },
           ]),
         ),
       ),
-    ).toEqual({ code: "special_day.not_found", params: { specialDayId: v.specialDayId } });
+    ).toEqual({ code: "staffing.invalid", params: { field: "edits.1.dateId" } });
+    expect(
+      await refusal(
+        inTx((tx) =>
+          saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+            { area: dept(v), dateId: randomUUID(), blocks: null },
+          ]),
+        ),
+      ),
+    ).toEqual({ code: "staffing.invalid", params: { field: "edits.0.dateId" } });
     const ghost = randomUUID();
     expect(
       await refusal(

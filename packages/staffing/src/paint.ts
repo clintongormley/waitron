@@ -328,8 +328,8 @@ export async function saveSpecialDayStaffing(
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
   const dateIds = new Set((await specialDayDatesHere(tx, cfg, specialDayId)).map((d) => d.dateId));
-  if (edits.some((edit) => !dateIds.has(edit.dateId)))
-    throw new AppError("special_day.not_found", { specialDayId });
+  const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
+  if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
   await assertEditTargets(tx, cfg, edits);
   for (const edit of edits) {
     await tx
