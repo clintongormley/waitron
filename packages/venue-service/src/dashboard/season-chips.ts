@@ -22,7 +22,7 @@ export type SeasonWrites = Pick<
 type Opening = { season?: SeasonChip; clockRevision: number; returnTo: HTMLElement | null };
 
 /** The venue's seasons as tinted chips. A chip's name asks for its week (`season-week-open`), also
- *  when read-only; its ✎ and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
+ *  when read-only, but not as a key only; its ✎ and "+ Season" open the season dialog, whose writes this element sends itself, announcing each
  *  with `season-changed` so its host re-reads. */
 @customElement("season-chips")
 export class SeasonChips extends LitElement {
@@ -78,6 +78,8 @@ export class SeasonChips extends LitElement {
   /** Special days by id, so an end-offset refusal can name one. */
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
+  /** Draws the chips as a key to the tints alone: no week to ask for and nothing to write. */
+  @property({ type: Boolean }) keyOnly = false;
   @state() private opening?: Opening;
   @state() private pending: "save" | "impact" | "delete" | "" = "";
   @state() private impactFailed = false;
@@ -223,6 +225,10 @@ export class SeasonChips extends LitElement {
           };
           const label = format("season.chip", { name: season.name, ...range });
           const tint = tints.get(season.id);
+          if (this.keyOnly)
+            return html`<span class="chip" data-season=${season.id} data-tint=${tint}
+              >${label}</span
+            >`;
           const week = html`<button
             type="button"
             data-test="season-week"
@@ -249,7 +255,7 @@ export class SeasonChips extends LitElement {
               >`;
         })}
         ${
-          this.readOnly
+          this.readOnly || this.keyOnly
             ? nothing
             : html`<wt-button
                 data-test="add-season"

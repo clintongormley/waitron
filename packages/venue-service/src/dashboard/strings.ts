@@ -129,6 +129,7 @@ const en = {
   "month.year_back": "Back to {year}",
   "month.rows": "Rows:",
   "month.department_closed": "{name} closed",
+  "month.no_orders": "No orders",
   "month.zone_closed": "{name} closed {start}–{end}",
   "month.range": "{name} {start}–{end}",
 
@@ -960,6 +961,7 @@ const es: Record<keyof typeof en, string> = {
   "month.year_back": "Volver a {year}",
   "month.rows": "Filas:",
   "month.department_closed": "{name}: cerrado",
+  "month.no_orders": "Sin pedidos",
   "month.zone_closed": "{name}: cerrado {start}–{end}",
   "month.range": "{name} {start}–{end}",
 

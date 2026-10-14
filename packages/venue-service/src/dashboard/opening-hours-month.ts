@@ -5,9 +5,8 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
-import type { LocalDate } from "../hours-types.js";
+import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
-import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
@@ -18,6 +17,14 @@ import type { SpecialDayAction } from "./special-day-action.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
+
+/** What the month reads of a department: its name, its zones' names and its periods' names and colours. */
+export interface MonthDepartment {
+  id: string;
+  name: string;
+  zones: readonly { id: string; name: string }[];
+  periods: readonly { id: string; name: string; colour: CalendarColour }[];
+}
 
 /** What `ordinary-date-open` carries: a date no special day or public holiday holds. */
 export interface OrdinaryDateOpen {
@@ -291,11 +298,14 @@ export class OpeningHoursMonthView extends LitElement {
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
   /** The departments' names, zones' names and periods' colours. */
-  @property({ attribute: false }) departments: OpeningHoursModel["departments"] = [];
+  @property({ attribute: false }) departments: readonly MonthDepartment[] = [];
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
+  /** One prep station's month, its one row the station: no year, no department picker, no special
+   *  day to add, the season chips a key only, and a date it gets nothing reads "No orders". */
+  @property({ type: Boolean }) stationMode = false;
   /** The date that holds the month's one Tab stop. */
   @state() private focusDate: LocalDate | null = null;
 
@@ -385,10 +395,16 @@ export class OpeningHoursMonthView extends LitElement {
     };
   }
 
+  #emptyRow(row: Row): string {
+    return this.stationMode
+      ? t("month.no_orders")
+      : format("month.department_closed", { name: row.name });
+  }
+
   #describe(day: Day, rows: readonly Row[], names: Names): string[] {
     if (day.closedAllDay) return [];
     return rows.map((row) => {
-      if (!row.ranges.length) return format("month.department_closed", { name: row.name });
+      if (!row.ranges.length) return this.#emptyRow(row);
       const parts = row.ranges.map((range) =>
         format("month.range", {
           name: names.period(range.periodId).name,
@@ -447,8 +463,8 @@ export class OpeningHoursMonthView extends LitElement {
           ? html`<span
               class="closed-row"
               ?data-all-day=${day.closedAllDay}
-              data-test="department-closed"
-              >${format("month.department_closed", { name: row.name })}</span
+              data-test=${this.stationMode ? "no-orders" : "department-closed"}
+              >${this.#emptyRow(row)}</span
             >`
           : html`<span class="track" data-row=${row.key}>
               ${row.ranges.map((range) => {
@@ -556,15 +572,19 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
-    return html`<button
-        type="button"
-        class="year-back"
-        data-test="year-back"
-        aria-label=${format("month.year_back", { year: String(year) })}
-        @click=${() => this.#emit("month-year-open", { year })}
-      >
-        ‹ ${year}
-      </button>
+    return html`${
+        this.stationMode
+          ? nothing
+          : html`<button
+              type="button"
+              class="year-back"
+              data-test="year-back"
+              aria-label=${format("month.year_back", { year: String(year) })}
+              @click=${() => this.#emit("month-year-open", { year })}
+            >
+              ‹ ${year}
+            </button>`
+      }
       <div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
         <h2 data-test="month" aria-live="polite">
@@ -592,6 +612,7 @@ export class OpeningHoursMonthView extends LitElement {
   }
 
   #tools(model: OpeningHoursMonth) {
+    if (this.stationMode) return nothing;
     return html`${this.#picker(model, this.#chosen(model), this.#names())}
     ${
       this.readOnly
@@ -626,6 +647,7 @@ export class OpeningHoursMonthView extends LitElement {
           .api=${this.api}
           .specialDays=${this.specialDays}
           .readOnly=${this.readOnly}
+          .keyOnly=${this.stationMode}
         ></season-chips>
         <p class="rows" data-test="rows">
           ${t("month.rows")}
