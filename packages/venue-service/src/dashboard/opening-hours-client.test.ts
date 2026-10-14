@@ -464,29 +464,6 @@ it.each([
   }
 });
 
-it("loads and refreshes the station picker as passive session activity", async () => {
-  const live = new LiveData();
-  const stations = [{ id: "bar", name: "Bar", active: true, isDefault: true }];
-  const request = vi.fn(async () => stations);
-  const api = new OpeningHoursApi(request as DashboardRequest, live);
-  const apply = vi.fn();
-  const stop = api.watchStations(apply, vi.fn(), vi.fn());
-  try {
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(stations));
-    live.invalidate([{ type: "kitchen_stations" }]);
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
-    expect(request.mock.calls).toEqual([
-      ["/management-api/stations", "GET", undefined, { passive: true }],
-      ["/management-api/stations", "GET", undefined, { passive: true }],
-    ]);
-  } finally {
-    stop();
-  }
-  live.invalidate([{ type: "kitchen_stations" }]);
-  await new Promise<void>((resolve) => queueMicrotask(resolve));
-  expect(request).toHaveBeenCalledTimes(2);
-});
-
 it.each(["sections", "section_members", "catalogues"])(
   "refreshes worked-out station times when menu composition changes in %s",
   async (type) => {
@@ -525,7 +502,47 @@ it.each(["sections", "section_members", "catalogues"])(
       "bar",
       "2026-10-12",
       "2026-10-18",
-      false,
+      (times) => received.push(times),
+      vi.fn(),
+      vi.fn(),
+    );
+    try {
+      await vi.waitFor(() => expect(received).toEqual([before]));
+      live.invalidate([{ type }]);
+      await vi.waitFor(() => expect(received).toEqual([before, after]));
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+    }
+  },
+);
+
+it.each(["holiday_geographies", "tenants"])(
+  "re-reads station times when %s changes, as the public holidays a date follows come from it",
+  async (type) => {
+    const live = new LiveData();
+    const before = { always: null, days: [{ date: "2026-10-12", departments: [] }] };
+    const after = {
+      always: null,
+      days: [
+        {
+          date: "2026-10-12",
+          departments: [
+            {
+              departmentId: "dining",
+              ranges: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }],
+            },
+          ],
+        },
+      ],
+    };
+    const request = vi.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const received: unknown[] = [];
+    const stop = api.watchStationTimes(
+      "bar",
+      "2026-10-12",
+      "2026-10-12",
       (times) => received.push(times),
       vi.fn(),
       vi.fn(),

@@ -677,6 +677,11 @@ browser test** — most of these rules exist because a test passed while proving
   first, never for `vi.waitFor`'s one second alone.** Cost: a devices-screen test failed
   A441's CI (#1477). Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-waits-for-a-dialogs-close-event-not-a-timer).
+- **A browser test sees whether a push happened by spying on `history.pushState` and
+  `replaceState`, never by counting `history.length`**, which Chromium stops at 50. Cost: A506-12's
+  Times tab check failed beside other files, and the unsaved-changes audit met it first. Nothing
+  guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-browser-test-sees-a-push-through-pushstate-not-historylength).
 - **A test waits for a browser grant, such as a Web Lock, by tracking the request until it is
   answered — never by a fixed sleep.** Cost: the Payments screen's reader-status tests failed CI on
   a late grant, fixed twice — W59 (#1168), then A320 (#1342). Nothing guards it. Receipt:

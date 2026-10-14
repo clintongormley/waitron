@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { chosenSeasonId, seasonOptions, seasonWeek } from "./season-choice.js";
+import { chosenSeasonId, seasonWeek } from "./season-choice.js";
 
 const seasons = [
   { id: "winter", name: "Winter", startsOn: "12-01" },
@@ -30,15 +30,4 @@ it("reads the named season's week, and no week for an unknown season", () => {
   ];
   expect(seasonWeek(weeks, "spring")).toEqual([{ weekday: 2 }]);
   expect(seasonWeek(weeks, "autumn")).toEqual([]);
-});
-it("labels each season with its range, across the year end and back to the first season", () => {
-  expect(seasonOptions(seasons)).toEqual([
-    { value: "winter", label: "Winter · 1 Dec – 28 Feb" },
-    { value: "spring", label: "Spring · 1 Mar – 31 May" },
-    { value: "summer", label: "Summer · 1 Jun – 30 Nov" },
-  ]);
-});
-it("labels a season's range in the screen's language", () => {
-  setLocale("es");
-  expect(seasonOptions(seasons)[0]!.label).toBe("Winter · 1 dic – 28 feb");
 });

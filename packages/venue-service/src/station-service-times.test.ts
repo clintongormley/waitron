@@ -562,7 +562,7 @@ it("reads the last valid calendar date without stepping beyond its requested ran
     });
   }));
 
-it("the normal week ignores a special day's closure while the dated week applies it", async () =>
+it("applies a special day's closure to the date it stands on", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     await specialDay(db, f, {
@@ -574,7 +574,6 @@ it("the normal week ignores a special day's closure while the dated week applies
       always: null,
       days: [{ date: day, departments: [] }],
     });
-    expect(await stationServiceTimes(db, f.cfg, f.station, day, day, "normal")).toEqual(planned(f));
   }));
 
 it("clamps a station forecast to the following dated start", async () =>
@@ -670,35 +669,21 @@ it("cuts Lunch by the zone's closure in each date's own season", async () =>
     });
   }));
 
-it("in normal mode shows, on every date, the week of the season holding the first requested date", async () =>
-  tx(async (db) => {
-    const f = await fixture(db);
-    await winterLunchOnly(db, f);
-    expect(
-      await stationServiceTimes(db, f.cfg, f.station, "2030-11-25", "2030-12-02", "normal"),
-    ).toEqual({ always: null, days: seasonDates.map(lunchOn(f, [])) });
-    expect(
-      await stationServiceTimes(db, f.cfg, f.station, "2030-12-01", "2030-12-02", "normal"),
-    ).toEqual({ always: null, days: seasonDates.slice(6).map(lunchOn(f, ["2030-12-02"])) });
-  }));
-
-it("reads the seasons and each season week once over a 42-day range, dated or normal", async () =>
+it("reads the seasons and each season week once over a 42-day range", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
       .session;
-    for (const mode of ["dated", "normal"] as const) {
-      const spy = vi.spyOn(session, "prepareQuery");
-      try {
-        await stationServiceTimes(db, f.cfg, f.station, "2030-11-01", "2030-12-12", mode);
-        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-        for (const table of ["seasons", "department_days", "zone_days"])
-          expect(
-            texts.filter((text) => text.includes(`from "${table}"`)),
-            `${mode} ${table}`,
-          ).toHaveLength(1);
-      } finally {
-        spy.mockRestore();
-      }
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      await stationServiceTimes(db, f.cfg, f.station, "2030-11-01", "2030-12-12");
+      const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      for (const table of ["seasons", "department_days", "zone_days"])
+        expect(
+          texts.filter((text) => text.includes(`from "${table}"`)),
+          table,
+        ).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
     }
   }));

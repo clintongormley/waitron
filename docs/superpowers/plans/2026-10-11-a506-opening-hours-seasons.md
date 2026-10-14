@@ -10,8 +10,9 @@
 **Spec:** [Opening hours rebuilt around seasons and special days](../specs/2026-10-11-opening-hours-seasons-design.md)
 (A506). The spec is the source of truth; each task names the spec section it builds. Mockups:
 [`docs/backlog/mockups/a506-opening-hours-seasons/`](../../backlog/mockups/a506-opening-hours-seasons/).
-Backlog: `docs/backlog.md` (the A506 entry) and
-[`docs/backlog/service-periods.md`](../../backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days).
+Backlog: `docs/backlog.md` (the A506 entry) and `docs/backlog/service-periods.md` (its A506
+section). 2026-10-14: A506-12 deleted both; the owner's rules are now one entry under
+[Decisions and deliberate limits](../../backlog/service-periods.md#decisions-and-deliberate-limits).
 
 **Audited base.** Every pointer below was READ on main `1f321faa8` (2026-10-11); none was run.
 Pointers name files and functions, never line numbers, because lane D's A495 is rewriting the same

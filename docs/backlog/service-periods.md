@@ -75,110 +75,68 @@ and hours proposals; the historical spec keeps its dated pointers.
   chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
   Arán" are Spanish data labels shown untranslated in English.
 
-## A506. Opening hours rebuilt around seasons and special days
+## The Business day start dialog repeats the server's conflict-counting rule
 
-**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups. Spec (2026-10-11; the owner's three questions answered the same evening):
-[opening hours seasons design](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md). Supersedes
-section 9.2, and the named-day hours of section 7, of
-[the 2026-10-07 service times spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
-Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3).
+Left open by A506-3, #1591.
 
-**Progress.** A506-1: seasons and per-season department and zone weeks are stored, the
-till sells and closes by the business day's season, and a configuration transfer carries and
-checks them. Special days are not written yet. A506-2: every server reader reads the season tables,
-and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` or `zone_closed_times`.
-A506-3: the two week routes save one named season; the Week tab has a season picker, and the Day tab
-and every real week draw each date's own season; the Business day start dialog names the season of
-each conflict in a season's week.
-A506-4 landed in #1597: special days are stored and saved through the API, the till sells and
-closes by their paint, end-offset and changeover checks read them, and a configuration transfer
-carries and checks them; the dashboard shows none of their paint until A506-5.
-A506-3b landed in #1599: the zone editor's closed-times summary reads the current season's week
-and names the season; a zone's single `week` left the Opening hours model.
-A506-5 landed in #1603: the Calendar edits special days through the special-day dialog; named
-days, the venue as a holiday source and the four old hours tables (`special_dates`,
-`menu_day_timetables`, `menu_slots`, `zone_closed_times`) are gone.
-A506-10 landed in #1607: a period in use can be deleted through the API, with another period of
-its department taking over its paint and keep-open extensions, or with none; either way the
-routing lines naming the period are deleted (A578); two
-reads list where each period is painted and what the delete dialog shows (one-off special days with
-no date still to come left out). The Periods page that uses
-them is A506-11, and the old refusing delete stays until then.
-A506-6 landed in #1609: seasons are added, renamed, moved and deleted from the season chips and
-their dialog (+ Season), and a move or a deletion is refused when a period's end offset would
-run into the next day's hours; Opening hours opens on the Year, which replaced the Calendar
-tab, and setup's Done link opens it.
-A506-7 landed in #1623: a month view, reached from the Year, draws each date's hours as a bar per
-department and opens a dialog on an ordinary date; it replaced the Day tab and the Real week
-switch, and the dashboard's dated week views went.
-A506-8 landed in #1634: a full-screen season painter edits one season's week for every department
-and zone, saving the edited weeks in one request; it replaced the Week tab's editors, and opens
-from a season chip, an ordinary date and a zone's Opening hours link.
-A506-9 landed in #1651: the special-day painter replaces the special-day dialog and the per-date editor; it
-edits one special day's name, dates, Every year and each date's department and zone paint in a
-full-screen painter with its own address, opens from the Year, the month and an ordinary date, and
-saves only the paint the draft changed. An old `/view/date` address opens the month instead.
-A506-11 landed in #1694: a Periods page (`/manage/periods`) lists each department's periods with
-their menus and where they are painted, and adds, edits and deletes them through a new period
-dialog and a delete dialog that can hand the period's paint to another period; the painters' + New
-period and ✎ open the same dialog; the Opening hours Periods tab, the period editor and the old
-refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are gone.
+The Business day start dialog works out its conflict count by repeating the server's rule for
+counting a conflict once whatever its season (`rangeKey`,
+`apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
+would make the dialog miscount without any test noticing. The server could return how many conflicts
+it left off its list instead, which adds a field to the shared preview type.
 
-**Left open by A506-1, for the later parts.**
-- No test yet gives a second department its own paint on the same special day.
+## A venue with no seasons cannot edit a week from the dashboard
 
-**Left open by A506-3, for the later parts.**
-- With no season in the address, the All departments week left open across a season change keeps
-  showing the old season (the picker names it) until the address changes. The season painter always
-  writes its season into the address. Read in the code (`resolveSeason`, `opening-hours-screen.ts`),
-  not run since A506-8.
-- The Business day start dialog works out its conflict count by repeating the server's rule for
-  counting a conflict once whatever its season (`rangeKey`,
-  `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
-  would make the dialog miscount without any test noticing. The server could return how many conflicts
-  it left off its list instead, which adds a field to the shared preview type.
-- A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
-  draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
-  every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
-  `deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
-  the code, not run.
+Left open by A506-3, #1591.
 
-**Left open by A506-4, for the later parts.**
-- A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses the
-  new start" (`packages/venue-service/src/business-day-schedule.ts`, season lines too).
-- A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
-- `assertOwnPeriods` and `skippedSlot` in `packages/venue-service/src/menu-timetable.ts` name a refused
-  slot by its sorted position, not its position in the request (read in the code, not run).
-- The clock-skip check runs before touching ranges are joined: two halves of one period meeting at a
-  skipped 02:30 are refused, while the joined range is accepted.
-- With named days gone (A506-5), the rule "special day, then season" is still written out in
-  `day-resolver.ts` (twice, for departments and for zones), `business-day-schedule.ts` and
-  `period-end-offset.ts`, and the end-offset check relies on list order for it; special-day paint is
-  read by four separately written queries in `special-days.ts` and `business-day-schedule.ts`;
-  `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
-  the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
-  `menu-timetable.ts`. Each could collapse to one place.
-- `business-day-schedule.ts` copies the changeover lookup of `packages/shared/src/business-day-clock.ts`
-  (`oldCutoverOn`) to avoid validating the clock on every day; a lookup exported from `shared` that
-  validates once would remove the copy.
+A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
+draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
+every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
+`deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
+the code, not run.
 
-**Left open by A506-5, for the later parts.**
-- The zone editor's closed-times summary uses its sentences without a season name
-  (`venue.zone_closed_days`, `venue.zone_closed_summary`, and `venue.zone_open_with_department`)
-  only when the venue has no seasons at all: `zoneClosedWeek`
-  (`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
-  season nor a first season exists. Provisioning gives every venue four seasons, and deleting the
-  last one is refused (`season.invalid`, reason `last`, `deleteSeason` in
-  `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in the code, not
-  run; no test names those keys.
-- A department or zone delete's preview never counts a special day's painted hours, yet the delete
-  removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
-  only `department_days` and `zone_days` rows that have a season, while
-  `clearServiceDeleteSettings` deletes all of the department's `department_days` and the zones'
-  `zone_days`, special-day rows included. The season-only count predates A506-5 (it came with A506-1,
-  #1577; special-day paint was first written in A506-4); until A506-5 the preview's timetable, slot and
-  closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
-  all.
+## The special-day-then-season rule is written out in several places
+
+Left open by A506-4, #1597.
+
+With named days gone (A506-5), the rule "special day, then season" is still written out in
+`day-resolver.ts` (twice, for departments and for zones), `business-day-schedule.ts` and
+`period-end-offset.ts`, and the end-offset check relies on list order for it; special-day paint is
+read by four separately written queries in `special-days.ts` and `business-day-schedule.ts`;
+`specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
+the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
+`menu-timetable.ts`. Each could collapse to one place.
+
+## The zone editor's closed-times sentences without a season name
+
+Left open by A506-5, #1603.
+
+The zone editor's closed-times summary uses its sentences without a season name
+(`venue.zone_closed_days`, `venue.zone_closed_summary`, and `venue.zone_open_with_department`)
+only when the venue has no seasons at all: `zoneClosedWeek`
+(`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
+season nor a first season exists. Provisioning gives every venue four seasons, and deleting the
+last one is refused (`season.invalid`, reason `last`, `deleteSeason` in
+`packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in the code, not
+run; no test names those keys.
+
+## A department or zone delete's preview never counts a special day's painted hours
+
+Left open by A506-5, #1603.
+
+A department or zone delete's preview never counts a special day's painted hours, yet the delete
+removes them: `readServiceDeleteSettings` (`packages/venue-service/src/service-delete-settings.ts`) counts
+only `department_days` and `zone_days` rows that have a season, while
+`clearServiceDeleteSettings` deletes all of the department's `department_days` and the zones'
+`zone_days`, special-day rows included. The season-only count predates A506-5 (it came with A506-1,
+#1577; special-day paint was first written in A506-4); until A506-5 the preview's timetable, slot and
+closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
+all.
+
+## Two special days can come to share a date
+
+Left open by A506-5, #1603. The point is kept in its own words:
+
 - Two special days can come to share a date after both were saved — two repeating ones, or a
   one-off and a repeating date that follows a holiday's name: a save compares dates only in the
   years whose holiday lists exist then, so "Good Friday" (every year, saved on a
@@ -195,228 +153,76 @@ refusing delete (`DELETE …/menu-periods/:periodId`, `menu_period.in_use`) are 
   in its first year only (`NO_HOLIDAY_DATES`, `packages/venue-service/src/configuration-transfer.ts`).
   Wanted: a readiness line for such a clash, whichever kinds of date meet, in the current or next
   year.
-- The readiness line for a repeating holiday date with no match names the stored official holiday
-  name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
-  holiday of that name" when the cause is that the year's whole list has not shipped yet.
-  The Year's missing-holiday warning (`#warnings`,
-  `packages/venue-service/src/dashboard/opening-hours-year.ts`) uses the same sentence and the same
-  name, though its read carries the special day's own `name`; a fix covers both.
-- Once a stored holiday date's year has passed, each order's service-state read (`readServiceDayPlan`)
-  also reads the tenant, location and holiday area to find that year's holiday: about 100 µs of
-  roughly 860 µs per call, measured over 2000 calls on a Madrid test venue during the A506-5
-  finish-branch review. One way to remove it is a cache that outlives the transaction.
-- The "Add to" offer reads every special day with every date (`GET …/special-days`) to show a name
-  and a latest date.
 
-**Left open by A506-11, for the later parts.**
-- The period dialog keeps the End offset field although mockup 7 leaves it out, because nothing
-  else edits a period's end offset (open question Q1 of A506-11). Owner to confirm; removing it is one field.
-- The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does,
-  because `wt-form-actions` has no left-hand slot (ruling C3 of A506-11).
-- A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year, not
-  back to the Periods page (open question Q10 and ruling C22 of A506-11): a manager loses their place.
-- The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
-  dashboard (open question Q9 of A506-11); `readOpeningHoursModel` still works both out on every read. See also
-  "Routing reads do work only one screen uses" in `docs/backlog.md`.
-- After a delete is refused because the business day's start changed, the delete dialog keeps
-  Delete greyed out until its re-read answers. If the page is taken out of the document during that
-  read, nothing starts a new read when it comes back, so Delete can stay greyed out
-  (`period-delete-dialog.ts`). Found by reading during #1694's review, not tried.
-- The delete dialog can skip a re-read of what the delete will change in a rare order of updates,
-  and then shows slightly old counts. The server still refuses a delete sent with an old clock
-  revision, so the wrong delete is not made. Not checked whether the code before #1694 had the
-  same gap.
-- Opening hours keeps its own click handler for the painters' Periods link
-  (`opening-hours-screen.ts`), although the dashboard shell handles that link first in the real
-  app (judged by reading). Two painter tests mount the screen without the shell and fail without
-  it; remove it once those tests mount the shell.
+## The readiness line for a repeating holiday date names the official holiday
 
-**Left open by A506-9, for the later parts.**
-- A special day whose dates start their business day at different times is painted on one grid
-  drawn from the first date's changeover, with a notice saying so (ruling R1 of A506-9), so the
-  other dates' columns start their day at the first date's changeover rather than their own
-  (`cutover`, `special-day-painter.ts`).
-- `GET …/named-days` (`readSpecialDaysModel`, `named-days.ts`) has no dashboard caller since the
-  per-date editor went; server suites still pin it. Remove it, or keep it with a stated reason.
-- `range-dialog.ts` (`<range-dialog>`, with its repeated-time note) has no caller since the
-  per-date editor went; only its own tests and `dated-clock-grid.test.ts` load it.
-- The end-offset check accepts a period whose cutoff runs past the changeover: A506-9's LOOK saved
-  Late 00:30–03:00 with a 180-minute offset, a cutoff of 06:00 past a 05:00 changeover. The check
-  compares a cutoff only with the start of the next period (`findEndOffsetClash`,
-  `period-end-offset.ts`, reached from the "runs into what follows it" checks in
-  `menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
-- A date another manager removed stays in the draft when this draft changed its paint or its Closed
-  tick (`merge`, `special-day-painter.ts`). If only the Closed tick changed, Save puts the date back
-  with no paint, though it had paint before the removal. The painter shows the date before Save, so
-  nothing is lost unseen. Found by reading, not run; decide whether that date should be dropped too.
-- A draft's clock revision is chosen before the edits a new model makes impossible are dropped
-  (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a draft whose only edits were
-  dropped keeps the revision it had. A new public-holiday day, which can be saved as it opened, could
-  then be refused with `hours.clock_changed`. Found by reading, not run.
-- A live update that arrives while a special day's save is in flight, when that save is then
-  refused, may never be taken in: the refusal path in `save` (`special-day-painter.ts`) asks for no
-  follow, so a retry could send the old copy of a date another manager changed. The season painter
-  had the same gap and A637 closed it. Found by reading, not run.
+Left open by A506-5, #1603.
 
-**Left open by A506-8, for the later parts.**
-- The painter cannot resize a block by dragging its edge (ruling R1 of A506-8); mockup 3's hint
-  mentioned it. Painting over a block lengthens it, and painting Closed shortens it.
-- On a venue whose business day changes over off the quarter hour, painting starts at the first
-  quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
-  from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
-  server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
-  was read in the code, not run.
-- A save writes each edited week whole, all seven days. If another manager's save of the same week
-  is stored after the read this painter's copy of the week came from and before this save is stored,
-  this save puts back the days they changed, and nothing shows it. A fix needs the server to refuse
-  a week changed since the draft was read, or to write only the changed days. Read in the code
-  (`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
-  against the server.
-- `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
-  own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
-  the code, not run.
-- The routes `PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week`
-  (`routes.ts`) are called by no client now that the painter saves through
-  `PUT …/seasons/:seasonId/weeks`. Remove them, or keep them with a stated reason.
-- Without a navigation guard, which only test harnesses lack, the painter's history mark is copied
-  to later entries, so ✕ can go back to a later entry of the same screen.
-- The navigation guard's `write()` and `rewrite()` both refuse while a leave question is open, so a live refresh that
-  moves the painter to another season at that moment leaves the address on the old season.
-- Closing a painter opened from the zone dialog's "Opening hours (normal week)" link, on
-  Departments and zones, lands on the Opening hours Year, not back on Departments and zones
-  (ruling R20). It does what "else the Year" in ruling R14 says, but a manager loses their place.
-- At 390 px a block too short for both lines, such as a one-hour block, shows its period's name
-  but not its times (ruling R21). Only its spoken label names them (`paint-grid.ts`).
+The readiness line for a repeating holiday date with no match names the stored official holiday
+name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
+holiday of that name" when the cause is that the year's whole list has not shipped yet.
+The Year's missing-holiday warning (`#warnings`,
+`packages/venue-service/src/dashboard/opening-hours-year.ts`) uses the same sentence and the same
+name, though its read carries the special day's own `name`; a fix covers both.
 
-**Left open by A506-7, for the later parts.**
-- Public holidays' names show in Spanish in the English interface (seen on the month view, #1623):
-  the official lists carry one name per holiday. Believed to predate A506-7; not checked against
-  the year view's history.
-- At 390 px a long name in a month cell breaks mid-word ("Christ|mas"): the dashboard page declares
-  no language, so the browser cannot hyphenate.
-- The special-day painter's note under "Every year" (`special.holiday_note`, from #1603) says "each
-  year" twice in English and reads as awkwardly in Spanish.
-- The stations service-times route's dated week (`stationServiceTimes(..., "dated")`), and
-  `watchStationTimes`'s `normal` flag, have no dashboard caller since A506-7.
-- With no readable venue clock the station view reads the week of 5 January 2026, a fallback the
-  screen already used before A506-7; the station view is replaced in A506-12.
+## The end-offset check accepts a cutoff past the changeover
 
-**Left open by A506-6, for the later parts.**
-- A season dialog whose season another session deletes says "This season no longer exists." but
-  stays open with Save and Delete still live (`season-dialog.ts`, #1616); the zone and department
-  dialogs close instead and say so on the page. Pressing either is refused by the server with the
-  same message, so nothing breaks; closing it like the others is the open choice.
-- `isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`
-  (`packages/venue-service/src/dashboard/calendar-grid.ts`) still build dates with `Date.UTC`, which
-  reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
-  which start at year 100; changing `isLocalDate` would change which dates the server accepts from
-  outside (menu publication dates, imports), so it needs a decision.
+Left open by A506-9, #1651.
 
-**Why.** One standard week does not fit a venue whose hours change with the season, and copying a
-week into future dates would bury the special days among ordinary ones.
+The end-offset check accepts a period whose cutoff runs past the changeover: A506-9's LOOK saved
+Late 00:30–03:00 with a 180-minute offset, a cutoff of 06:00 past a 05:00 changeover. The check
+compares a cutoff only with the start of the next period (`findEndOffsetClash`,
+`period-end-offset.ts`, reached from the "runs into what follows it" checks in
+`menu-timetable.ts`). Decide whether a cutoff past the changeover is refused.
 
-**Seasons.**
-- Every venue has seasons, four by default: Spring, Summer, Autumn, Winter. Repeating every year is
-  what a season is, not an option.
-- A season has a name and a start date only; it ends the day before the next season starts. So the
-  seasons always cover the whole year, with no gaps and no overlaps.
-- Moving a start date moves the neighbouring season's end. The new dates hold for this year and
-  later ones until changed again; there is no one-year-only exception.
-- Each season has its own week for each department, painted as today's normal week is.
+## A date another manager removed stays in the special-day draft
 
-**Special days.**
-- Two kinds: public holidays (from the official lists, as today) and the venue's own special days.
-  Today's own-holiday / working-day split goes: a search of non-test code found the kind read only to
-  choose the Calendar's colour (`packages/venue-service/src/named-days.ts`, the `tone` choice).
-- One special day is a name over any number of dates ("Christmas company dinners", 14–23 December),
-  optionally repeating every year (on the same month and day, or, for a public holiday's date,
-  wherever the holiday's name falls; spec section 5). Dates are added on a small calendar, singly or
-  as ranges.
-- **The season shows through.** Each date starts with the season's hours; what is painted on top
-  replaces them for that stretch of time, and unpainted time keeps following the season. A
-  special day has no "own hours" or "season's hours" switch. Worked example: under Winter's Dinner
-  20:00–23:30, painting Dinner 19:00–22:00 still leaves the season's Dinner until 23:30; painting
-  Closed over 22:00–23:30 ends the night at 22:00. The editor draws the season faded under the
-  paint so this is visible.
-- Closed is painted over part of a date, or a date's Closed tick shuts all of it. A public holiday
-  works the same way, so closing Christmas Day is one tick.
-- Every change to a single date is a special day. An ordinary date cannot be edited on its own: it
-  says which season it follows and offers "Edit the Winter week", "Make this a special day…" and
-  adding it to an existing special day.
+Left open by A506-9, #1651.
 
-**Periods get a page of their own** (owner, 2026-10-11): a period decides what is offered at a time
-of day — the customer menu, the staff-only menus and, once A504 lands, the floor plan — so it is
-more than a paint colour. Under Venue operations, beside Opening hours:
-- One list, periods grouped under their department as A493 groups zones, with columns Period
-  (colour and name), Customer menu, Staff-only menus, Floor plan (shown greyed until A504) and
-  Painted in (the seasons and special days that use it, each opening that editor). A period painted
-  nowhere is flagged, since nothing will sell its menu. Row ⋮: Edit, Open in Opening hours, Delete.
-  The owner chose this over one card per period.
-- One period dialog, opened from the page and from the painter: name, colour, customer menu (with
-  what it includes), staff-only menus, floor plan (from A504) and Painted in. Save stays quiet until
-  the draft changes.
-- Deleting says where the period is painted and which routing cells name it, and offers a period to
-  take its place. The mockup's answer without one: its painted time becomes closed in the seasons
-  and the season shows through on special days.
+A date another manager removed stays in the draft when this draft changed its paint or its Closed
+tick (`merge`, `special-day-painter.ts`). If only the Closed tick changed, Save puts the date back
+with no paint, though it had paint before the removal. The painter shows the date before Save, so
+nothing is lost unseen. Found by reading, not run; decide whether that date should be dropped too.
 
-**Venue, department, zone.** The venue holds the seasons and special days and no hours of its own
-(owner's choice). Departments paint periods; a zone follows its department except where it is marked
-closed, as today.
+## Painting stops short of an off-quarter-hour changeover
 
-**Screens** (images in `docs/backlog/mockups/a506-opening-hours-seasons/`):
-1. `1-calendar-year.png` — the Opening hours page opens on a year. Days are coloured by season;
-   public holidays, special days and closed days are marked. Season chips show each range and
-   edit its start (✎). "+ Special day".
-2. `2-calendar-month.png` — clicking a month opens it, each day's hours drawn as a bar per
-   department, with "‹ year" back. It replaces the Day tab and the Real week switch.
-3. `3-season-week-editor.png` — a season's week, full screen: no banner and no side menu.
-4. `4-special-day-editor.png` — a special day, in the same full-screen editor, one column per
-   date instead of Monday to Sunday; name, dates and every-year in a side panel.
-5. `5-ordinary-date.png` — clicking an ordinary date.
-6. `6-periods-page.png` — the Periods page.
-7. `7-period-dialog.png` — the period dialog.
-8. `8-period-delete.png` — deleting a period that is in use.
-9. `9-new-period-in-painter.png` — "+ New period" from inside the painter.
+Left open by A506-8, #1634.
 
-**The painter (both editors).**
-- Full screen, with one bar holding close, what is being edited, the season or department
-  picker, and Cancel and Save, which stay visible however the grid scrolls. Save stays quiet until
-  the draft changes (CLAUDE.md §3, A331).
-- One row of periods to paint with, plus Closed and "+ New period". Choose one, drag down a column.
-- 15 minutes is a thin row (about 5px in the mockup; the owner's screenshot of today's grid shows
-  under three hours at once), so most of a day fits on a laptop screen; the grid scrolls by itself while a drag passes its top or bottom edge.
-- Dragging over an existing block replaces that stretch; nothing has to be cleared first.
-- Two touching stretches of the same period are stored and drawn as one block.
-- Click a block to select it: change its period from a list, or Delete (Backspace too). Deleting
-  on a special day lets the season show through; in a season's week the time becomes closed.
-- No fallback period (owner): what is painted applies, anything unpainted in a season's week is
-  closed.
-- Each column's ⋮ has "Copy to…", ticking several days or dates at once, and Clear. A special
-  fortnight is painted once, copied across, and the odd dates changed after.
-- The day name and its ⋮ share one line.
-- **Periods from inside the painter.** Each period in the paint row has ✎, and "+ New period"
-  opens the period dialog over the painter ("Add and paint with it"); the unsaved painting stays
-  underneath. A period saves when its dialog saves, separately from the painter's Save, because the
-  Periods page and the till use it at once (owner, 2026-10-11). The bar links to the Periods page;
-  leaving with unsaved painting asks first.
+On a venue whose business day changes over off the quarter hour, painting starts at the first
+quarter hour after the changeover and ends at the last one before it (a 05:50 changeover paints
+from 06:00 to 05:45, `stepAt` in `paint-model.ts`), so 05:45–06:00 cannot be painted. The reason is that the
+server refuses a time off the quarter hour (`service-day.ts`, the `step` refusal); that refusal
+was read in the code, not run.
 
-**For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
-kind has three readers, not one, and that `station-times.ts` reads the week only through routing's
-period order — spec section 2).
-- What reads hours today and must read seasons and special days instead. A search for the
-  special-days table outside tests found `menu-timetable.ts`, `zone-closed-times.ts`,
-  `holidays.ts`, `hours.ts`, `named-days.ts`, `configuration-transfer.ts`, `routes.ts` and the
-  live queries in `packages/venue-service/src/`, plus `apps/dashboard/src/api/live-queries.ts`;
-  prep station times (`station-times.ts`) read the week. Follow each call chain; a search is not a
-  complete list.
-- Deleting a period in use: the mockup shows one answer (above); the spec confirms it, and what a
-  routing cell naming the period becomes (the 2026-10-07 spec, section 8, only warns).
-- Where the read-only prep station times live, now that the tabs go.
-- What the till sells at a moment is decided by these hours, so the sale-path resolver's
-  season-then-special-day layering needs real-database tests across a season boundary and across
-  midnight.
+## A season painter save writes each edited week whole
+
+Left open by A506-8, #1634.
+
+A save writes each edited week whole, all seven days. If another manager's save of the same week
+is stored after the read this painter's copy of the week came from and before this save is stored,
+this save puts back the days they changed, and nothing shows it. A fix needs the server to refuse
+a week changed since the draft was read, or to write only the changed days. Read in the code
+(`save` in `season-painter.ts` sends every day; `saveSeasonWeeks` in `season-weeks.ts`), not run
+against the server.
+
+## Two date helpers read years 0 to 99 as 1900 to 1999
+
+Left open by A506-6, #1609.
+
+`isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`
+(`packages/venue-service/src/dashboard/calendar-grid.ts`) still build dates with `Date.UTC`, which
+reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
+which start at year 100; changing `isLocalDate` would change which dates the server accepts from
+outside (menu publication dates, imports), so it needs a decision.
 
 ## Decisions and deliberate limits
+
+- **Opening hours are seasons and special days (A506, owner, 2026-10-11).** Every venue has
+  seasons that cover the whole year and repeat every year, each with its own week per department;
+  a special day is painted over its dates, and its unpainted time follows the season; periods have
+  a page of their own; the venue holds no hours of its own. The rules are in the
+  [spec](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md), with
+  [mockups](mockups/a506-opening-hours-seasons/).
 
 - A season delete's confirmation names only the departments with hours in it, though the delete
   also removes the zones' closed times for that season (`seasonDeleteImpact`,

@@ -456,12 +456,14 @@ including held dishes when released (`apps/server/src/station-closing.ts`). The 
 moves with the authenticated person's id and no device; till and device closures record their
 actors in `ticket_item_moves`.
 
-Opening hours' prep-station view is read-only. `stationServiceTimes` combines routed products on
-period menus with department hours, subtracts zone closed times, and joins overlapping shares of
-the same period. Its normal week ignores special days; its dated week applies them
-(`stationServiceTimes`, `packages/venue-service/src/station-service-times.ts`). Planning ignores
-today's station closures and kept-open extensions. The default station returns a status sentence
-without a grid; a deleted station id is refused.
+Prep stations' Times tab is read-only. `stationServiceTimes` combines routed products on period
+menus with department hours, subtracts zone closed times, and joins overlapping shares of the same
+period. It reads a span of at most 42 dates and works out each date from that date's own plan, its
+season and any special day (`readDayPlan`); there is no normal week, and the route refuses a `week`
+query (`stationServiceTimes`, `packages/venue-service/src/station-service-times.ts`). Planning
+ignores today's station closures and kept-open extensions. The default station answers
+`always: "default"` and no dates, and the tab shows a sentence in place of the month; a deleted
+station's id is refused (`station.not_found`).
 
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.

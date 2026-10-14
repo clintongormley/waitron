@@ -11,13 +11,6 @@ import { ModelWatches } from "./model-watch.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
 
-export interface OpeningStation {
-  id: string;
-  name: string;
-  active: boolean;
-  isDefault: boolean;
-}
-
 export interface SeasonInput {
   name: string;
   /** "MM-DD", never "02-29". */
@@ -147,36 +140,24 @@ export class OpeningHoursApi {
     );
     return { days: reads.flatMap(({ days }) => days) };
   }
-  watchStations(
-    apply: (stations: OpeningStation[]) => void,
-    failed: (error: unknown) => void,
-    recovered: () => void,
-  ): () => void {
-    return this.#watches.watch(
-      "opening-hours:stations",
-      QUERY_DEPENDENCIES.routing,
-      () =>
-        this.request<OpeningStation[]>("/management-api/stations", "GET", undefined, {
-          passive: true,
-        }),
-      apply,
-      failed,
-      recovered,
-    );
-  }
   watchStationTimes(
     stationId: string,
     from: string,
     to: string,
-    normal: boolean,
     apply: (times: StationServiceTimes) => void,
     failed: (error: unknown) => void,
     recovered: () => void,
   ): () => void {
-    const query = new URLSearchParams({ from, to, ...(normal ? { week: "normal" } : {}) });
+    const query = new URLSearchParams({ from, to });
     return this.#watches.watch(
       `opening-hours:station:${stationId}:${query}`,
-      [...new Set([...QUERY_DEPENDENCIES.routing, ...QUERY_DEPENDENCIES["opening-hours"]])],
+      [
+        ...new Set([
+          ...QUERY_DEPENDENCIES.routing,
+          ...QUERY_DEPENDENCIES["opening-hours"],
+          ...QUERY_DEPENDENCIES["opening-hours-month"],
+        ]),
+      ],
       () =>
         this.request<StationServiceTimes>(
           `${BASE}/stations/${at(stationId)}/service-times?${query}`,

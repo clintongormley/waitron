@@ -64,6 +64,8 @@ import type {
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
+import "./station-times-tab.js";
+import type { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   refusalOf,
   listedPrinterIds,
@@ -87,7 +89,7 @@ type StationAction = {
 
 type Editor = { kind: "station" };
 type NewStation = StationInput & { printerIds: string[] };
-const PREP_TABS = ["stations", "routing"] as const;
+const PREP_TABS = ["stations", "routing", "times"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
@@ -122,7 +124,7 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
-      wt-tabs[data-routes]::part(tablist) {
+      wt-tabs::part(tablist) {
         flex-wrap: wrap;
       }
       wt-tabs::part(tab-actions) {
@@ -158,6 +160,7 @@ export class PrepStationsScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
+  @property({ attribute: false }) hoursApi!: OpeningHoursApi;
   @state() private view?: PrepStationsView;
   @state() private editor?: Editor;
   @state() private draft: NewStation = {
@@ -176,6 +179,8 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationAttempted = false;
   @state() private stationAction?: StationAction;
   @state() private tab: PrepTab = "stations";
+  /** The Times tab's station as its address names it; `#settleStation` replaces one not shown. */
+  @state() private timesStation: string | null = null;
   @state() private stationOrder?: string[];
   @state() private stationAnnouncement = "";
   #stationDrag?: { id: string; pointerId: number; changed: boolean };
@@ -190,15 +195,33 @@ export class PrepStationsScreen extends LitElement {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
       this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
-      if (this.tab !== requested)
-        this.#url.write({ dashboard: "prep-stations", view: this.tab }, true);
+      this.timesStation = this.tab === "times" ? this.#url.read("station") : null;
+      if (this.tab !== requested || (this.tab !== "times" && this.#url.read("station") !== null))
+        this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
+      this.#settleStation();
     },
     {
       basePath: "/manage",
       primary: "dashboard",
-      children: { "*": { view: "view" } },
+      children: { "prep-stations": { view: "view", station: "station" }, "*": { view: "view" } },
     },
   );
+  /** The station the Times tab draws first: the Stations table's first active one. */
+  #firstStation(): string | undefined {
+    return this.view?.stations
+      .filter((station) => station.active)
+      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))[0]?.id;
+  }
+  /** On Times, an address naming no active station is replaced by the one the tab draws. */
+  #settleStation(): void {
+    if (this.tab !== "times" || !this.view) return;
+    const id = this.timesStation;
+    if (this.view.stations.some((station) => station.active && station.id === id)) return;
+    const first = this.#firstStation();
+    if (first === undefined) return;
+    this.timesStation = first;
+    this.#url.write({ dashboard: "prep-stations", view: "times", station: first }, true);
+  }
   /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
     change: RoutingChange;
@@ -362,6 +385,7 @@ export class PrepStationsScreen extends LitElement {
     this.#syncStationDrafts();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
+    if (changedState.has("view")) this.#settleStation();
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
       this.#writtenChoice = undefined;
@@ -1481,7 +1505,6 @@ export class PrepStationsScreen extends LitElement {
       ${
         view
           ? html`<wt-tabs
-              ?data-routes=${this.tab === "routing"}
               label=${t("prep.title")}
               .value=${this.tab}
               .items=${PREP_TABS.map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
@@ -1492,7 +1515,9 @@ export class PrepStationsScreen extends LitElement {
                 (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.tab;
                 const proceed = () => {
                   this.tab = tab;
-                  this.#url.write({ dashboard: "prep-stations", view: tab });
+                  this.timesStation = null;
+                  this.#url.write({ dashboard: "prep-stations", view: tab, station: null });
+                  this.#settleStation();
                 };
                 if (this.pending) this.#leaveCell("navigation", proceed);
                 else proceed();
@@ -1545,6 +1570,27 @@ export class PrepStationsScreen extends LitElement {
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>
+              </div>
+              <div slot="times">
+                ${
+                  this.tab === "times"
+                    ? html`<prep-station-times
+                        .api=${this.hoursApi}
+                        .stations=${view.stations}
+                        .periods=${view.routing.periods}
+                        .stationId=${this.timesStation ?? ""}
+                        @station-change=${(event: CustomEvent<{ stationId: string }>) => {
+                          event.stopPropagation();
+                          this.timesStation = event.detail.stationId;
+                          this.#url.write({
+                            dashboard: "prep-stations",
+                            view: "times",
+                            station: event.detail.stationId,
+                          });
+                        }}
+                      ></prep-station-times>`
+                    : nothing
+                }
               </div>
             </wt-tabs>`
           : nothing

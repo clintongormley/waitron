@@ -1,6 +1,4 @@
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
-import { seasonLastDay } from "../season-rules.js";
-import { formatMonthDay } from "./hours-view.js";
 
 type Seasons = OpeningHoursModel["seasons"];
 
@@ -12,13 +10,6 @@ export function chosenSeasonId(
 ): string {
   if (seasons.some((season) => season.id === requested)) return requested;
   return currentSeasonId ?? seasons[0]?.id ?? "";
-}
-
-export function seasonOptions(seasons: Seasons) {
-  return seasons.map((season) => ({
-    value: season.id,
-    label: `${season.name} · ${formatMonthDay(season.startsOn)} – ${formatMonthDay(seasonLastDay(seasons, season.startsOn))}`,
-  }));
 }
 
 export function seasonWeek<Day>(

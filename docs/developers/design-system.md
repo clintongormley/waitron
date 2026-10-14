@@ -3474,14 +3474,21 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Worked-out prep-station times
 
-Choose a prep station in Opening hours' picker to see its read-only Week view: the normal week
-of the season this week's Monday falls in, with department columns and period ranges derived from routed products and
-the zones that can order them. These are planned times;
-today's station closures and service extensions do not change them. A default station shows
-"Always open: this is the default station", without a grid (`opening-hours-station.ts`).
-Deleted stations are absent from the picker, and their old configuration id is not found. Special
-days are made and painted in Opening hours' special-day painter, opened from the Year or the month.
-The separate Station hours page and its station-cell editors are retired.
+Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
+Station picker at the top lists the active stations in the Stations table's order, the default
+station included. The month is Opening hours' month in its station mode (`stationMode` on
+`opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
++ Special day and no Rows legend. Each date draws one bar of the times the station gets orders, worked out from
+routed products and the zones that can order them, and reads "No orders" on a date it gets none.
+When more than one department sends the station orders in the weeks shown, each period's label
+names its department ("Lunch (Restaurant)"). Dates show their special day's and public holiday's
+names, as in Opening hours, and the season chips are only a key to the tints, not buttons
+(`keyOnly` on `season-chips.ts`). These are planned times; today's station closures and service
+extensions do not change them. A default station shows "Always open: this is the default
+station" and no month. A failed read shows "This station's times could not be loaded. It will be
+tried again." above the month until that read succeeds again. The month is not kept in the
+address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
+from the Year or the month.
 
 ### Tabbed management pages
 
@@ -3529,14 +3536,18 @@ leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hi
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations` and `routing` at `/manage/prep-stations/view/<key>`; any other key,
-such as an old `settings`, `tickets` or `watchers` address, opens Stations and replaces the address
-without adding a history entry. Stations shows no live kitchen numbers: each station's name with its
+Prep stations uses `stations`, `routing` and `times` (Stations, Routes and Times) at
+`/manage/prep-stations/view/<key>`; any other key, such as an old `settings`, `tickets` or
+`watchers` address, opens Stations and replaces the address without adding a history entry. Its tab
+strip wraps onto a second line when the labels do not fit, on every tab. Times takes
+`/station/<id>`: choosing a station in its picker adds a history entry, and a Times address naming
+no active station is replaced by the first one without adding one; moving to Stations or Routes
+drops the station from the address (`prep-stations-screen.ts`). Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
 show it, and a link to Devices) and Actions, the row's menu.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
-Each active non-default station links to Opening hours with its station id.
+Each non-default station's "When it gets orders" link opens Times on that station.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
@@ -3619,19 +3630,17 @@ also sets the default station, for someone with `venue.configure`. The page is o
 someone with `venue_service.manage`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`, with a Year tab; the month
-(`/view/month`) shows under the Year tab, and a Standard
-week tab shows only a station's or All departments' read-only week (`?station=<id>`,
-`/view/week/department/all`). The page opens on Year when its address names no view and no
-department, zone, station or season, and on an old `/view/calendar` address
+(`/view/month`) shows under the Year tab. The page opens on Year when its address names no view and
+no department, zone, season or `?station=`, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
-year, and choosing another tab drops it; `/department/<id>` selects the department; on All departments `/season/<id>` picks the season shown.
+year; `/department/<id>` selects the department.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season
 gives the current one, a missing department the first active one, and a zone the department does
-not have the department's own week. Any other week address opens the painter in its place
-unless it names a station or All departments: `/view/week`, with or without a department, an
-address with no view naming a season, a department or a zone, and an unknown view. The
+not have the department's own week. Every other week address opens the painter in its place:
+`/view/week`, with or without a department, a station or All departments, an address with no view
+naming a season, a department, a zone or `?station=`, and an unknown view. The
 special-day painter (Forms above) has its own address too: `/view/special-day` for a new day,
 with `/date/<yyyy-mm-dd>` for a new day holding that date, and
 `/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to

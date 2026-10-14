@@ -1,4 +1,3 @@
-import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -20,66 +19,64 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     // Assign the API before connecting: the screen attaches its passive model watch on connection.
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
-    screen.api = new OpeningHoursApi(
-      withOpeningStations((async (path: string) => {
-        if (state === "load-failed") throw new Error("offline");
-        if (path.includes("/opening-hours/year?"))
-          return {
-            businessDayClock: {
-              timeZone: "Europe/Madrid",
-              dayCutover: "06:00",
-              cutoverChanges: [],
-            },
-            clockRevision: 0,
-            currentBusinessDay: "2026-10-12",
-            pending: null,
-            year: Number(new URL(path, location.href).searchParams.get("year")),
-            timeZone: "Europe/Madrid",
-            today: "2026-10-12",
-            seasons: [],
-            days: [],
-            publicHolidaysAvailable: true,
-            missingHolidays: [],
-            holidayCoverage: [],
-            area: {
-              addressKey: "fixture-address",
-              readiness: "ready",
-              options: [],
-              required: false,
-              chosen: null,
-            },
-          };
+    screen.api = new OpeningHoursApi((async (path: string) => {
+      if (state === "load-failed") throw new Error("offline");
+      if (path.includes("/opening-hours/year?"))
         return {
-          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          businessDayClock: {
+            timeZone: "Europe/Madrid",
+            dayCutover: "06:00",
+            cutoverChanges: [],
+          },
           clockRevision: 0,
           currentBusinessDay: "2026-10-12",
           pending: null,
+          year: Number(new URL(path, location.href).searchParams.get("year")),
           timeZone: "Europe/Madrid",
-          clockReadable: state !== "unreadable-viewer",
-          dayCutover: "06:00",
-          menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-          departments: [
-            {
-              id: "restaurant",
-              name: "Restaurant",
-              active: true,
-              periods: [
-                {
-                  id: "p1",
-                  name: "Lunch",
-                  colour: "green",
-                  menuId: "lunch",
-                  staffMenuIds: [],
-                  endOffsetMinutes: 0,
-                  weekdays: [1, 3],
-                  routingUses: [],
-                },
-              ],
-            },
-          ],
+          today: "2026-10-12",
+          seasons: [],
+          days: [],
+          publicHolidaysAvailable: true,
+          missingHolidays: [],
+          holidayCoverage: [],
+          area: {
+            addressKey: "fixture-address",
+            readiness: "ready",
+            options: [],
+            required: false,
+            chosen: null,
+          },
         };
-      }) as DashboardRequest),
-    );
+      return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
+        timeZone: "Europe/Madrid",
+        clockReadable: state !== "unreadable-viewer",
+        dayCutover: "06:00",
+        menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
+        departments: [
+          {
+            id: "restaurant",
+            name: "Restaurant",
+            active: true,
+            periods: [
+              {
+                id: "p1",
+                name: "Lunch",
+                colour: "green",
+                menuId: "lunch",
+                staffMenuIds: [],
+                endOffsetMinutes: 0,
+                weekdays: [1, 3],
+                routingUses: [],
+              },
+            ],
+          },
+        ],
+      };
+    }) as DashboardRequest);
     screen.readOnly = state === "unreadable-viewer";
     wrapper.appendChild(screen);
     if (state === "load-failed") {
@@ -96,48 +93,6 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       .poll(() => screen.shadowRoot!.querySelector("opening-hours-year")?.model)
       .toBeDefined();
     await screen.shadowRoot!.querySelector("opening-hours-year")!.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-});
-
-describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (theme) => {
-  test("standard week", async () => {
-    setLocale("en");
-    history.replaceState(null, "", "/manage/opening-hours/view/week/department/all");
-    const wrapper = await mountThemed("<div></div>", theme);
-    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
-    const seasons = [
-      { id: "summer", name: "Summer", startsOn: "06-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
-    ];
-    screen.api = new OpeningHoursApi(
-      withOpeningStations((async () => ({
-        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-        clockRevision: 0,
-        currentBusinessDay: "2026-10-12",
-        pending: null,
-        timeZone: "Europe/Madrid",
-        clockReadable: true,
-        dayCutover: "06:00",
-        seasons,
-        currentSeasonId: "summer",
-        menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-        departments: [
-          {
-            id: "restaurant",
-            name: "Restaurant",
-            active: true,
-            zones: [],
-            seasonWeeks: seasons.map((season) => ({ seasonId: season.id, week: [] })),
-            periods: [],
-          },
-        ],
-      })) as DashboardRequest),
-    );
-    wrapper.appendChild(screen);
-    await expect.poll(() => screen.shadowRoot!.querySelector("[name=seasonId]")).not.toBeNull();
-    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-all")).not.toBeNull();
-    await screen.shadowRoot!.querySelector("opening-hours-all")!.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

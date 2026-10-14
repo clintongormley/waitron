@@ -32,6 +32,25 @@ async function mount(
   await el.updateComplete;
   return el;
 }
+/** A station's month: one row, the Grill, getting the Restaurant's orders. */
+const STATION = [
+  {
+    id: "grill",
+    name: "Grill",
+    zones: [],
+    periods: DEPARTMENTS[0]!.periods.map(({ id, name, colour }) => ({ id, name, colour })),
+  },
+];
+function stationModel(): OpeningHoursMonth {
+  const model = monthModel();
+  return {
+    ...model,
+    days: model.days.map((day) => ({
+      ...day,
+      departments: [{ departmentId: "grill", ranges: day.departments[0]!.ranges, zones: [] }],
+    })),
+  };
+}
 const root = (el: OpeningHoursMonthView) => el.shadowRoot!;
 const text = (node: Element | null | undefined) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -407,6 +426,47 @@ describe("Opening hours month", () => {
       "Company dinners",
     );
     expect(testId(el, "previous-month")).not.toBeNull();
+  });
+
+  it("in station mode, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
+    const el = await mount(stationModel(), {
+      readOnly: true,
+      stationMode: true,
+      departments: STATION,
+    });
+    expect(testId(el, "year-back")).toBeNull();
+    expect(root(el).querySelector("wt-combobox")).toBeNull();
+    expect(testId(el, "add-special-day")).toBeNull();
+    expect(root(el).querySelector("season-chips")!.keyOnly).toBe(true);
+    expect(root(el).querySelectorAll("button")).toHaveLength(0);
+    expect(cell(el, "2026-12-09").querySelector(".day")!.getAttribute("role")).toBe("group");
+    expect(testId(el, "rows")).toBeNull();
+    const months = events<{ month: string }>(el, "month-change");
+    testId(el, "previous-month")!.click();
+    testId(el, "next-month")!.click();
+    expect(months).toEqual([{ month: "2026-11" }, { month: "2027-01" }]);
+  });
+
+  it('in station mode, reads "No orders" for a date the station gets nothing', async () => {
+    for (const [locale, words] of [
+      ["en", "No orders"],
+      ["es", "Sin pedidos"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount(stationModel(), {
+        readOnly: true,
+        stationMode: true,
+        departments: STATION,
+      });
+      const sunday = cell(el, "2026-12-06");
+      expect([...sunday.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
+      expect(sunday.querySelector('[data-test="department-closed"]')).toBeNull();
+      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(words);
+      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).not.toContain("Grill");
+      expect(cell(el, "2026-12-07").querySelector('[data-test="no-orders"]')).toBeNull();
+      expect(cell(el, "2026-12-07").querySelectorAll(".track")).toHaveLength(1);
+      el.remove();
+    }
   });
 
   it("passes the seasons the month touches to the chips", async () => {

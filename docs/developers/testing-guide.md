@@ -1198,6 +1198,20 @@ dialog's `wt-close` first, with their assertions unchanged; `wt-dialog` itself w
 owner's decision (2026-10-09, A452: fix the tests, not the dialog). Holding the Pair dialog's native close back 1.5 s, the old wait failed and the new
 one passed after 1617 ms. Nothing guards the rule across suites.
 
+## A browser test sees a push through `pushState`, not `history.length`
+
+Chromium stops `history.length` at 50. Measured 2026-10-14 in A506-12's run-it review, in
+`packages/venue-service`'s Chromium browser project on Vitest 4.1.11: one test called
+`history.pushState` 60 times and then read `history.length` as 50. Once the tab's history is that
+full, a check that compares the count before and after cannot see a push. A506-12 met it when its
+suite ran beside other test files in one browser: a "new history entry" check failed with "expected
+50 to be 51", and its "no history entry" checks would have passed whatever the screen did. The
+2026-10-05 unsaved-changes audit had met it first
+(`docs/superpowers/plans/2026-10-05-unsaved-changes-audit.md`). A test spies on
+`history.pushState` and `history.replaceState` and reads their calls instead, as `writtenPaths` and
+the Times tab cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts` do.
+Nothing guards it.
+
 ## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.
 
 In browser mode every test file in a worker runs in its own iframe but shares ONE browser page, and

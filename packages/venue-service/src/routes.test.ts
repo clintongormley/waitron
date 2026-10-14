@@ -3348,6 +3348,7 @@ describe("station service-times planning route", () => {
     ["from=2026-10-12", "to"],
     ["from=2026-10-12&to=2026-11-23", "to"],
     ["from=2026-10-12&to=2026-10-18&week=unknown", "week"],
+    ["from=2026-10-12&to=2026-10-18&week=normal", "week"],
   ])("refuses incomplete or overlong date range %s", async (query, field) => {
     const f = await fixture();
     const response = await send(f.app, "GET", path(f.stationId, query!), f.managerCookie);

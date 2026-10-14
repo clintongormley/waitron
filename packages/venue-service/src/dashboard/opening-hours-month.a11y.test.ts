@@ -18,6 +18,23 @@ const states: Record<string, Partial<OpeningHoursMonthView>> = {
   "read-only, one department": { readOnly: true, departmentId: "rest" },
 };
 
+/** A station's month: one row, the Grill, getting the Restaurant's orders. */
+function stationMonth(): Partial<OpeningHoursMonthView> {
+  const model = monthModel();
+  return {
+    readOnly: true,
+    stationMode: true,
+    departments: [{ id: "grill", name: "Grill", zones: [], periods: DEPARTMENTS[0]!.periods }],
+    model: {
+      ...model,
+      days: model.days.map((day) => ({
+        ...day,
+        departments: [{ departmentId: "grill", ranges: day.departments[0]!.ranges, zones: [] }],
+      })),
+    },
+  };
+}
+
 function contrastRatio(a: string, b: string): number {
   const luminance = (rgb: string) => {
     expect(rgb).toMatch(/^rgba?\(/);
@@ -49,6 +66,19 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
         getComputedStyle(date).backgroundColor,
       ),
     ).toBeGreaterThanOrEqual(1.4);
+  });
+
+  test.each(["en", "es"] as const)("station mode (%s)", async (locale) => {
+    setLocale(locale);
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, stationMonth());
+    host.append(el);
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    for (const shown of ['[data-test="no-orders"]', "season-chips", ".track", "[data-closed]"])
+      expect(root.querySelector(shown), shown).not.toBeNull();
+    await expectNoA11yViolations(host);
   });
 
   test.each(Object.keys(states))("%s", async (state) => {

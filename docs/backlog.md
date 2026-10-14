@@ -1391,15 +1391,175 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
   on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
 
-- **A506. Opening hours rebuilt around seasons and special days (owner, 2026-10-11).** One
-  standard week becomes four seasons that cover the whole year and repeat every year; special days
-  are painted on top of the season, a stretch at a time. The page opens on a year calendar, and
-  seasons and special days are edited in full-screen painters. Periods (menus, and A504's floor
-  plan) get a page of their own. Supersedes the 2026-10-07 spec's
-  section 9.2 and the named-day hours of its section 7; takes in the two old Opening hours
-  presentation entries. Mockups:
-  [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
-  [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
+- **No test gives a second department its own paint on the same special day** — left open by
+  A506-1, #1577.
+
+- **The Business day start dialog repeats the server's conflict-counting rule** (`rangeKey`,
+  `business-day-start-editor.ts`), so a server change would make it miscount unnoticed — left open
+  by A506-3, #1591. [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
+
+- **A venue with no seasons cannot edit a week from the dashboard** — left open by A506-3, #1591.
+  Believed unreachable, read in the code, not run.
+  [Detail](backlog/service-periods.md#a-venue-with-no-seasons-cannot-edit-a-week-from-the-dashboard)
+
+- **A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses
+  the new start"** (`packages/venue-service/src/business-day-schedule.ts`, season lines too) — left
+  open by A506-4, #1597.
+
+- **A special-day line in the Business day start dialog shows its date unformatted
+  ("2026-11-03")** — left open by A506-4, #1597.
+
+- **`assertOwnPeriods` and `skippedSlot` name a refused slot by its sorted position, not its
+  position in the request** (`packages/venue-service/src/menu-timetable.ts`; read in the code, not
+  run) — left open by A506-4, #1597.
+
+- **The clock-skip check runs before touching ranges are joined**: two halves of one period meeting
+  at a skipped 02:30 are refused, while the joined range is accepted — left open by A506-4, #1597.
+
+- **The special-day-then-season rule is written out in several places**, and special-day paint is
+  read by four separately written queries; each could collapse to one place — left open by A506-4,
+  #1597. [Detail](backlog/service-periods.md#the-special-day-then-season-rule-is-written-out-in-several-places)
+
+- **`business-day-schedule.ts` copies the changeover lookup of
+  `packages/shared/src/business-day-clock.ts`** (`oldCutoverOn`) to avoid validating the clock on
+  every day; a lookup exported from `shared` that validates once would remove the copy — left open
+  by A506-4, #1597.
+
+- **The zone editor's closed-times sentences without a season name** are used only by a venue with
+  no seasons, believed unreachable; no test names those keys — left open by A506-5, #1603.
+  [Detail](backlog/service-periods.md#the-zone-editors-closed-times-sentences-without-a-season-name)
+
+- **A department or zone delete's preview never counts a special day's painted hours**, yet the
+  delete removes them — left open by A506-5, #1603.
+  [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
+
+- **Two special days can come to share a date** after both were saved, and the readiness list says
+  nothing — left open by A506-5, #1603.
+  [Detail](backlog/service-periods.md#two-special-days-can-come-to-share-a-date)
+
+- **The readiness line for a repeating holiday date names the official holiday**, not the special
+  day's own name, and the Year's missing-holiday warning does the same — left open by A506-5,
+  #1603. [Detail](backlog/service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
+
+- **Once a stored holiday date's year has passed, each order's service-state read
+  (`readServiceDayPlan`) also reads the tenant, location and holiday area** to find that year's
+  holiday: about 100 µs of roughly 860 µs per call, measured over 2000 calls on a Madrid test venue.
+  A cache that outlives the transaction is one way to remove it — left open by A506-5, #1603.
+
+- **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
+  name and a latest date — left open by A506-5, #1603.
+
+- **The period dialog keeps the End offset field although mockup 7 leaves it out**, because nothing
+  else edits a period's end offset. Owner to confirm; removing it is one field — left open by
+  A506-11, #1694.
+
+- **The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does**,
+  because `wt-form-actions` has no left-hand slot — left open by A506-11, #1694.
+
+- **A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year,
+  not back to the Periods page**, so a manager loses their place — left open by A506-11, #1694.
+
+- **The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
+  dashboard**, while `readOpeningHoursModel` still works both out on every read. See also "Routing
+  reads do work only one screen uses" — left open by A506-11, #1694.
+
+- **The period delete dialog can keep Delete greyed out** after a refusal for a changed business-day
+  start, when the page is taken out of the document during its re-read and comes back
+  (`period-delete-dialog.ts`; found by reading, not tried) — left open by A506-11, #1694.
+
+- **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
+  updates; the server still refuses a delete sent with an old clock revision — left open by
+  A506-11, #1694.
+
+- **Opening hours keeps its own click handler for the painters' Periods link**
+  (`opening-hours-screen.ts`), which the dashboard shell handles first in the real app; remove it
+  once the two painter tests that need it mount the shell — left open by A506-11, #1694.
+
+- **A special day whose dates start their business day at different times is painted on one grid
+  drawn from the first date's changeover**, with a notice saying so (`cutover`,
+  `special-day-painter.ts`) — left open by A506-9, #1651.
+
+- **`GET …/named-days` (`readSpecialDaysModel`, `named-days.ts`) has no dashboard caller**; server
+  suites still pin it. Remove it, or keep it with a stated reason — left open by A506-9, #1651.
+
+- **`range-dialog.ts` (`<range-dialog>`) has no caller**; only its own tests load it — left open by
+  A506-9, #1651.
+
+- **The end-offset check accepts a cutoff past the changeover** (a 06:00 cutoff past a 05:00
+  changeover was saved). Decide whether to refuse it — left open by A506-9, #1651.
+  [Detail](backlog/service-periods.md#the-end-offset-check-accepts-a-cutoff-past-the-changeover)
+
+- **A date another manager removed stays in the special-day draft** when this draft changed its
+  paint or Closed tick — left open by A506-9, #1651.
+  [Detail](backlog/service-periods.md#a-date-another-manager-removed-stays-in-the-special-day-draft)
+
+- **A special-day draft whose only edits were dropped keeps its old clock revision**
+  (`willUpdate`, then `dropUnpaintable`, `special-day-painter.ts`), so a new public-holiday day
+  could be refused with `hours.clock_changed`. Found by reading, not run — left open by A506-9,
+  #1651.
+
+- **A live update that arrives during a special day's save that is then refused may never be
+  taken in** (`save`, `special-day-painter.ts`), so a retry could send an old copy of a date; A637
+  closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
+
+- **The painter cannot resize a block by dragging its edge**; painting over a block lengthens it
+  and painting Closed shortens it — left open by A506-8, #1634.
+
+- **Painting stops short of an off-quarter-hour changeover** (05:45–06:00 cannot be painted on a
+  05:50 changeover) — left open by A506-8, #1634.
+  [Detail](backlog/service-periods.md#painting-stops-short-of-an-off-quarter-hour-changeover)
+
+- **A season painter save writes each edited week whole**, so it can put back days another
+  manager changed, and nothing shows it — left open by A506-8, #1634.
+  [Detail](backlog/service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
+
+- **`ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for
+  its own client's watches**; another `OpeningHoursApi` on the same live data still applies them.
+  Read in the code, not run — left open by A506-8, #1634.
+
+- **`PUT …/departments/:departmentId/menu-week` and `PUT …/zones/:zoneId/closed-week` (`routes.ts`)
+  are called by no client** now that the painter saves through `PUT …/seasons/:seasonId/weeks`.
+  Remove them, or keep them with a stated reason — left open by A506-8, #1634.
+
+- **Without a navigation guard, which only test harnesses lack, the painter's history mark is
+  copied to later entries**, so ✕ can go back to a later entry of the same screen — left open by
+  A506-8, #1634.
+
+- **The navigation guard's `write()` and `rewrite()` refuse while a leave question is open**, so a
+  live refresh that moves the painter to another season then leaves the address on the old season
+  — left open by A506-8, #1634.
+
+- **Closing a painter opened from the zone dialog's "Opening hours (normal week)" link lands on the
+  Opening hours Year, not back on Departments and zones**, so a manager loses their place — left
+  open by A506-8, #1634.
+
+- **At 390 px a block too short for both lines shows its period's name but not its times**; only
+  its spoken label names them (`paint-grid.ts`) — left open by A506-8, #1634.
+
+- **Public holidays' names show in Spanish in the English interface**: the official lists carry
+  one name per holiday. Believed to predate A506-7; not checked against the year view's history —
+  left open by A506-7, #1623.
+
+- **At 390 px a long name in a month cell breaks mid-word ("Christ|mas")**: the dashboard page
+  declares no language, so the browser cannot hyphenate — left open by A506-7, #1623. Seen again in
+  A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
+  (`overflow-wrap: anywhere` and the four-line clamp on `.name`, `opening-hours-month.ts:206-208`).
+
+- **Season colours differ between Opening hours' Year and its month (and the Times tab)**: Autumn is
+  salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
+  list it is given, and the month gives `season-chips` only the seasons it touches
+  (`opening-hours-month.ts:645`).
+
+- **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
+  twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
+
+- **A season dialog whose season another session deletes stays open with Save and Delete live**
+  (`season-dialog.ts`), where the zone and department dialogs close; the server refuses either
+  press — left open by A506-6, #1609.
+
+- **Two date helpers read years 0 to 99 as 1900 to 1999** (`isLocalDate`, `addMonths`); changing
+  `isLocalDate` changes which dates the server accepts, so it needs a decision — left open by
+  A506-6, #1609. [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
 
 - **Two holidays with one name in one year's list** (retro review of #1603). The holiday dates a
   save reads keep only each name's first date in the year (`readHolidayDates`,
@@ -1491,6 +1651,21 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 ### The kitchen and preparation
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
+
+- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
+  moved to Prep stations' Times tab, and Prep stations is offered only to someone with
+  `venue_service.manage`; the stations service-times route still lets `venue.view` read them
+  (`routes.ts`). Owner to decide whether a supervisor gets a read-only view — left open by A506-12.
+
+- **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
+  it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,
+  Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
+  the Times tab tests do — left open by A506-12.
+
+- **The Times tab opens on the browser's current month** (`browserToday`,
+  `station-times-tab.ts`), where Opening hours' month opens on the venue's business date, so
+  just after midnight before the changeover on the 1st the two can show different months — left
+  open by A506-12.
 
 - **A584. Prep stations get colours, and the Routes grid paints each cell with its station's colour
   and can show one period at a time (owner 2026-10-13)** — OPEN, not started. Each station picks a
@@ -2137,7 +2312,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A504. Floor plans published for a future date, and one per service period (owner,
   2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
-  different layouts for different periods. Backlog only, not queued to a lane.
+  different layouts for different periods. Backlog only, not queued to a lane. Until it lands, the
+  Periods page's Floor plan column shows a muted dash, and the period dialog a disabled Floor plan
+  field except when a painter's + New period opens it (`periods-screen.ts`, `period-dialog.ts`).
   [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
 
 - **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**

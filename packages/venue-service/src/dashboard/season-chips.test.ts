@@ -585,3 +585,25 @@ it("read-only, a chip's name still asks for its week, named as showing it", asyn
   expect(asked.map((event) => event.detail)).toEqual([{ seasonId: "w" }]);
   expect(el.shadowRoot!.querySelector("season-dialog")).toBeNull();
 });
+
+it("as a key only, draws each chip's name and dates with no button to press", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = four;
+  el.api = fakeApi();
+  el.keyOnly = true;
+  document.body.append(el);
+  await el.updateComplete;
+  const asked: Event[] = [];
+  document.body.addEventListener("season-week-open", (event) => asked.push(event));
+  expect(chips().map((chip) => chip.textContent!.trim())).toEqual([
+    "Spring · 1 Mar – 31 May",
+    "Summer · 1 Jun – 31 Aug",
+    "Autumn · 1 Sept – 30 Nov",
+    "Winter · 1 Dec – 29 Feb",
+  ]);
+  expect(chips()[3]!.dataset.tint).toBeTruthy();
+  expect(el.shadowRoot!.querySelectorAll("button, wt-button")).toHaveLength(0);
+  chips()[3]!.click();
+  await el.updateComplete;
+  expect(asked).toEqual([]);
+});
