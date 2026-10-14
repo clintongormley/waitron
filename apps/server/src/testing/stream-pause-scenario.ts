@@ -61,7 +61,12 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
-import { framesUnderHeader, readSideFile } from "./stream-pause-diagnostics.js";
+import {
+  framesUnderHeader,
+  holdProven,
+  readSideFile,
+  type CheckpointProbe,
+} from "./stream-pause-diagnostics.js";
 import { offerProducts } from "./zone-offers.js";
 
 const LOCALE = "es-ES";
@@ -75,12 +80,12 @@ const DEVICE_TOKEN = "stream-pause-e2e-device-token";
 const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
 // `waitFor` checks each POINTER, RESTART, RESUME and UPLOAD wait's deadline between probes, and
-// `restoreGeneration` its RESTORE_MS ceiling; the fill and the wait for the fold-back each check a
-// deadline between sales. BOOT_MS is a budget nothing here enforces, and UNTIMED_MS covers
-// migrations, provisioning and the close. A caller's timeout adds this sum, because Vitest's timer
-// fails a healthy run that outlasts it (CLAUDE.md §4). The fold-back is waited for until the
-// supervisor's next side-file check after the fill, TICK_MS at most, plus FOLD_SLACK_MS for
-// Litestream's stop, which escalates to SIGKILL after five seconds.
+// `restoreGeneration` its RESTORE_MS ceiling; the hold wait, the fill and the wait for the
+// fold-back each check a deadline between sales. BOOT_MS is a budget nothing here enforces, and
+// UNTIMED_MS covers migrations, provisioning and the close. A caller's timeout adds this sum,
+// because Vitest's timer fails a healthy run that outlasts it (CLAUDE.md §4). The fold-back is
+// waited for until the supervisor's next side-file check after the fill, TICK_MS at most, plus
+// FOLD_SLACK_MS for Litestream's stop, which escalates to SIGKILL after five seconds.
 const POINTER_WAIT_MS = 30_000;
 const BOOT_MS = 30_000;
 /** CI run 36210908359 had not reached the limit after 30 s (testing-guide.md, the pause test). */
@@ -93,10 +98,12 @@ const UNTIMED_MS = 60_000;
 const POLL_MS = 250;
 /** The supervisor restarts an exited Litestream after its first backoff, one second. */
 const RESTART_WAIT_MS = 10_000;
+/** How long the new Litestream is given to take its read transaction, proven by probe sales. */
+const HOLD_WAIT_MS = 10_000;
 /**
  * With no reader holding the side file, SQLite's automatic checkpoint restarts it once it holds
- * 1,000 frames (its default; the store sets none), so twice that under one header means something
- * holds it.
+ * 1,000 frames (its default; the store sets none), so twice that under one header is a second
+ * sign, after the probes, that something holds it.
  */
 const HELD_FRAMES = 2 * 1_000;
 /**
@@ -120,6 +127,7 @@ export const STREAM_PAUSE_SCENARIO_MS =
   2 * POINTER_WAIT_MS +
   (2 * TIMED_SALES + 1) * SALE_BUDGET_MS +
   RESTART_WAIT_MS +
+  HOLD_WAIT_MS +
   FILL_WAIT_MS +
   TICK_MS +
   FOLD_SLACK_MS +
@@ -593,7 +601,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     // 7. Litestream is killed, and the supervisor starts a new one against the frozen bucket. The
     //    new one takes its read transaction, then waits on the bucket in its start-up check
     //    (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file; a running
-    //    Litestream keeps checkpointing locally without the bucket, restarting the side file.
+    //    Litestream keeps checkpointing locally without the bucket, restarting the side file. Probe
+    //    sales then wait until a reader is seen holding the side file, so the fill starts held.
     const logDir = join(stateDir, "logs");
     const pidPath = join(stateDir, "stream", "litestream.pid");
     const readPid = async () => {
@@ -614,34 +623,67 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         ? pid
         : undefined;
     });
+    const probes: CheckpointProbe[] = [];
+    const probeDb = new DatabaseSync(join(venueDir, "venue.db"), { timeout: 5_000 });
+    try {
+      const holdDeadline = Date.now() + HOLD_WAIT_MS;
+      for (;;) {
+        signal?.throwIfAborted();
+        await sell(await fileBytes(walPath));
+        // Unlike during the fill, a checkpoint is allowed here: the fill's checks have not begun.
+        probes.push(
+          probeDb.prepare("pragma wal_checkpoint(passive)").get() as unknown as CheckpointProbe,
+        );
+        if (holdProven(probes.at(-2), probes.at(-1)!)) break;
+        if (Date.now() >= holdDeadline) {
+          throw new Error(
+            `no reader held the side file within ${HOLD_WAIT_MS} ms of the new Litestream ` +
+              `starting: each passive checkpoint after a sale reached ${JSON.stringify(probes)}`,
+          );
+        }
+        await sleep(POLL_MS);
+      }
+    } finally {
+      probeDb.close();
+    }
+    console.log("stream pause: a reader holds the side file", JSON.stringify({ probes }));
 
     clock.begin("fill");
     // 8. Sales grow the side file past the limit while the new Litestream holds its read
-    //    transaction; a restart of the side file once it is held fails the fill at once. A
+    //    transaction; a restart of the side file from the fill's first sale fails it at once. A
     //    supervisor measurement landing after the fill passed the limit but before step 9 would
     //    pause the stream early, so near one the sellers post nothing from `bound` plus LEAD_MS
     //    before it until LEAD_MS after it. That holds while each sale beats the bound, as step 10
     //    asserts, and the measurement is less than LEAD_MS late.
     const fillStarted = Date.now();
     const walAtFill = await fileBytes(walPath);
+    expect(walAtFill, "the side file reached the limit before the fill").toBeLessThan(
+      WAL_LIMIT_BYTES,
+    );
+    const atFill = readSideFile(walPath).header;
+    expect(atFill, "the probe sales wrote frames, so the side file has a header").not.toBeNull();
+    console.log("stream pause: the side file at the fill's start", JSON.stringify(atFill));
     let held: { checkpointSequence: number; salt: string } | undefined;
+    let framesSeen = framesUnderHeader(walPath);
     const checkHeld = (): void => {
       const header = readSideFile(walPath).header;
-      if (held === undefined) {
-        const frames = framesUnderHeader(walPath);
-        if (header !== null && frames !== null && frames >= HELD_FRAMES) {
-          held = { checkpointSequence: header.checkpointSequence, salt: header.salt };
-          console.log(
-            "stream pause: the side file is held",
-            JSON.stringify({ ...held, frames, elapsedMs: Date.now() - fillStarted }),
-          );
-        }
-        return;
-      }
-      if (header?.checkpointSequence !== held.checkpointSequence || header.salt !== held.salt) {
+      if (
+        header?.checkpointSequence !== atFill!.checkpointSequence ||
+        header.salt !== atFill!.salt
+      ) {
         throw new Error(
           `the side file was restarted during the fill: something is still checkpointing ` +
-            `(held at ${JSON.stringify(held)}, now ${JSON.stringify(header)})`,
+            `(at the fill's start ${JSON.stringify(atFill)}, now ${JSON.stringify(header)}; ` +
+            `${framesSeen} frames under the fill's header at the last check, ` +
+            `${Date.now() - fillStarted} ms into the fill)`,
+        );
+      }
+      const frames = (framesSeen = framesUnderHeader(walPath));
+      if (held === undefined && frames !== null && frames >= HELD_FRAMES) {
+        held = { checkpointSequence: header.checkpointSequence, salt: header.salt };
+        console.log(
+          "stream pause: the side file is held",
+          JSON.stringify({ ...held, frames, elapsedMs: Date.now() - fillStarted }),
         );
       }
     };

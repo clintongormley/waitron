@@ -71,3 +71,27 @@ export function framesUnderHeader(path: string): number | null {
     closeSync(file);
   }
 }
+
+/** One `pragma wal_checkpoint(passive)` row: frames in the side file, and frames copied back. */
+export interface CheckpointProbe {
+  busy: number;
+  log: number;
+  checkpointed: number;
+}
+
+/**
+ * Whether a reader holds the side file: a passive checkpoint stops at the oldest reader's snapshot,
+ * so two probes, each after its own sale, that stop short of the end at the same mark show a read
+ * transaction that outlived a sale.
+ */
+export function holdProven(
+  previous: CheckpointProbe | undefined,
+  current: CheckpointProbe,
+): boolean {
+  return (
+    previous !== undefined &&
+    previous.checkpointed < previous.log &&
+    current.checkpointed < current.log &&
+    current.checkpointed === previous.checkpointed
+  );
+}

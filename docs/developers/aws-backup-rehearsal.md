@@ -133,10 +133,11 @@ upload, because it lists the bucket's uploads itself.
 (`apps/server/src/testing/stream-pause-scenario.ts`, described in
 [testing-guide.md](testing-guide.md), "The stream pause test") against the run's bucket, under the
 label prefix `pause`. A box streams to the bucket; then every bucket call is held, Litestream is
-killed and its replacement is held too, sales grow the side file past a 16 MiB limit, and the server
-stops Litestream and folds the file back. While the stream is paused, a bucket rule refuses the
-supervisor's question to the bucket; once the rule is removed the stream resumes into the same
-generation, and a sale made during the pause must be in a restore of it.
+killed and its replacement is held too, probe sales prove a reader holds the side file, sales grow
+the side file past a 16 MiB limit, and the server stops Litestream and folds the file back. While
+the stream is paused, a bucket rule refuses the supervisor's question to the bucket; once the rule
+is removed the stream resumes into the same generation, and a sale made during the pause must be in
+a restore of it.
 
 **How the bucket is held.** Amazon S3 cannot be frozen, so the scenario holds the rehearsal's own
 connections to it instead, through three small proxies on 127.0.0.1 that the test starts and
@@ -218,7 +219,7 @@ control's last listing runs once started (the store makes up to three attempts, 
 30-second silence limit, `packages/stream/src/s3-client.ts`), the calls that put and remove the
 rule, and, in a failing run, the wait of up to 60 seconds from the kill for the restarted Litestream
 to reach its proxy. A unit test holds the local test's waits plus the planned 305 within the
-rehearsal's 15-minute scenario deadline: 526 + 305 = 831 seconds, leaving a planned 69 seconds,
+rehearsal's 15-minute scenario deadline: 536 + 305 = 841 seconds, leaving a planned 59 seconds,
 which also has to cover creating and checking the bucket.
 
 Its other recorded steps are the scenario's stages (`probe`, `boot`, `baseline`, `freeze-control`,

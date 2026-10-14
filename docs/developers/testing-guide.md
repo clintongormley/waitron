@@ -655,10 +655,15 @@ kills Litestream (`SIGKILL`, by the PID the supervisor records in
 `stream.litestream_exited`. The new Litestream takes its read transaction and then waits on the
 frozen bucket in its start-up check (`init` in Litestream 0.5.17's `db.go`), so nothing can restart the side file and every sale grows it. A
 Litestream left running keeps checkpointing locally without the bucket and restarts the side file
-every second or so at CI's sale rate (below, "Why the fill used to time out"). Once 2,000 frames are
-written under one header with no restart — SQLite's automatic checkpoint restarts a side file no
-reader holds at about 1,000 — the fill records the header's checkpoint sequence and salt, and fails
-at once, naming the cause, if they change. The sellers post until the side file passes the limit,
+every second or so at CI's sale rate (below, "Why the fill used to time out"). Before the fill, the
+test posts one sale at a time and, from a connection of its own, runs `pragma wal_checkpoint(passive)`
+after each, for up to 10 seconds: a passive checkpoint stops at the oldest reader's snapshot, so two
+in a row that stop short of the file's end at the same mark (`holdProven`,
+`apps/server/src/testing/stream-pause-diagnostics.ts`) show a read transaction that outlived a sale.
+The fill then records the side file's checkpoint sequence and salt before its first sale, and fails
+at once, naming the cause, if they change at any point in it. It also logs when 2,000 frames are
+under that header and expects to have seen it — SQLite's automatic checkpoint restarts a side file
+no reader holds at about 1,000. The sellers post until the side file passes the limit,
 stop, start again three seconds before the supervisor's next once-a-minute measurement, and post
 until one of them sees the file folded back; at least ten more sales follow during the pause. While
 filling, the sellers post nothing from the bound plus three seconds before a measurement until three
@@ -683,7 +688,7 @@ the supervisor's measurement; the slowest sale 123 ms with the bucket up, 129 ms
 pause, 53 to 56 ms for the three straddling sales and 78 ms during the pause, against a bound of
 1,000 ms; streaming again 253 ms after the bucket was let run. The fill's deadline was 30 seconds
 until CI run 36210908359 (2026-09-26) found the side file at 15,697,232 bytes when it expired; it
-is now 180 seconds, and the case's timeout, the sum of its waits and budgets, 536 seconds. Since
+is now 180 seconds, and the case's timeout, the sum of its waits and budgets, 546 seconds. Since
 the fill starts against a restarted Litestream, it took 1,353 to 1,791 ms (125 to 161 sales) in
 three runs on the owner's Mac, and 3,196 ms (89 sales) with an 80 ms wait added before each fill
 sale, about CI's rate (2026-10-13). In two earlier runs of the same change with a 10 ms sampler
@@ -696,11 +701,13 @@ waiting for the fold-back: the stream reads {"state":"streaming",…}, the side 
 `stream pause sellers` at each seller phase's start and finish, every ten seconds while it runs,
 and when a seller fails. You get the elapsed time, completed sales, summed request times, slowest
 request, summed waits around the supervisor's measurement, file size and the first 32 bytes'
-page size, checkpoint sequence and salt pair, and the line `stream pause: the side file is held`
-records the header the fill checks against. The sums cover three concurrent sellers, so they
-can exceed elapsed time. On failure, `stream pause failure context` also keeps the last twenty
-stream events and the synthetic S3 server's log before teardown resumes that server. An unreadable
-context does not replace the original failure.
+page size, checkpoint sequence and salt pair. `stream pause: a reader holds the side file` lists
+the checkpoint probes, `stream pause: the side file at the fill's start` records the header the
+fill checks against, and `stream pause: the side file is held` is logged when 2,000 frames are
+under it. The sums cover three concurrent sellers, so they can exceed elapsed time. On failure,
+`stream pause failure context` also keeps the last twenty stream events and the synthetic S3
+server's log before teardown resumes that server. An unreadable context does not replace the
+original failure.
 
 These are observations, not a consistent database snapshot: Litestream can change the file between
 its size and header reads. The helper opens the file read-only and checks its header length, magic
@@ -722,11 +729,19 @@ out at 9,776,792 bytes with the sequence rising 1 to 54; with Litestream's check
 it passed with the sequence fixed at 1; with Litestream killed after the freeze it passed twice,
 the sequence fixed from shortly after its replacement started. With the held-file check added and
 no kill, the same run failed 1.5 s into the fill: `the side file was restarted during the fill:
-something is still checkpointing`.
+something is still checkpointing`. That check began only at 2,000 frames under one header. On
+2026-10-14 (A589) it was moved to the fill's first sale: with no kill and a 400 ms wait before each
+fill sale, the side file restarted after 1,327 frames, 3,745 ms into the fill, and the test failed
+there with that message; the same change against the earlier check timed out after 181.7 s
+(`timed out waiting for the side file to reach the limit`, 1,098 sales, checkpoint sequence 57),
+never having seen 2,000 frames under one header. Healthy runs of the new check, with no added wait,
+passed four times on the owner's Mac; in each, the first three or four probes copied the whole
+file back and the next two stopped at mark 0.
 
 | Source | Source wording | What the diagnostic reads |
 | --- | --- | --- |
 | [SQLite WAL format](https://www.sqlite.org/fileformat.html#wal_file_format) | "The WAL header is 32 bytes in size"; "Checkpoint sequence number" | Big-endian page size at byte 8, checkpoint sequence at byte 12, and the salt pair at bytes 16–23. The same source's WAL Reset section describes salt changes and optional truncation. |
+| [SQLite WAL](https://www.sqlite.org/wal.html), "Checkpointing"; [`sqlite3_wal_checkpoint_v2`](https://www.sqlite.org/c3ref/wal_checkpoint_v2.html) | "the checkpoint must stop when it reaches a page in the WAL that is past the end mark of any current reader"; PASSIVE: "Checkpoint as many frames as possible without waiting for any database readers or writers to finish" | `pragma wal_checkpoint(passive)`'s `checkpointed` column as the point where the probe stopped (`holdProven`). |
 
 **In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
 the S3 rehearsal scenarios and the S3 test server's own suite with `TMPDIR=/dev/shm`, pinned by
