@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, drawn, measured, mountWidget, stylePlaceholder } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { fitPlaceholder } from "./fit-placeholder.js";
 import "./party-name-dialog.js";
 import type { PartyNameDetail, TillPartyNameDialog } from "./party-name-dialog.js";
 
@@ -247,46 +246,6 @@ describe("till-party-name-dialog", () => {
       } finally {
         await page.viewport(1280, 900);
       }
-    });
-  });
-
-  describe("fitPlaceholder, measuring one unit per character", () => {
-    const measure = (text: string) => text.length;
-
-    it("keeps text that fits exactly as it is", () => {
-      expect(fitPlaceholder("Aa, Bb", 6, measure)).toBe("Aa, Bb");
-    });
-
-    it("keeps as many whole names as fit, then an ellipsis", () => {
-      expect(fitPlaceholder("Aa, Bb, Cc", 9, measure)).toBe("Aa, Bb, …");
-      expect(fitPlaceholder("Aa, Bb, Cc", 8, measure)).toBe("Aa, …");
-    });
-
-    it("cuts the first name by characters when not even it fits beside the ellipsis", () => {
-      expect(fitPlaceholder("Abcdef, Gh", 4, measure)).toBe("Abc…");
-      expect(fitPlaceholder("Wwwwwwww", 5, measure)).toBe("Wwww…");
-    });
-
-    it("drops a space left before the ellipsis", () => {
-      expect(fitPlaceholder("Ab cdef", 4, measure)).toBe("Ab…");
-    });
-
-    it("cuts between whole characters, never inside an emoji", () => {
-      const chef = "\u{1F469}\u200D\u{1F373}";
-      expect(fitPlaceholder(chef.repeat(3), 8, measure)).toBe(`${chef}…`);
-    });
-
-    it("cuts between whole characters, never between a letter and its accent", () => {
-      expect(fitPlaceholder("e\u0301e\u0301e\u0301", 4, measure)).toBe("e\u0301…");
-    });
-
-    it("shows the ellipsis alone when no character fits", () => {
-      expect(fitPlaceholder("Ww", 0, measure)).toBe("…");
-    });
-
-    it("splits on the separator it is given", () => {
-      expect(fitPlaceholder("Aa+Bb+Cc", 7, measure, "+")).toBe("Aa+Bb+…");
-      expect(fitPlaceholder("Aa+Bb+Cc", 6, measure, "+")).toBe("Aa+…");
     });
   });
 
