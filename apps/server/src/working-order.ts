@@ -1,6 +1,7 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
+import { readFormerNumbers } from "./former-numbers.js";
 import {
   checkedInvoiceChoiceDelivery,
   reserveStagedInvoiceDelivery,
@@ -4136,6 +4137,8 @@ export interface HeldOrderSummary {
   hasPayments: boolean;
   /** The bill's own dishes ready or waiting long, which the counter's list shows. */
   signals: KitchenSignal[];
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   /** Null for a counter order; a party's bill is listed here too. */
   partyId: string | null;
   openedAt: string;
@@ -4246,6 +4249,7 @@ export async function listHeldOrders(
     const ids = rows.map((row) => row.id);
     const { received, holding } = await readPaymentsByBill(tx, ids);
     const signals = await readBillSignals(tx, ids, Date.now());
+    const former = await readFormerNumbers(tx, ids);
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
@@ -4254,6 +4258,7 @@ export async function listHeldOrders(
         outstanding: outstandingOf(total, received.get(row.id)),
         hasPayments: holding.has(row.id),
         signals: signals.get(row.id)!,
+        ...optional("formerNumbers", former.get(row.id)),
       };
     });
   });
@@ -6167,6 +6172,8 @@ export interface CounterWaitingOrder {
   /** A settled order's top-level dishes that `stillMovable` accepts, in line order; empty on a
    * placed one. */
   movableDishes: { lineId: string; stationId: string }[];
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
 }
 
 /**
@@ -6243,6 +6250,10 @@ export async function listCounterWaiting(
               ),
             )
             .orderBy(workingOrderLines.lineNo);
+    const former = await readFormerNumbers(
+      tx,
+      rows.map((row) => row.id),
+    );
     const movable = new Map<string, { lineId: string; stationId: string }[]>();
     for (const dish of dishes) {
       if (!stillMovable(dish, dish)) continue;
@@ -6272,6 +6283,7 @@ export async function listCounterWaiting(
         serviceMode: placed ? (modes.get(row.id) ?? "prepay") : null,
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
         movableDishes: movable.get(row.id) ?? [],
+        ...optional("formerNumbers", former.get(row.id)),
       });
     }
     return waiting;
@@ -6485,6 +6497,8 @@ export interface StationQueueGroup {
   /** Present only when one of this bill's tickets for the station was not printed after
    *  `JOBS_WAITING_MS`, or was given up on (`listPrintProblems`). */
   printProblem?: true;
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   items: StationQueueItem[];
   /** Present only when this station shows the rest of the order: the order's items at other stations, possibly none. */
   elsewhere?: ElsewhereItem[];
@@ -6778,6 +6792,7 @@ export async function listStationQueues(
     orderIds,
     new Date(nowMs),
   );
+  const former = await readFormerNumbers(tx, orderIds);
   // Each Map keeps insertion order, so groups come out oldest-first.
   const groupsAt = new Map(stationIds.map((id) => [id, new Map<string, StationQueueGroup>()]));
   for (const row of rows) {
@@ -6801,6 +6816,7 @@ export async function listStationQueues(
           "printProblem",
           printProblems.get(stationId)!.has(row.orderId) ? true : undefined,
         ),
+        ...optional("formerNumbers", former.get(row.orderId)),
         items: [],
         ...optional(
           "elsewhere",
@@ -6929,6 +6945,8 @@ export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
+  /** {@link readFormerNumbers}; absent when there are none. */
+  formerNumbers?: number[];
   openedMinutes: number;
   party?: QueueParty;
   courses: ExpoCourse[];
@@ -7045,6 +7063,10 @@ export async function readPassBoard(
     tx,
     rows.map((row) => row.lineId),
   );
+  const former = await readFormerNumbers(
+    tx,
+    rows.map((row) => row.orderId),
+  );
   const tableLabels = await orderTableLabels(
     tx,
     locationId,
@@ -7069,6 +7091,7 @@ export async function readPassBoard(
       order = {
         orderId: row.orderId,
         orderNumber: row.orderNumber,
+        ...optional("formerNumbers", former.get(row.orderId)),
         openedMinutes: minutesSince(row.openedAt, nowMs),
         ...optional("party", queueParty(row)),
         courses: [],
