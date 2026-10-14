@@ -322,8 +322,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   named-key pack downloads, printable handovers and archive/bucket/Cloud choosers showing the
   selected copy's saved key name and source. Its restart backend stages a separate node key and
   checks the selected copy's byte identity. The public restore routes, browser client and candidate restore screens carry
-  the public recovery record and separate key. Current outside allocation collection, emergency
-  recovery now has a candidate host collector with a separately configured outside journal,
+  the public recovery record and separate key. Paper recovery has a checked export from signed
+  block/consumption files and separate current outside evidence; the host rereads that evidence
+  at restart. Emergency recovery has a candidate host collector with a separately configured outside journal,
   fresh draws, conservative consumption and exact committed-result replay. Focused archive and
   prepared-stream restart cases pass; paper-only operator handover and the complete interrupted
   activation exercise remain unqualified;

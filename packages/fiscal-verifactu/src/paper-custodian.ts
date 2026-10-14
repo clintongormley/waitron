@@ -1,6 +1,7 @@
 import { createPublicKey, generateKeyPairSync } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { preparePaperRecoveryExport } from "./paper-recovery-export.js";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -19,7 +20,22 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
   const options: Record<string, { type: "string" | "boolean" }> = {
     key: { type: "string" },
   };
-  if (command === "keygen" || command === "public") {
+  if (command === "prepare-recovery") {
+    delete options.key;
+    for (const name of [
+      "block",
+      "consumption",
+      "input",
+      "custodian",
+      "fingerprint",
+      "confirmation",
+      "taxpayer",
+      "environment",
+      "action",
+      "output",
+    ])
+      options[name] = { type: "string" };
+  } else if (command === "keygen" || command === "public") {
     options.custodian = { type: "string" };
   } else if (
     command === "sign-block" ||
@@ -62,6 +78,14 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
   }
 
   try {
+    if (command === "prepare-recovery") {
+      const output = await preparePaperRecoveryExport(values);
+      await writeFile(values.output as string, JSON.stringify(output) + "\n", {
+        flag: "wx",
+        mode: 0o600,
+      });
+      return 0;
+    }
     if (command === "keygen" || command === "public") {
       const key =
         command === "keygen"

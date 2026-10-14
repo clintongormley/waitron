@@ -1064,3 +1064,13 @@ with the selected backup's old key after live-key replacement. This does not est
 configured path is physically outside the box, complete the paper-only operator flow or record
 all later attempt outcomes. Those, full interruption qualification and final review remain open.
 The candidate host contract is in [Emergency recovery](../developers/emergency-recovery.md).
+
+**2026-10-14 paper-export checkpoint (candidate only):** `prepare-recovery` assembles the public
+restore record from a signed block, consumption receipt and approval, checking separately supplied
+current-register confirmation and custodian fingerprint. It requires the selected taxpayer,
+environment and complete series, writes a new file and leaves outside history unchanged. The same
+public record can be transferred from a phone into the candidate restore form. Archive and
+prepared-stream restart qualification uses this export and rereads current outside evidence;
+retirement or consumption elsewhere after staging still refuses activation. This does not finish
+the emergency operator handover, later attempt outcomes or the full interruption exercise. The
+restaurant-friendly first-setup custodian design remains A679's separate scope.

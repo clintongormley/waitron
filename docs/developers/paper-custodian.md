@@ -128,11 +128,15 @@ Your `block.json` contains the frozen scope and complete identity set. For examp
     {
       "version": 1,
       "allocationId": "paper-42",
-      "taxpayerNif": "B12345678",
-      "softwareId": "WT",
+      "taxpayerNif": "89890001K",
+      "softwareId": "W1",
       "environment": "preproduction",
       "installationIdentity": "P000042",
-      "series": [{ "code": "A-P000042", "purpose": "standard" }],
+      "series": [
+        { "code": "A-P000042", "purpose": "standard" },
+        { "code": "FF-P000042", "purpose": "full" },
+        { "code": "R-P000042", "purpose": "rectificative" }
+      ],
       "source": "paper",
       "issuedAt": "2026-10-12T08:00:00.000Z"
     }
@@ -332,6 +336,66 @@ The default fiscal seed/restore/standby hooks and text identity schema remain un
 branch. The new host tests supply the allocated seed explicitly; this checkpoint is not a complete
 setup or recovery procedure. Finish the coupled transition before using it for a venue.
 
+## Export a paper recovery operation
+
+After the custodian marks the current outside entry consumed and signs its receipt, prepare the
+public record you will give the replacement box. Keep the selected backup's digest, node, event
+and recovery-key operator in the consumption receipt, local approval and separate current-event
+confirmation. The chooser displays the digest; a bucket generation label is not that digest.
+
+Your `approval.json` uses this shape, with synthetic values replaced by your selected copy:
+
+```json
+{
+  "version": 1,
+  "eventId": "replace-with-a-fresh-unpredictable-event-id",
+  "operatorId": {
+    "kind": "recovery-key",
+    "nodeId": "c0000000-0000-4000-8000-000000000001",
+    "eventId": "replace-with-a-fresh-unpredictable-event-id"
+  },
+  "sourceId": "replace-with-the-selected-copy-digest",
+  "targetNodeId": "c0000000-0000-4000-8000-000000000001",
+  "oldMachineOffline": true,
+  "oldMachineAbsent": false,
+  "noParallelRecovery": true,
+  "confirmedAt": "2026-10-14T09:00:00.000Z",
+  "incidentEvidence": "outside/this-recovery-event"
+}
+```
+
+Confirm the former machine is off and no parallel recovery is underway before setting those
+flags. On the custodian's machine, or replacement hardware holding the public files, run:
+
+```sh
+node packages/fiscal-verifactu/dist/paper-custodian.js prepare-recovery \
+  --block signed-block.json --consumption consumption.json \
+  --input approval.json --output recovery-operation.json \
+  --custodian /outside/current/custodian.public.json \
+  --fingerprint '<fingerprint compared with the current outside master>' \
+  --confirmation /outside/current/restore-event.json \
+  --taxpayer 89890001K --environment preproduction --action restore
+```
+
+Use the current-confirmation format above, including every configured series base and purpose.
+Select the taxpayer and environment from the backup you reviewed. The command verifies the
+signed block and receipt, current entry state, independent fingerprint, complete series and
+approval binding. It writes a new owner-only operation file and leaves the outside register
+unchanged. It reads each supplied block, receipt and approval file up to 64 KiB and refuses a
+missing, malformed or oversized file. It needs no private signing key or node recovery secret.
+
+Transfer the public operation from a phone or another computer and paste its complete JSON into
+the candidate restore screen's recovery-record field. A changed signed value is refused; typing
+the installation name alone supplies no consumption evidence. Enter the selected backup's node
+key in its separate field. Keep the receipt and operation with your outside incident record.
+This is a paper-custodian handoff; the Cloud registry adapter remains a later W41s item.
+
+Use `--action re-register` for a node re-registration, with a matching current-event confirmation.
+After a confirmed committed attempt, retain the original operation for the host's replay checks;
+the export command refuses to assemble a new operation from a committed or uncertain attempt.
+Exporting an approval does not authenticate its operator. The host still checks the selected
+database's node key and rereads separately configured current outside evidence before activation.
+
 ## Supply a recovery operation to the host
 
 The Task 4 branch accepts a public operation file for re-registration and cold restore. Keep its
@@ -339,7 +403,8 @@ signed allocation and approval separate from the node recovery key. The file bin
 action, event, source and target node; the host authenticates the key against the database it uses
 for that operation before collecting the current outside evidence.
 
-Build the file from the signed allocation and its matching approval:
+Use the export command above for a paper allocation. For a module input you already hold, the
+generic envelope is:
 
 ```sh
 node --input-type=module <<'JS'
