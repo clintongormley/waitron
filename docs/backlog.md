@@ -883,9 +883,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
   other items in the tree's row menus are greyed out while a change is out; the link to the included
-  menu's own editor is not marked `aria-disabled="true"` then, so it stays live (`wt-row-actions`
-  would grey it out and cancel its click). (A322 renamed it from "Edit <menu>", so that the
-  include's own Edit could sit beside it.)
+  menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
+  `wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
+  from "Edit <menu>", so that the include's own Edit could sit beside it.)
 
 - **A folder's fixed photo shows on the till only in Thumbnails mode**, as a section's photo does.
   Left open by A322 (#1372, an included menu can show its sections directly).

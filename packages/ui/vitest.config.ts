@@ -30,9 +30,9 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
   await page.emulateMedia({ reducedMotion });
 };
 
-interface ClickOptions {
-  button?: "left" | "middle";
-  modifiers?: ("Control" | "Meta" | "Shift")[];
+interface NewPageClick {
+  button?: "middle";
+  modifiers?: ("Shift" | "ControlOrMeta")[];
 }
 
 interface OpenedPage {
@@ -42,35 +42,46 @@ interface OpenedPage {
 
 interface PlaywrightBrowserContext {
   waitForEvent(event: "page", options: { timeout: number }): Promise<OpenedPage>;
+  pages(): OpenedPage[];
 }
 
 interface PlaywrightFrame {
-  click(selector: string, options: ClickOptions & { force: true }): Promise<void>;
+  click(selector: string, options: NewPageClick & { force: true }): Promise<void>;
 }
 
-/** Clicks the element, then answers the URL of the page the click opened, or "none" if no page
- * opened within a second. A new tab is outside the test's page, so only the provider can see it.
- * Forced, because Playwright will not click an aria-disabled element. */
-const clickForNewPage: BrowserCommand<[selector: string, options: ClickOptions]> = async (
-  context,
-  selector,
-  options,
-) => {
-  const { context: browserContext, frame } = context as unknown as {
+/** Clicks the element and answers the URL of the first page opened in this test run's browser
+ * context within `waitMs`, or "none". A new page is outside the test's page, so only the provider
+ * can see it. Forced, because Playwright will not click an aria-disabled element. Every page but
+ * the runner's own is closed before it returns. */
+const clickForNewPage: BrowserCommand<
+  [selector: string, click: NewPageClick, waitMs: number]
+> = async (context, selector, click, waitMs) => {
+  const {
+    page: runner,
+    context: browserContext,
+    frame,
+  } = context as unknown as {
+    page: unknown;
     context: PlaywrightBrowserContext;
     frame(): Promise<PlaywrightFrame>;
   };
-  const opened = browserContext
-    .waitForEvent("page", { timeout: 1000 })
-    .catch((error: unknown) =>
-      error instanceof Error && error.name === "TimeoutError" ? null : Promise.reject(error),
+  try {
+    const opened = browserContext
+      .waitForEvent("page", { timeout: waitMs })
+      .catch((error: unknown) =>
+        error instanceof Error && error.name === "TimeoutError" ? null : Promise.reject(error),
+      );
+    await (await frame()).click(selector, { ...click, force: true });
+    const page = await opened;
+    return page === null ? "none" : page.url();
+  } finally {
+    await Promise.all(
+      browserContext
+        .pages()
+        .filter((page) => page !== runner)
+        .map((page) => page.close()),
     );
-  await (await frame()).click(selector, { ...options, force: true });
-  const page = await opened;
-  if (page === null) return "none";
-  const url = page.url();
-  await page.close();
-  return url;
+  }
 };
 
 export default defineConfig({

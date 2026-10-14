@@ -19,7 +19,8 @@ declare module "vitest/browser" {
   interface BrowserCommands {
     clickForNewPage: (
       selector: string,
-      options: { button?: "middle"; modifiers?: "Shift"[] },
+      click: { button?: "middle"; modifiers?: ("Shift" | "ControlOrMeta")[] },
+      waitMs: number,
     ) => Promise<string>;
   }
 }
@@ -680,15 +681,13 @@ describe("a link entry", () => {
     const before = location.href;
     history.replaceState(null, "", "#start");
     let defaultPrevented: boolean | undefined;
-    const record = (event: Event) => {
-      if (event.target === link) defaultPrevented = event.defaultPrevented;
-    };
-    document.addEventListener("click", record);
+    const record = (event: Event) => (defaultPrevented = event.defaultPrevented);
+    link.addEventListener("click", record);
     try {
       await activate();
       return { hash: location.hash, defaultPrevented };
     } finally {
-      document.removeEventListener("click", record);
+      link.removeEventListener("click", record);
       history.replaceState(null, "", before);
     }
   }
@@ -732,36 +731,39 @@ describe("a link entry", () => {
 
   async function newPageOutcome(
     link: HTMLAnchorElement,
-    options: { button?: "middle"; modifiers?: "Shift"[] },
+    click: { button?: "middle"; modifiers?: ("Shift" | "ControlOrMeta")[] },
+    waitMs: number,
   ): Promise<{ opened: string; defaultPrevented: boolean | undefined }> {
-    // A new page on the test's own URL would start a second Vitest runner.
+    // about:blank, so a page the gesture opens does not load the test page.
     link.setAttribute("href", "about:blank#wine");
     link.setAttribute("data-new-page", "");
-    const type = options.button === "middle" ? "auxclick" : "click";
+    const type = click.button === "middle" ? "auxclick" : "click";
     let defaultPrevented: boolean | undefined;
-    const record = (event: Event) => {
-      if (event.target === link) defaultPrevented = event.defaultPrevented;
-    };
-    document.addEventListener(type, record);
+    const record = (event: Event) => (defaultPrevented = event.defaultPrevented);
+    link.addEventListener(type, record);
     try {
-      const opened = await commands.clickForNewPage("[data-new-page]", options);
+      const opened = await commands.clickForNewPage("[data-new-page]", click, waitMs);
       return { opened, defaultPrevented };
     } finally {
-      document.removeEventListener(type, record);
+      link.removeEventListener(type, record);
     }
   }
 
   const newPageGestures = [
-    { gesture: "a middle-click", options: { button: "middle" as const } },
-    { gesture: "a Shift-click", options: { modifiers: ["Shift" as const] } },
+    { gesture: "a middle-click", click: { button: "middle" as const } },
+    { gesture: "a Shift-click", click: { modifiers: ["Shift" as const] } },
+    {
+      gesture: "a Control-click (Command-click on macOS)",
+      click: { modifiers: ["ControlOrMeta" as const] },
+    },
   ];
 
   it.each(newPageGestures)(
     "does not open a new page on $gesture while marked aria-disabled",
-    async ({ options }) => {
+    async ({ click }) => {
       const { el, link } = await mountLinkAndButton({ disabled: true });
       const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-      expect(await newPageOutcome(link, options)).toEqual({
+      expect(await newPageOutcome(link, click, 1000)).toEqual({
         opened: "none",
         defaultPrevented: true,
       });
@@ -769,16 +771,13 @@ describe("a link entry", () => {
     },
   );
 
-  it.each(newPageGestures)(
-    "opens a new page on $gesture when not disabled",
-    async ({ options }) => {
-      const { link } = await mountLinkAndButton();
-      expect(await newPageOutcome(link, options)).toEqual({
-        opened: "about:blank#wine",
-        defaultPrevented: false,
-      });
-    },
-  );
+  it.each(newPageGestures)("opens a new page on $gesture when not disabled", async ({ click }) => {
+    const { link } = await mountLinkAndButton();
+    expect(await newPageOutcome(link, click, 5000)).toEqual({
+      opened: "about:blank#wine",
+      defaultPrevented: false,
+    });
+  });
 });
 
 test("reinserted after removal while open reports closed and opens normally again", async () => {
