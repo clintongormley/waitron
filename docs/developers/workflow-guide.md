@@ -304,8 +304,9 @@ anywhere (`packages/fiscal-verifactu/src/throwaway-allocation.ts`).
 **When the box makes one.** The setup route asks for a throwaway allocation when the request
 carries no `initialOperations` (no supplied allocation) and the mode is Demo or Preparation, on any
 box, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-api.ts`). All three
-are stamped preproduction: the database records, once and permanently, which environment it
-belongs to, and `parseProvisionPayload` in the same file picks it. A request that supplies an
+are stamped preproduction: the database records which environment it belongs to, and Waitron
+refuses to change it afterwards (`stampDeployment`, `packages/db/src/deployment.ts`);
+`parseProvisionPayload` in the same file picks it. A request that supplies an
 allocation always goes through the real custodian path, unchanged.
 
 **When the setup route refuses it.** The throwaway signer refuses unless both the box's
@@ -324,8 +325,8 @@ reauthentication_required` (HTTP 400), as `apps/server/src/setup-throwaway.route
 
 **How to recognise a throwaway venue.** Its `fiscal_allocations` row has an `allocation_key`
 beginning `throwaway-` and environment `preproduction`, the deployment is stamped `preproduction`,
-and a setup through the wizard logged `setup.throwaway_allocation` with the mode. Inside the signed
-allocation, the allocation, generation and block ids begin `throwaway-`, the custodian is
+and a setup through the wizard logged `setup.throwaway_allocation` with the mode. In what the signer
+produces, the allocation, generation and block ids begin `throwaway-`, the custodian is
 `waitron-throwaway-preproduction`, and the recipient venue and setup source are
 `throwaway-preproduction`; the setup's event id is an ordinary UUID. The installation number
 (`S000001`) and the series (`<code>-S000001`) are ordinary too, because they reach AEAT. A setup
