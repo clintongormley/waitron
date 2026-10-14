@@ -1952,6 +1952,7 @@ export class DevicesScreen extends LitElement {
               >`
             : html`<wt-button
                 size="sm"
+                variant=${held ? "primary" : "secondary"}
                 data-test=${`pair-${request.id}`}
                 aria-label=${`${pairAction(request)} ${waitingName(request)}`}
                 ?disabled=${!held}
