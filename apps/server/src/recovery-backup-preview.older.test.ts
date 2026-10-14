@@ -1,15 +1,27 @@
+import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { signPointer, writePointer } from "@waitron/stream";
+import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
+import { recoveryStreamSourceId } from "./recovery-source.js";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, nodes, tenants, stampDeployment } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  nodes,
+  tenants,
+  stampDeployment,
+  openVenueDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
-import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 
 const prefix = mkdtempSync(join(tmpdir(), "preview-old-schema-"));
 mkdirSync(join(prefix, "meta"));
@@ -103,6 +115,119 @@ it("previews a backup predating named keys by migrating only its private scratch
         .map((column) => column.name),
     ).not.toContain("break_glass_key_name");
     expect(await readdir(scratch)).toEqual(["source.db"]);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+});
+
+it("binds an older bucket copy before private preview migrations change its bytes", async () => {
+  const nodeId = "d0000000-0000-4000-8000-000000000001";
+  const locationId = "d0000000-0000-4000-8000-000000000002";
+  await stampDeployment(suite.db, "preproduction");
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Earlier venue" });
+  await suite.db
+    .insert(locations)
+    .values({
+      id: locationId,
+      name: "Earlier location",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+    });
+  await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
+  const scratch = await mkdtemp(join(tmpdir(), "preview-old-stream-"));
+  try {
+    const entries = [
+      {
+        name: "manifest.json",
+        bytes: Buffer.from(
+          JSON.stringify({
+            manifestVersion: 1,
+            createdAt: "2026-10-01T08:00:00.000Z",
+            environment: "preproduction",
+            modules: { core: journal.entries.length },
+          }),
+        ),
+      },
+      {
+        name: "secrets/trading.env",
+        bytes: Buffer.from(
+          `WAITRON_TILL_NODE_ID=${nodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\n`,
+        ),
+      },
+      { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
+      { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
+      {
+        name: "secrets/credentials.key",
+        bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
+      },
+    ];
+    await writeSealedStateRow(
+      suite.db,
+      nodeId,
+      await sealNodeState(entries, "bucket-key"),
+      new Date("2026-10-01T08:00:00Z"),
+    );
+    const source = join(scratch, "venue.db");
+    await suite.db.archiveTo(source);
+    const prepared = await openVenueDatabase(scratch);
+    await prepared.close();
+    const expected = await recoveryStreamSourceId(source, entries);
+    const bytes = await readFile(source);
+    const signer = generateNodeKeyPair();
+    const store = createMemoryObjectStore();
+    const generation = `gen-0-${nodeId}-20261001T080000Z`;
+    await writePointer(
+      store,
+      locationId,
+      signPointer(
+        { venueId: locationId, term: 0, nodeId, generation, writtenAt: "2026-10-01T08:00:00.000Z" },
+        signer.privateKey,
+      ),
+      null,
+    );
+    const preview = await previewRecoveryStream({
+      kit: {
+        version: 1,
+        venueId: locationId,
+        bucket: {
+          region: "local",
+          bucket: "copy",
+          prefix: "",
+          accessKeyId: "unused",
+          secretAccessKey: "unused",
+        },
+        recoveryKey: "bucket-key",
+        pointerSignerPublicKey: signer.publicKey,
+      },
+      stateDir: scratch,
+      stagingDir: scratch,
+      migrationsRoot: null,
+      modules: [
+        {
+          ...fakeModule("core"),
+          migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
+        },
+      ],
+      environment: "preproduction",
+      litestreamBin: "/unused",
+      oldBoxGone: true,
+      now: () => new Date("2026-10-14T12:00:00Z"),
+      log: () => {},
+      openStore: () => store,
+      restoreGeneration: async ({ outPath }) => {
+        await copyFile(source, outPath);
+      },
+    });
+    expect(preview.activationSourceId).toBe(expected);
+    expect(preview.nodeRecoveryKeyName).toBeNull();
+    expect(await readFile(source)).toEqual(bytes);
+    expect(
+      suite.db
+        .all<{ name: string }>(sql`pragma table_info(node_roles)`)
+        .map((column) => column.name),
+    ).not.toContain("break_glass_key_name");
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
