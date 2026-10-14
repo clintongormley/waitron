@@ -1154,26 +1154,43 @@ describe("catalogue operations", () => {
     expect(result.diet.diet).toMatchObject({ vegan: "no", vegetarian: "yes" });
   });
 
-  it("listProducts carries each product's recipe diet derivation, null where it has none", async () => {
-    const listed = await asTenant(async (tx) => {
-      const cat = await createCatalogue(tx, { name: "C" });
-      const input = {
-        catalogueId: cat.id,
-        categoryId: null,
-        unitId: eachUnitId,
-        unitPrice: "6.00",
-        vatClass: "general" as const,
-      };
-      const withRecipe = await createProduct(tx, { ...input, name: "stew" });
-      await createProduct(tx, { ...input, name: "plain" });
-      await applyDietDerivation(tx, withRecipe.id, { origins: ["meat", "plant"], pending: true });
-      return listProducts(tx, cat.id);
-    });
-    expect(listed.map(({ name, dietDerivation }) => ({ name, dietDerivation }))).toEqual([
-      { name: "stew", dietDerivation: { origins: ["meat", "plant"], pending: true } },
-      { name: "plain", dietDerivation: null },
-    ]);
-  });
+  it.each([
+    [
+      "recipe first",
+      "00000000-0000-4000-8000-000000000001",
+      "ffffffff-0000-4000-8000-000000000002",
+    ],
+    ["recipe last", "ffffffff-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+  ])(
+    "listProducts carries each product's recipe diet derivation, null where it has none (%s)",
+    async (_order, recipeId, plainId) => {
+      const listed = await asTenant(async (tx) => {
+        const cat = await createCatalogue(tx, { name: "C" });
+        const sameMoment = new Date("2026-10-14T10:00:00.000Z");
+        const input = {
+          catalogueId: cat.id,
+          categoryId: null,
+          pricingUnit: "each" as const,
+          unitPrice: 600,
+          vatClass: "general" as const,
+          createdAt: sameMoment,
+          updatedAt: sameMoment,
+        };
+        await tx.insert(products).values({ ...input, id: recipeId, name: "stew" });
+        await tx.insert(products).values({ ...input, id: plainId, name: "plain" });
+        await applyDietDerivation(tx, recipeId, { origins: ["meat", "plant"], pending: true });
+        return listProducts(tx, cat.id);
+      });
+      expect(listed).toHaveLength(2);
+      const byIdentity = [recipeId, plainId].map((id) =>
+        listed.find((product) => product.id === id)!,
+      );
+      expect(byIdentity.map(({ name, dietDerivation }) => ({ name, dietDerivation }))).toEqual([
+        { name: "stew", dietDerivation: { origins: ["meat", "plant"], pending: true } },
+        { name: "plain", dietDerivation: null },
+      ]);
+    },
+  );
 
   it("updateProduct rejects a conflicting diet override", async () => {
     await asTenant(async (tx) => {
