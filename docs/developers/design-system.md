@@ -1952,7 +1952,7 @@ Delete there gives the time back to the department. One draft holds every depart
 the season, so the picker keeps edits; Save stays quiet until the draft changes and writes the
 edited weeks in one request. ‹ › ask first when there are edits. A refusal that names a department
 or zone switches the picker to it, marks the day's heading and is told beside Save; the draft stays
-for a retry. A live refresh keeps edited weeks; one that removes the season, removes a department or
+for a retry. A live refresh keeps edited weeks; after a save, the weeks it sent follow the first read that started after it answered, while no other save is in flight, except days repainted since it was sent; one that removes the season, removes a department or
 zone with edits, or makes a department with edits inactive, drops those edits and says so beside
 Save. The grid fits seven days in 1280 px; at phone
 width the grid scrolls sideways with its time column pinned. A venue viewer gets ✕ alone, no paint
