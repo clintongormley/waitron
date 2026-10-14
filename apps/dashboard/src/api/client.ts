@@ -3586,6 +3586,13 @@ export class DashboardApi {
     return this.#request<PrintJobRow[]>("/management-api/print-jobs", "GET");
   }
 
+  printEquipmentLabel(
+    printerId: string,
+    label: { kind: "printer" | "reader"; id: string },
+  ): Promise<{ jobId: string }> {
+    return this.#request(`/management-api/printers/${printerId}/equipment-label`, "POST", label);
+  }
+
   testPrint(printerId: string): Promise<{ jobId: string }> {
     return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/test-print`,

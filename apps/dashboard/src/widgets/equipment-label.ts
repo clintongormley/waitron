@@ -1,8 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
-import { baseStyles, type WtModal } from "@waitron/ui";
+import { applyTokens, baseStyles, type WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import type { DashboardApi, Printer } from "../api/client.js";
+import { codeOf } from "../i18n/codes.js";
+import { refusal, bottomMessage } from "../i18n/form-message.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -37,6 +41,7 @@ export function printEquipmentLabel(
 ): void {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
+  applyTokens(frame);
   frame.style.position = "fixed";
   frame.style.width = "0";
   frame.style.height = "0";
@@ -44,10 +49,18 @@ export function printEquipmentLabel(
   frame.addEventListener("load", () => {
     const view = frame.contentWindow!;
     const doc = frame.contentDocument!;
+    const tokens = getComputedStyle(frame);
+    for (const token of [
+      "--wt-font-family",
+      "--wt-font-size-md",
+      "--wt-font-size-xl",
+      "--wt-font-weight-bold",
+    ])
+      doc.documentElement.style.setProperty(token, tokens.getPropertyValue(token));
     const style = doc.createElement("style");
     style.textContent =
-      "body{margin:0;font-family:sans-serif;text-align:center}" +
-      "img{width:40mm;height:40mm}p{margin:2mm 0;overflow-wrap:anywhere}";
+      "body{margin:0;font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);text-align:center}" +
+      "img{width:40mm;height:40mm}p{margin:2mm 0;overflow-wrap:anywhere}p:first-of-type{font-size:var(--wt-font-size-xl);font-weight:var(--wt-font-weight-bold)}";
     doc.head.append(style);
     const image = doc.createElement("img");
     image.src = label.qr;
@@ -112,6 +125,101 @@ export class EquipmentLabel extends LitElement {
   @property() kind: EquipmentKind = "printer";
   @property() itemId = "";
   @property() name = "";
+  @property({ attribute: false }) api:
+    Pick<DashboardApi, "listPrinters" | "printEquipmentLabel"> | undefined;
+  @state() private printerChoiceOpen = false;
+  @state() private printerChoices: Printer[] = [];
+  @state() private printerId = "";
+  @state() private printerLoading = false;
+  @state() private printerSending = false;
+  @state() private printerError: unknown = null;
+  @state() private printerQueued = false;
+
+  async #choosePrinter(): Promise<void> {
+    if (!this.api || this.printerLoading) return;
+    const generation = this.#generation;
+    this.printerChoiceOpen = true;
+    this.printerLoading = true;
+    this.printerError = null;
+    try {
+      const printers = await this.api.listPrinters();
+      if (this.#generation !== generation || !this.isConnected) return;
+      this.printerChoices = printers.filter((p) => p.active);
+      if (this.kind === "printer")
+        this.printerChoices.sort(
+          (a, b) => Number(b.id === this.itemId) - Number(a.id === this.itemId),
+        );
+    } catch (error) {
+      if (this.#generation === generation && this.isConnected) this.printerError = error;
+    } finally {
+      if (this.#generation === generation) this.printerLoading = false;
+    }
+  }
+
+  async #sendToPrinter(): Promise<void> {
+    if (
+      !this.api ||
+      this.printerSending ||
+      this.printerLoading ||
+      !this.printerChoices.some((p) => p.id === this.printerId)
+    )
+      return;
+    const generation = this.#generation;
+    this.printerSending = true;
+    this.printerError = null;
+    this.printerQueued = false;
+    try {
+      await this.api.printEquipmentLabel(this.printerId, { kind: this.kind, id: this.itemId });
+      if (this.#generation === generation && this.isConnected) this.printerQueued = true;
+    } catch (error) {
+      if (this.#generation === generation && this.isConnected) this.printerError = error;
+    } finally {
+      if (this.#generation === generation) this.printerSending = false;
+    }
+  }
+
+  #printerChoice(): TemplateResult | typeof nothing {
+    if (!this.printerChoiceOpen) return nothing;
+    const enabled =
+      !this.printerLoading && this.printerChoices.some((p) => p.id === this.printerId);
+    return html`<div class="printer-choice">
+      <wt-combobox
+        data-test="equipment-label-printer"
+        name="equipmentLabelPrinterId"
+        required
+        label=${t("equipment.choose_printer")}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${this.printerChoices.map((p) => ({ value: p.id, label: p.name }))}
+        .value=${this.printerId}
+        ?disabled=${this.printerLoading || this.printerSending}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.printerId = event.detail.value;
+          this.printerQueued = false;
+        }}
+      ></wt-combobox>
+      ${this.printerLoading ? html`<p role="status">${t("equipment.loading_printers")}</p>` : nothing}
+      ${!this.printerLoading && this.printerChoices.length === 0 ? html`<p>${t("equipment.no_printers")}</p>` : nothing}
+      ${this.printerQueued ? html`<p role="status" data-test="equipment-label-printer-status">${t("equipment.print_queued")}</p>` : nothing}
+      <wt-form-actions
+        data-test="equipment-label-printer-actions"
+        .error=${bottomMessage(refusal(this.printerError === null ? null : codeOf(this.printerError)))}
+      >
+        ${this.printerError && this.printerChoices.length === 0 ? html`<wt-button data-test="retry-equipment-printers" @click=${() => void this.#choosePrinter()}>${t("equipment.retry_printers")}</wt-button>` : nothing}
+        <wt-button
+          data-test="send-equipment-label"
+          variant=${enabled ? "primary" : "secondary"}
+          ?disabled=${!enabled || this.printerSending}
+          .loading=${this.printerSending}
+          @click=${() => void this.#sendToPrinter()}
+          >${t("equipment.venue_print")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+
   /** Where focus returns when the label closes. */
   @property({ attribute: false }) opener: HTMLElement | null = null;
   /** Replaced in tests, which cannot answer a print dialog. */
@@ -131,6 +239,13 @@ export class EquipmentLabel extends LitElement {
 
   #resetNfc(): void {
     this.#generation++;
+    this.printerChoiceOpen = false;
+    this.printerChoices = [];
+    this.printerId = "";
+    this.printerLoading = false;
+    this.printerSending = false;
+    this.printerError = null;
+    this.printerQueued = false;
     this.#nfcOperation?.abort();
     this.#nfcOperation = undefined;
     this.nfcBusy = "";
@@ -256,6 +371,7 @@ export class EquipmentLabel extends LitElement {
         </div>
         ${nfcWriter() ? nothing : html`<p class="hint" data-test="equipment-nfc-unavailable">${t("equipment.nfc_android")}</p>`}
         ${this.nfcMessage === null ? nothing : html`<p class="message" role="status" data-test="equipment-nfc-message">${t(this.nfcMessage)}</p>`}
+        ${this.#printerChoice()}
         <wt-form-actions slot="footer">
           <wt-button slot="cancel" data-test="close-equipment-label" @click=${() => this.#close()}
             >${t("action.close")}</wt-button
@@ -266,6 +382,13 @@ export class EquipmentLabel extends LitElement {
             ?disabled=${this.qr === ""}
             @click=${() => this.print({ qr: this.qr, code, name: this.name })}
             >${t("equipment.print")}</wt-button
+          >
+          <wt-button
+            data-test="venue-print-equipment-label"
+            ?disabled=${!this.api || this.printerLoading || this.printerSending}
+            variant=${this.api && !this.printerLoading && !this.printerSending ? "primary" : "secondary"}
+            @click=${() => void this.#choosePrinter()}
+            >${t("equipment.venue_print")}</wt-button
           >
           <wt-button
             variant=${nfcWriter() && !this.confirmLock && this.nfcBusy !== "lock" ? "primary" : "secondary"}

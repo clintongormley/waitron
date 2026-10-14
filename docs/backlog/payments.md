@@ -130,8 +130,11 @@ their full text.
   transaction, while a scan for a named row changes only that row. You can write the code as a text record from the dashboard equipment label, beside Print,
   and then confirm a permanent sticker lock. On browsers without Web NFC, the write action is
   disabled with an Android Chrome hint; Copy code remains available. Browser tests use simulated
-  writers and do not establish hardware writing or locking. Reading on every till screen and
-  venue-printer label printing remain open. What the probe settles for the build: the sticker holds a
+  writers and do not establish hardware writing or locking. You can also send the label to an active venue printer from the same dialog.
+  Choose a printer; the labelled printer is offered first when active. Its registered name prints
+  as a larger, heavier heading above the QR and code, in the browser print and the queued document.
+  Browser and real-database tests check the application path and payload, not a physical print.
+  Reading on every till screen remains open. What the probe settles for the build: the sticker holds a
   **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
   in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
   scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during
@@ -139,7 +142,11 @@ their full text.
   On the OnePlus 13, open a reader or portable printer's Equipment label there, write a spare
   unlocked sticker, and check its text with the till dialog. Write again after moving the sticker
   away to check the retry message; lock only a disposable sticker after reading the permanent
-  warning, then try rewriting it. These box-address write/read/lock checks remain unverified.
+  warning, then try rewriting it. These box-address write/read/lock checks remain unverified. On the OnePlus 13 at that address,
+  open a portable printer's Equipment label, press Print on a printer, choose that printer and print.
+  Check its job preview, read the paper's QR in the till dialog, and check the name and code are legible.
+  Repeat for a reader label on a second active printer. Confirm neither print opens the drawer.
+  These physical print checks remain unverified.
 
 ## A guest paying from their own phone
 
