@@ -5880,10 +5880,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `packages/fiscal-verifactu/src/venue-fields.ts`.
   [Detail](backlog/architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
 
-- **`isLocked` in `venue-lock.ts` reads `.errcode` without a null check**, so a thrown `null` would
-  raise a `TypeError` (the driver throws real errors). `packages/store`, found by #568 and not
-  changed.
-
 - **Nothing now checks at run time that a read returns something other than a Node `Buffer`** —
   found by #577 while pruning comments (`packages/credentials`). Nothing checks that a caller other
   than the application cannot read or list the vault; only the encryption protects it.
