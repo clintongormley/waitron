@@ -3672,6 +3672,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
   `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
 
+- **A switched-off `wt-switch` may be too faint to see** — seen in A639's screenshots of the Backups
+  screen, not fixed: its track measured roughly 1.3 to 1 against the light page and 1.6 to 1 against
+  the dark one, read from pixel colours in those screenshots, where WCAG 1.4.11 asks 3 to 1 for a
+  control's boundary. Not measured from the component's tokens; `wt-switch` itself was not changed
+  by A639 (last changed by W97, #1311).
+
 - **`wt-switch` cannot be marked invalid** — found during C47 part 2 and not fixed: a server refusal
   of an adjustment reason's note-required switch would show its message but move focus nowhere.
   [Detail](backlog/dashboard.md#what-c47-part-2-found-and-did-not-fix)
@@ -4278,6 +4284,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   changes.** The pack route answers no `revision` there, so a bucket changed in the environment
   leaves the shown pack in place (`#dropStalePack`, `apps/dashboard/src/screens/backup-screen.ts`).
   Left open by A538-5 and A538-6d.
+
+- **The Backups screen's Spanish names the bucket copy two ways.** The bucket choice's option says
+  "El bucket de la copia continua" (`backup.destination.choice_stream`), while the hints beside it
+  and the rest of the screen say "la copia en el bucket". From A538-6 (#1642); seen in A639's
+  screenshots, not changed there.
 
 - **The archive recovery pack file is in English only, while the bucket copy's kit file is
   translated.** The server writes the pack's explanatory text (`encodeArchiveRecoveryPack`) and the
