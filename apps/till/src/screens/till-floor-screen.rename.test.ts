@@ -195,6 +195,16 @@ describe("till-floor-screen: Rename", () => {
     expect(floorRefusal(el)).toBeNull();
   });
 
+  it("heads the window in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(bar(), stubApi());
+    expect(shown(await pressRename(el, "bar"))).toEqual({
+      heading: "Cambiar el nombre de Bar",
+      value: "",
+      hint: "Déjalo vacío para Bar",
+    });
+  });
+
   it("starts from a table's own name for today", async () => {
     const el = await mount([table("bar", "Bar", 40, { name: "Window" })], stubApi());
     expect(shown(await pressRename(el, "bar"))).toEqual({

@@ -9,7 +9,11 @@ afterEach(cleanupWidgets);
 
 const saveButton = (el: TillTodayNameDialog) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-rename-save]")!;
-const props = { heading: "Renombrar Mesa 4", normalName: "Mesa 4", value: "Cumpleaños García" };
+const props = {
+  heading: "Cambiar el nombre de Mesa 4",
+  normalName: "Mesa 4",
+  value: "Cumpleaños García",
+};
 
 describe.each(["light", "dark"] as const)("till-today-name-dialog a11y (%s theme)", (theme) => {
   it("has no violations when it opens, with Save quiet and disabled", async () => {

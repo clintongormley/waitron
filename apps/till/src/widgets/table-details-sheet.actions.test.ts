@@ -182,7 +182,7 @@ describe("till-table-details-sheet's actions for today", () => {
       "Unir con…",
       "Girar",
       "Cambiar plazas",
-      "Renombrar",
+      "Cambiar nombre",
       "Volver a su sitio",
       "Quitar por hoy",
       "Separar mesas…",
