@@ -1000,7 +1000,14 @@ async function bootServer(
             }
           }),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
-        stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
+        stageBucketRestore: async ({
+          kit,
+          environment,
+          oldBoxGone,
+          venueConfirmed,
+          recoveryOperation,
+          nodeRecoverySecret,
+        }) =>
           stageStreamRestore({
             kit: parseRecoveryKit(kit),
             stateDir: config.stateDir,
@@ -1011,6 +1018,8 @@ async function bootServer(
             litestreamBin: config.litestreamBin,
             oldBoxGone,
             venueConfirmed,
+            recoveryOperation,
+            nodeRecoverySecret,
             now,
             log,
             openStore: openBoundedBucket,

@@ -1032,3 +1032,10 @@ Public restore forms still need the offline allocation/key collection and forwar
 emergency and phone input, current outside confirmations, keeping an existing identity, and
 crashes around consumption/activation still need their complete operator journeys. This checkpoint
 does not complete Task 6 or change the environment-only command input contract.
+
+**2026-10-14 public-input checkpoint:** archive, bucket and Cloud restore routes forward a public
+recovery operation and separate node key. Archive uploads use multipart fields when those inputs
+are supplied. The browser API client supports the same inputs; the screens do not collect them
+yet. A completed setup request refuses a changed operation or node key. Focused route and
+real-listener cases cover forwarding, malformed fields and keeping the node key out of the public
+marker and logs. Outside allocation collection and the complete recovery journeys remain open.

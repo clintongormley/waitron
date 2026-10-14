@@ -38,6 +38,10 @@ import type {
 } from "./setup-operation.js";
 import type { ArchiveRestoreRequest } from "./restore-request.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
+import {
+  parseRecoveryOperationInput,
+  type RecoveryOperationInput,
+} from "./recovery-module-operation.js";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -56,6 +60,28 @@ export interface BucketRestoreInput {
   oldBoxGone: boolean;
   /** The tax id of the restored copy the owner confirmed; null until they have seen one. */
   venueConfirmed: string | null;
+  recoveryOperation?: RecoveryOperationInput;
+  nodeRecoverySecret?: string;
+}
+
+function recoveryCredentials(
+  operation: unknown,
+  secret: unknown,
+): {
+  recoveryOperation?: RecoveryOperationInput;
+  nodeRecoverySecret?: string;
+} {
+  if (operation === undefined && secret === undefined) return {};
+  const parsed = parseRecoveryOperationInput(operation);
+  if (
+    parsed === null ||
+    parsed.binding.action !== "restore" ||
+    Buffer.byteLength(JSON.stringify(parsed)) > 131072
+  )
+    invalidRequest("recoveryOperation");
+  if (typeof secret !== "string" || secret.trim().length === 0 || Buffer.byteLength(secret) > 4096)
+    invalidRequest("nodeRecoverySecret");
+  return { recoveryOperation: parsed, nodeRecoverySecret: secret };
 }
 
 /**
@@ -983,7 +1009,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     provisioning = true;
     return runRestore(c, log, async () => {
       try {
-        const body = await readJsonBody<{ pointId?: unknown; oldBoxGone?: unknown }>(c);
+        const body = await readJsonBody<{
+          pointId?: unknown;
+          oldBoxGone?: unknown;
+          recoveryOperation?: unknown;
+          nodeRecoverySecret?: unknown;
+        }>(c);
         if (
           typeof body.pointId !== "string" ||
           !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
@@ -992,13 +1023,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
           invalidRequest("oldBoxGone");
         }
+        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        c.header("Cache-Control", "no-store");
         const pointId = body.pointId;
         const oldBoxGone = body.oldBoxGone === true;
         const binding = await deps.cloudRecovery!.binding();
         if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
         const execute = async () => {
           await deps.cloudRecovery!.restore(
-            (request) => deps.stageRestore!(request, { oldBoxGone }),
+            (request) => deps.stageRestore!({ ...request, ...credentials }, { oldBoxGone }),
             pointId,
           );
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
@@ -1012,6 +1045,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           .update(":")
           .update(pointId)
           .update(oldBoxGone ? ":confirmed" : "")
+          .update("\0")
+          .update(JSON.stringify(credentials))
           .digest("hex");
         return await deps.operations.run("restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
@@ -1122,33 +1157,88 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
     return runRestore(c, log, async () => {
       try {
-        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")) {
+        const multipart = c.req
+          .header("content-type")
+          ?.toLowerCase()
+          .startsWith("multipart/form-data");
+        if (
+          !multipart &&
+          !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
+        )
           invalidRequest("artifact");
-        }
         const declaredLength = Number(c.req.header("content-length"));
-        if (Number.isFinite(declaredLength) && declaredLength > MAX_RESTORE_UPLOAD_BYTES) {
+        if (
+          Number.isFinite(declaredLength) &&
+          declaredLength > MAX_RESTORE_UPLOAD_BYTES + (multipart ? 262144 : 0)
+        )
           invalidRequest("artifact");
+        let form: FormData | undefined;
+        if (multipart) {
+          try {
+            form = await c.req.formData();
+          } catch {
+            invalidRequest("artifact");
+          }
+          for (const field of [
+            "artifact",
+            "recoveryKey",
+            "environment",
+            "oldBoxGone",
+            "recoveryOperation",
+            "nodeRecoverySecret",
+          ])
+            if (form.getAll(field).length > 1) invalidRequest(field);
+          const answer = form.get("oldBoxGone");
+          if (answer !== null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
         }
-        const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
-        const rawEnvironment = c.req.header("x-waitron-restore-environment");
-        if (rawEnvironment !== "production" && rawEnvironment !== "preproduction") {
+        const recoveryKey = asString(
+          form === undefined ? c.req.header("x-waitron-recovery-key") : form.get("recoveryKey"),
+          "recoveryKey",
+        );
+        const rawEnvironment =
+          form === undefined
+            ? c.req.header("x-waitron-restore-environment")
+            : form.get("environment");
+        if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
           invalidRequest("environment");
+        const oldBoxGone =
+          (form === undefined ? c.req.header("x-waitron-old-box-gone") : form.get("oldBoxGone")) ===
+          "1";
+        let suppliedOperation: unknown;
+        const rawOperation = form?.get("recoveryOperation");
+        if (rawOperation !== undefined && rawOperation !== null) {
+          if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
+            invalidRequest("recoveryOperation");
+          try {
+            suppliedOperation = JSON.parse(rawOperation);
+          } catch {
+            invalidRequest("recoveryOperation");
+          }
         }
-        const oldBoxGone = c.req.header("x-waitron-old-box-gone") === "1";
-        const artifact = new Uint8Array(await c.req.arrayBuffer());
-        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES) {
+        const credentials = recoveryCredentials(
+          suppliedOperation,
+          form?.get("nodeRecoverySecret") ?? undefined,
+        );
+        const file = form?.get("artifact");
+        if (form !== undefined && !(file instanceof Blob)) invalidRequest("artifact");
+        const artifact = new Uint8Array(
+          await (file instanceof Blob ? file.arrayBuffer() : c.req.arrayBuffer()),
+        );
+        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES)
           invalidRequest("artifact");
-        }
+        c.header("Cache-Control", "no-store");
         const requestHash = createHash("sha256")
           .update(rawEnvironment)
           .update(oldBoxGone ? "\0confirmed\0" : "\0")
           .update(recoveryKey)
           .update("\0")
           .update(artifact)
+          .update("\0")
+          .update(JSON.stringify(credentials))
           .digest("hex");
         const execute = async (): Promise<Response> => {
           await stageRestore(
-            { artifact, recoveryKey, environment: rawEnvironment },
+            { artifact, recoveryKey, environment: rawEnvironment, ...credentials },
             { oldBoxGone },
           );
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
@@ -1190,6 +1280,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           environment?: unknown;
           oldBoxGone?: unknown;
           venueConfirmed?: unknown;
+          recoveryOperation?: unknown;
+          nodeRecoverySecret?: unknown;
         }>(c);
         const kit = asString(body.kit, "kit");
         if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
@@ -1203,7 +1295,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
           invalidRequest("venueConfirmed");
         }
+        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        c.header("Cache-Control", "no-store");
         const input: BucketRestoreInput = {
+          ...credentials,
           kit,
           environment,
           oldBoxGone: body.oldBoxGone === true,
@@ -1211,7 +1306,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         };
         const requestHash = createHash("sha256")
           .update(
-            JSON.stringify(["bucket", environment, input.oldBoxGone, input.venueConfirmed, kit]),
+            JSON.stringify([
+              "bucket",
+              environment,
+              input.oldBoxGone,
+              input.venueConfirmed,
+              kit,
+              credentials,
+            ]),
           )
           .digest("hex");
         const execute = async (): Promise<Response> => {

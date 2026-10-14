@@ -380,7 +380,7 @@ unfinished. This is branch development guidance, not a qualified venue recovery 
 ## Staged node keys on the Task 6 candidate
 
 The restart backend can stage a node recovery key separately from the archive encryption key.
-The public restore forms do not collect or send this credential yet. A host request supplies
+The public restore forms do not collect this credential yet. A host request supplies
 `nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
 `restore-request.node-key` with mode `0600`, not into the JSON marker. After restart, the selected
 backup's verifier checks it again and the module rereads current outside evidence. A missing or
@@ -401,3 +401,16 @@ collects outside evidence. An interrupted write with no marker leaves no runnabl
 next entry pass removes the orphaned node-key file. These rules do not establish that a copied
 marker proves an allocation can be reused. Environment-only command inputs retain their existing
 contract.
+
+To submit these inputs through the candidate setup API, send `recoveryOperation` and
+`nodeRecoverySecret` together. Bucket and Cloud restores accept them in the JSON body. For an
+archive, send a multipart form with `artifact` as a file, `recoveryKey`, `environment`,
+`recoveryOperation` as JSON text, and `nodeRecoverySecret`. Set `oldBoxGone` to `1` only after
+confirming the old box is off; `0` leaves that confirmation unset. The archive encryption key is
+still `recoveryKey`. The browser API client accepts the recovery pair, but the screens do not
+collect it yet.
+
+The setup request's saved hash includes the operation and node key, so a completed request cannot
+be replayed with different inputs. Its saved progress contains neither key. Forwarding the operation
+does not supply outside authority: after restart, recovery still checks the selected database's node
+key and collects current outside evidence. These API checks do not complete the offline procedure.
