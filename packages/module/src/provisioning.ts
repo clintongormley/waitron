@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import type { LocationId, NodeId } from "@waitron/shared";
 import type { ModuleOperationInput } from "./operation-input.js";
+import type { ModuleOperationPreparation } from "./operation-preparation.js";
 
 /** These identities come from rows the host inserted or read. */
 export interface ProvisionedNode {
@@ -69,7 +70,31 @@ export interface StandbyProvisioning {
   ): Promise<void>;
 }
 
+/** A module's own preproduction-only allocation, for a venue set up with none supplied. */
+export interface ThrowawayAllocation {
+  /** Refuses (`sif.throwaway_allocation_refused`) when `environments` is empty or names
+   * "production", before any key is made. */
+  prepare(request: {
+    /** Every environment the venue is known by; all must be preproduction. */
+    readonly environments: readonly ("production" | "preproduction")[];
+    readonly taxpayerNif: string;
+    readonly bases: readonly { readonly code: string; readonly purpose: string }[];
+    readonly nodeId: string;
+    readonly administratorId: string;
+  }): {
+    /** The operation binding's event id. */
+    readonly eventId: string;
+    /** The operation binding's source id. */
+    readonly sourceId: string;
+    /** The module's operation input. */
+    readonly input: unknown;
+    /** Replaces the module's `operations` for this one setup. */
+    readonly operations: ModuleOperationPreparation;
+  };
+}
+
 export interface ModuleProvisioning {
   readonly seed?: NodeSeed;
   readonly standby?: StandbyProvisioning;
+  readonly throwawayAllocation?: ThrowawayAllocation;
 }

@@ -214,11 +214,6 @@ declare module "@waitron/shared" {
      */
     "deployment.demo_data_refused": { environment: string };
     /**
-     * The development custodian was asked to make a key or sign an allocation on a production
-     * host; refused before either happens. `environment` is always `production`, and not a secret.
-     */
-    "deployment.development_custodian_refused": { environment: string };
-    /**
      * An append-only trigger is absent or carries other text: found after migrating, the start is
      * refused; found while trading, the server stops. Both lists hold trigger names, never a secret.
      */

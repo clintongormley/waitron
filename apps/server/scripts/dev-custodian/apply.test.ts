@@ -86,7 +86,7 @@ describe("applyDevelopmentVenue", () => {
         { WAITRON_ENV: "production" },
       ),
     ).rejects.toMatchObject({
-      code: "deployment.development_custodian_refused",
+      code: "sif.throwaway_allocation_refused",
       params: { environment: "production" },
     });
     expect(facts()).toEqual(before);

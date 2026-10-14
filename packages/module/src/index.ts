@@ -73,6 +73,7 @@ export type {
   SeedReport,
   StandbyProvisioning,
   StandbyReservation,
+  ThrowawayAllocation,
 } from "./provisioning.js";
 export { fiscalSlot, selectFiscalModule } from "./fiscal-slot.js";
 export { selectVenueService } from "./venue-service-slot.js";
