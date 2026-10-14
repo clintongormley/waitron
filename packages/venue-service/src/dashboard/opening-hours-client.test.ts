@@ -72,6 +72,17 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("reads a delete's impact passively only when asked to", async () => {
+    const request = vi.fn(async () => ({}));
+    const api = new OpeningHoursApi(request as DashboardRequest);
+    await api.readPeriodDeleteImpact("p/1", { passive: true });
+    await api.readPeriodDeleteImpact("p/1");
+    expect(request.mock.calls).toEqual([
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: true }],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET"],
+    ]);
+  });
+
   it("watchPaintedIn reads passively and re-reads after rereadWatches", async () => {
     const painted = [{ periodId: "p1", seasons: [{ id: "s1", name: "Winter" }], specialDays: [] }];
     const request = vi.fn(async () => painted);

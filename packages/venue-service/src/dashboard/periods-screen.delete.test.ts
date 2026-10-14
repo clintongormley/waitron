@@ -471,6 +471,40 @@ it("a new revision arriving after an impact read began is not taken from that re
   await expect.poll(() => sent).toEqual([3, 4]);
 });
 
+it("reads the impact actively for Delete… and Retry, and passively when a live change or a changed clock reads it again", async () => {
+  const reads: (string | undefined)[] = [];
+  let fail = false;
+  const base = fake({
+    impact: () => {
+      if (fail) throw new Error("offline");
+      return impactOf();
+    },
+    write: () => {
+      throw { code: "hours.clock_changed" };
+    },
+  });
+  const el = await mount((async (path, method, body, options) => {
+    if (isImpactRead(path, method)) reads.push(options?.passive ? "passive" : "active");
+    return base(path, method, body, options);
+  }) as DashboardRequest);
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  expect(reads).toEqual(["active"]);
+
+  el.api.rereadWatches();
+  await expect.poll(() => reads).toEqual(["active", "passive"]);
+
+  confirm(dialog).click();
+  await expect.poll(() => reads).toEqual(["active", "passive", "passive"]);
+
+  fail = true;
+  el.api.rereadWatches();
+  await expect.poll(() => retry(dialog)).not.toBeNull();
+  fail = false;
+  retry(dialog)!.click();
+  await expect.poll(() => reads).toEqual(["active", "passive", "passive", "passive", "active"]);
+});
+
 it("ignores a departed delete confirmation after another period's dialog opened", async () => {
   const writes: string[] = [];
   const el = await mount(

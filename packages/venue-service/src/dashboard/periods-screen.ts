@@ -357,7 +357,7 @@ export class PeriodsScreen extends LitElement {
       return;
     }
     deletion.period = period;
-    if (this.model!.clockRevision !== deletion.readRevision) void this.readImpact(deletion);
+    if (this.model!.clockRevision !== deletion.readRevision) void this.readImpact(deletion, true);
     else this.rereadImpact(this.model!);
   }
   /** Reads the impact again unless the latest impact read started after the watch read that
@@ -367,7 +367,7 @@ export class PeriodsScreen extends LitElement {
     if (!deletion) return;
     const number = this.api.readNumberOf(read);
     if (number !== undefined && number < deletion.readAfter) return;
-    void this.readImpact(deletion);
+    void this.readImpact(deletion, true);
   }
 
   private askDelete(period: Period) {
@@ -387,7 +387,8 @@ export class PeriodsScreen extends LitElement {
     void this.readImpact(deletion);
   }
 
-  private async readImpact(deletion: Deletion) {
+  /** `automatic` for a read the person did not start, which is passive session activity. */
+  private async readImpact(deletion: Deletion, automatic = false) {
     const generation = ++deletion.generation;
     const revision = this.model!.clockRevision;
     deletion.readRevision = revision;
@@ -395,7 +396,10 @@ export class PeriodsScreen extends LitElement {
     deletion.reading = true;
     let impact: PeriodDeleteImpact;
     try {
-      impact = await this.api.readPeriodDeleteImpact(deletion.period.id);
+      impact = await this.api.readPeriodDeleteImpact(
+        deletion.period.id,
+        automatic ? { passive: true } : undefined,
+      );
     } catch {
       if (this.current(deletion, generation)) {
         deletion.reading = false;
