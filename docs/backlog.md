@@ -1977,6 +1977,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   on MOVED slips, so the cook meets the name on the first ticket. Reference: picture 5 in
   [the A650 mockups](backlog/mockups/a650-moved-slips/).
 
+- **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
+  (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
+  kitchen items and sends replacements. The dish keeps its earlier made-here choice
+  (`keepMadeHere`, `apps/server/src/working-order.ts`), but its extras are routed afresh in
+  `insertSplitExtras`, which reads the made-here stations of the sending device. So an extra the
+  Quesos station already received can come back as made on the spot when a device that makes
+  Quesos itself does the edit. Found by A687's review (#1720); its fifth case in
+  `apps/server/src/sent-order-number.test.ts` relies on this behaviour and will fail if it
+  changes. The review believed it dates from #1013 (`git log -S keepMadeHere`), not checked
+  further. Decide: should extras keep their earlier choice, as the dish does?
+
 ### The till, devices and table service
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
