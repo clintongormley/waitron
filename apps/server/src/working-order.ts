@@ -2013,7 +2013,7 @@ export async function fireCourse(
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await requireCourse(tx, cfg, courseId);
-  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing);
+  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing, attendance);
   const released = await releaseHeld(
     tx,
     cfg,

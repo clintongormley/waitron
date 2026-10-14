@@ -290,7 +290,18 @@ export async function fireGroup(
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       await requireHeldGroup(tx, partyId, groupId);
-      await releaseGroup(tx, cfg, partyId, groupId, firer, {}, routing, attendance);
+      await releaseGroup(
+        tx,
+        cfg,
+        partyId,
+        groupId,
+        firer,
+        {},
+        routing,
+        attendance === undefined || "deviceId" in firer
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -423,6 +434,7 @@ export async function fireHeldGroupsOfCourse(
   courseId: string,
   firer: Firer,
   routing?: RoutingOnce,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   const party = await partyRevisionOfOrder(tx, orderId);
   if (party === null) return;
@@ -447,6 +459,10 @@ export async function fireHeldGroupsOfCourse(
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   if (groups.length === 0) return;
   await checkAndBumpParty(tx, partyId, party.revision, "open");
+  const snapshot =
+    attendance === undefined || "deviceId" in firer
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   for (const group of groups) {
     await releaseGroup(
       tx,
@@ -459,6 +475,7 @@ export async function fireHeldGroupsOfCourse(
         workingOrderId: orderId,
       },
       routing,
+      snapshot,
     );
   }
 }
@@ -499,7 +516,7 @@ async function releaseGroup(
   firer: Firer,
   detail: Record<string, unknown>,
   routing = routingOnce(tx, cfg, new Date()),
-  attendance?: OrderAttendance,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const lines = await tx
     .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
@@ -542,9 +559,7 @@ async function releaseGroup(
       detail,
       ...("deviceId" in firer ? { actorDeviceId: firer.deviceId } : { actorId: firer.personId }),
     },
-    attendance === undefined || "deviceId" in firer
-      ? undefined
-      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+    attendance,
   );
 }
 
@@ -817,6 +832,10 @@ export async function moveLinesToGroup(
       await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
       await bumpRevision(tx, [...splitsByBill.keys()]);
+      const snapshot =
+        attendance === undefined
+          ? undefined
+          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       await recordGroupEvent(
         tx,
         {
@@ -826,11 +845,9 @@ export async function moveLinesToGroup(
           actorId: args.operatorId,
           detail: { moves, from: [...sources] },
         },
-        attendance === undefined
-          ? undefined
-          : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+        snapshot,
       );
-      await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId);
+      await removeEmptiedHeldGroups(tx, partyId, [...sources], args.operatorId, snapshot);
       return { revision };
     },
     cfg.madeHereSink,
@@ -935,6 +952,7 @@ export async function removeEmptiedHeldGroups(
   partyId: string,
   groupIds: readonly string[],
   operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   if (groupIds.length === 0) return;
   const emptied = new Set(
@@ -964,7 +982,11 @@ export async function removeEmptiedHeldGroups(
     .where(inArray(orderGroups.id, [...emptied]));
   for (const groupId of new Set(groupIds)) {
     if (!emptied.has(groupId)) continue;
-    await recordGroupEvent(tx, { partyId, groupId, kind: "removed", actorId, detail: {} });
+    await recordGroupEvent(
+      tx,
+      { partyId, groupId, kind: "removed", actorId, detail: {} },
+      attendance,
+    );
   }
 }
 

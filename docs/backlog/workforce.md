@@ -76,8 +76,12 @@ releases, reordering, line moves and splits now snapshot their event's worker, l
 instant. The captured event replaces the retained event in attendance reads and survives a later
 change to the party's bill locations. Legacy prep of a paid order and an unpaid departure from an
 already placed bill also capture the acting worker; their tests check rollback on capture refusal.
-Derived group events, draft-event snapshots, the remaining source-command classifications,
-restore-path qualification and final branch checks remain open; part 3 is unfinished.
+Course releases and group moves that empty a held group also snapshot their derived events at one
+trusted command instant. The route tests check that these events retain their original location
+after bills move and that a refused second snapshot rolls back the whole command. Group events
+created by basket edits, removals and arriving bills, draft-event snapshots, the remaining
+source-command classifications, restore-path qualification and final branch checks remain open;
+part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the
