@@ -51,6 +51,7 @@ const view: PrepStationsView = {
       },
     ],
     canMakeDefault: true,
+    printMovedSlips: true,
     defaultStationId: "bar",
     stations: [{ id: "bar", name: "Bar", active: true, colour: "blue" }],
     stationTimes: [
@@ -85,6 +86,7 @@ const view: PrepStationsView = {
         forgottenAfterMinutes: null,
       },
       showsRestOfOrder: false,
+      printMovedSlips: null,
     },
   ],
   categories: [
@@ -947,6 +949,33 @@ it("edits Show the rest of the order in the station editor and saves only that f
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+});
+it("hands the station's and the venue's MOVED slips choices to the editor and saves the station's", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      routing: { ...view.routing, printMovedSlips: false },
+      stations: [{ ...view.stations[0]!, printMovedSlips: true }],
+    }),
+  });
+  const el = await mount(a);
+  el.shadowRoot!.querySelector("prep-station-table")!
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!
+    .click();
+  await settle(el);
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  await editor.updateComplete;
+  const moved = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=printMovedSlips]",
+  )!;
+  expect(moved.value).toBe("print");
+  expect(moved.options[0]!.label).toBe("As the venue (don't print)");
+  moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "venue" } }));
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { printMovedSlips: null });
 });
 function fallbackView(): PrepStationsView {
   return {

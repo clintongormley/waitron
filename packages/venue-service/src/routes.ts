@@ -635,6 +635,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           await gatedAs(sessionId, async (tx, role) => ({
             ...(await routingModel(tx, ctx.cfg, new Date())),
             canMakeDefault: roleHasPermission(role, "venue.configure"),
+            printMovedSlips: await readPrintMovedSlips(tx),
           })),
         );
       }),

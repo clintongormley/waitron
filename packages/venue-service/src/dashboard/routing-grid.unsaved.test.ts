@@ -23,6 +23,7 @@ const view: PrepStationsView = {
       },
     ],
     canMakeDefault: true,
+    printMovedSlips: true,
     defaultStationId: "bar",
     stations: [
       { id: "bar", name: "Bar", active: true, colour: "blue" },
@@ -60,6 +61,7 @@ const view: PrepStationsView = {
         forgottenAfterMinutes: null,
       },
       showsRestOfOrder: false,
+      printMovedSlips: null,
     },
   ],
   categories: [

@@ -18,6 +18,7 @@ async function mount(printerIds = ["epson"]) {
     colour: "red",
     active: true,
     showsRestOfOrder: false,
+    printMovedSlips: null,
     printerIds,
     timingOverrides: {
       warmAfterMinutes: null,

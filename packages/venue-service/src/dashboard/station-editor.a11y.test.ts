@@ -33,6 +33,8 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     "timing refused",
     "timing invalid",
     "colour refused",
+    "moved slips as the venue, venue off",
+    "moved slips own choice",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
@@ -45,6 +47,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       colour: "orange",
       active: true,
       showsRestOfOrder: true,
+      printMovedSlips: state === "moved slips own choice" ? false : null,
       printerIds: ["epson"],
       timingOverrides: {
         warmAfterMinutes: null,
@@ -63,6 +66,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       { id: "pizza", name: "Pizza oven", colour: "orange" },
     ];
     el.canManagePrinters = state !== "read-out";
+    el.venuePrintsMovedSlips = state !== "moved slips as the venue, venue off";
     el.open = true;
     await el.updateComplete;
     if (state === "refusals") {
@@ -114,6 +118,15 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
           "station-colour-picker",
         )!.error,
       ).toBe("Choose one of these colours.");
+    }
+    if (state.startsWith("moved slips")) {
+      const moved = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=printMovedSlips]",
+      )!;
+      expect(moved.value).toBe(state === "moved slips own choice" ? "dont-print" : "venue");
+      expect(moved.options[0]!.label).toBe(
+        state === "moved slips own choice" ? "As the venue (print)" : "As the venue (don't print)",
+      );
     }
     for (const name of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"]) {
       await timing(name).updateComplete;

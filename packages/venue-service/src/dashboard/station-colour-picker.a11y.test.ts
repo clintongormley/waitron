@@ -65,6 +65,7 @@ it("wraps its tiles inside the station editor at 390px", async () => {
       colour: "red",
       active: true,
       showsRestOfOrder: false,
+      printMovedSlips: null,
       printerIds: [],
       timingOverrides: {
         warmAfterMinutes: null,

@@ -105,5 +105,8 @@ export interface RoutingModel {
   stations: { id: string; name: string; active: boolean; colour: StationColour }[];
 }
 
-/** `canMakeDefault`: the session may use Make default (`venue.configure`). */
-export type RoutingView = RoutingModel & { canMakeDefault: boolean };
+/**
+ * `canMakeDefault`: the session may use Make default (`venue.configure`). `printMovedSlips`: the
+ * venue's choice, which a prep station left as the venue follows.
+ */
+export type RoutingView = RoutingModel & { canMakeDefault: boolean; printMovedSlips: boolean };

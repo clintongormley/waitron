@@ -19,6 +19,7 @@ const GRILL: StationEditorStation = {
   colour: "orange",
   active: true,
   showsRestOfOrder: false,
+  printMovedSlips: null,
   printerIds: ["epson"],
   timingOverrides: { warmAfterMinutes: null, overdueAfterMinutes: 12, forgottenAfterMinutes: null },
   timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
@@ -32,11 +33,12 @@ const STATIONS = [
 
 async function mount(
   station: StationEditorStation = GRILL,
-  { canManagePrinters = true, locale = "en" as "en" | "es" } = {},
+  { canManagePrinters = true, locale = "en" as "en" | "es", venuePrintsMovedSlips = true } = {},
 ) {
   setLocale(locale);
   const el = (await mountHtml("<prep-station-editor></prep-station-editor>")) as StationEditor;
   el.station = station;
+  el.venuePrintsMovedSlips = venuePrintsMovedSlips;
   el.printers = [
     { id: "epson", name: "Epson" },
     { id: "star", name: "Star" },
@@ -58,6 +60,10 @@ const printersField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=printerIds]");
 const restSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=showsRestOfOrder]")!;
+const movedField = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=printMovedSlips]")!;
+const saveButton = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
 const timingField = (el: StationEditor, name: string) =>
   $<HTMLElementTagNameMap["wt-input"]>(el, `wt-input[name=${name}]`)!;
 const formMessage = (el: StationEditor) =>
@@ -77,6 +83,10 @@ async function pickPrinters(el: StationEditor, values: string[]) {
 }
 async function flipRest(el: StationEditor, checked: boolean) {
   restSwitch(el).dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
+  await el.updateComplete;
+}
+async function pickMoved(el: StationEditor, value: string) {
+  movedField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await el.updateComplete;
 }
 function saves(el: StationEditor) {
@@ -533,4 +543,60 @@ it("puts a colour refusal under Colour", async () => {
   await pickColour(el, "cyan");
   expect(picker(el).error).toBe("");
   expect(formMessage(el)).toBe("");
+});
+
+it("offers MOVED slips as the venue, naming the venue's choice, right after the rest-of-order switch", async () => {
+  const on = await mount();
+  expect(movedField(on).label).toBe("MOVED slips");
+  expect(movedField(on).value).toBe("venue");
+  expect(movedField(on).options.map(({ value, label }) => [value, label])).toEqual([
+    ["venue", "As the venue (print)"],
+    ["print", "Print"],
+    ["dont-print", "Don't print"],
+  ]);
+  const fields = [...on.shadowRoot!.querySelectorAll("wt-switch, wt-combobox")];
+  expect(fields.indexOf(movedField(on))).toBe(fields.indexOf(restSwitch(on)) + 1);
+  cleanup();
+  const off = await mount(GRILL, { venuePrintsMovedSlips: false });
+  expect(movedField(off).options[0]!.label).toBe("As the venue (don't print)");
+});
+
+it("opens on the station's own MOVED slips choice", async () => {
+  expect(movedField(await mount({ ...GRILL, printMovedSlips: true })).value).toBe("print");
+  cleanup();
+  expect(movedField(await mount({ ...GRILL, printMovedSlips: false })).value).toBe("dont-print");
+});
+
+it("enables Save on Don't print and sends it, and disables Save again on the stored choice", async () => {
+  const el = await mount(GRILL, { venuePrintsMovedSlips: true });
+  const seen = saves(el);
+  expect(saveButton(el).disabled).toBe(true);
+  await pickMoved(el, "dont-print");
+  expect(saveButton(el).disabled).toBe(false);
+  await pickMoved(el, "venue");
+  expect(saveButton(el).disabled).toBe(true);
+  await pickMoved(el, "dont-print");
+  await save(el);
+  expect(seen).toEqual([{ printMovedSlips: false }]);
+});
+
+it("sends null when a station's own choice goes back to as the venue", async () => {
+  const el = await mount({ ...GRILL, printMovedSlips: true });
+  const seen = saves(el);
+  await pickMoved(el, "venue");
+  await save(el);
+  expect(seen).toEqual([{ printMovedSlips: null }]);
+});
+
+it("reads MOVED slips in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es", venuePrintsMovedSlips: false });
+  expect(movedField(el).label).toBe("Avisos MOVIDO");
+  expect(movedField(el).options.map(({ label }) => label)).toEqual([
+    "Como el local (no imprimir)",
+    "Imprimir",
+    "No imprimir",
+  ]);
+  cleanup();
+  const on = await mount(GRILL, { locale: "es" });
+  expect(movedField(on).options[0]!.label).toBe("Como el local (imprimir)");
 });
