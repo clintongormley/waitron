@@ -209,6 +209,7 @@ const en = {
   "prep.when_gets_orders": "When it gets orders",
   "prep.times.station": "Station",
   "prep.times.period": "{period} ({department})",
+  "prep.times.load_error": "This station's times could not be loaded. It will be tried again.",
   "prep.station_no_replacement": "No replacement",
   "prep.station_clock_unreadable": "Venue time cannot be read.",
   "prep.health.waiting": "Waiting",
@@ -502,8 +503,6 @@ const en = {
   "venue.combobox_no_results": "No results",
   "nav.opening_hours": "Opening hours",
   "hours.title": "Station hours",
-  "hours.tab.dates": "Special dates",
-  "hours.tab.station_week": "Week",
   "hours.show_inactive": "Show inactive",
   "hours.clock_note": "Times are the venue's local time ({timeZone}).",
   "hours.clock_unreadable":
@@ -1038,6 +1037,8 @@ const es: Record<keyof typeof en, string> = {
   "prep.when_gets_orders": "Cuándo recibe pedidos",
   "prep.times.station": "Estación",
   "prep.times.period": "{period} ({department})",
+  "prep.times.load_error":
+    "No se han podido cargar los horarios de esta estación. Se volverá a intentar.",
   "prep.station_no_replacement": "Sin sustituta",
   "prep.station_clock_unreadable": "No se puede leer la hora del local.",
   "prep.health.waiting": "En espera",
@@ -1338,8 +1339,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.combobox_no_results": "Sin resultados",
   "nav.opening_hours": "Horario de apertura",
   "hours.title": "Horario de estaciones",
-  "hours.tab.dates": "Fechas especiales",
-  "hours.tab.station_week": "Semana",
   "hours.show_inactive": "Mostrar inactivos",
   "hours.clock_note": "Las horas son las del establecimiento ({timeZone}).",
   "hours.clock_unreadable":

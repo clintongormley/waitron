@@ -5,8 +5,8 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import { addDays } from "../hours-rules.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import type { PrepStationTimes } from "./station-times-screen.js";
-import "./station-times-screen.js";
+import type { PrepStationTimes } from "./station-times-tab.js";
+import "./station-times-tab.js";
 
 afterEach(() => {
   cleanup();

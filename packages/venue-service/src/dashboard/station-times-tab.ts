@@ -122,7 +122,7 @@ export class PrepStationTimes extends LitElement {
           this.monthError = "";
         },
         () => {
-          if (current()) this.monthError = t("prep.load_error");
+          if (current()) this.monthError = t("prep.times.load_error");
         },
         () => {
           if (current()) this.monthError = "";
@@ -146,7 +146,7 @@ export class PrepStationTimes extends LitElement {
           this.timesError = "";
         },
         () => {
-          if (current()) this.timesError = t("prep.load_error");
+          if (current()) this.timesError = t("prep.times.load_error");
         },
         () => {
           if (current()) this.timesError = "";

@@ -3474,7 +3474,7 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Worked-out prep-station times
 
-Prep stations' Times tab (`station-times-screen.ts`) shows one station's month, read-only. A
+Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
 `opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
@@ -3485,9 +3485,9 @@ names its department ("Lunch (Restaurant)"). Dates show their special day's and 
 names, as in Opening hours, and the season chips are only a key to the tints, not buttons
 (`keyOnly` on `season-chips.ts`). These are planned times; today's station closures and service
 extensions do not change them. A default station shows "Always open: this is the default
-station" and no month. A failed read shows "Prep stations could not be loaded." above the month
-until that read succeeds again. The month is not kept in the address: the tab opens on the browser's
-current month. Special days are made and painted in Opening hours' special-day painter, opened
+station" and no month. A failed read shows "This station's times could not be loaded. It will be
+tried again." above the month until that read succeeds again. The month is not kept in the
+address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
 from the Year or the month.
 
 ### Tabbed management pages
@@ -3633,7 +3633,7 @@ Department opening hours belong to `/manage/opening-hours`, with a Year tab; the
 (`/view/month`) shows under the Year tab. The page opens on Year when its address names no view and
 no department, zone, season or `?station=`, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
-year, and choosing another tab drops it; `/department/<id>` selects the department.
+year; `/department/<id>` selects the department.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season

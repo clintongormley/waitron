@@ -6,8 +6,8 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import type { PrepStationTimes } from "./station-times-screen.js";
-import "./station-times-screen.js";
+import type { PrepStationTimes } from "./station-times-tab.js";
+import "./station-times-tab.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
@@ -328,8 +328,8 @@ describe("Prep station times", () => {
           .poll(() => alerts(el).map(text))
           .toEqual([
             locale === "en"
-              ? "Prep stations could not be loaded."
-              : "No se pudieron cargar las estaciones de preparación.",
+              ? "This station's times could not be loaded. It will be tried again."
+              : "No se han podido cargar los horarios de esta estación. Se volverá a intentar.",
           ]);
         expect(monthRoot(el)?.querySelectorAll("[data-date]").length ?? 0).toBe(0);
         h.failing[failed] = false;

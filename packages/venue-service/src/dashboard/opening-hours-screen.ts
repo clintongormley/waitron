@@ -192,8 +192,8 @@ export class OpeningHoursScreen extends LitElement {
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
   }
-  /** Whether an address with no view names a week (the painter's, a station's or All departments')
-   *  rather than the Year (ruling R3). */
+  /** Whether an address with no view names a department, zone, season or an old `?station=`, which
+   *  opens the season painter rather than the Year (ruling R3). */
   private namesWeek(url: URL) {
     return (
       ["department", "zone", "season"].some((key) => this.url.read(key) !== null) ||
@@ -826,7 +826,7 @@ export class OpeningHoursScreen extends LitElement {
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
-          write({ department: event.detail.departmentId || null, zone: null, station: null });
+          write({ department: event.detail.departmentId || null, zone: null });
         }}
       ></opening-hours-month>`;
   }

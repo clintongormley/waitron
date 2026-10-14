@@ -11,7 +11,7 @@ import {
   type WtInput,
 } from "@waitron/ui";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
-import type { PrepStationTimes } from "./station-times-screen.js";
+import type { PrepStationTimes } from "./station-times-tab.js";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";

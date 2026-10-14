@@ -64,7 +64,7 @@ import type {
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
-import "./station-times-screen.js";
+import "./station-times-tab.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   refusalOf,
