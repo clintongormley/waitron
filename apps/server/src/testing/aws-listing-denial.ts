@@ -1,7 +1,9 @@
 // AWS facts this relies on, quoted from AWS's IAM documentation (fetched 2026-10-14):
 // - https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html
 //   "If the key that you specify in a policy condition is not present in the request context, the
-//   values do not match and the condition is false." So a listing with no prefix is not denied.
+//   values do not match and the condition is false." Whether S3 leaves `s3:prefix` out of a listing
+//   with no prefix or sends it empty is not established; neither is denied. Absent, the condition is
+//   false by that sentence; empty, `""` cannot match `<P>*` because `<P>` is never empty.
 // - https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
 //   "An explicit deny in either of these policies overrides the allow." So the rehearsal key's own
 //   S3 allow does not outrank this bucket policy's Deny.
@@ -83,6 +85,7 @@ async function pollUntil(
   exactPrefix: string,
   deps: ListingDenialDeps,
   want: (answer: ListAnswer) => boolean,
+  seen: { last?: ListAnswer } = {},
 ): Promise<Polled> {
   const budget = AWS_REHEARSAL_LIMITS.denialControlMs;
   const started = deps.now();
@@ -90,6 +93,7 @@ async function pollUntil(
   for (;;) {
     if (ctx.signal.aborted) throw new Error("the listing denial was stopped with the rehearsal");
     const last = await deps.list(exactPrefix, ctx.signal);
+    seen.last = last;
     attempts += 1;
     const elapsedMs = Math.max(0, deps.now() - started);
     if (want(last)) return { met: true, last, attempts, elapsedMs };
@@ -172,14 +176,14 @@ async function restore(
     );
   }
   let positive: Polled;
+  const seen: { last?: ListAnswer } = { last: lastDenied };
   try {
-    positive = await pollUntil(ctx, exactPrefix, deps, (answer) => answer.ok);
+    positive = await pollUntil(ctx, exactPrefix, deps, (answer) => answer.ok, seen);
   } catch (error) {
+    const named = error instanceof Error ? error.message : "unknown";
     return new Error(
-      "listing denial unresolved: the policy was removed, but the positive control did not finish",
-      {
-        cause: error,
-      },
+      `listing denial unresolved: the policy was removed, but the positive control did not finish (${named}); the listing last answered ${statusText(seen.last)}`,
+      { cause: error },
     );
   }
   record(ctx, "deny-positive-control", positive);

@@ -508,6 +508,30 @@ describe("withListingDenied", () => {
     expect(log.at(-1)).toBe("work");
   });
 
+  it("names the removal and the last listing answer when the positive control itself fails", async () => {
+    const log: string[] = [];
+    const h = harness(log);
+    const l = lister([DENIED, { ok: false, status: 500, errorName: "InternalError" }], log);
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        ctx.prefix("pause");
+        const deps: ListingDenialDeps = {
+          ...l.deps,
+          async list(prefix, signal) {
+            if (log.slice(log.indexOf("delete")).includes("list:500")) {
+              throw new Error("the listing broke");
+            }
+            return l.deps.list(prefix, signal);
+          },
+        };
+        await withListingDenied(ctx, EXACT, async () => {}, deps);
+      }, h.deps),
+    );
+    expect(error.message).toBe(
+      "listing denial unresolved: the policy was removed, but the positive control did not finish (the listing broke); the listing last answered 500",
+    );
+  });
+
   it("stops polling when the rehearsal's signal aborts", async () => {
     const outside = new AbortController();
     const log: string[] = [];
