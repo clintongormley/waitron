@@ -700,11 +700,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   row until the list is scrolled again (`apps/dashboard/src/widgets/section-add-products.ts`).
   **Next action:** keep the list's end in view when the block grows, test-first in real Chromium.
 
-- **Two copies of the count wording helper** — left by A453. `countOf`
-  (`apps/dashboard/src/widgets/count-text.ts`) and the catalogue browser's private `#plural`
-  (`apps/dashboard/src/widgets/catalogue-browser.ts`) pick the `_one` string the same way.
-  **Next action:** make the catalogue browser use `countOf`, widening its key list.
-
 - **On a phone, sections nested more than four deep read flat in the Structure tab** — left open
   by A453. At narrow width `wt-data-table` stops indenting after four levels
   (`min(var(--tree-depth, 0), 4)`, `packages/ui/src/components/wt-data-table.ts`), and the menu's
