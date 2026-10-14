@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError, decimal, type Decimal } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   CollectParams,
@@ -121,7 +122,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       amount: params.amount,
       billPaymentId: params.billPaymentId,
     };
-    await this.db.transaction(async (tx) => {
+    await withTransaction(this.db, async (tx) => {
       if (declined) await insertFailedPayment(tx, common);
       else await insertCapturedPayment(tx, { ...common, settledAt: settledAt as Date });
     });
@@ -183,7 +184,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   }
 
   async void(ref: string): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       await this.require(tx, ref);
       return recordVoid(tx, { provider: this.provider, paymentRef: ref });
     });
@@ -191,7 +192,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   }
 
   async refund(ref: string): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       const found = await this.require(tx, ref);
       return recordRefund(tx, {
         provider: this.provider,
@@ -203,7 +204,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   }
 
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    const row = await this.db.transaction(async (tx) => {
+    const row = await withTransaction(this.db, async (tx) => {
       await this.require(tx, ref);
       return recordRefund(tx, {
         provider: this.provider,

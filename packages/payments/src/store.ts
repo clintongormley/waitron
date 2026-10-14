@@ -469,9 +469,7 @@ async function selectForwardable(tx: Transaction, provider: string): Promise<For
  *
  * **What makes this a claim is the CALLER's transaction, not anything in the statement**: the
  * selection and the state-guarded advances after it must commit together, and two passes are
- * serialised only inside `withTransaction`, which takes the write lock. No caller does that today —
- * `FakePaymentProvider.forward` opens a bare `db.transaction`, which is not queued — so two
- * concurrent passes have not been run against this.
+ * serialised only inside `withTransaction`, which takes the write lock.
  */
 export async function claimAcceptedOffline(
   tx: Transaction,

@@ -1,4 +1,5 @@
 import { decimal } from "@waitron/shared";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type {
   AsyncPaymentProvider,
@@ -20,7 +21,7 @@ export class FakeAsyncProvider implements AsyncPaymentProvider {
 
   async initiate(params: InitiateParams): Promise<InitiateResult> {
     const externalRef = nextHostedId();
-    await this.db.transaction((tx) =>
+    await withTransaction(this.db, (tx) =>
       insertInitiated(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
