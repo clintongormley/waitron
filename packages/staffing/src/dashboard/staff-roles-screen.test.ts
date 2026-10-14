@@ -657,6 +657,82 @@ describe("the staff roles page", () => {
     expect(request.mock.calls.filter(([, method]) => method === "DELETE")).toHaveLength(1);
   });
 
+  it("closes the delete question and reads the list again when the impact read finds the staff role gone", async () => {
+    let roles = [waiter, runner];
+    const request = await mount(
+      fakeRequest(() => roles, {
+        [`GET ${BASE}/role-r/delete-impact`]: () => {
+          throw { code: "staff_role.not_found" };
+        },
+      }),
+    );
+    const reads = () =>
+      request.mock.calls.filter(([path, method]) => path === BASE && (method ?? "GET") === "GET")
+        .length;
+    const before = reads();
+    roles = [waiter];
+    await choose("delete-role-r");
+    expect(deleteDialog()).toBeNull();
+    expect(reads()).toBe(before + 1);
+    expect(rowKeys()).toEqual(["role-w"]);
+  });
+
+  it("ignores the impact read finding the staff role gone while its own delete is in flight", async () => {
+    let answer!: (impact: DeleteImpact) => void;
+    let gone = false;
+    const liveData = new LiveData();
+    const request = await mount(
+      fakeRequest(() => [waiter], {
+        [`GET ${BASE}/role-w/delete-impact`]: () => {
+          if (gone) throw { code: "staff_role.not_found" };
+          return impactOf(waiter);
+        },
+        [`DELETE ${BASE}/role-w`]: () => new Promise<DeleteImpact>((resolve) => (answer = resolve)),
+      }),
+      { liveData },
+    );
+    await choose("delete-role-w");
+    confirmDelete().click();
+    await settle();
+    gone = true;
+    liveData.invalidate([{ type: "staff_roles" }]);
+    await vi.waitFor(() =>
+      expect(
+        request.mock.calls.filter(([path]) => path === `${BASE}/role-w/delete-impact`),
+      ).toHaveLength(2),
+    );
+    await settle();
+    expect(deleteDialog()!.submitting).toBe(true);
+    expect(deleteDialog()!.readError).toBe("");
+    answer(impactOf(waiter));
+    await settle();
+    expect(deleteDialog()).toBeNull();
+    liveData.clear();
+  });
+
+  it("closes the delete question and reads the list again when the delete finds the staff role gone", async () => {
+    let roles = [waiter, runner];
+    const request = await mount(
+      fakeRequest(() => roles, {
+        [`DELETE ${BASE}/role-r`]: () => {
+          throw { code: "staff_role.not_found", params: { staffRoleId: "role-r" } };
+        },
+      }),
+    );
+    const reads = () =>
+      request.mock.calls.filter(([path, method]) => path === BASE && (method ?? "GET") === "GET")
+        .length;
+    await choose("delete-role-r");
+    const before = reads();
+    roles = [waiter];
+    confirmDelete().click();
+    await settle();
+    expect(request).toHaveBeenCalledWith(`${BASE}/role-r`, "DELETE");
+    expect(deleteDialog()).toBeNull();
+    expect(reads()).toBe(before + 1);
+    expect(rowKeys()).toEqual(["role-w"]);
+  });
+
   it.each(["answers", "is refused"] as const)(
     "drops a delete that %s after the page was taken out",
     async (outcome) => {

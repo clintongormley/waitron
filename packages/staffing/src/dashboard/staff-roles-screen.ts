@@ -111,8 +111,15 @@ export class StaffRolesScreen extends LitElement {
     this,
     () => this.api.liveData,
     (error) => {
+      const deletion = this.deleting;
+      if (!deletion) return;
+      if (codeOf(error) === "staff_role.not_found") {
+        // While this screen's own delete is in flight, its answer closes the question.
+        if (!deletion.busy) this.#staffRoleGone();
+        return;
+      }
       this.deleting = {
-        ...this.deleting!,
+        ...deletion,
         loading: false,
         readError: tf("staffing.role.delete_load_error", { reason: codeMessage(codeOf(error)) }),
       };
@@ -185,6 +192,12 @@ export class StaffRolesScreen extends LitElement {
     this.deleting = undefined;
   }
 
+  /** The role was deleted elsewhere: the question closes and the list is read again. */
+  #staffRoleGone(): void {
+    this.#closeDelete();
+    void this.#load();
+  }
+
   #readImpact(): void {
     const deletion = this.deleting!;
     this.deleting = { ...deletion, loading: true, readError: "" };
@@ -204,6 +217,10 @@ export class StaffRolesScreen extends LitElement {
       await this.api.deleteStaffRole(staffRoleId);
     } catch (error) {
       if (current !== this.#deletion) return;
+      if (codeOf(error) === "staff_role.not_found") {
+        this.#staffRoleGone();
+        return;
+      }
       this.deleting = {
         ...this.deleting,
         busy: false,
