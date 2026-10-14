@@ -4611,10 +4611,16 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   When teardown fails to delete the bucket and then fails to write the marker again, the cleanup
   command refuses (`ownership-unproven`); the runbook says to delete it by hand. Left open by A641.
 
-- **A rehearsal keeper that cannot reach Amazon S3 when it starts gives no cleanup command.** Its
-  ownership-marker read fails, so it reports a bucket the journal says the run owned as of unknown
-  ownership and deletes nothing (`apps/server/src/testing/aws-rehearsal-keeper.ts`). Left open by
-  A641.
+- **A rehearsal keeper that cannot reach Amazon S3 when it cleans up after a killed run gives no
+  cleanup command.** Its ownership-marker read fails, so it reports a bucket the journal says the
+  run owned as of unknown ownership and deletes nothing
+  (`apps/server/src/testing/aws-rehearsal-keeper.ts`). Left open by A641.
+
+- **A journal the rehearsal keeper refuses leaves the run's scratch folder, secrets included.** A
+  journal it cannot read, or one outside its bounds, makes it delete nothing, the scratch folder
+  too, so a box's `secrets.env` and `recovery-kit.txt` stay on disk until a person deletes them
+  (`readJournalAt` in `apps/server/src/testing/aws-rehearsal-keeper.ts`). The refusal is by
+  design; the folder it leaves is the open part. Left open by A641.
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.

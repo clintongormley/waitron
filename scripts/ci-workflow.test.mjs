@@ -1579,12 +1579,12 @@ describe("the venue-service shards' browser start-up record", () => {
 });
 
 /**
- * The stream loop and pause tests, the S3 rehearsal scenarios and the S3 test server's own suite run
- * in a job of their own, beside the apps/server shards: between them they need two downloaded
- * binaries. Their blob joins the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
+ * The tests that need Litestream or versitygw (`STREAM_TEST_FILES`) run in a job of their own,
+ * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
+ * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
  * passes.
  */
-describe("the job of the stream tests, the S3 rehearsal scenarios and the S3 test server's suite", () => {
+describe("the job of the tests that need Litestream or versitygw", () => {
   const stream = () => job(STREAM_JOB);
   const streamText = () => stream().body.join("\n");
 

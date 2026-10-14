@@ -122,4 +122,7 @@ Across the four runs:
   frozen-transport timing, and the Litestream trace-logging stall.
 - **The rehearsal's own open edges**, listed in [docs/backlog.md](../../backlog.md) under the A538
   rehearsal entries: among them, no teardown when the run is interrupted, and an unplanned request is
-  caught only after Amazon S3 has answered it.
+  caught only after Amazon S3 has answered it. (2026-10-14: A641 closed both, and the backlog no longer lists them. A
+  killed run is now cleaned up by a second process, the keeper, within limits, and a request off the
+  run's plan is refused before it is sent; see
+  [aws-backup-rehearsal.md](../../developers/aws-backup-rehearsal.md).)

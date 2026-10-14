@@ -8,7 +8,7 @@ error from AWS, the teardown's two-minute limit running out, or a Litestream upl
 when teardown starts. Any failed teardown step fails the run, and when the bucket is left the
 receipt names it and gives a cleanup command. A run whose process dies before it can tear down
 (Ctrl-C, a SIGTERM, an uncaught error) is cleaned up by a second process it started for that, the
-keeper; see "When a run is killed: the keeper". If the deadline passes before AWS answers the
+keeper, within the limits listed in "When a run is killed: the keeper". If the deadline passes before AWS answers the
 create, the run cannot know whether the bucket exists: the receipt records it as
 `unowned-candidate` with no cleanup command, and a person checks it.
 
@@ -128,8 +128,8 @@ failure message then names the folder, so you can delete it by hand.
 It then writes a receipt, `aws-rehearsal-<run id>.json`, and prints its path. A receipt holds the
 commit, versions, region, times and limits, one row per recorded step (a stage name, an outcome, a
 duration, and where relevant an API name, HTTP status and AWS error name), the teardown steps and
-their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the five
-bucket teardown steps or `remove-scratch` is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
+their outcomes, and what is left. For a bucket the run owned, a receipt missing any of the teardown
+steps above, `remove-scratch` included, is refused, and the run fails saying the receipt was not written. It never holds a key, a URL, an object's contents or a raw error
 message. For the loop scenario, the recorded steps are `probe`, `pointer-a`, `sale-a`, `rebuild`,
 `pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. The rehearsal passes the loop no way
 to freeze the transport, so `frozen-transport` always reads `skipped` here: the stage's sales
@@ -395,7 +395,7 @@ cancelling an upload needs its object key, which the receipt does not store. Ins
 unfinished upload the owned bucket lists, which covers the same uploads because the bucket is the
 run's alone.
 
-When teardown fails to delete the bucket after it has already deleted the marker with the objects,
+When teardown fails to delete the bucket after it has deleted the marker, just before the bucket,
 or the run never wrote a marker, teardown writes the marker again so this command can prove
 ownership. If that write fails too, the receipt has a failed `restore-nonce` row and the
 command refuses with `ownership-unproven`. The bucket is still the one the receipt names, created by
@@ -445,11 +445,11 @@ In every state it then removes the scratch folder, writes its own receipt,
 `interrupted` row, and prints its lines.
 
 **What it prints.** Every line goes to `aws-rehearsal-<run id>-keeper.log` beside the receipt, and to
-the terminal the run was started from, when there was one. The lines are the receipt's path, then
+the terminal the run was started from, when there was one, for as long as it stays open. The lines are the receipt's path, then
 either `nothing left behind` or `left behind:` followed by one line per thing left: `bucket <name>`,
 `bucket <name> (ownership unknown)`, `upload <id>`, `process <pid>`, `folder <path>`. It exits 0
-when nothing is left and nothing else went wrong, and 1 otherwise. A bucket left behind gets a
-cleanup command in the interrupted receipt, run as above. A bucket of unknown ownership gets none: a
+when nothing is left and nothing else went wrong, and 1 otherwise. A bucket left behind after the
+keeper's teardown gets a cleanup command in the interrupted receipt, run as above. A bucket of unknown ownership gets none: a
 person checks who owns it before deleting it, as for `unowned-candidate`.
 
 **Its limits.**
@@ -458,11 +458,15 @@ person checks who owns it before deleting it, as for `unowned-candidate`.
   `waitron-aws-rehearsal-<run id>` directly in the keeper's temporary folder, the bucket must have a
   rehearsal bucket's name, and an endpoint (set only by the rehearsal's own tests) must be on this
   machine. A journal outside those bounds, or one it cannot read, is refused: the keeper deletes
-  nothing, not even the scratch folder, prints why and exits 1. Clean up by hand, as described under
-  the limits near the top.
+  nothing, not even the scratch folder, prints why and exits 1, naming nothing as left. Clean up
+  by hand: the bucket's name is in the journal, `aws-rehearsal-<run id>-journal.json` in the
+  receipt folder; the scratch folder is `waitron-aws-rehearsal-<run id>` in your temporary folder,
+  and holds secrets; the bucket goes as described under the limits near the top.
 - **If its own checks fail** (the opt-in, the profile, `AWS_REGION` differing from the journal's),
   it sends nothing, but still stops the tracked processes and removes the scratch folder, and lists
-  an `owned` bucket as left and a `creating` one as of unknown ownership.
+  an `owned` bucket as left and a `creating` one as of unknown ownership. It writes no receipt, so
+  a bucket it lists has no cleanup command; delete it by hand, as described under the limits near
+  the top.
 - **It waits at most twice the run's whole budget**: the 15-minute deadline, the one-minute settle
   wait and the two-minute teardown, doubled, so 36 minutes. A run still going then is left to finish
   alone: the keeper prints `gave up waiting`, lists what may be left, does nothing and exits 1.
