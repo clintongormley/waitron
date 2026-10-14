@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openVenueDatabase, tenants } from "@waitron/db";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { paperCustodianFingerprint } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { loadConfig } from "../src/config.js";
 import { parseEnvFile } from "./dev-setup.js";
@@ -175,4 +177,41 @@ describe("devOnboard against a real venue directory", () => {
     );
     expect(await tenantsCount()).toBe(1);
   });
+});
+
+describe("dev-onboard run as a command", () => {
+  let workDir: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-onboard-main-"));
+  });
+
+  afterAll(async () => {
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("--reset under production refuses before removing the venue folder", () => {
+    const venueDir = join(workDir, "venue");
+    mkdirSync(venueDir);
+    writeFileSync(join(venueDir, "sentinel"), "keep me");
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", fileURLToPath(new URL("./dev-onboard.ts", import.meta.url)), "--reset"],
+      {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        encoding: "utf8",
+        timeout: 60_000,
+        env: {
+          ...process.env,
+          WAITRON_ENV: "production",
+          WAITRON_STATE_DIR: join(workDir, "state"),
+          WAITRON_VENUE_DIR: venueDir,
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("deployment.development_custodian_refused");
+    expect(result.stdout).not.toContain("removed");
+    expect(readFileSync(join(venueDir, "sentinel"), "utf8")).toBe("keep me");
+  }, 90_000);
 });

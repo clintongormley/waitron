@@ -92,6 +92,7 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
 
 /** `--reset` removes the venue directory first. */
 async function main(): Promise<void> {
+  assertDevelopmentEnvironment(process.env);
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
 
   // Resolved exactly as `config.ts` does, so this migrates the directory `pnpm dev` opens.

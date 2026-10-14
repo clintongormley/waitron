@@ -115,6 +115,17 @@ describe("dev:custodian init", () => {
     expect(await exists(join(dir, "key.pem"))).toBe(true);
   });
 
+  it("a relative --dir resolves from the working directory when INIT_CWD is unset", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue(dirname(dir));
+    try {
+      const result = await run(["init", "--dir", basename(dir)], dev);
+      expect(result.code).toBe(0);
+      expect(await exists(join(dir, "key.pem"))).toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("unknown subcommand prints usage", async () => {
     const result = await run(["frobnicate"], dev);
     expect(result.code).not.toBe(0);
@@ -296,6 +307,19 @@ describe("dev:custodian sign", () => {
       expect(await exists(join(dir, "confirmation.json"))).toBe(false);
     });
   }
+
+  it.each([
+    ["seriesCode", ""],
+    ["seriesCode", 7],
+    ["rectificativeSeriesCode", ""],
+  ])("refuses a body whose venue %s is %j", async (field, value) => {
+    await initAndStub();
+    const result = await sign(wizardBody({ [field]: value }));
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(`has no ${field}`);
+    expect(result.stdout).toBe("");
+    expect(await exists(join(dir, "confirmation.json"))).toBe(false);
+  });
 
   it("refuses production", async () => {
     await initAndStub();
