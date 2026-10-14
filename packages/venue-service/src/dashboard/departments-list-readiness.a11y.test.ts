@@ -251,16 +251,14 @@ describe.each(["light", "dark"] as const)("special-day clash warning (%s)", (the
             code: "special_day.date_shared",
             date: "2027-03-26",
             specialDayId: "sd2",
-            name: "Feria".repeat(20),
+            specialDayName: "Feria".repeat(20),
             otherSpecialDayId: "sd1",
-            otherName: "Viernes Santo".repeat(10),
+            otherSpecialDayName: "Viernes Santo".repeat(10),
           },
         ];
         el.model = view;
         await el.updateComplete;
-        const warning = el.shadowRoot!.querySelector<HTMLElement>(
-          '[data-test="special-day-clash"]',
-        )!;
+        const warning = el.shadowRoot!.querySelector<HTMLElement>('[data-test="date-shared"]')!;
         expect(warning.textContent).toContain(locale === "en" ? "applies" : "Se aplica");
         const bounds = el.getBoundingClientRect();
         const rect = warning.getBoundingClientRect();

@@ -306,10 +306,10 @@ export interface SpecialDayClash {
   date: LocalDate;
   /** The special day that applies on `date`. */
   specialDayId: string;
-  name: string;
+  specialDayName: string;
   /** The special day whose date falls on `date` too, and does not apply there. */
   otherSpecialDayId: string;
-  otherName: string;
+  otherSpecialDayName: string;
 }
 
 /** The special-day readiness warnings for the venue's current and next year: each repeating date
@@ -349,9 +349,9 @@ export async function specialDayReadiness(
       clashes.set(`${date}|${row.specialDayId}`, {
         date,
         specialDayId: applies.specialDayId,
-        name: applies.name,
+        specialDayName: applies.name,
         otherSpecialDayId: row.specialDayId,
-        otherName: row.name,
+        otherSpecialDayName: row.name,
       });
     }
   }

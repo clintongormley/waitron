@@ -226,14 +226,14 @@ describe("department list", () => {
           code: "special_day.date_shared" as const,
           date: "2027-03-26",
           specialDayId: "sd2",
-          name: "Feria",
+          specialDayName: "Feria",
           otherSpecialDayId: "sd1",
-          otherName: "Viernes Santo",
+          otherSpecialDayName: "Viernes Santo",
         },
       ],
     };
     const el = await setup(clash);
-    const warning = find(el, '[data-test="special-day-clash"]')!;
+    const warning = find(el, '[data-test="date-shared"]')!;
     expect(warning.textContent!.trim()).toBe(
       "Viernes Santo and Feria both fall on Fri, 26 Mar 2027. Feria applies; change one to choose.",
     );
@@ -243,7 +243,7 @@ describe("department list", () => {
     cleanup();
     setLocale("es");
     const es = await setup(clash);
-    expect(find(es, '[data-test="special-day-clash"]')!.textContent!.trim()).toBe(
+    expect(find(es, '[data-test="date-shared"]')!.textContent!.trim()).toBe(
       "Viernes Santo y Feria caen el vie, 26 mar 2027. Se aplica Feria; cambia uno para elegir.",
     );
   });

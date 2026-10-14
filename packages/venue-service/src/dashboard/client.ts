@@ -80,9 +80,9 @@ export type VenueReadinessIssue =
       code: "special_day.date_shared";
       date: LocalDate;
       specialDayId: string;
-      name: string;
+      specialDayName: string;
       otherSpecialDayId: string;
-      otherName: string;
+      otherSpecialDayName: string;
     };
 export interface NamedRow {
   id: string;

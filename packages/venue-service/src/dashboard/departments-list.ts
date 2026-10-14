@@ -446,10 +446,10 @@ export class DepartmentsList extends LitElement {
               })}
             </p>`
           : issue.code === "special_day.date_shared"
-            ? html`<p class="issue" data-test="special-day-clash">
-                ${format("venue.readiness.special_day_clash", {
-                  other: issue.otherName,
-                  name: issue.name,
+            ? html`<p class="issue" data-test="date-shared">
+                ${format("venue.readiness.date_shared", {
+                  other: issue.otherSpecialDayName,
+                  name: issue.specialDayName,
                   date: formatDate(issue.date),
                 })}
               </p>`

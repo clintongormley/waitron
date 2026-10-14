@@ -615,9 +615,9 @@ describe("the readiness list warns when two special days come to share a date", 
     code: "special_day.date_shared",
     date,
     specialDayId: applies.id,
-    name,
+    specialDayName: name,
     otherSpecialDayId: other.id,
-    otherName,
+    otherSpecialDayName: otherName,
   });
 
   it("names a repeating holiday that moved onto a fixed date, which applies, in the current and next year", async () => {

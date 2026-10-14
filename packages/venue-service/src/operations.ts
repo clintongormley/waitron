@@ -265,9 +265,9 @@ export type VenueReadinessIssue =
       code: "special_day.date_shared";
       date: LocalDate;
       specialDayId: string;
-      name: string;
+      specialDayName: string;
       otherSpecialDayId: string;
-      otherName: string;
+      otherSpecialDayName: string;
     };
 
 /** Describe configuration that prevents an active zone from accepting new orders, and, for the
