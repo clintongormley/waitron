@@ -19,6 +19,7 @@ import { ALL_MODULES } from "./modules.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillClockState } from "./till-clock-state.js";
+import { timeEntries } from "@waitron/workforce";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -57,6 +58,47 @@ it("the real recovery listener serves its recovery status and no clock routes", 
     );
     await rm(scratch, { recursive: true, force: true });
   }
+});
+
+describe("mounted till clock source", () => {
+  const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+  it("uses the injected server instant for own state and recorded clock events", async () => {
+    const at = new Date("2030-02-05T09:00:00Z");
+    const venue = await createClockVenue(suite.db, () => at);
+    const app = new Hono();
+    const system = systemClock();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        clock: { ...system, now: () => ({ ...system.now(), instant: at }) },
+        backend: makeFiscalBackend(
+          ALL_MODULES.filter((m) => m.name === "fiscal-none"),
+          "none",
+          suite.db,
+          {},
+        ),
+        secureCookies: false,
+        venueLocale: "en-GB",
+        workforceEnabled: true,
+      },
+      () => {},
+    );
+    const read = await app.request("/api/clock/state", { headers: { cookie: venue.cookie } });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({ businessDay: "2030-02-05", state: "out" });
+    const written = await app.request("/api/clock/in", {
+      method: "POST",
+      headers: { cookie: venue.cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedEntryId: null }),
+    });
+    expect(written.status).toBe(200);
+    expect(await written.json()).toMatchObject({ businessDay: "2030-02-05", state: "working" });
+    expect(await suite.db.select({ at: timeEntries.eventAt }).from(timeEntries)).toEqual([
+      { at: at.toISOString() },
+    ]);
+  });
 });
 
 describe("clock handler absence with identity and workforce absent", () => {

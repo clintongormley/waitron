@@ -2954,6 +2954,7 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     this.#stopDepartmentTransfers();
     this.#stopClocking();
+    this.#clockAccessLost = false;
     this.clockedOut = false;
     this.#loginPending = true;
     const signIn = ++this.#signIns;

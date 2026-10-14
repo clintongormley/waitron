@@ -60,6 +60,28 @@ describe("till clocking integration", () => {
     );
     expect(f.api.clockOut).not.toHaveBeenCalled();
   });
+  it("a clock refusal for one person does not disable the next admitted person's clock", async () => {
+    const f = await clockApp();
+    f.api.getClockState.mockRejectedValueOnce({ code: "attendance.not_permitted" });
+    await signIn(f.el);
+    await working(f.el);
+    expect(clockPage(f.el)).toBeNull();
+    await shellAction(f.el, ".logout");
+    await vi.waitFor(() =>
+      expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
+    );
+    f.api.login.mockImplementationOnce(async (personId) => {
+      f.setState(clockState("out", null, personId));
+      return { personId, displayName: "Bea", permissions: [] };
+    });
+    await signIn(f.el, "p2");
+    await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+    await pageButton(f.el, "[data-clock-in]");
+    await working(f.el);
+    expect(f.state().personId).toBe("p2");
+    expect(f.state().state).toBe("working");
+  });
+
   it("Cancel works and next sign-in asks again", async () => {
     const f = await clockApp();
     await signIn(f.el);

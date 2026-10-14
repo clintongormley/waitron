@@ -1126,7 +1126,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
   if (deps.workforceEnabled === true)
-    mountTillClockApi(app, { db: deps.db, cfg: deps.cfg, now: () => new Date() }, log);
+    mountTillClockApi(
+      app,
+      { db: deps.db, cfg: deps.cfg, now: () => deps.clock.now().instant },
+      log,
+    );
   const simulator = deps.cardProvider;
   if (simulator instanceof SimulatorPaymentProvider) {
     const demoRun = createErrorBoundary(
