@@ -246,6 +246,42 @@ it("a failed read is shown at the bottom over a refusal, with Try again, and the
   expect(confirm(el).disabled).toBe(false);
 });
 
+it("a failed re-read beside a shown impact keeps a refusal's sentence at the bottom, and offers Try again", async () => {
+  const el = await mount(impactOf({ seasons: 2 }));
+  el.refusal = {
+    code: "hours.clock_change_pending",
+    params: { effectiveBusinessDay: "2026-10-20" },
+  };
+  el.readError = "What deleting it changes could not be read.";
+  await el.updateComplete;
+  expect(bottom(el)).toBe("Cancel the pending business-day change before editing hours.");
+  expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
+  expect(body(el)).toContain("Painted in 2 seasons.");
+  expect(confirm(el).disabled).toBe(false);
+
+  el.refusal = {
+    code: "menu_timetable.invalid",
+    params: { field: "replacementPeriodId", reason: "end_offset", periodId: "p2" },
+  };
+  await el.updateComplete;
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(picker(el)!.error).toBe("Change the end offset of Dinner to fit these times.");
+  expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
+});
+
+it("a Replace-with choice is dropped when a new impact no longer offers the picker", async () => {
+  const el = await mount(impactOf({ keptOpenToday: true }));
+  await choose(el, "p2");
+  expect(body(el)).toContain("Today's later opening moves to Dinner.");
+  el.impact = impactOf({ keptOpenToday: false });
+  await el.updateComplete;
+  expect(picker(el)).toBeNull();
+  expect(body(el)).toBe("Not painted anywhere. No hours change.");
+  const confirmed = listen(el, "period-delete-confirm");
+  confirm(el).click();
+  expect(confirmed).toEqual([{ periodId: "p1", replacementPeriodId: null }]);
+});
+
 it("a replacement refusal marks Replace with and the bottom asks to correct it; Confirm stays enabled", async () => {
   const el = await mount(impactOf({ seasons: 1 }));
   await choose(el, "p2");

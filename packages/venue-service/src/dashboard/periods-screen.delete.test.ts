@@ -390,6 +390,35 @@ it("a failed then recovered page read leaves the delete dialog's refusal in plac
   );
 });
 
+it("a failed re-read after a refused delete keeps the refusal at the bottom, the impact and Delete, and offers Try again", async () => {
+  let failImpact = false;
+  const el = await mount(
+    fake({
+      impact: () => {
+        if (failImpact) throw new Error("offline");
+        return impactOf({ seasons: 2 });
+      },
+      write: () => {
+        throw {
+          code: "hours.clock_change_pending",
+          params: { effectiveBusinessDay: "2026-10-20" },
+        };
+      },
+    }),
+  );
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  confirm(dialog).click();
+  const pending = "Cancel the pending business-day change before editing hours.";
+  await expect.poll(() => bottom(dialog)).toBe(pending);
+  failImpact = true;
+  el.api.rereadWatches();
+  await expect.poll(() => retry(dialog)).not.toBeNull();
+  expect(bottom(dialog)).toBe(pending);
+  expect(body(dialog)).toContain("Painted in 2 seasons.");
+  expect(confirm(dialog).disabled).toBe(false);
+});
+
 /** A screen whose delete is refused unless it sends `server.revision`, and whose impact reads
  *  answer with that revision, or are held in `answers` while `server.hold` is set. */
 async function clockScreen(server: { revision: number; hold: boolean; failImpact?: boolean }) {

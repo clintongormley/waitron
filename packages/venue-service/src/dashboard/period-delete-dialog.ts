@@ -18,6 +18,9 @@ const cellLabel = (use: PeriodRoutingUse) =>
       use.rowLabel ?? t(use.rowKind === "all" ? "routing.all_categories" : "routing.no_category"),
     zone: use.zoneName ?? t("routing.every_zone"),
   });
+const offersReplacement = (impact: PeriodDeleteImpact) =>
+  impact.replacements.length > 0 &&
+  (impact.seasons + impact.specialDays > 0 || impact.keptOpenToday);
 
 @customElement("period-delete-dialog")
 export class PeriodDeleteDialog extends LitElement {
@@ -66,7 +69,8 @@ export class PeriodDeleteDialog extends LitElement {
       changed.has("impact") &&
       this.impact &&
       this.replacement !== "" &&
-      !this.impact.replacements.some((entry) => entry.id === this.replacement)
+      (!offersReplacement(this.impact) ||
+        !this.impact.replacements.some((entry) => entry.id === this.replacement))
     )
       this.replacement = "";
   }
@@ -93,7 +97,7 @@ export class PeriodDeleteDialog extends LitElement {
   }
   private bottomError(): string {
     const refusal = this.refusal;
-    if (!refusal || this.readError) return this.readError;
+    if (!refusal || (this.readError && !this.impact)) return this.readError;
     if (this.fieldError()) return t("prep.fix_fields");
     const params = refusal.params ?? {};
     switch (refusal.code) {
@@ -149,8 +153,7 @@ export class PeriodDeleteDialog extends LitElement {
     return lines.length ? lines : [t("period.delete_nothing")];
   }
   private picker(impact: PeriodDeleteImpact) {
-    const painted = impact.seasons + impact.specialDays > 0;
-    if (impact.replacements.length === 0 || !(painted || impact.keptOpenToday)) return nothing;
+    if (!offersReplacement(impact)) return nothing;
     return html`<p class="hint">${t("period.delete_keep_hint")}</p>
       <wt-combobox
         name="replacementPeriodId"
