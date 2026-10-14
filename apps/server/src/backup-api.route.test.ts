@@ -4,7 +4,7 @@
 // `backup-supervisor.test.ts`.
 import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -16,6 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
+import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
@@ -412,7 +413,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -441,7 +442,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -461,7 +462,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -493,7 +494,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: "trailing space key ",
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -517,7 +518,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -535,7 +536,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -596,7 +597,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -650,7 +651,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -678,7 +679,7 @@ describe("backup admin routes", () => {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
-          destination: { kind: "local-fs", dir: makeDestDir() },
+          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
           recoveryKey: KEY_1,
           schedule,
           retention: RETENTION,
@@ -728,7 +729,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -801,7 +802,7 @@ describe("backup admin routes", () => {
     expect(
       (
         await post("/api/backup/apply", {
-          destination: { kind: "local-fs", dir: dest },
+          destinations: [{ kind: "local-fs", dir: dest }],
           recoveryKey: KEY_1,
           schedule: DAILY_AT_0330,
           retention: RETENTION,
@@ -904,7 +905,7 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       // No key in the body: the box's own is the one archives are locked with.
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -926,7 +927,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_2,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -996,7 +997,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -1025,7 +1026,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -1091,7 +1092,7 @@ describe("backup admin routes", () => {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
-          destination: { kind: "local-fs", dir: makeDestDir() },
+          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
           recoveryKey,
           schedule: DAILY_AT_0330,
           retention: RETENTION,
@@ -1118,7 +1119,7 @@ describe("backup admin routes", () => {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
-          destination: { kind: "local-fs", dir: makeDestDir() },
+          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
           recoveryKey: KEY_1,
           schedule: DAILY_AT_0330,
           retention,
@@ -1147,15 +1148,15 @@ describe("backup admin routes", () => {
       });
     const dest = makeDestDir();
     const good = {
-      destination: { kind: "local-fs", dir: dest },
+      destinations: [{ kind: "local-fs", dir: dest }],
       recoveryKey: KEY_1,
       retention: RETENTION,
     };
     // Every malformed apply body → 400 backup.request_invalid, rejected before any write.
     const bad: unknown[] = [
-      {}, // destination missing
+      {}, // destinations missing
       {
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }, // recoveryKey missing
@@ -1165,7 +1166,7 @@ describe("backup admin routes", () => {
       { ...good, schedule: { kind: "wall-clock", days: [9], at: "auto" } }, // weekday out of range
       { ...good, schedule: { kind: "wall-clock", days: "daily", at: { hour: "x" } } }, // bad time
       {
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: "nope",
@@ -1206,7 +1207,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: "short", // storable, but under MIN_PASSPHRASE_LENGTH
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -1263,7 +1264,7 @@ describe("backup admin routes", () => {
     const app = buildApp(sup, stateDir, {}, undefined, recorder);
     const cookie = await login(app);
     const body = JSON.stringify({
-      destination: { kind: "local-fs", dir: dest },
+      destinations: [{ kind: "local-fs", dir: dest }],
       recoveryKey: KEY_1,
       schedule: DAILY_AT_0330,
       retention: RETENTION,
@@ -1318,7 +1319,7 @@ describe("backup admin routes", () => {
         method: "POST",
         headers,
         body: JSON.stringify({
-          destination: { kind: "local-fs", dir: makeDestDir() },
+          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
           schedule: DAILY_AT_0330,
           retention: RETENTION,
         }),
@@ -1390,7 +1391,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers,
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -1420,7 +1421,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers,
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: makeDestDir() },
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
         recoveryKey: KEY_2,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -1491,7 +1492,7 @@ describe("backup admin routes", () => {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        destination: { kind: "local-fs", dir: dest },
+        destinations: [{ kind: "local-fs", dir: dest }],
         recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
@@ -1586,7 +1587,7 @@ describe("backup admin routes", () => {
     }
 
     const applyBody = (destination: unknown, recoveryKey: string | undefined = KEY_1) => ({
-      destination,
+      destinations: [destination],
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: DAILY_AT_0330,
       retention: RETENTION,
@@ -2136,6 +2137,233 @@ describe("backup admin routes", () => {
       }, 60_000);
     }
 
+    const applyList = (destinations: unknown) => ({ ...applyBody(undefined), destinations });
+
+    it("a folder and the bucket copy's bucket are both stored, folder first, with only the bucket tested, and a sweep writes to each", async () => {
+      await storeStream();
+      const probed: string[] = [];
+      const { post, status } = await primaryApp({
+        buildBackend: (dest) => {
+          probed.push(dest.kind);
+          return buildBackend(dest);
+        },
+      });
+      const dir = makeDestDir();
+      const res = await post(
+        "/api/backup/apply",
+        applyList([{ kind: "stream-bucket" }, { kind: "local-fs", dir }]),
+      );
+      expect(res.status).toBe(200);
+      expect(probed).toEqual(["s3"]);
+      expect(bucket.calls.filter((c) => c.startsWith("put waitron-probe-"))).toHaveLength(1);
+      expect((await readdir(dir)).filter((f) => f.startsWith("waitron-probe-"))).toEqual([]);
+      expect((await readSealed())!.destinations).toEqual([
+        { kind: "local-fs", id: "primary", dir },
+        expect.objectContaining({ kind: "s3", id: "bucket", venueId: VENUE }),
+      ]);
+      const answered = await status();
+      expect(answered.destinations.map((d: { id: string }) => d.id)).toEqual(["primary", "bucket"]);
+      const swept = await poll(async () => {
+        const { backupStatus } = await status();
+        const ds: { id: string; storedUnderCurrentKey: boolean }[] =
+          backupStatus.destinations ?? [];
+        return ds.length === 2 && ds.every((d) => d.storedUnderCurrentKey) ? ds : undefined;
+      });
+      expect(swept).toEqual([
+        expect.objectContaining({ id: "primary", uploadErrorCode: null, readErrorCode: null }),
+        expect.objectContaining({ id: "bucket", uploadErrorCode: null, readErrorCode: null }),
+      ]);
+      expect(await readdir(dir)).not.toEqual([]);
+      expect([...bucket.objects.keys()].filter((k) => !k.startsWith("waitron-probe-"))).not.toEqual(
+        [],
+      );
+    }, 60_000);
+
+    it("a folder beside a custom bucket re-saved with no secret keeps the held secret", async () => {
+      const { post } = await primaryApp();
+      const dir = makeDestDir();
+      expect(
+        (
+          await post(
+            "/api/backup/apply",
+            applyList([
+              { kind: "local-fs", dir },
+              { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+            ]),
+          )
+        ).status,
+      ).toBe(200);
+      const res = await post(
+        "/api/backup/apply",
+        applyList([
+          { kind: "local-fs", dir },
+          { ...CUSTOM, secretAccessKey: "" },
+        ]),
+      );
+      expect(res.status).toBe(200);
+      const [folder, held] = (await readSealed())!.destinations;
+      expect(folder).toEqual({ kind: "local-fs", id: "primary", dir });
+      expect((held as Extract<BackupDestination, { kind: "s3" }>).bucket.secretAccessKey).toBe(
+        CUSTOM_SECRET,
+      );
+    }, 60_000);
+
+    it("rotation after a folder and bucket Save keeps both, under a new revision", async () => {
+      const { post } = await primaryApp();
+      const dir = makeDestDir();
+      expect(
+        (
+          await post(
+            "/api/backup/apply",
+            applyList([
+              { kind: "local-fs", dir },
+              { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+            ]),
+          )
+        ).status,
+      ).toBe(200);
+      const sealed = (await readSealed())!;
+      expect(sealed.destinations).toHaveLength(2);
+      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      const after = (await readSealed())!;
+      expect(after.revision).not.toBe(sealed.revision);
+      expect({ ...after, revision: sealed.revision }).toEqual(sealed);
+    }, 60_000);
+
+    it("a Save with a folder and a bucket after disable stores both, switched on", async () => {
+      const { post } = await primaryApp();
+      const dir = makeDestDir();
+      const both = [
+        { kind: "local-fs", dir },
+        { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+      ];
+      expect((await post("/api/backup/apply", applyList(both))).status).toBe(200);
+      expect((await post("/api/backup/disable")).status).toBe(200);
+      expect((await readSealed())!.enabled).toBe(false);
+      expect((await post("/api/backup/apply", applyList(both))).status).toBe(200);
+      const after = (await readSealed())!;
+      expect(after.enabled).toBe(true);
+      expect(after.destinations).toEqual([
+        { kind: "local-fs", id: "primary", dir },
+        expect.objectContaining({ kind: "s3", id: "bucket" }),
+      ]);
+    }, 60_000);
+
+    it("the archive recovery pack names the bucket when the folder is listed first", async () => {
+      const { app, cookie, post } = await primaryApp();
+      expect(
+        (
+          await post(
+            "/api/backup/apply",
+            applyList([
+              { kind: "local-fs", dir: makeDestDir() },
+              { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+            ]),
+          )
+        ).status,
+      ).toBe(200);
+      const res = await app.request("/api/backup/archive-recovery-pack", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      expect(decodeArchiveRecoveryPack((await res.json()).pack)).toMatchObject({
+        venueId: VENUE,
+        bucket: { bucket: "archive-bucket", secretAccessKey: CUSTOM_SECRET },
+      });
+    }, 60_000);
+
+    // Each refused Save beside a held folder record, and what it answers.
+    const REFUSED_LISTS: [string, () => Promise<unknown[]>, number, Record<string, unknown>][] = [
+      [
+        "two buckets",
+        async () => {
+          await storeStream();
+          return [{ kind: "stream-bucket" }, { ...CUSTOM, secretAccessKey: CUSTOM_SECRET }];
+        },
+        400,
+        { code: "backup.request_invalid", params: { field: "destinations" } },
+      ],
+      [
+        "a bucket that fails its test beside a good folder",
+        async () => {
+          bucket.failGet = true;
+          return [
+            { kind: "local-fs", dir: makeDestDir() },
+            { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+          ];
+        },
+        422,
+        { code: "backup.archive_test_failed" },
+      ],
+      [
+        "a folder beside the bucket copy's bucket while its settings cannot be read",
+        async () => {
+          await storeUnreadableStream();
+          return [{ kind: "local-fs", dir: makeDestDir() }, { kind: "stream-bucket" }];
+        },
+        409,
+        {
+          code: "backup.stream_settings_unreadable",
+          params: { reason: "credentials.decrypt_failed" },
+        },
+      ],
+    ];
+
+    for (const [name, arrange, code, error] of REFUSED_LISTS) {
+      it(`a Save of ${name} is refused, leaving the held record and key file unchanged`, async () => {
+        const { sc, post } = await primaryApp();
+        expect(
+          (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+            .status,
+        ).toBe(200);
+        const held = await readSealed();
+        const keyFile = await readFile(join(sc.stateDir, "backup.env"), "utf8");
+        const res = await post("/api/backup/apply", applyList(await arrange()));
+        expect(res.status).toBe(code);
+        expect(await res.json()).toMatchObject({ error });
+        expect(await readSealed()).toEqual(held);
+        expect(await readFile(join(sc.stateDir, "backup.env"), "utf8")).toBe(keyFile);
+      }, 60_000);
+    }
+
+    it("a malformed destination list is refused as the list, before the key is checked", async () => {
+      const { sc, post } = await primaryApp();
+      const dir = makeDestDir();
+      const folder = { kind: "local-fs", dir };
+      // With no key held and none sent, a well-formed list is refused as `recoveryKey`.
+      const noKey = (destinations: unknown) => ({
+        destinations,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      });
+      for (const destinations of [null, "nope", folder, [], [folder, folder, folder], [1]]) {
+        const res = await post("/api/backup/apply", noKey(destinations));
+        expect(res.status, JSON.stringify(destinations)).toBe(400);
+        expect(await res.json(), JSON.stringify(destinations)).toMatchObject({
+          error: { code: "backup.request_invalid", params: { field: "destinations" } },
+        });
+      }
+      const control = await post("/api/backup/apply", noKey([folder]));
+      expect(await control.json()).toMatchObject({
+        error: { code: "backup.request_invalid", params: { field: "recoveryKey" } },
+      });
+      expect(await readSealed()).toBeNull();
+      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+    }, 60_000);
+
+    it("a body with the old single destination field is refused as an unknown field", async () => {
+      const { post } = await primaryApp();
+      const res = await post("/api/backup/apply", {
+        destination: { kind: "local-fs", dir: makeDestDir() },
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.request_invalid", params: { field: "body" } },
+      });
+      expect(await readSealed()).toBeNull();
+    }, 60_000);
+
     // The other stored bucket-copy records this server cannot read, and the code a read answers.
     const UNREADABLE_STREAM: [string, () => Promise<void>][] = [
       [
@@ -2235,7 +2463,7 @@ describe("backup admin routes", () => {
       for (const [body, field] of [
         [{ ...good, destinationDir: "/mnt/x" }, "body"],
         [{ ...good, recoveryKey: null }, "recoveryKey"],
-        [{ ...good, destination: null }, "destination"],
+        [{ ...good, destinations: null }, "destinations"],
         [{ ...good, destinationTimeoutMs: "900000" }, "destinationTimeoutMs"],
         [{ ...good, destinationTimeoutMs: null }, "destinationTimeoutMs"],
         [{ ...good, destinationTimeoutMs: 1_000 }, "destinationTimeoutMs"],
