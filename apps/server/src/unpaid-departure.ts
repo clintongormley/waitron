@@ -125,7 +125,7 @@ export async function recordUnpaidDeparture(
     );
     saleOf.set(invoice.id, saleId);
     if (openIds.has(invoice.id)) {
-      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
+      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId, deps.attendance);
     }
   }
   for (const id of owingIds) {

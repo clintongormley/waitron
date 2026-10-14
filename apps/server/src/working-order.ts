@@ -264,6 +264,7 @@ export interface TillSaleDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
+  attendance?: AttendanceRecorder;
   /** Where a failure that must not undo the sale or attempt around it is logged. */
   log?: Logger;
 }
@@ -5907,7 +5908,7 @@ export async function placeOrder(
       .set({ sentAt: nowIso() })
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
-    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
+    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
 
     if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
       await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
@@ -6000,6 +6001,31 @@ export async function issueUnpaidInvoice(
   return { saleId, fiscal, locale: language.locale, ...order };
 }
 
+async function captureOrderAmendment(
+  tx: Transaction,
+  attendance: AttendanceRecorder | undefined,
+  orderId: string,
+  amendmentId: string,
+  personId: string,
+  at: Date,
+): Promise<void> {
+  if (attendance === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await attendance(tx, {
+    source: "order",
+    key: amendmentId,
+    personId,
+    locationId: order!.locationId,
+    kind: "order",
+    at: at.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
+}
+
 /** An open order becomes placed, and its `order_placed` amendment is appended. */
 export async function markOrderPlaced(
   tx: Transaction,
@@ -6007,11 +6033,12 @@ export async function markOrderPlaced(
   cfg: OriginConfig,
   id: string,
   operatorId: string,
+  attendance?: AttendanceRecorder,
 ): Promise<void> {
   await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
 
   const now = clock.now();
-  await appendOrderAmendment(tx, {
+  const amendment = await appendOrderAmendment(tx, {
     workingOrderId: id,
     kind: "order_placed",
     actorId: operatorId,
@@ -6021,6 +6048,7 @@ export async function markOrderPlaced(
     eventAt: now.instant,
     eventOffsetMinutes: now.offsetMinutes,
   });
+  await captureOrderAmendment(tx, attendance, id, amendment.id, operatorId, now.instant);
 }
 
 /**
@@ -6101,7 +6129,7 @@ async function cancelPlaced(
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
 
     const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
+    const amendment = await appendOrderAmendment(tx, {
       workingOrderId: id,
       kind: "order_cancelled",
       actorId: operator.personId,
@@ -6111,6 +6139,14 @@ async function cancelPlaced(
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,
     });
+    await captureOrderAmendment(
+      tx,
+      deps.attendance,
+      id,
+      amendment.id,
+      operator.personId,
+      now.instant,
+    );
   });
 }
 
