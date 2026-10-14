@@ -1,30 +1,21 @@
-import { css } from "lit";
+import { css, unsafeCSS } from "lit";
+import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 
-/** Sets `--period-fill` and `--period-on-fill` on each `[data-colour]` element from its
- *  `CALENDAR_COLOURS` (src/hours-types.ts) colour; this list and that one change together. */
+/** The `--wt-*` tokens that paint a period of `colour`. */
+export function periodColourTokens(colour: CalendarColour) {
+  return { fill: `--wt-color-palette-${colour}`, onFill: `--wt-color-on-palette-${colour}` };
+}
+
+/** Sets `--period-fill` and `--period-on-fill` on each `[data-colour]` element, one block per
+ *  `CALENDAR_COLOURS` entry. */
 export const periodColourStyles = css`
-  [data-colour="red"] {
-    --period-fill: var(--wt-color-palette-red);
-    --period-on-fill: var(--wt-color-on-palette-red);
-  }
-  [data-colour="amber"] {
-    --period-fill: var(--wt-color-palette-amber);
-    --period-on-fill: var(--wt-color-on-palette-amber);
-  }
-  [data-colour="grey"] {
-    --period-fill: var(--wt-color-palette-grey);
-    --period-on-fill: var(--wt-color-on-palette-grey);
-  }
-  [data-colour="blue"] {
-    --period-fill: var(--wt-color-palette-blue);
-    --period-on-fill: var(--wt-color-on-palette-blue);
-  }
-  [data-colour="green"] {
-    --period-fill: var(--wt-color-palette-green);
-    --period-on-fill: var(--wt-color-on-palette-green);
-  }
-  [data-colour="purple"] {
-    --period-fill: var(--wt-color-palette-purple);
-    --period-on-fill: var(--wt-color-on-palette-purple);
-  }
+  ${unsafeCSS(
+    CALENDAR_COLOURS.map((colour) => {
+      const tokens = periodColourTokens(colour);
+      return `[data-colour="${colour}"] {
+    --period-fill: var(${tokens.fill});
+    --period-on-fill: var(${tokens.onFill});
+  }`;
+    }).join("\n"),
+  )}
 `;

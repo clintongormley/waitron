@@ -1,37 +1,41 @@
-import { css } from "lit";
+import { css, unsafeCSS } from "lit";
 import { byStart, type Season } from "../season-rules.js";
 
-const TINTS = 4;
+/** Every tint `seasonTints` hands out, in order. */
+export const SEASON_TINTS = ["1", "2", "3", "4"] as const;
 
-/** Each season's tint, "1" to "4", by its place in start order, cycled past the fourth. */
+/** Each season's tint by its place in start order, cycled past the last of `SEASON_TINTS`. */
 export function seasonTints(
   seasons: readonly Pick<Season, "id" | "startsOn">[],
 ): Map<string, string> {
-  return new Map(byStart(seasons).map((season, index) => [season.id, String((index % TINTS) + 1)]));
+  return new Map(
+    byStart(seasons).map((season, index) => [
+      season.id,
+      SEASON_TINTS[index % SEASON_TINTS.length]!,
+    ]),
+  );
 }
 
-/** One block per tint, so `TINTS` above and this list change together. Sets `--season-tint`,
- *  `--season-on-tint` and `--season-tint-line` on each `[data-tint]` element for it and its
- *  descendants to paint with. */
+/** The `--wt-*` tokens that paint a season of `tint`. */
+export function seasonTintTokens(tint: string) {
+  return {
+    tint: `--wt-color-season-${tint}`,
+    onTint: `--wt-color-on-season-${tint}`,
+    line: `--wt-color-season-${tint}-line`,
+  };
+}
+
+/** Sets `--season-tint`, `--season-on-tint` and `--season-tint-line` on each `[data-tint]` element
+ *  for it and its descendants to paint with, one block per `SEASON_TINTS` entry. */
 export const seasonTintStyles = css`
-  [data-tint="1"] {
-    --season-tint: var(--wt-color-season-1);
-    --season-on-tint: var(--wt-color-on-season-1);
-    --season-tint-line: var(--wt-color-season-1-line);
-  }
-  [data-tint="2"] {
-    --season-tint: var(--wt-color-season-2);
-    --season-on-tint: var(--wt-color-on-season-2);
-    --season-tint-line: var(--wt-color-season-2-line);
-  }
-  [data-tint="3"] {
-    --season-tint: var(--wt-color-season-3);
-    --season-on-tint: var(--wt-color-on-season-3);
-    --season-tint-line: var(--wt-color-season-3-line);
-  }
-  [data-tint="4"] {
-    --season-tint: var(--wt-color-season-4);
-    --season-on-tint: var(--wt-color-on-season-4);
-    --season-tint-line: var(--wt-color-season-4-line);
-  }
+  ${unsafeCSS(
+    SEASON_TINTS.map((tint) => {
+      const tokens = seasonTintTokens(tint);
+      return `[data-tint="${tint}"] {
+    --season-tint: var(${tokens.tint});
+    --season-on-tint: var(${tokens.onTint});
+    --season-tint-line: var(${tokens.line});
+  }`;
+    }).join("\n"),
+  )}
 `;

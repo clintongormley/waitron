@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -8,7 +8,9 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
-import { seasonTints } from "./season-tint.js";
+import { periodColourTokens } from "./period-colour-styles.js";
+import { SEASON_TINTS, seasonTints, seasonTintTokens } from "./season-tint.js";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import { t } from "./strings.js";
 
 type Department = OpeningHoursModel["departments"][number];
@@ -18,6 +20,19 @@ export type PeriodRow =
   | ({ kind: "period"; departmentId: string; departmentName: string } & Period);
 
 const at = encodeURIComponent;
+
+const swatchColours = unsafeCSS(
+  CALENDAR_COLOURS.map(
+    (colour) =>
+      `wt-data-table::part(colour-${colour}) { background: var(${periodColourTokens(colour).fill}); }`,
+  ).join("\n"),
+);
+const chipTints = unsafeCSS(
+  SEASON_TINTS.map((tint) => {
+    const tokens = seasonTintTokens(tint);
+    return `wt-data-table::part(tint-${tint}) { background: var(${tokens.tint}); color: var(${tokens.onTint}); border-color: var(${tokens.line}); }`;
+  }).join("\n"),
+);
 
 /** The period list of mockup 6: every active department's periods, grouped under it. Cell markup
  *  lives in the table's shadow root, so each colour and season tint is its own part. */
@@ -50,24 +65,7 @@ export class PeriodsScreen extends LitElement {
         border: 1px solid transparent;
         vertical-align: middle;
       }
-      wt-data-table::part(colour-red) {
-        background: var(--wt-color-palette-red);
-      }
-      wt-data-table::part(colour-amber) {
-        background: var(--wt-color-palette-amber);
-      }
-      wt-data-table::part(colour-grey) {
-        background: var(--wt-color-palette-grey);
-      }
-      wt-data-table::part(colour-blue) {
-        background: var(--wt-color-palette-blue);
-      }
-      wt-data-table::part(colour-green) {
-        background: var(--wt-color-palette-green);
-      }
-      wt-data-table::part(colour-purple) {
-        background: var(--wt-color-palette-purple);
-      }
+      ${swatchColours}
       wt-data-table::part(swatch-unpainted) {
         background: transparent;
         border: 1px dashed var(--wt-color-text-muted);
@@ -99,26 +97,7 @@ export class PeriodsScreen extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      wt-data-table::part(tint-1) {
-        background: var(--wt-color-season-1);
-        color: var(--wt-color-on-season-1);
-        border-color: var(--wt-color-season-1-line);
-      }
-      wt-data-table::part(tint-2) {
-        background: var(--wt-color-season-2);
-        color: var(--wt-color-on-season-2);
-        border-color: var(--wt-color-season-2-line);
-      }
-      wt-data-table::part(tint-3) {
-        background: var(--wt-color-season-3);
-        color: var(--wt-color-on-season-3);
-        border-color: var(--wt-color-season-3-line);
-      }
-      wt-data-table::part(tint-4) {
-        background: var(--wt-color-season-4);
-        color: var(--wt-color-on-season-4);
-        border-color: var(--wt-color-season-4-line);
-      }
+      ${chipTints}
     `,
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;

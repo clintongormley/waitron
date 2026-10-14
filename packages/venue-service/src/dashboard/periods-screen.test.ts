@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable } from "@waitron/ui";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import { seasonTints } from "./season-tint.js";
 
 import "./periods-screen.js";
 
@@ -157,6 +159,48 @@ it("shows each period's colour, customer menu, staff-only menus and a greyed flo
   const floor = grid.shadowRoot!.querySelector<HTMLElement>("[part=unavailable]")!;
   expect(floor.textContent).toBe("—");
   expect(getComputedStyle(floor).color).not.toBe(getComputedStyle(grid).color);
+});
+
+it("paints every period colour's swatch and every season tint's chip", async () => {
+  const data = model();
+  data.seasons = Array.from({ length: 8 }, (_, index) => ({
+    id: `s${index}`,
+    name: `Season ${index}`,
+    startsOn: `${String(index + 1).padStart(2, "0")}-01`,
+  }));
+  data.departments = [
+    {
+      ...data.departments[0]!,
+      periods: CALENDAR_COLOURS.map((colour) => period(`p-${colour}`, colour, { colour })),
+    },
+  ];
+  const painted = [
+    {
+      periodId: "p-red",
+      seasons: data.seasons.map(({ id, name }) => ({ id, name })),
+      specialDays: [],
+    },
+  ];
+  const el = await mount(
+    answering(
+      () => data,
+      () => painted,
+    ),
+  );
+  const grid = await loaded(el);
+  const transparent = "rgba(0, 0, 0, 0)";
+  for (const colour of CALENDAR_COLOURS) {
+    const swatch = grid.shadowRoot!.querySelector(`[part~=swatch][data-colour=${colour}]`)!;
+    expect(getComputedStyle(swatch).backgroundColor, colour).not.toBe(transparent);
+  }
+  await expect.poll(() => grid.shadowRoot!.querySelectorAll("a[part~=chip]").length).toBe(8);
+  const tints = new Set(seasonTints(data.seasons).values());
+  expect(tints.size).toBeGreaterThan(1);
+  for (const tint of tints) {
+    const chip = grid.shadowRoot!.querySelector(`a[part~=tint-${tint}]`);
+    expect(chip, `tint ${tint}`).not.toBeNull();
+    expect(getComputedStyle(chip!).backgroundColor, `tint ${tint}`).not.toBe(transparent);
+  }
 });
 
 it("Painted in lists the seasons in order, then the special days, each linking to its editor", async () => {
