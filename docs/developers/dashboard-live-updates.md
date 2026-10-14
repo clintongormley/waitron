@@ -86,8 +86,9 @@ day: a day repainted since the save was sent keeps its new paint (`rebaseDays`,
 `packages/venue-service/src/paint-model.ts`).
 2026-10-14, A506-11: the Periods page reads `/menu-periods/painted-in` through
 `OpeningHoursApi.watchPaintedIn` on the `menu-periods-painted-in` dependencies. Its delete dialog
-reads `…/delete-impact` again, passively, only for a page read that started after its last impact
-read (`nextReadNumber`, `model-watch.ts`).
+reads `…/delete-impact` again, passively, when a page read that started after its last impact
+read answers, or when the hours model brings a clock revision other than the one that impact read
+took (`followDeletion`, `periods-screen.ts`; `nextReadNumber`, `model-watch.ts`).
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`
