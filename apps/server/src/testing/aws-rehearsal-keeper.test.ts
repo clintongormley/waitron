@@ -145,6 +145,42 @@ function harness(fake: FakeAdmin, overrides: Partial<KeeperDeps> = {}): Harness 
   };
 }
 
+/** A run that ends when the test calls `end`; `waiting` settles once the keeper waits on it. */
+function heldRunner(): {
+  waitForRunnerEnd: () => Promise<void>;
+  waiting: Promise<void>;
+  end: () => void;
+} {
+  let waited!: () => void;
+  let end!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    waited = resolve;
+  });
+  const ended = new Promise<void>((resolve) => {
+    end = resolve;
+  });
+  return {
+    waitForRunnerEnd: () => {
+      waited();
+      return ended;
+    },
+    waiting,
+    end: () => end(),
+  };
+}
+
+/** Reads files, the first read outlasting several of the test's own turns. */
+function slowFirstRead(): (path: string) => Promise<string> {
+  let first = true;
+  return async (path) => {
+    if (first) {
+      first = false;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return readFile(path, "utf8");
+  };
+}
+
 function withAlive(h: Harness, pids: number[]): void {
   const alive = new Set(pids);
   h.deps.isAlive = (pid) => alive.has(pid);
@@ -179,18 +215,16 @@ describe("runKeeper", () => {
     await writeJournalFile(journal({ state: "owned", scratchRoot: scratchRoot() }));
     await mkdir(scratchRoot());
     const fake = bucketWithObjects();
-    let end!: () => void;
+    const runner = heldRunner();
     const h = harness(fake, {
-      waitForRunnerEnd: () =>
-        new Promise<void>((resolve) => {
-          end = resolve;
-        }),
+      readFile: slowFirstRead(),
+      waitForRunnerEnd: runner.waitForRunnerEnd,
     });
     const status = runKeeper(journalPath, h.deps);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.waiting;
     expect(fake.calls).toEqual([]);
     await writeJournalFile(journal({ state: "finished", scratchRoot: scratchRoot() }));
-    end();
+    runner.end();
     expect(await status).toBe(0);
     expect(fake.calls).toEqual([]);
     expect(h.createAdminClient).not.toHaveBeenCalled();
@@ -473,18 +507,16 @@ describe("runKeeper", () => {
 
   it("refuses a journal that turns bad by the time the run ends", async () => {
     await writeJournalFile(journal());
-    let end!: () => void;
+    const runner = heldRunner();
     const fake = bucketWithObjects();
     const h = harness(fake, {
-      waitForRunnerEnd: () =>
-        new Promise<void>((resolve) => {
-          end = resolve;
-        }),
+      readFile: slowFirstRead(),
+      waitForRunnerEnd: runner.waitForRunnerEnd,
     });
     const status = runKeeper(journalPath, h.deps);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.waiting;
     await writeFile(journalPath, "{not json");
-    end();
+    runner.end();
     expect(await status).toBe(1);
     expect(h.printed).toEqual([
       "AWS rehearsal refused (journal-refused): the journal's JSON is not one it accepts",
