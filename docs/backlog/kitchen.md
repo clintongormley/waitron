@@ -245925,3 +245925,34 @@ e- **Settled with the owner from mock-ups (2026-10-13)**, in
     twelve colours in a 4 × 3 grid, a colour another station has is still offered with that
     station's name under it, and a new station starts on the first colour no station has.
 
+
+## A656 — tidy the Routes tab and its cell editor
+
+Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on a phone
+([mockups/a656-routes-tab/](mockups/a656-routes-tab/)).
+
+1. **The fallback field's label.** The cell editor (`routing-cell-editor.ts`, the `target`
+   combobox labelled `routing.any_other_time`) always says "Any other time", which "doesn't make
+   sense if you haven't already added a period routing". With no period route it reads "Station"
+   (Spanish needs the owner's wording beside "Estación"); once a route is added it reads "Any other
+   time" / "El resto del tiempo". The tests that pin the label (`routing-cell-editor.test.ts`, the
+   `[name=target]` case; `routing-grid.test.ts`, the labels the editor offers) follow.
+2. **Line the station fields up.** In screenshot 2 the fallback field runs past the right edge of
+   the route's Station field, and a route's Station is narrower than its Periods. Both choose a
+   station, so their right edges meet, and Periods and Station split a route row evenly beside its
+   Remove.
+3. **No empty band under a one-line row.** Every cell is `vertical-align: top`, and the label and
+   the station button each hold `min-block-size: var(--wt-tap-min)` with padding as well, so a
+   one-line row is taller than its text and the spare height sits below it (read in
+   `routing-grid.ts`, not measured). Keep a row a tap target tall, but either centre a one-line row
+   or stop the padding adding to the minimum. A cell with period lines (screenshot 4, "Kitchen /
+   Open: Bar / Lunch: Front bar") is the case that must still read from the top. The open entry "A
+   long word in a routing-grid row name still splits at 390 px" works on the same label cell.
+4. **One Expand/Collapse button, right of a full-width search.** Today `.toolbar` wraps and
+   `.toolbar wt-input` carries a `max-inline-size`, so on a desktop the search stops short and on a
+   phone the two buttons drop to a second row. One button, "Collapse all" while every category is
+   open and "Expand all" otherwise (`wt-data-table`'s `expandAllLabel` and `collapseAllLabel`
+   behave this way; the grid is drawn by hand, so it copies the behaviour rather than switching it
+   on), stays to the right of the search box at every width, and the search box takes the rest of
+   the row. A584's "All periods" dropdown joins this toolbar; place it in the same plan if A584 has
+   not landed.

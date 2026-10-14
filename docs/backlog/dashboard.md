@@ -1079,6 +1079,15 @@ minimised, especially for use on mobiles".
   At 375×667 Products' box held the All products row and one whole product row after W83, which
   the item that built it called short of "enough rows to remain usable"; Select and move mode
   overflowed there, and A303 changed that layout without the measurement being retaken.
+- **Phone side margins and the demo link strip** (owner, 2026-10-14, from a phone screenshot of the
+  Routes tab, [3-phone-side-margins-and-demo-bar.jpg](mockups/a653-table-scrolling/3-phone-side-margins-and-demo-bar.jpg)):
+  "the mobile view still has a lot of margin on the sides which narrows the page width
+  considerably". The page body keeps `padding: var(--wt-space-5)` at every width
+  (`apps/dashboard/index.html`), drawing a frame round the whole shell, and each screen pads its
+  content again inside. On a phone both shrink to a narrow gutter or none. The Demo and Preparation
+  link strip (`wt-demo-bar`, `packages/ui/src/components/wt-demo-bar.ts`) wraps to two rows there;
+  keep it to one, for example a row that scrolls sideways. Live mode draws no strip, but a venue
+  uses Preparation while being set up.
 
 ## A654 — the sidebar folds to a strip of icons
 
@@ -1097,3 +1106,24 @@ navbar sections)".
   unfolding the sidebar), whether the folded state is remembered per browser, and the icon for each
   group (Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing,
   Settings). Icons follow design-system.md.
+
+## A657 — Cancel leaves without asking
+
+Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just
+when you click escape or click outside the form". Asked about the rest the same day: a dialog's ✕
+still asks, and a full page's own Cancel leaves without asking too.
+
+- **Today.** design-system.md → "Protect an edited dialog before closing it" says to route "Cancel,
+  close controls and an existing backdrop action through `requestClose(reason)`", and the
+  coordinator asks whatever the reason (`LeaveReason` in `packages/ui-core/src/unsaved-changes.ts`:
+  `cancel`, `escape`, `backdrop`, `navigation`, `signout`). `requestClose("cancel")` is by far the
+  most common call in the tree; if those calls are the Cancel buttons, the rule can live where the
+  reason is read rather than in each screen. Which of them are Cancel buttons was not checked.
+- **The ✕.** It must still ask. Check what each dialog's close cross passes before keying the
+  change on `"cancel"`: a ✕ that passes `"cancel"` today needs a reason of its own (not checked).
+- **Full pages.** A page's own Cancel (the floor plan editor's Cancel link is the one named in
+  design-system.md; find the others) is a route change the shell guards, so that link has to tell
+  the shell it is a deliberate discard. Every other way off the page still asks.
+- **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
+  Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
+  that asserts Cancel asks is now asserting the old rule.

@@ -1505,6 +1505,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station and one colour. Design settled with the owner from mock-ups the same day.
   [Detail](backlog/kitchen.md#a584-prep-stations-get-colours-and-the-routes-grid-paints-each-cell-with-its-stations-colour-and-can-show-one-period-at-a-time-owner-2026-10-13)
 
+- **A656 — tidy the Routes tab and its cell editor (owner, 2026-10-14; open).** In
+  `packages/venue-service/src/dashboard/`: (1) the editor's fallback station field
+  (`routing-cell-editor.ts`, `routing.any_other_time`, Spanish "El resto del tiempo") reads
+  "Station" while the cell has no period route and "Any other time" once it has one; (2) that field
+  ends where a route's Station field ends, and a route's Periods and Station share the row evenly;
+  (3) a one-line grid row (`routing-grid.ts`) is no taller than it needs, with no empty band under
+  its text, while a cell with period lines ("Kitchen / Open: Bar") still reads from the top; (4)
+  Expand all and Collapse all become one button, "Collapse all" while every category is open and
+  "Expand all" otherwise, as `wt-data-table`'s own does, always to the right of the search box,
+  which fills the rest of the row as on Products (today it is capped and the toolbar wraps on a
+  phone). A584's period dropdown joins the same toolbar. The editor's height is the full-height
+  dialog entry under "Users, sign-in and the dashboard shell".
+  [Detail](backlog/kitchen.md#a656--tidy-the-routes-tab-and-its-cell-editor),
+  [screenshots](backlog/mockups/a656-routes-tab/)
+
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
@@ -3413,8 +3428,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Structure tab, and the other long tables, scroll the whole page instead. Make them consistent.
   The cost of Products' way is the height spent above the table — banner, page title, breadcrumb,
   status line, tabs, the Filters and Select buttons and the search box — which on a phone leaves
-  few rows; cut that down, phones first. Takes in W80's two open points: few rows at 375×667, and
-  `stickyHeader` set only by Products.
+  few rows; cut that down, phones first. On a phone also cut the side margins — the page's own
+  padding and each screen's — and keep the Demo and Preparation link strip (`wt-demo-bar`) from
+  wrapping to two rows (owner, 2026-10-14). Takes in W80's two open points: few rows at 375×667,
+  and `stickyHeader` set only by Products.
   [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
   [screenshots](backlog/mockups/a653-table-scrolling/)
 
@@ -3424,6 +3441,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Purchasing, Settings) needs an icon; only Settings has one today. Phones keep today's drawer. Clicking a section header already folds
   that section's links away, but nothing narrows the sidebar.
   [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons)
+
+- **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
+  dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes
+  without the "Discard changes?" question. Escape, a click outside, a dialog's ✕, and leaving a page
+  any other way (the sidebar, a language change, logging out, browser Back) still ask. Reverses the
+  written rule in design-system.md ("Protect an edited dialog before closing it"), which routes
+  Cancel through the question; change the rule in the same change. Dashboard, till and setup alike.
+  [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 
 - **A625. A row menu wraps its two-word items after the window is resized to phone width.** Seen on
   the Staff roles page (A585-1's look): after a desktop window was narrowed to 390 px, "Move up" and
@@ -3454,7 +3479,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `packages/venue-service/src/dashboard/prep-stations-screen.ts`) now holds its sentences with its
   product list closed, but `wt-modal` gives every dialog except a compact one the full
   screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
-  Decide whether a wide dialog should shrink to fit its content.
+  Decide whether a wide dialog should shrink to fit its content. A second case (owner, 2026-10-14):
+  the Routes tab's cell editor (`routing-cell-editor.ts`), one field and "+ Add route" above a
+  screen of white, its buttons at the bottom
+  ([screenshot](backlog/mockups/a656-routes-tab/1-editor-no-period-route.png)). The entry above,
+  about a form's message sitting far above its buttons, has the same cause; settle them together.
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
