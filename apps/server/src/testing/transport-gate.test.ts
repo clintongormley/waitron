@@ -58,7 +58,7 @@ afterAll(async () => {
 
 const gates: TransportGate[] = [];
 afterEach(async () => {
-  for (const gate of gates.splice(0)) await gate.close();
+  for (const gate of gates.splice(0)) if (gate !== undefined) await gate.close();
 });
 
 async function gate(
