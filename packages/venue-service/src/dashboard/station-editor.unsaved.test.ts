@@ -13,6 +13,7 @@ class StationEditorLeaveApp extends LitElement {
         .station=${{
           id: "grill",
           name: "Grill",
+          colour: "orange",
           active: true,
           showsRestOfOrder: false,
           printerIds: ["epson"],
@@ -206,4 +207,28 @@ it("keeps a timing edit across removal and reconnect", async () => {
   ).toBe("4");
   expect(save(el).variant).toBe("primary");
   expect(unload()).toBe(true);
+});
+
+async function pickColour(el: StationEditor, colour: string) {
+  const picker = el.shadowRoot!.querySelector("station-colour-picker")!;
+  picker
+    .shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!
+    .click();
+  await el.updateComplete;
+}
+
+it("a changed colour counts as unsaved, and picking the opened colour again does not", async () => {
+  const el = await mount();
+  await pickColour(el, "teal");
+  expect(unload()).toBe(true);
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickColour(el, "orange");
+  expect(unload()).toBe(false);
+  expect(save(el).variant).toBe("secondary");
+  expect(save(el).disabled).toBe(true);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
 });

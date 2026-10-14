@@ -914,6 +914,7 @@ export class PrepStationsScreen extends LitElement {
         .station=${{
           id: station.id,
           name: station.name,
+          colour: station.colour,
           active: station.active,
           showsRestOfOrder: station.showsRestOfOrder,
           printerIds: this.#printersOf(station.id),
@@ -921,6 +922,7 @@ export class PrepStationsScreen extends LitElement {
           timingDefaults: station.timingDefaults,
         }}
         .printers=${this.view.printers}
+        .stations=${this.#colourUsers()}
         .canManagePrinters=${canManagePrinters}
         .refusal=${this.stationEditRefusal}
         @station-save=${(event: CustomEvent<StationEditorSave>) => {
@@ -937,6 +939,11 @@ export class PrepStationsScreen extends LitElement {
         }}
       ></prep-station-editor>`,
     );
+  }
+  #colourUsers() {
+    return (this.view?.stations ?? [])
+      .filter((station) => station.active)
+      .map(({ id, name, colour }) => ({ id, name, colour }));
   }
   #openStation() {
     this.#stationBaseline = undefined;

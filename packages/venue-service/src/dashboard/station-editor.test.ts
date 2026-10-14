@@ -16,12 +16,19 @@ afterEach(() => {
 const GRILL: StationEditorStation = {
   id: "grill",
   name: "Grill",
+  colour: "orange",
   active: true,
   showsRestOfOrder: false,
   printerIds: ["epson"],
   timingOverrides: { warmAfterMinutes: null, overdueAfterMinutes: 12, forgottenAfterMinutes: null },
   timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
 };
+
+const STATIONS = [
+  { id: "grill", name: "Grill", colour: "orange" as const },
+  { id: "bar", name: "Bar", colour: "blue" as const },
+  { id: "pizza", name: "Pizza oven", colour: "orange" as const },
+];
 
 async function mount(
   station: StationEditorStation = GRILL,
@@ -36,6 +43,7 @@ async function mount(
     { id: "old", name: "Old printer", active: false },
     { id: "pass", name: "Pass printer" },
   ];
+  el.stations = STATIONS;
   el.canManagePrinters = canManagePrinters;
   el.open = true;
   await el.updateComplete;
@@ -77,6 +85,16 @@ function saves(el: StationEditor) {
     seen.push((event as CustomEvent<StationEditorSave>).detail),
   );
   return seen;
+}
+const picker = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["station-colour-picker"]>(el, "station-colour-picker")!;
+const tile = (el: StationEditor, colour: string) =>
+  picker(el).shadowRoot!.querySelector<HTMLButtonElement>(
+    `[role=radio][data-station-colour="${colour}"]`,
+  )!;
+async function pickColour(el: StationEditor, colour: string) {
+  tile(el, colour).click();
+  await el.updateComplete;
 }
 async function save(el: StationEditor) {
   $(el, "[data-test=save-station-edit]")!.click();
@@ -474,4 +492,45 @@ it("explains timings out of order in Spanish beside the field and at the bottom,
   expect(timingField(el, "overdueAfterMinutes").error).toBe("");
   expect(formMessage(el)).toBe("");
   expect(button.disabled).toBe(false);
+});
+
+it("saves and reloads a colour", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  expect(tile(el, "orange").getAttribute("aria-checked")).toBe("true");
+  await pickColour(el, "teal");
+  await save(el);
+  expect(seen).toEqual([{ colour: "teal" }]);
+  expect(el.saved()).toBe(true);
+  await el.updateComplete;
+  el.station = { ...GRILL, colour: "teal" };
+  el.open = true;
+  await el.updateComplete;
+  await picker(el).updateComplete;
+  expect(tile(el, "teal").getAttribute("aria-checked")).toBe("true");
+  expect(tile(el, "orange").getAttribute("aria-checked")).toBe("false");
+  const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
+  expect([button.variant, button.disabled]).toEqual(["secondary", true]);
+});
+
+it("offers another station's colour with its name, and never names the station being edited", async () => {
+  const el = await mount();
+  await picker(el).updateComplete;
+  expect(tile(el, "orange").getAttribute("aria-label")).toBe("Orange, used by Pizza oven");
+  expect(tile(el, "blue").getAttribute("aria-label")).toBe("Blue, used by Bar");
+  expect(picker(el).shadowRoot!.textContent).not.toContain("Grill");
+  expect($(el, ".form > wt-input[name=stationName] + station-colour-picker")).not.toBeNull();
+});
+
+it("puts a colour refusal under Colour", async () => {
+  const el = await mount();
+  await pickColour(el, "teal");
+  el.refusal = { code: "management.request_invalid", params: { field: "colour" } };
+  await el.updateComplete;
+  expect(picker(el).error).toBe("Choose one of these colours.");
+  expect(nameField(el).error).toBe("");
+  expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+  await pickColour(el, "cyan");
+  expect(picker(el).error).toBe("");
+  expect(formMessage(el)).toBe("");
 });
