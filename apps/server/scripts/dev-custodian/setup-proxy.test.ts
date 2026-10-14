@@ -1,11 +1,13 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { devCustodianPlugin, devCustodianProvision } from "./setup-proxy.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mintSelfSignedServerCert } from "../../src/self-signed-cert.js";
+import { cliSigner, devCustodianPlugin, devCustodianProvision } from "./setup-proxy.js";
 
 interface Recorded {
   method: string | undefined;
@@ -41,16 +43,43 @@ async function listen(handler: (req: IncomingMessage, res: ServerResponse) => vo
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-async function upstream(status: number, answer: unknown) {
+const UPSTREAM_HEADERS = {
+  "content-type": "application/json; charset=utf-8",
+  "x-upstream-trace": "trace-17",
+};
+
+function recorder(status: number, answer: unknown) {
   const received: Recorded[] = [];
-  const target = await listen((req, res) => {
+  const handler = (req: IncomingMessage, res: ServerResponse) => {
     void readBody(req).then((body) => {
       received.push({ method: req.method, url: req.url, headers: req.headers, body });
-      res.writeHead(status, { "content-type": "application/json" });
+      res.writeHead(status, UPSTREAM_HEADERS);
       res.end(JSON.stringify(answer));
     });
-  });
+  };
+  return { received, handler };
+}
+
+async function upstream(status: number, answer: unknown) {
+  const { received, handler } = recorder(status, answer);
+  const target = await listen(handler);
   return { target, received };
+}
+
+async function httpsUpstream(status: number, answer: unknown) {
+  const { received, handler } = recorder(status, answer);
+  const material = mintSelfSignedServerCert({
+    hostnames: ["localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  const server = createHttpsServer(
+    { cert: material.serverCertPem, key: material.serverKeyPem },
+    handler,
+  );
+  servers.push(server);
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  return { target: `https://127.0.0.1:${(server.address() as AddressInfo).port}`, received };
 }
 
 function fakeSigner() {
@@ -117,6 +146,8 @@ describe("devCustodianProvision", () => {
       expect(received[0]!.headers["content-type"]).toBe("application/json");
       expect(received[0]!.headers["accept-language"]).toBe("es-ES");
       expect(response.status).toBe(status);
+      expect(response.headers.get("content-type")).toBe(UPSTREAM_HEADERS["content-type"]);
+      expect(response.headers.get("x-upstream-trace")).toBe(UPSTREAM_HEADERS["x-upstream-trace"]);
       expect(await response.json()).toEqual({ answer: status });
       expect(fallthrough).toEqual([]);
     });
@@ -136,6 +167,66 @@ describe("devCustodianProvision", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(inputs).toEqual([]);
+    expect(received.map((r) => r.body)).toEqual([text]);
+  });
+
+  it("forwards to a self-signed https server when secure is false", async () => {
+    await withCustodian();
+    const { target, received } = await httpsUpstream(200, { ok: true });
+    const { sign } = fakeSigner();
+    const { base } = await devServer(
+      devCustodianProvision({ target, secure: false, stateDir, sign }),
+    );
+
+    const response = await fetch(`${base}/setup-api/provision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(plainBody),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(received).toHaveLength(1);
+  });
+
+  it("refuses a self-signed https server when secure is not false", async () => {
+    await withCustodian();
+    const { target, received } = await httpsUpstream(200, { ok: true });
+    const { sign } = fakeSigner();
+    const logged: string[] = [];
+    const { base } = await devServer(
+      devCustodianProvision({ target, stateDir, sign, log: (message) => logged.push(message) }),
+    );
+
+    const response = await fetch(`${base}/setup-api/provision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(plainBody),
+    });
+
+    expect(response.status).toBe(502);
+    expect(received).toEqual([]);
+    expect(logged.join("\n")).toContain("forwarding failed");
+  });
+
+  it.each([
+    ["null", "null"],
+    ["an array", "[]"],
+  ])("forwards a body that is %s unchanged, for the server to refuse", async (_, text) => {
+    await withCustodian();
+    const { target, received } = await upstream(400, { error: "server's own" });
+    const { inputs, sign } = fakeSigner();
+    const { base } = await devServer(devCustodianProvision({ target, stateDir, sign }));
+
+    const response = await fetch(`${base}/setup-api/provision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: text,
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "server's own" });
     expect(inputs).toEqual([]);
     expect(received.map((r) => r.body)).toEqual([text]);
   });
@@ -224,6 +315,44 @@ describe("devCustodianProvision", () => {
     });
     expect(logged.join("\n")).toContain("dev:custodian: the series code is missing");
     expect(received).toEqual([]);
+  });
+});
+
+describe("cliSigner", () => {
+  it("returns what the command prints for the body on its standard input", async () => {
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", "process.stdin.pipe(process.stdout)"],
+    });
+    await expect(sign('{"a":1}')).resolves.toBe('{"a":1}');
+  });
+
+  it("reports the command's refusal", async () => {
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", "console.error('no venue'); process.exit(3)"],
+    });
+    await expect(sign("{}")).rejects.toThrow(/exited 3: no venue/);
+  });
+
+  it("kills a command that outlasts its time limit", async () => {
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", "setTimeout(() => {}, 60_000)"],
+      timeoutMs: 200,
+    });
+    const started = Date.now();
+    await expect(sign("{}")).rejects.toThrow(/timed out after 200 ms/);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  it("kills what the command started too, as pnpm starts the signer as its own child", async () => {
+    const pidFile = join(stateDir, "grandchild.pid");
+    const grandchild = `const c = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" }); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setTimeout(() => {}, 60_000);`;
+    const sign = cliSigner(stateDir, {
+      command: [process.execPath, "-e", grandchild],
+      timeoutMs: 500,
+    });
+    await expect(sign("{}")).rejects.toThrow(/timed out/);
+    const pid = Number(await readFile(pidFile, "utf8"));
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 5_000 });
   });
 });
 

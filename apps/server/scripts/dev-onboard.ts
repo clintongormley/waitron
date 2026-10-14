@@ -48,7 +48,7 @@ export function renderSetupEnvFile(env: SetupEnv): string {
 }
 
 export interface DevOnboardOptions extends DevSetupOptions {
-  environment?: NodeJS.ProcessEnv;
+  environment: NodeJS.ProcessEnv;
 }
 
 export interface DevOnboardResult {
@@ -57,7 +57,7 @@ export interface DevOnboardResult {
 
 /** Provisions nothing, and refuses a directory that already holds a venue (CLAUDE.md §5). */
 export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardResult> {
-  const { venueDir, envPath, stateDir, environment = process.env, log = () => {} } = opts;
+  const { venueDir, envPath, stateDir, environment, log = () => {} } = opts;
 
   assertDevelopmentEnvironment(environment);
   const { hasAny } = await inspectVenues(venueDir, null);
@@ -110,6 +110,7 @@ async function main(): Promise<void> {
     envPath,
     stateDir,
     httpPort: process.env.WAITRON_HTTP_PORT,
+    environment: process.env,
     log: (line) => void console.log(line),
   });
 

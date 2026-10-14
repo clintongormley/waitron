@@ -66,7 +66,13 @@ describe("devOnboard against a real venue directory", () => {
     venueDir = join(workDir, "venue");
     envPath = join(workDir, ".env");
     stateDir = join(workDir, "state");
-    first = await devOnboard({ venueDir, envPath, stateDir, log: () => {} });
+    first = await devOnboard({
+      venueDir,
+      envPath,
+      stateDir,
+      environment: process.env,
+      log: () => {},
+    });
   }, 180_000);
 
   afterAll(async () => {
@@ -115,6 +121,7 @@ describe("devOnboard against a real venue directory", () => {
       envPath: join(workDir, "shifted.env"),
       stateDir: join(workDir, "shifted-state"),
       httpPort: "8180",
+      environment: process.env,
     });
     expect(shifted.env.WAITRON_HTTP_PORT).toBe("8180");
   });
@@ -172,9 +179,9 @@ describe("devOnboard against a real venue directory", () => {
         .insert(tenants)
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Onboard Refuse SL" });
     });
-    await expect(devOnboard({ venueDir, envPath, stateDir, log: () => {} })).rejects.toThrow(
-      /already holds a venue/i,
-    );
+    await expect(
+      devOnboard({ venueDir, envPath, stateDir, environment: process.env, log: () => {} }),
+    ).rejects.toThrow(/already holds a venue/i);
     expect(await tenantsCount()).toBe(1);
   });
 });

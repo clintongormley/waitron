@@ -32,21 +32,48 @@ export function defaultStateDir(env: NodeJS.ProcessEnv = process.env): string {
   return isAbsolute(configured) ? configured : resolve(SERVER_DIR, configured);
 }
 
-export function cliSigner(custodianDir: string): Signer {
+const SIGN_TIMEOUT_MS = 60_000;
+
+export function cliSigner(
+  custodianDir: string,
+  options: { command?: readonly string[]; timeoutMs?: number } = {},
+): Signer {
+  const [file, ...args] = options.command ?? [
+    "pnpm",
+    "--silent",
+    "--filter",
+    "@waitron/server",
+    "dev:custodian",
+    "sign",
+    "--dir",
+    custodianDir,
+  ];
+  const timeoutMs = options.timeoutMs ?? SIGN_TIMEOUT_MS;
   return (body) =>
     new Promise((done, fail) => {
-      const child = spawn(
-        "pnpm",
-        ["--silent", "--filter", "@waitron/server", "dev:custodian", "sign", "--dir", custodianDir],
-        { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"] },
-      );
+      // Its own process group, so the time limit also stops what pnpm started.
+      const child = spawn(file!, args, {
+        cwd: REPO_ROOT,
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: true,
+      });
       let stdout = "";
       let stderr = "";
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        process.kill(-child.pid!, "SIGKILL");
+      }, timeoutMs);
       child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
       child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
-      child.on("error", fail);
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        fail(error);
+      });
       child.on("close", (code) => {
-        if (code === 0) done(stdout);
+        clearTimeout(timer);
+        if (timedOut) fail(new Error(`dev:custodian sign timed out after ${timeoutMs} ms`));
+        else if (code === 0) done(stdout);
         else fail(new Error(`dev:custodian sign exited ${code}: ${stderr.trim()}`));
       });
       child.stdin.end(body);
@@ -59,14 +86,20 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function carriesAllocation(text: string): boolean {
+/** Only a plain object without an allocation is signed; anything else the server answers itself. */
+function needsAllocation(text: string): boolean {
+  let body: unknown;
   try {
-    const body: unknown = JSON.parse(text);
-    return typeof body === "object" && body !== null && "initialOperations" in body;
+    body = JSON.parse(text);
   } catch {
-    // Not JSON: the server refuses it with its own answer.
-    return true;
+    return false;
   }
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    !Array.isArray(body) &&
+    !("initialOperations" in body)
+  );
 }
 
 function forward(
@@ -122,7 +155,7 @@ export function devCustodianProvision(
     void (async () => {
       const original = await readBody(req);
       let body = original;
-      if (!carriesAllocation(original.toString())) {
+      if (needsAllocation(original.toString())) {
         try {
           body = Buffer.from(await sign(original.toString()));
         } catch (error) {
