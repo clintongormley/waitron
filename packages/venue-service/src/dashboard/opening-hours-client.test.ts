@@ -58,7 +58,7 @@ describe("OpeningHoursApi", () => {
     await api.deletePeriod("p/1", null, 4);
     expect(request.mock.calls).toEqual([
       [`${base}/menu-periods/painted-in?periodId=p%2F1`, "GET"],
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET"],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
       [
         `${base}/menu-periods/p%2F1/delete`,
         "POST",
@@ -72,14 +72,16 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
-  it("reads a delete's impact passively only when asked to", async () => {
+  it("reads a delete's impact passively only when asked to, passing the options straight through", async () => {
     const request = vi.fn(async () => ({}));
     const api = new OpeningHoursApi(request as DashboardRequest);
     await api.readPeriodDeleteImpact("p/1", { passive: true });
+    await api.readPeriodDeleteImpact("p/1", { passive: false });
     await api.readPeriodDeleteImpact("p/1");
-    expect(request.mock.calls).toEqual([
+    expect(request.mock.calls).toStrictEqual([
       [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: true }],
-      [`${base}/menu-periods/p%2F1/delete-impact`, "GET"],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, { passive: false }],
+      [`${base}/menu-periods/p%2F1/delete-impact`, "GET", undefined, undefined],
     ]);
   });
 

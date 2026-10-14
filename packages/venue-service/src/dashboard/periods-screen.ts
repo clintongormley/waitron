@@ -419,10 +419,7 @@ export class PeriodsScreen extends LitElement {
     deletion.reading = true;
     let impact: PeriodDeleteImpact;
     try {
-      impact = await this.api.readPeriodDeleteImpact(
-        deletion.period.id,
-        automatic ? { passive: true } : undefined,
-      );
+      impact = await this.api.readPeriodDeleteImpact(deletion.period.id, { passive: automatic });
     } catch {
       if (this.current(deletion, generation)) {
         deletion.reading = false;

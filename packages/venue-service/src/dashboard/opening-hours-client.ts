@@ -225,10 +225,14 @@ export class OpeningHoursApi {
   /** `passive` for a read nobody asked for, so it keeps no session alive. */
   readPeriodDeleteImpact(
     periodId: string,
-    options?: { passive: true },
+    options?: { passive?: boolean },
   ): Promise<PeriodDeleteImpact> {
-    const path = `${BASE}/menu-periods/${at(periodId)}/delete-impact`;
-    return options ? this.request(path, "GET", undefined, options) : this.request(path, "GET");
+    return this.request(
+      `${BASE}/menu-periods/${at(periodId)}/delete-impact`,
+      "GET",
+      undefined,
+      options,
+    );
   }
   deletePeriod(
     periodId: string,
