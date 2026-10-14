@@ -17,6 +17,7 @@ import {
   runArchiveRoundTrip,
 } from "./testing/s3-archive-scenario.js";
 import { DELETE_MANY_SCENARIO_MS, runDeleteManyScenario } from "./testing/s3-delete-scenario.js";
+import { settleWithin } from "./testing/settle-within.js";
 import {
   READY_TIMEOUT_MS as S3_READY_MS,
   resolveVersitygw,
@@ -26,6 +27,8 @@ import {
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+// After an abort a scenario may still be decrypting, which takes no stop signal.
+const ABORT_SETTLE_MS = 60_000;
 
 const versitygw = await resolveVersitygw(process.env);
 if (!versitygw.ok && !REQUIRED) {
@@ -37,6 +40,13 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   let s3: S3TestServer | undefined;
   let client: S3Client | undefined;
   const stop = new AbortController();
+  const running = new Set<Promise<unknown>>();
+
+  /** Starts a scenario that teardown waits for, so a timed-out one never outlives the server. */
+  function started<T>(scenario: Promise<T>): Promise<T> {
+    running.add(scenario);
+    return scenario;
+  }
 
   beforeAll(async () => {
     if (!versitygw.ok) return;
@@ -51,8 +61,11 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   }, S3_READY_MS + 10_000);
 
   afterAll(async () => {
-    stop.abort();
     const failures: unknown[] = [];
+    stop.abort();
+    if (!(await settleWithin(Promise.allSettled(running), ABORT_SETTLE_MS))) {
+      failures.push(new Error(`a scenario did not stop within ${ABORT_SETTLE_MS} ms`));
+    }
     for (const cleanup of [
       () => client?.destroy(),
       async () => {
@@ -153,7 +166,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "1,005 objects are deleted in batches of 1,000 and 5 and none remain",
     async (ctx) => {
       const local = await deleteManyFixture(ctx);
-      const summary = await runDeleteManyScenario(local.fixture);
+      const summary = await started(runDeleteManyScenario(local.fixture));
       expect(summary).toEqual({ put: 1005, deleteBatches: [1000, 5], remaining: 0 });
       console.info(`versitygw answers: ${JSON.stringify(answers(local))}`);
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
@@ -169,7 +182,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   it("refuses a 1,006th object before it sends any request", async (ctx) => {
     const local = await deleteManyFixture(ctx);
     local.fixture.reserveObjects(1);
-    await expect(runDeleteManyScenario(local.fixture)).rejects.toThrow(/fixture-limit/);
+    await expect(started(runDeleteManyScenario(local.fixture))).rejects.toThrow(/fixture-limit/);
     expect(local.events).toEqual([
       { scenario: "lifecycle", phase: "fixture-limit", count: 1005, outcome: "refused" },
     ]);
@@ -181,7 +194,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const local = await deleteManyFixture(ctx);
       const failure = injected();
       await expect(
-        runDeleteManyScenario(failingAt(local, "PutObject", 50, failure)),
+        started(runDeleteManyScenario(failingAt(local, "PutObject", 50, failure))),
       ).rejects.toMatchObject({ params: { operation: "put", status: 403 } });
       const atRejection = local.events.length;
       await delay(1000);
@@ -200,7 +213,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const local = await deleteManyFixture(ctx);
       const failure = injected();
       await expect(
-        runDeleteManyScenario(failingAt(local, "ListObjectsV2", 1, failure)),
+        started(runDeleteManyScenario(failingAt(local, "ListObjectsV2", 1, failure))),
       ).rejects.toMatchObject({ params: { operation: "list", status: 403 } });
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
         {
@@ -218,7 +231,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "a 32 MiB archive goes up in four parts and comes back through its saved pack alone",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-roundtrip");
-      const summary = await runArchiveRoundTrip(local.fixture);
+      const summary = await started(runArchiveRoundTrip(local.fixture));
       console.info(`versitygw answers (archive round trip): ${JSON.stringify(answers(local))}`);
       expect(summary).toEqual({ bytes: 32 * 1024 * 1024, parts: 4, partBytes: 8 * 1024 * 1024 });
       expect(local.events.filter(({ phase }) => phase !== "request")).toEqual([
@@ -252,7 +265,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
     "an upload cancelled after its first part is abandoned, leaving no upload and no object",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-abort");
-      const summary = await runArchiveAbort(local.fixture);
+      const summary = await started(runArchiveAbort(local.fixture));
       console.info(`versitygw answers (archive abort): ${JSON.stringify(answers(local))}`);
       console.info(`archive abort: ${JSON.stringify(summary)}`);
       expect(summary.partsBeforeAbort).toBeGreaterThanOrEqual(1);
@@ -292,7 +305,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const { bucket, prefix } = local.fixture.bucket;
       const folder = archiveNamespace(prefix, local.fixture.venueId);
       await leave(admin, bucket, folder);
-      await expect(runArchiveAbort(local.fixture)).rejects.toThrow();
+      await expect(started(runArchiveAbort(local.fixture))).rejects.toThrow();
       expect(local.events).toContainEqual({ scenario: "archive-abort", ...after, outcome: "ok" });
     },
   );
