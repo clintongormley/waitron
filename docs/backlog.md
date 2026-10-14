@@ -4277,6 +4277,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4; found
   by its review.
 
+- **Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.**
+  `apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
+  `recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
+  would quietly fall back to "Contact support.". The printer word list has such a check
+  (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
+
 - **A destination holding only old-format archive names reads as never backed up.** Since A538-3a
   the status counts only names `parseBackupArchiveKey` reads. Left open by A538-3.
 
