@@ -82,12 +82,21 @@ const COMPLETED = 9;
 const PRINTER_IDLE = 3;
 const PRINTER_STOPPED = 5;
 
-type IppRequest = { operation: number; documentFormat: string | undefined; data: Buffer };
+type IppRequest = {
+  operation: number;
+  documentFormat: string | undefined;
+  printerUri: string | undefined;
+  media: string | undefined;
+  url?: string;
+  data: Buffer;
+};
 
 function decodeIpp(body: Buffer): IppRequest {
   let offset = 8;
   let name = "";
   let documentFormat: string | undefined;
+  let printerUri: string | undefined;
+  let media: string | undefined;
   for (;;) {
     const tag = body[offset++]!;
     if (tag === 0x03) break;
@@ -99,9 +108,17 @@ function decodeIpp(body: Buffer): IppRequest {
     const length = body.readUInt16BE(offset);
     offset += 2;
     if (name === "document-format") documentFormat = body.toString("utf8", offset, offset + length);
+    if (name === "printer-uri") printerUri = body.toString("utf8", offset, offset + length);
+    if (name === "media") media = body.toString("utf8", offset, offset + length);
     offset += length;
   }
-  return { operation: body.readUInt16BE(2), documentFormat, data: body.subarray(offset) };
+  return {
+    operation: body.readUInt16BE(2),
+    documentFormat,
+    printerUri,
+    media,
+    data: body.subarray(offset),
+  };
 }
 
 function ippAttribute(tag: number, name: string, value: string | Buffer): Buffer {
@@ -191,6 +208,7 @@ async function startFakeIppPrinter(tray = { empty: false }): Promise<FakeIppPrin
     req.on("end", () => {
       const body = Buffer.concat(chunks);
       const request = decodeIpp(body);
+      request.url = req.url;
       requests.push(request);
       const requestId = body.readUInt32BE(4);
       const reply =
@@ -606,6 +624,101 @@ async function lapsedOriginal(v: Venue) {
 }
 
 describe("an A4 invoice through the real agent loop and a fake IPP printer", () => {
+  it("A576 registers two queues on one HTTP server and sends each its own document", async () => {
+    const v = await venue();
+    const { running, agentId } = await joinedAgent(v);
+    const endpoints = [
+      {
+        path: "/printers/kitchen",
+        name: "Kitchen A4",
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      },
+      {
+        path: "/printers/reception",
+        name: "Reception A4",
+        media: "na_letter_8.5x11in",
+        resolutionDpi: 600,
+      },
+    ];
+    const report = await v.app.request("/print-api/agent/jobs", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${await running.host.token()}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        scanned: endpoints.map((e) => ({
+          transport: "network_tcp",
+          host: "127.0.0.1",
+          port: ipp!.port,
+          name: e.name,
+          ippOnly: true,
+          ipp: { port: ipp!.port, resourcePath: e.path },
+          office: {
+            port: ipp!.port,
+            resourcePath: e.path,
+            printable: true,
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: e.media,
+            resolutionDpi: e.resolutionDpi,
+          },
+        })),
+      }),
+    });
+    expect(report.status).toBe(200);
+    const ids: string[] = [];
+    const sales: string[] = [];
+    const deliveries: string[] = [];
+    for (const endpoint of endpoints) {
+      const added = await request(v, "POST", "/management-api/page-printers", {
+        agentId,
+        host: "127.0.0.1",
+        port: ipp!.port,
+        path: endpoint.path,
+        name: endpoint.name,
+      });
+      expect(added.status).toBe(201);
+      const { id } = (await added.json()) as { id: string };
+      ids.push(id);
+      const saleId = await fullInvoice(v);
+      sales.push(saleId);
+      deliveries.push((await printOnA4(saleId, id)).id);
+    }
+    expect(new Set(ids).size).toBe(2);
+    await pollUntilIdle(running);
+    for (const [i, endpoint] of endpoints.entries()) {
+      const jobs = ipp!.printJobs().filter((job) => job.url === endpoint.path);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]!.printerUri).toBe(`ipp://127.0.0.1:${ipp!.port}${endpoint.path}`);
+      expect(jobs[0]!.documentFormat).toBe("application/pdf");
+      expect(jobs[0]!.media).toBe(endpoint.media);
+      expect(jobs[0]!.data.equals(await originalPdf(v, sales[i]!))).toBe(true);
+      expect(
+        ipp!.requests.filter((r) => r.operation === GET_JOB_ATTRIBUTES && r.url === endpoint.path)
+          .length,
+      ).toBeGreaterThan(0);
+      expect(await row(deliveries[i]!)).toMatchObject({ status: "sent", pagePrinterId: ids[i] });
+    }
+    expect(ipp!.printJobs()[0]!.data.equals(ipp!.printJobs()[1]!.data)).toBe(false);
+  });
+
+  it("A576 saved single-queue printer prints without rediscovery", async () => {
+    const v = await venue();
+    const { running, agentId } = await joinedAgent(v);
+    const id = await officePrinter(v, agentId);
+    const [before] = await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, id));
+    const sale = await fullInvoice(v);
+    const delivery = await printOnA4(sale, id);
+    await pollUntilIdle(running);
+    expect(await row(delivery.id)).toMatchObject({ status: "sent", pagePrinterId: id });
+    const [after] = await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, id));
+    expect(after).toEqual(before);
+    expect(ipp!.printJobs()[0]!.url).toBe("/ipp/print");
+    expect(ipp!.printJobs()[0]!.data.equals(await originalPdf(v, sale))).toBe(true);
+  });
+
   it("prints a synthetic F1's original on the office printer and ends it sent", async () => {
     const v = await venue();
     const { running, agentId } = await joinedAgent(v);

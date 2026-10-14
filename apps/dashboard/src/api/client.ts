@@ -1220,14 +1220,15 @@ export interface DiscoveredPrinter {
   make?: string | null;
   model?: string | null;
   name?: string | null;
+  serverName?: string;
   pagePrinter?: true;
   /** The IPP queue the host announced over mDNS. */
   ipp?: { port: number; resourcePath: string };
-  /** The host announced IPP and no raw queue, so `port` is its IPP port. Never a receipt printer. */
+  /** This queue has no unambiguous raw counterpart; `port` is its IPP port. Never a receipt printer. */
   ippOnly?: true;
   /** What the office printer's IPP queue answered: the format an A4 invoice would use, or why none. */
   office?: OfficePrinterReport;
-  /** `office` is another agent's report for the address, not this agent's: it cannot be registered
+  /** `office` is another agent's report for the same queue, not this agent's: it cannot be registered
    * through this agent. */
   officeLent?: true;
   /** Bluetooth only: the agent's scan decoded the device as a printer. */

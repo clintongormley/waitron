@@ -186,6 +186,59 @@ async function stored(id: string) {
   return row;
 }
 
+it("A576 creates enables and repoints only the selected queue", async () => {
+  const app = mountApp();
+  const a = await joinAgent(app, "Office agent");
+  const host = "10.61.20.1";
+  const queue = (path: string, report: unknown = { ...PRINTABLE, resourcePath: path }) => ({
+    ...officeEntry(host, report),
+    port: 631,
+    ippOnly: true,
+    ipp: { port: 631, resourcePath: path },
+  });
+  await scan(app, a.token, [queue("/printers/kitchen"), queue("/printers/reception")]);
+  const kitchen = await registered(
+    app,
+    target(a.agentId, host, { path: "/printers/kitchen", name: "Kitchen A4" }),
+  );
+  const reception = await registered(
+    app,
+    target(a.agentId, host, { path: "/printers/reception", name: "Reception A4" }),
+  );
+  expect(kitchen.id).not.toBe(reception.id);
+  const disabled = await send(app, "PATCH", `/management-api/page-printers/${kitchen.id}`, {
+    cookie: managerCookie,
+    body: { active: false },
+  });
+  expect(disabled.status).toBe(204);
+  expect(await stored(reception.id)).toMatchObject({ active: true, agentId: a.agentId });
+  expect(
+    await registered(app, target(a.agentId, host, { path: "/printers/kitchen", name: "Ignored" })),
+  ).toEqual({ id: kitchen.id, outcome: "enabled" });
+  const keptKitchen = await stored(kitchen.id);
+  const b = await joinAgent(app, "Second agent");
+  await scan(app, b.token, [
+    queue("/printers/reception", {
+      ...PRINTABLE,
+      resourcePath: "/printers/reception",
+      resolutionDpi: 600,
+    }),
+  ]);
+  expect(
+    await registered(
+      app,
+      target(b.agentId, host, { path: "/printers/reception", name: "Ignored" }),
+    ),
+  ).toEqual({ id: reception.id, outcome: "repointed" });
+  expect(await stored(kitchen.id)).toEqual(keptKitchen);
+  expect(await stored(reception.id)).toMatchObject({
+    name: "Reception A4",
+    agentId: b.agentId,
+    resourcePath: "/printers/reception",
+    resolutionDpi: 600,
+  });
+});
+
 /** One agent, one fresh printable office entry at `host`, registered as "Oficina". */
 async function onePrinter(app: Hono, host = "10.61.0.1") {
   const agent = await joinAgent(app, "Office agent");

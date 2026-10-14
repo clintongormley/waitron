@@ -158,7 +158,9 @@ export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
         name: srv.name.split(".")[0] ?? srv.name,
         ...(make !== undefined ? { make } : {}),
         ...(model !== undefined ? { model } : {}),
-        ...(ipp !== undefined ? { ipp } : {}),
+        ...(ipp !== undefined
+          ? { ipp, serverName: srv.target.replace(/\.$/, "").replace(/\.local$/i, "") }
+          : {}),
       });
     }
     return devices;

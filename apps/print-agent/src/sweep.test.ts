@@ -176,6 +176,65 @@ describe("sweepPort", () => {
 });
 
 describe("mergeDiscovered", () => {
+  const sharedQueue = (path: string, name: string): DiscoveredDevice => ({
+    transport: "network_tcp",
+    host: "192.168.1.20",
+    port: 631,
+    name,
+    ipp: { port: 631, resourcePath: path },
+  });
+
+  it.each([false, true])(
+    "A576 duplicate queue announcements do not hide another queue (reversed %s)",
+    (reverse) => {
+      const kitchen = sharedQueue("/printers/kitchen", "Kitchen A4");
+      const reception = sharedQueue("/printers/reception", "Reception A4");
+      const announced = reverse ? [reception, kitchen, kitchen] : [kitchen, kitchen, reception];
+      expect(mergeDiscovered(announced, [])).toEqual(
+        (reverse ? [reception, kitchen] : [kitchen, reception]).map((d) => ({
+          ...d,
+          ippOnly: true,
+        })),
+      );
+    },
+  );
+
+  it("A576 raw plus multiple IPP queues is ambiguous", () => {
+    const raw: DiscoveredDevice = {
+      transport: "network_tcp",
+      host: "192.168.1.20",
+      port: 9100,
+      name: "Raw",
+    };
+    const kitchen = sharedQueue("/printers/kitchen", "Kitchen A4");
+    const reception = sharedQueue("/printers/reception", "Reception A4");
+    expect(mergeDiscovered([kitchen, raw, reception, kitchen], [raw])).toEqual([
+      raw,
+      { ...kitchen, ippOnly: true },
+      { ...reception, ippOnly: true },
+    ]);
+  });
+
+  it("A576 keeps case-distinct and trailing-slash-distinct queue paths", () => {
+    const devices = [
+      "/printers/Kitchen",
+      "/printers/kitchen",
+      "/printers/kitchen/",
+      "/printers/kitchen:631",
+    ].map((path) => sharedQueue(path, path));
+    expect(mergeDiscovered(devices, [])).toEqual(devices.map((d) => ({ ...d, ippOnly: true })));
+  });
+
+  it("A576 keeps two raw ports when they share one IPP queue", () => {
+    const queue = sharedQueue("/printers/kitchen", "Kitchen A4");
+    const raws: DiscoveredDevice[] = [9100, 9101].map((port) => ({
+      transport: "network_tcp",
+      host: "192.168.1.20",
+      port,
+    }));
+    expect(mergeDiscovered([queue, ...raws], [])).toEqual(raws.map((d) => ({ ...queue, ...d })));
+  });
+
   it("keeps the announced (named) entry when the sweep also found the same host:port, and appends the rest", () => {
     const announced: DiscoveredDevice[] = [
       { transport: "network_tcp", host: "192.168.10.56", port: 9100, name: "HP LaserJet" },

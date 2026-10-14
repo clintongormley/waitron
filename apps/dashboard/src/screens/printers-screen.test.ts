@@ -10719,6 +10719,143 @@ describe("office printers in discovery", () => {
     return { el, host, api };
   }
 
+  const sharedOffice = (path: string, name: string) =>
+    office({
+      host: "192.168.1.20",
+      port: 631,
+      name,
+      ippOnly: true,
+      serverName: "Back-office PC",
+      ipp: { port: 631, resourcePath: path },
+      office: { ...printable, resourcePath: path },
+    });
+
+  it("A576 a raw receipt row with IPP metadata still shows its raw print address", async () => {
+    const { el } = await mountWith([
+      office({
+        host: "192.168.1.31",
+        port: 9100,
+        name: "Counter",
+        pagePrinter: undefined,
+        office: undefined,
+        ipp: { port: 631, resourcePath: "/ipp/print" },
+      }),
+    ]);
+    const details = text(el, "[data-test='discovered-row-192.168.1.31:9100']")!;
+    expect(details).toContain("192.168.1.31:9100");
+    expect(details).not.toContain("192.168.1.31:631/ipp/print");
+    expect(q(el, "[data-test='register-192.168.1.31:9100']")).not.toBeNull();
+  });
+
+  it("A576 gives two queues independent rows and Add payloads with their advertised server name", async () => {
+    const kitchen = sharedOffice("/printers/kitchen", "Kitchen A4");
+    const reception = sharedOffice("/printers/reception", "Reception A4");
+    const { el, api } = await mountWith([kitchen, reception]);
+    const table = q(el, "[data-test=discovered-table]")!;
+    const details = () => [
+      ...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=discovered-row-]"),
+    ];
+    expect(details().map((r) => r.querySelector("strong")!.textContent)).toEqual([
+      "Kitchen A4 (Back-office PC)",
+      "Reception A4 (Back-office PC)",
+    ]);
+    expect(new Set(details().map((r) => r.dataset.test)).size).toBe(2);
+    expect(details()[0]!.textContent).toContain("192.168.1.20:631/printers/kitchen");
+    for (const [index, path] of ["/printers/kitchen", "/printers/reception"].entries()) {
+      const actions = [
+        ...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=add-page-printer-]"),
+      ];
+      actions[index]!.click();
+      await flush(el);
+      typeField(
+        el,
+        "[data-test=page-printer-add-modal] wt-input[name=name]",
+        index === 0 ? "Kitchen" : "Reception",
+      );
+      q(el, "[data-test=confirm-add-page-printer]")!.click();
+      await flush(el);
+      expect(api.registerPagePrinter).toHaveBeenLastCalledWith({
+        agentId: "a1",
+        host: "192.168.1.20",
+        port: 631,
+        path,
+        name: index === 0 ? "Kitchen" : "Reception",
+      });
+      expect(q(el, "[data-test=page-printer-add-modal]")).toBeNull();
+    }
+  });
+
+  it("A576 keeps one queue's pending Enable and refusal separate from its sibling's Repoint", async () => {
+    let rejectKitchen!: (reason: unknown) => void;
+    const waiting = new Promise<never>((_, reject) => {
+      rejectKitchen = reject;
+    });
+    const registerPagePrinter = vi.fn((entry: { path: string }) =>
+      entry.path === "/printers/kitchen"
+        ? waiting
+        : Promise.resolve({ id: "pp2", outcome: "repointed" as const }),
+    );
+    const { el } = await mountWith(
+      [
+        sharedOffice("/printers/kitchen", "Kitchen A4"),
+        sharedOffice("/printers/reception", "Reception A4"),
+      ],
+      {
+        registerPagePrinter,
+        listPagePrinters: vi.fn().mockResolvedValue([
+          { ...added, host: "192.168.1.20", resourcePath: "/printers/kitchen", active: false },
+          {
+            ...added,
+            id: "pp2",
+            host: "192.168.1.20",
+            resourcePath: "/printers/reception",
+            agentId: "a2",
+          },
+        ]),
+      },
+    );
+    const table = q(el, "[data-test=discovered-table]")!;
+    const enable = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test^=enable-page-printer-]",
+    )!;
+    const repoint = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test^=repoint-page-printer-]",
+    )!;
+    enable.click();
+    await flush(el);
+    expect(enable.loading).toBe(true);
+    expect(repoint.loading).toBe(false);
+    repoint.click();
+    await flush(el);
+    expect(registerPagePrinter.mock.calls.map(([entry]) => entry.path)).toEqual([
+      "/printers/kitchen",
+      "/printers/reception",
+    ]);
+    rejectKitchen({ code: "page_printer.not_printable", params: {} });
+    await flush(el);
+    expect(table.shadowRoot!.querySelectorAll("[data-test^=page-printer-error-]")).toHaveLength(1);
+  });
+
+  it("A576 an IPP-only queue never inherits a disabled raw printer and falls back to its routing host", async () => {
+    const { el } = await mountWith(
+      [
+        sharedOffice("/printers/kitchen", "Kitchen A4"),
+        {
+          ...sharedOffice("/printers/reception", "Reception A4"),
+          serverName: undefined,
+          printerId: "p1",
+          alreadyRegistered: true,
+        },
+      ],
+      { listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, id: "p1", active: false }]) },
+    );
+    await flush(el);
+    const table = q(el, "[data-test=discovered-table]")!;
+    expect(table.shadowRoot!.textContent).toContain("Reception A4 (192.168.1.20)");
+    expect(table.shadowRoot!.querySelectorAll("[data-test^=add-page-printer-]")).toHaveLength(2);
+    expect(table.shadowRoot!.querySelector("[data-test^=enable-printer-]")).toBeNull();
+  });
+
   // Verdana is about as wide as CI's Linux system font, which widened this list past the phone's
   // width where macOS's narrower one fitted.
   it.each(
@@ -10805,9 +10942,9 @@ describe("office printers in discovery", () => {
     expect(text(el, "[data-test='page-printer-10.0.0.57:9100']")).toBe(
       t("printers.page_printer_unsupported_media"),
     );
-    expect(text(el, "[data-test='page-printer-10.0.0.58:631']")).toBe(
-      t("printers.page_printer_no_answer"),
-    );
+    expect(
+      text(el, "[data-test='page-printer-ipp:%5B%2210.0.0.58%22%2C631%2C%22%2Fipp%2Fprint%22%5D']"),
+    ).toBe(t("printers.page_printer_no_answer"));
     expect(text(el, "[data-test='page-printer-10.0.0.59:9100']")).toBe(
       t("printers.page_printer_no_answer"),
     );
@@ -10836,7 +10973,7 @@ describe("office printers in discovery", () => {
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
     await flush(el);
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
-      `HP LaserJet · 10.0.0.56:631 · ${t("printers.discovered_seen_on").split("{agent}").join(agentName)}`,
+      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").split("{agent}").join(agentName)}`,
     );
   });
 
@@ -10851,7 +10988,7 @@ describe("office printers in discovery", () => {
     };
     expect(field.required).toBe(true);
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
-      `HP LaserJet · 10.0.0.56:631 · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
+      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
     );
     expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(true);
     expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe(
@@ -10898,7 +11035,9 @@ describe("office printers in discovery", () => {
     const { el } = await mountWith([office({ agentName: null })], { registerPagePrinter });
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
     await flush(el);
-    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe("HP LaserJet · 10.0.0.56:631");
+    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
+      "HP LaserJet · 10.0.0.56:631/ipp/print",
+    );
     typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "Back office");
     await flush(el);
     q(el, "[data-test=confirm-add-page-printer]")!.click();

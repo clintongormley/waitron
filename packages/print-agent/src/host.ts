@@ -85,6 +85,8 @@ export interface DiscoveredDevice {
   make?: string;
   model?: string;
   name?: string;
+  /** The announced server name, for display only; `host` remains the routing address. */
+  serverName?: string;
   /** Set when the device answered an IPP capability query listing A4 or US letter, so it is an office
    * printer, not an ESC/POS receipt printer. Absent means unknown or not a page printer. */
   pagePrinter?: true;
@@ -92,8 +94,7 @@ export interface DiscoveredDevice {
   office?: OfficePrinterReport;
   /** The IPP queue the host announced over mDNS (`_ipp._tcp`). */
   ipp?: { port: number; resourcePath: string };
-  /** Set when the host announced IPP but no raw queue was announced or swept, so `port` is its IPP
-   * port, not a raw ESC/POS one. */
+  /** Set when this queue has no unambiguous raw counterpart; `port` is its IPP port. */
   ippOnly?: true;
   /** Set on a Bluetooth device whose `bluetoothctl info` shows a printer icon, an imaging class with
    * the printer bit, or the Serial Port profile. Absent means not inspected or none of the three. */

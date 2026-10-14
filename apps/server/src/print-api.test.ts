@@ -5004,6 +5004,254 @@ describe("office printers in discovery and the receipt-printer create route", ()
     return suite.db.select({ id: printers.id }).from(printers).where(eq(printers.host, host));
   }
 
+  const queueEntry = (
+    host: string,
+    path: string,
+    office: unknown = { ...PRINTABLE, resourcePath: path },
+  ) => ({
+    transport: "network_tcp",
+    host,
+    port: 631,
+    ippOnly: true,
+    name: path,
+    serverName: "Back-office PC",
+    ipp: { port: 631, resourcePath: path },
+    office,
+  });
+
+  it("A576 one queue's office mark never classifies a sibling queue", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.7";
+    await pull(app, a.token, {
+      scanned: [
+        { ...queueEntry(host, "/printers/kitchen"), pagePrinter: true },
+        queueEntry(host, "/printers/labels", { ...UNANSWERED, resourcePath: "/printers/labels" }),
+      ],
+    });
+    const rows = await discoveredRows(app);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/kitchen"),
+    ).toHaveProperty("pagePrinter", true);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/labels"),
+    ).not.toHaveProperty("pagePrinter");
+  });
+
+  it("A576 mixed-case hosts share one queue's fresh mark without borrowing its registration authority", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Lending agent");
+    const b = await joinAndAccept(app, "Borrowing agent");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    try {
+      await pull(app, b.token, {
+        scanned: [
+          queueEntry("office.local", "/printers/kitchen", {
+            ...UNANSWERED,
+            resourcePath: "/printers/kitchen",
+          }),
+        ],
+      });
+      clock.mockReturnValue(Date.now() + 1000);
+      await pull(app, a.token, {
+        scanned: [{ ...queueEntry("OFFICE.local", "/printers/kitchen"), pagePrinter: true }],
+      });
+      const borrowed = (await discoveredRows(app)).find((r) => r.agentId === b.agentId);
+      expect(borrowed).toMatchObject({
+        officeLent: true,
+        pagePrinter: true,
+        office: { ...PRINTABLE, resourcePath: "/printers/kitchen" },
+      });
+      const response = await send(app, "POST", "/management-api/page-printers", {
+        cookie: managerCookie,
+        body: { agentId: b.agentId, host: "office.local", port: 631, path: "/printers/kitchen" },
+      });
+      expect(await response.json()).toMatchObject({
+        error: { code: "page_printer.not_printable" },
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("A576 retains distinct queues and the advertised server name through repeated pulls", async () => {
+    const app = mountApp();
+    const agent = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.1";
+    const kitchen = queueEntry(host, "/printers/kitchen");
+    const reception = queueEntry(host, "/printers/reception", {
+      ...PRINTABLE,
+      resourcePath: "/printers/reception",
+      resolutionDpi: 600,
+    });
+    await pull(app, agent.token, { scanned: [kitchen, reception, kitchen] });
+    const initial = await discoveredRows(app);
+    expect(initial.filter((r) => r.host === host)).toHaveLength(2);
+    expect(
+      initial.find(
+        (r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/reception",
+      ),
+    ).toMatchObject({ office: reception.office, serverName: "Back-office PC" });
+    const refused = { ...UNANSWERED, resourcePath: "/printers/kitchen" };
+    await pull(app, agent.token, { scanned: [queueEntry(host, "/printers/kitchen", refused)] });
+    const updated = await discoveredRows(app);
+    expect(
+      updated.find(
+        (r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/kitchen",
+      )?.office,
+    ).toEqual(refused);
+    expect(
+      updated.find(
+        (r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/reception",
+      )?.office,
+    ).toEqual(reception.office);
+  });
+
+  it("A576 lends capabilities only for the same known queue", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Kitchen agent");
+    const b = await joinAndAccept(app, "Bar agent");
+    const host = "10.9.249.2";
+    await pull(app, a.token, { scanned: [queueEntry(host, "/printers/kitchen")] });
+    const refused = {
+      ...UNANSWERED,
+      resourcePath: "/printers/reception",
+      reason: "unsupported_document_format",
+      supportedFormats: ["application/postscript"],
+    };
+    await pull(app, b.token, {
+      scanned: [
+        queueEntry(host, "/printers/reception", refused),
+        queueEntry(host, "/printers/kitchen", { ...UNANSWERED, resourcePath: "/printers/kitchen" }),
+      ],
+    });
+    const rows = (await discoveredRows(app)).filter((r) => r.agentId === b.agentId);
+    expect(rows).toHaveLength(2);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/reception")
+        ?.office,
+    ).toEqual(refused);
+    expect(
+      rows.find((r) => (r.ipp as { resourcePath?: string })?.resourcePath === "/printers/kitchen"),
+    ).toMatchObject({
+      office: { ...PRINTABLE, resourcePath: "/printers/kitchen" },
+      officeLent: true,
+    });
+    for (const [path, code] of [
+      ["/printers/kitchen", "page_printer.not_printable"],
+      ["/printers/other", "page_printer.not_found"],
+    ]) {
+      const response = await send(app, "POST", "/management-api/page-printers", {
+        cookie: managerCookie,
+        body: { agentId: b.agentId, host, port: 631, path },
+      });
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+
+  it("A576 keeps queue freshness independent and expires the donor's capabilities", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.3";
+    const start = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      await pull(app, a.token, {
+        scanned: [queueEntry(host, "/printers/kitchen"), queueEntry(host, "/printers/reception")],
+      });
+      expect((await discoveredRows(app)).filter((r) => r.host === host)).toHaveLength(2);
+      clock.mockReturnValue(start + 15_000);
+      expect((await discoveredRows(app)).filter((r) => r.host === host)).toHaveLength(2);
+      clock.mockReturnValue(start + 15_001);
+      await pull(app, a.token, { scanned: [queueEntry(host, "/printers/reception")] });
+      const rows = (await discoveredRows(app)).filter((r) => r.host === host);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.ipp).toEqual({ port: 631, resourcePath: "/printers/reception" });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("A576 takes a printable duplicate in one pull but replaces it with the next pull's refusal", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Office agent");
+    const host = "10.9.249.5";
+    const printable = queueEntry(host, "/printers/kitchen");
+    const refused = queueEntry(host, "/printers/kitchen", {
+      ...UNANSWERED,
+      resourcePath: "/printers/kitchen",
+    });
+    await pull(app, a.token, { scanned: [printable, refused] });
+    expect((await discoveredRows(app)).find((r) => r.host === host)?.office).toEqual(
+      printable.office,
+    );
+    await pull(app, a.token, { scanned: [refused] });
+    expect((await discoveredRows(app)).find((r) => r.host === host)?.office).toEqual(
+      refused.office,
+    );
+  });
+
+  it("A576 IPP-only queues do not inherit a disabled raw registration", async () => {
+    const app = mountApp();
+    const host = "10.9.249.4";
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Legacy raw", transport: "network_tcp", host, port: 631 },
+    });
+    expect(created.status).toBe(201);
+    const { id } = await created.json();
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, id));
+    const a = await joinAndAccept(app, "Office agent");
+    await pull(app, a.token, { scanned: [queueEntry(host, "/printers/kitchen")] });
+    expect((await discoveredRows(app)).find((r) => r.host === host)).toMatchObject({
+      alreadyRegistered: false,
+      printerId: null,
+    });
+  });
+
+  it("A576 a reported raw local key cannot collapse two IPP queues", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app, "Office agent");
+    await pull(app, a.token, {
+      scanned: [
+        { ...queueEntry("OFFICE.local", "/printers/kitchen"), localKey: "raw-marker" },
+        { ...queueEntry("office.local", "/printers/reception"), localKey: "raw-marker" },
+      ],
+    });
+    const rows = (await discoveredRows(app)).filter((r) => r.localKey === "raw-marker");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => (r.ipp as { resourcePath: string }).resourcePath)).toEqual([
+      "/printers/kitchen",
+      "/printers/reception",
+    ]);
+  });
+
+  it("A576 raw ports sharing a queue retain their own receipt registrations", async () => {
+    const app = mountApp();
+    const host = "10.9.249.6";
+    const ids: string[] = [];
+    for (const port of [9100, 9101]) {
+      const response = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: `Raw ${port}`, transport: "network_tcp", host, port },
+      });
+      expect(response.status).toBe(201);
+      ids.push((await response.json()).id);
+    }
+    const a = await joinAndAccept(app, "Office agent");
+    await pull(app, a.token, {
+      scanned: [9100, 9101].map((port) => ({
+        ...queueEntry(host, "/printers/kitchen"),
+        port,
+        ippOnly: undefined,
+      })),
+    });
+    const rows = (await discoveredRows(app)).filter((r) => r.host === host);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.printerId)).toEqual(ids);
+    expect(rows.map((r) => r.port)).toEqual([9100, 9101]);
+  });
+
   it("carries a pulled office report, IPP queue and IPP-only mark to the discovered-printers list", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Office agent");
