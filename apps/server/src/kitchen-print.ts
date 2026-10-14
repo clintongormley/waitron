@@ -67,6 +67,14 @@ export interface FiredItem {
   quantity?: number | null;
 }
 
+/** Group-less items first, then group by group, each in line order: a paper heads each group's run. */
+function byGroupThenLine(
+  a: { lineNo: number; item: KitchenTicketItem },
+  b: { lineNo: number; item: KitchenTicketItem },
+): number {
+  return (a.item.group ?? 0) - (b.item.group ?? 0) || a.lineNo - b.lineNo;
+}
+
 /** `entry`'s printed item at the quantity `item` was fired at, where it records one. */
 function atFiredQuantity(entry: KitchenTicketItem, item: FiredItem): KitchenTicketItem {
   return item.quantity == null ? entry : { ...entry, qty: thousandthsToDecimal(item.quantity) };
@@ -512,8 +520,6 @@ async function planKitchenTickets(
     itemsByStation.set(fired.stationId, bucket);
   }
 
-  // Group-less items first, then group by group: the ticket heads each group's run of items.
-  const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
   const stations = [...stationNames.entries()]
     .map(([id, station]) => ({
       id,
@@ -522,7 +528,7 @@ async function planKitchenTickets(
       items: arrangeTicketItems(
         itemsByStation
           .get(id)!
-          .sort((a, b) => groupOrder(a.item) - groupOrder(b.item) || a.lineNo - b.lineNo)
+          .sort(byGroupThenLine)
           .map((entry) => entry.item),
         grouping,
       ),
@@ -1022,8 +1028,8 @@ export async function readSentWork(
 /**
  * Tell the kitchen of sent work that moved to another table. When the table a correction slip names
  * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
- * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and a MOVED slip where its
- * station has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
+ * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and each station with an
+ * active printer gets one MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it copied.
  * `force` tells the kitchen whatever the two labels read: a bill moved to or from the counter can
  * read the same on both sides.
  */
@@ -1167,7 +1173,7 @@ async function notifyMoved(
   });
 }
 
-/** One MOVED slip per station of `items`, listing its items in their order, to its printers. */
+/** One MOVED slip per station of `items`, to its printers, listing its items as its tickets do. */
 async function printMovedSlips(
   tx: Transaction,
   cfg: TillConfig,
@@ -1192,8 +1198,13 @@ async function printMovedSlips(
       .map((target) => {
         const entry = itemsByLine.get(target.workingOrderLineId)!;
         const item = atFiredQuantity(entry.item, target);
-        return entry.group === null ? item : { ...item, group: entry.group };
-      });
+        return {
+          lineNo: entry.lineNo,
+          item: entry.group === null ? item : { ...item, group: entry.group },
+        };
+      })
+      .sort(byGroupThenLine)
+      .map((entry) => entry.item);
     for (const group of groupByLayout(targets)) {
       const bytes = formatMovedSlip(
         {

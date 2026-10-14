@@ -596,6 +596,34 @@ describe("a MOVED slip per order per station", () => {
     ]);
   });
 
+  it("lists a station's dishes as its tickets do: group-less ones first, then group by group", async () => {
+    const v = await setupPartyVenue(db);
+    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
+    const mesa15 = await v.table("Mesa 15");
+    const mesa16 = await v.table("Mesa 16");
+    const { partyId, tabId } = await seat(v, mesa15);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    await orderForParty(v, partyId, ["Paella"], tabId);
+    await order(v, tabId, "Burger");
+    const before = (await printedBy(grill)).length;
+    const command = await commandFor(v, partyId);
+
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa16, { ...command, bills: "merge", otherPartyId: null }),
+    );
+
+    const slips = (await printedBy(grill)).slice(before).map((text) => text.split("\n"));
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.slice(6)).toEqual([
+      "1.000 x BURG",
+      "GROUP 1",
+      "1.000 x BURG",
+      "GROUP 2",
+      "1.000 x PAELLA",
+      "",
+    ]);
+  });
+
   it("names the party a bill moved to the counter left, and words the counter", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
