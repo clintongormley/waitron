@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import { format } from "./hours-view.js";
+import { periodColourStyles } from "./period-colour-styles.js";
 import { t } from "./strings.js";
 
 type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
@@ -42,6 +43,7 @@ const fields: Field[] = ["name", "colour", "menuId", "staffMenuIds", "endOffsetM
 export class PeriodDialog extends LitElement {
   static override styles = [
     baseStyles,
+    periodColourStyles,
     css`
       :host {
         display: block;
@@ -50,6 +52,38 @@ export class PeriodDialog extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
+      }
+      fieldset {
+        display: grid;
+        gap: var(--wt-space-2);
+        border: none;
+        margin: 0;
+        padding: 0;
+      }
+      legend {
+        padding: 0;
+      }
+      [role="radiogroup"] {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        width: var(--wt-space-6);
+        height: var(--wt-space-6);
+        padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--period-fill);
+        cursor: pointer;
+      }
+      .swatch[aria-checked="true"] {
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-selected-ring-offset);
+      }
+      [data-test="colour-error"] {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
       }
       [data-test="menu-includes"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
@@ -261,6 +295,7 @@ export class PeriodDialog extends LitElement {
             ? t("menu.department_gone")
             : t("menu.save_error")
         : "";
+    const colourError = this.error("colour");
     const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;
     const current = () =>
@@ -297,19 +332,33 @@ export class PeriodDialog extends LitElement {
               if (current()) this.changed("name", event.detail.value);
             }}
           ></wt-input>
-          <wt-combobox
-            name="colour"
-            label=${t("hours.colour")}
-            search="never"
-            .value=${this.draft.colour}
-            .error=${this.error("colour")}
-            ?disabled=${this.busy}
-            .options=${CALENDAR_COLOURS.map((colour) => ({ value: colour, label: t(`hours.colour.${colour}`) }))}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("colour", event.detail.value);
-            }}
-          ></wt-combobox>
+          <fieldset name="colour">
+            <legend>${t("hours.colour")}</legend>
+            <div
+              role="radiogroup"
+              aria-label=${t("hours.colour")}
+              aria-invalid=${colourError ? "true" : "false"}
+              aria-describedby="colour-error"
+            >
+              ${CALENDAR_COLOURS.map(
+                (colour) =>
+                  html`<button
+                    type="button"
+                    class="swatch"
+                    role="radio"
+                    aria-checked=${this.draft.colour === colour ? "true" : "false"}
+                    aria-label=${t(`hours.colour.${colour}`)}
+                    data-colour=${colour}
+                    ?disabled=${this.busy}
+                    @click=${(event: Event) => {
+                      event.stopPropagation();
+                      if (current()) this.changed("colour", colour);
+                    }}
+                  ></button>`,
+              )}
+            </div>
+            <span id="colour-error" data-test="colour-error">${colourError}</span>
+          </fieldset>
           <wt-combobox
             name="menuId"
             label=${t("period.customer_menu")}
@@ -356,6 +405,16 @@ export class PeriodDialog extends LitElement {
             }}
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
+          ${
+            this.period || !this.submitLabel
+              ? html`<wt-combobox
+                  name="floorPlanId"
+                  label=${t("period.floor_plan")}
+                  placeholder=${t("period.floor_plan_later")}
+                  disabled
+                ></wt-combobox>`
+              : nothing
+          }
         </div>
         <wt-form-actions
           slot="footer"

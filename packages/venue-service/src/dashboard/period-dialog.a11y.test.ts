@@ -44,6 +44,13 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=menuId]")!.error,
       ).toBe("Choose a menu.");
     }
+    if (state === "new" || state === "edit") {
+      expect(el.shadowRoot!.querySelectorAll("[role=radiogroup] [role=radio]")).toHaveLength(6);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=floorPlanId]")!
+          .disabled,
+      ).toBe(true);
+    }
     if (state === "refused") el.refusal = { code: "menu_period.name_taken" };
     if (state === "saving") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));

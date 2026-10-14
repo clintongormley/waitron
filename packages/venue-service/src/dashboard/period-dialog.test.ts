@@ -51,10 +51,29 @@ function field(el: PeriodDialog, name: string) {
   expect(control, `period field ${name}`).not.toBeNull();
   return control!;
 }
-async function change(el: PeriodDialog, name: string, detail: object) {
-  field(el, name).dispatchEvent(
-    new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
+function swatch(el: PeriodDialog, colour: string) {
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
+    `[role=radio][data-colour="${colour}"]`,
   );
+  expect(button, `colour swatch ${colour}`).not.toBeNull();
+  return button!;
+}
+function checkedColour(el: PeriodDialog) {
+  return (
+    el.shadowRoot!.querySelector("[role=radio][aria-checked=true]")?.getAttribute("data-colour") ??
+    null
+  );
+}
+function errorOf(el: PeriodDialog, name: string) {
+  if (name !== "colour") return field(el, name).error;
+  return el.shadowRoot!.querySelector("[data-test=colour-error]")?.textContent?.trim() ?? "";
+}
+async function change(el: PeriodDialog, name: string, detail: object) {
+  if (name === "colour") swatch(el, (detail as { value: string }).value).click();
+  else
+    field(el, name).dispatchEvent(
+      new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
+    );
   await el.updateComplete;
 }
 function save(el: PeriodDialog) {
@@ -70,7 +89,7 @@ it("opens the required fields quiet and blocks an unchanged programmatic save", 
   expect(field(el, "name").value).toBe("Lunch");
   expect(field(el, "name").required).toBe(true);
   expect(field(el, "menuId").required).toBe(true);
-  expect(field(el, "colour").value).toBe("blue");
+  expect(checkedColour(el)).toBe("blue");
   expect(field(el, "staffMenuIds").values).toEqual(["deli"]);
   expect(save(el).variant).toBe("secondary");
   expect(save(el).disabled).toBe(true);
@@ -106,7 +125,14 @@ it("orders Name, Colour, Customer menu, Staff-only menus, End offset, in English
   const el = await mount(true);
   const order = () =>
     [...el.shadowRoot!.querySelectorAll("[name]")].map((node) => node.getAttribute("name"));
-  expect(order()).toEqual(["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"]);
+  expect(order()).toEqual([
+    "name",
+    "colour",
+    "menuId",
+    "staffMenuIds",
+    "endOffsetMinutes",
+    "floorPlanId",
+  ]);
   expect(field(el, "menuId").label).toBe("Customer menu");
   setLocale("es");
   el.requestUpdate();
@@ -183,14 +209,14 @@ it.each(["name", "colour", "menuId", "staffMenuIds"])(
     await change(el, "name", { value: "Dinner" });
     el.refusal = { code: "menu_period.invalid", params: { field: name } };
     await el.updateComplete;
-    expect(field(el, name).error).toBe("Check this value.");
+    expect(errorOf(el, name)).toBe("Check this value.");
     expect(save(el).disabled).toBe(false);
     const detail =
       name === "staffMenuIds"
         ? { values: [] }
         : { value: name === "name" ? "Evening" : name === "colour" ? "green" : "drinks" };
     await change(el, name, detail);
-    expect(field(el, name).error).toBe("");
+    expect(errorOf(el, name)).toBe("");
   },
 );
 
@@ -347,16 +373,121 @@ it("maps a refused customer menu before a submission, but an unrelated catalogue
   ).toBe("This could not be saved. Try again.");
 });
 
-it("rejects a colour not offered by the form and keeps the required explanation", async () => {
-  const el = await mount(true);
+it("a stored colour outside the six is refused by the form's own check", async () => {
+  const el = document.createElement("period-dialog");
+  el.menus = menus;
+  el.departmentName = "Restaurant";
+  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
   const writes: unknown[] = [];
   el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
-  await change(el, "colour", { value: "unknown" });
+  expect(checkedColour(el)).toBeNull();
+  await change(el, "name", { value: "Dinner" });
   save(el).click();
   await el.updateComplete;
-  expect(field(el, "colour").error).toBe("Choose a colour.");
+  expect(errorOf(el, "colour")).toBe("Choose a colour.");
   expect(writes).toEqual([]);
   expect(save(el).disabled).toBe(true);
+  await change(el, "colour", { value: "green" });
+  expect(errorOf(el, "colour")).toBe("");
+  expect(save(el).disabled).toBe(false);
+});
+
+it("colour is a radio group of the six period colours; choosing one checks only it and makes Save ready", async () => {
+  const el = await mount(true);
+  const group = el.shadowRoot!.querySelector("fieldset[name=colour] [role=radiogroup]");
+  expect(group).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("fieldset[name=colour] > legend")!.textContent!.trim()).toBe(
+    "Colour",
+  );
+  const radios = [...group!.querySelectorAll<HTMLButtonElement>("button[role=radio]")];
+  expect(radios.map((radio) => radio.dataset.colour)).toEqual([
+    "red",
+    "amber",
+    "grey",
+    "blue",
+    "green",
+    "purple",
+  ]);
+  expect(radios.map((radio) => radio.getAttribute("aria-label"))).toEqual([
+    "Red",
+    "Amber",
+    "Grey",
+    "Blue",
+    "Green",
+    "Purple",
+  ]);
+  expect(radios.every((radio) => radio.type === "button")).toBe(true);
+  expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
+  expect(checkedColour(el)).toBe("blue");
+  expect(save(el).disabled).toBe(true);
+  await change(el, "colour", { value: "green" });
+  expect(
+    radios
+      .filter((radio) => radio.getAttribute("aria-checked") === "true")
+      .map((radio) => radio.dataset.colour),
+  ).toEqual(["green"]);
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+});
+
+it("a refusal naming colour shows under the colour group", async () => {
+  const el = await mount(true);
+  await change(el, "name", { value: "Dinner" });
+  el.refusal = { code: "menu_period.invalid", params: { field: "colour" } };
+  await el.updateComplete;
+  const message = el.shadowRoot!.querySelector(
+    "fieldset[name=colour] [role=radiogroup] ~ [data-test=colour-error]",
+  );
+  expect(message).not.toBeNull();
+  expect(message!.textContent!.trim()).toBe("Check this value.");
+  expect(
+    el
+      .shadowRoot!.querySelector("fieldset[name=colour] [role=radiogroup]")!
+      .getAttribute("aria-invalid"),
+  ).toBe("true");
+});
+
+it("the floor plan field is shown disabled with Not available yet, and is never sent", async () => {
+  const el = await mount(true);
+  const writes: { input: object }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  const plan = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=floorPlanId]",
+  );
+  expect(plan).not.toBeNull();
+  expect(plan!.disabled).toBe(true);
+  expect(plan!.label).toBe("Floor plan");
+  expect(plan!.placeholder).toBe("Not available yet");
+  await change(el, "name", { value: "Dinner" });
+  save(el).click();
+  await el.updateComplete;
+  expect(writes).toHaveLength(1);
+  expect(Object.keys(writes[0]!.input).sort()).toEqual([
+    "colour",
+    "endOffsetMinutes",
+    "menuId",
+    "name",
+    "staffMenuIds",
+  ]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(plan!.label).toBe("Plano de sala");
+  expect(plan!.placeholder).toBe("Aún no disponible");
+  const fresh = await mount();
+  expect(fresh.shadowRoot!.querySelector("[name=floorPlanId]")).not.toBeNull();
+});
+
+it("adding from a painter shows no floor plan field", async () => {
+  const el = await mount();
+  el.submitLabel = "Add and paint with it";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
 });
 
 it("committing an input without colour keeps the submitted colour as the saved baseline", async () => {
@@ -368,7 +499,7 @@ it("committing an input without colour keeps the submitted colour as the saved b
   );
   await el.updateComplete;
   expect(save(el).variant).toBe("secondary");
-  expect(field(el, "colour").value).toBe("blue");
+  expect(checkedColour(el)).toBe("blue");
 });
 
 it("an included menu absent from a read still leaves the customer menu selectable", async () => {
@@ -384,7 +515,7 @@ it("an included menu absent from a read still leaves the customer menu selectabl
 it("departed controls cannot edit, submit or close a reopened period", async () => {
   const el = await mount(true);
   const oldName = field(el, "name");
-  const oldColour = field(el, "colour");
+  const oldColour = swatch(el, "red");
   const oldMenu = field(el, "menuId");
   const oldStaffMenus = field(el, "staffMenuIds");
   const oldSave = save(el);
@@ -399,7 +530,7 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   const writes: unknown[] = [];
   el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
   oldName.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Stale" } }));
-  oldColour.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "red" } }));
+  oldColour.click();
   oldMenu.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "drinks" } }));
   oldStaffMenus.dispatchEvent(new CustomEvent("wt-change", { detail: { values: [] } }));
   oldSave.click();
@@ -411,7 +542,7 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   await el.updateComplete;
   expect(el.open).toBe(true);
   expect(field(el, "name").value).toBe("Evening changed");
-  expect(field(el, "colour").value).toBe("blue");
+  expect(checkedColour(el)).toBe("blue");
   expect(field(el, "menuId").value).toBe("lunch");
   expect(field(el, "staffMenuIds").values).toEqual(["deli"]);
   expect(writes).toEqual([]);
