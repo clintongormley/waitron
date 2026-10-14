@@ -356,3 +356,26 @@ server without changing their deployed same-origin paths; this also affects setu
 - **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
   root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
   widen the guard if that gap ever costs something.
+
+
+## Menu prices' narrow-layout CI failure still needs a cause (A613)
+
+Main run [38505417966](https://github.com/clintongormley/waitron/actions/runs/38505417966/job/115661820912)
+failed the cleared-price range case in `apps/dashboard/src/widgets/menu-prices-table.test.ts`:
+its 320 px table did not acquire `narrow` during the existing wait. The cause remains unverified.
+
+On 2026-10-14, the unchanged file passed five macOS runs of 261 tests. The CI-format command
+`pnpm --filter @waitron/dashboard test:shard --shard=4/4` passed 3,438 tests, including that file;
+this local shard used a separate coverage directory and did not enforce package-wide coverage.
+Two sets of 24 target cases also passed with a retained Chromium CDP CPU-throttle request at
+rate 8, then with that request and a deliberately delayed Verdana font response. The ordinary
+fixture's runtime font inventory was empty and its status loaded. These macOS probes do not
+reproduce the failed Linux run or establish a repair.
+
+The phone-width helper now attaches a geometry and font snapshot to the original failed
+assertion, without changing its check or wait. In an independently installed disposable copy,
+removing the table's `narrow` update failed the original check; the snapshot reported a connected
+tree at 320 px with `narrow: false`. Restoring the update passed both target cases. This control
+checks the diagnostic, not the cause of the intermittent failure. Next: use that snapshot and
+the existing failure screenshot to distinguish a wide scrolling box, delayed layout and missing
+resize delivery before changing the screen or its test.
