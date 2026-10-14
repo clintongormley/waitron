@@ -8,6 +8,8 @@ type Send = (this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown
 export interface RequestScopeOptions {
   plan: RequestPlan;
   mode: "enforce" | "record";
+  /** `"amazon"` (the default) refuses a request whose resolved host is not Amazon S3's; `"any"` is for a local endpoint. */
+  hosts?: "amazon" | "any";
   onRefused?: (detail: string, api: string) => void;
 }
 
@@ -15,6 +17,8 @@ export interface RequestScope {
   run<T>(body: () => T): T;
   /** Throws `AwsRehearsalRefused` when the request may not be sent; counts and reports the refusal first. */
   check(sender: RequestSender, api: string, input: Record<string, unknown>): void;
+  /** As `check`, for the hostname the SDK resolved; checked in every mode. */
+  checkHost(api: string, hostname: string): void;
   close(): void;
   refusals(): { count: number; first: string | undefined };
   seen(): { sender: RequestSender; api: string }[];
@@ -24,6 +28,8 @@ const SEND_PROTO = Object.getPrototypeOf(S3Client.prototype) as { send: Send };
 const GATED = Symbol("waitron.sendGate");
 const storage = new AsyncLocalStorage<RequestScope>();
 const runnerClients = new WeakSet<object>();
+const hostChecked = new WeakSet<object>();
+const AMAZON_HOST = /^[a-z0-9.-]+\.amazonaws\.com$/;
 let original: Send | undefined;
 let strict = false;
 
@@ -64,6 +70,11 @@ export function openRequestScope(options: RequestScopeOptions): RequestScope {
       const detail = planRefusal(options.plan, sender, api, input);
       if (detail !== null) refuse(detail, api);
     },
+    checkHost(api, hostname) {
+      if ((options.hosts ?? "amazon") === "amazon" && !AMAZON_HOST.test(hostname)) {
+        refuse(`${api} was sent to a host that is not Amazon S3`, api);
+      }
+    },
     close: () => {
       closed = true;
     },
@@ -78,6 +89,42 @@ function apiOf(command: unknown): string {
   return typeof name === "string" ? name.replace(/Command$/, "") : "an unnamed command";
 }
 
+type Handler = (args: { request?: { hostname?: unknown } }) => Promise<unknown>;
+
+interface MiddlewareStack {
+  add(
+    middleware: (next: Handler, context: { commandName?: unknown }) => Handler,
+    options: { step: "finalizeRequest"; priority: "low"; name: string },
+  ): void;
+}
+
+/**
+ * `send` runs before the SDK resolves the endpoint, so the host is checked from the client's stack.
+ * Measured 2026-10-14 on @aws-sdk/client-s3 3.1140.0 (the probe is in the commit that added this):
+ * at `initialize` there is no request yet; at `finalizeRequest`, priority low, the hostname equals
+ * the one the request handler receives, for plain, FIPS, dual-stack and custom endpoints.
+ */
+function addHostCheck(client: object): void {
+  const stack = (client as { middlewareStack?: MiddlewareStack }).middlewareStack;
+  if (stack === undefined || hostChecked.has(client)) return;
+  hostChecked.add(client);
+  stack.add(
+    (next, context) => async (args) => {
+      const hostname = args.request?.hostname;
+      storage
+        .getStore()
+        ?.checkHost(
+          typeof context.commandName === "string"
+            ? context.commandName.replace(/Command$/, "")
+            : "an unnamed command",
+          typeof hostname === "string" ? hostname : "",
+        );
+      return next(args);
+    },
+    { step: "finalizeRequest", priority: "low", name: "waitronRehearsalHostCheck" },
+  );
+}
+
 function gatedSend(this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown): unknown {
   const callback = typeof optionsOrCb === "function" ? optionsOrCb : cb;
   const api = apiOf(command);
@@ -86,6 +133,7 @@ function gatedSend(this: object, command: unknown, optionsOrCb?: unknown, cb?: u
     if (scope !== undefined) {
       const input = (command as { input?: Record<string, unknown> }).input ?? {};
       scope.check(runnerClients.has(this) ? "runner" : "scenario", api, input);
+      addHostCheck(this);
     } else if (strict) {
       throw new AwsRehearsalRefused("request-unplanned", `${api} was sent outside a rehearsal run`);
     }

@@ -566,6 +566,7 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       const printed: string[] = [];
       const cleaned = await cleanupFromReceipt(receiptPath, {
         env: await profileEnv(server, caseDir),
+        endpoint: server.endpoint,
         createAdminClient: (profile) =>
           createBucketClient({
             endpoint: server.endpoint,

@@ -322,6 +322,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
     createRequestPlan({ bucket, apis: [], prefixes: () => new Set() }),
     record,
     lines.say,
+    journal.endpoint,
   );
   try {
     const marker = (): Promise<{ error?: unknown; output?: GetObjectCommandOutput }> =>

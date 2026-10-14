@@ -156,6 +156,7 @@ describe("the send gate, against versitygw", () => {
         prefixes: () => new Set([ISSUED]),
       }),
       mode: "enforce",
+      hosts: "any",
     });
   }
 

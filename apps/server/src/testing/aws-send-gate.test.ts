@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
@@ -6,7 +9,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import { createRequestPlan, type RequestPlan } from "./aws-request-plan.js";
 import {
@@ -21,11 +24,13 @@ const BUCKET = "waitron-rehearsal-waitron-abcdefghijkl";
 const PREFIX = "rehearsal-run1/loop/";
 const OUTSIDE_KEY = "unissued-outside-key";
 
-function recording() {
+function recording(config: ConstructorParameters<typeof S3Client>[0] = {}) {
   let handled = 0;
+  const hosts: string[] = [];
   const requestHandler = {
-    async handle() {
+    async handle(request: { hostname: string }) {
       handled += 1;
+      hosts.push(request.hostname);
       return {
         response: { statusCode: 200, headers: { etag: '"v1"' }, body: Readable.from([]) },
       };
@@ -35,8 +40,9 @@ function recording() {
     region: "eu-north-1",
     credentials: { accessKeyId: "AKIAEXAMPLE0000", secretAccessKey: "not-a-real-secret" },
     requestHandler,
+    ...config,
   });
-  return { client, handled: () => handled };
+  return { client, handled: () => handled, hosts: () => hosts };
 }
 
 function plan(): RequestPlan {
@@ -60,6 +66,7 @@ beforeAll(() => {
 
 afterEach(() => {
   setSendGateStrict(false);
+  vi.unstubAllEnvs();
 });
 
 afterAll(() => {
@@ -228,5 +235,82 @@ describe("the send gate", () => {
       { sender: "runner", api: "CreateBucket" },
     ]);
     expect(scope.refusals().count).toBe(0);
+  });
+});
+
+describe("the send gate's host check", () => {
+  const LOCAL = "http://127.0.0.1:9";
+  const HOST_REFUSAL = "PutObject was sent to a host that is not Amazon S3";
+
+  it("refuses, before the handler, a request whose resolved host is not Amazon's", async () => {
+    const { client, handled } = recording({ endpoint: LOCAL, forcePathStyle: true });
+    const refused: [string, string][] = [];
+    const scope = openRequestScope({
+      plan: plan(),
+      mode: "enforce",
+      onRefused: (detail, api) => refused.push([detail, api]),
+    });
+    const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
+    expect(handled()).toBe(0);
+    expect(error).toBeInstanceOf(AwsRehearsalRefused);
+    expect((error as AwsRehearsalRefused).reason).toBe("request-unplanned");
+    expect((error as Error).message).toContain(HOST_REFUSAL);
+    expect((error as Error).message).not.toContain("127.0.0.1");
+    expect(refused).toEqual([[HOST_REFUSAL, "PutObject"]]);
+    expect(scope.refusals()).toEqual({ count: 1, first: HOST_REFUSAL });
+  });
+
+  it("refuses a host a config file's second, quoted profile header points the SDK at", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-send-gate-"));
+    try {
+      const config = join(dir, "config");
+      await writeFile(
+        config,
+        "[profile waitron-rehearsal]\nregion = eu-north-1\n" +
+          '[profile "waitron-rehearsal"]\nendpoint_url = http://127.0.0.1:9\n',
+      );
+      vi.stubEnv("AWS_CONFIG_FILE", config);
+      vi.stubEnv("AWS_PROFILE", "waitron-rehearsal");
+      const { client, handled } = recording({ forcePathStyle: true });
+      const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+      const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
+      expect(handled()).toBe(0);
+      expect((error as Error).message).toContain(HOST_REFUSAL);
+
+      // The control: the same file, with any host allowed, does send to the local host.
+      const control = recording({ forcePathStyle: true });
+      const open = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+      await open.run(() => control.client.send(planned()));
+      expect(control.hosts()).toEqual(["127.0.0.1"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("lets a FIPS or dual-stack Amazon S3 host through", async () => {
+    const fips = recording({ useFipsEndpoint: true });
+    const dual = recording({ useDualstackEndpoint: true });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce" });
+    await scope.run(() => fips.client.send(planned()));
+    await scope.run(() => dual.client.send(planned()));
+    expect([...fips.hosts(), ...dual.hosts()]).toEqual([
+      `${BUCKET}.s3-fips.eu-north-1.amazonaws.com`,
+      `${BUCKET}.s3.dualstack.eu-north-1.amazonaws.com`,
+    ]);
+    expect(scope.refusals().count).toBe(0);
+  });
+
+  it("lets a local host through only when the scope allows any host", async () => {
+    const { client, handled, hosts } = recording({ endpoint: LOCAL, forcePathStyle: true });
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+    await scope.run(() => client.send(planned()));
+    expect(handled()).toBe(1);
+    expect(hosts()).toEqual(["127.0.0.1"]);
+  });
+
+  it("leaves a scope-less request to another host alone when the gate is not strict", async () => {
+    const { client, handled } = recording({ endpoint: LOCAL, forcePathStyle: true });
+    await client.send(planned());
+    expect(handled()).toBe(1);
   });
 });

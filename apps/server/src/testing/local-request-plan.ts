@@ -20,6 +20,7 @@ export async function runUnderPlan<T>(plan: LocalPlan, body: () => Promise<T>): 
   const scope = openRequestScope({
     plan: createRequestPlan({ bucket: plan.bucket, apis: plan.apis, prefixes: () => prefixes }),
     mode: "enforce",
+    hosts: "any",
   });
   let outcome: { ok: true; value: T } | { ok: false; error: unknown };
   try {

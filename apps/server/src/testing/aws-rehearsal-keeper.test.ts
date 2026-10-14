@@ -609,9 +609,10 @@ describe("runKeeper", () => {
   });
 
   describe("with a real SDK client", () => {
-    function stubbed() {
+    function stubbed(config: ConstructorParameters<typeof S3Client>[0] = {}) {
       const paths: string[] = [];
       const client = new S3Client({
+        ...config,
         region: "eu-north-1",
         credentials: { accessKeyId: KEY_ID, secretAccessKey: SECRET },
         requestHandler: {
@@ -663,6 +664,32 @@ describe("runKeeper", () => {
         );
       expect(String(refused)).toContain("outside a rehearsal run");
       expect(after.paths).toEqual([]);
+    });
+
+    it("refuses a request whose host is not Amazon's when the journal names no endpoint", async () => {
+      await writeJournalFile(journal());
+      const real = stubbed({ endpoint: "http://127.0.0.1:9", forcePathStyle: true });
+      const h = harness(new FakeAdmin(), { createAdminClient: () => real.client });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(real.paths).toEqual([]);
+      expect((await receipt()).events).toContainEqual({
+        scenario: "lifecycle",
+        phase: "request-refused",
+        api: "GetObject",
+        outcome: "refused",
+      });
+    });
+
+    it("lets a request reach the journal's own local endpoint", async () => {
+      await writeJournalFile(journal({ endpoint: "http://127.0.0.1:9" }));
+      const real = stubbed({ endpoint: "http://127.0.0.1:9", forcePathStyle: true });
+      const h = harness(new FakeAdmin(), { createAdminClient: () => real.client });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(0);
+
+      expect(real.paths).toHaveLength(1);
     });
   });
   describe("tracked processes, whatever the bucket's state", () => {

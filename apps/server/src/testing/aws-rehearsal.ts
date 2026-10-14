@@ -191,7 +191,9 @@ function section(text: string, name: string, variable: string): Map<string, stri
         `${key} in ${variable} is not supported`,
       );
   }
-  // The SDK sends to these instead of Amazon; `deps.endpoint` is the only way a run points elsewhere.
+  // The SDK sends to these instead of Amazon. This parser does not read every header spelling the
+  // SDK does, so the send gate also refuses any resolved host outside Amazon S3 unless
+  // `deps.endpoint` is set (`hosts` in `aws-send-gate.ts`).
   for (const key of ENDPOINT_KEYS) {
     if (found.has(key)) {
       throw new AwsRehearsalRefused(
@@ -1082,6 +1084,7 @@ export function runScope(
   plan: Parameters<typeof openRequestScope>[0]["plan"],
   record: (event: unknown) => void,
   print: (line: string) => void,
+  endpoint: string | undefined,
 ): {
   scope: RequestScope;
   finished(): void;
@@ -1091,6 +1094,7 @@ export function runScope(
   const scope = openRequestScope({
     plan,
     mode: "enforce",
+    hosts: endpoint === undefined ? "amazon" : "any",
     onRefused(detail, api) {
       if (state !== "open") {
         try {
@@ -1302,6 +1306,7 @@ async function runOwned<T>(
     createRequestPlan({ bucket, apis, prefixes: () => issued }),
     record,
     deps.print,
+    deps.endpoint,
   );
   const ctx: AwsRehearsal = {
     runId,
@@ -1871,12 +1876,13 @@ export async function cleanupFromReceipt(
   const contained = containedLog(log);
   const { record } = contained;
   installSendGate();
-  const client = deps.createAdminClient(profile, undefined);
+  const client = deps.createAdminClient(profile, deps.endpoint);
   markRunnerClient(client);
   const requests = runScope(
     createRequestPlan({ bucket, apis: [], prefixes: () => new Set() }),
     record,
     deps.print,
+    deps.endpoint,
   );
   try {
     const removed = await requests.scope.run(async () => {

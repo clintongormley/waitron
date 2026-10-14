@@ -300,6 +300,34 @@ describe("withAwsRehearsal — the request plan", () => {
     expect(refusedEvents(await receipt())).toEqual([]);
   });
 
+  it("with no endpoint, refuses a scenario request whose host is not Amazon's before it reaches the handler", async () => {
+    const h = harness();
+    const net = recordingHandler();
+    const error = await rejection(
+      withAwsRehearsal(async (ctx) => {
+        const config = { ...ctx.bucketConfig(ctx.prefix("loop")), endpoint: "http://127.0.0.1:9" };
+        await storeFor(config, net).put("a.txt", new Uint8Array([1]));
+      }, h.deps),
+    );
+    expect(net.handled()).toBe(0);
+    expect(messagesOf(error)).toContain(
+      `${REFUSED_PREFIX}PutObject was sent to a host that is not Amazon S3`,
+    );
+    expect(refusedEvents(await receipt())).toEqual([
+      { scenario: "lifecycle", phase: "request-refused", api: "PutObject", outcome: "refused" },
+    ]);
+  });
+
+  it("with an endpoint, lets a scenario request reach that local host", async () => {
+    const h = harness({}, { endpoint: "http://127.0.0.1:9" });
+    const net = recordingHandler();
+    await withAwsRehearsal(async (ctx) => {
+      await storeFor(ctx.bucketConfig(ctx.prefix("loop")), net).put("a.txt", new Uint8Array([1]));
+    }, h.deps);
+    expect(net.handled()).toBe(1);
+    expect(refusedEvents(await receipt())).toEqual([]);
+  });
+
   it("refuses and prints a request sent after the run has ended", async () => {
     const h = harness();
     const net = recordingHandler();
@@ -353,6 +381,48 @@ describe("cleanupFromReceipt — the request plan", () => {
     const error = await rejection(cleanupFromReceipt(path, { ...h.deps, createAdminClient }));
     expect((error as AwsRehearsalRefused).reason).toBe("ownership-unproven");
     expect(net.handled()).toBe(1);
+  });
+
+  it("refuses a marker read whose host is not Amazon's before it reaches the handler", async () => {
+    const path = await writeOwnedReceipt();
+    const net = recordingHandler();
+    const h = harness();
+    const createAdminClient = (profile: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+    }) =>
+      createBucketClient(
+        { ...profile, bucket: "", prefix: "", endpoint: "http://127.0.0.1:9" },
+        { requestHandler: net.requestHandler },
+      );
+    const error = await rejection(cleanupFromReceipt(path, { ...h.deps, createAdminClient }));
+    // The same client without the endpoint reaches the handler: the case above this one.
+    expect(net.handled()).toBe(0);
+    expect((error as AwsRehearsalRefused).reason).toBe("ownership-unproven");
+  });
+
+  it("with an endpoint, builds its client for it and reads the marker from that local host", async () => {
+    const path = await writeOwnedReceipt();
+    const net = recordingHandler();
+    const h = harness();
+    const endpoints: (string | undefined)[] = [];
+    const createAdminClient = (
+      profile: { region: string; accessKeyId: string; secretAccessKey: string },
+      endpoint: string | undefined,
+    ) => {
+      endpoints.push(endpoint);
+      return createBucketClient(
+        { ...profile, bucket: "", prefix: "", endpoint: "http://127.0.0.1:9" },
+        { requestHandler: net.requestHandler },
+      );
+    };
+    const error = await rejection(
+      cleanupFromReceipt(path, { ...h.deps, createAdminClient, endpoint: "http://127.0.0.1:9" }),
+    );
+    expect(endpoints).toEqual(["http://127.0.0.1:9"]);
+    expect(net.handled()).toBe(1);
+    expect((error as AwsRehearsalRefused).reason).toBe("ownership-unproven");
   });
 
   it("fails naming a request refused during the cleanup, after writing its receipt", async () => {
