@@ -95,8 +95,8 @@ export class SectionAddProducts extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
-      /* A checkbox reached by Tab scrolls clear of the bottom block, whose height is measured into
-         --bottom-height because its messages come and go. */
+      /* Whole-row scrolling and keyboard focus need clearance for the footer's current height. */
+      li,
       li input[type="checkbox"] {
         scroll-margin-block-end: calc(var(--bottom-height, 0px) + var(--wt-space-2));
       }
@@ -159,6 +159,8 @@ export class SectionAddProducts extends LitElement {
   #within: ReadonlySet<string> | null = null;
   #scope?: DraftScope<string[]>;
 
+  #bottomHeight = 0;
+
   readonly #bottomSize = new ResizeObserver(() => this.#fitBottom());
 
   override connectedCallback(): void {
@@ -169,6 +171,7 @@ export class SectionAddProducts extends LitElement {
 
   override disconnectedCallback(): void {
     this.#bottomSize.disconnect();
+    this.#bottomHeight = 0;
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
@@ -183,8 +186,18 @@ export class SectionAddProducts extends LitElement {
   }
 
   #fitBottom(): void {
-    const height = this.renderRoot.querySelector(".bottom")!.getBoundingClientRect().height;
-    this.style.setProperty("--bottom-height", `${height}px`);
+    const bottom = this.renderRoot.querySelector(".bottom")!.getBoundingClientRect();
+    const growth = bottom.height - this.#bottomHeight;
+    const measured = this.#bottomHeight > 0;
+    this.#bottomHeight = bottom.height;
+    this.style.setProperty("--bottom-height", `${bottom.height}px`);
+    const last = this.renderRoot.querySelector<HTMLElement>("li:last-child");
+    if (measured && growth > 0 && last) {
+      const edge = last.getBoundingClientRect().bottom;
+      // Follow only a last row that the growing footer has just covered.
+      if (edge > bottom.top && edge <= bottom.top + growth)
+        last.scrollIntoView({ block: "nearest" });
+    }
   }
 
   commitSaved(productIds: readonly string[]): void {
