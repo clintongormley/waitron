@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import type { AdminClient, AwsRehearsalDeps } from "./aws-rehearsal.js";
 import type { RehearsalJournal } from "./aws-rehearsal-journal.js";
+import { AWS_REHEARSAL_NONCE_KEY } from "./aws-request-plan.js";
 
 export const KEY_ID = "AKIAFIXTUREKEYID0001";
 export const SECRET = "fixtureSecretValueNotReal0123456789abcd";
 export const SUFFIX = "abc123def456";
 export const BUCKET = `waitron-rehearsal-waitron-${SUFFIX}`;
 export const RUN_ID = "run-0001";
-export const NONCE = ".waitron-rehearsal-owner";
+export const NONCE = AWS_REHEARSAL_NONCE_KEY;
 export const START_TIME = "Wed Oct 14 10:00:00 2026";
 
 export const CREDENTIALS = `[waitron-rehearsal]\naws_access_key_id = ${KEY_ID}\naws_secret_access_key = ${SECRET}\n`;

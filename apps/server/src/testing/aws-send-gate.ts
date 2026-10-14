@@ -95,7 +95,7 @@ export function openRequestScope(options: RequestScopeOptions): RequestScope {
     },
     checkHost(api, hostname) {
       if (s3Host !== null && !s3Host.test(hostname)) {
-        refuse(`${api} was sent to a host that is not Amazon S3`, api);
+        refuse(`${api} was sent to a host that is not this run's Amazon S3 host`, api);
       }
     },
     close: () => {

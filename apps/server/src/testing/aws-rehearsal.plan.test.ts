@@ -311,7 +311,7 @@ describe("withAwsRehearsal — the request plan", () => {
     );
     expect(net.handled()).toBe(0);
     expect(messagesOf(error)).toContain(
-      `${REFUSED_PREFIX}PutObject was sent to a host that is not Amazon S3`,
+      `${REFUSED_PREFIX}PutObject was sent to a host that is not this run's Amazon S3 host`,
     );
     expect(refusedEvents(await receipt())).toEqual([
       { scenario: "lifecycle", phase: "request-refused", api: "PutObject", outcome: "refused" },
@@ -487,6 +487,57 @@ describe("cleanupFromReceipt — the request plan", () => {
     expect(error.message).toContain(
       `; ${REFUSED_PREFIX}PutObject was sent to a bucket this run did not create`,
     );
+  });
+
+  it("counts and prints a request refused after its receipt is written but before the scope closes", async () => {
+    const path = await writeOwnedReceipt();
+    const net = recordingHandler();
+    let fire: (() => void) | undefined;
+    let receiptWritten: boolean | undefined;
+    const printed: string[] = [];
+    const h = harness(
+      {
+        GetObject: () => {
+          const other = createBucketClient(
+            {
+              region: "eu-north-1",
+              bucket: "someone-elses-bucket",
+              prefix: "",
+              accessKeyId: "AKIAEXAMPLE0000",
+              secretAccessKey: "not-a-real-secret",
+            },
+            { requestHandler: net.requestHandler },
+          ) as S3Client;
+          // Bound here, so it runs inside the cleanup's scope when the print hook calls it.
+          fire = AsyncResource.bind(() => {
+            void other
+              .send(new PutObjectCommand({ Bucket: "someone-elses-bucket", Key: "a", Body: "x" }))
+              .catch(() => {});
+          });
+          return MARKER;
+        },
+      },
+      {
+        print: (line) => {
+          printed.push(line);
+          if (fire === undefined) return;
+          receiptWritten = existsSync(join(dir, `aws-rehearsal-${RUN_ID}-cleanup.json`));
+          const once = fire;
+          fire = undefined;
+          once();
+        },
+      },
+    );
+    const error = await rejection(cleanupFromReceipt(path, h.deps));
+    expect(receiptWritten).toBe(true);
+    expect(net.handled()).toBe(0);
+    expect(error.message).toBe(
+      `${REFUSED_PREFIX}PutObject was sent to a bucket this run did not create`,
+    );
+    expect(printed).toEqual([
+      join(dir, `aws-rehearsal-${RUN_ID}-cleanup.json`),
+      "refused after the receipt was written: PutObject was sent to a bucket this run did not create",
+    ]);
   });
 
   it("sends its marker read and teardown inside a scope", async () => {

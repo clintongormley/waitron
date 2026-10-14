@@ -219,11 +219,14 @@ describe("the send gate", () => {
     ).toThrow("the run has ended");
   });
 
-  it("checks a client created before the scope was opened", async () => {
+  it("checks a client created before the gate was installed", async () => {
+    uninstallSendGate();
     const { client, handled } = recording();
+    installSendGate();
     const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
-    await scope.run(() => client.send(unplanned())).catch(() => undefined);
+    const error = await scope.run(() => client.send(unplanned())).catch((e: unknown) => e);
     expect(handled()).toBe(0);
+    expect(error).toBeInstanceOf(AwsRehearsalRefused);
   });
 
   it("exposes the same check send makes", () => {
@@ -261,7 +264,7 @@ describe("the send gate", () => {
 
 describe("the send gate's host check", () => {
   const LOCAL = "http://127.0.0.1:9";
-  const HOST_REFUSAL = "PutObject was sent to a host that is not Amazon S3";
+  const HOST_REFUSAL = "PutObject was sent to a host that is not this run's Amazon S3 host";
 
   it("refuses, before the handler, a request whose resolved host is not Amazon's", async () => {
     const { client, handled } = recording({ endpoint: LOCAL, forcePathStyle: true });
@@ -339,8 +342,9 @@ describe("the send gate's host check", () => {
   it("refuses the accelerate host, which no rehearsal client is built to use", async () => {
     const { client, handled } = recording({ useAccelerateEndpoint: true });
     const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: S3_HOSTS });
-    await scope.run(() => client.send(planned())).catch(() => undefined);
+    const error = await scope.run(() => client.send(planned())).catch((e: unknown) => e);
     expect(handled()).toBe(0);
+    expect((error as Error).message).toContain(HOST_REFUSAL);
   });
 
   it("lets through every S3 host the SDK builds for the run's bucket and region", async () => {

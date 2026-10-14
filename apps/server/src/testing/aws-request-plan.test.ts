@@ -102,8 +102,16 @@ describe("createRequestPlan", () => {
     },
   );
 
-  it("refuses a declared API that is no S3 API the receipt knows", () => {
-    expect(() => plan(["SelectObjectContent"])).toThrow(AwsRehearsalRefused);
+  it("refuses a declared API that is no S3 API the receipt knows, without naming it", () => {
+    let caught: unknown;
+    try {
+      plan(["SelectObjectContent"]);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AwsRehearsalRefused);
+    expect((caught as AwsRehearsalRefused).reason).toBe("plan-refused");
+    expect((caught as Error).message).not.toContain("SelectObjectContent");
   });
 });
 
@@ -111,7 +119,7 @@ describe("planRefusal — any sender", () => {
   it("refuses an API name outside the receipt's list, naming it", () => {
     for (const sender of ["runner", "scenario"] as const) {
       const detail = refusedDetail(planRefusal(plan(), sender, "PutBucketAcl", { Bucket: BUCKET }));
-      expect(detail).toContain("PutBucketAcl");
+      expect(detail).toBe("PutBucketAcl is not an S3 API the rehearsal knows");
     }
   });
 
