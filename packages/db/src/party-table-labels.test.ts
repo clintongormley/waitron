@@ -8,7 +8,6 @@ import {
   orderTableLabels,
   partySurvivors,
   partyTableLabels,
-  shownTableNames,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
@@ -328,19 +327,39 @@ describe("party table labels", () => {
       );
     });
 
-    it("answers each table's shown name, its saved label when it has no today's row", async () => {
-      const { s, ids, labels } = await longTable();
-      await group([ids.c3, ids.c4], `García birthday ${s}`);
-      await nameToday(ids.c5, `Window ${s}`);
-      expect(await inTx((tx) => shownTableNames(tx, [ids.bar, ids.c3, ids.c4, ids.c5]))).toEqual(
+    it("names an order delivered to a table by its group's name, else its own, else its saved label", async () => {
+      const s = randomUUID().slice(0, 6);
+      const bar = await table(`Bar ${s}`);
+      const c3 = await table(`Counter 3 ${s}`);
+      const c4 = await table(`Counter 4 ${s}`);
+      const c5 = await table(`Counter 5 ${s}`);
+      await group([c3, c4], `García birthday ${s}`);
+      await nameToday(c4, `Window ${s}`);
+      await nameToday(c5, `Terrace ${s}`);
+      const delivered = (id: string, deliveryTableId: string) => ({
+        id,
+        partyId: null,
+        deliveryTableId,
+        deliveryTableLabel: null,
+        label: "Luis",
+      });
+      expect(
+        await inTx((tx) =>
+          orderTableLabels(tx, LOCATION, [
+            delivered("bar", bar),
+            delivered("c3", c3),
+            delivered("c4", c4),
+            delivered("c5", c5),
+          ]),
+        ),
+      ).toEqual(
         new Map([
-          [ids.bar, labels.bar],
-          [ids.c3, `García birthday ${s}`],
-          [ids.c4, `García birthday ${s}`],
-          [ids.c5, `Window ${s}`],
+          ["bar", `Bar ${s}`],
+          ["c3", `García birthday ${s}`],
+          ["c4", `García birthday ${s}`],
+          ["c5", `Terrace ${s}`],
         ]),
       );
-      expect(await inTx((tx) => shownTableNames(tx, []))).toEqual(new Map());
     });
 
     it("names an order delivered to a renamed table, and a party bill, by the shown names", async () => {

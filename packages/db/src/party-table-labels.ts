@@ -25,8 +25,8 @@ function readShownNames(tx: Transaction, where: SQL | undefined) {
 }
 
 /**
- * Each party's active tables' shown names ({@link shownTableNames}), in the order the tables joined
- * it, a group's name once.
+ * Each party's active tables' shown names — its group's today's name, else its own, else its saved
+ * label — in the order the tables joined it, a named group's name once.
  */
 export async function partyTableLabels(
   tx: Transaction,
@@ -59,16 +59,6 @@ export async function partyTableLabels(
     labels.get(row.partyId)!.push(shown(row));
   }
   return labels;
-}
-
-/** Each of `tableIds`' shown name (D10): its group's today's name, else its own, else its saved label. */
-export async function shownTableNames(
-  tx: Transaction,
-  tableIds: readonly string[],
-): Promise<Map<string, string>> {
-  if (tableIds.length === 0) return new Map();
-  const rows = await readShownNames(tx, inArray(diningTables.id, [...tableIds]));
-  return new Map(rows.map((row) => [row.id, shown(row)]));
 }
 
 /**
@@ -127,7 +117,7 @@ interface LabelledOrder {
 /**
  * The table each order belongs to, keyed by order. A party bill names the tables
  * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
- * when that list is empty. Any other order names the shown name ({@link shownTableNames}) of the
+ * when that list is empty. Any other order names the shown name, as {@link partyTableLabels} reads it, of the
  * table of `locationId` it is delivered to, else the name kept when that table was let go, else its
  * own label; null for an unlabelled walk-up.
  */
