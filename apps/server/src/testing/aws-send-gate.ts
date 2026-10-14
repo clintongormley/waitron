@@ -1,0 +1,111 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { S3Client } from "@aws-sdk/client-s3";
+import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
+import { planRefusal, type RequestPlan, type RequestSender } from "./aws-request-plan.js";
+
+type Send = (this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown) => unknown;
+
+export interface RequestScopeOptions {
+  plan: RequestPlan;
+  mode: "enforce" | "record";
+  onRefused?: (detail: string, api: string) => void;
+}
+
+export interface RequestScope {
+  run<T>(body: () => T): T;
+  /** Throws `AwsRehearsalRefused` when the request may not be sent; counts and reports the refusal first. */
+  check(sender: RequestSender, api: string, input: Record<string, unknown>): void;
+  close(): void;
+  refusals(): { count: number; first: string | undefined };
+  seen(): { sender: RequestSender; api: string }[];
+}
+
+const SEND_PROTO = Object.getPrototypeOf(S3Client.prototype) as { send: Send };
+const GATED = Symbol("waitron.sendGate");
+const storage = new AsyncLocalStorage<RequestScope>();
+const runnerClients = new WeakSet<object>();
+let original: Send | undefined;
+let strict = false;
+
+export function markRunnerClient(client: object): void {
+  runnerClients.add(client);
+}
+
+export function setSendGateStrict(on: boolean): void {
+  strict = on;
+}
+
+export function openRequestScope(options: RequestScopeOptions): RequestScope {
+  let closed = false;
+  let count = 0;
+  let first: string | undefined;
+  const seen: { sender: RequestSender; api: string }[] = [];
+
+  const refuse = (detail: string, api: string): never => {
+    count += 1;
+    first ??= detail;
+    options.onRefused?.(detail, api);
+    throw new AwsRehearsalRefused("request-unplanned", detail);
+  };
+
+  const scope: RequestScope = {
+    run: (body) => storage.run(scope, body),
+    check(sender, api, input) {
+      if (closed) refuse(`${api} was sent after the run has ended`, api);
+      if (!seen.some((pair) => pair.sender === sender && pair.api === api)) {
+        seen.push({ sender, api });
+      }
+      if (options.mode === "record") return;
+      const detail = planRefusal(options.plan, sender, api, input);
+      if (detail !== null) refuse(detail, api);
+    },
+    close: () => {
+      closed = true;
+    },
+    refusals: () => ({ count, first }),
+    seen: () => seen.map((pair) => ({ ...pair })),
+  };
+  return scope;
+}
+
+function apiOf(command: unknown): string {
+  const name = (command as { constructor?: { name?: unknown } } | null)?.constructor?.name;
+  return typeof name === "string" ? name.replace(/Command$/, "") : "an unnamed command";
+}
+
+function gatedSend(this: object, command: unknown, optionsOrCb?: unknown, cb?: unknown): unknown {
+  const callback = typeof optionsOrCb === "function" ? optionsOrCb : cb;
+  const api = apiOf(command);
+  try {
+    const scope = storage.getStore();
+    if (scope !== undefined) {
+      const input = (command as { input?: Record<string, unknown> }).input ?? {};
+      scope.check(runnerClients.has(this) ? "runner" : "scenario", api, input);
+    } else if (strict) {
+      throw new AwsRehearsalRefused("request-unplanned", `${api} was sent outside a rehearsal run`);
+    }
+  } catch (error) {
+    if (typeof callback === "function") {
+      (callback as (err: unknown) => void)(error);
+      return undefined;
+    }
+    return Promise.reject(error);
+  }
+  return original!.call(this, command, optionsOrCb, cb);
+}
+Object.defineProperty(gatedSend, GATED, { value: true });
+
+/** Wraps the SDK's shared `send` once per process; a second call does nothing. */
+export function installSendGate(): void {
+  if ((SEND_PROTO.send as unknown as Record<symbol, unknown>)[GATED] === true) return;
+  original = SEND_PROTO.send;
+  SEND_PROTO.send = gatedSend;
+}
+
+/** Test-only: puts the SDK's own `send` back, so the gate does not reach other suites in the process. */
+export function uninstallSendGate(): void {
+  if (original === undefined) return;
+  SEND_PROTO.send = original;
+  original = undefined;
+  strict = false;
+}
