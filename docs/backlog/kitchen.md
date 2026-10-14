@@ -224,8 +224,8 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
   line; (5) the Period dropdown sits beside the search and always opens on "All periods", not
   remembered. The station editor board (twelve colours, a used colour still offered with its
   station's name under it, a new station starting on the first unused colour) was shown and not
-  objected to. The colour is `kitchen_stations.colour` in the core set (`packages/db`), not
-  venue-service's as the queue said, because `kitchen_stations` is core's table; it has no CHECK,
+  objected to. The colour is `kitchen_stations.colour` in the core set (`packages/db`),
+  because `kitchen_stations` is core's table; it has no CHECK,
   because a CHECK makes drizzle rebuild `kitchen_stations` and a rebuild deletes its cascading
   children's rows (a reviewer added one in a scratch worktree and `db:generate` produced
   `__new_kitchen_stations` five times), so the station routes and the configuration import refuse a

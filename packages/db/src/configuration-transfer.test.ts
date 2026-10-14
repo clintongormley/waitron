@@ -73,7 +73,7 @@ describe("validateCoreConfiguration", () => {
     ).toThrowError(stationRefusal);
   });
 
-  it("refuses a station with no colour, which the column cannot store", () => {
+  it("refuses a station with no colour", () => {
     expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).toThrowError(
       stationRefusal,
     );

@@ -124,9 +124,9 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), the prep stations'
-`--wt-color-station-<colour>` (each with a `-dot`), and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
-and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour
+`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
+`--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -242,7 +242,7 @@ order is chosen so a venue's default seasons, which start with Spring on 1 March
 Summer amber, Autumn peach and Winter blue.
 
 A prep station's colour (`STATION_COLOURS`, `packages/shared/src/station-colours.ts`) paints its
-Routes cells with `--wt-color-station-<colour>` and its period-line dots and key swatch with
+Routes cells and its key swatch with `--wt-color-station-<colour>` and its period-line dots with
 `--wt-color-station-<colour>-dot`. There is no text colour per station: a cell's text keeps
 `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-warning` or `--wt-color-danger`.
 
@@ -267,7 +267,7 @@ from every fill and from `--wt-color-surface`, that `--wt-color-focus` is 3:1 or
 and on `--wt-color-surface-lifted`, that the twelve fills differ and so do the twelve dots, and that
 the `prefers-color-scheme` blocks give the same values as the explicit themes. A further case holds
 that every pair of dark fills is at least as far apart, by CIEDE2000 colour difference, as the
-closest pair of light fills (indigo and purple, about 4.7).
+closest pair of light fills.
 
 The till's table map paints a table's fill from `--wt-color-table-<fill>` and its text from
 `--wt-color-on-table-<fill>`, through `floorMapFillStyles` (`packages/ui/src/floor-map-fills.ts`), a
