@@ -107,10 +107,15 @@ export function writeJournal(receiptDir: string, journal: RehearsalJournal): voi
   renameSync(temporary, path);
 }
 
+/**
+ * Read under a fixed locale and time zone: the runner has the person's and the keeper neither, and
+ * `ps` prints `lstart` in both (under `LANG=es_ES.UTF-8` as `mié. 14 oct. 17:54:30 2026`).
+ */
 export function processStartTime(pid: number): string | null {
   try {
     const started = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], {
       encoding: "utf8",
+      env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return started === "" ? null : started;

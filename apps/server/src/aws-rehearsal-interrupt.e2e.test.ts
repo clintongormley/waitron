@@ -308,6 +308,10 @@ describe("a rehearsal run killed part-way, against versitygw", () => {
       TMPDIR: tmp,
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: process.env.HOME ?? caseDir,
+      // A person's locale and time zone, which the keeper is not given: the start times the run
+      // records must still match what the keeper reads.
+      LANG: "es_ES.UTF-8",
+      TZ: "Asia/Tokyo",
     };
   }
 

@@ -2,7 +2,7 @@ import { closeSync, openSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import {
   journalFileName,
@@ -223,5 +223,45 @@ describe("processStartTime", () => {
 
   it("answers null for a pid ps cannot read", () => {
     expect(processStartTime(2 ** 22 + 12345)).toBeNull();
+  });
+
+  // The runner reads under the person's locale and time zone; the keeper is given neither
+  // (`KEEPER_ENV_NAMES`), so both must read the same text whatever these hold.
+  const TIME_SETTINGS = ["LANG", "LC_ALL", "LC_TIME", "TZ"] as const;
+
+  function readUnder(settings: Partial<Record<(typeof TIME_SETTINGS)[number], string>>) {
+    for (const name of TIME_SETTINGS) vi.stubEnv(name, settings[name]);
+    try {
+      return processStartTime(process.pid);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it.each([
+    { LANG: "es_ES.UTF-8" },
+    { LANG: "en_GB.UTF-8" },
+    { LC_ALL: "es_ES.UTF-8" },
+    { LC_TIME: "es_ES.UTF-8" },
+    { TZ: "Asia/Tokyo" },
+    { TZ: "America/Los_Angeles" },
+  ])("reads the same start time under %o as under the keeper's environment", (settings) => {
+    const keepers = readUnder({});
+    expect(keepers).not.toBeNull();
+    expect(readUnder(settings)).toBe(keepers);
+  });
+
+  it("writes a start time read under a Spanish locale that the journal's reader accepts", async () => {
+    const receipts = await mkdtemp(join(tmpdir(), "aws-rehearsal-journal-"));
+    try {
+      const startTime = readUnder({ LANG: "es_ES.UTF-8", LC_ALL: "es_ES.UTF-8" });
+      writeJournal(receipts, journal({ pids: [{ pid: process.pid, startTime }] }));
+      const read = readJournal(readFileSync(join(receipts, journalFileName(RUN_ID)), "utf8"), {
+        tmpdir: TMP,
+      });
+      expect(read.pids).toEqual([{ pid: process.pid, startTime: readUnder({}) }]);
+    } finally {
+      await rm(receipts, { recursive: true, force: true });
+    }
   });
 });
