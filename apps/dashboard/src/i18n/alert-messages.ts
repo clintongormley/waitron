@@ -67,6 +67,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The last backup to “{destination}” failed. Open the Backups page to retry.",
     es: "La última copia de seguridad en «{destination}» falló. Abre la página de Copias para reintentar.",
   },
+  "backup.run_stopped": {
+    en: "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue. {errorCode:backup_stop}",
+    es: "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan. {errorCode:backup_stop}",
+  },
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
     es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
@@ -297,9 +301,6 @@ export const ALERT_MESSAGES: Readonly<
   },
 };
 
-// What an office printer holding a job needs, by the hold code an alert's `hold` param carries
-// (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
-// supervisor holds without `printer.manage`, so each asks only for something done at the printer.
 export const ALERT_WORDS: Readonly<
   Record<
     string,
@@ -309,6 +310,9 @@ export const ALERT_WORDS: Readonly<
     }
   >
 > = {
+  // What an office printer holding a job needs, by the hold code an alert's `hold` param carries
+  // (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
+  // supervisor holds without `printer.manage`, so each asks only for something done at the printer.
   printer_hold: {
     words: {
       paper_out: { en: "It is out of paper: load paper.", es: "No tiene papel: carga papel." },
@@ -345,5 +349,18 @@ export const ALERT_WORDS: Readonly<
       en: "It is waiting for something: check the printer for what it needs.",
       es: "Está esperando algo: revisa qué necesita la impresora.",
     },
+  },
+  backup_stop: {
+    words: {
+      "backup.staging_space_low": {
+        en: "The box does not have enough free disk space to prepare it. Contact support.",
+        es: "El equipo no tiene espacio libre suficiente en disco para prepararla. Contacta con soporte.",
+      },
+      "recovery.state_incomplete": {
+        en: "Some of the box's own files that every backup must include are missing. Contact support.",
+        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte.",
+      },
+    },
+    otherwise: { en: "Contact support.", es: "Contacta con soporte." },
   },
 };

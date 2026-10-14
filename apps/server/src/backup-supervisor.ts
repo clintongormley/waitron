@@ -129,8 +129,9 @@ export interface BackupSupervisorDeps {
   jitterSeed: string;
   /** The venue's wall clock (tz + business-day cutover). */
   readClock: () => Promise<ScheduleClock>;
-  /** In-memory per-destination outcome holder the backups alert source reads. Passed straight to the
-   * sweep so each destination's tick result is recorded; optional so tests that ignore alerts omit it. */
+  /** In-memory outcome holder the backups alert source reads: each destination's last result, and a
+   * run that stopped before any destination. Passed straight to the sweep; optional so tests that
+   * ignore alerts omit it. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
   /** DI for tests; defaults to `openVenueDatabase`. */
