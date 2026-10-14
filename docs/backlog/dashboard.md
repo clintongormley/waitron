@@ -535,18 +535,9 @@ readers yet." under an empty table, and Cloud services says "Checking Cloud conn
 failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
 Roster and Planned vs actual.
 
-## The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN
+## The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09)
 
-**The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
-`waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
-`#4c8dff` (`--wt-color-primary`, dark) and `#eceef2` (`--wt-color-text`, dark) literally, from
-`build-icons.mjs`. Until this is done, change either token and change the generator, then re-run it.
-`scripts/brand-icons.test.ts` fails when they drift, weaker than its name: it reads `colors.css` as
-text and takes the dark values from the `@media (prefers-color-scheme: dark)` block only.
-**Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
-there is no copy to keep in step.
-
-**Separate observation, 2026-10-09:** the final live A435-1 catalogue captures at
+The final live A435-1 catalogue captures at
 `a68dc2188`, with the dashboard forced to the dark theme, showed a nearly black wordmark.
 The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
 **Next action:** measure the browser's media preference and the selected `<picture>` source

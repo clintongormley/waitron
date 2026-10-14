@@ -6,9 +6,9 @@ full width of the word above the other letters. The lockup is the two together.
 
 ## Sources and derived files
 
-Only the two sources are edited by hand. Everything else is written by `build-icons.mjs` from them,
-so the geometry exists in exactly one place per drawing and redrawing the mark is one edit plus one
-command. The derived files are committed and nothing checks them against their source, so skipping
+You edit the two source drawings by hand. `build-icons.mjs` writes the derived files from those
+drawings and the dark colour tokens, so the geometry exists in exactly one place per drawing and
+redrawing the mark is one edit plus one command. The derived files are committed and nothing checks their geometry against the sources, so skipping
 the command leaves stale derivatives behind a green gate — run it whenever you touch a source.
 
 | File                          | Kind    | Read by                                                                                             |
@@ -27,15 +27,17 @@ time — verified by building all three: the dashboard emits `/manage/favicon.ic
 `/favicon.ico`. `scripts/brand-icons.test.ts` (root project, so it runs on every non-docs push) fails
 if an app links to a file this directory does not hold, or points its `publicDir` somewhere else.
 
-Four token values are inlined and **kept in step by hand**: `#1f6feb` and `#4c8dff` are
-`--wt-color-primary` light and dark, and `#16181d` / `#eceef2` are `--wt-color-text` light and dark,
-all declared in `packages/ui-core/src/tokens/colors.css`. A standalone SVG cannot read a CSS custom
-property, so the usual rule against inlining a token value does not reach here; change a token and
-change these with it.
+Standalone SVGs carry literal colours because an `<img>` cannot read the page's CSS custom
+properties. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
+generator: it reads `--wt-color-primary` and `--wt-color-text` from that file's
+`@media (prefers-color-scheme: dark)` block for the dark lockup and the favicon's dark rule.
+It expects six-digit hex values and an unindented closing brace for that block; a missing block or
+token stops generation before any output is written. Explicit `data-theme` blocks and deployment
+overrides are not read. `scripts/brand-build.test.ts` runs the generator in scratch copies with
+changed and missing tokens; its raster renderer is a stub, so it checks SVG generation, not PNG paint.
 
-**They are inlined in three places.** The two source SVGs here carry `#1f6feb` and `#16181d`;
-`build-icons.mjs` carries `#4c8dff` and `#eceef2`, for the favicon's dark rule and the dark lockup;
-and `apps/server/src/trust-page-logo.ts` holds a copy of the whole lockup for the certificate page,
+The light source SVGs still carry `#1f6feb` and `#16181d`; keep these in step with the light
+tokens by hand. `apps/server/src/trust-page-logo.ts` holds a copy of the whole lockup for the certificate page,
 which must stay one self-contained string with nothing to fetch. `scripts/trust-page-logo.test.ts`
 compares the two DRAWINGS and deliberately ignores paint, so it will not catch a colour that drifts.
 `scripts/brand-icons.test.ts` does check both lockups' two colours against `colors.css`, weaker than
@@ -81,9 +83,9 @@ it.
 node packages/ui/brand/build-icons.mjs
 ```
 
-Hand-run, not a build step — Inkscape is not a workspace dependency, so nothing in CI or the pre-push
-hook can call it. Set `INKSCAPE` if the binary is not on PATH. It prints what it wrote and which
-Inkscape it used.
+Run this by hand: Inkscape is not a workspace dependency. The root tests use a stub raster renderer,
+so they do not replace regeneration with real Inkscape. Set `INKSCAPE` if the binary is not on PATH.
+The command prints what it wrote and which Inkscape it used.
 
 On 2026-10-03, one re-run over the committed files on one machine, with Inkscape 1.4.4 (dcaf3e7),
 left all seven files it wrote — `public/favicon.svg`, `waitron-lockup.svg`,

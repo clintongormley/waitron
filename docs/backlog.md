@@ -3897,10 +3897,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Roster and Planned vs actual.
   [Detail](backlog/dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
 
-- **The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
-  **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs,
-  so there is no copy to keep in step.
-  [Detail](backlog/dashboard.md#the-dark-logos-colours-are-copies-of-the-dark-themes-a253-2026-10-03-from-a225--open)
+- **The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09) — UNVERIFIED.**
+  **Next action:** measure the browser's media preference and selected `<picture>` source against
+  `data-wt-theme` in the live dashboard before deciding a fix.
+  [Detail](backlog/dashboard.md#the-dashboards-dark-wordmark-looked-nearly-black-a253-observation-2026-10-09)
 
 - **`wt-relative-time` also keeps disclosure state from `toggle` and has document listeners**
   (open, untested; A369 review). Next: reproduce open/remove/reinsert, including removal before the
