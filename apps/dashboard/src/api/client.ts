@@ -1721,7 +1721,7 @@ export interface StreamSupervisorStatus {
 export type StreamStatusView =
   StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
 
-/** `GET /api/backup/archive-recovery-pack`. `pack` is the whole file to save, and secret. */
+/** `GET /api/backup/archive-recovery-pack`. `pack` is the pack's code line alone, and secret. */
 export interface ArchiveRecoveryPackAnswer {
   pack: string;
   keyFingerprint: string;

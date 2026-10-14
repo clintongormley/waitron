@@ -1425,16 +1425,32 @@ describe("another S3-compatible bucket", () => {
   });
 });
 
-const PACK_FILE = [
+const PACK_LINE = "WAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ";
+
+const PACK_FILE_EN = [
   "Waitron archive recovery pack.",
   "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
+  "Keep the previous pack while you still want to restore archives made before it was replaced.",
+  "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
+  'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
   "",
-  "WAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ",
+  PACK_LINE,
+  "",
+].join("\n");
+
+const PACK_FILE_ES = [
+  "Paquete de recuperación de las copias de Waitron.",
+  "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
+  "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
+  "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
+  "Para restaurar una copia archivada en una caja nueva, sigue «A restore takes one of three sources» en deploy/README.md.",
+  "",
+  PACK_LINE,
   "",
 ].join("\n");
 
 const PACK = {
-  pack: PACK_FILE,
+  pack: PACK_LINE,
   keyFingerprint: "ab12cd34",
   revision: TWO.revision!,
 };
@@ -1467,15 +1483,48 @@ describe("recovery pack", () => {
     expect(displayedPack(el)).toBeNull();
     await showPack(el);
     expect(getArchiveRecoveryPack).toHaveBeenCalledTimes(1);
-    expect(displayedPack(el)).toBe(PACK_FILE);
+    expect(displayedPack(el)).toBe(PACK_LINE);
     expect(q(el, "[data-test=pack-warning]")!.getAttribute("role")).toBe("note");
     expect(text(q(el, "[data-test=pack-warning]")!)).toContain(t("backup.pack.warning"));
     expect(q(el, "[data-test=copy-pack]")).not.toBeNull();
     const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement;
     expect(link.getAttribute("download")).toContain("ab12cd34");
     const body = await (await fetch(link.href)).text();
-    expect(body).toBe(PACK_FILE);
+    expect(body).toBe(
+      [
+        t("backup.pack.file_heading"),
+        t("backup.pack.file_secret"),
+        t("backup.pack.file_keep_previous"),
+        t("backup.pack.file_store"),
+        t("backup.pack.file_restore"),
+        "",
+        PACK_LINE,
+        "",
+      ].join("\n"),
+    );
   });
+
+  it.each([
+    ["es", PACK_FILE_ES],
+    ["en", PACK_FILE_EN],
+  ] as const)(
+    "downloads a file in the owner's language (%s) around the pack's code line",
+    async (locale, file) => {
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        const { el } = await mount(TWO, {
+          getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK),
+        });
+        await showPack(el);
+        expect(displayedPack(el)).toBe(PACK_LINE);
+        const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement;
+        expect(await (await fetch(link.href)).text()).toBe(file);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it("names its action for showing the pack, which the download link then saves", async () => {
     const { el } = await mount(TWO);
@@ -1500,7 +1549,7 @@ describe("recovery pack", () => {
     }
   });
 
-  it("wraps the pack's sentences at spaces, breaking only a word longer than the line", async () => {
+  it("wraps the shown pack at spaces, breaking only a word longer than the line", async () => {
     const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
     await showPack(el);
     const style = getComputedStyle(q(el, "[data-test=pack]")!);
@@ -1509,13 +1558,13 @@ describe("recovery pack", () => {
     expect(style.whiteSpace).toBe("pre-wrap");
   });
 
-  it("copies the pack's text as the server wrote it", async () => {
+  it("copies the pack's code line as the server handed it over", async () => {
     const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
     await showPack(el);
     const spy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
     try {
       q(el, "[data-test=copy-pack]")!.click();
-      expect(spy).toHaveBeenCalledWith(PACK_FILE);
+      expect(spy).toHaveBeenCalledWith(PACK_LINE);
     } finally {
       spy.mockRestore();
     }
@@ -1532,7 +1581,7 @@ describe("recovery pack", () => {
       { getArchiveRecoveryPack: vi.fn().mockResolvedValue({ ...PACK, revision: undefined }) },
     );
     await showPack(el);
-    expect(displayedPack(el)).toBe(PACK_FILE);
+    expect(displayedPack(el)).toBe(PACK_LINE);
   });
 
   it.each([
@@ -1569,7 +1618,7 @@ describe("recovery pack", () => {
     });
     await showPack(el);
     await read(el, api, withOutcomes({ storedUnderCurrentKey: true }, {}));
-    expect(displayedPack(el)).toBe(PACK_FILE);
+    expect(displayedPack(el)).toBe(PACK_LINE);
   });
 
   it("under environment management, a status read with the same key keeps the pack it has no revision for", async () => {
@@ -1579,7 +1628,7 @@ describe("recovery pack", () => {
     });
     await showPack(el);
     await read(el, api, managed as BackupStatusView);
-    expect(displayedPack(el)).toBe(PACK_FILE);
+    expect(displayedPack(el)).toBe(PACK_LINE);
     await read(el, api, { ...(managed as BackupStatusView), keyFingerprint: "ffee0011" });
     expect(displayedPack(el)).toBeNull();
   });

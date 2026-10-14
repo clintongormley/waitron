@@ -68,7 +68,7 @@ describe("archive recovery pack", () => {
     const file = [
       "Paquete de recuperación de las copias archivadas de Waitron.",
       "Guarda este archivo en secreto: abre las copias archivadas del local.",
-      'Para restaurar, sigue «A restore takes one of three sources» en deploy/README.md.',
+      "Para restaurar, sigue «A restore takes one of three sources» en deploy/README.md.",
       "",
       encodeArchiveRecoveryPack(pack()),
       "",

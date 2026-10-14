@@ -1567,6 +1567,15 @@ export const en = {
     "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
   "backup.pack.copy": "Copy",
   "backup.pack.download": "Download pack file",
+  "backup.pack.file_heading": "Waitron archive recovery pack.",
+  "backup.pack.file_secret":
+    "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
+  "backup.pack.file_keep_previous":
+    "Keep the previous pack while you still want to restore archives made before it was replaced.",
+  "backup.pack.file_store":
+    "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
+  "backup.pack.file_restore":
+    'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
   "backup.pack.key_missing":
     "This box holds no recovery key, so there is no archive recovery pack.",
   "backup.pack.key_too_short":
@@ -4443,6 +4452,15 @@ export const es: Record<StringKey, string> = {
     "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
   "backup.pack.copy": "Copiar",
   "backup.pack.download": "Descargar el archivo del paquete",
+  "backup.pack.file_heading": "Paquete de recuperación de las copias de Waitron.",
+  "backup.pack.file_secret":
+    "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
+  "backup.pack.file_keep_previous":
+    "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
+  "backup.pack.file_store":
+    "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
+  "backup.pack.file_restore":
+    "Para restaurar una copia archivada en una caja nueva, sigue «A restore takes one of three sources» en deploy/README.md.",
   "backup.pack.key_missing":
     "Esta caja no tiene clave de recuperación, así que no hay paquete de recuperación de las copias.",
   "backup.pack.key_too_short":

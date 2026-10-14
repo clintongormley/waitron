@@ -1012,7 +1012,17 @@ export class BackupScreen extends LitElement {
       const answer = await this.api.getArchiveRecoveryPack();
       if (request !== this.#packRequest) return;
       this.pack = answer;
-      this.packUrl = URL.createObjectURL(new Blob([answer.pack], { type: "text/plain" }));
+      const file = [
+        t("backup.pack.file_heading"),
+        t("backup.pack.file_secret"),
+        t("backup.pack.file_keep_previous"),
+        t("backup.pack.file_store"),
+        t("backup.pack.file_restore"),
+        "",
+        answer.pack,
+        "",
+      ].join("\n");
+      this.packUrl = URL.createObjectURL(new Blob([file], { type: "text/plain" }));
     } catch (error) {
       if (request === this.#packRequest) this.packFailure = codeOf(error);
     } finally {

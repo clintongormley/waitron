@@ -4349,11 +4349,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   and the rest of the screen say "la copia en el bucket". From A538-6 (#1642); seen in A639's
   screenshots, not changed there.
 
-- **The archive recovery pack file is in English only, while the bucket copy's kit file is
-  translated.** The server writes the pack's explanatory text (`encodeArchiveRecoveryPack`) and the
-  Backups screen downloads it as written; the kit's heading and note come from the screen's strings
-  (`stream.kit.file_heading`, `stream.kit.file_note`). Left open by A538-5.
-
 - **A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
   (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
   the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
