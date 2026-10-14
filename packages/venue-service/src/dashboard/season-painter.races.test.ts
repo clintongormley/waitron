@@ -1,0 +1,121 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { applyTokens } from "@waitron/ui";
+import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import type { MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import { OpeningHoursApi } from "./opening-hours-client.js";
+import { drag, frame, grid, painterModel, settle } from "../testing/season-painter-fixture.js";
+import type { SeasonPainter } from "./season-painter.js";
+import "./season-painter.js";
+
+type WeeksBody = {
+  departments: { departmentId: string; days: MenuWeekDay[] }[];
+  zones: unknown[];
+  expectedClockRevision: number;
+};
+type HeldRead = { snapshot: OpeningHoursModel; answer: (model?: OpeningHoursModel) => void };
+type HeldPut = { body: WeeksBody; store: () => void; answer: () => void };
+
+let host: SeasonPainter | undefined;
+let detach: (() => void) | undefined;
+afterEach(() => {
+  detach?.();
+  host?.remove();
+  host = undefined;
+  detach = undefined;
+  setLocale("en");
+  vi.useRealTimers();
+});
+
+/**
+ * A painter on a real `OpeningHoursApi` whose server the test drives: once the painter holds a
+ * model, every GET is held until answered, and a PUT is stored and answered in separate steps so
+ * another manager's write can land between them. A held GET answers with the store as it was
+ * when the read started, unless the test hands it another model.
+ */
+async function racingPainter(live: boolean) {
+  setLocale("en");
+  const server = { stored: painterModel() };
+  const reads: HeldRead[] = [];
+  const puts: HeldPut[] = [];
+  const request = (async (_path: string, method: string, body: unknown) => {
+    if (method === "GET") {
+      const snapshot = structuredClone(server.stored);
+      if (!host?.model) return snapshot;
+      return new Promise<OpeningHoursModel>((resolve) =>
+        reads.push({ snapshot, answer: (model = snapshot) => resolve(model) }),
+      );
+    }
+    const weeks = structuredClone(body) as WeeksBody;
+    return new Promise<void>((resolve) =>
+      puts.push({
+        body: weeks,
+        store: () => {
+          for (const { departmentId, days } of weeks.departments) {
+            const season = server.stored.departments
+              .find(({ id }) => id === departmentId)!
+              .seasonWeeks.find(({ seasonId }) => seasonId === "winter")!;
+            season.week = structuredClone(days);
+          }
+        },
+        answer: () => resolve(),
+      }),
+    );
+  }) as DashboardRequest;
+  host = document.createElement("season-painter");
+  host.api = new OpeningHoursApi(request, live ? new LiveData() : undefined);
+  host.seasonId = "winter";
+  host.departmentId = "d1";
+  host.open = true;
+  applyTokens(host);
+  document.body.append(host);
+  const painter = host;
+  detach = painter.api.watchOpeningHours(
+    (model) => {
+      painter.model = model;
+    },
+    () => {},
+    () => {},
+  );
+  await expect.poll(() => !!painter.model).toBe(true);
+  await settle(painter);
+  const save = async () => {
+    const before = puts.length;
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await expect.poll(() => puts.length).toBe(before + 1);
+    return puts[before]!;
+  };
+  return { painter, server, reads, puts, save };
+}
+
+const slotsOn = (body: WeeksBody, weekday: number) =>
+  body.departments[0]!.days.find((day) => day.weekday === weekday)!.slots;
+const wednesday = [{ periodId: "p1", startsAt: "07:00", endsAt: "09:00" }];
+
+it.each([
+  ["live data", true],
+  ["no live data", false],
+])(
+  "a read that started before a save cannot undo it: the week stays as saved, and the next save sends it (%s)",
+  async (_, live) => {
+    const { painter, reads, save } = await racingPainter(live);
+    painter.api.rereadWatches();
+    await expect.poll(() => reads.length).toBe(1);
+    await drag(painter, "3", 60, 180);
+    const first = await save();
+    first.store();
+    first.answer();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    reads[0]!.answer();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settle(painter);
+    expect(grid(painter).days.get("3")).toEqual(wednesday);
+
+    await drag(painter, "4", 60, 180);
+    await expect.poll(() => reads.length).toBe(2);
+    reads[1]!.answer();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settle(painter);
+    const second = await save();
+    expect(slotsOn(second.body, 3)).toEqual(wednesday);
+  },
+);
