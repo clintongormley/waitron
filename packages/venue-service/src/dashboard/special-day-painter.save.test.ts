@@ -695,7 +695,7 @@ describe("a live update while the day is open", () => {
     ]);
   });
 
-  it("an owner the draft has changed keeps its paint and its saved state, while an unchanged zone follows", async () => {
+  it("an owner the draft has changed keeps its paint on the dates it changed and follows on the others, as an unchanged zone does", async () => {
     const days = { sd1: dinnerOn14("21:00") };
     const { painter, writes } = await mount({ days });
     await paintDinner(painter, DEC_15);
@@ -714,7 +714,7 @@ describe("a live update while the day is open", () => {
       .poll(() => grid(painter).days.get(DEC_14))
       .toEqual([{ periodId: null, startsAt: "21:00", endsAt: "23:00" }]);
     await pick(painter, "d1");
-    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("20:00", "21:00")]);
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("20:00", "22:00")]);
     expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
     await save(painter, writes);
     expect(body(writes[0]!)).toEqual({

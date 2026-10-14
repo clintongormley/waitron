@@ -238,9 +238,9 @@ saves only the paint the draft changed. An old `/view/date` address opens the mo
   a save of that week answered, with no other save in flight: it takes in the stored days not
   repainted since (`rebaseDays`). This is A506-8's rule, asserted by "a live model refresh keeps an
   edited week and reseeds the ones not edited" in `season-painter.test.ts`. Following unedited days
-  one by one would reverse that assertion, so it is an owner decision. PR #1651 (A506-9) leaves the
-  same question open for special days: a live update merges paint per department or zone, not per
-  date.
+  one by one would reverse that assertion, so it is an owner decision. Special days (PR #1651,
+  A506-9) already follow per date: a live update takes the stored paint on every date the draft did
+  not change, asserted in `special-day-painter.races.test.ts`.
 - `ModelWatches.reread` (`model-watch.ts`) holds back reads that started before a save only for its
   own client's watches. Another `OpeningHoursApi` on the same live data still applies them. Read in
   the code, not run.

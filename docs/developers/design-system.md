@@ -1979,9 +1979,11 @@ first offers Add to <name>, which opens the one with the latest date with this d
 unsaved change, or New special day. Save stays quiet until the draft changes and sends the name,
 Every year, the dates and their Closed ticks, and paint only for each department or zone and date
 whose paint differs from what is saved; the painter stays open and the answer becomes the saved
-state. A live refresh reads a stored day again: its name, Every year, its dates, and each
-department's or zone's paint each follow what is now stored unless the draft has changed them, when
-the draft and what it is compared against both stay; one that removes a department or zone with
+state. A live refresh reads a stored day again: its name, Every year and its dates each follow what
+is now stored unless the draft has changed them, when the draft and what it is compared against
+both stay. Paint follows per department or zone and date: the saved paint takes what is stored, and
+the draft keeps its own only on the dates it changed (`merge`, `special-day-painter.ts`; the cases in
+`special-day-painter.races.test.ts`). A refresh that removes a department or zone with
 edits, or makes a department with edits inactive, drops those edits and says so beside Save; while
 a save is out, that waits for its answer or refusal; edits the save stored are not dropped, and
 after a refusal only the refusal is shown. Otherwise a refusal keeps the draft. One that names the name says so under Name, and one about a date that

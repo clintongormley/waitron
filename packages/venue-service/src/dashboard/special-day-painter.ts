@@ -21,7 +21,7 @@ import { addDays, isLocalDate } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
-import { samePaint } from "../paint-model.js";
+import { rebaseDays, samePaint } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -605,8 +605,9 @@ export class SpecialDayPainter extends LitElement {
       },
     );
   }
-  /** Name, Every year, the dates and each owner's paint each follow `detail`, in the draft and the
-   *  saved state alike, where the draft has not changed them; a changed one keeps both. */
+  /** Name, Every year and the dates each follow `detail`, in the draft and the saved state alike,
+   *  where the draft has not changed them; a changed one keeps both. Each owner's saved paint
+   *  follows `detail`, and its draft too on every date the draft has not changed. */
   private merge(detail: SpecialDayDetail) {
     const fresh = fromDetail(detail);
     const draft = copyDraft(this.draft);
@@ -619,11 +620,14 @@ export class SpecialDayPainter extends LitElement {
       baseline.dates = fresh.dates;
     }
     const owners = [...draft.paint.keys(), ...baseline.paint.keys(), ...fresh.paint.keys()];
+    const none = new Map<LocalDate, Paint[]>();
     for (const owner of new Set(owners)) {
-      if (!sameDays(draft.paint.get(owner), baseline.paint.get(owner))) continue;
-      const days = fresh.paint.get(owner) ?? new Map<LocalDate, Paint[]>();
-      draft.paint.set(owner, copyDays(days));
-      baseline.paint.set(owner, days);
+      const days = fresh.paint.get(owner) ?? none;
+      draft.paint.set(
+        owner,
+        rebaseDays(days, baseline.paint.get(owner) ?? none, draft.paint.get(owner) ?? none),
+      );
+      baseline.paint.set(owner, copyDays(days));
     }
     this.stored = new Map(detail.dates.map(({ date, holidayName }) => [date, holidayName]));
     this.draft = draft;

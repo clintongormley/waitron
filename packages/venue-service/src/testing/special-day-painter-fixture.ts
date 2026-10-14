@@ -1,9 +1,10 @@
-import { type DashboardRequest } from "@waitron/dashboard-kit";
+import { type DashboardRequest, type LiveData } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
 import type { SpecialDayPainter } from "../dashboard/special-day-painter.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
+import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { painterModel, type Write } from "./season-painter-fixture.js";
 
 export { painterModel, type Write };
@@ -52,11 +53,16 @@ export interface SpecialDayAnswers {
   failingSeason?: () => boolean;
   /** A write's answer; thrown when it returns an object with a `code`. Defaults to the saved day. */
   answer?: (write: Write) => unknown;
+  /** What the opening hours model read answers, as it is when asked; defaults to `painterModel`. */
+  model?: () => OpeningHoursModel;
+  /** Awaited before the opening hours model read answers. */
+  modelAfter?: () => Promise<unknown> | undefined;
+  liveData?: LiveData;
 }
 
 /** The answer a save gets by default, as the server builds it: the request's facts as a stored day
  *  `sd1`, or `sd-new`, keeping the stored paint of every kept date the request names no paint for. */
-function savedFrom(write: Write, stored: SpecialDayDetail | undefined): SpecialDayDetail {
+export function savedFrom(write: Write, stored: SpecialDayDetail | undefined): SpecialDayDetail {
   const body = write.body as SpecialDayInput;
   const id = write.method === "POST" ? "sd-new" : decodeURIComponent(write.url.split("/").pop()!);
   const dates = new Set(body.dates.map(({ date }) => date));
@@ -83,65 +89,70 @@ function savedFrom(write: Write, stored: SpecialDayDetail | undefined): SpecialD
 }
 
 export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers = {}) {
-  return new OpeningHoursApi((async (url, method, body) => {
-    if (method === "GET") {
-      if (/\/special-days$/.test(url)) {
-        await answers.listAfter;
-        if (answers.failingList) throw { code: "server.internal" };
-        return structuredClone(answers.list ?? Object.values(answers.days ?? {}));
+  return new OpeningHoursApi(
+    (async (url, method, body) => {
+      if (method === "GET") {
+        if (/\/special-days$/.test(url)) {
+          await answers.listAfter;
+          if (answers.failingList) throw { code: "server.internal" };
+          return structuredClone(answers.list ?? Object.values(answers.days ?? {}));
+        }
+        const day = /\/special-days\/([^/?]+)$/.exec(url);
+        if (day) {
+          const found = answers.days?.[decodeURIComponent(day[1]!)];
+          if (!found) throw { code: "special_day.not_found" };
+          const detail = structuredClone(found);
+          await answers.dayAfter?.();
+          return detail;
+        }
+        if (url.includes("/opening-hours/season-days?")) {
+          await answers.seasonAfter?.();
+          if (answers.failingSeason?.()) throw { code: "server.internal" };
+          const dates = new URL(url, "http://x").searchParams.get("dates")!.split(",");
+          return {
+            days: dates.map((date) => {
+              const season = answers.season?.(date) ?? {};
+              return {
+                date,
+                seasonId: "winter",
+                dayCutover: season.dayCutover ?? "06:00",
+                departments: [
+                  {
+                    departmentId: "d1",
+                    ranges: season.ranges ?? [],
+                    zones: ["z1", "z2"].map((zoneId) => ({
+                      zoneId,
+                      closed: season.zones?.[zoneId] ?? [],
+                    })),
+                  },
+                ],
+              };
+            }),
+          } satisfies SeasonDays;
+        }
+        const month = /\/opening-hours\/month\?month=(\d{4}-\d{2})/.exec(url)?.[1];
+        if (month && answers.failingMonths?.includes(month)) throw { code: "server.internal" };
+        if (month)
+          return {
+            days: (answers.taken ?? [])
+              .filter(({ date }) => date.startsWith(month))
+              .map(({ date, id, name }) => ({ date, inMonth: true, specialDay: { id, name } })),
+          };
+        const model = answers.model?.() ?? painterModel();
+        await answers.modelAfter?.();
+        return model;
       }
-      const day = /\/special-days\/([^/?]+)$/.exec(url);
-      if (day) {
-        const found = answers.days?.[decodeURIComponent(day[1]!)];
-        if (!found) throw { code: "special_day.not_found" };
-        const detail = structuredClone(found);
-        await answers.dayAfter?.();
-        return detail;
-      }
-      if (url.includes("/opening-hours/season-days?")) {
-        await answers.seasonAfter?.();
-        if (answers.failingSeason?.()) throw { code: "server.internal" };
-        const dates = new URL(url, "http://x").searchParams.get("dates")!.split(",");
-        return {
-          days: dates.map((date) => {
-            const season = answers.season?.(date) ?? {};
-            return {
-              date,
-              seasonId: "winter",
-              dayCutover: season.dayCutover ?? "06:00",
-              departments: [
-                {
-                  departmentId: "d1",
-                  ranges: season.ranges ?? [],
-                  zones: ["z1", "z2"].map((zoneId) => ({
-                    zoneId,
-                    closed: season.zones?.[zoneId] ?? [],
-                  })),
-                },
-              ],
-            };
-          }),
-        } satisfies SeasonDays;
-      }
-      const month = /\/opening-hours\/month\?month=(\d{4}-\d{2})/.exec(url)?.[1];
-      if (month && answers.failingMonths?.includes(month)) throw { code: "server.internal" };
-      if (month)
-        return {
-          days: (answers.taken ?? [])
-            .filter(({ date }) => date.startsWith(month))
-            .map(({ date, id, name }) => ({ date, inMonth: true, specialDay: { id, name } })),
-        };
-      return painterModel();
-    }
-    const write = { url, method, body };
-    writes.push(write);
-    const answer = answers.answer ? await answers.answer(write) : undefined;
-    if (answer && typeof answer === "object" && "code" in answer) throw answer;
-    if (answer !== undefined) return answer;
-    if (method === "DELETE") return undefined;
-    const stored = answers.days?.[decodeURIComponent(url.split("/").pop()!)];
-    return savedFrom(write, method === "PUT" ? stored : undefined);
-  }) as DashboardRequest);
+      const write = { url, method, body };
+      writes.push(write);
+      const answer = answers.answer ? await answers.answer(write) : undefined;
+      if (answer && typeof answer === "object" && "code" in answer) throw answer;
+      if (answer !== undefined) return answer;
+      if (method === "DELETE") return undefined;
+      const stored = answers.days?.[decodeURIComponent(url.split("/").pop()!)];
+      return savedFrom(write, method === "PUT" ? stored : undefined);
+    }) as DashboardRequest,
+    answers.liveData,
+  );
 }
 
 export const frame = (el: SpecialDayPainter) =>
