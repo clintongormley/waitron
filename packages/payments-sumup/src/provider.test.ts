@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, deviceProfiles, devices } from "@waitron/db";
@@ -14,6 +16,7 @@ import { setup } from "./testing/setup.js";
 import type { FakeSumUp } from "./testing/fake-sumup.js";
 import { SumUpCloudProvider, cardFromTransaction, mapEntryMode } from "./provider.js";
 import type { SumUpClient } from "./client.js";
+import { sumupClient } from "./sumup-client.js";
 
 describe("SumUp card details mapping", () => {
   it("maps SumUp entry modes to the four normalised values", () => {
@@ -419,6 +422,40 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
     });
     expect(provider.refundResendWindowMs).toBeNull();
   });
+
+  it.each([
+    {
+      status: 404,
+      contentType: "text/html",
+      body: "<html>nope</html>",
+      answer: { kind: "refused", httpStatus: 404, documented: true },
+    },
+    { status: 201, contentType: "text/plain", body: "ok", answer: { kind: "accepted" } },
+  ])(
+    "answers SumUp's $status with a body that is not JSON by its status, through the real client",
+    async ({ status, contentType, body, answer }) => {
+      const server = createServer((_req, res) =>
+        res.writeHead(status, { "content-type": contentType }).end(body),
+      );
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const provider = new SumUpCloudProvider({
+          client: sumupClient({
+            apiKey: "k",
+            merchantCode: "MC",
+            baseUrl: `http://127.0.0.1:${port}`,
+          }),
+          db: suite.db,
+          incidents: () => Promise.resolve(true),
+        });
+        expect(await provider.sendRefund(request("txn_1"))).toEqual(answer);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
 
   it.each([
     ["REFUNDED", "completed"],

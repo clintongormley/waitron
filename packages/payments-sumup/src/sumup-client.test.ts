@@ -579,6 +579,55 @@ describe("sumupClient sendRefund", () => {
       client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
     ).rejects.toThrow("fetch failed");
   });
+
+  async function againstServer<T>(
+    handler: Parameters<typeof createServer>[1],
+    use: (client: SumUpClient) => Promise<T>,
+    timeoutMs?: number,
+  ): Promise<T> {
+    const server = createServer(handler);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      return await use(
+        sumupClient({
+          apiKey: "k",
+          merchantCode: "MC",
+          baseUrl: `http://127.0.0.1:${port}`,
+          ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        }),
+      );
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
+  it.each([
+    { status: 404, contentType: "text/html", body: "<html>nope</html>" },
+    { status: 201, contentType: "text/plain", body: "ok" },
+  ])(
+    "answers $status with a body that is not JSON by its status",
+    async ({ status, contentType, body }) => {
+      const answer = await againstServer(
+        (_req, res) => res.writeHead(status, { "content-type": contentType }).end(body),
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+      );
+      expect(answer).toEqual({ httpStatus: status });
+    },
+  );
+
+  it("answers a 201 whose body never ends without waiting for the body", async () => {
+    const answer = await againstServer(
+      (_req, res) => {
+        res.writeHead(201, { "content-type": "application/json" });
+        res.write("{");
+      },
+      (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+      2_000,
+    );
+    expect(answer).toEqual({ httpStatus: 201 });
+  });
 });
 
 describe("sumupClient findTransaction refund events", () => {

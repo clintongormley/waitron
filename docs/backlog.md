@@ -3524,8 +3524,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   before any card payment is taken through a Stripe webhook.
   [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
 
-- Bound the HTTP body read as well as the header wait in `sumup-client.ts` (move `clearTimeout` after
-  `res.text()`); lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
+- Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
+
+- **SumUp's older `refund` call still parses a 2xx or 4xx body as JSON**
+  (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
+  an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
+  reversal primitive above. Left open by A632.
 
 - Pre-existing `forward` retry backoff.
 
@@ -5325,6 +5329,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
+- **The upgrade test overran its 165,500 ms deadline once in CI, on a branch that changed no
+  migration** (PR #1705, run 38607502363, job 116002045326, 2026-10-14). Its finished phases summed
+  168,686 ms and none took 2 seconds; the four main runs before it took 81,898 to 122,555 ms.
+  Whether the runner or the walk was slow was not established.
+
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
   runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
@@ -5765,11 +5774,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   step 4 (#1519).
 - **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
   which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
-- **SumUp's refund status call parses 2xx and 4xx bodies before returning their status**
-  (`packages/payments-sumup/src/sumup-client.ts`, `call` and `sendRefund`). A621's real local-server
-  probe answered 404 with `<html>nope</html>`: `sendRefund` threw `SyntaxError`, and the provider
-  returned `{ kind: "uncertain", reason: "network" }`. Next: keep the HTTP status when that body's
-  format is irrelevant to the refund answer; retain the existing pending-outcome rules.
 - **The Disable dialog's failed-unpair message says the reader is "still enabled"** (A518, #1562),
   which is untrue if another session disables it while the dialog is open, because the Unpair route
   checks only that the reader exists. Left as it is: right whenever nobody else acts at the same moment.
