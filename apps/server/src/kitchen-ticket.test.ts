@@ -1458,3 +1458,111 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
     "SEAGRAMS GIN RESERVA ESPECIAL DE LA CASA (SINGLE CON HIELO Y RODAJA DE LIMA)",
   );
 });
+
+describe("a kitchen ticket for a named party", () => {
+  const unnamed: KitchenTicket = {
+    scope: "station",
+    stationName: "Grill",
+    tableLabel: "Mesa 4",
+    orderNumber: "5",
+    firedAt: new Date(2026, 9, 14, 13, 24),
+    items: [{ qty: 1, name: "BURG" }],
+  };
+
+  it("prints the order line as Order N · name in English at 80 mm", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "en-GB" } }, KITCHEN_80),
+      ),
+    ).toEqual(["Grill", "Mesa 4", "Order 5 · Ana", "13:24", "1 x BURG", ""]);
+  });
+
+  it("prints the Spanish order word at 58 mm", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "es-ES" } }, KITCHEN_58),
+      ),
+    ).toEqual(["Grill", "Mesa 4", "Pedido 5 · Ana", "13:24", "1 x BURG", ""]);
+  });
+
+  it("wraps a long name under the text after the order number at 58 mm, as a MOVED slip does", () => {
+    const party = { name: "Cumpleaños de la abuela", locale: "es-ES" };
+    const ticket = printedLines(
+      formatKitchenTicket({ ...unnamed, orderNumber: "7", party }, KITCHEN_58),
+    );
+    expect(ticket.slice(2, 5)).toEqual([
+      "Pedido 7 · Cumpleaños de la",
+      "           abuela",
+      "13:24",
+    ]);
+    const slip = printedLines(
+      formatMovedSlip(
+        {
+          stationName: "Grill",
+          fromNumber: "7",
+          partyName: party.name,
+          fromText: "Mesa 4",
+          toText: "Mesa 4",
+          at: unnamed.firedAt.toISOString(),
+          items: [],
+          held: [],
+          locale: party.locale,
+        },
+        KITCHEN_58,
+      ),
+    );
+    expect(slip.slice(2, 4)).toEqual(ticket.slice(2, 4));
+  });
+
+  it("prints the name on a ticket for several stations, under the reprint and HOLD marks", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket(
+          {
+            scope: "stations",
+            reprint: true,
+            mark: "HOLD",
+            tableLabel: "Mesa 4",
+            orderNumber: "5",
+            firedAt: unnamed.firedAt,
+            stations: [
+              { stationName: "Cocina", items: [{ qty: 2, name: "Steak" }] },
+              { stationName: "Parrilla", items: [{ qty: 1, name: "Chips" }] },
+            ],
+            party: { name: "Ana", locale: "en-GB" },
+          },
+          KITCHEN_80,
+        ),
+      ),
+    ).toEqual([
+      "*** REPRINT ***",
+      "*** HOLD ***",
+      "Cocina · Parrilla",
+      "Mesa 4",
+      "Order 5 · Ana",
+      "13:24",
+      "Cocina",
+      "2 x Steak",
+      "Parrilla",
+      "1 x Chips",
+      "",
+    ]);
+  });
+
+  it("prints the name on a station ticket under the FIRE mark", () => {
+    expect(
+      printedLines(
+        formatKitchenTicket(
+          { ...unnamed, mark: "FIRE", party: { name: "Ana", locale: "en-GB" } },
+          KITCHEN_80,
+        ),
+      ).slice(0, 4),
+    ).toEqual(["*** FIRE ***", "Grill", "Mesa 4", "Order 5 · Ana"]);
+  });
+
+  it("prints a ticket with no party name as before: the bare order number", () => {
+    const bytes = formatKitchenTicket(unnamed, KITCHEN_80);
+    expect(printedLines(bytes)).toEqual(["Grill", "Mesa 4", "5", "13:24", "1 x BURG", ""]);
+    expect(formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80)).toEqual(bytes);
+  });
+});
