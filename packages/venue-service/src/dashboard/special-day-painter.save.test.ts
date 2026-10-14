@@ -244,10 +244,12 @@ describe("Save sends only the paint the draft changed", () => {
     });
   });
 
-  it("sends nothing for a zone deleted while its paint was unsaved", async () => {
+  it("drops the edits of a zone deleted while its paint was unsaved, says so beside Save, and sends none of them", async () => {
     const { painter, writes } = await mount();
     await pick(painter, "zone:z2");
     await drag(painter, DEC_14, at("21:00"), at("22:00"));
+    await pick(painter, "d1");
+    await paintDinner(painter, DEC_15);
     const model = painterModel();
     painter.model = {
       ...model,
@@ -257,8 +259,105 @@ describe("Save sends only the paint the draft changed", () => {
       })),
     };
     await settle(painter);
+    expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
     await save(painter, writes);
-    expect(body(writes[0]!)).toEqual(FACTS);
+    expect(body(writes[0]!)).toEqual({
+      ...FACTS,
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] }],
+    });
+  });
+});
+
+describe("a live refresh that takes away a department or zone with edits", () => {
+  /** The fixture's model with Old bar active, so it can be painted. */
+  function oldBarActive() {
+    const model = painterModel();
+    return {
+      ...model,
+      departments: model.departments.map((department) => ({ ...department, active: true })),
+    };
+  }
+  async function paintOldBar(el: SpecialDayPainter) {
+    el.model = oldBarActive();
+    await settle(el);
+    await pick(el, "d2");
+    await drag(el, DEC_14, at("21:00"), at("22:00"));
+    expect(grid(el).days.get(DEC_14)).toEqual([
+      { periodId: null, startsAt: "21:00", endsAt: "22:00" },
+    ]);
+  }
+
+  it("drops the edits of a department made inactive, says so beside Save, and sends none of them", async () => {
+    const { painter, writes } = await mount();
+    await paintOldBar(painter);
+    await pick(painter, "d1");
+    await paintDinner(painter, DEC_15);
+    painter.model = painterModel();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
+    await save(painter, writes);
+    expect(body(writes[0]!)).toEqual({
+      ...FACTS,
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] }],
+    });
+  });
+
+  it("a zone whose department is made inactive is dropped under the department's name", async () => {
+    const { painter } = await mount();
+    painter.model = oldBarActive();
+    await settle(painter);
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_14, at("21:00"), at("22:00"));
+    const model = painterModel();
+    painter.model = {
+      ...model,
+      departments: model.departments.map((department) => ({
+        ...department,
+        active: department.id !== "d1",
+      })),
+    };
+    await settle(painter);
+    expect(frame(painter).refusal).toBe(
+      "Restaurant is no longer active; its changes were dropped.",
+    );
+  });
+
+  it("when only dropped edits made the draft changed, Save is quiet again and the next edit clears the notice", async () => {
+    const { painter } = await mount();
+    await paintOldBar(painter);
+    expect(saveButton(painter).disabled).toBe(false);
+    painter.model = painterModel();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
+    expect(saveButton(painter).disabled).toBe(true);
+    await paintDinner(painter, DEC_15);
+    expect(frame(painter).refusal).toBe("");
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("keeps the stored paint of an owner it drops edits from, and a refresh that takes nothing away says nothing", async () => {
+    const { painter, writes } = await mount({
+      days: {
+        sd1: storedDay({
+          paint: [{ departmentId: "d2", date: DEC_14, ranges: [dinner("20:00", "21:00")] }],
+        }),
+      },
+    });
+    painter.model = oldBarActive();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("");
+    await pick(painter, "d2");
+    await clear(painter, DEC_14);
+    painter.model = painterModel();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
+    expect(saveButton(painter).disabled).toBe(true);
+    painter.model = oldBarActive();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
+    await pick(painter, "d2");
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("20:00", "21:00")]);
+    expect(writes).toEqual([]);
   });
 });
 

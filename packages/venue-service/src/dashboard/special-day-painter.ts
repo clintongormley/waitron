@@ -29,7 +29,7 @@ import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import { PeriodEditing, periodsLink } from "./period-editing.js";
 import { periodColourStyles } from "./period-colour-styles.js";
-import { ownerName, refusalReason } from "./painter-labels.js";
+import { departmentOf, droppedNotice, ownerName, refusalReason } from "./painter-labels.js";
 import {
   browserToday,
   format,
@@ -59,12 +59,13 @@ interface Draft {
   paint: OwnerPaint;
 }
 interface Refused {
+  /** Beside Save. */
   message: string;
   field?: "name" | "dates";
   column?: LocalDate;
   /** The department (`d:<id>`) or zone (`z:<id>`) whose column is marked; any, when absent. */
   owner?: string;
-  /** What the column heading says, when shorter than the message. */
+  /** What the marked field or column heading says, when not the message. */
   mark?: string;
 }
 type PaintEntries = Pick<SpecialDayInput, "paint" | "zonePaint">;
@@ -341,8 +342,12 @@ export class SpecialDayPainter extends LitElement {
         padding: var(--wt-space-4);
         color: var(--wt-color-text-muted);
       }
-      .error {
+      .error,
+      .required {
         color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
       }
       .tick {
         display: inline-flex;
@@ -395,6 +400,8 @@ export class SpecialDayPainter extends LitElement {
   @state() private loadFailed = false;
   @state() private attempted = false;
   @state() private refused?: Refused;
+  /** Edits a refresh dropped because what they belonged to is gone or inactive; shown beside Save. */
+  @state() private notice = "";
   @state() private saving = false;
   @state() private adding = false;
   @state() private month = "";
@@ -418,16 +425,27 @@ export class SpecialDayPainter extends LitElement {
   private followToken = {};
   /** A fresh model arrived while the stored day was first being read. */
   private followAfterRead = false;
+  /** Asks again for the read of the stored day still unanswered, which a disconnect drops. */
+  private unanswered?: () => void;
   private stopMonth?: () => void;
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
 
+  override connectedCallback() {
+    super.connectedCallback();
+    const unanswered = this.unanswered;
+    this.unanswered = undefined;
+    unanswered?.();
+    if (this.adding) this.showMonth(this.month);
+  }
   override disconnectedCallback() {
     this.scope?.dispose();
     this.scope = undefined;
     this.coordinator = undefined;
     this.closeMonth();
     this.generation = {};
+    this.saving = false;
+    if (this.deleting?.busy) this.deleting = undefined;
     this.forgetSeason();
     super.disconnectedCallback();
   }
@@ -438,6 +456,7 @@ export class SpecialDayPainter extends LitElement {
     if (this.open && this.seeded !== key) this.reseed(key);
     else if (changes.has("model")) {
       if (!this.scope?.isDirty()) this.revision = this.model.clockRevision;
+      this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
       if (this.open) this.follow();
     }
     if (this.isConnected && !this.scope) {
@@ -450,6 +469,7 @@ export class SpecialDayPainter extends LitElement {
           this.draft = copyDraft(value);
           this.attempted = false;
           this.refused = undefined;
+          this.notice = "";
         },
       });
       this.scope = scope;
@@ -501,10 +521,12 @@ export class SpecialDayPainter extends LitElement {
   private reseed(key: string) {
     this.generation = {};
     this.followAfterRead = false;
+    this.unanswered = undefined;
     this.seeded = key;
     this.saving = false;
     this.attempted = false;
     this.refused = undefined;
+    this.notice = "";
     this.deleting = undefined;
     this.adding = false;
     this.offered = undefined;
@@ -526,9 +548,11 @@ export class SpecialDayPainter extends LitElement {
     this.loading = true;
     this.adopt(undefined, []);
     const generation = this.generation;
+    this.unanswered = () => this.read(id, addDate, announce);
     this.api.specialDays.readSpecialDay(id).then(
       (detail) => {
         if (generation !== this.generation) return;
+        this.unanswered = undefined;
         this.loading = false;
         this.adopt(detail, []);
         if (addDate !== undefined && !this.draft.dates.some(({ date }) => date === addDate))
@@ -549,6 +573,7 @@ export class SpecialDayPainter extends LitElement {
       },
       () => {
         if (generation !== this.generation) return;
+        this.unanswered = undefined;
         this.loading = false;
         this.loadFailed = true;
       },
@@ -563,9 +588,18 @@ export class SpecialDayPainter extends LitElement {
     if (id === null || this.loading || this.loadFailed || this.saving) return;
     const generation = this.generation;
     const token = (this.followToken = {});
-    this.api.specialDays.readSpecialDay(id, { passive: true }).then((detail) => {
-      if (generation === this.generation && token === this.followToken) this.merge(detail);
-    }, ignore);
+    const current = () => generation === this.generation && token === this.followToken;
+    this.unanswered = () => this.follow();
+    this.api.specialDays.readSpecialDay(id, { passive: true }).then(
+      (detail) => {
+        if (!current()) return;
+        this.unanswered = undefined;
+        this.merge(detail);
+      },
+      () => {
+        if (current()) this.unanswered = undefined;
+      },
+    );
   }
   /** Name, Every year, the dates and each owner's paint each follow `detail`, in the draft and the
    *  saved state alike, where the draft has not changed them; a changed one keeps both. */
@@ -633,6 +667,31 @@ export class SpecialDayPainter extends LitElement {
           since.set(owner, new Map(since.get(owner)).set(date, day));
     return since;
   }
+  /** An edited owner's paint goes back to its saved state when the owner is gone from `this.model`
+   *  or no longer active, and the notice beside Save names it. */
+  private dropUnpaintable(previous: Model) {
+    const paintable = new Set(
+      this.model.departments
+        .filter(({ active }) => active)
+        .flatMap(({ id, zones }) => [departmentKey(id), ...zones.map((zone) => zoneKey(zone.id))]),
+    );
+    const gone: string[] = [];
+    const inactive = new Set<string>();
+    let paint: OwnerPaint | undefined;
+    for (const [owner, days] of this.draft.paint) {
+      const saved = this.baseline.paint.get(owner);
+      if (paintable.has(owner) || sameDays(days, saved)) continue;
+      const department = departmentOf(this.model, owner);
+      if (department) inactive.add(department.name);
+      else gone.push(ownerName(previous, owner));
+      paint ??= copyPaint(this.draft.paint);
+      if (saved) paint.set(owner, copyDays(saved));
+      else paint.delete(owner);
+    }
+    if (!paint) return;
+    this.draft = { ...this.draft, paint };
+    this.notice = droppedNotice(gone, inactive);
+  }
   /** One entry per (owner, date) whose paint differs from the saved state, for owners the model
    *  still has; a removed date sends none, as the server drops its paint with it. */
   private changedPaint(): PaintEntries {
@@ -674,6 +733,7 @@ export class SpecialDayPainter extends LitElement {
   private change(next: Draft) {
     this.draft = next;
     this.refused = undefined;
+    this.notice = "";
     this.scope?.changed();
   }
 
@@ -710,8 +770,10 @@ export class SpecialDayPainter extends LitElement {
     const sent = copyPaint(this.draft.paint);
     const generation = this.generation;
     this.followToken = {};
+    this.unanswered = undefined;
     this.saving = true;
     this.refused = undefined;
+    this.notice = "";
     let detail: SpecialDayDetail;
     try {
       detail = await this.api.specialDays.writeSpecialDay(this.specialDayId, input, this.revision);
@@ -769,21 +831,30 @@ export class SpecialDayPainter extends LitElement {
     } else if (code === "special_day.invalid" && this.refusePaint(params, input)) {
       return;
     } else if (code === "special_day.invalid" && params.field === "name") {
-      this.refused = { message: t("special.field_refused"), field: "name" };
+      this.refused = {
+        message: t("prep.fix_fields"),
+        field: "name",
+        mark: t("special.field_refused"),
+      };
     } else if (code === "special_day.invalid" && typeof params.field === "string") {
       const index = /^dates\.(\d+)(?=\.|$)/.exec(params.field)?.[1];
       const date = index === undefined ? undefined : input.dates[Number(index)]?.date;
+      const marked = column(date);
       this.refused =
-        date === undefined
-          ? { message: t("menu.save_error") }
-          : {
-              message:
-                params.reason === "overlap"
-                  ? format("special.date_meets", { date: formatDate(date) })
-                  : t("special.field_refused"),
+        date !== undefined && params.reason === "overlap"
+          ? {
+              message: format("special.date_meets", { date: formatDate(date) }),
               field: "dates",
-              column: column(date),
-            };
+              column: marked,
+            }
+          : marked !== undefined
+            ? {
+                message: t("prep.fix_fields"),
+                field: "dates",
+                column: marked,
+                mark: t("special.field_refused"),
+              }
+            : { message: t("menu.save_error") };
     } else {
       this.refused = { message: t("menu.save_error") };
     }
@@ -1190,7 +1261,7 @@ export class SpecialDayPainter extends LitElement {
   private message(): string {
     if (this.refused) return this.refused.message;
     if (this.blocked()) return t("prep.fix_fields");
-    return this.loadFailed ? t("special.load_error") : "";
+    return this.loadFailed ? t("special.load_error") : this.notice;
   }
 
   private panel(locked: boolean) {
@@ -1203,7 +1274,8 @@ export class SpecialDayPainter extends LitElement {
       this.draft.repeatsYearly && this.draft.dates.some(({ date }) => date.endsWith("-02-29"));
     const dates = this.draft.dates.map(({ date }) => date);
     const years = new Set(dates.map((date) => date.slice(0, 4))).size > 1;
-    const nameError = errors.name ?? (this.refused?.field === "name" ? this.refused.message : "");
+    const nameError =
+      errors.name ?? (this.refused?.field === "name" ? (this.refused.mark ?? "") : "");
     const repeat = (value: boolean, label: "special.no" | "special.yes") =>
       html`<label
         ><input
@@ -1230,7 +1302,9 @@ export class SpecialDayPainter extends LitElement {
         }}
       ></wt-input>
       <div>
-        <p class="label" id="dates-label">${t("special.dates")}</p>
+        <p class="label" id="dates-label">
+          ${t("special.dates")}<span class="required" data-required aria-hidden="true">*</span>
+        </p>
         <ul aria-labelledby="dates-label">
           ${runsOf(dates).map(([first, last]) => {
             const span = (show: (date: LocalDate) => string) =>
@@ -1376,10 +1450,12 @@ export class SpecialDayPainter extends LitElement {
           this.open = false;
           this.seeded = undefined;
           this.generation = {};
+          this.unanswered = undefined;
           this.saving = false;
           this.adding = false;
           this.deleting = undefined;
           this.offered = undefined;
+          this.notice = "";
           this.closeMonth();
           this.forgetSeason();
         }}

@@ -95,3 +95,39 @@ it("undoing an edit makes Save quiet again and ✕ closes without asking", async
   await expect.poll(() => painter.open).toBe(false);
   expect(question().open).toBe(false);
 });
+
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+it.each(["before", "after"])(
+  "an edit made %s the painter is taken off the page and put back still asks before leaving",
+  async (when) => {
+    const painter = await mount();
+    if (when === "before") {
+      tick(painter).click();
+      await settle(painter);
+    }
+    const parent = painter.parentNode!;
+    painter.remove();
+    await painter.updateComplete;
+    expect(unload()).toBe(false);
+    parent.insertBefore(painter, parent.firstChild);
+    await settle(painter);
+    if (when === "after") {
+      tick(painter).click();
+      await settle(painter);
+    }
+    expect(unload()).toBe(true);
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await choose("keep");
+    expect(await request).toBe("kept");
+    expect(tick(painter).checked).toBe(true);
+    expect(unload()).toBe(true);
+  },
+);

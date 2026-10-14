@@ -536,6 +536,17 @@ describe("opened on a public holiday", () => {
 });
 
 describe("dates", () => {
+  it("are marked required as the name is, with the same star", async () => {
+    const { painter } = await mount();
+    const mark = painter.shadowRoot!.querySelector<HTMLElement>("#dates-label [data-required]");
+    const nameMark = painter
+      .shadowRoot!.querySelector("wt-input[name=name]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-required]")!;
+    expect(mark?.textContent).toBe(nameMark.textContent);
+    expect(mark!.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(mark!).color).toBe(getComputedStyle(nameMark).color);
+  });
+
   it("adds the calendar's dates once each, in order, and a chip's remove takes its date and column away", async () => {
     const { painter } = await mount();
     await addDates(painter, ["2026-12-31", "2026-12-10", "2026-12-14"]);
@@ -829,6 +840,32 @@ describe("Save", () => {
     expect(saveButton(painter).disabled).toBe(true);
   });
 
+  it("a refused name is marked under Name, and beside Save says only the generic sentence", async () => {
+    const { painter, writes } = await mount({
+      answer: () => ({ code: "special_day.invalid", params: { field: "name" } }),
+    });
+    const name = () =>
+      painter.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=name]")!;
+    await typeName(painter, "Renamed");
+    await save(painter, writes);
+    expect(name().error).toBe("Check this field.");
+    expect(frame(painter).refusal).toBe("Correct the highlighted fields to continue.");
+    expect(saveButton(painter).disabled).toBe(false);
+    await typeName(painter, "Renamed again");
+    expect(name().error).toBe("");
+    expect(frame(painter).refusal).toBe("");
+  });
+
+  it("a date's own refusal is told on its column, and beside Save says only the generic sentence", async () => {
+    const { painter, writes } = await mount({
+      answer: () => ({ code: "special_day.invalid", params: { field: "dates.1.closedAllDay" } }),
+    });
+    await typeName(painter, "Renamed");
+    await save(painter, writes);
+    expect([...grid(painter).columnErrors]).toEqual([["2026-12-15", "Check this field."]]);
+    expect(frame(painter).refusal).toBe("Correct the highlighted fields to continue.");
+  });
+
   it("maps the other refusals to their messages", async () => {
     const cases: [unknown, string][] = [
       [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
@@ -836,7 +873,10 @@ describe("Save", () => {
         { code: "special_day.invalid", params: { field: "dates.1.date", reason: "overlap" } },
         "Tue, 15 Dec 2026 meets another of these dates.",
       ],
-      [{ code: "special_day.invalid", params: { field: "name" } }, "Check this field."],
+      [
+        { code: "special_day.invalid", params: { field: "name" } },
+        "Correct the highlighted fields to continue.",
+      ],
       [{ code: "server.internal" }, "This could not be saved. Try again."],
     ];
     for (const [refusal, message] of cases) {
@@ -968,7 +1008,7 @@ describe("edges", () => {
       ],
       [
         { code: "special_day.invalid", params: { field: "dates.0.closedAllDay" } },
-        "Check this field.",
+        "Correct the highlighted fields to continue.",
       ],
       [
         { code: "special_day.invalid", params: { field: "paint.0" } },
@@ -981,7 +1021,9 @@ describe("edges", () => {
       await save(painter, writes);
       expect(frame(painter).refusal).toBe(message);
       const marked = [...grid(painter).columnErrors.keys()];
-      expect(marked).toEqual(message === "Check this field." ? ["2026-12-14"] : []);
+      expect(marked).toEqual(
+        message === "Correct the highlighted fields to continue." ? ["2026-12-14"] : [],
+      );
       painter.remove();
     }
   });
@@ -1147,4 +1189,121 @@ it("while the offer to add to a same-named day is shown, the paint row and the C
       (button) => button.disabled,
     ),
   ).toBe(false);
+});
+
+describe("taken off the page while a request is out, and put back", () => {
+  const dismiss = (el: SpecialDayPainter) =>
+    frame(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=dismiss]")!;
+  const deferred = () => {
+    let release!: (value?: unknown) => void;
+    const promise = new Promise((resolve) => (release = resolve));
+    return { promise, release };
+  };
+  async function putBack(el: SpecialDayPainter) {
+    el.remove();
+    await Promise.resolve();
+    document.body.append(el);
+    await settle(el);
+  }
+
+  it("during a save, is no longer busy: the edit stays unsaved, ✕ can close and Save sends it again", async () => {
+    const held = deferred();
+    let calls = 0;
+    const { painter, writes } = await mount({
+      answer: () => (calls++ === 0 ? held.promise : undefined),
+    });
+    await typeName(painter, "Renamed");
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect.poll(() => frame(painter).busy).toBe(true);
+    await putBack(painter);
+    held.release();
+    await settle(painter);
+    expect(frame(painter).busy).toBe(false);
+    expect(dismiss(painter).disabled).toBe(false);
+    expect(frame(painter).heading).toBe("Renamed");
+    await save(painter, writes);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.body).toEqual(writes[0]!.body);
+    expect(saveButton(painter).disabled).toBe(true);
+  });
+
+  it("during the first read, reads the day again and opens on it", async () => {
+    const held = deferred();
+    let reads = 0;
+    const writes: Write[] = [];
+    painter = document.createElement("special-day-painter");
+    painter.api = specialDayApi(writes, {
+      days: { sd1: storedDay() },
+      dayAfter: () => (reads++ === 0 ? held.promise : undefined),
+    });
+    painter.model = painterModel();
+    painter.specialDayId = "sd1";
+    painter.open = true;
+    applyTokens(painter);
+    document.body.append(painter);
+    await settle(painter);
+    expect(part(painter, "loading")).not.toBeNull();
+    painter.remove();
+    held.release();
+    await held.promise;
+    document.body.append(painter);
+    await loaded(painter);
+    expect(frame(painter).heading).toBe("Christmas dinners");
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
+    expect(reads).toBe(2);
+  });
+
+  it("during a delete, the question is no longer busy and ✕ can close", async () => {
+    const held = deferred();
+    const { painter, writes, events } = await mount({
+      answer: (write) => (write.method === "DELETE" ? held.promise : undefined),
+    });
+    part(painter, "delete")!.click();
+    await settle(painter);
+    part(painter, "confirm-delete")!.click();
+    await expect.poll(() => writes.length).toBe(1);
+    await putBack(painter);
+    held.release();
+    await settle(painter);
+    expect(painter.shadowRoot!.querySelector("wt-dialog[data-test=delete-special-day]")).toBeNull();
+    expect(events.filter(({ type }) => type === "special-day-deleted")).toEqual([]);
+    expect(dismiss(painter).disabled).toBe(false);
+    dismiss(painter).click();
+    await expect.poll(() => painter.open).toBe(false);
+  });
+
+  it("during a passive re-read, reads the day again, so a name changed elsewhere still follows", async () => {
+    let hold: ReturnType<typeof deferred> | undefined;
+    const days = { sd1: storedDay() };
+    const { painter } = await mount({ days, dayAfter: () => hold?.promise });
+    hold = deferred();
+    days.sd1 = storedDay({ name: "Renamed elsewhere" });
+    painter.model = painterModel();
+    await settle(painter);
+    const first = hold;
+    hold = undefined;
+    painter.remove();
+    first.release();
+    await first.promise;
+    document.body.append(painter);
+    await settle(painter);
+    await expect.poll(() => frame(painter).heading).toBe("Renamed elsewhere");
+    expect(saveButton(painter).disabled).toBe(true);
+  });
+
+  it("with the calendar open, watches its month again", async () => {
+    const { painter } = await mount();
+    const months: string[] = [];
+    const watch = painter.api.watchMonth.bind(painter.api);
+    painter.api.watchMonth = (month, ...rest) => {
+      months.push(month);
+      return watch(month, ...rest);
+    };
+    part(painter, "add-dates")!.click();
+    await settle(painter);
+    expect(months).toEqual(["2026-12"]);
+    await putBack(painter);
+    expect(months).toEqual(["2026-12", "2026-12"]);
+  });
 });

@@ -1961,7 +1961,7 @@ does not change.
 The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. Its bar
 holds ✕, the day's name as heading ("New special day" before it has one), Delete on a stored day,
 the department-or-zone picker, and Cancel and Save. A side panel holds the required name, the
-dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
+required dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
 opens a month to pick from (`add-dates-calendar.ts`): a click adds a date, a shift-click or Range
 adds every date between it and the last one clicked, at most 366 at a time, and a date another
 special day holds is marked with that day's name but still offered. Every year notes that it
@@ -1981,9 +1981,14 @@ Every year, the dates and their Closed ticks, and paint only for each department
 whose paint differs from what is saved; the painter stays open and the answer becomes the saved
 state. A live refresh reads a stored day again: its name, Every year, its dates, and each
 department's or zone's paint each follow what is now stored unless the draft has changed them, when
-the draft and what it is compared against both stay. A refusal is told beside Save and keeps the draft; one that names a department's or zone's
-paint switches the picker to it and marks that date's heading, and a date another special day
-holds says "<name> already holds <date>." and marks that date's column when it is one. Delete asks first, saying
+the draft and what it is compared against both stay; one that removes a department or zone with
+edits, or makes a department with edits inactive, drops those edits and says so beside Save. A
+refusal keeps the draft. One that names the name says so under Name, and one about a date that
+is not an overlap marks that date's heading; beside Save either says only "Correct the
+highlighted fields to continue.". Any other refusal is told beside Save: one that names a
+department's or zone's paint also switches the picker to it and marks that date's heading, and a
+date another special day holds says "<name> already holds <date>." and marks that date's column
+when it is one. Delete asks first, saying
 so when the day repeats every year, and closes the painter. A venue viewer gets the painter
 read-only: no paint row, no Delete, and nothing in the panel or grid changes.
 

@@ -23,7 +23,7 @@ import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
-import { ownerName, refusalReason } from "./painter-labels.js";
+import { departmentOf, droppedNotice, listOf, ownerName, refusalReason } from "./painter-labels.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 import { PeriodEditing, periodsLink } from "./period-editing.js";
@@ -75,18 +75,6 @@ function weekFrom<Day extends { weekday: number }>(
       const day = days.find((entry) => entry.weekday === weekday);
       return [String(weekday), day ? paint(day) : []];
     }),
-  );
-}
-function listOf(names: readonly string[]): string {
-  return new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    type: "conjunction",
-  }).format(names);
-}
-/** The department, active or not, whose week holds `key`'s, when it is still in the model. */
-function departmentOf(model: Model, key: string): Department | undefined {
-  const id = key.slice(2);
-  return model.departments.find((department) =>
-    key.startsWith("d:") ? department.id === id : department.zones.some((zone) => zone.id === id),
   );
 }
 function shownIn(model: Model, departmentId: string, zoneId: string) {
@@ -217,7 +205,7 @@ export class SeasonPainter extends LitElement {
       const lost = this.seededSeason === this.seasonId && this.anyEdited();
       this.seasonId = chosenSeasonId(this.model.seasons, this.model.currentSeasonId, "");
       if (this.seededSeason !== undefined) {
-        if (lost && gone) this.notice = this.removed([gone.name]);
+        if (lost && gone) this.notice = droppedNotice([gone.name], new Set());
         this.reseed();
         this.navigate();
       }
@@ -271,11 +259,6 @@ export class SeasonPainter extends LitElement {
   private anyEdited(): boolean {
     const { departments, zones } = this.edited();
     return departments.length + zones.length > 0;
-  }
-  private removed(names: string[]): string {
-    return format(names.length === 1 ? "painter.removed_one" : "painter.removed_many", {
-      names: listOf(names),
-    });
   }
   private commitBaseline(baseline: Draft) {
     this.baseline = baseline;
@@ -346,15 +329,8 @@ export class SeasonPainter extends LitElement {
     if ([...baseline].every(([key, week]) => week === fresh.get(key))) this.followed = this.model;
     this.draft = draft;
     this.commitBaseline(baseline);
-    const notices = [
-      gone.length ? this.removed(gone) : "",
-      inactive.size
-        ? format(inactive.size === 1 ? "painter.inactive_one" : "painter.inactive_many", {
-            names: listOf([...inactive]),
-          })
-        : "",
-    ].filter(Boolean);
-    if (notices.length) this.notice = notices.join(" ");
+    const notice = droppedNotice(gone, inactive);
+    if (notice) this.notice = notice;
   }
 
   private department(): Department | undefined {

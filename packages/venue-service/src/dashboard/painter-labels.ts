@@ -1,9 +1,42 @@
+import { currentLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 type Model = OpeningHoursModel;
-type Period = Model["departments"][number]["periods"][number];
+type Department = Model["departments"][number];
+type Period = Department["periods"][number];
+
+export function listOf(names: readonly string[]): string {
+  return new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
+    type: "conjunction",
+  }).format(names);
+}
+/** The department, active or not, whose week holds `key`'s, when it is still in the model. */
+export function departmentOf(model: Model, key: string): Department | undefined {
+  const id = key.slice(2);
+  return model.departments.find((department) =>
+    key.startsWith("d:") ? department.id === id : department.zones.some((zone) => zone.id === id),
+  );
+}
+/** What a painter says beside Save when a refresh dropped edits: of the departments and zones
+ *  `gone`, by name, and of those under the `inactive` departments. Empty when it dropped none. */
+export function droppedNotice(gone: readonly string[], inactive: ReadonlySet<string>): string {
+  return [
+    gone.length
+      ? format(gone.length === 1 ? "painter.removed_one" : "painter.removed_many", {
+          names: listOf(gone),
+        })
+      : "",
+    inactive.size
+      ? format(inactive.size === 1 ? "painter.inactive_one" : "painter.inactive_many", {
+          names: listOf([...inactive]),
+        })
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** The name of the department (`d:<id>`) or zone (`z:<id>`) a painter's key stands for. */
 export function ownerName(model: Model, key: string): string {
