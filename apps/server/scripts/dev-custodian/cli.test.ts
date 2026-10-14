@@ -1,6 +1,6 @@
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +53,7 @@ describe("dev:custodian init", () => {
       unknown
     >;
     expect(Object.keys(custodian).sort()).toEqual(["custodianId", "fingerprint", "publicKey"]);
+    expect(result.stdout).not.toContain("PRIVATE KEY");
     expect(result.stdout).toBe(
       [
         `WAITRON_FISCAL_CUSTODIAN_FILE=${join(dir, "custodian.json")}`,
@@ -95,6 +96,23 @@ describe("dev:custodian init", () => {
     const result = await run(["init", "--dir", dir], { WAITRON_ENV: "" });
     expect(result.code).toBe(0);
     expect(result.stdout.trimEnd().split("\n")).toHaveLength(3);
+  });
+
+  it("refuses production before reading the subcommand", async () => {
+    const result = await run(["frobnicate"], { WAITRON_ENV: "production" });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("deployment.development_custodian_refused");
+    expect(result.stderr).not.toContain("usage:");
+  });
+
+  it("a relative --dir resolves from the directory pnpm was invoked in", async () => {
+    const result = await run(["init", "--dir", basename(dir)], {
+      ...dev,
+      INIT_CWD: dirname(dir),
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`WAITRON_FISCAL_CUSTODIAN_FILE=${join(dir, "custodian.json")}`);
+    expect(await exists(join(dir, "key.pem"))).toBe(true);
   });
 
   it("unknown subcommand prints usage", async () => {
@@ -204,6 +222,7 @@ describe("dev:custodian sign", () => {
     await initAndStub();
     const result = await sign(wizardBody());
     expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain("PRIVATE KEY");
     const signed = JSON.parse(result.stdout) as Signed;
     const venue = await provision(signed.initialOperations);
     expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
@@ -235,7 +254,7 @@ describe("dev:custodian sign", () => {
     expect(suite.db.all(sql`select * from registro_sif`)).toEqual([]);
   });
 
-  it("the output keeps the rest of the body byte-for-byte", async () => {
+  it("keeps every other field of the body unchanged", async () => {
     await initAndStub();
     const body = wizardBody();
     const { initialOperations, ...rest } = JSON.parse((await sign(body)).stdout) as Signed;
@@ -264,6 +283,19 @@ describe("dev:custodian sign", () => {
     expect(result.stdout).toBe("");
     expect(await exists(join(dir, "confirmation.json"))).toBe(false);
   });
+
+  for (const field of ["seriesCode", "rectificativeSeriesCode"]) {
+    it(`refuses a body whose venue has no ${field}`, async () => {
+      await initAndStub();
+      const body = wizardBody();
+      delete (body.venue as Record<string, unknown>)[field];
+      const result = await sign(body);
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(field);
+      expect(result.stdout).toBe("");
+      expect(await exists(join(dir, "confirmation.json"))).toBe(false);
+    });
+  }
 
   it("refuses production", async () => {
     await initAndStub();

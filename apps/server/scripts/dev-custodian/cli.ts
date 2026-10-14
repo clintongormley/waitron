@@ -23,20 +23,21 @@ const USAGE = [
   "",
 ].join("\n");
 
-function dirOption(args: readonly string[]): string {
+function dirOption(args: readonly string[], env: NodeJS.ProcessEnv): string {
   const { values } = parseArgs({
     args: [...args],
     options: { dir: { type: "string" } },
     strict: true,
   });
   if (values.dir === undefined || values.dir === "") throw new UsageError("--dir is required");
-  return resolve(values.dir);
+  // pnpm runs the script from apps/server; INIT_CWD is where the user typed the command.
+  return resolve(env.INIT_CWD || process.cwd(), values.dir);
 }
 
 class UsageError extends Error {}
 
 async function init(args: readonly string[], io: CliIo): Promise<number> {
-  const dir = await initCustodianDir(dirOption(args), io.env);
+  const dir = await initCustodianDir(dirOption(args, io.env), io.env);
   io.stdout.write(
     [
       `WAITRON_FISCAL_CUSTODIAN_FILE=${dir.custodianFile}`,
@@ -49,7 +50,7 @@ async function init(args: readonly string[], io: CliIo): Promise<number> {
 }
 
 async function sign(args: readonly string[], io: CliIo): Promise<number> {
-  const dir = dirOption(args);
+  const dir = dirOption(args, io.env);
   let text = "";
   for await (const chunk of io.stdin) text += chunk.toString();
   let body: unknown;

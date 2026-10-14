@@ -87,6 +87,12 @@ export async function signSetupBody(
   if (country === undefined) throw new SignError(`unknown country ${String(venue.country)}`);
   const taxId = country.taxIdentifier?.validate(String(venue.taxId));
   if (taxId?.valid === false) throw new SignError(`invalid taxId ${String(venue.taxId)}`);
+  for (const field of ["seriesCode", "rectificativeSeriesCode"] as const) {
+    if (typeof venue[field] !== "string" || venue[field] === "")
+      throw new SignError(`the provision body's venue has no ${field}`);
+  }
+  const seriesCode = venue.seriesCode as string;
+  const rectificativeSeriesCode = venue.rectificativeSeriesCode as string;
   const key = await loadDevelopmentKey(dir);
   if (key === null) throw new SignError(`no key in ${dir}; run dev:custodian init first`);
   const nodeId = randomUUID();
@@ -98,12 +104,12 @@ export async function signSetupBody(
       key,
       taxpayerNif: taxId?.valid === true ? taxId.normalized : String(venue.taxId),
       bases: [
-        { code: String(venue.seriesCode), purpose: "standard" },
+        { code: seriesCode, purpose: "standard" },
         {
           code: typeof venue.fullSeriesCode === "string" ? venue.fullSeriesCode : "FF",
           purpose: "full",
         },
-        { code: String(venue.rectificativeSeriesCode), purpose: "rectificative" },
+        { code: rectificativeSeriesCode, purpose: "rectificative" },
       ],
       nodeId,
       administratorId,
