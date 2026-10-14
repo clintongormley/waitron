@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { nextFloorMoment } from "../state/floor-today.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorAnswer, FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
@@ -306,6 +307,23 @@ describe("till-floor-screen: Rename", () => {
     expect(windowOf(el)).toBeNull();
     expect(floorRefusal(el)).toBe("The floor has changed. Check and try again");
     expect(refreshes.count).toBe(1);
+  });
+
+  it("sends the name with the revision of the read current at Save, not at the window's opening", async () => {
+    const api = stubApi();
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+
+    el.tablesReadAt = nextFloorMoment();
+    el.tables = [
+      table("bar", "Bar", 40, { zoneRevision: 8 }),
+      table("c3", "Counter 3", 10, { zoneRevision: 8 }),
+    ];
+    await el.updateComplete;
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("bar", "Window", 8);
   });
 
   it("sends the waiter's next change with the rename's answer's revision, not the read's", async () => {
