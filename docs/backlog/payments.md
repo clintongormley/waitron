@@ -211,7 +211,6 @@ would be again by any sale written on an order that is not settled. Not re-run s
 decide what the fallback does when the order is not settled (for example, fail and leave the charge
 for reconciliation rather than show a receipt).
 
-
 ## Decisions and deliberate limits
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

@@ -60,7 +60,7 @@ async function behindRollback(operation: () => Promise<unknown>) {
   );
   try {
     await Promise.race([requested.promise, result]);
-    expect(finished, "the reader write must wait behind the unrelated transaction").toBe(false);
+    expect(finished, "the reader is still pending when its queued write is requested").toBe(false);
   } finally {
     release.resolve();
     lock.mockRestore();

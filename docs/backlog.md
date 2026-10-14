@@ -3405,7 +3405,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   is known. Left open by A526.
   [Detail](backlog/payments.md#finalizecaptures-duplicate-fallback-can-show-a-receipt-for-an-order-that-is-not-settled)
 
-
 - **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
   placed order**: once no card payment of the order runs in this process, a collect is accepted
   (`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
