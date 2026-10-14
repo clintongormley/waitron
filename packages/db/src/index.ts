@@ -247,10 +247,12 @@ export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export {
   billPartyTableLabels,
+  billPartyTables,
   orderTableLabels,
   partySurvivors,
   partyTableLabels,
-  tableOwnNames,
+  tableNames,
+  type TableNames,
 } from "./party-table-labels.js";
 export { withTransaction } from "./tenancy.js";
 export { isRefusal, isUniqueViolation } from "./unique-violation.js";

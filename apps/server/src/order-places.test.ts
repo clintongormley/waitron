@@ -48,7 +48,7 @@ async function group(name: string, tableIds: string[]): Promise<void> {
 }
 
 async function placesOf(orderId: string) {
-  const places = await inTx(v, (tx) => readOrderPlaces(tx, v.cfg, [orderId]));
+  const places = await inTx(v, (tx) => readOrderPlaces(tx, [orderId]));
   return places.get(orderId)!;
 }
 
@@ -107,7 +107,7 @@ describe("readOrderPlaces", () => {
     expect(places.tables.map((table) => table.id)).toEqual([t1, t2]);
     expect(places.names).toEqual(["Mesa 31", "Mesa 32"]);
     expect(places.counter).toBe(false);
-    const both = await inTx(v, (tx) => readOrderPlaces(tx, v.cfg, [b.tabId, a.tabId]));
+    const both = await inTx(v, (tx) => readOrderPlaces(tx, [b.tabId, a.tabId]));
     expect(both.get(b.tabId)!.tables).toEqual(both.get(a.tabId)!.tables);
     expect(both.get(a.tabId)!.tables.map((table) => table.id)).toEqual([t1, t2]);
   });
@@ -124,6 +124,23 @@ describe("readOrderPlaces", () => {
     expect(places.tables).toEqual([]);
     expect(places.names).toEqual(["Mesa 51"]);
     expect(places.counter).toBe(false);
+  });
+
+  it("reads the empty bill a finished party abandoned at no table and no place name", async () => {
+    const t1 = await v.table("Mesa 52");
+    const { partyId, tabId } = await seat(v, t1);
+    const sent = await commandFor(v, partyId);
+    await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
+    const bill = await billRow(v, tabId);
+    expect(bill.status).toBe("abandoned");
+    expect(bill.label).toBeNull();
+    expect(await placesOf(tabId)).toEqual({
+      orderNumber: bill.orderNumber,
+      counter: false,
+      tables: [],
+      names: [],
+      partyName: null,
+    });
   });
 
   it("reads a counter order delivered to a table at that table's shown name", async () => {
@@ -162,13 +179,15 @@ describe("readOrderPlaces", () => {
     const t1 = await v.table("Mesa 41");
     const { tabId } = await seat(v, t1);
     const counter = await counterOrder(v, "Burger");
-    const places = await inTx(v, (tx) => readOrderPlaces(tx, v.cfg, [tabId, counter]));
+    const places = await inTx(v, (tx) => readOrderPlaces(tx, [tabId, counter]));
     expect([...places.keys()].sort()).toEqual([tabId, counter].sort());
     expect(places.get(tabId)!.names).toEqual(["Mesa 41"]);
     expect(places.get(counter)!.counter).toBe(true);
+    const unknown = "cccccccc-9999-4000-8000-0000000000c1";
+    expect(await inTx(v, (tx) => readOrderPlaces(tx, [unknown]))).toEqual(new Map());
   });
 
   it("answers an empty map for no orders", async () => {
-    expect(await inTx(v, (tx) => readOrderPlaces(tx, v.cfg, []))).toEqual(new Map());
+    expect(await inTx(v, (tx) => readOrderPlaces(tx, []))).toEqual(new Map());
   });
 });

@@ -61,18 +61,23 @@ export async function partyTableLabels(
   return labels;
 }
 
-/** Each table's own name — today's name, else its saved label — ignoring any group it is in. */
-export async function tableOwnNames(
+/** A table's own name (today's, else its saved label) and its shown name ({@link partyTableLabels}). */
+export interface TableNames {
+  id: string;
+  name: string;
+  shown: string;
+}
+
+/** Each of `tableIds` that exists, by its own name and its shown name, in any location. */
+export async function tableNames(
   tx: Transaction,
   tableIds: readonly string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, TableNames>> {
   if (tableIds.length === 0) return new Map();
-  const rows = await tx
-    .select({ id: diningTables.id, label: diningTables.label, name: floorTodayTables.name })
-    .from(diningTables)
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
-    .where(inArray(diningTables.id, [...tableIds]));
-  return new Map(rows.map((row) => [row.id, row.name ?? row.label]));
+  const rows = await readShownNames(tx, inArray(diningTables.id, [...tableIds]));
+  return new Map(
+    rows.map((row) => [row.id, { id: row.id, name: row.name ?? row.label, shown: shown(row) }]),
+  );
 }
 
 /**
@@ -117,6 +122,46 @@ export async function billPartyTableLabels(
     if (survivor !== undefined) labels.set(id, labels.get(survivor) ?? survivors.get(survivor)!);
   }
   return labels;
+}
+
+/** Each party's active table ids, in the order they joined it, keyed by each party asked about. */
+async function activeTableIds(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const byParty = new Map(partyIds.map((id) => [id, [] as string[]]));
+  if (partyIds.length === 0) return byParty;
+  const rows = await tx
+    .select({ partyId: partyTables.partyId, tableId: partyTables.tableId })
+    .from(partyTables)
+    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
+    .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
+  for (const row of rows) byParty.get(row.partyId)!.push(row.tableId);
+  return byParty;
+}
+
+/**
+ * The tables a party's bill is at, keyed by each party asked about, as {@link billPartyTableLabels}
+ * chooses them — the party's active tables, else those of the party at the end of its merges — each
+ * by {@link tableNames}; empty under the same conditions.
+ */
+export async function billPartyTables(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, TableNames[]>> {
+  const ids = await activeTableIds(tx, partyIds);
+  const seatless = partyIds.filter((id) => ids.get(id)!.length === 0);
+  if (seatless.length > 0) {
+    const survivorOf = await partySurvivors(tx, seatless);
+    const unread = [...new Set(survivorOf.values())].filter((id) => !ids.has(id));
+    const survivors = await activeTableIds(tx, unread);
+    for (const id of seatless) {
+      const survivor = survivorOf.get(id);
+      if (survivor !== undefined) ids.set(id, ids.get(survivor) ?? survivors.get(survivor)!);
+    }
+  }
+  const names = await tableNames(tx, [...new Set([...ids.values()].flat())]);
+  return new Map([...ids].map(([id, tables]) => [id, tables.map((table) => names.get(table)!)]));
 }
 
 /** What {@link orderTableLabels} reads of an order. */
