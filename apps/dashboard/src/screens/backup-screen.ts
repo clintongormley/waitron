@@ -17,13 +17,13 @@ import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
-  ArchiveChoice,
   ArchiveRecoveryPackAnswer,
   BackupApplyBody,
   BackupDestinationStatus,
@@ -45,17 +45,7 @@ import {
   streamLocation,
   type BucketChoice,
   type CustomBucket,
-  type DestinationChoice,
 } from "./backup-destination-model.js";
-
-function choiceDestinations(
-  choice: DestinationChoice,
-  folder: string,
-  custom: CustomBucket,
-): ArchiveChoice[] {
-  const bucket: BucketChoice = choice === "local-fs" ? "none" : choice;
-  return destinationsBody(choice === "local-fs", folder, bucket, custom);
-}
 
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
@@ -63,7 +53,8 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
-  choice: DestinationChoice;
+  folderOn: boolean;
+  bucket: BucketChoice;
   folder: string;
   custom: CustomBucket;
   daysMode: "daily" | "weekdays";
@@ -85,7 +76,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
-    destinations: choiceDestinations(value.choice, value.folder, value.custom),
+    destinations: destinationsBody(value.folderOn, value.folder, value.bucket, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
@@ -332,7 +323,8 @@ export class BackupScreen extends LitElement {
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
-  @state() private choice: DestinationChoice = "local-fs";
+  @state() private folderOn = true;
+  @state() private bucket: BucketChoice = "none";
   @state() private folder = "";
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
@@ -433,7 +425,8 @@ export class BackupScreen extends LitElement {
 
   #fields(): FormFields {
     return {
-      choice: this.choice,
+      folderOn: this.folderOn,
+      bucket: this.bucket,
       folder: this.folder,
       custom: { ...this.custom },
       daysMode: this.daysMode,
@@ -472,7 +465,8 @@ export class BackupScreen extends LitElement {
       }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
-        this.choice = value.choice;
+        this.folderOn = value.folderOn;
+        this.bucket = value.bucket;
         this.folder = value.folder;
         this.custom = { ...value.custom };
         this.daysMode = value.daysMode;
@@ -491,7 +485,8 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
-        "choice",
+        "folderOn",
+        "bucket",
         "folder",
         "custom",
         "daysMode",
@@ -652,7 +647,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #folderMissing(): boolean {
-    return this.choice === "local-fs" && this.folder.trim() === "";
+    return this.folderOn && this.folder.trim() === "";
   }
 
   get #secretRequired(): boolean {
@@ -665,17 +660,24 @@ export class BackupScreen extends LitElement {
 
   #customMissing(f: CustomFieldRow): boolean {
     return (
-      this.choice === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
+      this.bucket === "custom-s3" && this.#customRequired(f) && this.custom[f.field].trim() === ""
     );
   }
 
   get #streamGone(): boolean {
-    return this.choice === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+    return this.bucket === "stream-bucket" && (this.stream?.bucket ?? null) === null;
+  }
+
+  get #nothingChosen(): boolean {
+    return !this.folderOn && this.bucket === "none";
   }
 
   get #destinationMissing(): boolean {
     return (
-      this.#folderMissing || this.#streamGone || CUSTOM_FIELDS.some((f) => this.#customMissing(f))
+      this.#nothingChosen ||
+      this.#folderMissing ||
+      this.#streamGone ||
+      CUSTOM_FIELDS.some((f) => this.#customMissing(f))
     );
   }
 
@@ -784,7 +786,7 @@ export class BackupScreen extends LitElement {
 
   #applyBody(recoveryKey?: string): BackupApplyBody {
     return {
-      destinations: choiceDestinations(this.choice, this.folder, this.custom),
+      destinations: destinationsBody(this.folderOn, this.folder, this.bucket, this.custom),
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -1122,7 +1124,8 @@ export class BackupScreen extends LitElement {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     this.secretDemanded = false;
     const f = this.#fieldsFrom(s);
-    this.choice = f.choice;
+    this.folderOn = f.folderOn;
+    this.bucket = f.bucket;
     this.folder = f.folder;
     this.custom = f.custom;
     this.daysMode = f.daysMode;
@@ -1139,7 +1142,8 @@ export class BackupScreen extends LitElement {
     const opened = openingDestinations(s, this.stream?.bucket ?? null);
     const fields: FormFields = {
       ...this.#fields(),
-      choice: opened.folderOn || opened.bucket === "none" ? "local-fs" : opened.bucket,
+      folderOn: opened.folderOn,
+      bucket: opened.bucket,
       folder: opened.folder,
       custom: opened.custom,
     };
@@ -1526,47 +1530,24 @@ export class BackupScreen extends LitElement {
     const streamMarked = this.attempted && this.#streamGone;
     const folderMessage = this.folderRefused
       ? t("backup.destination.folder_refused")
-      : this.#destinationHeld
+      : this.attempted && this.#folderMissing
         ? t("backup.destination.folder_required")
         : "";
     return html`
       <h2>${t("backup.destination.title")}</h2>
-      <wt-combobox
-        data-test="archive-destination"
-        name="archive-destination"
-        search="never"
-        label=${t("backup.destination.choice")}
-        .options=${[
-          { value: "local-fs", label: t("backup.destination.choice_local") },
-          {
-            value: "stream-bucket",
-            label: t("backup.destination.choice_stream"),
-            disabled: bucket === null,
-            ...(unavailable === null ? {} : { description: unavailable }),
-          },
-          { value: "custom-s3", label: t("backup.destination.choice_custom") },
-        ]}
-        .value=${this.choice}
-        .error=${streamMarked ? (unavailable ?? t("backup.destination.stream_unavailable")) : ""}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+      <wt-switch
+        data-test="archive-folder-on"
+        name="archive-folder"
+        label=${t("backup.destination.choice_local")}
+        .checked=${this.folderOn}
+        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
           e.stopPropagation();
-          this.choice = e.detail.value as DestinationChoice;
+          this.folderOn = e.detail.checked;
           this.folderRefused = false;
-          this.customRefused = null;
         }}
-      ></wt-combobox>
+      ></wt-switch>
       ${
-        unavailable === null || this.choice !== "stream-bucket" || streamMarked
-          ? nothing
-          : html`<p
-              class="hint"
-              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
-            >
-              ${unavailable}
-            </p>`
-      }
-      ${
-        this.choice === "local-fs"
+        this.folderOn
           ? html`<wt-input
               data-test="destination"
               name="backup-folder"
@@ -1578,9 +1559,54 @@ export class BackupScreen extends LitElement {
               @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
               @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
             ></wt-input>`
-          : this.choice === "stream-bucket"
-            ? this.#renderStreamChoice(bucket)
-            : this.#renderCustomChoice()
+          : nothing
+      }
+      <wt-combobox
+        data-test="archive-destination"
+        name="archive-destination"
+        search="never"
+        label=${t("backup.destination.bucket")}
+        .options=${[
+          { value: "none", label: t("backup.destination.bucket_none") },
+          {
+            value: "stream-bucket",
+            label: t("backup.destination.choice_stream"),
+            disabled: bucket === null,
+            ...(unavailable === null ? {} : { description: unavailable }),
+          },
+          { value: "custom-s3", label: t("backup.destination.choice_custom") },
+        ]}
+        .value=${this.bucket}
+        .error=${
+          streamMarked
+            ? (unavailable ?? t("backup.destination.stream_unavailable"))
+            : this.attempted && this.#nothingChosen
+              ? t("backup.destination.nothing_chosen")
+              : ""
+        }
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.bucket = e.detail.value as BucketChoice;
+          this.folderRefused = false;
+          this.customRefused = null;
+        }}
+      ></wt-combobox>
+      ${
+        unavailable === null || this.bucket !== "stream-bucket" || streamMarked
+          ? nothing
+          : html`<p
+              class="hint"
+              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
+            >
+              ${unavailable}
+            </p>`
+      }
+      ${
+        this.bucket === "stream-bucket"
+          ? this.#renderStreamChoice(bucket)
+          : this.bucket === "custom-s3"
+            ? this.#renderCustomChoice()
+            : nothing
       }
     `;
   }

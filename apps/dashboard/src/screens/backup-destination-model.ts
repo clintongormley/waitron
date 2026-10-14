@@ -5,7 +5,6 @@ import type {
   StreamSettingsView,
 } from "../api/client.js";
 
-export type DestinationChoice = "local-fs" | "stream-bucket" | "custom-s3";
 export type BucketChoice = "none" | "stream-bucket" | "custom-s3";
 
 type StreamBucket = NonNullable<StreamSettingsView["bucket"]>;

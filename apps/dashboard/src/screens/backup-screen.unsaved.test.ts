@@ -194,7 +194,7 @@ it("a changed destination choice warns, and Discard restores the opening choice"
   await choose(app, "discard");
   expect(await discarded).toBe("proceeded");
   await screen.updateComplete;
-  expect(field(screen, "archive-destination").value).toBe("local-fs");
+  expect(field(screen, "archive-destination").value).toBe("none");
   expect(field(screen, "destination")).not.toBeNull();
   expect(unload()).toBe(false);
 });
@@ -237,7 +237,7 @@ it("a secret typed before the form's draft is taken again is not restored by Dis
   });
   await change(screen, "archive-destination", "custom-s3");
   await change(screen, "archive-bucket-secret-access-key", "SECRET-1");
-  await change(screen, "archive-destination", "local-fs");
+  await change(screen, "archive-destination", "none");
   status = { ...off, isPrimary: false };
   api.liveData.invalidate([{ type: "backup_status" }]);
   await expect

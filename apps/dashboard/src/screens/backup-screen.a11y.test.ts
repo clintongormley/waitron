@@ -115,6 +115,15 @@ function change(el: BackupScreen, sel: string, value: string): void {
   );
 }
 
+async function setFolder(el: BackupScreen, on: boolean): Promise<void> {
+  const folder = q(el, "[data-test=archive-folder-on]") as HTMLElementTagNameMap["wt-switch"];
+  folder.checked = on;
+  folder.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: on }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
 function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getBackupStatus: vi.fn().mockResolvedValue(status),
@@ -178,6 +187,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     const api = stubApi({ ...OFF, recoveryKeySet: true }, { getStreamSettings });
     const { el, host } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api }, theme);
     await flush(el);
+    await setFolder(el, false);
     await chooseOption(q(el, "[data-test=archive-destination]")!, "stream-bucket");
     getStreamSettings.mockResolvedValue({
       isPrimary: true,
@@ -246,6 +256,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
       theme,
     );
     await flush(el);
+    await setFolder(el, false);
     await chooseOption(q(el, "[data-test=archive-destination]")!, "custom-s3");
     await el.updateComplete;
     for (const [name, value] of [
@@ -564,6 +575,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
       theme,
     );
     await flush(el);
+    await setFolder(el, false);
     await chooseOption(q(el, "[data-test=archive-destination]")!, "custom-s3");
     await el.updateComplete;
     for (const [name, value] of [
@@ -580,7 +592,8 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await vi.waitFor(() =>
       expect(actions().error).toContain(codeMessage("backup.archive_test_failed")),
     );
-    await chooseOption(q(el, "[data-test=archive-destination]")!, "local-fs");
+    await setFolder(el, true);
+    await chooseOption(q(el, "[data-test=archive-destination]")!, "none");
     await el.updateComplete;
     const folder = q(el, "[data-test=destination]") as HTMLElementTagNameMap["wt-input"];
     expect(folder.error).toBe(t("backup.destination.folder_required"));
