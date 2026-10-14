@@ -3968,6 +3968,30 @@ describe("till-table-order-screen", () => {
       expect(moved).toEqual([{ toTableId: "t5", bills: "merge" }]);
     });
 
+    it("Join a table offers only tables in the party's service zone; Move guests still offers every zone", async () => {
+      const { party, tables } = partyTables();
+      const terrace = new Set(["t7", "t9"]);
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        party,
+        tables: tables.map((table) => ({
+          ...table,
+          zoneId: terrace.has(table.id) ? "zone-terrace" : "zone-dining",
+        })),
+      });
+      await toMenu(el);
+      click(el, '[data-action="join"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t6"]);
+
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
+    });
+
     it.each([
       ["Join a table", "join"],
       ["Move guests", "move"],

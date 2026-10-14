@@ -4321,15 +4321,27 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Every table but the party's own; Move guests also offers the party's own tables while it holds
-   * more than one, since moving to one of them leaves the others. */
+   * more than one, since moving to one of them leaves the others. Join a table offers only the
+   * party's zone, as `joinTables` refuses any other while the party's zone is known. */
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
+    const zoneId = this.actionVerb === "join" ? this.#partyZoneId() : null;
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
+      .filter((table) => zoneId === null || table.zoneId === zoneId)
       .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];
+  }
+
+  /** The zone of the first of the party's tables this screen knows with one; null when none. */
+  #partyZoneId(): string | null {
+    for (const id of this.party?.tableIds ?? []) {
+      const zoneId = this.tables.find((table) => table.id === id)?.zoneId;
+      if (zoneId != null) return zoneId;
+    }
+    return null;
   }
 
   /** The party's other open bills holding no payment, a pending one included, which merge and
