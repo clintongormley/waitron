@@ -1971,6 +1971,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
+  that drag** — left open by A642. The drag's override sheet is added to the document and to every
+  open shadow root present when the drag starts; in a shadow root attached mid-drag, an
+  element with a cursor rule of its own keeps it unless that rule reads `--reorder-drag-cursor`.
+  **Next action:** decide whether it matters; if so, have `holdPageCursor`
+  (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
+  [Decision](backlog/till.md#decisions-and-deliberate-limits)
+
 - **A669 — an allergy at the table (owner, 2026-10-14; spec written, awaiting the owner's
   review).** At a table's first Send the waiter answers "Any allergies at this table?"; for
   Allergies, who (free text), what they avoid and a note, then ticks the dishes that guest eats. A

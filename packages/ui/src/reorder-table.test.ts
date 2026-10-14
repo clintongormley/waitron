@@ -12,6 +12,7 @@ import {
 } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
 import { baseStyles } from "./base-styles.js";
+import "./components/wt-button.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -685,6 +686,78 @@ it("holds the cursor it is given on the page body and a row's handle, and puts t
   } finally {
     document.body.style.cursor = "";
   }
+});
+
+async function mountCursorOwners(): Promise<{ link: HTMLElement; inner: HTMLElement }> {
+  const wrap = await mountHtml(`<div><a href="#">Link</a><wt-button>Button</wt-button></div>`);
+  const button = wrap.querySelector("wt-button") as LitElement;
+  await button.updateComplete;
+  return {
+    link: wrap.querySelector("a")!,
+    inner: button.shadowRoot!.querySelector<HTMLElement>("[part=button]")!,
+  };
+}
+
+it("holds the cursor over a link and a shadow-root button present when the hold begins, and gives each its own back", async () => {
+  const { link, inner } = await mountCursorOwners();
+  expect(getComputedStyle(link).cursor).toBe("pointer");
+  expect(getComputedStyle(inner).cursor).toBe("pointer");
+  holdPageCursor("ns-resize");
+  try {
+    expect(getComputedStyle(link).cursor).toBe("ns-resize");
+    expect(getComputedStyle(inner).cursor).toBe("ns-resize");
+  } finally {
+    releasePageCursor();
+  }
+  expect(getComputedStyle(link).cursor).toBe("pointer");
+  expect(getComputedStyle(inner).cursor).toBe("pointer");
+});
+
+it("keeps the first hold's cursor on a link and a shadow-root button until the last hold is released", async () => {
+  const { link, inner } = await mountCursorOwners();
+  holdPageCursor("ns-resize");
+  holdPageCursor("grabbing");
+  releasePageCursor();
+  try {
+    expect(getComputedStyle(link).cursor).toBe("ns-resize");
+    expect(getComputedStyle(inner).cursor).toBe("ns-resize");
+  } finally {
+    releasePageCursor();
+  }
+  expect(getComputedStyle(link).cursor).toBe("pointer");
+  expect(getComputedStyle(inner).cursor).toBe("pointer");
+});
+
+it("shows the held cursor on a row handle in a table mounted after the hold began", async () => {
+  holdPageCursor("ns-resize");
+  try {
+    const el = await mount();
+    expect(getComputedStyle(handle(el, "a")).cursor).toBe("ns-resize");
+  } finally {
+    releasePageCursor();
+  }
+});
+
+it("leaves the page's other adopted style sheets in place", async () => {
+  const { inner } = await mountCursorOwners();
+  const root = inner.getRootNode() as ShadowRoot;
+  const before = [...root.adoptedStyleSheets];
+  const docBefore = [...document.adoptedStyleSheets];
+  holdPageCursor("ns-resize");
+  releasePageCursor();
+  expect(root.adoptedStyleSheets).toEqual(before);
+  expect(document.adoptedStyleSheets).toEqual(docBefore);
+});
+
+it("gives every element its own cursor back when the system cancels a row drag", async () => {
+  const el = await mount();
+  const { link, inner } = await mountCursorOwners();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(getComputedStyle(link).cursor).toBe("grabbing");
+  expect(getComputedStyle(inner).cursor).toBe("grabbing");
+  pointer(document, "pointercancel", 1);
+  expect(getComputedStyle(link).cursor).toBe("pointer");
+  expect(getComputedStyle(inner).cursor).toBe("pointer");
 });
 
 it("paints the dragged row lifted, from tokens", async () => {

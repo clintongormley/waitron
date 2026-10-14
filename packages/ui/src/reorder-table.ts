@@ -12,27 +12,54 @@ import "./components/wt-icon.js";
 
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
 
-/** Set on the body, to the held cursor, while any drag holds the page's cursor. The body's own
- * `cursor` loses to any element with a cursor rule of its own, such as the handle; a custom property
- * inherits into every shadow root, so a rule that reads it follows the drag. */
+/** Set on the body, to the held cursor, while any drag holds the page's cursor. It inherits into a
+ * shadow root attached mid-drag, which the overriding sheet below does not reach. */
 const DRAG_CURSOR = "--reorder-drag-cursor";
 
 /** Shared by every drag that holds the page's cursor, so overlapping holds (two tables, two fingers)
  * hand the page's own cursor back only when the last one ends; the first hold's cursor stays until
- * then. */
-const pageDrag = { count: 0, cursor: "" };
+ * then. A document's rules do not reach into a shadow root, so the overriding sheet is adopted by
+ * the document and by every open shadow root present when the first hold starts; one attached
+ * later is not covered, and an element's own `!important` cursor rule can still win. */
+const pageDrag = {
+  count: 0,
+  cursor: "",
+  sheet: null as CSSStyleSheet | null,
+  roots: [] as (Document | ShadowRoot)[],
+};
+
+function openRoots(): (Document | ShadowRoot)[] {
+  const roots: (Document | ShadowRoot)[] = [document];
+  for (let i = 0; i < roots.length; i++) {
+    for (const element of roots[i]!.querySelectorAll("*")) {
+      if (element.shadowRoot) roots.push(element.shadowRoot);
+    }
+  }
+  return roots;
+}
 
 export function holdPageCursor(cursor = "grabbing"): void {
   if (pageDrag.count++ > 0) return;
   pageDrag.cursor = document.body.style.cursor;
   document.body.style.cursor = cursor;
   document.body.style.setProperty(DRAG_CURSOR, cursor);
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`*, *::before, *::after { cursor: ${cursor} !important; }`);
+  pageDrag.sheet = sheet;
+  pageDrag.roots = openRoots();
+  for (const root of pageDrag.roots) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
 }
 
 export function releasePageCursor(): void {
   if (--pageDrag.count > 0) return;
   document.body.style.cursor = pageDrag.cursor;
   document.body.style.removeProperty(DRAG_CURSOR);
+  const sheet = pageDrag.sheet;
+  for (const root of pageDrag.roots) {
+    root.adoptedStyleSheets = root.adoptedStyleSheets.filter((adopted) => adopted !== sheet);
+  }
+  pageDrag.sheet = null;
+  pageDrag.roots = [];
 }
 
 /** Touch pointer capture keeps event targets at the press site; find the painted target instead. */
