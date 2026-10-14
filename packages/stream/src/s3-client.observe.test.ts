@@ -114,6 +114,27 @@ describe("observing a bucket client's commands", () => {
     ).rejects.toBe(refusal);
   });
 
+  it("destroys a streamed answer's body when the observer throws", async () => {
+    const refusal = new Error("field refused");
+    const body = new Readable({ read() {} });
+    body.push("partial");
+    const handler = {
+      async handle() {
+        return { response: { statusCode: 200, headers: { etag: '"v1"' }, body } };
+      },
+    };
+    const client = createBucketClient(CONFIG, {
+      requestHandler: handler,
+      observe: () => {
+        throw refusal;
+      },
+    });
+    await expect(
+      client.send(new GetObjectCommand({ Bucket: "owner-bucket", Key: "a" })),
+    ).rejects.toBe(refusal);
+    expect(body.destroyed).toBe(true);
+  });
+
   it("adds nothing to the client when no observer is given", () => {
     const plain = createBucketClient(CONFIG, { requestHandler: network([]).handler });
     const watched = observed([]).client;

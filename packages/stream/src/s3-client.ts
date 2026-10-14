@@ -85,13 +85,29 @@ export function createBucketClient(
           observe({ command, input, error, elapsedMs: performance.now() - started });
           throw error;
         }
-        observe({ command, input, output: result.output, elapsedMs: performance.now() - started });
+        try {
+          observe({
+            command,
+            input,
+            output: result.output,
+            elapsedMs: performance.now() - started,
+          });
+        } catch (error) {
+          // The caller gets a rejection, never the output, so nothing else will close its body.
+          destroyBody(result.output);
+          throw error;
+        }
         return result;
       },
       { step: "initialize", name: "observeCommand" },
     );
   }
   return client;
+}
+
+function destroyBody(output: unknown): void {
+  const body = (output as { Body?: { destroy?: unknown } }).Body;
+  if (typeof body?.destroy === "function") (body as { destroy: () => void }).destroy();
 }
 
 export function statusOf(error: unknown): number | null {
