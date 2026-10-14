@@ -12,7 +12,7 @@ import {
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { PARTY_NAME_MAX } from "@waitron/shared";
+import { PARTY_NAME_MAX, TABLE_SEPARATOR } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
 export interface PartyNameDetail {
@@ -20,10 +20,12 @@ export interface PartyNameDetail {
   name: string | null;
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 /**
  * Chromium draws a text field's `text-overflow: ellipsis` only while the field does not have the
  * cursor, and this window opens with the cursor in it, so the placeholder is shortened as text.
- * Whole names of a ", "-separated list are kept where one fits; otherwise the first is cut.
+ * Whole names of the list are kept where one fits; otherwise the first is cut between characters.
  */
 export function fitPlaceholder(
   text: string,
@@ -31,13 +33,14 @@ export function fitPlaceholder(
   measure: (text: string) => number,
 ): string {
   if (measure(text) <= width) return text;
-  const names = text.split(", ");
+  const names = text.split(TABLE_SEPARATOR);
   for (let count = names.length - 1; count > 0; count--) {
-    const shortened = `${names.slice(0, count).join(", ")}, …`;
+    const shortened = `${names.slice(0, count).join(TABLE_SEPARATOR)}${TABLE_SEPARATOR}…`;
     if (measure(shortened) <= width) return shortened;
   }
-  for (let length = names[0]!.length; length > 0; length--) {
-    const shortened = `${names[0]!.slice(0, length).trimEnd()}…`;
+  const characters = Array.from(graphemes.segment(names[0]!), ({ segment }) => segment);
+  for (let length = characters.length; length > 0; length--) {
+    const shortened = `${characters.slice(0, length).join("").trimEnd()}…`;
     if (measure(shortened) <= width) return shortened;
   }
   return "…";
@@ -66,10 +69,15 @@ export class TillPartyNameDialog extends LitElement {
 
   @state() private attempted = false;
   /** The name field's text box, in pixels; infinite until the field is first measured. */
-  @state() private textBox = Number.POSITIVE_INFINITY;
+  #textBox = Number.POSITIVE_INFINITY;
   #placeholder = "";
   #resize?: ResizeObserver;
   readonly #measure = document.createElement("canvas").getContext("2d")!;
+  /** A font that arrives late changes the text's width but not the field's, so no resize says so. */
+  readonly #fontsLoaded = () => {
+    const field = this.renderRoot.querySelector<HTMLElement>("wt-input");
+    if (field) this.#measureField(field);
+  };
 
   @state() private active = true;
   #scope?: DraftScope<string>;
@@ -80,16 +88,12 @@ export class TillPartyNameDialog extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    document.fonts.addEventListener("loadingdone", this.#fontsLoaded);
     this.requestUpdate();
   }
 
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("tables") || changed.has("textBox"))
-      this.#placeholder = fitPlaceholder(
-        this.tables,
-        this.textBox,
-        (text) => this.#measure.measureText(text).width,
-      );
+    if (changed.has("tables")) this.#fit();
     if (!this.isConnected || !this.active || this.#scope) return;
     this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
@@ -114,12 +118,27 @@ export class TillPartyNameDialog extends LitElement {
   #measureField(field: HTMLElement): void {
     const input = field.shadowRoot!.querySelector("input")!;
     const control = getComputedStyle(input);
-    this.#measure.font = getComputedStyle(input, "::placeholder").font;
-    this.textBox =
-      input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight);
+    const placeholder = getComputedStyle(input, "::placeholder");
+    this.#measure.font = placeholder.font;
+    this.#measure.letterSpacing = placeholder.letterSpacing;
+    // A pixel to spare, as `clientWidth` is rounded to a whole pixel.
+    this.#textBox =
+      input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight) - 1;
+    const shown = this.#placeholder;
+    this.#fit();
+    if (this.#placeholder !== shown) this.requestUpdate();
+  }
+
+  #fit(): void {
+    this.#placeholder = fitPlaceholder(
+      this.tables,
+      this.#textBox,
+      (text) => this.#measure.measureText(text).width,
+    );
   }
 
   override disconnectedCallback(): void {
+    document.fonts.removeEventListener("loadingdone", this.#fontsLoaded);
     this.#resize?.disconnect();
     this.#resize = undefined;
     this.#scope?.dispose();
