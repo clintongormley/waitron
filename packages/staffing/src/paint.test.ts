@@ -181,14 +181,23 @@ describe("season staffing", () => {
     expect(
       (await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId))).areas[0]!.weekdays[2],
     ).toEqual([block(v.cook, { headcount: 3 })]);
+    const days = () =>
+      inTx((tx) =>
+        tx.select().from(staffingDays).where(eq(staffingDays.departmentId, v.departmentId)),
+      );
+    const [painted] = await days();
+    expect(
+      await inTx((tx) =>
+        tx.select().from(staffingBlocks).where(eq(staffingBlocks.dayId, painted!.id)),
+      ),
+    ).toHaveLength(1);
     await save([]);
-    const days = await inTx((tx) =>
-      tx.select().from(staffingDays).where(eq(staffingDays.departmentId, v.departmentId)),
-    );
-    expect(days).toEqual([]);
-    expect(await inTx((tx) => tx.select().from(staffingBlocks))).not.toContainEqual(
-      expect.objectContaining({ staffRoleId: v.cook, headcount: 3 }),
-    );
+    expect(await days()).toEqual([]);
+    expect(
+      await inTx((tx) =>
+        tx.select().from(staffingBlocks).where(eq(staffingBlocks.dayId, painted!.id)),
+      ),
+    ).toEqual([]);
   });
 
   it("refuses a season at another location, a staff role from another location and an unknown area", async () => {
@@ -412,6 +421,28 @@ describe("resolveStaffing", () => {
       [`station:${v.stationId}`]: saturday,
     });
     expect(plain("2026-08-17")).toEqual({});
+  });
+
+  it("carries a yearly special day's paint to its later years", async () => {
+    const v = await venue();
+    const fiesta = [block(v.waiter, { headcount: 4 })];
+    await inTx(async (tx) => {
+      await tx
+        .update(specialDays)
+        .set({ repeatsYearly: true })
+        .where(eq(specialDays.id, v.specialDayId));
+      await saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+        { area: dept(v), weekday: 0, blocks: [block(v.cook)] },
+      ]);
+      await saveSpecialDayStaffing(tx, v.cfg, v.specialDayId, [
+        { area: dept(v), dateId: v.aug15, blocks: fiesta },
+      ]);
+    });
+    // 2027-08-15 is a Sunday: without the special day it would take the season's Sunday.
+    const resolved = await inTx((tx) => resolveStaffing(tx, v.cfg, ["2027-08-15"]));
+    expect(Object.fromEntries(resolved.get("2027-08-15")!)).toEqual({
+      [`department:${v.departmentId}`]: fiesta,
+    });
   });
 
   it("returns empty days when there are no days or no season", async () => {

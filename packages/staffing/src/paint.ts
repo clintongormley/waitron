@@ -24,18 +24,18 @@ export interface StaffingArea {
 export interface SeasonStaffingEdit {
   area: AreaRef;
   weekday: number;
+  /** Times as `HH:MM`, as `parseBlocks` returns them. */
   blocks: readonly StaffingBlock[];
 }
 export interface SpecialDayStaffingEdit {
   area: AreaRef;
   dateId: string;
-  /** null: the date follows the season. */
+  /** Times as `HH:MM`, as `parseBlocks` returns them; null: the date follows the season. */
   blocks: readonly StaffingBlock[] | null;
 }
 
 const venueScope = (cfg: Cfg) => ({ locationId: locationId(cfg.locationId) });
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-// Edits carry `HH:MM` only: parseBlocks refuses any other spelling.
 const storedTime = (value: string) => `${value}:00`;
 const wireTime = (value: string) => value.slice(0, 5);
 const seasonDayKey = (seasonId: string, weekday: number) => `season:${seasonId}:${weekday}`;

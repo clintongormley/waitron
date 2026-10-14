@@ -37,7 +37,7 @@ function parseBlock(value: unknown, field: string, cutover: string): StaffingBlo
     throw invalid(`${field}.headcount`);
   const startsAt = stepTime(raw.startsAt, `${field}.startsAt`);
   const endsAt = stepTime(raw.endsAt, `${field}.endsAt`);
-  // A block may run past midnight but must end by the next changeover, inside its business day.
+  // A block stays inside its business day.
   const span = blockSpan({ startsAt, endsAt }, cutover);
   if (startsAt === endsAt || span.end <= span.start) throw invalid(`${field}.endsAt`);
   return { staffRoleId, headcount, startsAt, endsAt };
