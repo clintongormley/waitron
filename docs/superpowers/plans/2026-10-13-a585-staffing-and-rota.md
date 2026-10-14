@@ -622,6 +622,14 @@ it("reorders by the given ids and refuses a list that is not exactly the venue's
 
 ## Part A585-2 — staffing paint storage and the slot library
 
+> **Built 2026-10-14 on `feat/a585-2-staffing-paint`, with five things later parts should know.**
+> `placeShift` measures `start` from its business day's own changeover, so when the changeover
+> moves later between two days a shift can start past minute 1440 (`slotsForDay` still ends every
+> slot by 1440). `resolveStaffing` answers an area whose special-day row is empty with `[]`, not by
+> leaving it out. `parseArea`/`parseBlocks` lower-case ids; `paint-rules.ts` also exports `record`
+> and `uuid`. `listStaffingAreas` is exported for `GET /areas`. Staffing depends on
+> `@waitron/reporting` for `readLocationClock`.
+
 Branch `feat/a585-2-staffing-paint`. Waits for A585-1.
 
 ### Task 2.1: venue-service exports what staffing reads
