@@ -1,12 +1,14 @@
 # A650 — MOVED slips say which order moved, from where, to where (build plan)
 
-Status: build plan, written 2026-10-14 after the owner's rulings (§0). Nothing is built yet. The
-build is four pull requests (§7); three small questions (§8) each carry the default the build
-proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
+Status: build plan, written 2026-10-14 after the owner's rulings (§0). The build is four pull
+requests (§7); three small questions (§8) each carry the default the build proceeds on. Drawings: [`docs/backlog/mockups/a650-moved-slips/`](../../backlog/mockups/a650-moved-slips/)
 — pictures 1 to 4 are the design as it stood before the rulings, pictures 5 to 7 are this plan.
 
-2026-10-14: Part 1 landed in #1706, and Part 2 adds `ticket_items.sent_order_number` (migration
-`0153_sent_order_number.sql`); §5's account of what is stored describes the code before Part 2.
+2026-10-14: Part 1 landed in #1706, and Part 2 in #1714, which adds
+`ticket_items.sent_order_number` (migration `0153_sent_order_number.sql`); §5's account of what is
+stored describes the code before Part 2. Part 3 adds `service_settings.print_moved_slips`
+(venue-service migration `0052_mute_groot.sql`) and ships the venue switch's hint without its last
+sentence (§6).
 
 The file keeps its old name (`…-design.md`) so the links to it from the backlog stay good.
 
@@ -394,7 +396,7 @@ Drawing: picture 7.
   `apps/server/src/order-groups.ts:1312`); the dashboard reads it in the settings view and saves it
   through a route beside `printHeldWork`'s (the settings view at
   `packages/venue-service/src/routes.ts:703-708` and the save at `:760-768`).
-- **Dashboard placement**: Settings → Kitchen tab, the "Changes after sending" section
+- **Dashboard placement**: Venue settings → Kitchen tab, the "Changes after sending" section
   (`#kitchen`, `packages/venue-service/src/dashboard/service-settings-panel.ts:138-164`, mounted as
   the `venue-service-kitchen` settings panel, `packages/venue-service/src/dashboard/index.ts:92-108`),
   a switch after "Print held groups in advance" and before "Reminder to fire the next group".

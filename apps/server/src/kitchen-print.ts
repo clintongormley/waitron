@@ -1089,9 +1089,9 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
 /**
  * Tell the kitchen of sent work that moved; nothing when `before` is null. When the kitchen is to
  * be told ({@link kitchenToBeTold}), each of `before`'s items on paper now on `toOrderId` gets a
- * `moved` notice, at the quantity its ticket asks for, and each station with an active printer gets
- * one MOVED slip listing those items. `splitFrom` maps a ticket item a split made to the one it
- * copied.
+ * `moved` notice, at the quantity its ticket asks for, and, unless the venue has turned MOVED slips
+ * off, each station with an active printer gets one MOVED slip listing those items. `splitFrom` maps
+ * a ticket item a split made to the one it copied.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
