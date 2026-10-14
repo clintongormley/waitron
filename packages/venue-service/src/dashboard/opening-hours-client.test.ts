@@ -33,11 +33,9 @@ describe("OpeningHoursApi", () => {
     };
     expect(await api.createPeriod("d/1", input, 0)).toEqual({ id: "p1" });
     expect(await api.updatePeriod("p/1", input, 0)).toBeUndefined();
-    await api.deletePeriodIfUnused("p/1");
     expect(request.mock.calls).toEqual([
       [`${base}/departments/d%2F1/menu-periods`, "POST", { ...input, expectedClockRevision: 0 }],
       [`${base}/menu-periods/p%2F1`, "PATCH", { ...input, expectedClockRevision: 0 }],
-      [`${base}/menu-periods/p%2F1`, "DELETE"],
     ]);
   });
 

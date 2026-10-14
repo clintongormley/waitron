@@ -218,9 +218,6 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
-  deletePeriodIfUnused(periodId: string): Promise<void> {
-    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "DELETE");
-  }
   readPeriodDeleteImpact(periodId: string): Promise<PeriodDeleteImpact> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}/delete-impact`, "GET");
   }

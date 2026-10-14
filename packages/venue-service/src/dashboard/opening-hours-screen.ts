@@ -1,22 +1,17 @@
 import { LitElement, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
-import { codeOf } from "@waitron/dashboard-kit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   leaveCoordinatorFor,
   UrlStateController,
   navigationGuardFor,
-  type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "./period-editor.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-all.js";
@@ -31,30 +26,20 @@ import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
-import type { PeriodEditor } from "./period-editor.js";
-import type {
-  MenuPeriodInput,
-  MenuPeriodUse,
-  OpeningHoursModel,
-  PeriodRoutingUse,
-} from "../menu-timetable-types.js";
+import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./business-date.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
-import { browserToday, format, formatDate } from "./hours-view.js";
+import { browserToday, format } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
-type Department = OpeningHoursModel["departments"][number];
-type Period = Department["periods"][number];
-type View = "year" | "month" | "week" | "periods";
-type Editor = { department: Department; period?: Period; clockRevision: number };
+type View = "year" | "month" | "week";
 /** The Year panel's Delete of a special day, asked in the screen's own confirmation. */
 type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   clockRevision: number;
   detail?: SpecialDayDetail;
 };
-type Deletion = { period: Period };
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
@@ -94,18 +79,6 @@ export class OpeningHoursScreen extends LitElement {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
-      .toolbar {
-        display: flex;
-        justify-content: flex-end;
-        margin-block-end: var(--wt-space-3);
-      }
-      wt-data-table::part(period-colour) {
-        display: inline-block;
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        margin-inline-end: var(--wt-space-2);
-        border-radius: var(--wt-radius-sm);
-      }
     `,
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
@@ -137,9 +110,6 @@ export class OpeningHoursScreen extends LitElement {
   private watchedMonth = "";
   @state() private ordinary?: OrdinaryDateOpen;
   @state() private readError = "";
-  @state() private editor?: Editor;
-  @state() private deleting?: Deletion;
-  @state() private deleteError = "";
   @state() private busy = false;
   @state() private namedAction?: OpenSpecialDay;
   @state() private namedDeleteError = "";
@@ -218,7 +188,7 @@ export class OpeningHoursScreen extends LitElement {
       return;
     }
     const shown: View =
-      view === "year" || view === "month" || view === "periods" || view === "week"
+      view === "year" || view === "month" || view === "week"
         ? view
         : view === "calendar"
           ? "year"
@@ -314,30 +284,28 @@ export class OpeningHoursScreen extends LitElement {
   }
   private pickerOptions() {
     const departments = this.model?.departments.filter((department) => department.active) ?? [];
-    return this.view === "week"
-      ? [
-          { value: "all", label: t("opening.all_departments") },
-          ...departments.flatMap((department) => [
-            { value: department.id, label: department.name },
-            ...(department.zones ?? []).map((zone) => ({
-              value: `zone:${zone.id}`,
-              label: `${department.name} › ${zone.name}`,
-            })),
-          ]),
-          ...this.stations
-            .filter((station) => station.active)
-            .map((station) => ({
-              value: `station:${station.id}`,
-              label: station.name,
-              group: t("nav.prep_stations"),
-            })),
-        ]
-      : departments.map((department) => ({ value: department.id, label: department.name }));
+    return [
+      { value: "all", label: t("opening.all_departments") },
+      ...departments.flatMap((department) => [
+        { value: department.id, label: department.name },
+        ...(department.zones ?? []).map((zone) => ({
+          value: `zone:${zone.id}`,
+          label: `${department.name} › ${zone.name}`,
+        })),
+      ]),
+      ...this.stations
+        .filter((station) => station.active)
+        .map((station) => ({
+          value: `station:${station.id}`,
+          label: station.name,
+          group: t("nav.prep_stations"),
+        })),
+    ];
   }
   private pickerValue() {
-    if (this.view === "week" && this.stationId) return `station:${this.stationId}`;
-    if (this.view === "week" && this.departmentId === "all") return "all";
-    const zone = this.view === "week" ? this.zone() : undefined;
+    if (this.stationId) return `station:${this.stationId}`;
+    if (this.departmentId === "all") return "all";
+    const zone = this.zone();
     return zone ? `zone:${zone.id}` : (this.department()?.id ?? "");
   }
   private async chooseDepartment(value: string) {
@@ -413,30 +381,6 @@ export class OpeningHoursScreen extends LitElement {
     this.watchYear();
     this.watchMonth();
     this.watchHolidays();
-    if (this.editor) {
-      const department = this.model.departments.find(
-        (row) => row.active && row.id === this.editor!.department.id,
-      );
-      if (
-        !department ||
-        (this.editor.period &&
-          !department.periods.some((period) => period.id === this.editor!.period!.id))
-      ) {
-        this.editor = undefined;
-        this.busy = false;
-      }
-    }
-    if (
-      this.deleting &&
-      !this.model.departments.some(
-        (department) =>
-          department.active &&
-          department.periods.some((period) => period.id === this.deleting!.period.id),
-      )
-    ) {
-      this.deleting = undefined;
-      this.busy = false;
-    }
   }
   private shownYear() {
     if (this.view !== "year" || !this.model) return 0;
@@ -657,15 +601,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** Opens the special-day painter over the current view; `holidays` are the ones the view sent. */
   private async openSpecialPainter(address: SpecialAddress, holidays: readonly HolidayFact[] = []) {
-    if (
-      !this.isConnected ||
-      this.readOnly ||
-      this.busy ||
-      this.editor ||
-      this.deleting ||
-      this.namedAction ||
-      this.overlaid()
-    )
+    if (!this.isConnected || this.readOnly || this.busy || this.namedAction || this.overlaid())
       return;
     this.specialReadError = "";
     this.sentHolidays = address.date ? { date: address.date, holidays } : undefined;
@@ -828,128 +764,6 @@ export class OpeningHoursScreen extends LitElement {
       }}
     ></special-day-painter>`;
   }
-  private menuLabel(id: string) {
-    const menu = this.model!.menus.find((m) => m.id === id);
-    if (!menu) return id;
-    return menu.includes.length
-      ? format("opening.menu_includes", {
-          name: menu.name,
-          menus: menu.includes
-            .map((included) => this.model!.menus.find((m) => m.id === included)?.name ?? included)
-            .join(", "),
-        })
-      : menu.name;
-  }
-  private openPeriod(department: Department, period?: Period) {
-    if (this.readOnly || this.busy || !this.isConnected || this.editor || this.deleting) return;
-    this.editor = { department, period, clockRevision: this.model!.clockRevision };
-  }
-  private async savePeriod(
-    event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>,
-  ) {
-    event.stopPropagation();
-    const editor = this.editor;
-    const component = event.currentTarget as PeriodEditor;
-    if (
-      !editor ||
-      this.readOnly ||
-      this.busy ||
-      !this.isConnected ||
-      component !== this.shadowRoot?.querySelector("period-editor")
-    )
-      return;
-    const { periodId, input } = event.detail;
-    this.busy = true;
-    component.refusal = undefined;
-    try {
-      if (periodId === null)
-        await this.api.createPeriod(editor.department.id, input, editor.clockRevision);
-      else await this.api.updatePeriod(periodId, input, editor.clockRevision);
-    } catch (error) {
-      if (this.editor === editor && this.isConnected) {
-        component.refusal = {
-          code: codeOf(error),
-          params:
-            typeof error === "object" && error !== null
-              ? (error as { params?: Record<string, unknown> }).params
-              : undefined,
-        };
-      }
-      return;
-    } finally {
-      if (this.editor === editor && this.isConnected) this.busy = false;
-    }
-    if (this.editor === editor && component.commitSubmitted(input)) this.editor = undefined;
-    this.api.rereadWatches();
-  }
-  private askDelete(period: Period) {
-    if (this.readOnly || this.busy || !this.isConnected || this.editor || this.deleting) return;
-    this.deleteError = "";
-    this.deleting = { period };
-  }
-  /** The period's routing uses as last read, so the warning follows a re-read while it is open. */
-  private routingWarning(period: Period) {
-    const current =
-      this.model?.departments
-        .flatMap((department) => department.periods)
-        .find((candidate) => candidate.id === period.id) ?? period;
-    const uses = current.routingUses;
-    if (uses.length === 0) return nothing;
-    const label = (use: PeriodRoutingUse) =>
-      format("opening.routing_use", {
-        row:
-          use.rowLabel ??
-          t(use.rowKind === "all" ? "routing.all_categories" : "routing.no_category"),
-        zone: use.zoneName ?? t("routing.every_zone"),
-      });
-    return html`<div data-test="routing-uses">
-      <p>
-        ${
-          uses.length === 1
-            ? t("opening.delete_routing_one")
-            : format("opening.delete_routing", { count: String(uses.length) })
-        }
-      </p>
-      <ul>
-        ${uses.map((use) => html`<li>${label(use)}</li>`)}
-      </ul>
-    </div>`;
-  }
-  private async deletePeriod(deletion: Deletion) {
-    const period = deletion.period;
-    if (this.readOnly || this.busy || !this.isConnected || this.deleting !== deletion) return;
-    this.busy = true;
-    this.deleteError = "";
-    try {
-      await this.api.deletePeriodIfUnused(period.id);
-    } catch (error) {
-      if (this.deleting !== deletion || !this.isConnected) return;
-      if (codeOf(error) === "menu_period.in_use") {
-        const uses = (error as { params?: { uses?: MenuPeriodUse[] } }).params?.uses ?? [];
-        this.deleteError = format("menu.period_in_use", {
-          name: period.name,
-          days: uses
-            .map((use) =>
-              use.kind === "week"
-                ? t(`hours.day.${use.weekday}` as Parameters<typeof t>[0])
-                : format("menu.period_use_special_day", {
-                    name: use.name,
-                    date: formatDate(use.date),
-                  }),
-            )
-            .join(", "),
-        });
-      } else
-        this.deleteError = t(
-          codeOf(error) === "menu_period.not_found" ? "menu.period_gone" : "menu.save_error",
-        );
-      return;
-    } finally {
-      this.busy = false;
-    }
-    if (this.deleting === deletion) this.deleting = undefined;
-    this.api.rereadWatches();
-  }
   private openNamedDay(event: CustomEvent<SpecialDayAction>) {
     event.stopPropagation();
     if (
@@ -974,15 +788,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** The Year panel's Delete: reads the special day, then asks in the screen's own confirmation. */
   private async askDeleteSpecial(sentAction: SpecialDayAction) {
-    if (
-      !this.isConnected ||
-      this.readOnly ||
-      this.busy ||
-      this.editor ||
-      this.deleting ||
-      this.namedAction ||
-      this.overlaid()
-    )
+    if (!this.isConnected || this.readOnly || this.busy || this.namedAction || this.overlaid())
       return;
     const { specialDay, ...detail } = sentAction;
     if (!specialDay) return;
@@ -1086,8 +892,6 @@ export class OpeningHoursScreen extends LitElement {
       !this.isConnected ||
       this.readOnly ||
       this.busy ||
-      this.editor ||
-      this.deleting ||
       this.namedAction ||
       this.ordinary ||
       event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-month")
@@ -1176,86 +980,14 @@ export class OpeningHoursScreen extends LitElement {
         }}
       ></opening-hours-month>`;
   }
-  private periods(department: Department) {
-    const columns: DataTableColumn<Period>[] = [
-      {
-        key: "name",
-        label: t("menu.period_name"),
-        cell: (row) =>
-          html`<span
-              part="period-colour"
-              data-colour=${row.colour}
-              style=${`background: var(--wt-color-palette-${row.colour})`}
-            ></span
-            >${row.name}`,
-      },
-      { key: "menu", label: t("menu.period_menu"), cell: (row) => this.menuLabel(row.menuId) },
-      {
-        key: "staff",
-        label: t("opening.staff_menus"),
-        cell: (row) => row.staffMenuIds.map((id) => this.menuLabel(id)).join(", "),
-      },
-      {
-        key: "endOffsetMinutes",
-        label: t("menu.end_offset_column"),
-        cell: (row) =>
-          row.endOffsetMinutes > 0 ? `+${row.endOffsetMinutes}` : String(row.endOffsetMinutes),
-      },
-      {
-        key: "weekdays",
-        label: t("menu.period_uses"),
-        cell: (row) =>
-          row.weekdays.length
-            ? row.weekdays.map((day) => t(`hours.day.${day}` as Parameters<typeof t>[0])).join(", ")
-            : t("menu.not_placed"),
-      },
-      ...(this.readOnly
-        ? []
-        : [
-            {
-              key: "actions",
-              label: t("menu.actions"),
-              pinned: "end",
-              cell: (row: Period) =>
-                html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })}
-                  ><wt-button
-                    variant="secondary"
-                    data-test="edit-period"
-                    @click=${() => this.openPeriod(department, row)}
-                    >${t("menu.edit")}</wt-button
-                  ><wt-button
-                    variant="secondary"
-                    data-test="delete-period"
-                    @click=${() => this.askDelete(row)}
-                    >${t("menu.delete")}</wt-button
-                  ></wt-row-actions
-                >`,
-            } satisfies DataTableColumn<Period>,
-          ]),
-    ];
-    return html`${this.readOnly ? nothing : html`<div class="toolbar"><wt-button variant="secondary" data-test="new-period" @click=${() => this.openPeriod(department)}>${t("menu.add_period")}</wt-button></div>`}
-      <wt-data-table
-        data-test="periods"
-        aria-label=${t("opening.tab.periods")}
-        .columns=${columns}
-        .rows=${department.periods}
-        .rowKey=${(row: Period) => row.id}
-        .emptyMessage=${t("menu.no_periods")}
-      ></wt-data-table>`;
-  }
   override render() {
     const department = this.department();
-
-    const editor = this.editor;
-    const deleting = this.deleting;
-    const currentDelete = () => this.isConnected && this.deleting === deleting && !this.busy;
     return html`<h1>${t("opening.title")}</h1>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
         !this.model
           ? nothing
           : html` ${
-                (department || this.view === "week") &&
-                (this.view === "week" || this.view === "periods")
+                this.view === "week"
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
@@ -1302,9 +1034,7 @@ export class OpeningHoursScreen extends LitElement {
                       }
                       ${this.stationReadError ? html`<p role="alert">${this.stationReadError}</p>` : nothing}
                     </div>`
-                  : this.view === "periods"
-                    ? html`<p>${t("menu.no_departments")}</p>`
-                    : nothing
+                  : nothing
               }
               <wt-tabs
                 label=${t("opening.title")}
@@ -1312,7 +1042,6 @@ export class OpeningHoursScreen extends LitElement {
                 .items=${[
                   { key: "year", label: t("opening.tab.year") },
                   ...(this.view === "week" ? [{ key: "week", label: t("hours.tab.week") }] : []),
-                  { key: "periods", label: t("opening.tab.periods") },
                 ]}
                 @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
                   if (event.target !== event.currentTarget) return;
@@ -1386,72 +1115,11 @@ export class OpeningHoursScreen extends LitElement {
                         : nothing
                   }
                 </div>
-                <div slot="periods">
-                  ${this.view === "periods" && department ? this.periods(department) : nothing}
-                </div>
               </wt-tabs>`
       }
       ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
       ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()}
-      ${this.specialPainter()}
-      ${
-        this.editor
-          ? keyed(
-              this.editor,
-              html`<period-editor
-                .open=${true}
-                .period=${this.editor.period}
-                .departmentName=${this.editor.department.name}
-                .usedColours=${this.editor.department.periods.map((period) => period.colour)}
-                .menus=${this.model!.menus}
-                .busy=${this.busy}
-                @period-save=${this.savePeriod}
-                @period-close=${(event: Event) => {
-                  event.stopPropagation();
-                  if (this.isConnected && this.editor === editor && !this.busy)
-                    this.editor = undefined;
-                }}
-              ></period-editor>`,
-            )
-          : nothing
-      }
-      ${
-        this.deleting
-          ? keyed(
-              this.deleting,
-              html`<wt-dialog
-                .open=${true}
-                heading=${t("menu.delete_period_heading")}
-                .dismissible=${!this.busy}
-                @wt-close=${(event: Event) => {
-                  event.stopPropagation();
-                  if (currentDelete()) this.deleting = undefined;
-                }}
-              >
-                <p>${format("opening.delete_confirm", { name: this.deleting.period.name })}</p>
-                ${this.routingWarning(this.deleting.period)}
-                ${this.deleteError ? html`<p role="alert" data-test="delete-error">${this.deleteError}</p>` : nothing}
-                <wt-form-actions slot="footer"
-                  ><wt-button
-                    slot="cancel"
-                    variant="secondary"
-                    ?disabled=${this.busy}
-                    @click=${() => {
-                      if (currentDelete()) this.deleting = undefined;
-                    }}
-                    >${t("hours.cancel")}</wt-button
-                  ><wt-button
-                    data-test="confirm-delete"
-                    variant="danger"
-                    ?disabled=${this.busy}
-                    @click=${() => this.deletePeriod(deleting!)}
-                    >${t("menu.delete")}</wt-button
-                  ></wt-form-actions
-                >
-              </wt-dialog>`,
-            )
-          : nothing
-      }`;
+      ${this.specialPainter()}`;
   }
 }
 declare global {
