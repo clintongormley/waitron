@@ -686,6 +686,23 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
+- **A647 — tidy the product editor (owner, 2026-10-14; open).** One style for every section, a
+  Selling section for Available and standalone ordering, the swatches moved behind the thumbnail,
+  and a header link for the variants' unit. Which sections start open: Kitchen and Pricing; Modifiers
+  when the product has any; with variants, Variants open and Pricing closed; Selling always closed,
+  its summary showing "Unavailable" in the warning colour. Needs a new shared three-way toggle.
+  [Detail](backlog/catalogue.md#a647--tidy-the-product-editor),
+  [mockups](backlog/mockups/a647-product-editor/)
+
+- **A648 — pale default colours (owner, 2026-10-14; open).** A new venue's "All products" default
+  colour (`catalogue_settings.default_color`) starts as the pale blue swatch `#abcced`, so a product
+  with no category is no longer white. Each new top-level section in a menu starts with a colour
+  from the pale row of `CATEGORY_PALETTE` (`packages/ui/src/category-color.ts`: red, orange, yellow,
+  green, teal, blue, violet, magenta, then red again), chosen by how many top-level sections the
+  menu already has. The colour is set once, at creation: moving or deleting sections never
+  recolours one, and it can be changed or cleared like any other. No data migration (CLAUDE.md §3:
+  venues are reset). [Mockup](backlog/mockups/a648-pale-default-colours/1-pale-defaults.png)
+
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
@@ -1709,6 +1726,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Left open by A439.
 
 ### The till, devices and table service
+
+- **A649 — Add a device's Pair is drawn blue when it can act (owner, 2026-10-14; open).** In the
+  waiting-devices table (`apps/dashboard/src/screens/devices-screen.ts`, the `pair-<id>` button,
+  which reads Enable for a returning device) the button is drawn `secondary` even when a device is
+  waiting and Pair can be pressed. Under the A416 rule (design-system.md → Forms) it is drawn
+  `secondary` while it is disabled and `primary` once it can act; add it to that rule's list.
+  [Mockup](backlog/mockups/a649-pair-button/1-pair-button.png)
 
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at

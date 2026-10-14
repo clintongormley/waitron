@@ -741,6 +741,56 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
   **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
   and decides whether the product editor keeps both summaries.
 
+## A647 — tidy the product editor
+
+Owner, 2026-10-14, decided over a run of screenshots and mock-ups. Boards, in
+[mockups/a647-product-editor/](mockups/a647-product-editor/): 1 the thumbnail, 2 the sections,
+3 the Variants section and the unit link, 4 the whole editor as it opens (the target), 5 the
+Selling options (A chosen; B, two loose lines under the name, rejected). Where a board and this
+text differ, this text wins. The editor is `apps/dashboard/src/widgets/product-editor.ts`.
+
+1. **The thumbnail is the one control for image and colour.** The Colour heading, the
+   "Use category colour" chip, the swatches and Custom leave the form. The square beside the name
+   shows the image, or the colour when there is no image, carries a small pencil badge, and opens
+   one panel holding Choose image, then Use category colour, the swatches and Custom. A colour
+   picked there shows in the square at once, before saving (today the square shows the saved value
+   only). Keyboard focus returns to the square when the panel closes.
+2. **Every section has one style.** Title in bold, its arrow beside it as now, a light line under
+   the title running the full width; a closed section's summary sits close under the line at normal
+   line spacing (today Descriptors' two summary lines touch). The gap between sections is the same
+   everywhere: today the gap after Kitchen is larger than the others and Pricing's label sits
+   directly under Nutritional info with no gap.
+3. **Pricing, Variants and Modifiers become sections like the others** (today PRICING and
+   MODIFIERS are grey all-capitals labels that never close, and Pricing becomes a section only once
+   a variant exists). Variants is its own section after Pricing. With no variants, the open Variants
+   section shows only Add variant under its title; closed, its summary reads "None". Pricing's
+   closed summary keeps today's "Base price: €11.00 each · VAT: Reduced (10%)" form.
+4. **A Selling section, placed first,** holds the Available switch and, below it, "Ordered on its
+   own by" with a three-way toggle: Anyone / Staff only / Nobody (today "Public / Staff only / Not
+   sold separately", `product.ordering_*` in `apps/dashboard/src/i18n/strings.ts`), with the
+   chosen choice's existing explanation underneath (`product.ordering_*_hint`). Closed, its summary
+   reads "Available · Ordered on its own by: Anyone", with "Unavailable" in the warning colour
+   (`--wt-color-warning`) when the switch is off. The new names apply wherever the old ones are
+   shown, including the products list's ordering filter and its tests; the Spanish strings change
+   with them and need the owner's wording. On a variant's page, which has no ordering choice, the
+   section holds only the switch.
+5. **Which sections start open:** Kitchen and Pricing; Modifiers when the product has any; for a
+   product with variants, Variants open and Pricing closed. Selling, Descriptors and Nutritional
+   info start closed.
+6. **The variants table's unit choice becomes a link** in the Price column title,
+   "Price · Each ▾", in place of the bordered button; it opens the same unit dialog. The base
+   price field's own unit button stays as it is.
+
+**The three-way toggle is a new shared primitive** (`packages/ui`; nothing like it exists — only
+`wt-switch` and `wt-combobox`), so it needs the two tests a new `wt-*` primitive needs (CLAUDE.md
+§3): a token-painting test and an axe test for each state in both themes. It is a single-choice
+group: one button per choice, the chosen one filled `primary`.
+
+Related open entries on the same screen: [the editor summarises the same values
+twice](#the-product-editor-summarises-the-same-values-twice) (Nutritional info's summary), and
+the Descriptors fold at 390px in `docs/backlog.md`. Every change here is to an editor that saves,
+so its draft scope and `*.unsaved.test.ts` must keep passing with sections closed.
+
 ## Decisions and deliberate limits
 
 **Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last
