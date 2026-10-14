@@ -48,6 +48,11 @@ your time record open. If the finish was recorded but logout fails, the till sta
 Clocked out. A lost clock response is checked with a fresh own-state read before another write is
 available. An open shift in another location is shown with clock actions unavailable.
 
+Part 3 has a reviewed [end-of-day plan](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
+Its implementation remains open: attributed activity capture, completed-day processing, durable worker
+questions and missing-time reminders. The plan records conservative handling of conflicting historical
+clock events; planning alone has added no attendance behavior.
+
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the
 correction waiting-list follow-ups remain in the backlog.
