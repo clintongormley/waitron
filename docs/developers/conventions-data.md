@@ -2524,8 +2524,8 @@ venue has ONE node and no failover at all until slice 3 (2026-09-19,
 When you restore a filing node from an archive or the bucket, supply its recovery operation and
 node recovery key. The operation carries an outside signed allocation and its matching approval.
 The fiscal hook activates that identity and its complete series set in the local transaction.
-The box no longer draws an installation number from a clock or backup counter. Keep one source
-per restore so the event takes one allocation path. The input procedure is in
+The box no longer draws an installation number from a clock or backup counter. The restore
+command refuses combined archive and bucket inputs before either restore runs. The input procedure is in
 [paper-custodian.md](paper-custodian.md#supply-a-recovery-operation-to-the-host).
 
 Cold restore checks the node key saved in the selected backup. An older backup can accept a
@@ -2539,6 +2539,7 @@ retained fiscal and working-time history. The first FULL review's missing-operat
 refused `sif.allocation_invalid` with `reauthentication_required` and unchanged rows. The second
 review removed that refusal and the fiscal cases failed four checks. These runs replace the
 clock-floor receipt from #248; they do not establish outside register continuity or fencing.
+The existing mixed-source argument case also passed: exit 2, no restore called and no store calls.
 
 The working-time chain continues from the backup's head. A survivor's forked row is refused by
 `time_entries_chain_position_uq`, reported by this engine as

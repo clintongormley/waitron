@@ -201,8 +201,8 @@ regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff a
 The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
 Both FULL Claude reviews are complete. Their migration-preservation gap gains an exact SIF-row
 comparison, and wrong-administrator preparation is qualified at the authority boundary. Their
-restore wording finding is corrected in the developer topic; the exact root-rule correction is
-proposed to the owner under the campaign's instruction-file restriction. Hook/current-head CI
+restore wording finding is corrected in the developer topic and the exact root bullet, under
+the owner's A+ approval. The mixed-source command test refuses before either restore runs. Hook/current-head CI
 still qualify the publication candidate. Earlier dated Task 4 notes describe earlier checkpoints.
 
 

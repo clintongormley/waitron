@@ -800,13 +800,14 @@ browser test** — most of these rules exist because a test passed while proving
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
-- **Re-registering a node starts a new chain** and mints a fresh installation number. Correct for a
-  reimaged box, destructive for a working one. A cold restore (`waitron-restore`) and a rebuild from
-  the bucket both do it automatically for a node that was filing (#248); one restore takes one
-  source, never both, or one event would mint two installation numbers. The working-time chain is
-  NOT reset on a cold restore — it continues from the backup's head. Guard:
-  `packages/workforce/src/restore-continuation.test.ts`. How a restore mints:
-  [conventions-data.md](docs/developers/conventions-data.md).
+- **Re-registering a filing node activates a supplied signed identity and starts a new chain.** Correct
+  for a reimaged box, destructive for a working one. A cold restore (`waitron-restore`) and a rebuild
+  from the bucket require the recovery operation and node key before activating that outside
+  allocation; the box does not mint an installation number from its clock or a counter. One restore
+  takes one source, never both; the restore command refuses combined archive and bucket inputs before
+  either restore runs. The working-time chain continues from the backup's head. Guard:
+  `packages/workforce/src/restore-continuation.test.ts`. Restore inputs and the selected backup's
+  recovery-key warning: [conventions-data.md](docs/developers/conventions-data.md).
 - **On a node that files, every start puts each sale left "being sent" back to waiting before its
   first filing pass** (`resetInFlightClaims`, `packages/fiscal-verifactu/src/drain.ts`) — safe only
   while no second process files from the database: the server opens the folder exclusively, and the
