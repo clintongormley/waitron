@@ -52,7 +52,7 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
     throw new Error(`seedCatalogues: no "Cocina" station found for location ${locationId}`);
   }
   await tx.execute(sql`
-    update kitchen_stations set name = 'Kitchen'
+    update kitchen_stations set name = 'Kitchen', colour = 'orange'
     where id = ${kitchen}`);
   // Seed scripts have no management session, so insert directly — through the table definition,
   // because the insert BUILDER generates `kitchen_stations.id` and `created_at`.
@@ -60,13 +60,14 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
     .insert(kitchenStations)
     .values(
       [
-        { name: "Downstairs bar", displayOrder: 1 },
-        { name: "Upstairs bar", displayOrder: 2 },
-        { name: "Deli counter", displayOrder: 3 },
-      ].map(({ name, displayOrder }) => ({
+        { name: "Downstairs bar", displayOrder: 1, colour: "blue" as const },
+        { name: "Upstairs bar", displayOrder: 2, colour: "indigo" as const },
+        { name: "Deli counter", displayOrder: 3, colour: "green" as const },
+      ].map(({ name, displayOrder, colour }) => ({
         locationId,
         name,
         displayOrder,
+        colour,
         isDefault: false,
         active: true,
       })),

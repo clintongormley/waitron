@@ -10,7 +10,7 @@ import {
   kitchenStations,
   kitchenStationTiming,
 } from "@waitron/db";
-import type { StationThresholds } from "@waitron/shared";
+import type { StationColour, StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
@@ -35,6 +35,7 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
+  colour: StationColour;
   timingDefaults: StationThresholds;
   timingOverrides: { [Field in keyof StationThresholds]: number | null };
   warmAfterMinutes: number;
@@ -82,6 +83,7 @@ export async function createStation(
     name: string;
     displayOrder?: number;
     isDefault?: boolean;
+    colour?: StationColour;
     thresholds?: StationTimingPatch;
     printerIds?: readonly string[];
   },
@@ -102,6 +104,7 @@ export async function createStation(
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         isDefault: input.isDefault ?? false,
+        ...(input.colour === undefined ? {} : { colour: input.colour }),
       })
       .returning({ id: kitchenStations.id });
     if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {
@@ -129,6 +132,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
+      colour: kitchenStations.colour,
       warmAfterMinutes: kitchenStationTiming.warmAfterMinutes,
       overdueAfterMinutes: kitchenStationTiming.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStationTiming.forgottenAfterMinutes,
@@ -194,6 +198,7 @@ export async function updateStation(
     name?: string;
     displayOrder?: number;
     showsRestOfOrder?: boolean;
+    colour?: StationColour;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {

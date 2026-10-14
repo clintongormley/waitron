@@ -18,7 +18,7 @@ import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, isStationColour, type StationColour } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -379,6 +379,13 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
   }
   /* v8 ignore stop */
   return deps.venueCfg;
+}
+
+function parseStationColour(value: unknown): StationColour | undefined {
+  if (value === undefined) return undefined;
+  if (!isStationColour(value))
+    throw new AppError("management.request_invalid", { field: "colour" });
+  return value;
 }
 
 function parseStationPrinterIds(value: unknown): string[] | undefined {
@@ -1803,6 +1810,7 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         isDefault?: unknown;
+        colour?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1820,12 +1828,20 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "isDefault" });
         isDefault = body.isDefault;
       }
+      const colour = parseStationColour(body.colour);
       const { name } = body;
       const thresholds = parseStationTimingPatch(body);
       const printerIds = parseStationPrinterIds(body.printerIds);
       const result = await withVenueAuth(deps, sessionId, async (tx) => {
         await authorizeStationPrinters(tx, sessionId, printerIds);
-        return createStation(tx, cfg, { name, displayOrder, isDefault, thresholds, printerIds });
+        return createStation(tx, cfg, {
+          name,
+          displayOrder,
+          isDefault,
+          colour,
+          thresholds,
+          printerIds,
+        });
       });
       return c.json(result, 201);
     }),
@@ -1876,6 +1892,7 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         showsRestOfOrder?: unknown;
+        colour?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
         forgottenAfterMinutes?: unknown;
@@ -1890,6 +1907,7 @@ export function mountManagementApi(
         name?: string;
         displayOrder?: number;
         showsRestOfOrder?: boolean;
+        colour?: StationColour;
         warmAfterMinutes?: number | null;
         overdueAfterMinutes?: number | null;
         forgottenAfterMinutes?: number | null;
@@ -1908,6 +1926,8 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });
         patch.showsRestOfOrder = body.showsRestOfOrder;
       }
+      const colour = parseStationColour(body.colour);
+      if (colour !== undefined) patch.colour = colour;
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;

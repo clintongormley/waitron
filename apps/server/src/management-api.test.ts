@@ -1015,7 +1015,7 @@ describe("/management-api/tables", () => {
 describe("/management-api/stations (KDS-1 config)", () => {
   async function createStation(
     name: string,
-    extra: { isDefault?: boolean; displayOrder?: number } = {},
+    extra: { isDefault?: boolean; displayOrder?: number; colour?: string } = {},
   ): Promise<string> {
     const res = await req(
       "/stations",
@@ -1034,6 +1034,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
+      colour: string;
     }[]
   > {
     return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
@@ -1043,6 +1044,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
+      colour: string;
     }[];
   }
 
@@ -1176,6 +1178,74 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
       showsRestOfOrder: false,
     });
+  });
+
+  it("creates a station with its colour and lists it", async () => {
+    const id = await createStation(unique("Teal"), { colour: "teal" });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      colour: "teal",
+    });
+  });
+
+  it("a station created with no colour is Red", async () => {
+    const id = await createStation(unique("No colour"));
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      colour: "red",
+    });
+  });
+
+  it("PATCH changes only the colour", async () => {
+    const id = await createStation(unique("Recolour"), { displayOrder: 3 });
+    const timed = await req(
+      `/stations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ warmAfterMinutes: 4, overdueAfterMinutes: 9 }),
+      },
+      managerCookie,
+    );
+    expect(timed.status).toBe(204);
+    const before = (await listStations()).find((station) => station.id === id)!;
+    const response = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ colour: "indigo" }) },
+      managerCookie,
+    );
+    expect(response.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toEqual({
+      ...before,
+      colour: "indigo",
+    });
+  });
+
+  it("refuses a colour outside the twelve on create and on edit, naming colour, and writes nothing", async () => {
+    const id = await createStation(unique("Kept colour"), { colour: "cyan" });
+    for (const colour of ["grey", "Teal", 7]) {
+      const countBefore = (await listStations()).length;
+      const created = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: unique("Bad colour"), colour }) },
+        managerCookie,
+      );
+      expect(created.status).toBe(400);
+      expect(await created.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "colour" } },
+      });
+      expect((await listStations()).length).toBe(countBefore);
+      const edited = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ name: unique("Renamed"), colour }) },
+        managerCookie,
+      );
+      expect(edited.status).toBe(400);
+      expect(await edited.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "colour" } },
+      });
+      expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+        name: expect.stringContaining("Kept colour"),
+        colour: "cyan",
+      });
+    }
   });
 
   it("POST stores timing overrides atomically and rejects an unordered effective set without a row", async () => {

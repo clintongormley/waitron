@@ -117,6 +117,7 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
+        colour: "red",
         ...defaultThresholds,
       },
       {
@@ -126,6 +127,7 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
+        colour: "red",
         ...defaultThresholds,
       },
       {
@@ -135,6 +137,7 @@ describe("kitchen-station config", () => {
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
+        colour: "red",
         ...defaultThresholds,
       },
     ]);
