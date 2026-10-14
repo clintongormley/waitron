@@ -381,6 +381,7 @@ export class RoutingGrid extends LitElement {
   #cells: ReadonlyMap<string, RoutingModelCell> = new Map();
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
+  #stations = new Map<string, RoutingModel["stations"][number]>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
   #searchOf: ReturnType<typeof routingSearch> | null = null;
@@ -407,6 +408,7 @@ export class RoutingGrid extends LitElement {
     this.#cells = lookups.cells;
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
+    this.#stations = new Map(model.stations.map((station) => [station.id, station]));
     this.#allRows = null;
     this.#blank = blankZoneCell(model, lookups);
     this.#searchOf = routingSearch(model);
@@ -453,7 +455,7 @@ export class RoutingGrid extends LitElement {
   }
 
   #station(id: string) {
-    return this.model!.stations.find((station) => station.id === id);
+    return this.#stations.get(id);
   }
 
   /** The colour a target paints in; none for No preparation, a missing or a disabled station. */
@@ -651,11 +653,10 @@ export class RoutingGrid extends LitElement {
   }
 
   #defaultTarget(): RouteTarget | null {
-    const model = this.model!;
-    const active = model.stations.find(
-      (station) => station.id === model.defaultStationId && station.active,
-    );
-    return active ? { kind: "station", stationId: active.id } : null;
+    const id = this.model!.defaultStationId;
+    return id !== null && this.#station(id)?.active === true
+      ? { kind: "station", stationId: id }
+      : null;
   }
 
   /** All categories × Every zone is the default station: Make default, never cleared. */
@@ -941,8 +942,11 @@ export class RoutingGrid extends LitElement {
   }
 
   #key(model: RoutingModel) {
-    if (this.#used?.model !== model) this.#used = { model, stations: usedStations(model) };
-    const stations = this.#used.stations.filter((station) => isStationColour(station.colour));
+    if (this.#used?.model !== model) {
+      const stations = usedStations(model).filter((station) => isStationColour(station.colour));
+      this.#used = { model, stations };
+    }
+    const { stations } = this.#used;
     if (stations.length === 0) return nothing;
     return html`<ul class="key" aria-label=${t("routing.colour_key")}>
       ${stations.map(
