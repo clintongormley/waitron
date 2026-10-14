@@ -31,21 +31,6 @@ export interface SeasonDeleteImpact {
 export type PaintedInRow = { periodId: string } & PaintedIn;
 export type { PeriodDeleteImpact };
 
-/** What the server's `paintedIn` reads, plus the clock for "today" — not the whole
- *  "opening-hours" list, which would re-read it on every product, category and zone change. */
-const PAINTED_IN_DEPENDENCIES = [
-  "menu_periods",
-  "departments",
-  "seasons",
-  "department_days",
-  "department_day_ranges",
-  "special_days",
-  "special_day_dates",
-  "locations",
-  "location_business_day_settings",
-  "location_day_cutover_changes",
-];
-
 const BASE = "/management-api/venue-service";
 const at = (id: string) => encodeURIComponent(id);
 
@@ -83,7 +68,7 @@ export class OpeningHoursApi {
   ): () => void {
     return this.#watches.watch(
       "venue-service:menu-periods-painted-in",
-      PAINTED_IN_DEPENDENCIES,
+      QUERY_DEPENDENCIES["menu-periods-painted-in"],
       () =>
         this.request<PaintedInRow[]>(`${BASE}/menu-periods/painted-in`, "GET", undefined, {
           passive: true,

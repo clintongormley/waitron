@@ -152,6 +152,18 @@ export const QUERY_DEPENDENCIES = {
   ],
   holidays: ["tenants", "locations", "holiday_geographies"],
   "floor-plan": ["floor_plans", "floor_plan_tables", "dining_tables", "floor_zones"],
+  "menu-periods-painted-in": [
+    "menu_periods",
+    "departments",
+    "seasons",
+    "department_days",
+    "department_day_ranges",
+    "special_days",
+    "special_day_dates",
+    "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
+  ],
   "opening-hours": [
     "menu_periods",
     "menu_period_staff_menus",

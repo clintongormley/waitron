@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 
 const model: OpeningHoursModel = {
@@ -87,6 +88,40 @@ describe("OpeningHoursApi", () => {
         [`${base}/menu-periods/painted-in`, "GET", undefined, { passive: true }],
         [`${base}/menu-periods/painted-in`, "GET", undefined, { passive: true }],
       ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("watches Painted in on its declared tables, re-reading it after a period save and not on a product change", async () => {
+    const live = new LiveData();
+    const painted = [{ periodId: "p1", seasons: [], specialDays: [] }];
+    const request = vi.fn(async () => painted);
+    const api = new OpeningHoursApi(request as DashboardRequest, live);
+    const apply = vi.fn();
+    const stop = api.watchPaintedIn(apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+      const tables = [
+        "menu_periods",
+        "departments",
+        "seasons",
+        "department_days",
+        "department_day_ranges",
+        "special_days",
+        "special_day_dates",
+        "locations",
+        "location_business_day_settings",
+        "location_day_cutover_changes",
+      ];
+      expect(QUERY_DEPENDENCIES["menu-periods-painted-in"]).toEqual(tables);
+      expect(live.interests).toEqual(tables.map((type) => ({ type })));
+      live.invalidate([{ type: "products" }]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(request).toHaveBeenCalledTimes(1);
+      api.rereadWatches();
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+      expect(request).toHaveBeenCalledTimes(2);
     } finally {
       stop();
     }
