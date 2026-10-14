@@ -4888,11 +4888,6 @@ the tree. What remains, largest first:
   (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
   output.
 
-- **A catalogue test fails now and then; read, not measured, as two products created in the same
-  millisecond (found by A521).** Next: make the test independent of the tie (or give the two
-  products different times).
-  [Detail](backlog/ci.md#a-catalogue-test-fails-now-and-then-read-not-measured-as-two-products-created-in-the-same-millisecond-found-by-a521)
-
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;

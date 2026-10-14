@@ -47,16 +47,6 @@ step missing from `shard.log`; fix that step. Do not raise `connectTimeout`, add
 concurrency first. A raised limit goes in the outer config's `test.browser` block, the only place
 Vitest 4.1.11 reads it.
 
-## A catalogue test fails now and then; read, not measured, as two products created in the same millisecond (found by A521)
-
-"listProducts carries each product's recipe diet derivation, null where it has none"
-(`packages/catalogue/src/operations.test.ts`) expects "stew" before "plain", but `listProducts`
-orders by `createdAt` and then `id`, and ids are random (`newId`, `packages/db/src/schema/columns.ts`),
-so two products created in the same millisecond can come back in either order. Running the whole file
-failed it 1 time in 3 on A521's branch and 2 times in 5 on main's `derivation.ts`; six runs of
-the test alone all passed. The tie-break explanation is from reading the code, not measured.
-Next: make the test independent of the tie (or give the two products different times).
-
 ## The stream pause test's frozen-bucket control failed once in CI
 
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
