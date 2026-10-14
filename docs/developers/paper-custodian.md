@@ -11,7 +11,9 @@ The command below prepares signed evidence. It does not update your master regis
 landed in #1700. Earlier paragraphs below describing those as unfinished refer to its development
 checkpoints. Successful allocated standby adoption still needs the primary's venue copy and fresh
 establishment authority. Task 6's candidate adds the pack handover and recovery-record entry below;
-the complete offline exercise remains unfinished. Its optional host-managed emergency collector
+the complete Task 11 exercise remains separate. For the container mounts, selected-copy review,
+restore inputs and generated-record handover, follow
+[Recover a filing box](offline-fiscal-restore.md). Its optional host-managed emergency collector
 is described in [Emergency recovery](emergency-recovery.md).
 
 ## Create the custodian's key

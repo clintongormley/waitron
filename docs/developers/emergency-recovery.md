@@ -4,6 +4,8 @@ When you cannot establish the current short-name register, an emergency allocati
 random identity. It does not declare a short paper name free. This collector
 requires a separately configured outside confirmation file and an existing writable incident
 directory. Your outside record remains the authority for consumption; a downloaded request is not an activation result.
+For the container mounts and the setup or CLI sequence, follow
+[Recover a filing box](offline-fiscal-restore.md).
 
 Keep the incident directory on storage outside the box and outside its backups. Configure its
 mount yourself; the collector does not establish that a configured path is outside the machine.

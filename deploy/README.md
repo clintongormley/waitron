@@ -411,6 +411,12 @@ command against it treat that entrypoint differently:
   `sudo chown 10001 kit.txt` keeps it private at mode 0600. Otherwise the command stops with
   `cannot read kit file: /kit.txt`.
 
+  **A filing node also needs its fiscal recovery operation.** Follow
+  [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
+  backup's node key, a fresh allocation and current outside evidence. The source examples below
+  show archive and bucket access only; add that procedure's recovery override and credentials
+  when restoring Veri*Factu. The archive encryption key alone does not authorise activation.
+
   ```bash
   docker compose run --rm -v "$PWD/kit.txt:/kit.txt:ro" --entrypoint node app \
     /app/bin-restore.js restore --from-bucket /kit.txt --confirm-venue <tax-id>
@@ -432,8 +438,8 @@ command against it treat that entrypoint differently:
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  restores with `restore <backup-file>` and the recovery key alone, in
-  `WAITRON_BACKUP_RECOVERY_KEY`.
+  opens with `restore <backup-file>` and its encryption key in
+  `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
 
   ```bash
   docker compose run --rm -v "$PWD/pack.txt:/pack.txt:ro" --entrypoint node app \

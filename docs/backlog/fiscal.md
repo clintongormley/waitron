@@ -1122,3 +1122,19 @@ path with a fresh fiscal allocation. The generic `skipSecrets` rejoin path remai
 has no production caller in the tracked tree (`rg -n skipSecrets apps packages --glob
 '!*.test.ts'`). These checks do not introduce a selling route through that flag. The complete operator
 flow through deployed entry points, final task review and current-head CI remain open.
+
+
+**2026-10-14 deployed operator qualification (candidate only):** the
+[operator procedure](../developers/offline-fiscal-restore.md) supplies an explicit Compose
+recovery override. The base service forwards no fiscal collector configuration. The override
+keeps public evidence read-only and mounts a separate writable outside incident directory;
+its resolved configuration preserves the state volume. Candidate production bundles, migrations
+and assets ran over the existing `waitron:dev` runtime as uid10001 with networking disabled.
+Paper and emergency archive CLIs exited0, and both staged entry processes reached
+`server.listening`. The stored allocation, three series at1, unchanged node/location and actual
+outside incident/readable digest were checked. Missing outside configuration, read-only incident
+storage and a wrong fingerprint each refused with no trading settings. The final synthetic
+fixture has one venue and its credential-vault key; the two earlier incomplete fixtures are
+not successful-start receipts. This is packaged-entry-point qualification, not a new full-image,
+physical-printer or remote-share test. Full task review and current-head CI remain required;
+Task11 retains the later full operational exercise.
