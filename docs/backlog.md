@@ -1538,14 +1538,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **At 390 px a long name in a month cell breaks mid-word ("Christ|mas")**: the dashboard page
   declares no language, so the browser cannot hyphenate — left open by A506-7, #1623. Seen again in
-  A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…".
-  The styles are `overflow-wrap: anywhere` and the four-line clamp on `.name`
-  (`opening-hours-month.ts:206-208`), from 3887f0f790 per `git blame`, which predates A506-12.
+  A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
+  (`overflow-wrap: anywhere` and the four-line clamp on `.name`, `opening-hours-month.ts:206-208`).
 
 - **Season colours differ between Opening hours' Year and its month (and the Times tab)**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
   list it is given, and the month gives `season-chips` only the seasons it touches
-  (`opening-hours-month.ts:645`, from 3887f0f790 per `git blame`, which predates A506-12).
+  (`opening-hours-month.ts:645`).
 
 - **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
   twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
@@ -1654,14 +1653,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `venue_service.manage`; the stations service-times route still lets `venue.view` read them
   (`routes.ts`). Owner to decide whether a supervisor gets a read-only view — left open by A506-12.
 
-- **Prep stations' older "no history entry" tests count `history.length`, which Chromium stops
-  counting at 50**, so once the shared browser reaches that they pass whatever the screen does
-  (`prep-stations-screen.test.ts`, the retired Settings address, old tester link and invalid tab
-  cases). Move them to `pushState`/`replaceState` spies, as the Times tab tests do — left open by
-  A506-12.
+- **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
+  it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,
+  Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
+  the Times tab tests do — left open by A506-12.
 
 - **The Times tab opens on the browser's current month** (`browserToday`,
-  `station-times-screen.ts`), where Opening hours' month opens on the venue's business date, so
+  `station-times-tab.ts`), where Opening hours' month opens on the venue's business date, so
   just after midnight before the changeover on the 1st the two can show different months — left
   open by A506-12.
 

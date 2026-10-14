@@ -135,7 +135,7 @@ all.
 
 ## Two special days can come to share a date
 
-Left open by A506-5, #1603. A577 points here; the point is kept in its own words:
+Left open by A506-5, #1603. The point is kept in its own words:
 
 - Two special days can come to share a date after both were saved — two repeating ones, or a
   one-off and a repeating date that follows a holiday's name: a save compares dates only in the

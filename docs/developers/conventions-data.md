@@ -463,7 +463,7 @@ season and any special day (`readDayPlan`); there is no normal week, and the rou
 query (`stationServiceTimes`, `packages/venue-service/src/station-service-times.ts`). Planning
 ignores today's station closures and kept-open extensions. The default station answers
 `always: "default"` and no dates, and the tab shows a sentence in place of the month; a deleted
-station id is refused.
+station's id is refused (`station.not_found`).
 
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.
