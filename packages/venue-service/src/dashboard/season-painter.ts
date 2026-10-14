@@ -174,7 +174,7 @@ export class SeasonPainter extends LitElement {
   });
   private baseline: Draft = new Map();
   private seededSeason?: string;
-  /** The model every week of the baseline was last taken from; a clean draft catches up to a newer one. */
+  /** The model every week of the baseline was last taken from. */
   private followed?: Model;
   /** The weeks a save sent, taken in only from a model read after `barrier` (`ModelWatches.reread`)
    *  and while no save is in flight. */
@@ -272,8 +272,9 @@ export class SeasonPainter extends LitElement {
     this.saving = false;
     this.confirming = undefined;
   }
-  /** A save in flight already holds the draft's copy of every day, and until the first read after
-   *  a save that succeeded its baseline is what was sent, so neither may take in another day yet. */
+  /** A save in flight already holds the draft's copy of every day, and after a successful save the
+   *  weeks it sent keep what was sent as their baseline until the first read that started after it
+   *  answered; until then no edited week may take in another day. */
   private mayFollow(): boolean {
     return !this.saving && this.confirming === undefined;
   }

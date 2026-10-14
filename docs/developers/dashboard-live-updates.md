@@ -28,7 +28,8 @@ refill a form nobody has changed from the latest read (`#openStoredOff` for swit
 settings, `#reopenUnchanged` when the stream's bucket changes), and leave a form holding a change
 alone. `DraftRows` helps with
 scalar row editors by replacing clean fields while retaining locally edited fields. Structured
-editors keep their draft until you save or reopen them.
+editors keep their draft until you save or reopen them, except the opening-hours painters, which take
+in stored changes on the days the draft has not changed.
 
 A read error a screen shows must go away once the read succeeds again, for example after the server
 restarts. Either clear it in the apply callback (on a screen that shares one field between reads and
@@ -86,9 +87,10 @@ the first model read that started after its save answered, while no other save i
 day: a day repainted since the save was sent keeps its new paint (`rebaseDays`,
 `packages/venue-service/src/paint-model.ts`).
 2026-10-14, A637: every other live update reaching the season painter is taken in day by day too:
-a day the draft has not changed takes the stored paint, and a day it changed keeps the draft. A save
-in flight, and the time until the first read after a save that succeeded, still hold the edited
-weeks whole.
+a day the draft has not changed takes the stored paint, and a day it changed keeps the draft
+(`refresh` and `mayFollow`, `packages/venue-service/src/dashboard/season-painter.ts`). A save in
+flight, and the time until the first read that started after a successful save answered, still hold
+the edited weeks whole.
 2026-10-14, A506-11: the Periods page reads `/menu-periods/painted-in` through
 `OpeningHoursApi.watchPaintedIn` on the `menu-periods-painted-in` dependencies. Its delete dialog
 reads `…/delete-impact` again, passively, when a page read (the hours model or Painted in) that
