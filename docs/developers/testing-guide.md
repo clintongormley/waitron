@@ -245,8 +245,8 @@ set and only then falls back to the outer config's (`dist/chunks/cli-api.CnMVyza
 separately on a scratch fixture of four test files: an outer limit of 4 together with a project limit
 of 1 gave peak concurrency 1 across four distinct worker processes, and the same fixture without the
 project limit peaked at 4. Configs here depend on the project value winning — `packages/bookings`,
-`packages/payments-stripe`, `packages/payments-sumup`, `packages/venue-service` and
-`packages/adjustments` each set `maxWorkers: 1` inside a project.
+`packages/payments-stripe`, `packages/payments-sumup`, `packages/venue-service`,
+`packages/adjustments` and `packages/staffing` each set `maxWorkers: 1` inside a project.
 
 **A cap that must apply to every project still belongs on the outer config**, which a project
 setting none of its own falls back to.

@@ -1620,6 +1620,116 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   expect(withoutId(imported)).toEqual(withoutId(prepared));
 });
 
+it("transfers staff roles, who holds them and a painted season week under new ids", async () => {
+  const source = await applyVenue(planVenue(venue("B24681390"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  const original = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, { name: "Staffed room" });
+    const [season] = await tx
+      .select({ id: seasons.id })
+      .from(seasons)
+      .where(eq(seasons.locationId, scope.locationId))
+      .limit(1);
+    const [holder] = await tx
+      .insert(persons)
+      .values({ displayName: "Holder", role: "staff" })
+      .returning({ id: persons.id });
+    const waiter = randomUUID();
+    const runner = randomUUID();
+    // Raw: apps/server does not depend on @waitron/staffing, and these tables have no `$defaultFn`
+    // column beyond the ids supplied here.
+    await tx.execute(sql`
+      insert into staff_roles (id, location_id, name, colour, position)
+      values (${waiter}, ${scope.locationId}, 'Waiter', 'blue', 0),
+             (${runner}, ${scope.locationId}, 'Runner', 'green', 1)`);
+    await tx.execute(sql`
+      insert into person_staff_roles (person_id, staff_role_id) values (${holder!.id}, ${waiter})`);
+    const days: string[] = [];
+    for (const weekday of [5, 6]) {
+      const day = randomUUID();
+      days.push(day);
+      await tx.execute(sql`
+        insert into staffing_days (id, department_id, season_id, weekday)
+        values (${day}, ${department.id}, ${season!.id}, ${weekday})`);
+      await tx.execute(sql`
+        insert into staffing_blocks (id, day_id, staff_role_id, headcount, starts_at, ends_at)
+        values (${randomUUID()}, ${day}, ${waiter}, 3, '19:00', '23:30'),
+               (${randomUUID()}, ${day}, ${runner}, 1, '20:15', '23:00')`);
+    }
+    return [department.id, season!.id, holder!.id, waiter, runner, ...days];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-14T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.staffing_blocks).toHaveLength(4);
+  const target = await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const roles = await targetSuite.db.execute(sql`
+    select r.location_id, r.name, r.colour, r.position, p.display_name as holder
+    from staff_roles r
+    left join person_staff_roles h on h.staff_role_id = r.id
+    left join persons p on p.id = h.person_id
+    order by r.position`);
+  expect(roles.rows).toEqual([
+    {
+      location_id: target.locationId,
+      name: "Waiter",
+      colour: "blue",
+      position: 0,
+      holder: "Holder",
+    },
+    { location_id: target.locationId, name: "Runner", colour: "green", position: 1, holder: null },
+  ]);
+  const week = await targetSuite.db.execute(sql`
+    select d.id as day_id, d.department_id, d.season_id, h.person_id, b.staff_role_id,
+      dep.name as department, s.location_id as season_location, d.weekday, d.station_id,
+      d.special_day_date_id, r.name as role, b.headcount, b.starts_at, b.ends_at
+    from staffing_days d
+    join departments dep on dep.id = d.department_id
+    join seasons s on s.id = d.season_id
+    join staffing_blocks b on b.day_id = d.id
+    join staff_roles r on r.id = b.staff_role_id
+    left join person_staff_roles h on h.staff_role_id = r.id
+    order by d.weekday, b.starts_at`);
+  const block = (weekday: number, role: string, headcount: number, from: string, to: string) => ({
+    day_id: expect.any(String),
+    department_id: expect.any(String),
+    season_id: expect.any(String),
+    person_id: role === "Waiter" ? expect.any(String) : null,
+    staff_role_id: expect.any(String),
+    department: "Staffed room",
+    season_location: target.locationId,
+    weekday,
+    station_id: null,
+    special_day_date_id: null,
+    role,
+    headcount,
+    starts_at: from,
+    ends_at: to,
+  });
+  expect(week.rows).toEqual([
+    block(5, "Waiter", 3, "19:00", "23:30"),
+    block(5, "Runner", 1, "20:15", "23:00"),
+    block(6, "Waiter", 3, "19:00", "23:30"),
+    block(6, "Runner", 1, "20:15", "23:00"),
+  ]);
+  for (const row of week.rows)
+    for (const key of ["day_id", "department_id", "season_id", "person_id", "staff_role_id"])
+      expect(original).not.toContain(row[key]);
+});
+
 it("transfers the venue's limit on a bill's total discount", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
