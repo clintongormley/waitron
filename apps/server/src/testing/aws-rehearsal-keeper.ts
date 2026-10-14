@@ -254,7 +254,7 @@ async function stopTracked(
   journal: RehearsalJournal,
   deps: KeeperDeps,
   lines: Lines,
-): Promise<{ entry: TeardownEntry; left: number[] }> {
+): Promise<{ entry: TeardownEntry; stopped: number[]; left: number[] }> {
   const pids = matchingPids(journal, deps, lines);
   const entry = await stopChildren(
     pids,
@@ -268,7 +268,8 @@ async function stopTracked(
     },
     AbortSignal.timeout(journal.teardownMs),
   );
-  return { entry, left: entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid)) : [] };
+  const left = entry.outcome === "failed" ? pids.filter((pid) => deps.isAlive(pid)) : [];
+  return { entry, stopped: pids.filter((pid) => !left.includes(pid)), left };
 }
 
 async function removeJournalScratch(
@@ -299,6 +300,7 @@ async function act(journal: RehearsalJournal, deps: KeeperDeps, lines: Lines): P
     // Nothing can be sent, but the scratch folder holding the run's secrets is still removed.
     lines.say(describe(error));
     const stopped = await stopTracked(journal, deps, lines);
+    for (const pid of stopped.stopped) lines.note(`stopped process ${pid}`);
     const scratch = await removeJournalScratch(journal, deps);
     sayLeft(lines, [
       ...journalLeft(journal),

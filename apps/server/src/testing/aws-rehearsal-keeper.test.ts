@@ -754,6 +754,32 @@ describe("runKeeper", () => {
       expect(h.printed.slice(1)).toEqual(["left behind:", `bucket ${BUCKET}`]);
     });
 
+    it("logs the process it stopped when it is refused, which has no receipt to record it", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), {
+        env: profileEnv({ credentialsFile, configFile }, { AWS_PROFILE: undefined }),
+      });
+      withAlive(h, [4242]);
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(h.kill).toHaveBeenCalledWith(4242, "SIGTERM");
+      expect(await logLines()).toContain("stopped process 4242");
+      expect(await readdir(receiptDir)).not.toContain(`aws-rehearsal-${RUN_ID}-interrupted.json`);
+    });
+
+    it("does not log as stopped a process that would not stop when it is refused", async () => {
+      await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
+      const h = harness(new FakeAdmin(), {
+        env: profileEnv({ credentialsFile, configFile }, { AWS_PROFILE: undefined }),
+        isAlive: (p) => p === 4242,
+      });
+
+      expect(await runKeeper(journalPath, h.deps)).toBe(1);
+
+      expect(await logLines()).not.toContain("stopped process 4242");
+    });
+
     it("names a process that would not stop when it is refused", async () => {
       await writeJournalFile(journal({ state: "deleted", pids: [pid] }));
       const h = harness(new FakeAdmin(), {
