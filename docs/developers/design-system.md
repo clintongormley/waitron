@@ -702,7 +702,9 @@ heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as 
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after
 it; Guests has no placeholder. Rename, after Change seats on the details sheet, opens the Rename
 window (`apps/till/src/widgets/today-name-dialog.ts`), which names a table, or its group when it is
-in one, for today; its hint names what an empty field puts back ("Leave it empty for Bar+Window"), and
+in one, for today; its empty field's placeholder is the name an empty field puts back ("Bar+Window"),
+shortened where it does not fit to as many whole table names as fit, then "+…"; when not even the first
+name and "+…" fit, to as much of the first name as fits, then "…" (`apps/till/src/widgets/fit-placeholder.ts`), and
 a name in use or too long is refused under the field, and any other refusal at the window's foot, with the
 window kept open and what was typed kept — or on the floor when, by the time the answer arrives, the table
 no longer offers Rename or is in a different group.

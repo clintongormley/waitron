@@ -9,6 +9,7 @@ import {
   submitOnEnter,
   draftScopeFor,
   saveActionState,
+  MAP_SEPARATOR,
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -16,6 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { PARTY_NAME_MAX } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { PlaceholderFit } from "./fit-placeholder.js";
 
 export interface TodayNameDetail {
   /** Trimmed; null goes back to the normal name. */
@@ -51,6 +53,7 @@ export class TillTodayNameDialog extends LitElement {
   @property({ attribute: false }) refusal: TodayNameRefusal | null = null;
 
   @state() private attempted = false;
+  readonly #placeholder = new PlaceholderFit(this, () => this.normalName, MAP_SEPARATOR);
   @state() private refusalDismissed = false;
   @state() private active = true;
   #scope?: DraftScope<string>;
@@ -175,7 +178,7 @@ export class TillTodayNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("floor.rename_label")}
-          .hint=${t("floor.rename_hint").replace("{name}", () => this.normalName)}
+          .placeholder=${this.#placeholder.placeholder}
           .value=${live(this.value)}
           .disabled=${this.busy}
           .error=${fieldError}

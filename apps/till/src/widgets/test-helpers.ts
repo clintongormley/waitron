@@ -482,3 +482,48 @@ export async function cancelThroughDialog(
   emitFrom(dialog, "adjust-confirm");
   await settle();
 }
+
+const placeholderInput = (el: HTMLElement) =>
+  el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+
+/** Measured with the page's own layout, not the window's canvas: a span in the placeholder's font
+ * and letter spacing, against the field's unrounded box less its borders and padding. */
+export function drawn(el: HTMLElement) {
+  const input = placeholderInput(el);
+  const control = getComputedStyle(input);
+  const placeholder = getComputedStyle(input, "::placeholder");
+  const px = (value: string) => parseFloat(value);
+  return {
+    placeholder: input.placeholder,
+    width(text: string): number {
+      const probe = document.createElement("span");
+      probe.style.cssText = "position: absolute; visibility: hidden; white-space: pre";
+      probe.style.font = placeholder.font;
+      probe.style.letterSpacing = placeholder.letterSpacing;
+      probe.textContent = text;
+      document.body.append(probe);
+      const width = probe.getBoundingClientRect().width;
+      probe.remove();
+      return width;
+    },
+    textBox:
+      input.getBoundingClientRect().width -
+      px(control.borderLeftWidth) -
+      px(control.borderRightWidth) -
+      px(control.paddingLeft) -
+      px(control.paddingRight),
+  };
+}
+
+/** Adds a placeholder rule inside the `wt-input`'s own shadow tree. */
+export function stylePlaceholder(el: HTMLElement, rule: string): void {
+  const style = document.createElement("style");
+  style.textContent = `.field-control::placeholder { ${rule} }`;
+  el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.append(style);
+}
+
+/** A ResizeObserver reports after the frame's animation callbacks, so this waits two frames. */
+export async function measured(): Promise<void> {
+  for (let frame = 0; frame < 2; frame++)
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+}

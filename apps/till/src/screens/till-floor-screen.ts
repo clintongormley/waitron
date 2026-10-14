@@ -21,6 +21,7 @@ import {
   buildZoneTabs,
   floorTrayStyles,
   inNumberOrder,
+  MAP_SEPARATOR,
   mergeLabel,
   renderFloorChips,
   resolveActiveTabKey,
@@ -814,7 +815,7 @@ export class TillFloorScreen extends LitElement {
       [...groups.values()]
         .sort((a, b) => inNumberOrder(firstLabel(a), firstLabel(b)))
         .map(groupName),
-      "+",
+      MAP_SEPARATOR,
     );
   }
 

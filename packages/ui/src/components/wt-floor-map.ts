@@ -103,8 +103,11 @@ const collator = new Intl.Collator(undefined, { numeric: true });
 /** The order the map names a merge's labels in, and so the order a waiter reads them. */
 export const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
 
+export const MAP_SEPARATOR = "+";
+
 /** Names the labels in the order given. */
-export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
+export const mapLabel = (labels: readonly string[]): string =>
+  partyTablesName(labels, MAP_SEPARATOR);
 
 /** A merge's name when it has none for today: its labels in number order, then `mapLabel`. */
 export const mergeLabel = (labels: readonly string[]): string =>
