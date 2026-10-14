@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
@@ -18,6 +18,29 @@ import { t } from "../i18n/t.js";
 export interface PartyNameDetail {
   /** Trimmed; null clears the name. */
   name: string | null;
+}
+
+/**
+ * Chromium draws a text field's `text-overflow: ellipsis` only while the field does not have the
+ * cursor, and this window opens with the cursor in it, so the placeholder is shortened as text.
+ * Whole names of a ", "-separated list are kept where one fits; otherwise the first is cut.
+ */
+export function fitPlaceholder(
+  text: string,
+  width: number,
+  measure: (text: string) => number,
+): string {
+  if (measure(text) <= width) return text;
+  const names = text.split(", ");
+  for (let count = names.length - 1; count > 0; count--) {
+    const shortened = `${names.slice(0, count).join(", ")}, …`;
+    if (measure(shortened) <= width) return shortened;
+  }
+  for (let length = names[0]!.length; length > 0; length--) {
+    const shortened = `${names[0]!.slice(0, length).trimEnd()}…`;
+    if (measure(shortened) <= width) return shortened;
+  }
+  return "…";
 }
 
 @customElement("till-party-name-dialog")
@@ -42,6 +65,11 @@ export class TillPartyNameDialog extends LitElement {
   @property() refusal = "";
 
   @state() private attempted = false;
+  /** The name field's text box, in pixels; infinite until the field is first measured. */
+  @state() private textBox = Number.POSITIVE_INFINITY;
+  #placeholder = "";
+  #resize?: ResizeObserver;
+  readonly #measure = document.createElement("canvas").getContext("2d")!;
 
   @state() private active = true;
   #scope?: DraftScope<string>;
@@ -55,7 +83,13 @@ export class TillPartyNameDialog extends LitElement {
     this.requestUpdate();
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("tables") || changed.has("textBox"))
+      this.#placeholder = fitPlaceholder(
+        this.tables,
+        this.textBox,
+        (text) => this.#measure.measureText(text).width,
+      );
     if (!this.isConnected || !this.active || this.#scope) return;
     this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
@@ -70,7 +104,24 @@ export class TillPartyNameDialog extends LitElement {
     scope.commit(this.#baseline);
   }
 
+  override updated(): void {
+    if (this.#resize) return;
+    const field = this.renderRoot.querySelector("wt-input")!;
+    this.#resize = new ResizeObserver(() => this.#measureField(field));
+    this.#resize.observe(field);
+  }
+
+  #measureField(field: HTMLElement): void {
+    const input = field.shadowRoot!.querySelector("input")!;
+    const control = getComputedStyle(input);
+    this.#measure.font = getComputedStyle(input, "::placeholder").font;
+    this.textBox =
+      input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight);
+  }
+
   override disconnectedCallback(): void {
+    this.#resize?.disconnect();
+    this.#resize = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -158,7 +209,7 @@ export class TillPartyNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("table.name_label")}
-          .placeholder=${this.tables}
+          .placeholder=${this.#placeholder}
           .value=${live(this.value)}
           .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
