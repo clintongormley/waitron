@@ -271,8 +271,8 @@ export async function loadRehearsalProfile(
 
 /** A run that went wrong after the bucket was named; its message carries no SDK text or value. */
 class AwsRehearsalFailed extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "AwsRehearsalFailed";
   }
 }
@@ -1604,9 +1604,10 @@ async function runOwned<T>(
     tearingDown = true;
     // A run that never owned a bucket records this step only if it made scratch.
     const scratchEntries: TeardownEntry[] = [];
+    let scratchRemovalError: unknown;
     if (created?.state === "owned" || scratchMade) {
       await Promise.all(scratchMaking);
-      const entry = await removeScratch(
+      const { entry, removalError } = await removeScratch(
         scratchMade,
         scratchRoot,
         deps.removeDir,
@@ -1614,6 +1615,7 @@ async function runOwned<T>(
       );
       contained.teardown(entry);
       scratchEntries.push(entry);
+      scratchRemovalError = removalError;
     }
     const scratchLeft = scratchEntries.some((entry) => entry.outcome === "failed")
       ? `; scratch folder not removed: ${scratchRoot}`
@@ -1673,6 +1675,7 @@ async function runOwned<T>(
             `teardown failed at ${failed}` +
               scratchLeft +
               (receiptFailure === undefined ? `; receipt: ${receiptPath}` : ""),
+            scratchRemovalError === undefined ? undefined : { cause: scratchRemovalError },
           );
     const problems = [
       failure,
@@ -1718,32 +1721,48 @@ async function runOwned<T>(
   }
 }
 
-/** `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this. */
+/**
+ * `stillRunning`: the scenario outlived its settle wait, so it can write the root again after this,
+ * and can make the removal itself throw; the entry names the scenario either way, so its name does
+ * not depend on which won the race. `removalError` is what the removal threw, if it did.
+ */
 export async function removeScratch(
   made: boolean,
   root: string,
   removeDir: AwsRehearsalDeps["removeDir"],
   stillRunning: boolean,
-): Promise<TeardownEntry> {
-  if (!made) return { step: "remove-scratch", outcome: "skipped" };
+): Promise<{ entry: TeardownEntry; removalError?: unknown }> {
+  if (!made) return { entry: { step: "remove-scratch", outcome: "skipped" } };
+  const stillRunningEntry: TeardownEntry = {
+    step: "remove-scratch",
+    outcome: "failed",
+    errorName: "ScenarioStillRunning",
+    httpStatus: null,
+  };
   try {
     await removeDir(root);
   } catch (error) {
-    return failedEntry("remove-scratch", error);
+    return {
+      entry: stillRunning ? stillRunningEntry : failedEntry("remove-scratch", error),
+      removalError: error,
+    };
   }
+  if (stillRunning) return { entry: stillRunningEntry };
   const back = await access(root).then(
     () => true,
     () => false,
   );
-  if (stillRunning || back) {
+  if (back) {
     return {
-      step: "remove-scratch",
-      outcome: "failed",
-      errorName: stillRunning ? "ScenarioStillRunning" : "ScratchRecreated",
-      httpStatus: null,
+      entry: {
+        step: "remove-scratch",
+        outcome: "failed",
+        errorName: "ScratchRecreated",
+        httpStatus: null,
+      },
     };
   }
-  return { step: "remove-scratch", outcome: "ok" };
+  return { entry: { step: "remove-scratch", outcome: "ok" } };
 }
 
 /**

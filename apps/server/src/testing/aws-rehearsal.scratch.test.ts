@@ -235,6 +235,8 @@ describe("AwsRehearsal.scratch", () => {
 
   describe("a scenario still running when teardown starts", () => {
     // Writes `secrets.env` every 5 ms, remaking its folder first, until `stop` or its own signal.
+    // Once the run has signalled a stop, teardown can remove the folder mid-write, so a write that
+    // fails then is expected; one that fails before the stop is not.
     function writer(honoursSignal: boolean) {
       let stop = false;
       let finished: Promise<void> | undefined;
@@ -242,8 +244,12 @@ describe("AwsRehearsal.scratch", () => {
         finished = (async () => {
           const folder = await ctx.scratch("loop");
           while (!stop && !(honoursSignal && ctx.signal.aborted)) {
-            await mkdir(folder, { recursive: true });
-            await writeFile(join(folder, "secrets.env"), "KEY=value\n");
+            try {
+              await mkdir(folder, { recursive: true });
+              await writeFile(join(folder, "secrets.env"), "KEY=value\n");
+            } catch (error) {
+              if (!ctx.signal.aborted) throw error;
+            }
             await delay(5);
           }
         })();
@@ -273,6 +279,47 @@ describe("AwsRehearsal.scratch", () => {
       } finally {
         await w.end();
       }
+    });
+
+    it("names the still-running scenario, and keeps the removal's error as the cause, when the removal throws", async () => {
+      // As `rm` does when a racing rewrite puts a file back in a folder it is emptying.
+      const removal = Object.assign(new Error("ENOTEMPTY: directory not empty"), {
+        code: "ENOTEMPTY",
+      });
+      let release: () => void = () => {};
+      const scenario = async (ctx: AwsRehearsal): Promise<void> => {
+        await ctx.scratch("loop");
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      };
+      const error = await rejection(
+        withAwsRehearsal(
+          scenario,
+          deps(
+            {},
+            {
+              deadlineMs: 30,
+              settleMs: 20,
+              removeDir: async () => {
+                throw removal;
+              },
+            },
+          ),
+        ),
+      );
+      release();
+      expect((await receipt()).teardown.at(-1)).toEqual({
+        step: "remove-scratch",
+        outcome: "failed",
+        errorName: "ScenarioStillRunning",
+        httpStatus: null,
+      });
+      const teardownFailure = (error as AggregateError).errors.find((each: Error) =>
+        each.message.startsWith("teardown failed at remove-scratch"),
+      ) as Error;
+      expect(teardownFailure.message).toContain(`scratch folder not removed: ${root()}`);
+      expect(teardownFailure.cause).toBe(removal);
     });
 
     it("records remove-scratch as ok when the scenario stops within the settle wait", async () => {

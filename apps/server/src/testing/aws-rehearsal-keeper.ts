@@ -296,7 +296,7 @@ async function removeJournalScratch(
   deps: KeeperDeps,
 ): Promise<{ entry: TeardownEntry | null; left: string | null }> {
   if (journal.scratchRoot === null) return { entry: null, left: null };
-  const entry = await removeScratch(true, journal.scratchRoot, deps.removeDir, false);
+  const { entry } = await removeScratch(true, journal.scratchRoot, deps.removeDir, false);
   return { entry, left: entry.outcome === "failed" ? journal.scratchRoot : null };
 }
 
