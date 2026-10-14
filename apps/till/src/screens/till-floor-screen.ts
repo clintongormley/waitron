@@ -989,7 +989,12 @@ export class TillFloorScreen extends LitElement {
       const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
       if (dropAction(zoneTables, drop).kind === "none") continue;
       const label = linkId === null ? this.#mergeName(each) : this.#linkName(linkId);
-      targets.push({ ...each, label: label ?? shownName(each) });
+      // `tableTarget` draws a table's own name for today ahead of its label.
+      targets.push({
+        ...each,
+        label: label ?? shownName(each),
+        today: { ...each.today!, name: null },
+      });
     }
     return targets.sort((a, b) => inNumberOrder(a.label, b.label));
   }

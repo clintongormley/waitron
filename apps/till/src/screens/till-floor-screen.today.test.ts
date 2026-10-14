@@ -813,6 +813,49 @@ describe("till-floor-screen: today's names", () => {
     ]);
   });
 
+  const drawnTargets = async (el: TillFloorScreen) => {
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
+        "till-join-with-dialog",
+      )!;
+    await dialog.updateComplete;
+    return [...dialog.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map((target) => [
+      target.dataset.target,
+      target.querySelector(".target-label")!.textContent!.trim(),
+    ]);
+  };
+
+  it("Join with… draws a named group by its name when its first table has its own name for today", async () => {
+    const el = await mount(
+      [counter4({}, inGroup("García birthday")), counter5(inGroup("García birthday")), bar()],
+      stubApi(),
+    );
+    await press(el, "tb", "join-with");
+    expect(await drawnTargets(el)).toEqual([["t4", "García birthday"]]);
+  });
+
+  it("Join with… draws an unnamed group by its tables' shown names when its first table has its own name for today", async () => {
+    const el = await mount(
+      [counter4({}, inGroup(null)), counter5(inGroup(null)), bar()],
+      stubApi(),
+    );
+    await press(el, "tb", "join-with");
+    expect(await drawnTargets(el)).toEqual([["t4", "Counter 5+Window"]]);
+  });
+
+  it("Join with… sends a group's first table by saved name, whatever its tables are called today", async () => {
+    const el = await mount(
+      [
+        counter4({}, { name: "Alpha", ...inGroup(null) }),
+        bar({ name: "Zed", ...inGroup(null) }),
+        counter5(),
+      ],
+      stubApi(),
+    );
+    await press(el, "t5", "join-with");
+    expect(await drawnTargets(el)).toEqual([["tb", "Alpha+Zed"]]);
+  });
+
   const splitWindow = (el: TillFloorScreen) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-split-joined-dialog"]>(
       "till-split-joined-dialog",
