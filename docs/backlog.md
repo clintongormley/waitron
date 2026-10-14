@@ -307,6 +307,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
+- **A venue without Cloud needs a usable paper-custodian route.** If you do not subscribe to
+  Cloud, your custodian currently needs a repository checkout to create a signing key and sign
+  allocations, plus a separate master register. Design a route a restaurant owner can use after
+  W41s-4 lands, such as a dashboard page or a printed setup kit. Owner request, 2026-10-14.
+  Detail: [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+
 - **W41s. Fiscal prevention and offline recovery** — DESIGN AND REVISED PLAN APPROVED (2026-10-04).
   **2026-10-13, Task 4 decisions settled:** cold restore checks the selected backup's
   node key, and you must keep its older paper key until no older backup remains. The owner

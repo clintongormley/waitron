@@ -175,10 +175,6 @@ export interface SifContentionFixture {
   nodeIds: NodeId[];
 }
 
-/**
- * `count` DISTINCT nodes sharing ONE NIF, with NO SIF registered yet, so a test can fire every
- * `registerSif` itself, concurrently, against the one `contadores_instalacion` allocator.
- */
 export async function seedNodesForSifContention(
   db: Database,
   count: number,

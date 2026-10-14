@@ -1360,7 +1360,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         target.store.venue.all(
           sql`select code from invoice_series where retired_at is null order by code`,
         ),
-      ).toEqual([{ code: "B" }, { code: "FB" }, { code: "RB" }]);
+      ).toEqual([{ code: "B-S000001" }, { code: "FB-S000001" }, { code: "RB-S000001" }]);
       expect(
         target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);

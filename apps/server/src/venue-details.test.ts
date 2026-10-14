@@ -1,3 +1,6 @@
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
+import { stampDeployment } from "@waitron/db";
 import { floorTodayTables } from "@waitron/db";
 import { Hono } from "hono";
 import { WorkforceBackend, employments } from "@waitron/workforce";
@@ -629,6 +632,30 @@ describe("unavailable country and own expected values", () => {
 });
 
 describe("venue details preserve committed history", () => {
+  beforeEach(async () => {
+    await stampDeployment(suite.db, "preproduction");
+    const taxId = suite.db.all<{ tax_id: string }>(sql`select tax_id from tenants`)[0]!.tax_id;
+    const bases = suite.db.all<{ code: string; purpose: string }>(
+      sql`select code, purpose from invoice_series where retired_at is null`,
+    );
+    const fixture = allocationFixture({
+      node: { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId },
+      taxpayerNif: taxId,
+      identity: "P000042",
+      bases,
+    });
+    await fixture.transaction(suite.db, "re-register", (tx, operation) =>
+      ALLOCATED_FISCAL_SEED.run(
+        tx,
+        { nodeId: venue.cfg.nodeId, locationId: venue.cfg.locationId },
+        operation,
+      ),
+    );
+    expect(suite.db.all(sql`select * from fiscal_allocations`)).toHaveLength(1);
+    expect(
+      suite.db.all(sql`select name from sqlite_master where name = 'contadores_instalacion'`),
+    ).toEqual([]);
+  });
   const retainedTables = [
     "tenants",
     "nodes",
@@ -640,7 +667,8 @@ describe("venue details preserve committed history", () => {
     "sale_voids",
     "registros_facturacion",
     "registro_sif",
-    "contadores_instalacion",
+    "fiscal_allocations",
+    "fiscal_reservations",
     "working_orders",
     "working_order_lines",
     "ticket_items",
@@ -662,6 +690,7 @@ describe("venue details preserve committed history", () => {
     )();
     const initial = await read();
     const history = retained();
+    expect(history.fiscal_allocations).toHaveLength(1);
     const location = suite.db.all(sql`select * from locations`);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -695,6 +724,7 @@ describe("venue details preserve committed history", () => {
   it("a rolled-back real sale does not leave history or consume a series number", async () => {
     const sell = await prepareSale();
     const before = retained();
+    expect(before.fiscal_allocations).toHaveLength(1);
     await suite.db.execute(
       sql`create trigger detail_sale_rollback before insert on sale_settlements begin select raise(abort, 'sale rollback probe'); end`,
     );

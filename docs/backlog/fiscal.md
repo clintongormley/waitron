@@ -185,6 +185,15 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
+## A venue without Cloud needs a usable paper-custodian route
+
+You can use fiscal allocations without a Cloud subscription. The current paper route asks your
+custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,
+keep a separate master register and sign allocation evidence. That is not a usable setup route for
+an ordinary restaurant owner. After W41s-4 lands, design a friendly route, such as a dashboard page
+or a printed setup kit, while preserving the separate custodian and outside register. The owner
+requested this follow-up on 2026-10-14; no design or product work belongs in W41s-4.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate

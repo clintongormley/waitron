@@ -989,3 +989,21 @@ venue-application suite passes all 43 cases. The earlier independent guard remov
 returned ids versus one and its restored candidate passed 43. No owner answer remains pending
 for these checks. Host consumer/input ports, server type errors, current-main regeneration, full
 upgrade/Cloud qualification, both reviews, the hook and current-head CI still remain.
+
+
+**2026-10-14 developer and remaining host-check qualification:** the owner approved both A
+choices in [the remaining request](2026-10-14-w41s4-host-check-and-demo-decision.md).
+The venue-details snapshots now include complete populated allocation rows and the reservation
+ledger. The new-taxpayer import checks its supplied B-S000001/FB-S000001/RB-S000001 series.
+The developer seed uses a runtime signing boundary constrained to preproduction and the built-in
+fictional Spanish taxpayer. Its seven new database cases cover all purposes and refuse production
+or changed country, tax ID or legal name before venue facts are written. The original developer
+production-refusal and untouched-directory checks remain unchanged. All four affected suites
+passed 147 cases. In an independently frozen-installed candidate, deleting the identity guard
+failed three refusal cases, deleting the environment guard failed one, and omitting the allocation
+table from each history snapshot failed both capture assertions; restoring the source passed
+147 cases. The initial runtime construction used the wrong private-key representation and an
+extra-field consumption object; both were corrected before the behavioral guard controls.
+The owner-requested usable paper-custodian follow-up is recorded without design work.
+Current-main rebase and regeneration, populated upgrade, the incoming Cloud operator contract,
+both FULL reviews and the hook/current-head CI remain before publication. Task 4 is incomplete.

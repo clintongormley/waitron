@@ -22,8 +22,6 @@ import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
 
-// The installation-number counter never resets, so each case relies on the helper's per-test reset
-// to start from an empty `contadores_instalacion`.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;

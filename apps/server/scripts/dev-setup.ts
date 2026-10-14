@@ -15,7 +15,7 @@ import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { applyVenue, planVenue } from "@waitron/provisioning";
+import { planVenue } from "@waitron/provisioning";
 import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -32,6 +32,7 @@ import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
 import { demoDataSetFor } from "./demo-seed/data-set.js";
+import { applyDeveloperDemoVenue } from "./demo-seed/allocation.js";
 
 export { parseEnvFile };
 
@@ -198,7 +199,7 @@ async function provisionVenue(
   seedLocale: SeedLocale,
   salesDays: number,
 ): Promise<DevVenueIds> {
-  const venue = await applyVenue(
+  const venue = await applyDeveloperDemoVenue(
     planVenue(
       {
         country: "ES",

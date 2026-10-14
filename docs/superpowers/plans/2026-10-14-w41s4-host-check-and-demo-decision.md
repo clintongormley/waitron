@@ -1,5 +1,11 @@
 # W41s-4: the remaining host checks and developer demo
 
+> **Owner answers, 2026-10-14:** both A choices below are approved. The branch applies the
+> two exact host-check rows and a developer runtime allocation boundary limited to preproduction
+> and the built-in fictional Spanish identity. Real setup still consumes supplied outside evidence.
+> This dated update supersedes the pending status in the historical request below.
+
+
 The host pass now exercises supplied setup, re-registration, standby, promotion,
 archive and bucket inputs. Three existing checks and the developer demo remain
 open. The earlier approvals remain valid; this request changes none of their limits.
