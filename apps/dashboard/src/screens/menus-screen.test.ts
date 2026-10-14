@@ -8133,14 +8133,14 @@ describe("publishing", () => {
       ).updateComplete;
       await page.screenshot({
         element: inPanel(el, "document-pane")!,
-        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-hierarchy.png`,
+        path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-hierarchy.png`,
       });
       await followChange(el, "lemon-description");
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
       await page.screenshot({
         element: inPanel(el, "document-pane")!,
-        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-detail.png`,
+        path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-detail.png`,
       });
       const menuPane = inPanel(el, "document-pane")!;
       const renderer = await content(el);
@@ -8163,7 +8163,7 @@ describe("publishing", () => {
       await expectNoA11yViolations(el.parentElement!);
       await page.screenshot({
         element: menuPane,
-        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
+        path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
       });
       await followChange(el, "home-columns");
       checkWidth();
@@ -10999,7 +10999,7 @@ it.each(
     );
     await page.screenshot({
       element: el,
-      path: `.superpowers/a461-task9/menus-${locale}-${theme}-${width}-${state}.png`,
+      path: `__screenshots__/a461-task9/menus-${locale}-${theme}-${width}-${state}.png`,
     });
   };
   const search = async (value: string) => {
@@ -11118,7 +11118,7 @@ it.each(
     await expectNoA11yViolations(el.parentElement!);
     await page.screenshot({
       element: el,
-      path: `.superpowers/a462-task5/structure-${width}-${locale}-${theme}-${state}.png`,
+      path: `__screenshots__/a462-task5/structure-${width}-${locale}-${theme}-${state}.png`,
     });
   };
   const select = q<HTMLButtonElement>(el, '[data-test="select"]')!;
@@ -11152,7 +11152,7 @@ it.each(
   await expectNoA11yViolations(empty.parentElement!);
   await page.screenshot({
     element: empty,
-    path: `.superpowers/a462-task5/structure-${width}-${locale}-${theme}-empty.png`,
+    path: `__screenshots__/a462-task5/structure-${width}-${locale}-${theme}-empty.png`,
   });
 });
 

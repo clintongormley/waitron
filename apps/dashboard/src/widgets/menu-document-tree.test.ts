@@ -361,7 +361,7 @@ it.each(
     expect(row(el, "drinks/beer/mi")!.querySelector('[aria-current="true"]')).not.toBeNull();
     await page.screenshot({
       element: el,
-      path: `.superpowers/a350-reveal/${locale}-${theme}-${width}.png`,
+      path: `__screenshots__/a350-reveal/${locale}-${theme}-${width}.png`,
     });
   },
 );

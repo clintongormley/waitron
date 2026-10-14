@@ -1,12 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
  * Contract: a browser test's `screenshot({ path })` lands where git ignores it, so a run leaves no
- * untracked image beside the test. Vitest resolves the path against the TEST FILE's directory.
+ * untracked image beside the test, and never in a `.superpowers` folder, the agents' scratch space.
+ * Vitest resolves the path against the TEST FILE's directory.
  *
  * Weaker than its name: it parses only `*.test.ts` under `apps/` and `packages/`, skipping
  * `node_modules`, `dist` and dot-directories, and only a `.screenshot(...)` call whose first
@@ -232,6 +233,13 @@ describe("the tree", () => {
 
   it("reads every screenshot path as a literal", () => {
     expect(unreadable.sort()).toEqual([]);
+  });
+
+  it("writes no screenshot into a .superpowers folder", () => {
+    const scratch = [...written]
+      .filter(([, target]) => target.split(sep).includes(".superpowers"))
+      .map(([site, target]) => `${site} -> ${target}`);
+    expect(scratch.sort()).toEqual([]);
   });
 
   it(
