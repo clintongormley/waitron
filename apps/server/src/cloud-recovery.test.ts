@@ -547,3 +547,59 @@ describe("Cloud recovery target", () => {
     }
   });
 });
+
+describe("Cloud selected-copy preview", () => {
+  it("reviews verified bytes without staging and still permits a later restore", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow();
+    const review = vi.fn(async (request: import("./restore-request.js").ArchiveRestoreRequest) => ({
+      sourceId: request.managedCloud!.pointId,
+      nodeRecoveryKeyName: "Amber Hill",
+    }));
+    expect(typeof client.preview).toBe("function");
+    expect(await client.preview(review, point.id)).toEqual({
+      sourceId: point.id,
+      nodeRecoveryKeyName: "Amber Hill",
+    });
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    expect(saved.phase).toBeUndefined();
+    expect(review).toHaveBeenCalledWith({
+      artifact: Buffer.from("archive"),
+      recoveryKey: "archive-key",
+      environment: "preproduction",
+      managedCloud: { requestId: saved.requestId, pointId: point.id },
+    });
+    const stage = vi.fn(async () => {});
+    await client.restore(stage, point.id);
+    expect(stage).toHaveBeenCalledOnce();
+    expect(JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase).toBe(
+      "staged",
+    );
+  });
+  it("refuses wrong bytes before exposing selected-copy metadata", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow();
+    f.options.download.mockResolvedValue(Buffer.from("wrong!!"));
+    const review = vi.fn(async () => ({ nodeRecoveryKeyName: "Amber Hill" }));
+    expect(typeof client.preview).toBe("function");
+    await expect(client.preview(review, point.id)).rejects.toThrow();
+    expect(review).not.toHaveBeenCalled();
+  });
+  it("releases its gate after a failed preview and keeps the request un-staged", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow();
+    expect(typeof client.preview).toBe("function");
+    await expect(
+      client.preview(async () => {
+        throw new Error("damaged archive");
+      }, point.id),
+    ).rejects.toThrow("damaged archive");
+    expect(await client.preview(async () => "selected-name", point.id)).toBe("selected-name");
+    expect(
+      JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase,
+    ).toBeUndefined();
+  });
+});

@@ -1,3 +1,4 @@
+import type { RecoveryRestoreCredentials } from "./api/client.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { AdoptBody, ProvisionBody, ResetCredential } from "./api/client.js";
 
@@ -43,7 +44,7 @@ export function dispatchResetRequested(el: EventTarget, credential: ResetCredent
   );
 }
 
-export interface RestoreRequestDetail {
+export interface RestoreRequestDetail extends Partial<RecoveryRestoreCredentials> {
   artifact: File;
   recoveryKey: string;
   environment: "production" | "preproduction";
@@ -61,7 +62,7 @@ export function dispatchRestoreRequested(el: EventTarget, request: RestoreReques
   );
 }
 
-export interface BucketRestoreRequestDetail {
+export interface BucketRestoreRequestDetail extends Partial<RecoveryRestoreCredentials> {
   kit: string;
   environment: "production" | "preproduction";
   oldBoxGone: boolean;

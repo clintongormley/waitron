@@ -381,6 +381,62 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     await save(state);
     return view(state, "approved", p, info.operationExpiresAt);
   }
+  async function readSelectedArchive(expectedPointId: string) {
+    const state = await readForSetup();
+    if (!state || state.phase) unavailable();
+    const current = await statusOf(state, "status");
+    if (current.state !== "approved" || !current.point || expectedPointId !== current.point.id)
+      unavailable();
+    const info = await post(state, "info");
+    if (!record(info)) unavailable();
+    const p = point(info.point);
+    if (
+      p.id !== current.point.id ||
+      state.pointId !== p.id ||
+      !validDate(info.operationExpiresAt) ||
+      Date.parse(info.operationExpiresAt) <= Date.now()
+    )
+      unavailable();
+    const result = await post(state, "read", p.digest);
+    if (
+      !record(result) ||
+      !record(result.location) ||
+      !record(result.credentials) ||
+      typeof result.recoveryKey !== "string" ||
+      !result.recoveryKey ||
+      !validDate(result.expiresAt) ||
+      Date.parse(result.expiresAt) <= Date.now() ||
+      !validDate(result.operationExpiresAt) ||
+      Date.parse(result.operationExpiresAt) <= Date.now()
+    )
+      unavailable();
+    const granted = point(result.point);
+    if (JSON.stringify(granted) !== JSON.stringify(p)) unavailable();
+    const grant = result as unknown as Grant;
+    const archive = await (
+      options.download ?? ((g: Grant) => downloadArchive(g, options.storageCa))
+    )(grant);
+    if (
+      archive.length !== p.size ||
+      createHash("sha256").update(archive).digest("hex") !== p.digest
+    )
+      unavailable();
+    const after = await post(state, "info");
+    if (
+      !record(after) ||
+      JSON.stringify(point(after.point)) !== JSON.stringify(p) ||
+      !validDate(after.operationExpiresAt) ||
+      Date.parse(after.operationExpiresAt) <= Date.now()
+    )
+      unavailable();
+    const request: ArchiveRestoreRequest = {
+      artifact: archive,
+      recoveryKey: grant.recoveryKey,
+      environment: "preproduction",
+      managedCloud: { requestId: state.requestId, pointId: p.id },
+    };
+    return { state, request };
+  }
   return {
     async replacementApproval(): Promise<{
       requestId: string;
@@ -456,64 +512,22 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         return statusOf(state, "start");
       });
     },
+    async preview<T>(
+      review: (request: ArchiveRestoreRequest) => Promise<T>,
+      expectedPointId: string,
+    ): Promise<T> {
+      return locked(async () => {
+        const { request } = await readSelectedArchive(expectedPointId);
+        return review(request);
+      });
+    },
     async restore(
       stage: (request: ArchiveRestoreRequest) => Promise<void>,
       expectedPointId: string,
     ): Promise<void> {
       return locked(async () => {
-        const state = await readForSetup();
-        if (!state || state.phase) unavailable();
-        const current = await statusOf(state, "status");
-        if (current.state !== "approved" || !current.point || expectedPointId !== current.point.id)
-          unavailable();
-        const info = await post(state, "info");
-        if (!record(info)) unavailable();
-        const p = point(info.point);
-        if (
-          p.id !== current.point.id ||
-          state.pointId !== p.id ||
-          !validDate(info.operationExpiresAt) ||
-          Date.parse(info.operationExpiresAt) <= Date.now()
-        )
-          unavailable();
-        const result = await post(state, "read", p.digest);
-        if (
-          !record(result) ||
-          !record(result.location) ||
-          !record(result.credentials) ||
-          typeof result.recoveryKey !== "string" ||
-          !result.recoveryKey ||
-          !validDate(result.expiresAt) ||
-          Date.parse(result.expiresAt) <= Date.now() ||
-          !validDate(result.operationExpiresAt) ||
-          Date.parse(result.operationExpiresAt) <= Date.now()
-        )
-          unavailable();
-        const granted = point(result.point);
-        if (JSON.stringify(granted) !== JSON.stringify(p)) unavailable();
-        const grant = result as unknown as Grant;
-        const archive = await (
-          options.download ?? ((g: Grant) => downloadArchive(g, options.storageCa))
-        )(grant);
-        if (
-          archive.length !== p.size ||
-          createHash("sha256").update(archive).digest("hex") !== p.digest
-        )
-          unavailable();
-        const after = await post(state, "info");
-        if (
-          !record(after) ||
-          JSON.stringify(point(after.point)) !== JSON.stringify(p) ||
-          !validDate(after.operationExpiresAt) ||
-          Date.parse(after.operationExpiresAt) <= Date.now()
-        )
-          unavailable();
-        await stage({
-          artifact: archive,
-          recoveryKey: grant.recoveryKey,
-          environment: "preproduction",
-          managedCloud: { requestId: state.requestId, pointId: p.id },
-        });
+        const { state, request } = await readSelectedArchive(expectedPointId);
+        await stage(request);
         state.phase = "staged";
         await save(state);
       });

@@ -160,6 +160,7 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
+import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import {
   clearStagedConfigurationImport,
@@ -219,6 +220,7 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
+import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -922,20 +924,58 @@ async function bootServer(
     const ownerDatabaseName = config.venueDir;
     const openBoundedBucket = (bucket: BucketConfig) =>
       boundObjectStore(createS3ObjectStore(bucket));
+    const cloudRecovery =
+      cloudOrigin && config.environment === "preproduction"
+        ? createCloudRecoveryClient({
+            stateDir: config.stateDir,
+            origin: cloudOrigin,
+            environment: config.environment,
+          })
+        : undefined;
     mountSetup(
       app,
       {
         environment: config.environment,
         devMode: config.devMode,
         operations: createSetupOperationStore(config.stateDir),
-        cloudRecovery:
-          cloudOrigin && config.environment === "preproduction"
-            ? createCloudRecoveryClient({
-                stateDir: config.stateDir,
-                origin: cloudOrigin,
-                environment: config.environment,
-              })
-            : undefined,
+        cloudRecovery,
+        previewRestore: (request) =>
+          previewRecoveryArchive({
+            ...request,
+            stateDir: config.stateDir,
+            stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+            migrationsRoot: config.migrationsRoot,
+            modules: ALL_MODULES,
+          }),
+        previewCloudRestore:
+          cloudRecovery === undefined
+            ? undefined
+            : (pointId) =>
+                cloudRecovery.preview(
+                  (request) =>
+                    previewRecoveryArchive({
+                      ...request,
+                      stateDir: config.stateDir,
+                      stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+                      migrationsRoot: config.migrationsRoot,
+                      modules: ALL_MODULES,
+                    }),
+                  pointId,
+                ),
+        previewBucketRestore: async ({ kit, environment, oldBoxGone }) =>
+          previewRecoveryStream({
+            kit: parseRecoveryKit(kit),
+            stateDir: config.stateDir,
+            stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+            migrationsRoot: config.migrationsRoot,
+            modules: ALL_MODULES,
+            environment,
+            litestreamBin: config.litestreamBin,
+            oldBoxGone,
+            now,
+            log,
+            openStore: openBoundedBucket,
+          }),
         stageRestore: (request, { oldBoxGone }) =>
           stageRestoreRequest(config.stateDir, request, async (candidate) => {
             const validated = await validateArtifact({
@@ -960,7 +1000,14 @@ async function bootServer(
             }
           }),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
-        stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
+        stageBucketRestore: async ({
+          kit,
+          environment,
+          oldBoxGone,
+          venueConfirmed,
+          recoveryOperation,
+          nodeRecoverySecret,
+        }) =>
           stageStreamRestore({
             kit: parseRecoveryKit(kit),
             stateDir: config.stateDir,
@@ -971,6 +1018,8 @@ async function bootServer(
             litestreamBin: config.litestreamBin,
             oldBoxGone,
             venueConfirmed,
+            recoveryOperation,
+            nodeRecoverySecret,
             now,
             log,
             openStore: openBoundedBucket,
@@ -1880,6 +1929,11 @@ async function bootServer(
   mountMembershipRemovalApi(app, { db, ring, nodeId: till.nodeId }, log);
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
+  mountRecoveryPackApi(
+    app,
+    { db, node: till, venueId: till.locationId, modules: setsToMigrate, now },
+    log,
+  );
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,

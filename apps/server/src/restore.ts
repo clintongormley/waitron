@@ -1,4 +1,5 @@
 import { lstatSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import {
   chmod,
   copyFile,
@@ -37,7 +38,13 @@ import {
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
-import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
+import {
+  orderedMigrationSets,
+  type OperationBinding,
+  type ProvisionedNode,
+  type WaitronModule,
+} from "@waitron/module";
+import { assertNotAhead } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -100,6 +107,7 @@ export interface RestoreDeps extends ValidationDeps {
    * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly withModuleOperations?: RestoreOperationRunner;
+  readonly resumeOperation?: OperationBinding;
   readonly log: Logger;
 }
 
@@ -248,12 +256,26 @@ async function validateEntryMetadata(
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
-  if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
-  await restoreDatabase({
-    databasePath: validated.databasePath,
-    venueDir: deps.venueDir,
-    log,
-  });
+  if (deps.resumeOperation !== undefined) {
+    if (
+      deps.skipSecrets ||
+      !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile()
+    )
+      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
+    const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
+    try {
+      await assertNotAhead(existing.db, orderedMigrationSets(deps.modules), deps.migrationsRoot);
+    } finally {
+      await existing.close();
+    }
+  } else {
+    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
+    await restoreDatabase({
+      databasePath: validated.databasePath,
+      venueDir: deps.venueDir,
+      log,
+    });
+  }
   // The gate admits an OLDER schema; a hook written against today's must not run against
   // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
   await (deps.migrate ?? applyMigrations)(
@@ -277,6 +299,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
       node: identity.node,
       log,
       withModuleOperations: deps.withModuleOperations,
+      resumeOperation: deps.resumeOperation,
     });
   } finally {
     await opened.close();
@@ -633,6 +656,7 @@ export async function runRestoreHooks(args: {
   log: Logger;
   moduleOperations?: ModuleOperations;
   withModuleOperations?: RestoreOperationRunner;
+  resumeOperation?: OperationBinding;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
   const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
@@ -647,6 +671,18 @@ export async function runRestoreHooks(args: {
       throw new AppError("restore.identity_unknown", {
         nodeId: node.nodeId,
       });
+    }
+    if (args.resumeOperation !== undefined) {
+      const binding = args.resumeOperation;
+      const owner = args.modules.find((module) => module.name === binding.module);
+      const operation = moduleOperationFor(operations, binding.module, node.nodeId, "restore");
+      if (
+        operation === undefined ||
+        !isDeepStrictEqual(operation.binding, binding) ||
+        owner?.backup?.assertRestoreCommitted === undefined
+      )
+        throw new AppError("module.operation_invalid", { module: binding.module });
+      await owner.backup.assertRestoreCommitted(tx, node, binding);
     }
     const reports: string[] = [];
     let replacement:

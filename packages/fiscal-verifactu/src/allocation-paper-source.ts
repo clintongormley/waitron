@@ -4,7 +4,6 @@ import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import type {
   AllocationEvidenceRequest,
-  AllocationEvidenceSource,
   AllocationOperationEvidence,
 } from "./allocation-operation.js";
 import type {
@@ -14,6 +13,15 @@ import type {
 import { enrolPaperCustodian } from "./paper-evidence.js";
 
 type PaperAuthority = Extract<AllocationOperationEvidence["authority"], { kind: "paper" }>;
+type PaperAllocationSource = (request: AllocationEvidenceRequest) => Promise<
+  AllocationEvidenceRequest & {
+    evidence: AllocationOperationEvidence & {
+      allocationId: string;
+      authority: PaperAuthority;
+      requiredBases: NonNullable<AllocationOperationEvidence["requiredBases"]>;
+    };
+  }
+>;
 type CurrentConfirmation = AllocationEvidenceRequest &
   Pick<AllocationOperationEvidence, "priorActivation" | "incidentEvidence"> & {
     version: 1;
@@ -103,7 +111,7 @@ export function createPaperAllocationSource(configuration: {
   readonly custodianPath: string;
   readonly confirmationPath: string;
   readonly confirmedFingerprint: string;
-}): AllocationEvidenceSource {
+}): PaperAllocationSource {
   const { custodianPath, confirmationPath, confirmedFingerprint } = configuration;
   return async (supplied) => {
     const request = structuredClone(supplied);

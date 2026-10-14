@@ -978,3 +978,184 @@ unsuffixed initial series. The concrete proposals and experiments are in
 They are not enabled by this checkpoint. Task 4 still owes their decisions and
 implementation, current-main regeneration/populated upgrade, the Cloud operator
 contract, both FULL reviews, the push hook and current-head CI.
+
+
+## W41s-6 pack-download checkpoint (2026-10-14)
+
+The candidate pack download combines the node key you supply with a module-validated public
+paper-register snapshot, without bucket or subscription settings. It keeps the existing verifier
+and key name. A pack is secret-bearing, and its snapshot does not establish that the outside
+register still makes an allocation available.
+
+The printable handover, selected-backup key name, allocation screen, paper/emergency/phone input
+collection across restore entry points, and interrupted-recovery exercise remain to be built.
+This checkpoint is not the completed offline recovery journey or a usable paper-custodian tool.
+
+**2026-10-14 printable-pack checkpoint:** the candidate adds `sign-register`, a Backups card and
+offline JSON/HTML downloads with the supplied current node key's stored name. Printing retains the
+signed register and public custodian fingerprint; it neither changes the current outside master nor
+establishes consumption authority. The selected-copy preview reader reads the key name from the
+decrypted backup and qualifies a live-key replacement, but has no public chooser consumer yet.
+The chooser, paper/emergency/phone collection, restore-screen integration and interruption exercise
+remain open. The custodian still needs the repository command and a separate master register.
+
+**2026-10-14 archive-chooser checkpoint:** setup can review the selected archive's business,
+location, date and saved node-key name before staging it. The preview upgrades only its private
+copy; an archive predating named keys says the name is absent. Changing the file, encryption key
+or environment clears the preview. Its warning keeps the node credential separate from archive
+encryption and tells you to retain older paper keys. Bucket/Cloud chooser integration, offline
+allocation collection and interrupted activation remain open; this is not the completed Task 6.
+
+
+**2026-10-14 bucket/Cloud chooser checkpoint:** setup's candidate now reviews the downloaded
+bucket database or approved Cloud archive before staging. Both show the selected copy's saved
+node-key name, stored manifest date and source reference. Cloud preview checks the downloaded
+archive's digest and rechecks approval; it does not mark the request staged. Bucket preview
+retains the old-box check and asks for confirmation when it refuses. Kit/environment edits and
+Cloud request/point changes discard late metadata. Archive encryption and node authentication
+remain separate. The bucket reference currently names a generation, not an immutable snapshot;
+Task 6's activation binding must still identify the actual selected bytes. Offline allocation
+collection, staged node credentials and interruption qualification remain open.
+
+
+**2026-10-14 staged-key checkpoint:** the candidate restart backend stores a supplied node key in
+an owner-only temporary file, separate from the archive encryption key and public marker. The
+selected database still authenticates it, and module preparation still collects outside evidence.
+An archive request with a staged node key binds its operation to the encrypted archive's digest;
+a bucket request binds to the prepared closed database and unlocked entries before preview
+migrations. A bucket preview carries that digest separately from its generation display reference.
+Opening the downloaded database switches its journal-mode header, so the digest identifies the
+prepared file, not the untouched downloaded object. Staging and restart reject a different source.
+Cleanup, missing-key refusal and lock-preserving retry are covered by the focused restore suites.
+
+Public restore forms still need the offline allocation/key collection and forwarding. Paper,
+emergency and phone input, current outside confirmations, keeping an existing identity, and
+crashes around consumption/activation still need their complete operator journeys. This checkpoint
+does not complete Task 6 or change the environment-only command input contract.
+
+**2026-10-14 public-input checkpoint:** archive, bucket and Cloud restore routes forward a public
+recovery operation and separate node key. Archive uploads use multipart fields when those inputs
+are supplied. The browser API client supports the same inputs; the screens do not collect them
+yet. A completed setup request refuses a changed operation or node key. Focused route and
+real-listener cases cover forwarding, malformed fields and keeping the node key out of the public
+marker and logs. Outside allocation collection and the complete recovery journeys remain open.
+
+
+**2026-10-14 recovery-entry checkpoint (candidate only):** the selected-copy panel accepts a
+public recovery operation and a separate node key. Archive, bucket and Cloud screens forward
+both through the existing public routes. The browser checks the selected node and archive or
+prepared-stream digest, asks for isolation and outside-record retention, and clears the new
+credentials on discard, disconnection and a refused request. The source and authentication
+checks on the server still decide whether activation can proceed. This is document entry, not
+an allocation issuer or current-register collector: the configured outside paper source still
+rereads its separate files. Emergency/phone evidence collection, keeping an existing identity
+and the complete interruption/retry/burn journeys remain Task 6 work. The operator must not
+interpret a pasted record or a checked box as independent outside authority.
+
+**2026-10-14 emergency-collector checkpoint (candidate only):** a public emergency request can
+use the default module preparation seat without a paper signer or subscription. The host must
+separately configure its current confirmation and a mounted outside incident directory. A fresh
+cryptographic draw and every series are retained there before local activation; a failed local
+transaction leaves the event consumed. Exclusive event files prevent concurrent or changed-source
+claims from reopening it. A confirmed retry rereads the current outside evidence and returns only
+an exact locally committed result. Reapplying an old backup without that result cannot recreate
+the draw's authority. Focused tests exercise the real staged archive and prepared-stream paths
+with the selected backup's old key after live-key replacement. This does not establish that a
+configured path is physically outside the box, complete the paper-only operator flow or record
+all later attempt outcomes. Those, full interruption qualification and final review remain open.
+The candidate host contract is in [Emergency recovery](../developers/emergency-recovery.md).
+
+**2026-10-14 paper-export checkpoint (candidate only):** `prepare-recovery` assembles the public
+restore record from a signed block, consumption receipt and approval, checking separately supplied
+current-register confirmation and custodian fingerprint. It requires the selected taxpayer,
+environment and complete series, writes a new file and leaves outside history unchanged. The same
+public record can be transferred from a phone into the candidate restore form. Archive and
+prepared-stream restart qualification uses this export and rereads current outside evidence;
+retirement or consumption elsewhere after staging still refuses activation. This does not finish
+the emergency operator handover, later attempt outcomes or the full interruption exercise. The
+restaurant-friendly first-setup custodian design remains A679's separate scope.
+
+
+**2026-10-14 emergency-attempt checkpoint (candidate only):** the outside incident retains a
+fresh attempt ID and start time before the activation callback, then its returned or thrown
+result. An unfinished entry says nothing about whether the local transaction committed. Result
+storage refusal stops the staged archive and prepared-stream paths before trading settings are
+published; qualification includes a locally committed activation with that publication blocked.
+A child killed inside the callback leaves its unfinished entry. The journal keeps earlier entries
+and consumed identities under an exclusive per-event lock and refuses corrupt or oversized
+history. Exception messages and parameters are omitted. See the current
+[emergency procedure](../developers/emergency-recovery.md) for the record and lock-file meanings.
+The operator handover, keep-identity path and complete interruption and first-sale exercise
+remain unfinished; the prior two checkpoints describe their captured versions.
+
+
+**2026-10-14 emergency readable-record checkpoint (candidate only):** each outside emergency
+incident now has a bilingual printable text copy containing the actual generated identity,
+checksum, series, selected source and attempt history. Its SHA-256 identifies the corresponding
+JSON bytes so an older printout can be recognised after an interrupted update. Both the initial
+handover and final outcome are flushed before their caller can proceed. A readable-copy refusal
+prevents staged archive and prepared-stream trading-settings publication, including after a local
+activation commit. This is a retained operator record, not proof of reading, printing or current
+allocation authority. Setup-screen presentation, keep-identity recovery and the complete
+interruption/first-sale journeys remain unfinished.
+
+
+**2026-10-14 operator-request and interrupted-restart qualification (candidate only):** the
+selected-copy form shows and downloads its public request with the selected backup metadata,
+without adding the separately entered node key. Editing the request clears its retention
+confirmation; source changes, discard and disconnection revoke its download. The confirmation
+names the request, since an emergency identity has not yet been drawn.
+
+A killed staged archive restore previously replaced its already activated database with the
+old backup; a streamed restore had consumed its source file. The candidate retains the source,
+records started placement and resumes against the placed database. A module checks that the
+matching event already committed before running its ordinary authenticated replay. Current
+outside evidence, key authentication and exact active-state checks still apply. A marker alone
+cannot activate, and a newer-image database refuses before migration. A lock refusal before
+placement remains a fresh attempt. Process-kill cases cover staging, outside consumption,
+uncommitted activation, settings publication and before the first sale. An uncommitted event
+stays burned; a fresh event uses a different identity. Retrying a committed event preserves earlier
+invoice records and supports a first sale in the new series without a network client.
+
+Keeping the stopped box's existing node and location identifiers uses the ordinary cold-restore
+path with a fresh fiscal allocation. The generic `skipSecrets` rejoin path remains unchanged and
+has no production caller in the tracked tree (`rg -n skipSecrets apps packages --glob
+'!*.test.ts'`). These checks do not introduce a selling route through that flag. The complete operator
+flow through deployed entry points, final task review and current-head CI remain open.
+
+
+**2026-10-14 deployed operator qualification (candidate only):** the
+[operator procedure](../developers/offline-fiscal-restore.md) supplies an explicit Compose
+recovery override. The base service forwards no fiscal collector configuration. The override
+keeps public evidence read-only and mounts a separate writable outside incident directory;
+its resolved configuration preserves the state volume. Candidate production bundles, migrations
+and assets ran over the existing `waitron:dev` runtime as uid10001 with networking disabled.
+Paper and emergency archive CLIs exited0, and both staged entry processes reached
+`server.listening`. The stored allocation, three series at1, unchanged node/location and actual
+outside incident/readable digest were checked. Missing outside configuration, read-only incident
+storage and a wrong fingerprint each refused with no trading settings. The final synthetic
+fixture has one venue and its credential-vault key; the two earlier incomplete fixtures are
+not successful-start receipts. This is packaged-entry-point qualification, not a new full-image,
+physical-printer or remote-share test. Full task review and current-head CI remain required;
+Task11 retains the later full operational exercise.
+
+
+**2026-10-14 Task6 review qualification (candidate only):** two FULL Claude run-it reviews
+independently reproduced loss of staged credentials after a caught post-commit file error.
+Placement-started requests now retain those files on thrown errors as well as process kills;
+four injected settings/outside-result failures preserve the committed allocation and original
+invoice rows through exact replay. A pack-download probe also distinguished right and wrong
+node keys for unauthorised callers. The route now checks permission without touching the session
+before derivation, serialises downloads by node, and rechecks permission in its transaction.
+A revoked-manager case protects the later check. A copied-event test independently checks the
+recorded node even when the requested target agrees. Installed removal controls each fail their
+owning assertions, with restored suites passing.
+
+The existing outside-confirmation refusal also covers a failed outside result write; the
+[procedure](../developers/emergency-recovery.md) now says explicitly that it does not describe
+local commit status. A double-failure case checks that the storage refusal takes precedence and
+that the failed restore's message stays out of the outside record. No original-main fiscal
+assertion or protected writer changed. A separate pinned Litestream0.5.17/versitygw1.8.0
+experiment restored one stopped generation twice through the normal database opener: row
+values, database bytes and source hashes matched. That checks this synthetic stable generation,
+not all bucket providers or a moving source. Required current-head CI still gates publication.

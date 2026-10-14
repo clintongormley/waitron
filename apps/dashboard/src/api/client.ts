@@ -11,6 +11,19 @@ import type {
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
 
+export interface NodeRecoveryPack {
+  readonly version: 1;
+  readonly kind: "node-recovery-pack";
+  readonly createdAt: string;
+  readonly nodeRecovery: {
+    readonly nodeId: string;
+    readonly name: string;
+    readonly secret: string;
+  };
+  readonly modules: Readonly<Record<string, unknown>>;
+  readonly warnings: readonly string[];
+}
+
 /**
  * Most types below are hand-kept copies of the server's JSON shapes, so nothing compares them with
  * the server at compile time. The product and modifier-list shapes are imported instead, from
@@ -4065,6 +4078,16 @@ export class DashboardApi {
       { passphrase },
       { as: "blob" },
     );
+  }
+
+  createNodeRecoveryPack(
+    nodeRecoveryKey: string,
+    modules: Record<string, unknown>,
+  ): Promise<NodeRecoveryPack> {
+    return this.#request<NodeRecoveryPack>("/api/box/recovery-pack", "POST", {
+      nodeRecoveryKey,
+      modules,
+    });
   }
 
   mintBackupKey(): Promise<{ key: string }> {

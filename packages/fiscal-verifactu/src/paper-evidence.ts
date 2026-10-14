@@ -469,6 +469,74 @@ export function enrolPaperCustodian(
   return { custodianId, publicKey: key, fingerprint };
 }
 
+export type PaperBlockSnapshot =
+  | {
+      readonly ok: true;
+      readonly block: SignedPaperValue<PaperBlock>;
+      readonly custodian: PaperCustodianTrust;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: "malformed" | "untrusted" | "scope_mismatch" | "series_mismatch";
+    };
+
+/** A signed snapshot has no evidence that its entries are still available in the outside register. */
+export function verifyPaperBlockSnapshot(
+  input: unknown,
+  trust: unknown,
+  context: {
+    readonly taxpayerNif: string;
+    readonly softwareId: string;
+    readonly environment: string;
+    readonly recipientVenueId: string;
+    readonly requiredBases: readonly { readonly code: string; readonly purpose: string }[];
+  },
+): PaperBlockSnapshot {
+  if (!record(input) || !exactKeys(input, ["payload", "signature"]) || !signature(input.signature))
+    return { ok: false, reason: "malformed" };
+  const block = parseBlock(input.payload);
+  if (block === null) return { ok: false, reason: "malformed" };
+  const key = trustedKey(trust);
+  if (
+    !record(trust) ||
+    !exactKeys(trust, ["custodianId", "publicKey", "fingerprint"]) ||
+    key === null ||
+    trust.custodianId !== block.custodianId ||
+    !verify(null, blockBytes(block), key, Buffer.from(input.signature, "base64url"))
+  )
+    return { ok: false, reason: "untrusted" };
+  if (
+    block.recipientVenueId !== context.recipientVenueId ||
+    block.allocations.some(
+      (allocation) =>
+        allocation.taxpayerNif !== context.taxpayerNif ||
+        allocation.softwareId !== context.softwareId ||
+        allocation.environment !== context.environment,
+    )
+  )
+    return { ok: false, reason: "scope_mismatch" };
+  if (
+    block.allocations.some(
+      (allocation) =>
+        !isAllocatedSeries(
+          allocation.series,
+          allocation.installationIdentity,
+          context.requiredBases,
+        ),
+    )
+  )
+    return { ok: false, reason: "series_mismatch" };
+  return {
+    ok: true,
+    block: { payload: block, signature: input.signature },
+    custodian: {
+      custodianId: trust.custodianId as string,
+      publicKey: trust.publicKey as string,
+      fingerprint: trust.fingerprint as string,
+    },
+  };
+}
+
 function signingKey(value: string): KeyObject {
   const key = createPrivateKey(value);
   if (key.asymmetricKeyType !== "ed25519")

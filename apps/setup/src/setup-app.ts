@@ -24,6 +24,7 @@ import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import type {
+  RecoveryRestoreCredentials,
   AdoptBody,
   ApiError,
   ConfigurationPreview,
@@ -220,12 +221,21 @@ const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
   "credential.totp": "totp",
 };
 
+function withoutRecoveryCredentials<T extends Partial<RecoveryRestoreCredentials>>(request: T): T {
+  const kept = { ...request };
+  delete kept.nodeRecoverySecret;
+  delete kept.recoveryOperation;
+  return kept;
+}
+
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
   "recovery.passphrase_invalid": "recoveryKey",
   "restore.environment_mismatch": "environment",
 };
 
 const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
+  recoveryOperation: "recoveryOperation",
+  nodeRecoverySecret: "nodeRecoverySecret",
   artifact: "artifact",
   recoveryKey: "recoveryKey",
   environment: "environment",
@@ -237,6 +247,8 @@ const BUCKET_FIELD_CODES: Record<string, BucketField> = {
 };
 
 const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
+  recoveryOperation: "recoveryOperation",
+  nodeRecoverySecret: "nodeRecoverySecret",
   kit: "kit",
   environment: "environment",
   oldBoxGone: "oldBoxGone",
@@ -244,16 +256,22 @@ const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
 };
 
 const CLOUD_FIELD_PATHS: Record<string, CloudField> = {
+  recoveryOperation: "recoveryOperation",
+  nodeRecoverySecret: "nodeRecoverySecret",
   oldBoxGone: "oldBoxGone",
 };
 
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
+  recoveryOperation: "restore.allocation_invalid",
+  nodeRecoverySecret: "restore.allocation_key_missing",
   artifact: "restore.check.backup_file",
   recoveryKey: "restore.check.recovery_key",
   environment: "restore.check.environment",
 };
 
 const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
+  recoveryOperation: "restore.allocation_invalid",
+  nodeRecoverySecret: "restore.allocation_key_missing",
   kit: "restore_bucket.check.kit",
   environment: "restore_bucket.check.environment",
   oldBoxGone: "restore_bucket.check.old_box",
@@ -262,6 +280,8 @@ const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
 
 /** Keyed by the field the refusal names; `pointId` is not a field the screen shows. */
 const CLOUD_FIELD_CHECKS: Record<CloudField | "pointId", StringKey> = {
+  recoveryOperation: "restore.allocation_invalid",
+  nodeRecoverySecret: "restore.allocation_key_missing",
   pointId: "cloud_restore.check.point",
   oldBoxGone: "cloud_restore.check.old_box",
 };
@@ -993,6 +1013,14 @@ export class SetupApp extends LitElement {
         request.recoveryKey,
         request.environment,
         request.oldBoxGone,
+        ...(request.recoveryOperation !== undefined && request.nodeRecoverySecret !== undefined
+          ? [
+              {
+                recoveryOperation: request.recoveryOperation,
+                nodeRecoverySecret: request.nodeRecoverySecret,
+              },
+            ]
+          : []),
       );
       if (!current()) return;
       this.restoreRequest = undefined;
@@ -1003,7 +1031,7 @@ export class SetupApp extends LitElement {
         code?: unknown;
         params?: { lastChangeAt?: unknown };
       };
-      this.restoreRequest = request;
+      this.restoreRequest = withoutRecoveryCredentials(request);
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
         this.restoreLiveSince = params.lastChangeAt;
         this.restoreLiveUnknown = false;
@@ -1067,7 +1095,7 @@ export class SetupApp extends LitElement {
         code?: unknown;
         params?: Record<string, unknown>;
       };
-      this.bucketRequest = request;
+      this.bucketRequest = withoutRecoveryCredentials(request);
       const venue = venueToConfirm(params);
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
         this.bucketLiveSince = params.lastChangeAt;
@@ -1102,6 +1130,8 @@ export class SetupApp extends LitElement {
       action: "start" | "status" | "start-again" | "restore";
       pointId?: string;
       oldBoxGone?: boolean;
+      recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
+      nodeRecoverySecret?: string;
     }>,
   ): Promise<void> {
     event.stopPropagation();
@@ -1121,12 +1151,18 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryError = undefined;
     this.cloudInvalidField = undefined;
     try {
-      const { action, pointId, oldBoxGone } = event.detail;
+      const { action, pointId, oldBoxGone, recoveryOperation, nodeRecoverySecret } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
         phase = "provisioning";
         this.screen = phase;
-        await this.api.restoreFromCloud(pointId, oldBoxGone === true);
+        await this.api.restoreFromCloud(
+          pointId,
+          oldBoxGone === true,
+          ...(recoveryOperation !== undefined && nodeRecoverySecret !== undefined
+            ? [{ recoveryOperation, nodeRecoverySecret }]
+            : []),
+        );
         if (current()) this.screen = "done";
       } else {
         const shown = this.cloudRecoveryView?.point?.id;
@@ -1466,6 +1502,7 @@ export class SetupApp extends LitElement {
       case "restore":
         return html`<setup-restore-screen
           data-test="screen-restore"
+          .api=${this.api}
           .errorMessage=${this.restoreError?.()}
           .invalidField=${this.restoreInvalidField}
           .liveSince=${this.restoreLiveSince}
@@ -1475,6 +1512,7 @@ export class SetupApp extends LitElement {
       case "restore-bucket":
         return html`<setup-restore-bucket-screen
           data-test="screen-restore-bucket"
+          .api=${this.api}
           .errorMessage=${this.bucketRestoreError?.()}
           .invalidField=${this.bucketInvalidField}
           .liveSince=${this.bucketLiveSince}
@@ -1485,6 +1523,7 @@ export class SetupApp extends LitElement {
       case "cloud-restore":
         return html`<setup-cloud-restore-screen
           data-test="screen-cloud-restore"
+          .api=${this.api}
           .view=${this.cloudRecoveryView}
           .errorMessage=${this.cloudRecoveryError?.()}
           .invalidField=${this.cloudInvalidField}

@@ -1,6 +1,41 @@
 // The restore, restore-bucket, cloud-restore, live-source, configuration-preview and fiscal-test screens.
 
 export const restoreEn = {
+  "restore.allocation_heading": "Recovery allocation",
+  "restore.allocation_intro":
+    "Use the current outside recovery record. An old pack cannot replace it.",
+  "restore.allocation_record": "Recovery record",
+  "restore.allocation_placeholder": "Paste the recovery record from your custodian or phone.",
+  "restore.allocation_node_key": "Selected backup’s node recovery key",
+  "restore.allocation_invalid": "Check the recovery record and its selected backup.",
+  "restore.allocation_key_missing": "Enter the node recovery key from the selected backup’s paper.",
+  "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
+  "restore.allocation_isolation_missing": "Confirm that this is the only recovery.",
+  "restore.allocation_retained": "I have kept this request with the outside recovery records.",
+  "restore.allocation_retention_missing":
+    "Keep the request with the outside recovery records before continuing.",
+  "restore.allocation_clear": "Clear recovery details",
+  "restore.allocation_review": "Keep this recovery request",
+  "restore.allocation_request_warning":
+    "This request does not confirm activation. Keep the resulting outside incident record too.",
+  "restore.allocation_download": "Save request",
+
+  "restore.preview_action": "Review backup",
+  "restore.preview_heading": "Selected backup",
+  "restore.preview_source": "Source",
+  "restore.preview_business": "Business",
+  "restore.preview_location": "Location",
+  "restore.preview_date": "Backup date",
+  "restore.preview_node_key": "Node recovery key",
+  "restore.preview_unnamed": "This backup's node key has no stored name.",
+  "restore.preview_older_key": "An older backup reinstates its older node key.",
+  "restore.preview_keep_keys": "Keep older paper keys until no older backup remains.",
+  "restore.preview_key_separate": "The node key is separate from the backup file's encryption key.",
+  "restore.preview_kit_error": "Check the recovery kit.",
+  "restore.preview_key_error": "Check the backup file's encryption key.",
+  "restore.preview_environment_error": "Check the backup environment.",
+  "restore.preview_file_error": "Check the backup file.",
+  "restore.preview_failed": "Couldn't review this backup.",
   "restore.heading": "Restore from backup",
   "restore.cloud_restore": "Restore from Waitron Cloud",
   "restore.intro":
@@ -137,6 +172,45 @@ export const restoreEn = {
 } as const;
 
 export const restoreEs: Record<keyof typeof restoreEn, string> = {
+  "restore.allocation_heading": "Asignación de recuperación",
+  "restore.allocation_intro":
+    "Usa el registro externo actual de recuperación. Un paquete antiguo no lo sustituye.",
+  "restore.allocation_record": "Registro de recuperación",
+  "restore.allocation_placeholder": "Pega el registro de recuperación de tu custodio o teléfono.",
+  "restore.allocation_node_key": "Clave de recuperación del nodo de la copia elegida",
+  "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
+  "restore.allocation_key_missing": "Introduce la clave del nodo del papel de la copia elegida.",
+  "restore.allocation_isolated":
+    "El equipo anterior está desconectado y no hay otra recuperación en curso.",
+  "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
+  "restore.allocation_retained":
+    "He guardado esta solicitud con los registros externos de recuperación.",
+  "restore.allocation_retention_missing":
+    "Guarda la solicitud con los registros externos de recuperación antes de continuar.",
+  "restore.allocation_clear": "Borrar datos de recuperación",
+  "restore.allocation_review": "Guarda esta solicitud de recuperación",
+  "restore.allocation_request_warning":
+    "Esta solicitud no confirma la activación. Guarda también el registro externo del resultado.",
+  "restore.allocation_download": "Guardar solicitud",
+
+  "restore.preview_action": "Revisar copia",
+  "restore.preview_heading": "Copia seleccionada",
+  "restore.preview_source": "Origen",
+  "restore.preview_business": "Negocio",
+  "restore.preview_location": "Local",
+  "restore.preview_date": "Fecha de la copia",
+  "restore.preview_node_key": "Clave de recuperación del nodo",
+  "restore.preview_unnamed": "La clave del nodo de esta copia no tiene nombre guardado.",
+  "restore.preview_older_key": "Una copia antigua restablece la clave del nodo de entonces.",
+  "restore.preview_keep_keys":
+    "Conserva las claves en papel antiguas mientras queden copias que las necesiten.",
+  "restore.preview_key_separate":
+    "La clave del nodo es distinta de la clave de cifrado del archivo de copia.",
+  "restore.preview_kit_error": "Revisa el kit de recuperación.",
+  "restore.preview_key_error": "Revisa la clave de cifrado del archivo de copia.",
+  "restore.preview_environment_error": "Revisa el entorno de la copia.",
+  "restore.preview_file_error": "Revisa el archivo de copia.",
+  "restore.preview_failed": "No se ha podido revisar esta copia.",
   "restore.heading": "Restaurar desde una copia de seguridad",
   "restore.cloud_restore": "Restaurar desde Waitron Cloud",
   "restore.intro":

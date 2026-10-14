@@ -127,12 +127,28 @@ export interface RestoreOutcome {
   restarting: true;
 }
 
+export interface RecoveryRestoreCredentials {
+  recoveryOperation: {
+    binding: {
+      module: string;
+      action: string;
+      eventId: string;
+      sourceId: string;
+      targetNodeId: string;
+    };
+    input: unknown;
+  };
+  nodeRecoverySecret: string;
+}
+
 export interface BucketRestoreBody {
   /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
   kit: string;
   environment: "production" | "preproduction";
   oldBoxGone: boolean;
   venueConfirmed: string | null;
+  recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
+  nodeRecoverySecret?: string;
 }
 
 export interface CloudRecoveryView {
@@ -142,6 +158,17 @@ export interface CloudRecoveryView {
   expiresAt: string;
   state: "awaiting_owner" | "approved" | "expired";
   point?: { id: string; venueId: string; capturedAt: string; modules: Record<string, number> };
+}
+
+export interface RecoveryBackupPreview {
+  readonly activationSourceId?: string;
+  sourceId: string;
+  createdAt: string;
+  environment: "production" | "preproduction";
+  nodeId: string;
+  nodeRecoveryKeyName: string | null;
+  taxpayer: { legalName: string; taxId: string };
+  locationName: string;
 }
 
 export interface ConfigurationPreview {
@@ -250,12 +277,16 @@ export class SetupApi {
   }
 
   /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
-  restoreFromCloud(pointId: string, oldBoxGone = false): Promise<RestoreOutcome> {
-    return this.#request(
-      "/setup-api/cloud-recovery/restore",
-      "POST",
-      oldBoxGone ? { pointId, oldBoxGone } : { pointId },
-    );
+  restoreFromCloud(
+    pointId: string,
+    oldBoxGone = false,
+    recovery?: RecoveryRestoreCredentials,
+  ): Promise<RestoreOutcome> {
+    return this.#request("/setup-api/cloud-recovery/restore", "POST", {
+      pointId,
+      ...(oldBoxGone ? { oldBoxGone } : {}),
+      ...recovery,
+    });
   }
 
   /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
@@ -264,21 +295,72 @@ export class SetupApi {
     recoveryKey: string,
     environment: "production" | "preproduction",
     oldBoxGone = false,
+    recovery?: RecoveryRestoreCredentials,
   ): Promise<RestoreOutcome> {
     const fetchImpl = this.#fetchImpl;
+    let body: Blob | FormData = artifact;
+    if (recovery !== undefined) {
+      const form = new FormData();
+      form.set("artifact", artifact, "backup.waitron");
+      form.set("recoveryKey", recoveryKey);
+      form.set("environment", environment);
+      form.set("oldBoxGone", oldBoxGone ? "1" : "0");
+      form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
+      form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
+      body = form;
+    }
     const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {
+      method: "POST",
+      credentials: "include",
+      ...(recovery === undefined
+        ? {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-recovery-key": recoveryKey,
+              "x-waitron-restore-environment": environment,
+              ...(oldBoxGone ? { "x-waitron-old-box-gone": "1" } : {}),
+            },
+          }
+        : {}),
+      body,
+    });
+    if (!res.ok) throw await apiError(res);
+    return JSON.parse(await res.text()) as RestoreOutcome;
+  }
+
+  previewBucketRestore(
+    kit: string,
+    environment: "production" | "preproduction",
+    oldBoxGone = false,
+  ): Promise<RecoveryBackupPreview> {
+    return this.#request("/setup-api/restore-bucket/preview", "POST", {
+      kit,
+      environment,
+      oldBoxGone,
+    });
+  }
+  previewCloudRestore(pointId: string): Promise<RecoveryBackupPreview> {
+    return this.#request("/setup-api/cloud-recovery/preview", "POST", { pointId });
+  }
+
+  async previewRestore(
+    artifact: Blob,
+    recoveryKey: string,
+    environment: "production" | "preproduction",
+  ): Promise<RecoveryBackupPreview> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/setup-api/restore/preview", {
       method: "POST",
       credentials: "include",
       headers: {
         "content-type": "application/octet-stream",
         "x-waitron-recovery-key": recoveryKey,
         "x-waitron-restore-environment": environment,
-        ...(oldBoxGone ? { "x-waitron-old-box-gone": "1" } : {}),
       },
       body: artifact,
     });
-    if (!res.ok) throw await apiError(res);
-    return JSON.parse(await res.text()) as RestoreOutcome;
+    if (!response.ok) throw await apiError(response);
+    return (await response.json()) as RecoveryBackupPreview;
   }
 
   /** `POST /setup-api/restore-bucket` — check the owner's bucket and stage a rebuild from it.

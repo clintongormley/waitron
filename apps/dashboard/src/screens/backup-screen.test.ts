@@ -27,6 +27,15 @@ const OFF: BackupStatusView = {
   recoveryKeyTooShort: false,
 };
 
+it("offers the node recovery pack even with archives and bucket streaming off", async () => {
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    api: stubApi({}, OFF),
+  });
+  const panel = el.shadowRoot!.querySelector("dashboard-node-recovery");
+  expect(panel).not.toBeNull();
+  expect(panel!.api).toBe(el.api);
+});
+
 const ENABLED: BackupStatusView = {
   venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,

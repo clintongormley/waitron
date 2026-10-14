@@ -5,8 +5,16 @@ current master register outside venue backups, with a named custodian. Reserve e
 before signing it, and cross out an entry there before signing its consumption receipt. The
 signature records the custodian's evidence; it does not establish that the register is current.
 
-The command below prepares signed evidence. Allocation activation and recovery-pack integration
-remain open in W41s Task 4 and Task 6. It does not update your master register.
+The command below prepares signed evidence. It does not update your master register.
+
+**2026-10-14 status:** Task 4's allocation activation, default fiscal hooks and text identities
+landed in #1700. Earlier paragraphs below describing those as unfinished refer to its development
+checkpoints. Successful allocated standby adoption still needs the primary's venue copy and fresh
+establishment authority. Task 6's candidate adds the pack handover and recovery-record entry below;
+the complete Task 11 exercise remains separate. For the container mounts, selected-copy review,
+restore inputs and generated-record handover, follow
+[Recover a filing box](offline-fiscal-restore.md). Its optional host-managed emergency collector
+is described in [Emergency recovery](emergency-recovery.md).
 
 ## Create the custodian's key
 
@@ -122,11 +130,15 @@ Your `block.json` contains the frozen scope and complete identity set. For examp
     {
       "version": 1,
       "allocationId": "paper-42",
-      "taxpayerNif": "B12345678",
-      "softwareId": "WT",
+      "taxpayerNif": "89890001K",
+      "softwareId": "W1",
       "environment": "preproduction",
       "installationIdentity": "P000042",
-      "series": [{ "code": "A-P000042", "purpose": "standard" }],
+      "series": [
+        { "code": "A-P000042", "purpose": "standard" },
+        { "code": "FF-P000042", "purpose": "full" },
+        { "code": "R-P000042", "purpose": "rectificative" }
+      ],
       "source": "paper",
       "issuedAt": "2026-10-12T08:00:00.000Z"
     }
@@ -148,6 +160,38 @@ The flag records your confirmation that reservation happened outside the venue. 
 not check or write the master register. Its output contains the validated payload and signature.
 It refuses an existing output file. Reprinting it does not create fresh names or clear consumption
 marks; the pack still identifies its generation and block and states that its snapshot may be stale.
+
+## Download and print a node recovery pack
+
+To give the venue a signed register file it can upload, use the same reserved block and signing
+key on the custodian's machine:
+
+```sh
+node packages/fiscal-verifactu/dist/paper-custodian.js sign-register \
+  --key /secure/master/custodian-2026.pem \
+  --input block.json --output recovery-register.json --reserved-outside
+```
+
+The output combines the signed block with the custodian's public key and fingerprint. Keep the
+private signing key with the custodian. This command signs the reserved block again; it does not
+allocate another block or clear any entry's consumption history.
+
+In the dashboard, open **Backups**, enter the current **Node recovery key**, choose
+`recovery-register.json`, and select **Create pack**. You need management permission and the node
+key you already hold. You do not need bucket settings or a subscription. A wrong node key or a
+register for a different taxpayer, environment, venue or series set is refused.
+
+Download the JSON pack and the **Printable copy**. Open the downloaded HTML file in your browser
+and print it using the browser's Print action. It has no external assets. It includes the node
+key's stored name and secret, the signed register and the custodian's public fingerprint. Keep
+both downloads and the paper outside the server and its backups. Choose **Clear pack** to remove
+the screen's download links; this does not delete files you already downloaded.
+
+The printed register is a snapshot. Compare its custodian fingerprint with the current outside
+master before trusting it for recovery, and consult that master before consuming an entry.
+Reprinting a pack cannot establish that a name remains free. Keep paper keys needed by older
+backups even after you replace the live node key. The archive encryption key opens a backup file;
+the node recovery key authenticates the node operation. They remain separate credentials.
 
 ## Reserve an entry for a named standby
 
@@ -294,6 +338,66 @@ The default fiscal seed/restore/standby hooks and text identity schema remain un
 branch. The new host tests supply the allocated seed explicitly; this checkpoint is not a complete
 setup or recovery procedure. Finish the coupled transition before using it for a venue.
 
+## Export a paper recovery operation
+
+After the custodian marks the current outside entry consumed and signs its receipt, prepare the
+public record you will give the replacement box. Keep the selected backup's digest, node, event
+and recovery-key operator in the consumption receipt, local approval and separate current-event
+confirmation. The chooser displays the digest; a bucket generation label is not that digest.
+
+Your `approval.json` uses this shape, with synthetic values replaced by your selected copy:
+
+```json
+{
+  "version": 1,
+  "eventId": "replace-with-a-fresh-unpredictable-event-id",
+  "operatorId": {
+    "kind": "recovery-key",
+    "nodeId": "c0000000-0000-4000-8000-000000000001",
+    "eventId": "replace-with-a-fresh-unpredictable-event-id"
+  },
+  "sourceId": "replace-with-the-selected-copy-digest",
+  "targetNodeId": "c0000000-0000-4000-8000-000000000001",
+  "oldMachineOffline": true,
+  "oldMachineAbsent": false,
+  "noParallelRecovery": true,
+  "confirmedAt": "2026-10-14T09:00:00.000Z",
+  "incidentEvidence": "outside/this-recovery-event"
+}
+```
+
+Confirm the former machine is off and no parallel recovery is underway before setting those
+flags. On the custodian's machine, or replacement hardware holding the public files, run:
+
+```sh
+node packages/fiscal-verifactu/dist/paper-custodian.js prepare-recovery \
+  --block signed-block.json --consumption consumption.json \
+  --input approval.json --output recovery-operation.json \
+  --custodian /outside/current/custodian.public.json \
+  --fingerprint '<fingerprint compared with the current outside master>' \
+  --confirmation /outside/current/restore-event.json \
+  --taxpayer 89890001K --environment preproduction --action restore
+```
+
+Use the current-confirmation format above, including every configured series base and purpose.
+Select the taxpayer and environment from the backup you reviewed. The command verifies the
+signed block and receipt, current entry state, independent fingerprint, complete series and
+approval binding. It writes a new owner-only operation file and leaves the outside register
+unchanged. It reads each supplied block, receipt and approval file up to 64 KiB and refuses a
+missing, malformed or oversized file. It needs no private signing key or node recovery secret.
+
+Transfer the public operation from a phone or another computer and paste its complete JSON into
+the candidate restore screen's recovery-record field. A changed signed value is refused; typing
+the installation name alone supplies no consumption evidence. Enter the selected backup's node
+key in its separate field. Keep the receipt and operation with your outside incident record.
+This is a paper-custodian handoff; the Cloud registry adapter remains a later W41s item.
+
+Use `--action re-register` for a node re-registration, with a matching current-event confirmation.
+After a confirmed committed attempt, retain the original operation for the host's replay checks;
+the export command refuses to assemble a new operation from a committed or uncertain attempt.
+Exporting an approval does not authenticate its operator. The host still checks the selected
+database's node key and rereads separately configured current outside evidence before activation.
+
 ## Supply a recovery operation to the host
 
 The Task 4 branch accepts a public operation file for re-registration and cold restore. Keep its
@@ -301,7 +405,8 @@ signed allocation and approval separate from the node recovery key. The file bin
 action, event, source and target node; the host authenticates the key against the database it uses
 for that operation before collecting the current outside evidence.
 
-Build the file from the signed allocation and its matching approval:
+Use the export command above for a paper allocation. For a module input you already hold, the
+generic envelope is:
 
 ```sh
 node --input-type=module <<'JS'
@@ -335,6 +440,51 @@ still receive the node key and reread the current outside evidence. The key is n
 the marker. Inputs that would change when saved as JSON are refused before replacing a staged
 request.
 
+**2026-10-14 reading note:** the following qualification paragraph records the earlier Task 4
+checkpoint. The status at the top and the staged-input section below describe the later host.
+
 The host qualification uses the allocated hooks explicitly and source-tree migrations. Default
 fiscal hooks, packaged boot, text schema/counter retirement and the complete setup screen remain
 unfinished. This is branch development guidance, not a qualified venue recovery procedure.
+
+
+## Staged node keys on the Task 6 candidate
+
+The restart backend can stage a node recovery key separately from the archive encryption key.
+The candidate public restore forms collect this credential. A host request supplies
+`nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
+`restore-request.node-key` with mode `0600`, not into the JSON marker. On the first attempt, the selected
+backup's verifier checks it again. An interrupted attempt uses the placed database's verifier.
+Both reread current outside evidence. A missing or
+invalid staged credential refuses recovery rather than falling back to an environment key.
+
+For requests carrying a staged node key, bind `recoveryOperation.binding.sourceId` to the selected
+copy. For an archive, use the preview's `sourceId`, the SHA-256 digest of its encrypted bytes. For a
+bucket, use `activationSourceId`, which covers the prepared closed database and unlocked entries
+before preview migrations. The displayed bucket `sourceId` is only a generation reference. Opening
+a downloaded SQLite database changes its journal-mode header, so `activationSourceId` identifies
+the prepared file rather than the untouched bucket object. A later download with different bytes
+needs a fresh review and matching outside recovery evidence.
+
+The backend checks this binding before replacing a staged request and again at restart. A fresh
+attempt removes the staged key after success or a refusal before placement is marked started;
+a venue-lock refusal keeps it for another fresh attempt. Once placement is marked started, any
+failure keeps the request and key for a checked resume, including a thrown file-write error after
+activation commits. A successful resume removes them. Restaging replaces the credential. Each attempt
+still authenticates the key and collects current outside evidence. See
+[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). An interrupted write with no marker leaves no runnable request, and the
+next entry pass removes the orphaned node-key file. These rules do not establish that a copied
+marker proves an allocation can be reused. Environment-only command inputs retain their existing
+contract.
+
+To submit these inputs through the candidate setup API, send `recoveryOperation` and
+`nodeRecoverySecret` together. Bucket and Cloud restores accept them in the JSON body. For an
+archive, send a multipart form with `artifact` as a file, `recoveryKey`, `environment`,
+`recoveryOperation` as JSON text, and `nodeRecoverySecret`. Set `oldBoxGone` to `1` only after
+confirming the old box is off; `0` leaves that confirmation unset. The archive encryption key is
+still `recoveryKey`. The browser API client and candidate restore screens forward the recovery pair.
+
+The setup request's saved hash includes the operation and node key, so a completed request cannot
+be replayed with different inputs. Its saved progress contains neither key. Forwarding the operation
+does not supply outside authority: after restart, recovery still checks the selected database's node
+key and collects current outside evidence. These API checks do not complete the offline procedure.

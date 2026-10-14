@@ -1,6 +1,7 @@
 import { createPublicKey, generateKeyPairSync } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { preparePaperRecoveryExport } from "./paper-recovery-export.js";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -19,16 +20,32 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
   const options: Record<string, { type: "string" | "boolean" }> = {
     key: { type: "string" },
   };
-  if (command === "keygen" || command === "public") {
+  if (command === "prepare-recovery") {
+    delete options.key;
+    for (const name of [
+      "block",
+      "consumption",
+      "input",
+      "custodian",
+      "fingerprint",
+      "confirmation",
+      "taxpayer",
+      "environment",
+      "action",
+      "output",
+    ])
+      options[name] = { type: "string" };
+  } else if (command === "keygen" || command === "public") {
     options.custodian = { type: "string" };
   } else if (
     command === "sign-block" ||
+    command === "sign-register" ||
     command === "sign-consumption" ||
     command === "sign-reservation"
   ) {
     options.input = { type: "string" };
     options.output = { type: "string" };
-    if (command === "sign-block") {
+    if (command === "sign-block" || command === "sign-register") {
       options["reserved-outside"] = { type: "boolean" };
     } else {
       options.block = { type: "string" };
@@ -61,6 +78,14 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
   }
 
   try {
+    if (command === "prepare-recovery") {
+      const output = await preparePaperRecoveryExport(values);
+      await writeFile(values.output as string, JSON.stringify(output) + "\n", {
+        flag: "wx",
+        mode: 0o600,
+      });
+      return 0;
+    }
     if (command === "keygen" || command === "public") {
       const key =
         command === "keygen"
@@ -91,7 +116,7 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
     const privateKey = await readFile(values.key as string, "utf8");
     const input: unknown = JSON.parse(await readFile(values.input as string, "utf8"));
     const signed =
-      command === "sign-block"
+      command === "sign-block" || command === "sign-register"
         ? signPaperBlock(input, privateKey)
         : (command === "sign-reservation"
             ? signPaperReservationForBlock
@@ -101,7 +126,22 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
             input,
             privateKey,
           );
-    await writeFile(values.output as string, JSON.stringify(signed) + "\n", {
+    const output =
+      command === "sign-register"
+        ? {
+            "fiscal-verifactu": {
+              block: signed,
+              custodian: enrolPaperCustodian(
+                signed.payload.custodianId,
+                createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString(),
+                paperCustodianFingerprint(
+                  createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString(),
+                ),
+              ),
+            },
+          }
+        : signed;
+    await writeFile(values.output as string, JSON.stringify(output) + "\n", {
       flag: "wx",
       mode: 0o600,
     });

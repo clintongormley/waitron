@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import * as command from "./paper-custodian.js";
-import { verifyPaperEvidence } from "./paper-evidence.js";
+import { verifyPaperBlockSnapshot, verifyPaperEvidence } from "./paper-evidence.js";
 
 async function fixture(
   test: (
@@ -64,6 +64,48 @@ const event = {
 };
 
 describe("the paper custodian's separate command", () => {
+  it("exports a signed recovery register with public trust, never the signing secret", async () => {
+    await fixture(async (dir, run, out, err) => {
+      const key = join(dir, "custodian.pem");
+      expect(await run(["keygen", "--custodian", "register-custodian", "--key", key])).toBe(0);
+      const input = join(dir, "block.json");
+      const output = join(dir, "register.json");
+      await writeFile(input, JSON.stringify(block));
+      const args = [
+        "sign-register",
+        "--key",
+        key,
+        "--input",
+        input,
+        "--output",
+        output,
+        "--reserved-outside",
+      ];
+      expect(await run(args)).toBe(0);
+      const register = JSON.parse(await readFile(output, "utf8"));
+      expect(Object.keys(register)).toEqual(["fiscal-verifactu"]);
+      expect(register["fiscal-verifactu"].custodian).toEqual(JSON.parse(out[0]!));
+      expect(register["fiscal-verifactu"].block.payload).toEqual(block);
+      expect(
+        verifyPaperBlockSnapshot(
+          register["fiscal-verifactu"].block,
+          register["fiscal-verifactu"].custodian,
+          {
+            taxpayerNif: "B12345678",
+            softwareId: "WT",
+            environment: "preproduction",
+            recipientVenueId: "venue-madrid",
+            requiredBases: [{ code: "A", purpose: "standard" }],
+          },
+        ),
+      ).toMatchObject({ ok: true });
+      expect(await readFile(output, "utf8")).not.toContain("PRIVATE KEY");
+      expect((await stat(output)).mode & 0o777).toBe(0o600);
+      expect(await run(args)).toBe(1);
+      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(register);
+      expect(err).toEqual(["Paper custodian command failed (Error)"]);
+    });
+  });
   it("creates an Ed25519 private key with owner-only mode and prints only its public trust", async () => {
     await fixture(async (dir, run, out, err) => {
       const keyPath = join(dir, "custodian.pem");
