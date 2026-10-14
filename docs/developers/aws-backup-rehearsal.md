@@ -11,9 +11,9 @@ under the limits below. If the deadline passes before AWS answers the create, th
 whether the bucket exists: the receipt records it as `unowned-candidate` with no cleanup command,
 and a person checks it.
 
-As of 2026-10-14 only the loop scenario exists and it has never run against Amazon S3; later tasks of the A538
-plan (`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`, tasks 8 to 10) add the pause,
-refused-listing, batch-delete and archive scenarios and the first live run.
+As of 2026-10-14 the loop and pause scenarios exist and neither has run against Amazon S3; later
+tasks of the A538 plan (`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`) add the delete and
+archive scenarios (task 9) and the first live run (task 10).
 
 ## What it is, and what it is not
 
@@ -28,13 +28,14 @@ refused-listing, batch-delete and archive scenarios and the first live run.
   `WAITRON_AWS_REHEARSAL_BUCKET` is set to anything but an empty value, the run refuses: it never reuses a bucket you name.
   Before any scenario starts it checks that the new bucket uses Amazon's own encryption (SSE-S3) and
   has versioning off.
-- **Synthetic data only.** The loop scenario provisions a made-up venue ("Stream Loop SL") and records
-  test sales in it. No real venue, customer or fiscal data goes near the bucket.
+- **Synthetic data only.** The loop and pause scenarios each provision a made-up venue ("Stream Loop
+  SL", "Stream Pause SL") and record test sales in it. No real venue, customer or fiscal data goes near the bucket.
 - **Bounded.** The runner refuses a fixture past its limits before sending it: a 32 MiB archive,
   1,005 objects for the delete scenario, and 128 MiB uploaded in total. Creating and checking the
   bucket and then the scenario get 15 minutes together, and teardown gets 2 minutes on top; the
   2 minutes include stopping the child processes the runner was told about. The loop scenario does not count its bytes against the 128 MiB
-  limit, because Litestream does its uploads and the runner does not see them.
+  limit, because Litestream does its uploads and the runner does not see them; nor does the pause
+  scenario.
 
 Two limits matter if something goes wrong:
 
@@ -58,13 +59,14 @@ Two limits matter if something goes wrong:
   behind too. It holds a box's `secrets.env` (box A's until the loop removes it, then the rebuilt
   box's) and, once written, `recovery-kit.txt`, which carries the rehearsal's key pair encoded as
   base64url, not encrypted.
-  Delete that folder as well.
+  Delete that folder as well, and the pause scenario's `waitron-aws-stream-pause-<random>`, which
+  holds its box's `secrets.env`.
 
 ## Running it
 
 Run it from a checkout of the branch you want to test, with Litestream installed
-(`node scripts/setup-litestream.mjs`). The loop scenario fails, rather than skips, when Litestream is
-missing.
+(`node scripts/setup-litestream.mjs`). The loop and pause scenarios fail, rather than skip, when
+Litestream is missing.
 
 ```sh
 AWS_SHARED_CREDENTIALS_FILE="$HOME/.config/waitron-cloud/aws/credentials" \
@@ -85,7 +87,7 @@ The variables the rehearsal's own code reads:
 | `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there, AWS's CreateBucket reference says, "if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK", so the run could not tell a fresh bucket from one the account already owns, such as another run's (read 2026-10-14). |
 | `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
-| `WAITRON_LITESTREAM_BIN`             | The Litestream binary the loop scenario runs. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |
+| `WAITRON_LITESTREAM_BIN`             | The Litestream binary the scenarios run.      Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |
 
 A scenario sees the key pair only inside the bucket settings the runner builds for it. The key pair
 never reaches a receipt: every string in a receipt is checked against both halves of it before the
@@ -112,6 +114,90 @@ still run, but their timing is not checked.
 An upload the runner could not cancel, whose id the receipt cannot carry, is left out of what is left
 and recorded as a `record-refused` row, and the run fails; the cleanup command still finds that
 upload, because it lists the bucket's uploads itself.
+
+## The pause scenario
+
+`apps/server/src/aws-stream-pause.aws-rehearsal.test.ts` runs the stream pause test's steps
+(`apps/server/src/testing/stream-pause-scenario.ts`, described in
+[testing-guide.md](testing-guide.md), "The stream pause test") against the run's bucket, under the
+label prefix `pause`. A box streams to the bucket; then every bucket call is held, Litestream is
+killed and its replacement is held too, sales grow the side file past a 16 MiB limit, and the server
+stops Litestream and folds the file back. While the stream is paused, a bucket rule refuses the
+supervisor's question to the bucket; once the rule is removed the stream resumes into the same
+generation, and a sale made during the pause must be in a restore of it.
+
+**How the bucket is held.** Amazon S3 cannot be frozen, so the scenario holds the rehearsal's own
+connections to it instead, through two small proxies on 127.0.0.1 that the test starts and closes
+(`apps/server/src/testing/transport-gate.ts`). Litestream reaches the bucket through one of them:
+`HTTPS_PROXY` is added to the environment of the Litestream processes the server starts, and to no
+other process. The server's own bucket calls, and the scenario's, go through the other, by a request
+handler the test gives the server's store. While held, a new connection waits unanswered and is
+never passed on to AWS, and an open one moves no bytes; releasing passes the waiting ones on in
+order. Each proxy lets through only port 443 of the owned bucket's own name in the run's region,
+`<bucket>.s3.<region>.amazonaws.com`, and refuses every other host, including the shared
+`s3.<region>.amazonaws.com`; the run fails if anything asked for a refused host (the `gate-refused`
+step). Not everything goes through a proxy: the runner's own calls, the rule's control listings
+and the final restore check reach AWS directly, with the same key pair. Unlike the loop scenario's,
+this test hands the server the function that starts Litestream, so it learns each process id and
+the runner stops those processes at teardown.
+
+On 2026-10-14, slice 8a held a real Litestream 0.5.17 this way on a Mac, against a made-up bucket
+name with dummy keys and no AWS packet sent: for 240 seconds Litestream stayed alive and kept
+opening new connections to replace held ones it gave up (the one timed closely was given up between
+59 and 65 seconds after it arrived), none was passed on, and its side file grew from 7 MB to 50 MB
+without being restarted.
+
+**The bucket rule.** While the stream is paused, the scenario puts this bucket policy, with
+`<prefix>` the exact listing the paused supervisor asks for (the generation's level-0 folder, under
+the run's `pause` prefix):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WaitronRehearsalListingDenial",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<bucket>",
+      "Condition": { "StringLike": { "s3:prefix": "<prefix>*" } }
+    }
+  ]
+}
+```
+
+The runner refuses any other document before sending it. After putting the rule, a negative control
+lists that prefix every two seconds until AWS answers 403, for 60 seconds at most. Only then does the
+scenario release the server's held connections, so the supervisor's held question reaches AWS under
+the rule, and it waits up to 60 seconds more for the server to log `stream.pause_check_failed` with
+status 403 and `AccessDenied` (the `pause-check-denied` step, its status and name taken from that
+log line). The supervisor logs that event once per pause, so the first one decides: any other
+status or name fails the run at once. Then the rule is removed and a positive control lists the
+prefix until it is answered, again for 60 seconds at most. If the negative control never sees a 403,
+the refusal is **unmeasured**: the receipt records `deny-unmeasured` as failed, the scenario's held
+question is never released under the rule, and the run fails. Teardown removes the bucket's policy
+again whatever happened.
+
+A successful control listing records no HTTP status, because the store's success carries none, so
+the receipt sees `ListObjectsV2` answered only through a refusal or the runner's own listings. The
+60-second budgets bound when a control starts a listing, not how long one listing takes: a single
+listing that hangs is bounded by the store's own transport limits.
+
+The server's store is set to give up a held call after 120 seconds without traffic (measured with
+shorter settings to give up later than its setting, never earlier), longer than the hold is expected
+to last, so its question is still waiting when the rule is in place. The
+`held-pause-check` step records how long the question was held, from the logged `stream.paused` to
+its release. After the refusal, the stream is given the supervisor's one-minute interval, plus 60
+seconds for the rule's removal to reach AWS, plus 30 seconds, to resume.
+
+Its other recorded steps are the scenario's stages (`probe`, `boot`, `baseline`, `freeze-control`,
+`restart-held`, `fill`, `fold-back`, `paused-sales`, `while-paused`, `resume`, `restore-sale`),
+`restart-through-gate` (a connection reached the held Litestream proxy after the kill, so the
+replacement Litestream really went through it), `pause-check-held` (how many connections the
+server's proxy held before the release; the scenario's own listing from the freeze check shares
+that proxy, so this does not single out the supervisor's), and the rule's `listing-denial` steps.
+Its working folder is `waitron-aws-stream-pause-<random>` under your temporary folder.
 
 ## When teardown fails: the cleanup command
 
