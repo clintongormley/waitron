@@ -20,6 +20,7 @@ import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { eq, inArray } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -35,6 +36,7 @@ import {
   openVenueDatabase,
   withTransaction,
   applicationVersion,
+  locations,
   type Database,
   type SingletonRole,
 } from "@waitron/db";
@@ -142,6 +144,11 @@ import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { createRoutedInvoiceEmailSender } from "./invoice-email.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { beginAttendanceDiscovery } from "./attendance-discovery.js";
+import { runAttendanceLoop } from "./attendance-loop.js";
+import { createAttendanceEmailSender } from "./attendance-email.js";
+import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -1495,6 +1502,9 @@ async function bootServer(
   });
   const tillClock = systemClock();
   const tableRemovals = enabledTableRemovals(setsToMigrate);
+  const workforceEnabled =
+    !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
+  const attendanceRecorder = workforceEnabled ? recordAttendanceFact : undefined;
   const invoiceEmailAvailable = async () =>
     (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured";
   mountTillApi(
@@ -1516,8 +1526,8 @@ async function bootServer(
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
       invoiceEmailAvailable,
-      workforceEnabled:
-        !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce"),
+      workforceEnabled,
+      attendance: attendanceRecorder,
     },
     log,
   );
@@ -1546,6 +1556,51 @@ async function bootServer(
   const testPages = createPageTestPages(now);
   const invoiceEmailController = new AbortController();
   let invoiceEmailLoop: Promise<void> | undefined;
+  const attendanceController = new AbortController();
+  let attendanceLoop: Promise<void> | undefined;
+  let attendanceEmailLoop: Promise<void> | undefined;
+  if (workforceEnabled && isSingletonPrimary) {
+    await withTransaction(db, (tx) =>
+      beginAttendanceDiscovery(tx, { locationId: till.locationId, generation: randomUUID() }),
+    );
+    attendanceLoop = runAttendanceLoop({
+      db,
+      nodeId: till.nodeId,
+      locationId: till.locationId,
+      now,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      signal: attendanceController.signal,
+      onError: (error) =>
+        log("error", "attendance.processing_failed", { errorCode: codeOf(error) }),
+    });
+    undoOnFailure.push(async () => {
+      attendanceController.abort();
+      await attendanceLoop;
+    });
+    const [location] = await db
+      .select({ name: locations.name })
+      .from(locations)
+      .where(eq(locations.id, till.locationId));
+    attendanceEmailLoop = runAttendanceEmailLoop({
+      db,
+      nodeId: till.nodeId,
+      locationId: till.locationId,
+      holder: till.nodeId,
+      now,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      signal: attendanceController.signal,
+      venueLocale: venueLocale === "es-ES" ? "es" : "en",
+      locationName: location!.name,
+      resolveDelivery: () =>
+        resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true),
+      send: createAttendanceEmailSender(),
+      onError: (error) => log("error", "attendance.email_failed", { errorCode: codeOf(error) }),
+    });
+    undoOnFailure.push(async () => {
+      attendanceController.abort();
+      await attendanceEmailLoop;
+    });
+  }
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
@@ -1617,6 +1672,7 @@ async function bootServer(
         pool: cardPool,
         providers: CARD_PROVIDERS,
         simulator: cardProvider,
+        attendance: attendanceRecorder,
       },
       log,
     );
@@ -2334,7 +2390,10 @@ async function bootServer(
         controller.abort();
         cloudController.abort();
         invoiceEmailController.abort();
+        attendanceController.abort();
         await closeAll([
+          () => attendanceLoop,
+          () => attendanceEmailLoop,
           () => invoiceEmailLoop,
           () => cloudWorker,
           () => cloudSnapshots,

@@ -119,9 +119,11 @@ export async function runAttendanceEmailPass(
         smtp: delivery.smtp,
         recipient,
         locale:
-          current.person.locale === "es" || current.person.locale === "en"
-            ? current.person.locale
-            : deps.venueLocale,
+          current.person.locale === "es-ES"
+            ? ("es" as const)
+            : current.person.locale === "en-GB"
+              ? ("en" as const)
+              : deps.venueLocale,
         businessDay: current.question.businessDay,
         locationName: deps.locationName,
         missingKinds:

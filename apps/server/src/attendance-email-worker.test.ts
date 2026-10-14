@@ -58,7 +58,7 @@ const deps = () => ({
   now: () => now,
   isPrimary: () => primary,
   signal: controller.signal,
-  venueLocale: "en" as const,
+  venueLocale: "en" as "en" | "es",
   locationName: "Madrid",
   resolveDelivery: async (): Promise<EmailDelivery> => ({ mode: "smtp", smtp }),
   send,
@@ -152,7 +152,7 @@ beforeEach(async () => {
       displayName: "Worker",
       email: "worker@example.test",
       pendingEmail: "unverified@example.test",
-      locale: "es",
+      locale: "es-ES",
     })
     .returning();
   personId = person!.id;
@@ -160,6 +160,18 @@ beforeEach(async () => {
 });
 
 describe("missing-attendance delivery worker", () => {
+  it.each([
+    ["es-ES", "en", "es"],
+    ["en-GB", "es", "en"],
+  ] as const)(
+    "uses the saved %s preference ahead of venue %s",
+    async (locale, venueLocale, expected) => {
+      await seedMissing();
+      await suite.db.update(persons).set({ locale }).where(eq(persons.id, personId));
+      await pass({ venueLocale });
+      expect(send.mock.calls[0]![0].locale).toBe(expected);
+    },
+  );
   it("does not send if storage refuses to retain the claim", async () => {
     await seedMissing();
     const before = await mail();

@@ -60,8 +60,11 @@ evidence before claiming, snapshots the saved email rather than a pending replac
 outside the write transaction. SMTP acceptance and uncertain delivery suppress another automatic
 attempt; an explicit refusal waits fifteen minutes before retrying. An abandoned claim becomes
 uncertain after sixty seconds. SMTP acceptance does not establish inbox delivery, and restoring an
-older backup can lose the sent marker and permit a duplicate. Remaining command capture, starting
-both duties at boot and their boot lifecycle checks remain open; part 3 is unfinished.
+older backup can lose the sent marker and permit a duplicate. Writable workforce primaries start
+both duties and begin a fresh discovery generation at each open. Setup, mirror, fenced, secondary
+and workforce-disabled boots start neither duty. Failure unwind and normal close abort and await
+the duties before closing their database handle. Remaining command capture, restore-path
+qualification and final branch checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the
