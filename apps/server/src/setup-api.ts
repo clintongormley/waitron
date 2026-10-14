@@ -565,8 +565,9 @@ function parseProvisionPayload(
   };
 }
 
-/** Demo, Preparation and a dev box's Live make their own preproduction allocation; a production
- * environment among them is refused by the allocation itself, not here. */
+/** Demo, Preparation and a dev box's Live make their own preproduction allocation. A production
+ * box or request environment is refused not here but by the throwaway seat `provisionVenue` calls
+ * with both (`provision.ts`). */
 function throwawayMarker(
   mode: "demo" | "prepare" | "live",
   devMode: boolean,
