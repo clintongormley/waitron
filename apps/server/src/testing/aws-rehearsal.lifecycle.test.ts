@@ -597,6 +597,31 @@ describe("withAwsRehearsal — a teardown that fails", () => {
     expect(parsed.remaining.uploadIds).toEqual([id]);
   });
 
+  it.each([
+    ["a control character", "listed\u0001id"],
+    ["the secret key", `listed-${SECRET}`],
+  ])(
+    "writes the receipt without a listed upload id holding %s it could not abort",
+    async (_, refusedId) => {
+      const carried = "2~Ab+cd/ef=gh";
+      const h = harness({
+        AbortMultipartUpload: () => {
+          throw sdkError("AccessDenied", 403, 2);
+        },
+      });
+      h.fake.uploads.set(carried, "rehearsal-run-0001/a/archive");
+      h.fake.uploads.set(refusedId, "rehearsal-run-0001/a/other");
+      const { error, parsed } = await failedRun(h);
+      expect(error.message).not.toContain(refusedId);
+      expect(parsed.remaining.uploadIds).toEqual([carried]);
+      expect(parsed.events).toContainEqual({
+        scenario: "lifecycle",
+        phase: "record-refused",
+        outcome: "refused",
+      });
+    },
+  );
+
   it("stops a listing that repeats its continuation token", async () => {
     const h = harness({
       ListObjectsV2: () => ({
@@ -905,7 +930,7 @@ describe("fix round 1", () => {
   });
 });
 
-describe("finish-branch review: failures that must still reach teardown and the receipt", () => {
+describe("withAwsRehearsal — failures that still reach teardown and the receipt", () => {
   it("aborts the signal and tears down when the scenario throws before returning a promise", async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown) => unhandled.push(reason);
@@ -1068,7 +1093,7 @@ describe("finish-branch review: failures that must still reach teardown and the 
   });
 });
 
-describe("finish-branch review: child shutdown", () => {
+describe("teardownOwnedBucket — child shutdown", () => {
   it("keeps child shutdown inside the teardown budget", async () => {
     const fake = new FakeAdmin();
     let alive = true;
@@ -1129,7 +1154,7 @@ describe("finish-branch review: child shutdown", () => {
   });
 });
 
-describe("finish-branch review: refusals before any request", () => {
+describe("withAwsRehearsal — refusals before any request", () => {
   it("refuses us-east-1, where re-creating an owned bucket answers success, before any client", async () => {
     await writeFile(configFile, "[profile waitron-rehearsal]\nregion = us-east-1\n");
     const h = harness({}, { env: env({ AWS_REGION: "us-east-1" }) });

@@ -291,7 +291,7 @@ export interface TeardownDeps {
   sleep(ms: number): Promise<void>;
   now(): number;
   teardownMs: number;
-  /** How long a tracked child gets after SIGTERM before SIGKILL; 5 s when unset. */
+  /** How long the runner waits for tracked children after SIGTERM, and again after SIGKILL; 5 s when unset. */
   childGraceMs?: number;
   record?(event: unknown): void;
 }
@@ -952,6 +952,8 @@ function receiptFailureCause(error: unknown): string {
 function containedLog(log: ReceiptLog): {
   record(event: unknown): void;
   teardown(entry: TeardownEntry): void;
+  /** Notes and counts a value left out of the receipt by the caller. */
+  refuse(): void;
   refused(): number;
 } {
   let refused = 0;
@@ -983,8 +985,26 @@ function containedLog(log: ReceiptLog): {
         }
       }
     },
+    refuse: note,
     refused: () => refused,
   };
+}
+
+/**
+ * Leaves out, as a refused entry, a listed upload id the receipt could not carry; the cleanup
+ * command lists the bucket's uploads itself, so `bucket` alone is enough to finish the job.
+ */
+function carriedRemaining(
+  remaining: AwsReceiptRemaining,
+  profile: RehearsalProfile,
+  contained: { refuse(): void },
+): AwsReceiptRemaining {
+  const uploadIds = remaining.uploadIds.filter((id) => {
+    const carried = isReceiptUploadId(id) && !carriesKeyPair(id, profile);
+    if (!carried) contained.refuse();
+    return carried;
+  });
+  return { bucket: remaining.bucket, uploadIds };
 }
 
 function refusedEntriesFailure(refused: number): AwsRehearsalFailed | undefined {
@@ -1268,7 +1288,11 @@ async function runOwned<T>(
     for (const entry of teardown.entries) contained.teardown(entry);
   }
 
-  const remaining = teardown?.remaining ?? { bucket: null, uploadIds: [] };
+  const remaining = carriedRemaining(
+    teardown?.remaining ?? { bucket: null, uploadIds: [] },
+    profile,
+    contained,
+  );
   const failed = failedSteps(teardown?.entries ?? []);
   let receiptFailure: AwsRehearsalFailed | undefined;
   try {
@@ -1337,7 +1361,7 @@ async function runOwned<T>(
 
 /**
  * Runs one rehearsal for a test file whose test can hit Vitest's time limit, which leaves the run
- * going after the test has failed. Call `stop()` in `afterAll`: it ends a run still going as its
+ * going after the test has failed. Call `stop()` in `afterAll`: it stops a scenario still running as its
  * deadline would, and waits up to `waitMs` for the teardown and the receipt.
  */
 export function rehearsalLifecycle(overrides: Partial<AwsRehearsalDeps> = {}): {
@@ -1529,12 +1553,12 @@ export async function cleanupFromReceipt(
       { ...deps, record },
     );
     for (const entry of teardown.entries) contained.teardown(entry);
+    const remaining = carriedRemaining(teardown.remaining, profile, contained);
     const receipt = log.finish({
       finishedAt: new Date(deps.now()).toISOString(),
       ownership: { state: "owned", bucket },
-      remaining: teardown.remaining,
-      cleanupCommand:
-        teardown.remaining.bucket === null ? null : cleanupCommandFor(region, cleanupPath),
+      remaining,
+      cleanupCommand: remaining.bucket === null ? null : cleanupCommandFor(region, cleanupPath),
     });
     let written: string;
     try {
@@ -1542,13 +1566,13 @@ export async function cleanupFromReceipt(
     } catch (error) {
       throw new AwsRehearsalFailed(
         `cleanup receipt not written (${receiptFailureCause(error)}); ` +
-          `bucket left: ${teardown.remaining.bucket ?? "none"}; ` +
+          `bucket left: ${remaining.bucket ?? "none"}; ` +
           `failed teardown steps: ${failedSteps(teardown.entries)}`,
       );
     }
     deps.print(written);
     return {
-      ok: teardown.remaining.bucket === null && contained.refused() === 0,
+      ok: remaining.bucket === null && contained.refused() === 0,
       receiptPath: written,
     };
   } finally {

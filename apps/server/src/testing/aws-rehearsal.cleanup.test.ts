@@ -486,4 +486,35 @@ describe("cleanupFromReceipt: a receipt entry the receipt refuses", () => {
       outcome: "refused",
     });
   });
+
+  it.each([
+    ["a control character", "listed\u0001id"],
+    ["the secret key", `listed-${SECRET}`],
+  ])(
+    "writes its receipt without a listed upload id holding %s it could not abort",
+    async (_, refusedId) => {
+      await writeLeft(leftReceipt());
+      const h = harness({
+        AbortMultipartUpload: () => {
+          throw sdkError("AccessDenied", 403);
+        },
+      });
+      h.fake.uploads.set(refusedId, "rehearsal-run-0001/loop/third");
+      const result = await cleanupFromReceipt(receiptPath, h.deps);
+      expect(result.ok).toBe(false);
+      expect(h.printed).toEqual([cleanupPath()]);
+      const text = await readFile(cleanupPath(), "utf8");
+      expect(text).not.toContain(SECRET);
+      const receipt = JSON.parse(text) as AwsReceipt;
+      expect(receipt.remaining).toEqual({
+        bucket: BUCKET,
+        uploadIds: ["upload-from-receipt", "upload-only-listed"],
+      });
+      expect(receipt.events).toContainEqual({
+        scenario: "lifecycle",
+        phase: "record-refused",
+        outcome: "refused",
+      });
+    },
+  );
 });

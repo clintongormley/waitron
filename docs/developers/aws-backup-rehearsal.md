@@ -1,12 +1,15 @@
 # The Amazon S3 backup rehearsal
 
-The server's stream tests talk to versitygw, a small S3-compatible server started on your machine. That is fast and free, but it cannot tell you how Amazon S3 itself answers.
+The server's stream tests talk to versitygw, a small S3-compatible server started on your machine.
+That is fast and free, but it cannot tell you how Amazon S3 itself answers.
 The rehearsal is the one place that asks the real service: it runs the same scenarios against Amazon
 S3, in a bucket it creates for the run and then tries to delete. Teardown can fail to delete it: an
 error from AWS, the teardown's two-minute limit running out, or a Litestream upload still running
 when teardown starts. Any failed teardown step fails the run, and when the bucket is left the
 receipt names it and gives a cleanup command. Pressing Ctrl-C also leaves the bucket, with no receipt; that is described
-under the limits below.
+under the limits below. If the deadline passes before AWS answers the create, the run cannot know
+whether the bucket exists: the receipt records it as `unowned-candidate` with no cleanup command,
+and a person checks it.
 
 As of 2026-10-14 only the loop scenario exists and it has never run against Amazon S3; later tasks of the A538
 plan (`docs/superpowers/plans/2026-10-12-a538-archive-s3.md`, tasks 8 to 10) add the pause,
@@ -35,12 +38,14 @@ refused-listing, batch-delete and archive scenarios and the first live run.
 
 Two limits matter if something goes wrong:
 
-- **A run that passes its deadline, or whose test hits Vitest's time limit, gets one minute to stop.** The runner signals the scenario
+- **A run that passes its deadline gets one minute to stop.** The runner signals the scenario
   to stop. The loop scenario then closes whichever of its two servers is running, which stops that
   server's Litestream, and ends at its next wait. The runner waits up to 60 seconds for that before
-  it starts teardown, and records the wait as the `settle` step. When Vitest's time limit ends the test
-  first, the test file's `afterAll` stops the run the same way and waits for its teardown and
-  receipt; the receipt records that stop as the `interrupt` step. A scenario still running after
+  it starts teardown, and records the wait as the `settle` step. The test's own time limit is longer than the
+  deadline, that minute and teardown together. If it still ends the test while the run is going,
+  the test file's `afterAll` stops the run and waits up to three and a half minutes for its teardown
+  and receipt; a scenario still running then is stopped as at its deadline, and the receipt records
+  that stop as the `interrupt` step. A scenario still running after
   that minute, for example one inside a restore that cannot be cut short, races the teardown, and a
   late Litestream upload can leave the bucket behind. The server does not tell the scenario its
   Litestream child's process id, so the runner has no child of its own to stop. When the bucket is
@@ -77,14 +82,16 @@ The variables the rehearsal's own code reads:
 | `AWS_SHARED_CREDENTIALS_FILE`        | Absolute path to the credentials file, outside the repository. The runner reads the `waitron-rehearsal` profile's static key pair from it. A session token is refused.                                                            |
 | `AWS_CONFIG_FILE`                    | Absolute path to the config file, outside the repository. The profile's region is read from it.                                                                                                                                   |
 | `AWS_PROFILE`                        | Must be `waitron-rehearsal`.                                                                                                                                                                                                       |
-| `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there AWS answers a create for a bucket the account already owns with success, so the run could not tell a fresh bucket from someone else's. |
+| `AWS_REGION`                         | Must match the profile's region. The bucket is created there. `us-east-1` is refused (`region-unsupported`) before any request, because there, AWS's CreateBucket reference says, "if you re-create an existing bucket that you already own in the North Virginia Region, Amazon S3 returns 200 OK", so the run could not tell a fresh bucket from one the account already owns, such as another run's (read 2026-10-14). |
 | `WAITRON_AWS_REHEARSAL_RECEIPT_DIR`  | Where receipts are written. Unset or empty, they go to `waitron-aws-rehearsal` under your temporary folder. The full path may hold only letters, digits and `. _ @ -` between its slashes and must be at most 40 folders deep. The cleanup command naming a receipt in it must fit in 512 characters, which the run checks before any AWS call; with the default run id that allows a folder path of about 150 characters, depending on the region (155 for `eu-north-1`). |
 | `WAITRON_AWS_REHEARSAL_BUCKET`       | Must be unset or empty. Any other value refuses the run (`supplied-bucket`).                                                                                                                                                       |
 | `WAITRON_LITESTREAM_BIN`             | The Litestream binary the loop scenario runs. Unset or empty, it is `.bin/litestream` at the repository root, where `node scripts/setup-litestream.mjs` puts it. It must report the pinned version, or the loop fails.             |
 
 A scenario sees the key pair only inside the bucket settings the runner builds for it. The key pair
 never reaches a receipt: every string in a receipt is checked against both halves of it before the
-receipt is written.
+receipt is written. If a row the runner records would carry part of the key pair, the receipt holds
+a fixed `record-refused` row in its place (a teardown step keeps only its name and outcome), and the
+run, or the cleanup, fails. A scenario's own such row fails the scenario where it is recorded.
 
 ## What a run leaves behind
 
@@ -98,9 +105,13 @@ commit, versions, region, times and limits, one row per recorded step (a stage n
 duration, and where relevant an API name, HTTP status and AWS error name), the teardown steps and
 their outcomes, and what is left. It never holds a key, a URL, an object's contents or a raw error
 message. For the loop scenario, the recorded steps are `probe`, `pointer-a`, `sale-a`, `rebuild`,
-`pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. Amazon S3 cannot be frozen the way
-the local test freezes versitygw, so `frozen-transport` always reads `skipped` here: the stage's sales
+`pointer-b`, `sale-b`, `frozen-transport` and `restore-compare`. The rehearsal passes the loop no way
+to freeze the transport, so `frozen-transport` always reads `skipped` here: the stage's sales
 still run, but their timing is not checked.
+
+An upload the runner could not cancel, whose id the receipt cannot carry, is left out of what is left
+and recorded as a `record-refused` row, and the run fails; the cleanup command still finds that
+upload, because it lists the bucket's uploads itself.
 
 ## When teardown fails: the cleanup command
 
