@@ -388,6 +388,19 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).not.toHaveBeenCalled();
   });
 
+  it("sends nothing for a Save pressed after its table joined a group but before the screen redrew", async () => {
+    const api = stubApi();
+    const el = await mount(bar(), api);
+    const opened = await pressRename(el, "bar");
+
+    el.tables = barJoined();
+    send(opened, "today-name-confirm", { name: "Window" });
+    await settle(el);
+
+    expect(api.nameToday).not.toHaveBeenCalled();
+    expect(windowOf(el)).toBeNull();
+  });
+
   it("keeps a group member's window open across a re-read listing the group in another order", async () => {
     const api = stubApi();
     const el = await mount(group(), api);

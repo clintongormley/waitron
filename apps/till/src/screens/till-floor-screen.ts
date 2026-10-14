@@ -1410,10 +1410,19 @@ export class TillFloorScreen extends LitElement {
   /** A refusal naming the name field stays under it while the window is still shown; any other
    * closes the window and shows on the floor. */
   async #rename(dialog: TillTodayNameDialog, name: string | null): Promise<void> {
+    // A floor read can land after the last draw, and `#renameShown` reads the zone as drawn.
+    this.#zone = this.#zoneOnScreen();
     const renaming = this.renaming;
     const table = renaming === null ? undefined : this.#renamable(renaming.tableId);
     const api = this.api;
-    if (renaming === null || renaming.sent || table === undefined || api === undefined) return;
+    if (
+      renaming === null ||
+      renaming.sent ||
+      !this.#renameShown(renaming) ||
+      table === undefined ||
+      api === undefined
+    )
+      return;
     const sending = { ...renaming, sent: true, refusal: null };
     this.renaming = sending;
     try {
