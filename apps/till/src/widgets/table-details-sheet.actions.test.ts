@@ -117,6 +117,11 @@ describe("till-table-details-sheet's actions for today", () => {
     expect(buttons(el).some((each) => each.getAttribute("slot") === "footer")).toBe(false);
   });
 
+  it("leaves Join with… out when told the zone has nothing to join", async () => {
+    const el = await mount({ offersJoinWith: false });
+    expect(offered(el)).toEqual(["rotate", "seats", "rename", "back", "take-off"]);
+  });
+
   it("offers a merge Split tables…, seats and back, and no Join with…, Rotate or Take off", async () => {
     const el = await mount({ table: table({ today: merged }) });
     expect(offered(el)).toEqual(["split-off", "seats", "rename", "back"]);

@@ -425,3 +425,48 @@ describe("till-floor-screen: the sheet's actions and the room's revision", () =>
     expect(api.setSeatsToday).toHaveBeenCalledExactlyOnceWith("t1", 8, 7);
   });
 });
+
+describe("till-floor-screen: Join with… in a zone that seats no one", () => {
+  async function mountIn(serviceMode: FloorZone["serviceMode"], tables: TableState[]) {
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [{ ...zone, serviceMode }],
+      tables,
+      api: stubApi() as unknown as TillApi,
+      canChangeToday: true,
+    });
+    return el;
+  }
+
+  const offersJoinWith = (sheet: HTMLElementTagNameMap["till-table-details-sheet"]) =>
+    sheet.shadowRoot!.querySelector('[data-today-action="join-with"]') !== null;
+
+  const fixedPair = () => [planned("t1", 2, { fixed: true }), planned("t2", 20, { fixed: true })];
+
+  it("is not offered for one of two fixed free tables", async () => {
+    const el = await mountIn("prepay", fixedPair());
+    expect(offersJoinWith(await openSheet(el, "t1"))).toBe(false);
+  });
+
+  it("lists only the free tables a drop would merge with", async () => {
+    const el = await mountIn("prepay", [
+      planned("t1", 2, { fixed: true }),
+      planned("t2", 10),
+      planned("t3", 20, {}, party("P", 1, ["t3"])),
+      planned("t4", 30),
+    ]);
+    await press(el, "t4", "join-with");
+    expect(targetIds(el)).toEqual(["t2"]);
+  });
+
+  it("is offered as before in a zone with table service, and the pick opens Seat for both", async () => {
+    const el = await mountIn("table_tab", fixedPair());
+    expect(offersJoinWith(await openSheet(el, "t1"))).toBe(true);
+    await press(el, "t1", "join-with");
+    expect(targetIds(el)).toEqual(["t2"]);
+    send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
+    await settle(el);
+    const dialog = el.shadowRoot!.querySelector("till-seat-dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.tableLabel).toBe("1+2");
+  });
+});
