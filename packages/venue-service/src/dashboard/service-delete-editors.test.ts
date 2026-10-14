@@ -3,7 +3,6 @@ import { LitElement, html } from "lit";
 import { LiveData, currentLocale, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { zonesModel } from "../testing/department-zones-fixture.js";
-import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import { VenueServiceApi } from "./client.js";
@@ -169,7 +168,7 @@ async function hours(
   let model = initial;
   const writes: unknown[][] = [];
   const api = new OpeningHoursApi(
-    withOpeningStations((async (path, method, body) => {
+    (async (path, method, body) => {
       if (method === "GET" && path.includes("/opening-hours/year?"))
         return {
           businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -195,7 +194,7 @@ async function hours(
       if (method === "GET") return path.includes("/named-days?") ? namedWeekModel() : model;
       writes.push([path, method, body]);
       return write();
-    }) as DashboardRequest),
+    }) as DashboardRequest,
     live,
   );
   const screen = document.createElement("dashboard-opening-hours-screen");

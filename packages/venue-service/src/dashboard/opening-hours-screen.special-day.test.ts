@@ -8,7 +8,6 @@ import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
-import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { frame, painterModel, settle, storedDay } from "../testing/special-day-painter-fixture.js";
 import "./opening-hours-screen.js";
 
@@ -82,7 +81,7 @@ interface Recorded {
 }
 function request(recorded: Recorded): DashboardRequest {
   const days: Record<string, SpecialDayDetail> = { sd1: storedDay(), sd2: fair, sd3: labourDay };
-  return withOpeningStations((async (path: string, method: string, body: unknown) => {
+  return (async (path: string, method: string, body: unknown) => {
     if (method !== "GET") {
       recorded.writes.push([path, method, body]);
       if (method === "DELETE") return undefined;
@@ -126,7 +125,7 @@ function request(recorded: Recorded): DashboardRequest {
           .map((date) => ({ date, seasonId: "winter", dayCutover: "06:00", departments: [] })),
       } satisfies SeasonDays;
     return painterModel();
-  }) as DashboardRequest);
+  }) as DashboardRequest;
 }
 
 const hosts: HTMLElement[] = [];

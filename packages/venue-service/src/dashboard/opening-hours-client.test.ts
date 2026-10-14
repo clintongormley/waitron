@@ -464,29 +464,6 @@ it.each([
   }
 });
 
-it("loads and refreshes the station picker as passive session activity", async () => {
-  const live = new LiveData();
-  const stations = [{ id: "bar", name: "Bar", active: true, isDefault: true }];
-  const request = vi.fn(async () => stations);
-  const api = new OpeningHoursApi(request as DashboardRequest, live);
-  const apply = vi.fn();
-  const stop = api.watchStations(apply, vi.fn(), vi.fn());
-  try {
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(stations));
-    live.invalidate([{ type: "kitchen_stations" }]);
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
-    expect(request.mock.calls).toEqual([
-      ["/management-api/stations", "GET", undefined, { passive: true }],
-      ["/management-api/stations", "GET", undefined, { passive: true }],
-    ]);
-  } finally {
-    stop();
-  }
-  live.invalidate([{ type: "kitchen_stations" }]);
-  await new Promise<void>((resolve) => queueMicrotask(resolve));
-  expect(request).toHaveBeenCalledTimes(2);
-});
-
 it.each(["sections", "section_members", "catalogues"])(
   "refreshes worked-out station times when menu composition changes in %s",
   async (type) => {

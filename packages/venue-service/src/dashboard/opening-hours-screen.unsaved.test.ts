@@ -1,4 +1,3 @@
-import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -11,142 +10,140 @@ import "./opening-hours-screen.js";
 class OpeningLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly writes: unknown[][] = [];
-  readonly api = new OpeningHoursApi(
-    withOpeningStations((async (path, method, body) => {
-      if (method !== "GET") {
-        this.writes.push([path, method, body]);
-        return;
-      }
-      if (path.includes("/opening-hours/season-days?"))
-        return {
-          days: new URL(path, "http://x").searchParams
-            .get("dates")!
-            .split(",")
-            .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
-        };
-      if (path.endsWith("/special-days/own"))
-        return {
-          id: "own",
-          name: "Anniversary",
-          repeatsYearly: true,
-          dates: [{ date: "2025-10-13", closedAllDay: false }],
-          paint: [],
-          zonePaint: [],
-        };
-      if (path.includes("/named-days?"))
-        return {
-          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-          clockRevision: 0,
-          currentBusinessDay: "2026-10-07",
-          pending: null,
-          timeZone: "Europe/Madrid",
-          dayCutover: "06:00",
-          civilDate: "2026-10-07",
-          clockReadable: true,
-          days: [
-            {
-              date: "2026-10-13",
-              specialDay: { id: "own", name: "Anniversary" },
-              holidays: [],
-              tone: "special_day",
-              closed: false,
-            },
-          ],
-          holidayCoverage: [],
-          holidaySources: [],
-          area: {
-            addressKey: "fixture-address",
-            readiness: "ready",
-            options: [],
-            required: false,
-            chosen: null,
-          },
-          localHolidaysPerYear: 2,
-        };
-      if (path.endsWith("/special-days")) return [];
-      if (path.includes("/opening-hours/year?"))
-        return {
-          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-          clockRevision: 0,
-          currentBusinessDay: "2026-10-07",
-          pending: null,
-          year: 2026,
-          timeZone: "Europe/Madrid",
-          today: "2026-10-07",
-          seasons: [],
-          days: [
-            {
-              date: "2026-10-13",
-              seasonId: null,
-              specialDay: { id: "own", name: "Anniversary" },
-              holidays: [],
-              tone: "special_day",
-              closed: false,
-            },
-          ],
-          publicHolidaysAvailable: true,
-          missingHolidays: [],
-          holidayCoverage: [],
-          area: {
-            addressKey: "fixture-address",
-            readiness: "ready",
-            options: [],
-            required: false,
-            chosen: null,
-          },
-        };
-      if (path.includes("/hours?"))
-        return {
-          timeZone: "Europe/Madrid",
-          dayCutover: "06:00",
-          civilDate: "2026-10-07",
-          clockReadable: true,
-          departments: [],
-          subjects: [],
-          week: [],
-          days: [],
-          specialCells: [],
-          holidayCoverage: [],
-          holidaySources: [],
-        };
+  readonly api = new OpeningHoursApi((async (path, method, body) => {
+    if (method !== "GET") {
+      this.writes.push([path, method, body]);
+      return;
+    }
+    if (path.includes("/opening-hours/season-days?"))
+      return {
+        days: new URL(path, "http://x").searchParams
+          .get("dates")!
+          .split(",")
+          .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
+      };
+    if (path.endsWith("/special-days/own"))
+      return {
+        id: "own",
+        name: "Anniversary",
+        repeatsYearly: true,
+        dates: [{ date: "2025-10-13", closedAllDay: false }],
+        paint: [],
+        zonePaint: [],
+      };
+    if (path.includes("/named-days?"))
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
         clockRevision: 0,
-        currentBusinessDay: "2026-10-12",
+        currentBusinessDay: "2026-10-07",
         pending: null,
         timeZone: "Europe/Madrid",
-        clockReadable: true,
         dayCutover: "06:00",
-        menus: [
-          { id: "lunch", name: "Lunch menu", active: true, includes: [] },
-          { id: "dinner", name: "Dinner menu", active: true, includes: [] },
-        ],
-        seasons: [],
-        currentSeasonId: null,
-        departments: [
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        days: [
           {
-            id: "restaurant",
-            name: "Restaurant",
-            active: true,
-            zones: [],
-            seasonWeeks: [],
-            periods: [
-              {
-                id: "p1",
-                name: "Lunch",
-                colour: "blue",
-                menuId: "lunch",
-                staffMenuIds: [],
-                endOffsetMinutes: 0,
-                weekdays: [1],
-                routingUses: [],
-              },
-            ],
+            date: "2026-10-13",
+            specialDay: { id: "own", name: "Anniversary" },
+            holidays: [],
+            tone: "special_day",
+            closed: false,
           },
         ],
+        holidayCoverage: [],
+        holidaySources: [],
+        area: {
+          addressKey: "fixture-address",
+          readiness: "ready",
+          options: [],
+          required: false,
+          chosen: null,
+        },
+        localHolidaysPerYear: 2,
       };
-    }) as DashboardRequest),
-  );
+    if (path.endsWith("/special-days")) return [];
+    if (path.includes("/opening-hours/year?"))
+      return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-07",
+        pending: null,
+        year: 2026,
+        timeZone: "Europe/Madrid",
+        today: "2026-10-07",
+        seasons: [],
+        days: [
+          {
+            date: "2026-10-13",
+            seasonId: null,
+            specialDay: { id: "own", name: "Anniversary" },
+            holidays: [],
+            tone: "special_day",
+            closed: false,
+          },
+        ],
+        publicHolidaysAvailable: true,
+        missingHolidays: [],
+        holidayCoverage: [],
+        area: {
+          addressKey: "fixture-address",
+          readiness: "ready",
+          options: [],
+          required: false,
+          chosen: null,
+        },
+      };
+    if (path.includes("/hours?"))
+      return {
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-07",
+        clockReadable: true,
+        departments: [],
+        subjects: [],
+        week: [],
+        days: [],
+        specialCells: [],
+        holidayCoverage: [],
+        holidaySources: [],
+      };
+    return {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
+      dayCutover: "06:00",
+      menus: [
+        { id: "lunch", name: "Lunch menu", active: true, includes: [] },
+        { id: "dinner", name: "Dinner menu", active: true, includes: [] },
+      ],
+      seasons: [],
+      currentSeasonId: null,
+      departments: [
+        {
+          id: "restaurant",
+          name: "Restaurant",
+          active: true,
+          zones: [],
+          seasonWeeks: [],
+          periods: [
+            {
+              id: "p1",
+              name: "Lunch",
+              colour: "blue",
+              menuId: "lunch",
+              staffMenuIds: [],
+              endOffsetMinutes: 0,
+              weekdays: [1],
+              routingUses: [],
+            },
+          ],
+        },
+      ],
+    };
+  }) as DashboardRequest);
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;

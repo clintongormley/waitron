@@ -1,4 +1,3 @@
-import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { userEvent } from "vitest/browser";
@@ -129,13 +128,11 @@ async function mount(request?: DashboardRequest, readOnly = false) {
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(
     withSeasonDays(
-      withOpeningStations(
-        request ??
-          ((async (path: string) =>
-            path.includes("/opening-hours/year?")
-              ? yearRead(2026)
-              : structuredClone(model())) as DashboardRequest),
-      ),
+      request ??
+        ((async (path: string) =>
+          path.includes("/opening-hours/year?")
+            ? yearRead(2026)
+            : structuredClone(model())) as DashboardRequest),
     ),
   );
   el.readOnly = readOnly;
@@ -161,13 +158,11 @@ it("falls back to an active department for an unknown link", async () => {
 it("ignores another screen's department link while Opening hours is mounted", async () => {
   history.replaceState(null, "", "/manage/other-screen/view/periods/department/deli");
   const el = await mount();
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!
-      .value,
-  ).toBe("restaurant");
   expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!.value).toBe(
-    "week",
+    "year",
   );
+  expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
+  expect(location.pathname).toBe("/manage/other-screen/view/periods/department/deli");
 });
 
 it("recovers a failed initial load and ignores model reads that settle after removal", async () => {
@@ -176,16 +171,14 @@ it("recovers a failed initial load and ignores model reads that settle after rem
   let reads = 0;
   let resolve!: (data: OpeningHoursModel) => void;
   const el = document.createElement("dashboard-opening-hours-screen");
-  el.api = new OpeningHoursApi(
-    withOpeningStations((async (path: string) => {
-      if (path.includes("/opening-hours/year?")) return yearRead(2026);
-      if (++reads === 1) throw new Error("offline");
-      if (reads === 2) return model();
-      return new Promise<OpeningHoursModel>((done) => {
-        resolve = done;
-      });
-    }) as DashboardRequest),
-  );
+  el.api = new OpeningHoursApi((async (path: string) => {
+    if (path.includes("/opening-hours/year?")) return yearRead(2026);
+    if (++reads === 1) throw new Error("offline");
+    if (reads === 2) return model();
+    return new Promise<OpeningHoursModel>((done) => {
+      resolve = done;
+    });
+  }) as DashboardRequest);
   hosts.push(el);
   document.body.append(el);
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();
@@ -201,6 +194,23 @@ it("recovers a failed initial load and ignores model reads that settle after rem
   await new Promise((settled) => setTimeout(settled, 0));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2026);
+});
+
+it("reads no prep-station list, on the Year or on an old station address", async () => {
+  const paths: string[] = [];
+  const read = (async (path: string) => {
+    paths.push(path);
+    return path.includes("/opening-hours/year?") ? yearRead(2026) : structuredClone(model());
+  }) as DashboardRequest;
+  const el = document.createElement("dashboard-opening-hours-screen") as Screen;
+  el.api = new OpeningHoursApi(withSeasonDays(read));
+  hosts.push(el);
+  document.body.append(el);
+  await expect.poll(() => el.shadowRoot?.querySelector("opening-hours-year")).not.toBeNull();
+  history.pushState(null, "", "/manage/opening-hours?view=week&station=bar");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => el.shadowRoot?.querySelector("season-painter")).not.toBeNull();
+  expect(paths.some((path) => path.startsWith("/management-api/stations"))).toBe(false);
 });
 
 it("shows the Spanish Opening hours title", async () => {

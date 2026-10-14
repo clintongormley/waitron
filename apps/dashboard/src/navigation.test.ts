@@ -242,7 +242,6 @@ it("declares no Station hours destination while retaining Opening hours navigati
     view: "view",
     department: "department",
     zone: "zone",
-    station: "station",
     season: "season",
     date: "date",
     year: "year",

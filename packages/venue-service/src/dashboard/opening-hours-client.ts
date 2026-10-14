@@ -11,13 +11,6 @@ import { ModelWatches } from "./model-watch.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
 
-export interface OpeningStation {
-  id: string;
-  name: string;
-  active: boolean;
-  isDefault: boolean;
-}
-
 export interface SeasonInput {
   name: string;
   /** "MM-DD", never "02-29". */
@@ -146,23 +139,6 @@ export class OpeningHoursApi {
       ),
     );
     return { days: reads.flatMap(({ days }) => days) };
-  }
-  watchStations(
-    apply: (stations: OpeningStation[]) => void,
-    failed: (error: unknown) => void,
-    recovered: () => void,
-  ): () => void {
-    return this.#watches.watch(
-      "opening-hours:stations",
-      QUERY_DEPENDENCIES.routing,
-      () =>
-        this.request<OpeningStation[]>("/management-api/stations", "GET", undefined, {
-          passive: true,
-        }),
-      apply,
-      failed,
-      recovered,
-    );
   }
   watchStationTimes(
     stationId: string,
