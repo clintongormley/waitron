@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
 import { WtDataTable } from "./wt-data-table.js";
@@ -13,6 +13,16 @@ async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>
   Object.assign(el, props);
   await el.updateComplete;
   return { el, host };
+}
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    clickForNewPage: (
+      selector: string,
+      click: { button?: "middle"; modifiers?: ("Shift" | "ControlOrMeta")[] },
+      waitMs: number,
+    ) => Promise<string>;
+  }
 }
 
 afterEach(cleanup);
@@ -662,6 +672,111 @@ describe("a link entry", () => {
     } finally {
       history.replaceState(null, "", before);
     }
+  });
+
+  async function clickOutcome(
+    link: HTMLAnchorElement,
+    activate: () => Promise<void>,
+  ): Promise<{ hash: string; defaultPrevented: boolean | undefined }> {
+    const before = location.href;
+    history.replaceState(null, "", "#start");
+    let defaultPrevented: boolean | undefined;
+    const record = (event: Event) => (defaultPrevented = event.defaultPrevented);
+    link.addEventListener("click", record);
+    try {
+      await activate();
+      return { hash: location.hash, defaultPrevented };
+    } finally {
+      link.removeEventListener("click", record);
+      history.replaceState(null, "", before);
+    }
+  }
+
+  // Playwright waits for an aria-disabled element to become enabled before clicking it; a person
+  // can still press a greyed link.
+  it("does not open its page when clicked while marked aria-disabled, and stays open", async () => {
+    const { el, link } = await mountLinkAndButton({ disabled: true });
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const outcome = await clickOutcome(link, () => userEvent.click(link, { force: true }));
+    expect(outcome).toEqual({ hash: "#start", defaultPrevented: true });
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+
+  it("does not open its page on Enter while marked aria-disabled", async () => {
+    const { el, link } = await mountLinkAndButton({ disabled: true });
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
+    expect(outcome).toEqual({ hash: "#start", defaultPrevented: true });
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+
+  it("opens its page on a real click when not disabled", async () => {
+    const { el, link } = await mountLinkAndButton();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const outcome = await clickOutcome(link, () => userEvent.click(link));
+    expect(outcome).toEqual({ hash: "#wine", defaultPrevented: false });
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("opens its page on Enter when not disabled", async () => {
+    const { el, link } = await mountLinkAndButton();
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    link.focus();
+    const outcome = await clickOutcome(link, () => userEvent.keyboard("{Enter}"));
+    expect(outcome).toEqual({ hash: "#wine", defaultPrevented: false });
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  async function newPageOutcome(
+    link: HTMLAnchorElement,
+    click: { button?: "middle"; modifiers?: ("Shift" | "ControlOrMeta")[] },
+    waitMs: number,
+  ): Promise<{ opened: string; defaultPrevented: boolean | undefined }> {
+    // about:blank, so a page the gesture opens does not load the test page.
+    link.setAttribute("href", "about:blank#wine");
+    link.setAttribute("data-new-page", "");
+    const type = click.button === "middle" ? "auxclick" : "click";
+    let defaultPrevented: boolean | undefined;
+    const record = (event: Event) => (defaultPrevented = event.defaultPrevented);
+    link.addEventListener(type, record);
+    try {
+      const opened = await commands.clickForNewPage("[data-new-page]", click, waitMs);
+      return { opened, defaultPrevented };
+    } finally {
+      link.removeEventListener(type, record);
+    }
+  }
+
+  const newPageGestures = [
+    { gesture: "a middle-click", click: { button: "middle" as const } },
+    { gesture: "a Shift-click", click: { modifiers: ["Shift" as const] } },
+    {
+      gesture: "a Control-click (Command-click on macOS)",
+      click: { modifiers: ["ControlOrMeta" as const] },
+    },
+  ];
+
+  it.each(newPageGestures)(
+    "does not open a new page on $gesture while marked aria-disabled",
+    async ({ click }) => {
+      const { el, link } = await mountLinkAndButton({ disabled: true });
+      const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(await newPageOutcome(link, click, 1000)).toEqual({
+        opened: "none",
+        defaultPrevented: true,
+      });
+      expect(popup.matches(":popover-open")).toBe(true);
+    },
+  );
+
+  it.each(newPageGestures)("opens a new page on $gesture when not disabled", async ({ click }) => {
+    const { link } = await mountLinkAndButton();
+    expect(await newPageOutcome(link, click, 5000)).toEqual({
+      opened: "about:blank#wine",
+      defaultPrevented: false,
+    });
   });
 });
 

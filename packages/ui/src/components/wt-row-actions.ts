@@ -133,8 +133,14 @@ export class WtRowActions extends LitElement {
   private readonly judgeAction = {
     capture: true,
     handleEvent: (event: MouseEvent) => {
+      this.cancelDisabledLink(event);
       if (this.closesMenu(event)) this.closingClicks.add(event);
     },
+  };
+  // A middle-click opens a link in a new tab through `auxclick`, which fires no `click`.
+  private readonly judgeAuxclick = {
+    capture: true,
+    handleEvent: (event: MouseEvent) => this.cancelDisabledLink(event),
   };
   private readonly closingClicks = new WeakSet<Event>();
 
@@ -150,17 +156,25 @@ export class WtRowActions extends LitElement {
         )
     )
       return false;
-    const action = event
-      .composedPath()
-      .find(
-        (node): node is HTMLElement =>
-          node instanceof HTMLElement && node.matches("button, a[href], wt-button"),
-      );
+    const action = this.actionOf(event);
     return (
       action !== undefined &&
       !action.hasAttribute("disabled") &&
       action.getAttribute("aria-disabled") !== "true"
     );
+  }
+
+  private cancelDisabledLink(event: MouseEvent): void {
+    if (this.actionOf(event)?.matches('a[href][aria-disabled="true"]')) event.preventDefault();
+  }
+
+  private actionOf(event: MouseEvent): HTMLElement | undefined {
+    return event
+      .composedPath()
+      .find(
+        (node): node is HTMLElement =>
+          node instanceof HTMLElement && node.matches("button, a[href], wt-button"),
+      );
   }
 
   private onAction(event: MouseEvent): void {
@@ -192,7 +206,9 @@ export class WtRowActions extends LitElement {
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
-        <div class="actions" @click=${this.judgeAction}><slot @click=${this.onAction}></slot></div>
+        <div class="actions" @click=${this.judgeAction} @auxclick=${this.judgeAuxclick}>
+          <slot @click=${this.onAction}></slot>
+        </div>
       </div>
     `;
   }

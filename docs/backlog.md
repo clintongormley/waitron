@@ -883,7 +883,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).** The
   other items in the tree's row menus are greyed out while a change is out; the link to the included
-  menu's own editor is a link, which has no greyed-out state, so it stays live. (A322 renamed it
+  menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
+  `wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
   from "Edit <menu>", so that the include's own Edit could sit beside it.)
 
 - **A folder's fixed photo shows on the till only in Thumbnails mode**, as a section's photo does.
@@ -3520,9 +3521,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   highlights while another control in it, such as its Actions menu, has focus. Left open by W79
   (#1186, the Menus list).
 
-- **A link marked `aria-disabled="true"` in a ⋮ menu (`wt-row-actions`) looks greyed out but still
-  opens its page when clicked** (no screen marks one disabled yet; W88's busy-tree point would be
-  the first). Left open by A380 (#1385).
+- **The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
+  (`wt-row-actions`) has not been tried.** No screen marks one disabled yet; W88's busy-tree point
+  would be the first. Left open by A629 (#1684).
 
 - **`wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.** Other long tables
   (Orders, Staff, Payments and the rest) keep scrolling with the content column until someone
