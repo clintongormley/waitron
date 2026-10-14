@@ -8,8 +8,8 @@ full width of the word above the other letters. The lockup is the two together.
 
 You edit the two source drawings by hand. `build-icons.mjs` writes the derived files from those
 drawings and the dark colour tokens, so the geometry exists in exactly one place per drawing and
-redrawing the mark is one edit plus one command. The derived files are committed and nothing checks their geometry against the sources, so skipping
-the command leaves stale derivatives behind a green gate — run it whenever you touch a source.
+redrawing the mark is one edit plus one command. The derived files are committed, so run the command
+whenever you change a source drawing or a dark token.
 
 | File                          | Kind    | Read by                                                                                             |
 | ----------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
