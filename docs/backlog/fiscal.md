@@ -308,6 +308,18 @@ also need pre-sign partitioning within the existing import count/byte limits; ol
 oversized blocks remain intact and explicitly unavailable for import. This records missing
 integration; it authorises no Cloud repository change or new campaign item.
 
+**Replacement-plan Task 1, 2026-10-15, branch milestone:** the signed-history verifier preserves
+original public blocks and consumptions, checks predecessors and occupied names, and distinguishes
+complete history from conservative checkpoint continuation. Printed-entry codecs recover the same
+custody key, check frozen scope and known positions, and preserve complete imported node-key text.
+Custody version in an uploaded document is retained data, not independent authority: the verifier
+returns a known matching version or an explicit unknown. The initial candidate path accepts every
+configured base, including multiple bases for one purpose; its S wrapper stays separate from P.
+The sibling `register-history`, `register-compact` and `initial-paper-candidates` suites exercise
+these libraries. The PDF, explicit currentness confirmation, all fresh-allocation consumers, actual
+recovery verifier, Cloud admission and wizard integration still belong to later plan tasks. No
+generated document, owner typing journey or revised whole-branch acceptance is qualified here.
+
 **Owner redesign, 2026-10-15 at about 18:10–18:15:** replace the downloaded tool and separate
 custodian/computer with one PDF made by the setup page. You may download it, print it over the
 ordinary network, or both, and keep it in the restaurant’s office. Offline operation, paper/file

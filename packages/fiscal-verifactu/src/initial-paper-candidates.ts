@@ -23,7 +23,7 @@ function checkContext(context: InitialSetupContext): void {
     context.country !== "ES" ||
     !["production", "preproduction"].includes(context.environment) ||
     !/^[A-Z0-9]{9}$/.test(context.taxId) ||
-    context.bases.length !== 3 ||
+    context.bases.length < 3 ||
     purposes.size !== 3 ||
     !["standard", "full", "rectificative"].every((purpose) => purposes.has(purpose)) ||
     !isAllocatedSeries(
@@ -87,6 +87,7 @@ function checkRecordNames(allocation: PaperAllocation): void {
 function checked(
   context: InitialSetupContext,
   input: readonly unknown[],
+  prefix: "S" | "P" = "S",
 ): readonly PaperAllocation[] {
   checkContext(context);
   if (
@@ -101,7 +102,7 @@ function checked(
     const allocation = parsePaperAllocation(value);
     if (
       allocation === null ||
-      allocation.source !== "initial-paper" ||
+      allocation.source !== (prefix === "S" ? "initial-paper" : "paper") ||
       allocation.taxpayerNif !== context.taxId ||
       allocation.softwareId !== WAITRON_ID_SISTEMA ||
       allocation.environment !== context.environment ||
@@ -122,8 +123,17 @@ export function validateInitialPaperCandidates(
   context: InitialSetupContext,
   serials: readonly number[],
 ): ValidatedInitialCandidates {
+  return validatePaperCandidates(context, "S", serials);
+}
+
+export function validatePaperCandidates(
+  context: InitialSetupContext,
+  prefix: "S" | "P",
+  serials: readonly number[],
+): ValidatedInitialCandidates {
   checkContext(context);
   if (
+    (prefix !== "S" && prefix !== "P") ||
     serials.length === 0 ||
     serials.length > 100 ||
     new Set(serials).size !== serials.length ||
@@ -134,7 +144,7 @@ export function validateInitialPaperCandidates(
   const candidates = checked(
     context,
     serials.map((serial): PaperAllocation => {
-      const installationIdentity = `S${String(serial).padStart(6, "0")}`;
+      const installationIdentity = `${prefix}${String(serial).padStart(6, "0")}`;
       return {
         version: 1,
         allocationId: randomUUID(),
@@ -146,10 +156,11 @@ export function validateInitialPaperCandidates(
           code: `${code}-${installationIdentity}`,
           purpose,
         })),
-        source: "initial-paper",
+        source: prefix === "S" ? "initial-paper" : "paper",
         issuedAt,
       };
     }),
+    prefix,
   );
   return Object.freeze({ version: 1, candidates, candidateDigest: digest(candidates) });
 }

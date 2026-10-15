@@ -83,3 +83,11 @@ export {
 } from "./cloud-preparation.js";
 
 export { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
+export { parseRegisterHistory, verifyRegisterHistory } from "./register-history.js";
+export type {
+  RegisterHistory,
+  RegisterProjection,
+  RegisterScope,
+  RegisterHead,
+  KnownRegisterEvidence,
+} from "./register-protocol.js";

@@ -57,6 +57,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./paper-protocol": "./src/paper-protocol.ts",
+    "./register-protocol": "./src/register-protocol.ts",
+    "./register-history": "./src/register-history.ts",
+    "./register-compact": "./src/custodian/register-compact.ts",
     "./custodian": "./src/custodian/index.ts",
     "./src/*": "./src/*",
     "./test/*": "./test/*",

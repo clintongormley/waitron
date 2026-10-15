@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import * as library from "@waitron/verifactu";
+import * as candidatesApi from "./initial-paper-candidates.js";
 import { deviceId, saleId } from "@waitron/shared";
 import type { InitialSetupContext } from "@waitron/module";
 import { altaFor } from "./testing/seed.js";
@@ -250,5 +251,42 @@ describe("host initial paper candidate validation", () => {
         }),
       ),
     ).toContainEqual(expect.objectContaining({ field: "NumSerieFactura", severity: "error" }));
+  });
+  it("retains every configured base when two bases serve the same purpose", () => {
+    const four = { ...context, bases: [...context.bases, { code: "B", purpose: "standard" }] };
+    const result = validateInitialPaperCandidates(four, [42]);
+    expect(result.candidates[0]?.series).toEqual([
+      { code: "A-S000042", purpose: "standard" },
+      { code: "FF-S000042", purpose: "full" },
+      { code: "R-S000042", purpose: "rectificative" },
+      { code: "B-S000042", purpose: "standard" },
+    ]);
+    for (const series of [
+      result.candidates[0]!.series.slice(0, 3),
+      result.candidates[0]!.series.map((s) =>
+        s.code === "B-S000042" ? { ...s, purpose: "full" } : s,
+      ),
+      [...result.candidates[0]!.series.slice(0, 3), result.candidates[0]!.series[0]!],
+    ]) {
+      const candidates = [{ ...result.candidates[0]!, series }];
+      const candidateDigest = createHash("sha256").update(JSON.stringify(candidates)).digest("hex");
+      expect(() =>
+        readInitialPaperCandidates(four, { version: 1, candidates, candidateDigest }),
+      ).toThrowError(invalid);
+    }
+  });
+  it("validates fresh recovery P candidates with the same complete configured set", () => {
+    expect(candidatesApi).toHaveProperty("validatePaperCandidates");
+    const result = candidatesApi.validatePaperCandidates(context, "P", [8, 999999]);
+    expect(result.candidates.map((a) => [a.installationIdentity, a.source])).toEqual([
+      ["P000008", "paper"],
+      ["P999999", "paper"],
+    ]);
+    expect(result.candidates[0]?.series).toEqual([
+      { code: "A-P000008", purpose: "standard" },
+      { code: "FF-P000008", purpose: "full" },
+      { code: "R-P000008", purpose: "rectificative" },
+    ]);
+    expect(() => readInitialPaperCandidates(context, result)).toThrowError(invalid);
   });
 });
