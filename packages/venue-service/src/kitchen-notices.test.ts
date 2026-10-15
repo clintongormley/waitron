@@ -505,8 +505,7 @@ describe("recordKitchenNotices", () => {
               order.orderId,
               [item(order.burgerLineId, v.grill)],
               kind,
-              null,
-              "added",
+              { direction: "added" },
             ),
           ),
         ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
@@ -527,9 +526,7 @@ describe("recordKitchenNotices", () => {
               order.orderId,
               [item(order.burgerLineId, v.grill)],
               kind,
-              null,
-              null,
-              "Gherkins",
+              { cancelledExtra: "Gherkins" },
             ),
           ),
         ).rejects.toMatchObject({
@@ -568,10 +565,7 @@ describe("recordKitchenNotices", () => {
             order.orderId,
             [item(order.burgerLineId, v.grill)],
             "recalled",
-            null,
-            null,
-            null,
-            "Grill",
+            { reroutedTo: "Grill" },
           ),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "reroutedTo" } });
@@ -591,11 +585,7 @@ describe("recordKitchenNotices", () => {
               order.orderId,
               [item(order.burgerLineId, v.grill)],
               kind,
-              null,
-              null,
-              null,
-              null,
-              28,
+              { fromNumber: 28 },
             ),
           ),
         ).rejects.toMatchObject({
@@ -617,11 +607,7 @@ describe("recordKitchenNotices", () => {
             order.orderId,
             [item(order.burgerLineId, v.grill)],
             "rerouted",
-            null,
-            null,
-            null,
-            "Grill",
-            28,
+            { reroutedTo: "Grill", fromNumber: 28 },
           ),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "fromNumber" } });
@@ -639,8 +625,7 @@ describe("recordKitchenNotices", () => {
             order.orderId,
             [item(order.burgerLineId, v.grill)],
             "changed",
-            null,
-            "sideways" as "added",
+            { direction: "sideways" as "added" },
           ),
         ),
       ).rejects.toMatchObject({ code: "kitchen_notice.invalid", params: { field: "direction" } });
@@ -701,11 +686,15 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "removed");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        direction: "added",
+      });
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        direction: "removed",
+      });
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed");
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", "Mesa 2");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", { movedTo: "Mesa 2" });
     });
     expect(
       (await db.execute(sql`select kind, direction from kitchen_notices order by rowid`)).rows,
@@ -731,8 +720,12 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "removed");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        direction: "removed",
+      });
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        direction: "added",
+      });
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
     });
     const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
@@ -756,17 +749,12 @@ describe("recordKitchenNotices", () => {
       },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(
-        tx,
-        v.cfg,
-        order.orderId,
-        burger,
-        "changed",
-        null,
-        null,
-        "Gherkins",
-      );
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", null, "added");
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        cancelledExtra: "Gherkins",
+      });
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed", {
+        direction: "added",
+      });
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
     });
     const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
@@ -808,7 +796,7 @@ describe("recordKitchenNotices", () => {
           },
         ],
         "moved",
-        "Mesa 7",
+        { movedTo: "Mesa 7" },
       ),
     );
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
@@ -841,42 +829,17 @@ describe("recordKitchenNotices", () => {
       { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
     ];
     await inTx(async (tx) => {
-      await recordKitchenNotices(
-        tx,
-        v.cfg,
-        order.orderId,
-        burger(order),
-        "moved",
-        "Mesa 7",
-        null,
-        null,
-        null,
-        28,
-      );
-      await recordKitchenNotices(
-        tx,
-        v.cfg,
-        order.orderId,
-        burger(order),
-        "moved",
-        "Mesa 7",
-        null,
-        null,
-        null,
-        27,
-      );
-      await recordKitchenNotices(
-        tx,
-        v.cfg,
-        labelled.orderId,
-        burger(labelled),
-        "moved",
-        null,
-        null,
-        null,
-        null,
-        28,
-      );
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
+        movedTo: "Mesa 7",
+        fromNumber: 28,
+      });
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
+        movedTo: "Mesa 7",
+        fromNumber: 27,
+      });
+      await recordKitchenNotices(tx, v.cfg, labelled.orderId, burger(labelled), "moved", {
+        fromNumber: 28,
+      });
     });
     expect(
       (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((notice) => [
@@ -907,10 +870,7 @@ describe("recordKitchenNotices", () => {
           },
         ],
         "rerouted",
-        null,
-        null,
-        null,
-        "Grill",
+        { reroutedTo: "Grill" },
       ),
     );
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).toEqual([

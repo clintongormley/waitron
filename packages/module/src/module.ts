@@ -1137,10 +1137,10 @@ export interface VenueServiceContribution {
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;
   /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.
-   *  `direction` and `cancelledExtra` (the extra taken off the dish) are for a `changed` notice
-   *  only. `reroutedTo` names the new station on a `rerouted` notice only. `fromNumber`, the
-   *  number of the order the dishes came from, is for a `moved` notice only and labels the notice
-   *  `#28 → #27` when it differs. */
+   *  Of the named `options`, `direction` and `cancelledExtra` (the extra taken off the dish) are
+   *  for a `changed` notice only. `reroutedTo` names the new station on a `rerouted` notice only.
+   *  `fromNumber`, the number of the order the dishes came from, is for a `moved` notice only and
+   *  labels the notice `#28 → #27` when it differs. */
   recordKitchenNotices(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -1152,11 +1152,13 @@ export interface VenueServiceContribution {
       wasStarted: boolean;
     }[],
     kind: "recalled" | "void" | "changed" | "moved" | "rerouted",
-    movedTo?: string | null,
-    direction?: "added" | "removed" | null,
-    cancelledExtra?: string | null,
-    reroutedTo?: string | null,
-    fromNumber?: number | null,
+    options?: {
+      movedTo?: string | null;
+      direction?: "added" | "removed" | null;
+      cancelledExtra?: string | null;
+      reroutedTo?: string | null;
+      fromNumber?: number | null;
+    },
   ): Promise<void>;
   /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
   listStationNotices(

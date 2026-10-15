@@ -49,6 +49,14 @@ export interface KitchenNoticeItem {
   wasStarted: boolean;
 }
 
+export interface KitchenNoticeOptions {
+  movedTo?: string | null;
+  direction?: KitchenNoticeDirection | null;
+  cancelledExtra?: string | null;
+  reroutedTo?: string | null;
+  fromNumber?: number | null;
+}
+
 const NOTICE_LIMIT = 50;
 
 /** Notices recorded in one call share a timestamp; the row id keeps them in the order given. */
@@ -59,11 +67,12 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * and whether it was sold in Each as they stand now, so a void calls it BEFORE deleting the line.
  * The order and every station must be at the caller's location (`working_order.not_found`,
  * `station.not_found`) and every quantity positive (`quantity.invalid`). An item whose line is not
- * on the order is the caller's fault and throws a plain `Error`. `movedTo` is for a `moved` notice
- * only; on another kind only the table's check constraint `kitchen_notices_moved_to_ck` refuses
- * it, as the engine's constraint error rather than an `AppError`. `direction` is for a `changed`
- * one only (`kitchen_notice.invalid` otherwise, or for a value outside the two), and so is
- * `cancelledExtra`, the extra taken off the dish (`kitchen_notice.invalid` otherwise).
+ * on the order is the caller's fault and throws a plain `Error`. Of the named `options`, `movedTo`
+ * is for a `moved` notice only; on another kind only the table's check constraint
+ * `kitchen_notices_moved_to_ck` refuses it, as the engine's constraint error rather than an
+ * `AppError`. `direction` is for a `changed` one only (`kitchen_notice.invalid` otherwise, or for a
+ * value outside the two), and so is `cancelledExtra`, the extra taken off the dish
+ * (`kitchen_notice.invalid` otherwise).
  * `reroutedTo` names the new station on a `rerouted` notice and is refused on every other kind
  * (`kitchen_notice.invalid`). `fromNumber`, the number of the order the dishes came from, is for a
  * `moved` notice only (`kitchen_notice.invalid` otherwise) and labels the notice `#28 → #27` when
@@ -75,12 +84,15 @@ export async function recordKitchenNotices(
   orderId: string,
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
-  movedTo: string | null = null,
-  direction: KitchenNoticeDirection | null = null,
-  cancelledExtra: string | null = null,
-  reroutedTo: string | null = null,
-  fromNumber: number | null = null,
+  options: KitchenNoticeOptions = {},
 ): Promise<void> {
+  const {
+    movedTo = null,
+    direction = null,
+    cancelledExtra = null,
+    reroutedTo = null,
+    fromNumber = null,
+  } = options;
   if (
     direction !== null &&
     (kind !== "changed" || !KITCHEN_NOTICE_DIRECTIONS.includes(direction))

@@ -133,6 +133,11 @@ async function waitForArchive(dir: string): Promise<string[]> {
   });
 }
 
+// The archive is visible in the folder a moment before the sweep reports it stored.
+async function waitForArchiveUnderCurrentKey(sup: BackupSupervisor): Promise<void> {
+  await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+}
+
 async function waitForEvent(refs: Refs, event: string): Promise<void> {
   await poll(async () => (refs.logs.some((l) => l.event === event) ? true : undefined));
 }
@@ -155,6 +160,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     try {
       await sup.reload();
       const [name] = await waitForArchive(dest);
+      await waitForArchiveUnderCurrentKey(sup);
       expect(sup.current().enabled).toBe(true);
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_1));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(true);
@@ -281,6 +287,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         }
         return undefined;
       });
+      await waitForArchiveUnderCurrentKey(sup);
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_2));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(true);
     } finally {

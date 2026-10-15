@@ -809,17 +809,9 @@ export async function enqueueStationMoved(
   toStationName: string,
 ): Promise<void> {
   if (items.length === 0) return;
-  await VENUE_SERVICE.recordKitchenNotices(
-    tx,
-    cfg,
-    orderId,
-    items.map(toNoticeItem),
-    "rerouted",
-    null,
-    null,
-    null,
-    toStationName,
-  );
+  await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, items.map(toNoticeItem), "rerouted", {
+    reroutedTo: toStationName,
+  });
   const fired = items.filter((item) => item.group === undefined);
   const held = items.filter((item) => item.group !== undefined);
   if (fired.length > 0)
@@ -852,8 +844,7 @@ export async function enqueueHoldCorrections(
     orderId,
     items.map(toNoticeItem),
     change.kind === "HOLD CANCELLED" ? "void" : "changed",
-    null,
-    change.kind === "HOLD CANCELLED" ? null : change.direction,
+    { direction: change.kind === "HOLD CANCELLED" ? null : change.direction },
   );
   await printCorrectionSlips(tx, cfg, orderId, items, change);
 }
@@ -936,16 +927,9 @@ export async function enqueueExtraCancelled(
   cancelledExtra: string,
 ): Promise<void> {
   if ((await withoutMadeHere(tx, [item])).length === 0) return;
-  await VENUE_SERVICE.recordKitchenNotices(
-    tx,
-    cfg,
-    orderId,
-    [toNoticeItem(item)],
-    "changed",
-    null,
-    null,
+  await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, [toNoticeItem(item)], "changed", {
     cancelledExtra,
-  );
+  });
   await printCorrectionSlips(tx, cfg, orderId, [item], {
     kind: "EXTRA CANCELLED",
     held: item.group !== undefined,
@@ -1227,18 +1211,10 @@ async function notifyMoved(
   for (const { before, to, after, items } of told) {
     const texts = movedTexts(before.places, after.places, cfg.locale);
     // The station screen words the counter itself, in the screen's own language.
-    await VENUE_SERVICE.recordKitchenNotices(
-      tx,
-      cfg,
-      to,
-      items.map(toNoticeItem),
-      "moved",
-      after.places.counter ? null : texts.toText,
-      null,
-      null,
-      null,
-      before.places.orderNumber,
-    );
+    await VENUE_SERVICE.recordKitchenNotices(tx, cfg, to, items.map(toNoticeItem), "moved", {
+      movedTo: after.places.counter ? null : texts.toText,
+      fromNumber: before.places.orderNumber,
+    });
     if (printing === null) continue;
     const partyName = after.partyId === null ? before.places.partyName : after.sittingWith;
     const toNumber = after.places.orderNumber;
