@@ -63,46 +63,12 @@ function listUnitGrossOf(line: FiledLine, listGross: Decimal): Decimal | null {
 export interface GroupDiscount {
   /** The lines' `net.rate`, as filed. */
   rate: string;
-  /** The `discount` of `beforeVatFigures` for the group's lines at this rate, added; never zero. */
+  /** What the row takes off at this rate, before VAT; never zero. */
   amount: Decimal;
   /** Every line of the group at this rate has a filed base of zero. */
   comp: boolean;
   /** The adjustment whose words name the row, or null for plain «Descuento». */
   named: ReceiptAdjustment | null;
-}
-
-/** One entry per rate a group's lines carry, in the order the rates first appear. */
-export function groupDiscounts(
-  lines: readonly FiguredLine[],
-  billAdjustments: readonly ReceiptAdjustment[],
-  invoiceHasLineAdjustments: boolean,
-): GroupDiscount[] {
-  const own = lines.flatMap(({ line }) => line.adjustments ?? []);
-  const named =
-    own.length === 1 && billAdjustments.length === 0
-      ? own[0]!
-      : own.length === 0 && billAdjustments.length === 1 && !invoiceHasLineAdjustments
-        ? billAdjustments[0]!
-        : null;
-  const byRate: { rate: string; amount: Decimal; comp: boolean }[] = [];
-  for (const {
-    line,
-    figures: { discount },
-  } of lines) {
-    const zeroBase = isZeroDecimal(decimal(line.net.base));
-    const entry = byRate.find(
-      (candidate) => compareDecimal(decimal(candidate.rate), decimal(line.net.rate)) === 0,
-    );
-    if (entry === undefined) {
-      byRate.push({ rate: line.net.rate, amount: discount, comp: zeroBase });
-    } else {
-      entry.amount = addDecimal(entry.amount, discount);
-      entry.comp &&= zeroBase;
-    }
-  }
-  return byRate
-    .filter((entry) => !isZeroDecimal(entry.amount))
-    .map((entry) => ({ ...entry, named }));
 }
 
 export interface FiguredGroup {

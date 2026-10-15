@@ -2,7 +2,6 @@ import { compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/
 import { describe, expect, it } from "vitest";
 import {
   beforeVatFigures,
-  groupDiscounts,
   invoiceDiscounts,
   quantityText,
   type FiguredGroup,
@@ -153,123 +152,6 @@ describe("beforeVatFigures", () => {
         filed({ quantity: "0.100", gross: "3.00", net: net("1.24", "2.48", "21.00", "0.050") }),
       ).price,
     ).toBe("1.24");
-  });
-});
-
-describe("groupDiscounts", () => {
-  const pizza = filed({
-    gross: "8.10",
-    listGross: "9.00",
-    net: net("6.69", "6.69", "21.00"),
-    adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.05" }],
-  });
-  const olives = filed({
-    parentLineNo: 1,
-    gross: "1.35",
-    listGross: "1.50",
-    net: net("1.12", "1.12", "21.00"),
-  });
-
-  it("adds a dish's and its extras' discounts into one row named by the dish's one adjustment", () => {
-    expect(groupDiscounts(figured(pizza, olives), [], true)).toEqual([
-      {
-        rate: "21.00",
-        amount: "0.87",
-        comp: false,
-        named: { kind: "discount", percentBp: 1000, amount: "1.05" },
-      },
-    ]);
-  });
-
-  it("calls a comped dish an invitation", () => {
-    const wine = filed({
-      gross: "0.00",
-      listGross: "30.00",
-      net: net("0.00", "0.00", "21.00"),
-      adjustments: [{ kind: "comp", amount: "30.00" }],
-    });
-    expect(groupDiscounts(figured(wine), [], true)).toEqual([
-      { rate: "21.00", amount: "24.79", comp: true, named: { kind: "comp", amount: "30.00" } },
-    ]);
-  });
-
-  it("names no percentage for two discounts on one dish", () => {
-    const burger = filed({
-      gross: "10.26",
-      listGross: "12.00",
-      net: net("8.48", "8.48", "21.00"),
-      adjustments: [TEN, { kind: "discount", percentBp: 500, amount: "0.54" }],
-    });
-    expect(groupDiscounts(figured(burger), [], true)).toEqual([
-      { rate: "21.00", amount: "1.44", comp: false, named: null },
-    ]);
-  });
-
-  it("names a whole-bill discount under a dish only when no dish has one of its own", () => {
-    const wine = filed({ gross: "27.00", listGross: "30.00", net: net("22.31", "22.31", "21.00") });
-    expect(groupDiscounts(figured(wine), [TEN], false)[0]).toMatchObject({
-      amount: "2.48",
-      named: TEN,
-    });
-    expect(groupDiscounts(figured(wine), [TEN], true)[0]).toMatchObject({
-      amount: "2.48",
-      named: null,
-    });
-  });
-
-  it("does not name a dish's own discount when the bill has one too", () => {
-    const burger = filed({
-      gross: "9.72",
-      listGross: "12.00",
-      net: net("8.03", "8.03", "21.00"),
-      adjustments: [TEN],
-    });
-    expect(groupDiscounts(figured(burger), [TEN], true)).toEqual([
-      { rate: "21.00", amount: "1.89", comp: false, named: null },
-    ]);
-  });
-
-  it("reads rates 10 and 10.00 as one rate", () => {
-    const dish = filed({ gross: "9.00", listGross: "10.00", net: net("8.18", "8.18", "10") });
-    const extra = filed({
-      parentLineNo: 1,
-      gross: "1.35",
-      listGross: "1.50",
-      net: net("1.23", "1.23", "10.00"),
-    });
-    expect(groupDiscounts(figured(dish, extra), [], false).map((d) => [d.rate, d.amount])).toEqual([
-      ["10", "1.04"],
-    ]);
-  });
-
-  it("does not call a row an invitation when a discounted extra beside the comped dish is still charged", () => {
-    const wine = filed({
-      gross: "0.00",
-      listGross: "30.00",
-      net: net("0.00", "0.00", "21.00"),
-      adjustments: [{ kind: "comp", amount: "30.00" }],
-    });
-    expect(
-      groupDiscounts(figured(wine, olives), [], true).map((d) => [d.rate, d.amount, d.comp]),
-    ).toEqual([["21.00", "24.91", false]]);
-  });
-
-  it("gives each rate in a group its own row, and none to a group nothing lowered", () => {
-    const reducedExtra = {
-      ...olives,
-      net: net("1.36", "1.36", "10.00"),
-      listGross: "1.65",
-      gross: "1.50",
-    };
-    expect(
-      groupDiscounts(figured(pizza, reducedExtra), [], true).map((d) => [d.rate, d.amount]),
-    ).toEqual([
-      ["21.00", "0.75"],
-      ["10.00", "0.14"],
-    ]);
-    expect(groupDiscounts(figured(filed({ net: net("4.00", "8.00", "10") })), [], false)).toEqual(
-      [],
-    );
   });
 });
 

@@ -588,7 +588,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     expect(rows.some((r) => r.price.includes("/"))).toBe(false);
   });
 
-  it("puts a whole-bill discount under each dish, before VAT, at its rate", () => {
+  it("prints a whole-bill discount once per rate at the end of the table (owner, Q10)", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.result.lines = [
       {
@@ -625,13 +625,129 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     ];
     input.result.total = "29.25";
     const document = buildReceiptDocument(input);
-    expect(tableOf(document).rows.map((r) => [r.item, r.amount, r.rate])).toEqual([
+    const rows = tableOf(document).rows;
+    expect(rows.map((r) => [r.item, r.amount, r.rate])).toEqual([
       ["Rioja crianza", "24,79", "21%"],
-      ["Descuento 10%", "-2,48", "21%"],
       ["Pan de pueblo", "2,27", "10%"],
+      ["Descuento 10%", "-2,48", "21%"],
       ["Descuento 10%", "-0,22", "10%"],
     ]);
+    expect(rows.slice(2).map((r) => r.itemIndent)).toEqual([undefined, undefined]);
     expect(amountRows(document).some(([caption]) => caption!.startsWith("Descuento"))).toBe(false);
+  });
+
+  const burgerAndBread = () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1",
+        gross: "9.72",
+        listGross: "12.00",
+        net: {
+          unitPrice: "8.03",
+          priceQuantity: "1.000",
+          base: "8.03",
+          tax: "1.69",
+          rate: "21.00",
+        },
+        adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
+      },
+      {
+        descriptions: { "es-ES": "Pan de pueblo" },
+        quantity: "1",
+        gross: "2.25",
+        listGross: "2.50",
+        net: {
+          unitPrice: "2.05",
+          priceQuantity: "1.000",
+          base: "2.05",
+          tax: "0.20",
+          rate: "10.00",
+        },
+      },
+    ];
+    input.result.vatBreakdown = [
+      { rate: "21.00", base: "8.03", tax: "1.69" },
+      { rate: "10.00", base: "2.05", tax: "0.20" },
+    ];
+    input.result.total = "11.97";
+    return input;
+  };
+
+  it("keeps a dish's own discount under it and its bill share at the end", () => {
+    const input = burgerAndBread();
+    input.result.billAdjustments = [{ kind: "discount", percentBp: 1000, amount: "1.33" }];
+    expect(
+      tableOf(buildReceiptDocument(input)).rows.map((r) => [r.item, r.amount, r.rate]),
+    ).toEqual([
+      ["Hamburguesa", "9,92", "21%"],
+      ["Descuento 10%", "-0,99", "21%"],
+      ["Pan de pueblo", "2,27", "10%"],
+      ["Descuento 10%", "-0,90", "21%"],
+      ["Descuento 10%", "-0,22", "10%"],
+    ]);
+  });
+
+  it("prints one plain discount for everything a dish lost when the records could not be placed", () => {
+    const input = burgerAndBread();
+    input.result.lines[0]!.adjustments = [{ kind: "discount", amount: "2.28" }];
+    delete input.result.lines[1]!.listGross;
+    delete input.result.billAdjustments;
+    expect(tableOf(buildReceiptDocument(input)).rows.map((r) => [r.item, r.amount])).toEqual([
+      ["Hamburguesa", "9,92"],
+      ["Descuento", "-1,89"],
+      ["Pan de pueblo", "2,05"],
+    ]);
+  });
+
+  const jamon = (comped: boolean) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Jamón ibérico" },
+        unitName: { es: "kg" },
+        quantity: "0.123",
+        gross: comped ? "0.00" : "2.65",
+        listGross: "2.95",
+        listUnitPriceGross: "24.00",
+        net: comped
+          ? { unitPrice: "0.00", priceQuantity: "1.000", base: "0.00", tax: "0.00", rate: "10.00" }
+          : {
+              unitPrice: "19.62",
+              priceQuantity: "1.000",
+              base: "2.41",
+              tax: "0.24",
+              rate: "10.00",
+            },
+        adjustments: [
+          comped
+            ? { kind: "comp", amount: "2.95" }
+            : { kind: "discount", percentBp: 1000, amount: "0.30" },
+        ],
+      },
+    ];
+    input.result.vatBreakdown = [
+      comped
+        ? { rate: "10.00", base: "0.00", tax: "0.00" }
+        : { rate: "10.00", base: "2.41", tax: "0.24" },
+    ];
+    input.result.total = comped ? "0.00" : "2.65";
+    return tableOf(buildReceiptDocument(input)).rows;
+  };
+
+  it("prints the jamón under a kilo at its price, with its own discount (owner, Q9)", () => {
+    expect(jamon(false)).toMatchObject([
+      { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
+      { item: "Descuento 10%", amount: "-0,27" },
+    ]);
+  });
+
+  it("prints a comped jamón's value and an invitation", () => {
+    expect(jamon(true)).toMatchObject([
+      { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
+      { item: "Invitación", amount: "-2,68" },
+    ]);
   });
 
   it("prints no «Precio sin IVA» line and no per-item Base or IVA line", () => {
