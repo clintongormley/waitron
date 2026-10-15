@@ -465,3 +465,84 @@ it("refuses recovery when another owner advances after password inspection but b
     spy.mockRestore();
   }
 });
+
+it("recovers a lost rebind response with another password proof without restoring old access", async () => {
+  const f = await fixture();
+  const first = await f.claim();
+  const initial = (await f.store.read())!;
+  const oldOwner = { ...first.state, capability: first.capability };
+  const grant = await f.owner.reconfirm(oldOwner, payload.request.admin.password, "activation");
+  const update = f.store.update.bind(f.store);
+  const lost = vi.spyOn(f.store, "update").mockImplementationOnce(async (...args) => {
+    await update(...args);
+    throw new Error("lost rebind response");
+  });
+  try {
+    await expect(
+      f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+        password: payload.request.admin.password,
+      }),
+    ).rejects.toThrow("lost rebind response");
+  } finally {
+    lost.mockRestore();
+  }
+  expect((await f.store.read())?.ownerGeneration).toBe(2);
+  await expect(f.owner.authorize(oldOwner)).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    f.owner.resumeFirstSetup(f.nonce, { password: payload.request.admin.password }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  const recovered = await f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+    password: payload.request.admin.password,
+  });
+  expect(recovered.ownerGeneration).toBe(3);
+  expect((await f.store.read())?.frozen).toEqual(initial.frozen);
+  await expect(
+    f.owner.consumeReconfirmation(
+      { ...recovered.state, capability: recovered.capability },
+      grant,
+      "activation",
+    ),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+});
+
+it.each(["complete", "interrupted-publication"])(
+  "password recovery keeps %s out of new activation",
+  async (phase) => {
+    const f = await fixture();
+    await f.claim();
+    let state = (await f.store.read())!;
+    for (const change of [
+      { kind: "consumption-intent" },
+      { kind: "activation-started" },
+      { kind: "committed", result: { retained: "original-result" } },
+      { kind: "publication" },
+      { kind: "complete" },
+    ] as const)
+      state = await f.store.update(state.frozen.attemptId, state.revision, change);
+    if (phase === "interrupted-publication") {
+      const path = join(f.dir, "venue", "first-setup-claim.json");
+      const marker = JSON.parse(await readFile(path, "utf8"));
+      marker.status = "active";
+      await writeFile(path, JSON.stringify(marker));
+      const recovered = await f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+        password: payload.request.admin.password,
+      });
+      expect(recovered.state.status).toBe("publication");
+      expect(recovered.state.consumptionIntent).toBe(true);
+      expect((await f.store.read())?.result).toEqual({ retained: "original-result" });
+      await expect(
+        f.store.update(state.frozen.attemptId, recovered.state.revision, {
+          kind: "activation-started",
+        }),
+      ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    } else {
+      const bytes = await readFile(join(f.dir, "state", "first-setup.json"));
+      await expect(
+        f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+          password: payload.request.admin.password,
+        }),
+      ).rejects.toMatchObject({ code: "setup.owner_required" });
+      expect(await readFile(join(f.dir, "state", "first-setup.json"))).toEqual(bytes);
+    }
+  },
+);

@@ -845,6 +845,36 @@ it("rejects a marker repair when the observed ownership changed before exclusion
   expect((await f.store.readForRepair())?.state.ownerGeneration).toBe(2);
 });
 
+it.each(["before-write", "lost-response"])(
+  "preserves state across marker repair failure %s",
+  async (point) => {
+    const f = await fixture();
+    await f.claim();
+    const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+    marker.status = "claiming";
+    await writeFile(f.markerPath, JSON.stringify(marker));
+    const stateBefore = await readFile(f.statePath);
+    const expected = (await f.store.readForRepair())!;
+    const original = (
+      await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
+    ).writeDurableHostJson;
+    vi.mocked(durable.writeDurableHostJson).mockImplementationOnce(async (...args) => {
+      if (point === "lost-response") await original(...args);
+      throw new Error("marker repair interrupted");
+    });
+    await expect(f.store.repairMarker(expected, async () => {})).rejects.toThrow(
+      "marker repair interrupted",
+    );
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(original);
+    expect(await readFile(f.statePath)).toEqual(stateBefore);
+    const after = (await f.store.readForRepair())!;
+    expect(after.repairMarker).toBe(point === "lost-response" ? null : "active");
+    if (point === "before-write") await f.store.repairMarker(after, async () => {});
+    expect((await f.store.read())?.status).toBe("claimed");
+    expect(await readFile(f.statePath)).toEqual(stateBefore);
+  },
+);
+
 it.each([
   "consumption",
   "input",
