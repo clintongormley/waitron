@@ -109,18 +109,20 @@ export type InvoicePrinter =
 
 /**
  * The printer the device's full invoices resolve to: its own choice, else its profile's default at
- * its location. `undefined` when it resolves to none, the printer is switched off, or the origin is
- * not a device; no other printer stands in.
+ * its location. `undefined` when it resolves to none, the printer is switched off or, given `at`, is
+ * at another location, or the origin is not a device; no other printer stands in.
  */
 export async function resolveInvoicePrinter(
   tx: Transaction,
   origin: Origin,
+  at?: { locationId: string },
 ): Promise<InvoicePrinter | undefined> {
   if (origin.source !== "device") return undefined;
   const equipment = await readPrinterEquipment(tx, [origin.deviceId], { lists: false });
   const role = equipment.roles.get(origin.deviceId)?.find((state) => state.role === "invoice");
   const printer = role?.resolvedId == null ? undefined : equipment.printers.get(role.resolvedId);
   if (printer === undefined || !printer.active) return undefined;
+  if (at !== undefined && printer.locationId !== at.locationId) return undefined;
   if (printer.kind === "a4") return { kind: "a4", id: printer.id, name: printer.name };
   const [setting] = await tx
     .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })

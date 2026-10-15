@@ -98,6 +98,7 @@ type DeviceState = {
 export type PrinterInfo = {
   id: string;
   name: string;
+  locationId: string;
   kind: "receipt" | "a4";
   portable: boolean;
   active: boolean;
@@ -209,6 +210,7 @@ async function readStatesWith(
           .select({
             id: printers.id,
             name: printers.name,
+            locationId: printers.locationId,
             portable: printers.portable,
             active: printers.active,
             holderDeviceId: printerHolders.deviceId,
@@ -221,7 +223,12 @@ async function readStatesWith(
     unfound.length === 0
       ? []
       : await tx
-          .select({ id: pagePrinters.id, name: pagePrinters.name, active: pagePrinters.active })
+          .select({
+            id: pagePrinters.id,
+            name: pagePrinters.name,
+            locationId: pagePrinters.locationId,
+            active: pagePrinters.active,
+          })
           .from(pagePrinters)
           .where(inArray(pagePrinters.id, unfound));
   const portable = new Set(printerRows.filter((row) => row.portable).map((row) => row.id));

@@ -470,6 +470,7 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(read.printers.get(p1)).toEqual({
       id: p1,
       name: "Handheld",
+      locationId: loc,
       kind: "receipt",
       portable: true,
       active: true,
@@ -1256,12 +1257,14 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
     expect(read.printers.get(page)).toEqual({
       id: page,
       name: "Office",
+      locationId: loc,
       kind: "a4",
       portable: false,
       active: true,
       holderDeviceId: null,
     });
     expect(read.printers.get(receiptPrinter)).toMatchObject({ kind: "receipt" });
+    expect(read.printers.get(awayPage)).toMatchObject({ locationId: elsewhere });
     const unlisted = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: false }));
     expect([...unlisted.printers.keys()]).toEqual([page]);
   });
