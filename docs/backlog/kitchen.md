@@ -184,6 +184,20 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
 
 ## Decisions and deliberate limits
 
+- **A counter order moved to a table sends its unsent dishes to the kitchen at the move (A660,
+  owner 2026-10-15: (C), keep the rule).** A bill entering table service from another service mode
+  has its never-sent dishes sent then, as a round is (`adoptZone`, `apps/server/src/move-bill.ts`,
+  since #864); five cases in `party-move-bill.test.ts` ("the dishes of an open bill moved between
+  service modes") pin it. The owner first chose that the dishes arrive as a held course (A660b),
+  then withdrew it after a throwaway patch of that change, measured 2026-10-15, showed three costs:
+  the release reminder names only the party's first held course and comes due only once food sent
+  ahead of it is served, so a counter order seated at a free table is never reminded about; a
+  bill holding a held course cannot move again (`group.held_leaves_party`), so a counter order
+  moved to the wrong table could be corrected only by sending its food; and a paid dish could wait
+  unsent with nothing prompting anyone, since `finishTable` does not look at held dishes. The same
+  run found that holding alone would not do: the dishes need held kitchen items, or the course's
+  Send sends nothing.
+
 - **The till's Join that pushes tables together reads what was sent from the target group's
   tables, as the floor plan's merge does (A704, owner 2026-10-15).** A counter order
   delivered to a table already in the group, whose place becomes the group's name, gets a MOVED
