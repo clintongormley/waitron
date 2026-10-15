@@ -90,6 +90,10 @@ export class WtSegmentedControl extends LitElement {
   readonly #hintId = uniqueId("wt-segmented-hint");
   readonly #errorId = uniqueId("wt-segmented-error");
 
+  override focus(options?: FocusOptions): void {
+    this.shadowRoot?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus(options);
+  }
+
   private choose(value: string): void {
     if (this.disabled || value === this.value) return;
     this.value = value;

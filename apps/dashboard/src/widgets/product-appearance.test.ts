@@ -61,3 +61,15 @@ it("a disabled thumbnail cannot open the panel", async () => {
   thumb!.click();
   expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });
+
+it("reveals invalid controls once the thumbnail is enabled", async () => {
+  const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-product-appearance"]>(
+    "dashboard-product-appearance",
+    { invalid: true, disabled: true },
+  );
+  const panel = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  expect(panel.matches(":popover-open")).toBe(false);
+  el.disabled = false;
+  await el.updateComplete;
+  expect(panel.matches(":popover-open")).toBe(true);
+});

@@ -3190,6 +3190,9 @@ it("puts a refusal of the ordering under its choice group, focusing it, until an
   );
   await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("ordering");
   expect((el.shadowRoot!.activeElement as Field).value).toBe("staff_only");
+  expect(
+    el.shadowRoot!.activeElement!.shadowRoot!.activeElement?.getAttribute("aria-checked"),
+  ).toBe("true");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await pickOrdering(el, "not_sold_separately");
@@ -6032,4 +6035,115 @@ it("opens the unit chooser at the compact modal width on a desktop", async () =>
       0,
     );
   });
+});
+
+it("ignores a previous product's image-picker return after reseeding", async () => {
+  const el = await mountWithPhoto();
+  const previous = appearance(el);
+  photoControl(el).dispatchEvent(
+    new CustomEvent("image-picker-state", {
+      detail: { open: true },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  photoControl(el).dispatchEvent(
+    new CustomEvent("image-picker-state", {
+      detail: { open: false },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  el.value = { ...saved, id: "another-product", name: "Another dish" };
+  await el.updateComplete;
+  await closeReportsDelivered();
+  const next = appearance(el);
+  await next.updateComplete;
+  expect(next).not.toBe(previous);
+  expect(next.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+});
+
+it("reopens manually closed Variants for a refused row and focuses its action", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const fold = section(el, "variants");
+  fold.open = false;
+  await fold.updateComplete;
+  el.fieldErrors = { [productEditorField("variants.0.unitPrice", "en")!]: "Refused price" };
+  await el.updateComplete;
+  await fold.updateComplete;
+  expect(fold.open).toBe(true);
+  const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+  await expect
+    .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("actions-0");
+});
+
+it("reopens manually closed Modifiers for a refused attachment and focuses its control", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    extraLists,
+    optionLists,
+  });
+  const fold = section(el, "modifiers");
+  fold.open = false;
+  await fold.updateComplete;
+  el.fieldErrors = { modifier: "Refused list" };
+  await el.updateComplete;
+  await fold.updateComplete;
+  expect(fold.open).toBe(true);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(addModifier(el));
+  expect(addModifier(el).error).toBe("Refused list");
+});
+
+it.each(["image", "product-color"])(
+  "one Escape after a real %s refusal closes only the appearance panel",
+  async (field) => {
+    const el = await mountWithPhoto();
+    await edit(el);
+    const submitted = vi.fn();
+    el.addEventListener("wt-submit", submitted);
+    await userEvent.click(saveButton(el));
+    expect(submitted).toHaveBeenCalledOnce();
+    el.fieldErrors = { [field]: "Refused appearance" };
+    await el.updateComplete;
+    const panel = appearance(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await expect.poll(() => panel.matches(":popover-open")).toBe(true);
+    await expect
+      .poll(() =>
+        field === "image"
+          ? photoControl(el).shadowRoot!.activeElement?.getAttribute("data-test") === "choose-image"
+          : el.shadowRoot!.activeElement?.getAttribute("name") === "product-color",
+      )
+      .toBe(true);
+    const name = el.shadowRoot!.querySelector('wt-input[name="name"]')!;
+    for (let i = 0; i < 100 && el.shadowRoot!.activeElement !== name; i++)
+      await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(el.shadowRoot!.activeElement).toBe(name);
+    expect(panel.matches(":popover-open")).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    expect(el.open).toBe(true);
+  },
+);
+
+it("shows a refused colour even when another refused field takes focus first", async () => {
+  const el = await mountWithPhoto();
+  el.fieldErrors = { name: "Refused name", "product-color": "Refused colour" };
+  await el.updateComplete;
+  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("name");
+  const error = el.shadowRoot!.querySelector<HTMLElement>("#product-color-error")!;
+  expect(error.textContent!.trim()).toBe("Refused colour");
+  expect(error.checkVisibility()).toBe(true);
 });

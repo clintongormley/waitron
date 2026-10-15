@@ -164,3 +164,15 @@ test("the selection, neutral options, border and hint paint from tokens", async 
     "rgb(13, 14, 15)",
   ]);
 });
+
+test.each(["public", "staff_only", "not_sold_separately", ""])(
+  "programmatic focus reaches the selected %s choice or first fallback",
+  async (value) => {
+    const el = await setup();
+    el.value = value;
+    await el.updateComplete;
+    el.focus({ preventScroll: true });
+    const selected = buttons(el).find((button) => button.tabIndex === 0)!;
+    expect(el.shadowRoot!.activeElement).toBe(selected);
+  },
+);

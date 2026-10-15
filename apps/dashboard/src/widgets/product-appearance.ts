@@ -96,7 +96,11 @@ export class ProductAppearance extends LitElement {
   readonly #captionId = uniqueId("product-appearance-caption");
 
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("disabled") && this.disabled) this.closePanel();
+    if (this.disabled) {
+      this.closePanel();
+    } else if ((changed.has("invalid") || changed.has("disabled")) && this.invalid) {
+      this.openPanel();
+    }
   }
 
   openPanel(): void {
