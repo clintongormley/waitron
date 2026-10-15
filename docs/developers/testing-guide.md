@@ -1876,3 +1876,12 @@ and `window` as undefined inside their page callbacks. Git ignored the directory
 JavaScript from root ESLint. Archiving the finished QA workspace outside the checkout and removing
 it kept the visual receipts without adding lint exceptions. A package-only lint pass had not
 scanned those root-level probe files.
+
+## Await the API operation when checking a late response
+
+A deferred response promise can settle before the request wrapper and the component awaiting it
+have resumed. In a race test, track and await the public API method's returned promise before
+checking the component. A585-7's first change-week test survived deletion of its generation check
+while it awaited only the inner response; awaiting `StaffingApi.changeRotaWeek` made that deletion
+fail at the new week's swap notice. `packages/staffing/src/dashboard/rota-races.test.ts` covers that
+case and the late publication response.

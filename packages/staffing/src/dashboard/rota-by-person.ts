@@ -82,7 +82,7 @@ export class RotaByPerson extends LitElement {
                   );
                   return html`<td data-day=${day.businessDay}>
                     ${day.closedAllDay ? html`<small>${t("staffing.rota.closed")}</small>` : nothing}${shifts.map((s) => this.shift(s))}
-                    ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && (b.workDate === day.businessDay || shifts.some((s) => new Date(Date.parse(s.startsAt) + s.startsOffsetMinutes * 60000).toISOString().slice(0, 10) === b.workDate))))}
+                    ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
                     ${this.editable ? html`<button class="card" data-test="add-shift" @click=${() => this.emit("add-shift", { personId: p.personId, businessDay: day.businessDay })}>${t("staffing.shift.add")}</button>` : nothing}
                   </td>`;
                 })}

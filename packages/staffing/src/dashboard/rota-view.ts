@@ -117,9 +117,10 @@ export class RotaView extends LitElement {
   @state() private changingError = "";
   @state() private publishing = false;
   @state() private publishError = "";
+  // The rota observation triggers this read; a second live observation would duplicate it.
   readonly #warningQueries = new QueryController(
     this,
-    () => this.api.liveData,
+    () => undefined,
     (e) => {
       this.warnings = undefined;
       this.warningsError = tf("staffing.rota.warnings_error", { reason: codeMessage(codeOf(e)) });
@@ -179,6 +180,7 @@ export class RotaView extends LitElement {
       .watchRota(this.#queries, week, (read) => {
         this.read = read;
         this.loadError = "";
+        this.warnings = undefined;
         void this.api
           .watchRotaWarnings(this.#warningQueries, read.locationId, week, (warnings) => {
             this.warnings = warnings;
@@ -289,11 +291,14 @@ export class RotaView extends LitElement {
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
     const chosen = read?.areas.find((a) => areaKey(a.area) === this.params.area) ?? read?.areas[0];
-    const matches = chosen
-      ? read!.days.flatMap((d) =>
-          d.areas.filter((a) => areaKey(a.area) === areaKey(chosen.area)).map((a) => a.match),
-        )
-      : [];
+    const matches =
+      this.params.mode === "person"
+        ? (read?.days.flatMap((d) => d.areas.map((a) => a.match)) ?? [])
+        : chosen
+          ? read!.days.flatMap((d) =>
+              d.areas.filter((a) => areaKey(a.area) === areaKey(chosen.area)).map((a) => a.match),
+            )
+          : [];
     const slots = matches.flatMap((m) => m.slots);
     return html`<div class="head">
         <wt-button
@@ -313,7 +318,7 @@ export class RotaView extends LitElement {
           @click=${() => this.#go(step(this.week, 7))}
           >›</wt-button
         >
-        ${read ? html`<wt-combobox name="area" label=${t("staffing.rota.area")} .value=${chosen ? areaKey(chosen.area) : ""} .options=${read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))} @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}></wt-combobox><span data-test="attention" role="status">${tf("staffing.rota.attention", { unfilled: String(slots.filter((s) => s.status.kind === "unfilled").length), partly: String(slots.filter((s) => s.status.kind === "partly_uncovered").length), over: String(matches.reduce((n, m) => n + m.over.length, 0)) })}</span><span class="status">${t(read.version?.status === "published" ? "staffing.rota.published" : "staffing.rota.draft")}${read.version?.changedSincePublished ? ` · ${t("staffing.rota.changed")}` : ""}</span>` : nothing}
+        ${read ? html`${this.params.mode === "person" ? nothing : html`<wt-combobox name="area" label=${t("staffing.rota.area")} .value=${chosen ? areaKey(chosen.area) : ""} .options=${read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))} @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}></wt-combobox>`}<span data-test="attention" role="status">${tf("staffing.rota.attention", { unfilled: String(slots.filter((s) => s.status.kind === "unfilled").length), partly: String(slots.filter((s) => s.status.kind === "partly_uncovered").length), over: String(matches.reduce((n, m) => n + m.over.length, 0)) })}</span><span class="status">${t(read.version?.status === "published" ? "staffing.rota.published" : "staffing.rota.draft")}${read.version?.changedSincePublished ? ` · ${t("staffing.rota.changed")}` : ""}</span>` : nothing}
       </div>
       ${read ? html`<div class="head" aria-label=${t("staffing.rota.view")}><wt-button variant=${this.params.mode === "person" ? "secondary" : "primary"} data-test="by-area" aria-pressed=${this.params.mode !== "person"} @click=${() => this.open("rota", { week: this.week, ...(this.params.area ? { area: this.params.area } : {}) })}>${t("staffing.rota.by_area")}</wt-button><wt-button variant=${this.params.mode === "person" ? "primary" : "secondary"} data-test="by-person" aria-pressed=${this.params.mode === "person"} @click=${() => this.open("rota", { week: this.week, mode: "person", ...(this.params.area ? { area: this.params.area } : {}) })}>${t("staffing.rota.by_person")}</wt-button></div>` : nothing}
       ${

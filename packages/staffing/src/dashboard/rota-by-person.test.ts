@@ -19,7 +19,11 @@ type View = LitElement & {
   canWrite: boolean;
   open: ReturnType<typeof vi.fn>;
 };
-async function mount(published = false, width = "1280px") {
+async function mount(
+  published = false,
+  width = "1280px",
+  prepare: (week: RotaWeek) => RotaWeek = (r) => r,
+) {
   const frame = document.createElement("div");
   frame.style.width = width;
   frames.push(frame);
@@ -29,7 +33,7 @@ async function mount(published = false, width = "1280px") {
   el.api = rotaApi(async (w) => {
     const r = rotaWeek(w);
     if (published) r.version = { id: "pub", status: "published", changedSincePublished: false };
-    return r;
+    return prepare(r);
   }).api;
   el.week = "2026-11-30";
   el.params = { mode: "person", area: "station:kitchen" };
@@ -145,4 +149,61 @@ describe("the Rota by person", () => {
     expect(scroll.clientWidth).toBeLessThanOrEqual(parseInt(width));
     if (width === "1280px") expect(scroll.scrollWidth).toBe(scroll.clientWidth);
   });
+});
+
+it("keeps the area filter out of the all-areas person view", async () => {
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector('[name="area"]')).toBeNull();
+});
+
+it("counts every area's open slots in the person view", async () => {
+  const { el } = await mount(false, "1280px", (r) => {
+    r.days[4]!.areas.push({
+      area: r.areas[1]!.area,
+      match: {
+        slots: [
+          {
+            slot: {
+              ...r.days[4]!.areas[0]!.match.slots[0]!.slot,
+              key: "restaurant",
+              area: r.areas[1]!.area,
+            },
+            status: { kind: "unfilled" },
+          },
+        ],
+        over: [],
+      },
+    });
+    return r;
+  });
+  expect(el.shadowRoot!.querySelector("[data-test=attention]")!.textContent).toContain(
+    "2 unfilled",
+  );
+});
+it("shows a daily warning once on its calendar date when the shift starts before changeover", async () => {
+  const { grid, root } = await mount();
+  grid.week = {
+    ...grid.week,
+    shifts: grid.week.shifts.map((s) =>
+      s.shiftId === "filled"
+        ? { ...s, businessDay: "2026-11-30", startsAt: "2026-12-01T00:00:00Z" }
+        : s,
+    ),
+  };
+  grid.breaches = [
+    {
+      kind: "exceeds_daily_max",
+      personId: "ana",
+      workDate: "2026-12-01",
+      plannedMinutes: 600,
+      maxMinutes: 540,
+    },
+  ];
+  await grid.updateComplete;
+  expect(
+    root.querySelector('[data-person=ana] [data-day="2026-11-30"]')!.textContent,
+  ).not.toContain("daily maximum");
+  expect(root.querySelector('[data-person=ana] [data-day="2026-12-01"]')!.textContent).toContain(
+    "daily maximum 9 h",
+  );
 });

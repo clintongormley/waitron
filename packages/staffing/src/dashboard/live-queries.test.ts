@@ -46,6 +46,7 @@ describe("QUERY_DEPENDENCIES", () => {
       "staff-roles",
       "staff-role-delete-impact",
       "staffing-month",
+      "rota-warnings",
       "rota",
     ]);
   });

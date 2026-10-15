@@ -384,6 +384,13 @@ stream, so a misspelled name affects other screens too. The guard catches unknow
 SQL dependencies or disabled-module combinations. Cost: the live-updates run-it review found this
 unguarded coupling.
 
+The dependency list belongs in `live-queries.ts`. The guard reads that catalogue and does not
+inspect an inline list in a client method. A585-7's review renamed such an inline dependency to an
+unknown name and the guard passed; moving the names into the catalogue made it refuse them.
+The fix also registered the labour module's own change source. Its real subscription probe changed
+from HTTP 400 to 200, with a shifts-only 200 control. The warning read follows the rota's live
+observation once; a second independent observation had fetched the warnings twice per notice.
+
 ## Another module's view inside the Calendar is a `calendarViews` entry
 
 A module adds a view to the Calendar (the page at `/manage/opening-hours`) through

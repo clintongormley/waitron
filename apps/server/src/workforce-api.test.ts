@@ -1,6 +1,6 @@
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -13,6 +13,7 @@ import {
   rosterVersions,
 } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, convenioConfig } from "@waitron/workforce-es";
+import * as workforceEs from "@waitron/workforce-es";
 import type { Logger } from "./logger.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -531,6 +532,30 @@ describe("mountWorkforceApi — publish", () => {
       `/management-api/roster?locationId=${otherLoc}&period=2026-05-18`,
     );
     expect(await roster.json()).toMatchObject({ version: { id: versionId, status: "published" } });
+  });
+
+  it("leaves the roster draft when resolving its labour rules fails unexpectedly", async () => {
+    const app = mountApp();
+    const create = await send(app, "POST", "/management-api/roster", {
+      body: { locationId, period: "2026-08-17" },
+    });
+    const { versionId } = (await create.json()) as { versionId: string };
+    const spy = vi
+      .spyOn(workforceEs, "resolveWorkTimeRuleset")
+      .mockRejectedValueOnce(new Error("rules probe"));
+    try {
+      const response = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+      const read = await send(
+        app,
+        "GET",
+        `/management-api/roster?locationId=${locationId}&period=2026-08-17`,
+      );
+      expect(await read.json()).toMatchObject({ version: { id: versionId, status: "draft" } });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("404s publish of an unknown version (roster.not_found)", async () => {

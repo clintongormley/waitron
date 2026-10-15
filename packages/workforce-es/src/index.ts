@@ -10,7 +10,7 @@ export { WORKFORCE_ES_VOCABULARY } from "./vocabulary.js";
 export { convenioConfig, overtimeModel } from "./schema/convenio-config.js";
 export { resolveWorkTimeRuleset } from "./convenio.js";
 
-export { WORKFORCE_ES_CLASSIFICATION } from "./classification.js";
+export { WORKFORCE_ES_CLASSIFICATION, WORKFORCE_ES_CHANGE_SOURCES } from "./classification.js";
 export { WORKFORCE_ES_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from

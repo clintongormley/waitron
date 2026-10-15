@@ -197,6 +197,7 @@ describe("ALL_MODULES vocabulary seat", () => {
   it("workforce-es declares the Spain labour module's own vocabulary, by reference", () => {
     const wfes = ALL_MODULES.find((m) => m.name === "workforce-es");
     expect(wfes?.vocabulary).toBe(WORKFORCE_ES_VOCABULARY);
+    expect(wfes?.changes).toEqual([{ table: "convenio_config", type: "convenio_config" }]);
   });
 });
 

@@ -150,7 +150,7 @@ export class StaffingApi {
       "rota-warnings",
       {
         key: `staffing:rota-warnings:${locationId}:${week}`,
-        dependencies: ["shifts", "roster_versions", "convenio_config"].map((type) => ({ type })),
+        dependencies: QUERY_DEPENDENCIES["rota-warnings"].map((type) => ({ type })),
         read: async () => {
           try {
             return await this.request<{ breaches: RosterBreach[]; ruleset: WorkTimeRuleset }>(

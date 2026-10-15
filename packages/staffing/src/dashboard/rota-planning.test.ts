@@ -373,3 +373,20 @@ it("shows daily and weekly warnings beside the named person in the area view", a
     "weekly maximum 40 h",
   );
 });
+
+it("reads the warnings once per live rota change", async () => {
+  const { el, request, live } = await mount();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=labour-count]")).toBeTruthy(),
+  );
+  request.mockClear();
+  live.invalidate([{ type: "shifts" }]);
+  await vi.waitFor(() =>
+    expect(
+      request.mock.calls.filter(([path]) => path.includes("/roster/breaches?")).length,
+    ).toBeGreaterThan(0),
+  );
+  await el.updateComplete;
+  await Promise.resolve();
+  expect(request.mock.calls.filter(([path]) => path.includes("/roster/breaches?"))).toHaveLength(1);
+});

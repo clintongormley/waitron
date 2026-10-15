@@ -231,8 +231,17 @@ export class ShiftEditDialog extends LitElement {
       this.emit("shift-saved");
     } catch (error) {
       if (identity !== this.identity) return;
-      const params = (error as { params?: { field?: string } }).params;
-      this.refusal = { code: codeOf(error), field: params?.field };
+      const code = codeOf(error);
+      const params = (error as { params?: { field?: string; staffRoleId?: string; area?: string } })
+        .params;
+      const field =
+        params?.field ??
+        (code === "staff_role.not_found" && params?.staffRoleId
+          ? "staffRoleId"
+          : code === "staffing_area.not_found" && params?.area
+            ? "area"
+            : undefined);
+      this.refusal = { code, field };
     } finally {
       if (identity === this.identity) this.busy = false;
     }

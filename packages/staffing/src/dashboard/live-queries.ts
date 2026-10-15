@@ -20,7 +20,9 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     ...CALENDAR_MONTH_PLAN_READS,
   ],
+  "rota-warnings": ["shifts", "roster_versions", "convenio_config"],
   rota: [
+    "convenio_config",
     "shift_swaps",
     "shifts",
     "roster_versions",

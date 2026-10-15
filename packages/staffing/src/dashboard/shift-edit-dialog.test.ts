@@ -206,3 +206,18 @@ it("paints Cancel and Delete as visible controls in the actual dialog footer", a
     );
   }
 });
+
+it.each([
+  ["staff_role.not_found", "staffRoleId", { staffRoleId: "head" }],
+  ["staffing_area.not_found", "area", { area: "station:kitchen" }],
+])("puts %s beside the field its payload names", async (code, name, params) => {
+  const api = await mount();
+  await change("endsAt", "18:00");
+  api.updateRotaShift.mockRejectedValueOnce({ code, params });
+  button("save").click();
+  await vi.waitFor(() => expect(field(name as string).error).toBeTruthy());
+  expect(button("save").disabled).toBe(false);
+  expect(
+    (el.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & { error: string }).error,
+  ).toBe("Correct the highlighted fields to continue.");
+});
