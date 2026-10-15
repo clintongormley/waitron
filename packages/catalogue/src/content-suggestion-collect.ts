@@ -1,6 +1,6 @@
-import { categories, products, type Transaction } from "@waitron/db";
+import { categories, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
@@ -12,7 +12,7 @@ import {
   type TranslationContext,
 } from "./content-translation-targets.js";
 import type { TranslationRef, TranslationTarget } from "./content-translation-types.js";
-import type { SuggestionItem } from "./content-suggestion-types.js";
+import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
 import { menuRoots } from "./menu-structure.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 
@@ -244,4 +244,176 @@ export async function collectSuggestionItems(
       missing: config.languages.filter((language) => gap.missing.has(language)),
     }));
   return describeItems(tx, config, wanted);
+}
+
+export const JOB_ITEM_LIMIT = 1000;
+export const JOB_BYTE_LIMIT = 1_048_576;
+export const HOUSE_STYLE_LIMIT = 300;
+export const HOUSE_STYLE_BYTE_LIMIT = 262_144;
+
+type HouseStyleRow = {
+  kind: TranslationGapKind;
+  id: string;
+  staff_name: string;
+  names: string;
+  category: string | null;
+};
+
+/**
+ * Saved customer-facing names of live items, one from each kind-and-category group in turn. Every
+ * saved name was typed, or reviewed and saved, by a person, so they are the venue's house style.
+ */
+export async function readHouseStyle(
+  tx: Transaction,
+  languages: readonly string[],
+  limit: number = HOUSE_STYLE_LIMIT,
+): Promise<HouseStyleExample[]> {
+  const result = await tx.execute<HouseStyleRow>(sql`
+    select * from (
+      select 'product' as kind, p.id, p.name as staff_name, p.customer_name as names,
+          c.name as category
+        from products p left join categories c on c.id = p.category_id
+        where p.parent_id is null and p.active = 1
+      union all select 'variant', v.id, v.name, v.customer_name, c.name
+        from products v join products p on p.id = v.parent_id
+          left join categories c on c.id = p.category_id
+        where v.active = 1 and p.active = 1
+      union all select 'option_list', id, name, customer_name, null
+        from option_lists where active = 1
+      union all select 'option_label', l.id, l.name, l.customer_name, null
+        from option_labels l join option_lists o on o.id = l.list_id where o.active = 1
+      union all select 'extra_list', id, name, customer_name, null
+        from extra_lists where active = 1
+      union all select 'menu', s.id, s.internal_name, s.names, null
+        from sections s join menu_details d on d.root_section_id = s.id
+          join catalogues c on c.id = s.owner_menu_id
+        where s.role = 'menu_root' and c.active = 1
+      union all select 'section', s.id, s.internal_name, s.names, null
+        from sections s join catalogues c on c.id = s.owner_menu_id
+        where s.role = 'section' and c.active = 1
+    ) where names is not null and names <> '{}'
+    order by kind, category, id`);
+  const groups = new Map<string, HouseStyleExample[]>();
+  for (const row of result.rows) {
+    if (!fits(row.staff_name)) continue;
+    const saved = JSON.parse(row.names) as Record<string, string>;
+    const names = Object.fromEntries(
+      languages
+        .filter((language) => fits(saved[language] ?? ""))
+        .map((language) => [language, saved[language]!]),
+    );
+    if (Object.keys(names).length === 0) continue;
+    const key = `${row.kind}:${row.category ?? ""}`;
+    const group = groups.get(key) ?? [];
+    group.push({ kind: row.kind, staffName: row.staff_name, names });
+    groups.set(key, group);
+  }
+  const lists = [...groups.values()];
+  const longest = Math.max(0, ...lists.map((list) => list.length));
+  const spread: HouseStyleExample[] = [];
+  for (let round = 0; round < longest; round += 1)
+    for (const list of lists) if (round < list.length) spread.push(list[round]!);
+  return spread.slice(0, limit);
+}
+
+function fitHouseStyle(examples: readonly HouseStyleExample[]): HouseStyleExample[] {
+  const kept: HouseStyleExample[] = [];
+  let bytes = 2;
+  for (const example of examples) {
+    const size = Buffer.byteLength(JSON.stringify(example)) + (kept.length === 0 ? 0 : 1);
+    if (bytes + size > HOUSE_STYLE_BYTE_LIMIT) break;
+    kept.push(example);
+    bytes += size;
+  }
+  return kept;
+}
+
+/** The family heads the items name but do not include, as context entries keyed by ref. */
+async function readContextHeads(
+  tx: Transaction,
+  context: TranslationContext,
+  config: ContentLanguages,
+  items: readonly SuggestionItem[],
+): Promise<Map<string, SuggestionItem>> {
+  const listed = new Set(items.map((item) => item.ref));
+  const families = [...new Set(items.map((item) => item.family))].filter(
+    (family) => !listed.has(family),
+  );
+  const live = await resolveLive(
+    tx,
+    config.defaultLanguage,
+    families.map((family) => parseSuggestionRef(family)!),
+    context,
+  );
+  const heads = await describeItems(
+    tx,
+    config,
+    live.map((entry) => ({ entry, missing: [] })),
+  );
+  return new Map(heads.map((head) => [head.ref, head]));
+}
+
+export interface SuggestionJobDraft {
+  body: string;
+  sent: Record<string, string[]>;
+  included: number;
+  heads: number;
+  remaining: number;
+  bytes: number;
+}
+
+/** The next job of a run: what is missing, less `exclude`, inside Cloud's item and byte limits. */
+export async function buildSuggestionJob(
+  tx: Transaction,
+  context: TranslationContext,
+  exclude: ReadonlySet<string>,
+): Promise<SuggestionJobDraft | null> {
+  const items = await collectSuggestionItems(tx, context, exclude);
+  if (items.length === 0) return null;
+  const config = await readContentLanguages(tx, context.fallbackLanguage);
+  const [tenant] = await tx
+    .select({ country: tenants.country })
+    .from(tenants)
+    .where(eq(tenants.id, 1));
+  const heads = await readContextHeads(tx, context, config, items);
+  const job = {
+    version: 1,
+    country: tenant!.country,
+    languages: { default: config.defaultLanguage, enabled: config.languages },
+    items: [] as SuggestionItem[],
+    houseStyle: fitHouseStyle(await readHouseStyle(tx, config.languages)),
+  };
+  // The first item always fits: the house style takes at most a quarter of the job, and an item
+  // with its head is two entries of at most 22 fields of 500 characters (staff name, category and
+  // Cloud's 20 languages), under 140 KB even with every character escaped as six bytes.
+  let bytes = Buffer.byteLength(JSON.stringify(job));
+  const sent: Record<string, string[]> = {};
+  const inJob = new Set<string>();
+  let headCount = 0;
+  let next = 0;
+  for (; next < items.length; next += 1) {
+    const item = items[next]!;
+    const head = inJob.has(item.family) ? undefined : heads.get(item.family);
+    const adding = head === undefined ? [item] : [head, item];
+    const size =
+      adding.reduce((sum, entry) => sum + Buffer.byteLength(JSON.stringify(entry)), 0) +
+      adding.length -
+      (job.items.length === 0 ? 1 : 0);
+    if (job.items.length + adding.length > JOB_ITEM_LIMIT || bytes + size > JOB_BYTE_LIMIT) break;
+    for (const entry of adding) {
+      job.items.push(entry);
+      inJob.add(entry.ref);
+    }
+    sent[item.ref] = item.missing;
+    headCount += adding.length - 1;
+    bytes += size;
+  }
+  return {
+    body: JSON.stringify(job),
+    sent,
+    included: job.items.length,
+    heads: headCount,
+    remaining: items.length - next,
+    bytes,
+  };
 }
