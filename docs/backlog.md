@@ -317,8 +317,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [implementation plan](superpowers/plans/2026-10-15-a679-first-fiscal-setup.md) is being
   implemented inline. The wizard integration and packaged offline-tool download are implemented
   on the feature branch. The staged configuration import is bound to the claimed attempt and exercised through both
-  launch paths. Finish the joint wizard/tool qualification and required physical-paper checks before
-  accepting the implementation. Keep Live readiness in A680’s separate preproduction database. Keep both guided outside-kit and existing-custodian import routes. A new kit
+  launch paths. Compiled wizard/host/saved-tool checks cover both launch paths and custody choices
+  with synthetic outside responses. Finish physical-paper acceptance, whole-branch reviews and
+  publication gates before accepting the implementation. Keep Live readiness in A680’s separate preproduction database. Keep both guided outside-kit and existing-custodian import routes. A new kit
   keeps one paper-original current master, a protected key file and separate secret recovery paper;
   actual saved-file reopen and actual-paper recovery remain required acceptance checks. W41s-6
   [#1717](https://github.com/clintongormley/waitron/pull/1717), A680

@@ -1,4 +1,4 @@
-import type { ProvisionBody, SetupApi } from "./api/client.js";
+import type { ProvisionBody, SetupApi, EmailSettingsDraft } from "./api/client.js";
 import type {
   FirstSetupOwner,
   FirstSetupOwnership,
@@ -403,6 +403,13 @@ export class FirstSetupSession {
       const result = await this.#api.firstSetupRequest(owner);
       current();
       if (result.attemptId !== owner.attemptId) failure("setup.attempt_conflict");
+      return result;
+    });
+  }
+  runEmailTest(email: EmailSettingsDraft) {
+    return this.#run(async (current) => {
+      const result = await this.#api.runFirstSetupEmailTest(this.#owner(), email);
+      current();
       return result;
     });
   }

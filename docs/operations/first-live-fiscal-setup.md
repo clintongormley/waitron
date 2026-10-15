@@ -6,8 +6,10 @@ on a separate computer. A restored box or an old printout cannot tell you which 
 machine has already used.
 
 **Candidate qualification, 2026-10-15:** this procedure accompanies the A679 feature branch.
-The complete joint wizard/tool exercise and actual-paper acceptance remain outstanding. Do not
-regard an automated recovery check or a print preview as physical-paper acceptance. The
+Browser checks exercised the compiled wizard, local host and saved offline tool through both
+launch paths and custody choices, using synthetic certificate, email-delivery and authority
+responses. Actual-paper acceptance and the final review/publication gates remain outstanding.
+Do not regard an automated recovery check or a print preview as physical-paper acceptance. The
 [approved plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md#task-9-joint-qualification-actual-paper-and-whole-branch-gates)
 lists the remaining qualification gates.
 

@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
@@ -613,3 +614,67 @@ it.each([false, true])(
     expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("configurationImport");
   },
 );
+
+it("keeps a fresh Live choice after Start empty discards the previous draft", async () => {
+  const { app, requests } = await mount();
+  const mode = await screen(app, "mode");
+  const nativeClick = async (owner: HTMLElement, selector: string) => {
+    const host = owner.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    await userEvent.click(host.shadowRoot!.querySelector<HTMLElement>("button, input")!);
+  };
+  await nativeClick(mode, "[data-test=choose-live]");
+  await (mode as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  await nativeClick(mode, "[data-test=understand]");
+  await nativeClick(mode, "[data-test=confirm-live]");
+  const source = await screen(app, "live-source");
+  await nativeClick(source, "[data-test=empty]");
+  const warning = app.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+    "wt-unsaved-changes",
+  )!;
+  await expect.poll(() => warning.open).toBe(true);
+  await nativeClick(warning, "[data-choice=discard]");
+  await screen(app, "admin");
+  expect((app as unknown as { draft: { mode: string } }).draft.mode).toBe("live");
+  emit(app, "setup-patch", { patch: { venue } });
+  emit(app, "setup-goto", { screen: "venue" });
+  await screen(app, "venue");
+  emit(app, "setup-advance");
+  await screen(app, "cert");
+  expect(requests.filter((request) => request.path.endsWith("/claim"))).toHaveLength(1);
+});
+
+it("tests email as the current owner without sending a replacement administrator", async () => {
+  const email = {
+    server: "smtp.example.test",
+    port: 465,
+    encryption: "tls" as const,
+    from: "owner@example.test",
+    user: "",
+    password: "",
+  };
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/email-test")) return Response.json({ accepted: true });
+    },
+  });
+  await liveVenue(app);
+  await screen(app, "cert");
+  emit(app, "setup-patch", { patch: { email } });
+  emit(app, "setup-goto", { screen: "email" });
+  const emailScreen = await screen(app, "email");
+  const test = emailScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!;
+  await userEvent.click(test.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+  await expect.poll(() => requests.some((r) => r.path.endsWith("/email-test"))).toBe(true);
+  const sent = requests.find((r) => r.path.endsWith("/email-test"))!;
+  expect(sent.body).toEqual({ email });
+  expect(sent.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
+  expect(sent.headers.get("X-Waitron-Setup-Attempt")).toBe(initial.attemptId);
+  expect(sent.headers.get("X-Waitron-Setup-Revision")).toBe("1");
+  await expect
+    .poll(() =>
+      emailScreen
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!
+        .hasAttribute("disabled"),
+    )
+    .toBe(false);
+});

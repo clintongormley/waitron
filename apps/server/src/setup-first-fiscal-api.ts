@@ -5,6 +5,8 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
+import { parseEmailSettings } from "./email-settings-api.js";
+import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
@@ -147,7 +149,7 @@ export function mountSetupFirstFiscalApi(
       return c.res;
     }),
   );
-  for (const path of ["/setup-api/provision", "/setup-api/fiscal-test"])
+  for (const path of ["/setup-api/provision", "/setup-api/fiscal-test", "/setup-api/email-test"])
     app.post(path, (c, next) => {
       if (c.req.header("X-Waitron-Setup-Owner") === undefined) return next();
       return boundary(c, log, async () => {
@@ -155,6 +157,14 @@ export function mountSetupFirstFiscalApi(
         const body = object(await readFirstFiscalBody(c)),
           owner = firstFiscalOwner(c);
         return host.coordinator.run(async (hold) => {
+          if (path.endsWith("email-test")) {
+            const state = await host.owner.authorize(owner);
+            host.assertSelection(state);
+            if (Object.keys(body).length !== 1 || !("email" in body)) invalid();
+            const settings = parseEmailSettings(object(body.email));
+            const send = deps.sendEmailTest ?? sendSmtpTestMessage;
+            return c.json(await send(settings, state.frozen.request.admin.email));
+          }
           if (path.endsWith("fiscal-test")) {
             const state = await host.owner.authorize(owner);
             host.assertSelection(state);

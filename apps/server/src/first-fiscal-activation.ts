@@ -125,8 +125,6 @@ export function firstFiscalPayload(
     secret!.validate(body.aeatCert);
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
-  if (state.frozen.environment === "production" && body.email === undefined)
-    throw new AppError("setup.email_required", { field: "email" });
   if (
     body.email !== undefined &&
     (typeof body.email !== "object" ||
@@ -186,6 +184,8 @@ export async function activateFirstFiscal(
   host.assertSelection(state);
   const payload = firstFiscalPayload(host, state, body),
     req = firstFiscalProvisionRequest(state);
+  if (state.frozen.environment === "production" && payload.email === undefined)
+    throw new AppError("setup.email_required", { field: "email" });
   if (
     state.inputs.$publication !== undefined &&
     !isDeepStrictEqual(state.inputs.$publication, { digest: payload.digest })
