@@ -2331,8 +2331,8 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
 - **Where it is read.** The full invoice's reader of filed lines
   (`receipt-adjustments.ts:46-80`, beside `listGross` at `:55` and `:68`), which paper and A4 share
   (A4 reaches it through `receiptLines`, `apps/server/src/invoice-document.ts:62-82`). Then
-  `beforeVatFigures` (`apps/server/src/receipt-figures.ts:24-47`) takes the stored price instead of
-  dividing the list total back, and loses the early return for less than one priced unit (`:35`).
+  `beforeVatFigures` (`apps/server/src/receipt-figures.ts:38-57`) takes the stored price instead of
+  dividing the list total back, and loses the early return for less than one priced unit (`:45`).
 - The owner's example: «0.123 kg Jamón ibérico 21,82 2,68 10%» and «Descuento 10% -0,26 10%»
   (24,00 ÷ 1,10 = 21,82; 2,95 ÷ 1,10 = 2,68; 2,68 − 2,42 = 0,26; Python `Decimal`, half up,
   2026-10-15). A comped weighed line prints its value and an «Invitación» row.
@@ -2341,8 +2341,8 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
 
 ## Scope — Q10: the whole-bill discount once per rate
 
-- `groupDiscounts` (`receipt-figures.ts:62-92`) and the table builder that calls it
-  (`receipt-document.ts:285-307`) stop putting a whole-bill share under each dish. A dish's row
+- `groupDiscounts` (`receipt-figures.ts:71-102`) and the table builder that calls it
+  (`receipt-document.ts:290-313`) stop putting a whole-bill share under each dish. A dish's row
   carries its own discount only. After the last item, one row per VAT rate the whole-bill discount
   reached: «Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%» (S5, the owner's example; the label
   rule is Part 2's). Each is the sum of that rate's lines' shares before VAT, so the table still

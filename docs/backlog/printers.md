@@ -399,7 +399,7 @@ just a green typecheck.
 
 - **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
   Part 2).** The A4 page draws an amount row's caption first, then its amount right-aligned
-  (`layoutInvoicePages`, `apps/server/src/invoice-page.ts:250-254`). When the amount does not fit
+  (`layoutInvoicePages`, `apps/server/src/invoice-page.ts:266-270`). When the amount does not fit
   beside the caption's last line, it takes a line of its own, and if the page is full there it
   moves to the next page, leaving its caption at the foot of the one before. Keep the two
   together: make room for the caption's lines and the amount's line before drawing either.
@@ -408,7 +408,7 @@ just a green typecheck.
 
 - **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
   open by A663 Part 2).** The A4 page draws the table's header row and each item row as separate
-  rows, each checking only its own room (`apps/server/src/invoice-page.ts:232`, `tableRow`). The
+  rows, each checking only its own room (`apps/server/src/invoice-page.ts:248`, `tableRow`). The
   header can therefore end a page with the items starting on the next, and a table that runs onto
   a further page shows no header there. Keep the header with the first row, and repeat it at the
   top of each continuation page.
