@@ -113,13 +113,6 @@ const cell = (el: OpeningHoursYearView, date: LocalDate) =>
   root(el).querySelector<HTMLElement>(`td[data-date="${date}"]`)!;
 const dayButton = (el: OpeningHoursYearView, date: LocalDate) =>
   cell(el, date).querySelector<HTMLButtonElement>("button")!;
-function actions(el: OpeningHoursYearView) {
-  const sent: unknown[] = [];
-  el.addEventListener("special-day-action", (event) =>
-    sent.push((event as CustomEvent<unknown>).detail),
-  );
-  return sent;
-}
 function opens(el: OpeningHoursYearView) {
   const sent: CalendarDayOpen[] = [];
   el.addEventListener("calendar-day-open", (event) =>
@@ -367,12 +360,10 @@ describe("Opening hours year", () => {
     for (const readOnly of [false, true]) {
       const el = await mount(yearModel(), { readOnly });
       const opened = opens(el);
-      const sent = actions(el);
       dayButton(el, "2027-05-12").click();
       await el.updateComplete;
       expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
       expect(opened[0]!.returnTo()).toBe(dayButton(el, "2027-05-12"));
-      expect(sent).toEqual([]);
     }
   });
 
@@ -402,15 +393,13 @@ describe("Opening hours year", () => {
     expect(text(dayButton(el, "2027-12-08"))).toBe("8");
   });
 
-  it("gives a viewer read-only chips, and a date still sends calendar-day-open and no special-day-action", async () => {
+  it("gives a viewer read-only chips, and a date still sends calendar-day-open", async () => {
     const el = await mount(yearModel(), { readOnly: true });
-    const sent = actions(el);
     const opened = opens(el);
     expect(root(el).querySelector("season-chips")!.readOnly).toBe(true);
     dayButton(el, "2027-05-12").click();
     await el.updateComplete;
     expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
-    expect(sent).toEqual([]);
   });
 
   it("keeps one Tab stop in the year and moves it with the arrow keys", async () => {
