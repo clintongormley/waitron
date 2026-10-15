@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { isUniqueViolation } from "../unique-violation.js";
+import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { isRefusal, isUniqueViolation } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { deviceProfilePrinters } from "./device-profile-printers.js";
 import { deviceProfiles } from "./device-profiles.js";
+import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 import { locations, tenants } from "./tenants.js";
 
@@ -15,6 +17,7 @@ describe("device_profile_printers defaults", () => {
   let profile: string;
   let printer1: string;
   let printer2: string;
+  let pagePrinter: string;
 
   beforeEach(async () => {
     const db = suite.db;
@@ -44,6 +47,21 @@ describe("device_profile_printers defaults", () => {
       )
       .returning({ id: printers.id });
     [printer1, printer2] = madePrinters.map((p) => p.id) as [string, string];
+    const [madePage] = await db
+      .insert(pagePrinters)
+      .values({
+        locationId: location!.id,
+        name: "Office printer",
+        host: "10.0.0.9",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      })
+      .returning({ id: pagePrinters.id });
+    pagePrinter = madePage!.id;
   });
 
   it("refuses a second default for one role of one profile", async () => {
@@ -108,5 +126,34 @@ describe("device_profile_printers defaults", () => {
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, profile));
     expect(row).toEqual({ role: "cash_drawer", isDefault: false });
+  });
+
+  it("page_printer_id accepts a page printer and refuses an unknown id", async () => {
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: profile,
+        printerId: printer1,
+        pagePrinterId: pagePrinter,
+        role: "receipt",
+        position: 0,
+      }),
+    );
+    const [row] = await suite.db
+      .select({ pagePrinterId: deviceProfilePrinters.pagePrinterId })
+      .from(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, profile));
+    expect(row!.pagePrinterId).toBe(pagePrinter);
+    const e = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx.insert(deviceProfilePrinters).values({
+          deviceProfileId: profile,
+          printerId: printer2,
+          pagePrinterId: printer2,
+          role: "receipt",
+          position: 1,
+        }),
+      ),
+    );
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

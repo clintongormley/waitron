@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, newId, table } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
+import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 
 export const deviceProfilePrinterRole = enumType(["receipt", "payment_slip", "cash_drawer"]);
@@ -24,6 +25,11 @@ export const deviceProfilePrinters = table(
       .notNull()
       /* v8 ignore start */
       .references(() => printers.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
+    /* v8 ignore start */
+    pagePrinterId: id("page_printer_id").references(() => pagePrinters.id, {
+      onDelete: "restrict",
+    }),
     /* v8 ignore stop */
     role: deviceProfilePrinterRole("role").notNull(),
     position: count("position").notNull(),

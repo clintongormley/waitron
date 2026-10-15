@@ -9,6 +9,8 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
+import { pagePrinters } from "./page-printers.js";
+import { printers } from "./printers.js";
 import { locations, tenants } from "./tenants.js";
 
 // What this suite proves is the column mapping and the location foreign key.
@@ -17,6 +19,9 @@ const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
+const RECEIPT_PRINTER = "11111111-0000-4000-8000-0000000000a1";
+const PAGE_PRINTER = "11111111-0000-4000-8000-0000000000a2";
+const GHOST_PRINTER = "11111111-0000-4000-8000-0000000000ff";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices schema (columns, FKs, unique)", () => {
@@ -132,5 +137,64 @@ describe("devices schema (columns, FKs, unique)", () => {
     await seedDevice("Real location", LOCATION_B);
     const e = await captureError(() => seedDevice("Ghost location", GHOST_LOCATION));
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  describe("the invoice printer choice", () => {
+    beforeEach(async () => {
+      await suite.db.insert(printers).values({
+        id: RECEIPT_PRINTER,
+        locationId: LOCATION_A,
+        name: "Receipt printer",
+        transport: "cloud_poll",
+        pollId: "poll-a",
+      });
+      await suite.db.insert(pagePrinters).values({
+        id: PAGE_PRINTER,
+        locationId: LOCATION_A,
+        name: "Office printer",
+        host: "10.0.0.9",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      });
+    });
+
+    async function setChoice(
+      id: string,
+      choice: { invoicePrinterId?: string; invoicePagePrinterId?: string },
+    ): Promise<void> {
+      await inTx((tx) => tx.update(devices).set(choice).where(eq(devices.id, id)));
+    }
+
+    it("invoice_printer_id accepts a receipt printer and refuses an unknown id", async () => {
+      const id = await seedDevice("Till 1");
+      await setChoice(id, { invoicePrinterId: RECEIPT_PRINTER });
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ invoicePrinterId: devices.invoicePrinterId })
+          .from(devices)
+          .where(eq(devices.id, id)),
+      );
+      expect(row!.invoicePrinterId).toBe(RECEIPT_PRINTER);
+      const e = await captureError(() => setChoice(id, { invoicePrinterId: GHOST_PRINTER }));
+      expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    });
+
+    it("invoice_page_printer_id accepts a page printer and refuses an unknown id", async () => {
+      const id = await seedDevice("Till 1");
+      await setChoice(id, { invoicePagePrinterId: PAGE_PRINTER });
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ invoicePagePrinterId: devices.invoicePagePrinterId })
+          .from(devices)
+          .where(eq(devices.id, id)),
+      );
+      expect(row!.invoicePagePrinterId).toBe(PAGE_PRINTER);
+      const e = await captureError(() => setChoice(id, { invoicePagePrinterId: RECEIPT_PRINTER }));
+      expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    });
   });
 });
