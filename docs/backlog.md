@@ -1125,7 +1125,23 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   dialog's counters still say "edited" for every row Save would send, untouched suggestions
   included: `translations.edited`, `translations.hidden`, `translations.show_edited`,
   `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are
-  edited"). Owner to choose the wording.
+  edited"). Owner to choose the wording. The bell's Translate all notice has the same gap: one
+  suggestion reads "1 suggestions are waiting" / "1 sugerencias pendientes"
+  (`content.suggestions_ready`, `apps/dashboard/src/i18n/alert-messages.ts`), because the alert
+  formatter has no plural forms.
+
+- **Translate all: no bell notice when a run's last job fails, expires or is refused, although an
+  earlier job's suggestions wait (A689's fifth PR, 2026-10-15).** `contentSuggestionsAlertSource`
+  (`apps/server/src/alert-sources.ts`) raises the notice only for a run that is `done` or
+  `partly_done`, as the plan's Task 19 says; a run of two jobs whose second fails ends `failed` with
+  the first job's suggestions still counted in `waiting`, and the bell says nothing. Measured by
+  Task 19's review with a temporary case: job 1 done with 3 suggestions, job 2 failed → notice `[]`.
+  Owner question filed; the alternative is a notice for any run that is neither sending nor running
+  with `waiting > 0`.
+- **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
+  (`readSuggestionRun`, `packages/catalogue/src/content-suggestion-jobs.ts`) counts every stored
+  suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,
+  and ones left from an earlier run. Opening the dialog clears the notice, which limits the effect.
 
 - **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
   A Discard whose delete request never answers keeps Save disabled, across closing and reopening the

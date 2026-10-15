@@ -798,8 +798,8 @@ export function batteryAlertSource(deps: {
   };
 }
 
-/** The Translate all notice: open while a finished run's suggestions wait and nobody has opened
- * them in the translations dialog. */
+/** The Translate all notice: open while a finished run's suggestions wait, until someone opens the
+ * translations dialog. */
 export function contentSuggestionsAlertSource(): AlertSource {
   return {
     area: "content",
