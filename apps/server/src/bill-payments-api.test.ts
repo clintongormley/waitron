@@ -1793,7 +1793,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(after).toEqual(before);
   });
 
-  /** Mirrors `invoiceDefault` on the till's profile: the default only at the till's location. */
+  /** Lists the page printer on the till's profile, as its default only at the till's location. */
   async function listOnTill(pagePrinterId: string, locationId: string): Promise<void> {
     await inTx((tx) =>
       listInvoicePrinter(tx, {
@@ -1839,13 +1839,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         printerLocation = other!.id;
       }
       const pagePrinterId = randomUUID();
-      // The suite does not reset per test; one invoice printer per location.
-      await inTx((tx) =>
-        tx
-          .update(pagePrinters)
-          .set({ invoiceDefault: false })
-          .where(eq(pagePrinters.locationId, printerLocation)),
-      );
       await unlistFromTill();
       if (kind !== "missing") {
         await inTx((tx) =>
@@ -1861,7 +1854,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             media: "iso_a4_210x297mm",
             resolutionDpi: 300,
             active: kind !== "disabled",
-            invoiceDefault: true,
           }),
         );
         await listOnTill(pagePrinterId, printerLocation);
@@ -1897,12 +1889,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     },
   );
 
-  describe("the location's invoice printer", () => {
+  describe("the device's invoice printer", () => {
     async function pagePrinter(values: {
       name: string;
       locationId?: string;
       active?: boolean;
-      invoiceDefault?: boolean;
+      onTill?: boolean;
     }): Promise<string> {
       const id = randomUUID();
       await inTx((tx) =>
@@ -1918,10 +1910,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           media: "iso_a4_210x297mm",
           resolutionDpi: 300,
           active: values.active ?? true,
-          invoiceDefault: values.invoiceDefault ?? false,
         }),
       );
-      if (values.invoiceDefault) await listOnTill(id, values.locationId ?? venue.cfg.locationId);
+      if (values.onTill) await listOnTill(id, values.locationId ?? venue.cfg.locationId);
       return id;
     }
 
@@ -1940,8 +1931,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     }
 
     beforeEach(async () => {
-      await inTx((tx) => tx.update(pagePrinters).set({ active: false, invoiceDefault: false }));
+      await inTx((tx) => tx.update(pagePrinters).set({ active: false }));
       await unlistFromTill();
+      suite.db.run(
+        sql`update devices set invoice_printer_id = null, invoice_page_printer_id = null where id = ${venue.deviceId}`,
+      );
     });
 
     it("answers no invoice printer when the location has none, only another location's or a disabled one", async () => {
@@ -1949,25 +1943,57 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await pagePrinter({
         name: "Elsewhere",
         locationId: await otherLocation(),
-        invoiceDefault: true,
+        onTill: true,
       });
       expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
         status: 200,
         json: { invoicePrinter: null, emailAvailable: false },
       });
-      await pagePrinter({ name: "Back office", active: false, invoiceDefault: true });
+      await pagePrinter({ name: "Back office", active: false, onTill: true });
       expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
         status: 200,
         json: { invoicePrinter: null, emailAvailable: false },
       });
     });
 
-    it("answers the location's active invoice printer by id and name", async () => {
+    it("answers the device's active A4 invoice printer by id and name", async () => {
       await pagePrinter({ name: "Office" });
-      const id = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      const id = await pagePrinter({ name: "Invoices", onTill: true });
       expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
         status: 200,
         json: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+      });
+    });
+
+    it("answers no invoice printer while the device's invoice printer is a receipt printer, and the A4 printer it chooses instead", async () => {
+      const receipt = await inTx((tx) =>
+        createPrinter(
+          tx,
+          { locationId: venue.cfg.locationId },
+          { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        ),
+      );
+      await inTx((tx) =>
+        listInvoicePrinter(tx, {
+          profileId: venue.profileId,
+          printerId: receipt.id,
+          isDefault: true,
+        }),
+      );
+      const a4 = await pagePrinter({ name: "Invoices" });
+      await inTx((tx) =>
+        listInvoicePrinter(tx, { profileId: venue.profileId, pagePrinterId: a4, isDefault: false }),
+      );
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 200,
+        json: { invoicePrinter: null, emailAvailable: false },
+      });
+      suite.db.run(
+        sql`update devices set invoice_page_printer_id = ${a4} where id = ${venue.deviceId}`,
+      );
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 200,
+        json: { invoicePrinter: { id: a4, name: "Invoices" }, emailAvailable: false },
       });
     });
 
@@ -1991,7 +2017,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     it("answers email unavailable beside the invoice printer when the mail server's credential cannot be read", async () => {
-      const id = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      const id = await pagePrinter({ name: "Invoices", onTill: true });
       try {
         await inTx((tx) =>
           putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
@@ -2014,7 +2040,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     it("refuses a caller with no session", async () => {
-      await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      await pagePrinter({ name: "Invoices", onTill: true });
       expect(await request("GET", "/api/invoice-delivery-options", undefined, "")).toEqual({
         status: 401,
         json: { code: "session.required", params: {} },
@@ -2024,7 +2050,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     it("stages A4 only on the invoice printer, for the signed-in staff member", async () => {
       const billId = await tabWith("Chuletón");
       const office = await pagePrinter({ name: "Office" });
-      const invoices = await pagePrinter({ name: "Invoices", invoiceDefault: true });
+      const invoices = await pagePrinter({ name: "Invoices", onTill: true });
       const [before] = await inTx((tx) =>
         tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
       );

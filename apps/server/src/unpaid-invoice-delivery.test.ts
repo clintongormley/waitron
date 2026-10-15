@@ -68,7 +68,6 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
       supportedFormats: ["application/pdf"],
       media: "iso_a4_210x297mm",
       resolutionDpi: 300,
-      invoiceDefault: true,
     });
     const [device] = await tx
       .select({ profileId: devices.deviceProfileId })

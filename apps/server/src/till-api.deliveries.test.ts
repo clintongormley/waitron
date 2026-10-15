@@ -203,7 +203,6 @@ async function venue(): Promise<Venue> {
         media: "iso_a4_210x297mm",
         resolutionDpi: 600,
         agentId: agent!.id,
-        invoiceDefault: true,
       })
       .returning({ id: pagePrinters.id });
     const receipt = { email: "facturas@example.test" };
@@ -737,7 +736,6 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
   it("refuses when the till has no invoice printer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    await suite.db.update(pagePrinters).set({ invoiceDefault: false });
     await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     expect(await printOnA4(v, orderId)).toEqual(refusal(409, "invoice_delivery.printer_invalid"));
     expect(await deliveryRows(saleId)).toEqual([]);
@@ -1855,7 +1853,6 @@ describe("what each delivery route reads", () => {
       answer: refusal(409, "invoice_delivery.active"),
       reads: 1,
     });
-    await suite.db.update(pagePrinters).set({ invoiceDefault: false });
     await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     const none = await invoice(v);
     expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, none.orderId))).toEqual({

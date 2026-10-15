@@ -252,8 +252,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-/** Makes `pagePrinterId` the only invoice printer on the till's profile, mirroring
- * `invoiceDefault`: its default only at the till's location. */
+/** Makes `pagePrinterId` the only invoice printer on the till's profile: its default only at the
+ * till's location. */
 async function tillInvoicePrinter(
   tx: Transaction,
   pagePrinterId: string,
@@ -2475,7 +2475,6 @@ describe("the invoice at full payment", () => {
       const pagePrinterId = randomUUID();
       if (kind !== "missing")
         await inTx(async (tx) => {
-          await tx.update(pagePrinters).set({ invoiceDefault: false });
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
             locationId: kind === "other-location" ? otherLocationId : venue.cfg.locationId,
@@ -2488,7 +2487,6 @@ describe("the invoice at full payment", () => {
             media: "iso_a4_210x297mm",
             resolutionDpi: 300,
             active: kind !== "disabled",
-            invoiceDefault: true,
           });
           await tillInvoicePrinter(
             tx,
@@ -2536,7 +2534,6 @@ describe("the invoice at full payment", () => {
     const billId = await tabWith("Caña");
     const pagePrinterId = randomUUID();
     await inTx(async (tx) => {
-      await tx.update(pagePrinters).set({ invoiceDefault: false });
       await tx.insert(pagePrinters).values({
         id: pagePrinterId,
         locationId: venue.cfg.locationId,
@@ -2548,7 +2545,6 @@ describe("the invoice at full payment", () => {
         supportedFormats: ["application/pdf"],
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
-        invoiceDefault: true,
       });
       await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
     });
@@ -2598,11 +2594,9 @@ describe("the invoice at full payment", () => {
       const pagePrinterId = randomUUID();
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
         await inTx(async (tx) => {
-          await tx.update(pagePrinters).set({ invoiceDefault: false });
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
             locationId: venue.cfg.locationId,
-            invoiceDefault: true,
             name: "Invoice",
             host: pagePrinterId,
             port: 631,

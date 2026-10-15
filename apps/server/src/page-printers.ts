@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { invoiceDeliveries, pagePrinters, printAgents, type Transaction } from "@waitron/db";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError } from "@waitron/shared";
@@ -33,32 +33,6 @@ export async function listPagePrinters(
     .where(eq(pagePrinters.locationId, locationId))
     .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
   return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
-}
-
-export async function readInvoicePrinter(
-  tx: Transaction,
-  locationId: string,
-): Promise<{ id: string; name: string } | null> {
-  return (await readInvoicePrinters(tx, [locationId])).get(locationId) ?? null;
-}
-
-/** {@link readInvoicePrinter} for several locations in one query; a location with none has no entry. */
-export async function readInvoicePrinters(
-  tx: Transaction,
-  locationIds: readonly string[],
-): Promise<Map<string, { id: string; name: string }>> {
-  const rows = await tx
-    .select({ locationId: pagePrinters.locationId, id: pagePrinters.id, name: pagePrinters.name })
-    .from(pagePrinters)
-    .where(
-      and(
-        inArray(pagePrinters.locationId, [...locationIds]),
-        eq(pagePrinters.invoiceDefault, true),
-        eq(pagePrinters.active, true),
-      ),
-    );
-  // `page_printers_invoice_default_uq` allows one invoice default per location.
-  return new Map(rows.map((row) => [row.locationId, { id: row.id, name: row.name }]));
 }
 
 /**

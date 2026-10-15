@@ -66,7 +66,6 @@ async function venue() {
       supportedFormats: ["application/pdf"],
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
-      invoiceDefault: true,
     })
     .returning({ id: pagePrinters.id });
   return { locationId, nodeId, agentId: agent!.id, officeId: office!.id };

@@ -690,11 +690,11 @@ async function requireListedPrinters(
   sessionId: string,
   lists: Partial<ProfilePrinterLists>,
 ): Promise<void> {
-  const invoiceDefault = lists.invoicePrinterDefaultId;
+  const defaultInvoicePrinter = lists.invoicePrinterDefaultId;
   const invoiceIds = [
     ...new Set([
       ...(lists.invoicePrinterIds ?? []),
-      ...(invoiceDefault == null ? [] : [invoiceDefault]),
+      ...(defaultInvoicePrinter == null ? [] : [defaultInvoicePrinter]),
     ]),
   ];
   const ids = [

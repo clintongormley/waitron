@@ -77,7 +77,6 @@ useVenueDb({
           media: "iso_a4_210x297mm",
           resolutionDpi: 600,
           agentId: agent!.id,
-          invoiceDefault: true,
         })
         .returning({ id: pagePrinters.id });
       officeId = office!.id;

@@ -21,6 +21,7 @@ import {
 } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { checkedInvoiceChoiceDelivery } from "./invoice-choice-delivery.js";
+import type { InvoicePrinter } from "./receipt-print.js";
 import { setOrderInvoiceChoice } from "./working-order.js";
 
 const suite = useVenueDb({
@@ -223,5 +224,48 @@ describe("invoice-choice email contact selection", () => {
     expect(
       await suite.db.select().from(workingOrders).where(eq(workingOrders.id, f.orderId)),
     ).toEqual(saved);
+  });
+});
+
+describe("invoice-choice A4 staging", () => {
+  const a4: InvoicePrinter = { kind: "a4", id: randomUUID(), name: "Office" };
+  const receipt: InvoicePrinter = {
+    kind: "receipt",
+    id: randomUUID(),
+    name: "Bar",
+    paperWidth: "80mm",
+    resolution: "203dpi",
+  };
+  async function staged(pagePrinterId: string, printer: InvoicePrinter | undefined) {
+    const f = await fixture();
+    return withTransaction(suite.db, (tx) =>
+      checkedInvoiceChoiceDelivery(tx, {
+        delivery: { medium: "a4", pagePrinterId },
+        invoiceType: "F1",
+        locationId: f.cfg.locationId,
+        context,
+        source: { kind: "order", orderId: f.orderId },
+        invoicePrinter: async () => printer,
+      }),
+    );
+  }
+
+  it("stages A4 on the device's A4 invoice printer", async () => {
+    expect(await staged(a4.id, a4)).toEqual({
+      medium: "a4",
+      pagePrinterId: a4.id,
+      personId: "operator",
+    });
+  });
+
+  it.each([
+    ["another printer", randomUUID(), a4],
+    ["a receipt invoice printer", receipt.id, receipt],
+    ["no invoice printer", a4.id, undefined],
+  ] as const)("refuses A4 staged on %s", async (_name, pagePrinterId, printer) => {
+    await expect(staged(pagePrinterId, printer)).rejects.toMatchObject({
+      code: "invoice_delivery.printer_invalid",
+      params: {},
+    });
   });
 });

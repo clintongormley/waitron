@@ -2773,7 +2773,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
         supportedFormats: ["application/pdf"],
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
-        invoiceDefault: true,
       });
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })

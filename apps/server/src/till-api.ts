@@ -222,7 +222,6 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
-import { readInvoicePrinter } from "./page-printers.js";
 import { readInvoiceDeliveries, type OfferedPrinter } from "./invoice-delivery-status.js";
 import {
   requestPrintDelivery,
@@ -1999,10 +1998,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
-      const invoicePrinter = await withTransaction(deps.db, (tx) =>
-        readInvoicePrinter(tx, deps.cfg.locationId),
+      const session = await requireSession(deps, c);
+      const printer = await withTransaction(deps.db, (tx) =>
+        resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin),
       );
+      // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
+      const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
       return c.json({ invoicePrinter, emailAvailable: await readEmailTransport() });
     }),
   );

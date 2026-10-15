@@ -112,7 +112,6 @@ async function pagePrinter(
       supportedFormats: ["application/pdf"],
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
-      invoiceDefault: true,
       ...extra,
     })
     .returning({ id: pagePrinters.id });
@@ -574,7 +573,6 @@ describe("readInvoiceDeliveries", () => {
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
       const upstairs = await pagePrinter(v.locationId, {
-        invoiceDefault: false,
         name: "Upstairs",
       });
       await attempt(v, saleId, "a4", "sent", office);
@@ -602,7 +600,6 @@ describe("readInvoiceDeliveries", () => {
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
       const upstairs = await pagePrinter(v.locationId, {
-        invoiceDefault: false,
         name: "Upstairs",
       });
       await attempt(v, saleId, "a4", "failed", office);
@@ -989,7 +986,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers a receipt retry when the failed A4 original cannot be retried on A4", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const old = await pagePrinter(v.locationId, { invoiceDefault: false, name: "Old office" });
+      const old = await pagePrinter(v.locationId, { name: "Old office" });
       await attempt(v, saleId, "receipt", "failed");
       await attempt(v, saleId, "a4", "failed", old);
 

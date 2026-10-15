@@ -207,7 +207,7 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { enqueueCollectionTicket } from "./receipt-print.js";
+import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
 import {
   ordersWithUnfiledPayment,
   paymentAttemptIsLive,
@@ -3684,7 +3684,7 @@ async function readChoiceChangeableOrder(
 export async function setOrderInvoiceChoice(
   db: Database,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TillConfig, "nodeId">,
+  cfg: Pick<TillConfig, "nodeId"> & Partial<Pick<OriginConfig, "origin">>,
   orderId: string,
   request: InvoiceChoiceRequest,
   deliveryContext?: InvoiceChoiceDeliveryContext,
@@ -3717,6 +3717,8 @@ export async function setOrderInvoiceChoice(
       locationId: order.locationId,
       source: { kind: "order", orderId },
       context: deliveryContext,
+      invoicePrinter: async () =>
+        cfg.origin === undefined ? undefined : resolveInvoicePrinter(tx, cfg.origin),
     });
     const revision = order.revision + 1;
     await tx

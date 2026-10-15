@@ -33,7 +33,7 @@ declare module "@waitron/shared" {
     "invoice_delivery.receipt_unavailable": Record<string, never>;
     /** The agent's A4 claim is no longer the delivery's current one, or this process never handed it out. */
     "invoice_delivery.claim_lost": Record<string, never>;
-    /** No page printer with that id in this location (for the invoice printer: no ACTIVE one), or
+    /** No page printer with that id in this location (for `setInvoicePrinter`: no ACTIVE one), or
      * no discovery entry an agent reported recently enough for the discovered list to show it. */
     "page_printer.not_found": Record<string, never>;
     /** The discovery entry carries no office report, or one whose printer cannot print an A4 invoice. */

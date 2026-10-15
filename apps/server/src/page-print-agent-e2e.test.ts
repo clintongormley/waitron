@@ -506,7 +506,6 @@ async function officePrinter(
       media: "iso_a4_210x297mm",
       resolutionDpi: 300,
       agentId,
-      invoiceDefault: printer === ipp,
     })
     .returning({ id: pagePrinters.id });
   if (printer === ipp)
@@ -783,7 +782,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       } else {
         await suite.db
           .update(pagePrinters)
-          .set({ active: false, invoiceDefault: false })
+          .set({ active: false })
           .where(eq(pagePrinters.id, office));
         expect(await row(delivery.id)).toMatchObject({ status: "queued" });
       }

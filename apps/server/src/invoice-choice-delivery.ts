@@ -7,7 +7,7 @@ import {
   type InvoiceEmailContactSource,
 } from "./invoice-email-contact.js";
 import { optionalDocument } from "./optional-document.js";
-import { readInvoicePrinter } from "./page-printers.js";
+import type { InvoicePrinter } from "./receipt-print.js";
 import { AppError, isValidEmail, locationId } from "@waitron/shared";
 
 export type InvoiceChoiceDeliveryContext = {
@@ -31,6 +31,8 @@ export async function checkedInvoiceChoiceDelivery(
     locationId: string;
     source: InvoiceEmailContactSource;
     context: InvoiceChoiceDeliveryContext | undefined;
+    /** The staging device's invoice printer; absent when no device stages the choice. */
+    invoicePrinter?: () => Promise<InvoicePrinter | undefined>;
   },
 ): Promise<StagedInvoiceDelivery | null> {
   const delivery = input.delivery;
@@ -41,8 +43,8 @@ export async function checkedInvoiceChoiceDelivery(
   if (input.invoiceType !== "F1") invalid("delivery.medium");
   if (delivery.medium === "a4") {
     if (typeof delivery.pagePrinterId !== "string") invalid("delivery.pagePrinterId");
-    const printer = await readInvoicePrinter(tx, input.locationId);
-    if (printer?.id !== delivery.pagePrinterId) {
+    const printer = await input.invoicePrinter?.();
+    if (printer?.kind !== "a4" || printer.id !== delivery.pagePrinterId) {
       throw new AppError("invoice_delivery.printer_invalid", {});
     }
     if (input.context === undefined) invalid("personId");
