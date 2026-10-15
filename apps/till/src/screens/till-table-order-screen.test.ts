@@ -4045,6 +4045,11 @@ describe("till-table-order-screen", () => {
           await el.updateComplete;
           expect(targetIds(el)).not.toContain("t7");
           expect(targetIds(el)).not.toContain("t8");
+          el.bills = [];
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(
+            action === "move" ? ["unknown", "t6", "t9"] : ["counter", "unknown", "t6", "t9"],
+          );
         },
       );
 

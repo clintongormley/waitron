@@ -4334,7 +4334,8 @@ export class TillTableOrderScreen extends LitElement {
     const zoneId = this.actionVerb === "join" ? sourceZoneId : null;
     const takesOrders =
       this.actionVerb === "move" ||
-      (this.actionVerb === "move-bill" && this.#billOpen(this.orderId));
+      (this.actionVerb === "move-bill" &&
+        (this.#shownBill === undefined || this.#shownBill.status === "open"));
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
