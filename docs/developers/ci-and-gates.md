@@ -1155,9 +1155,10 @@ runs `pnpm`. A setup in a composite action or a reusable workflow is invisible t
 run by a script the step calls is not seen, and the step's `timeout-minutes` is not compared with
 the script's worst case. `scripts/setup-node-pnpm.test.mjs` finds the setup only by a one-line
 `run: bash scripts/ci-setup-pnpm.sh`. The script's behaviour — the bound, the kill
-grace, the retries, the version check, refusing an empty `RUNNER_TEMP` or `GITHUB_PATH` and a
-`packageManager` that is not an exact version — is run under a stubbed npm by
-`scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted by it.
+grace, the retries, the version check, refusing an empty `RUNNER_TEMP` or `GITHUB_PATH`, a
+PATH with neither `gtimeout` nor `timeout`, and a `packageManager` that is not an exact version — is
+run under a stubbed npm by `scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted
+by it.
 
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 

@@ -5601,7 +5601,7 @@ the tree. What remains, largest first:
 - **A745. The image build's pnpm install has no time limit or retry of its own.**
   `deploy/Dockerfile`'s build stage runs `npm install --global pnpm@9.15.0` and then
   `pnpm install --frozen-lockfile` with no outer `timeout` and no retry, and image-smoke (which
-  image-nightly calls) and ci.yml's `publish` job build that image in CI, so only their job limits
+  ci.yml and image-nightly call) and ci.yml's `publish` job build that image in CI, so only their job limits
   end a stall. A744 bounded every workflow's pnpm setup (`scripts/ci-setup-pnpm.sh`) and left this
   one out as an image build, not a workflow step. Next: wrap both in the stage the way the runtime
   stage's `bounded()` wraps apt-get, and add the case to `scripts/deploy-image-env.test.ts`.
