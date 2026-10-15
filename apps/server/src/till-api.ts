@@ -766,17 +766,13 @@ export function requirePartyParam(id: string): string {
 /** An optional guest count: absent or null records none, otherwise a whole number from 1. */
 function requireGuestCount(value: unknown, field = "guestCount"): number | null {
   if (value === undefined || value === null) return null;
-  if (!isValidGuestCount(value)) {
-    throw new AppError("management.request_invalid", { field });
-  }
+  if (!isValidGuestCount(value)) throw invalid(field);
   return value;
 }
 
 /** A guest count the wire must carry: null clears it, an absent key is refused. */
 function requireGuestCountOrNull(value: unknown, field = "guestCount"): number | null {
-  if (value === undefined) {
-    throw new AppError("management.request_invalid", { field });
-  }
+  if (value === undefined) throw invalid(field);
   return requireGuestCount(value, field);
 }
 
