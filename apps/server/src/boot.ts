@@ -1815,7 +1815,11 @@ async function bootServer(
   );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   if (workforceEnabled && isSingletonPrimary)
-    mountManagementAttendanceApi(app, { db, cfg: { nodeId: till.nodeId }, now }, log);
+    mountManagementAttendanceApi(
+      app,
+      { db, cfg: { nodeId: till.nodeId, locationId: till.locationId }, now },
+      log,
+    );
   mountScheduleApi(app, { db }, log);
   mountMeApi(
     app,
