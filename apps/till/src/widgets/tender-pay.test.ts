@@ -1617,8 +1617,9 @@ describe("till-tender-pay", () => {
   });
 });
 
-it("collects a fractional quantity before the picker, and prices each pick per fractional unit", async () => {
-  const store = new WorkingOrderStore();
+describe("a dish not sold by the unit offers its options but no extras", () => {
+  // The server refuses `extras.unsupported_product` on a dish whose unit has a scale or any decimal
+  // places, because an extra is billed at the dish's quantity times its picks.
   const cheese = {
     portion: "1",
     unit: {
@@ -1639,48 +1640,79 @@ it("collects a fractional quantity before the picker, and prices each pick per f
     addAllergens: null,
     suitableFor: [],
   };
-  const product: TillProduct = {
-    ...jamon,
-    offeredModifiers: [
+  const extrasList = {
+    kind: "extras" as const,
+    id: "list-extras",
+    name: "Extras",
+    customerName: { es: "Extras carta" },
+    kitchenName: "Extras KDS",
+    minPicks: 1,
+    maxPicks: null,
+    items: [cheese],
+  };
+  const cookedList = {
+    kind: "options" as const,
+    id: "list-cooked",
+    name: "Punto",
+    customerName: { es: "Punto carta" },
+    kitchenName: "Punto KDS",
+    defaultLabelId: "label-rare",
+    labels: [
       {
-        kind: "extras",
-        id: "list-extras",
-        name: "Extras",
-        customerName: { es: "Extras carta" },
-        kitchenName: "Extras KDS",
-        minPicks: 1,
-        maxPicks: null,
-        items: [cheese],
+        id: "label-rare",
+        name: "Poco hecha",
+        customerName: { es: "Poco hecha carta" },
+        kitchenName: "Poco hecha KDS",
+        available: true,
       },
     ],
   };
-  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
-  store.emit("product-selected", product);
-  await el.updateComplete;
-  await type(el, "0.125");
-  click(el, ".add");
-  await el.updateComplete;
-  const picker =
-    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
-      "till-modifier-picker",
-    )!;
-  await picker.updateComplete;
-  // Cheese seeds at 1 (preselected); bump it to 2 so the fractional-unit pricing has a count.
-  picker
-    .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-cheese-inc"]')!
-    .click();
-  await picker.updateComplete;
-  expect(store.lines).toHaveLength(0);
-  // dish 10.00 × 0.125 = 1.25; pick 1.00 × (0.125 × 2) = 0.25 → 1.50.
-  expect(picker.shadowRoot!.querySelector(".running-amount")!.textContent).toBe(
-    formatMoney("1.50", currentLocale()),
-  );
-  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
-  expect(store.lines[0]?.quantity).toBe("0.125");
-  expect(store.lines[0]?.extras).toEqual([
-    { listId: "list-extras", productId: "p-cheese", name: "Queso", price: "1.00", quantity: 2 },
-  ]);
-  expect(store.total).toBe("1.50");
+
+  it.each([
+    ["weighed on a scale", jamon],
+    ["in a unit with decimal places and no scale", portion],
+  ])("adds a dish %s with only extras lists straight to the basket", async (_, dish) => {
+    const store = new WorkingOrderStore();
+    const product: TillProduct = { ...dish, offeredModifiers: [extrasList] };
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", product);
+    await el.updateComplete;
+    await type(el, "0.12");
+    click(el, ".add");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]?.quantity).toBe("0.12");
+    expect(store.lines[0]?.extras).toBeUndefined();
+  });
+
+  it.each([
+    ["weighed on a scale", jamon],
+    ["in a unit with decimal places and no scale", portion],
+  ])("asks a dish %s its options list and offers no extras list", async (_, dish) => {
+    const store = new WorkingOrderStore();
+    const product: TillProduct = { ...dish, offeredModifiers: [extrasList, cookedList] };
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", product);
+    await el.updateComplete;
+    await type(el, "0.12");
+    click(el, ".add");
+    await el.updateComplete;
+    const picker =
+      el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+        "till-modifier-picker",
+      )!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelector('input[name="options-list-cooked"]')).not.toBeNull();
+    expect(picker.shadowRoot!.querySelector('[name="extras-list-extras"]')).toBeNull();
+    expect(
+      picker.shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-inc"]'),
+    ).toBeNull();
+    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    expect(store.lines[0]?.quantity).toBe("0.12");
+    expect(store.lines[0]?.extras).toBeUndefined();
+    expect(store.lines[0]?.options).toEqual([{ listId: "list-cooked", labelId: "label-rare" }]);
+  });
 });
 
 it("asks for the variant of a weighed dish whose only question is one", async () => {

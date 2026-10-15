@@ -659,3 +659,15 @@ it("asks for a manager when a sale has no department, without directing staff to
     "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
   );
 });
+
+it("tells staff extras go only on a dish sold by the unit, in both languages, not the generic sentence", () => {
+  expect(codeMessage("extras.unsupported_product", "en")).toBe(
+    "Extras can only be added to a dish sold by the unit.",
+  );
+  expect(codeMessage("extras.unsupported_product", "es")).toBe(
+    "Solo se pueden añadir extras a un plato que se vende por unidades.",
+  );
+  expect(codeMessage("extras.unsupported_product", "en")).not.toBe(
+    codeMessage("server.internal", "en"),
+  );
+});

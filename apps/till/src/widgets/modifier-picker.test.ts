@@ -1036,3 +1036,24 @@ describe("till-modifier-picker", () => {
     });
   });
 });
+
+it("offers no extras list on a dish not sold by the unit, whichever surface opens it", async () => {
+  // The server refuses extras on such a dish (`extras.unsupported_product`); its options list stays.
+  const litre: TillProduct = {
+    ...burger,
+    unit: {
+      id: "unit-l",
+      name: { en: "litre" },
+      abbreviation: { en: "l" },
+      precision: 3,
+      hardwareUnit: null,
+    },
+  };
+  for (const product of [litre, { ...jamon, offeredModifiers: burger.offeredModifiers }]) {
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
+    expect(labelRadio(el, "list-cooked", "label-rare")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[name="extras-list-extras"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test^="pick-list-extras-"]')).toBeNull();
+    cleanupWidgets();
+  }
+});

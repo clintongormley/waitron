@@ -9,7 +9,7 @@ import { type Decimal, decimal, formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { optionAnswers } from "./option-snapshot.js";
-import { dishGross, extraGross, quantityLabel } from "../state/order-line.js";
+import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
@@ -497,7 +497,7 @@ export class TillBasket extends LitElement {
             // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
             // variants AND an offered list — still re-asks the variant and discards it; open in
             // `docs/backlog.md`.
-            line.product.offeredModifiers?.length
+            offeredListsOf(line.product).length > 0
               ? html`<wt-button
                   class="edit-modifiers"
                   size="sm"

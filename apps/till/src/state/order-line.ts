@@ -12,7 +12,7 @@ import {
 import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import { productUnit, unitName } from "../widgets/product-name.js";
+import { productUnit, soldByTheUnit, unitName } from "../widgets/product-name.js";
 
 type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
 
@@ -54,10 +54,19 @@ export function extraGross(line: OrderLine, extra: PricedPick): Decimal {
  * `docs/backlog.md`, the entry beginning "Reopening the picker".
  */
 export function needsModifierPicker(
-  product: Pick<TillProduct, "variants" | "offeredModifiers">,
+  product: Pick<TillProduct, "variants" | "offeredModifiers" | "unit" | "pricingUnit">,
 ): boolean {
   if ((product.variants ?? []).length > 0) return true;
-  return (product.offeredModifiers ?? []).length > 0;
+  return offeredListsOf(product).length > 0;
+}
+
+/** The lists the till offers on this dish: no extras list unless it is sold by the unit, because
+ * the server refuses them (`extras.unsupported_product`). */
+export function offeredListsOf(
+  product: Pick<TillProduct, "offeredModifiers" | "unit" | "pricingUnit">,
+): NonNullable<TillProduct["offeredModifiers"]> {
+  const offered = product.offeredModifiers ?? [];
+  return soldByTheUnit(product) ? offered : offered.filter((entry) => entry.kind !== "extras");
 }
 
 /**

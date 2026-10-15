@@ -7,7 +7,12 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { decimal, formatMoney, toScale } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { lineGross, productAsVariant, quantityPlaces } from "../state/order-line.js";
+import {
+  lineGross,
+  offeredListsOf,
+  productAsVariant,
+  quantityPlaces,
+} from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
 import { productName } from "./product-name.js";
 import { descriptionFor } from "./dish-format.js";
@@ -266,7 +271,7 @@ export class TillModifierPicker extends LitElement {
   /** The lists this dish offers, in offer order. A product the till synthesised (a retrieved line
    * with no live offer) carries none, and then the dialog has only its variants to ask about. */
   get #offered() {
-    return this.product.offeredModifiers ?? [];
+    return offeredListsOf(this.product);
   }
 
   /** Every variant the offer lists, in variant order; an unavailable one is drawn disabled. The
