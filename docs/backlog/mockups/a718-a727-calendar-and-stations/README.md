@@ -14,7 +14,7 @@ session's own numbering; this is where each job went.
 | 8 (period chips' Edit), 10, 11, 12, 13, 16 | A723 — the season painter and special-day editor |
 | 23, 24, 25 | A724 — staffing |
 | 28, 29, 30 | A725 — prep stations |
-| 31, 32 ("Clear setting") | A726 — Routes |
+| 31, 32 ("Clear setting") | A726 — Routes; see _Decisions and deliberate limits_ in `docs/backlog/kitchen.md` |
 | 27 | A727 — page search |
 | 32 (dialog heights) | A734 — the medium dialog height; see _Decisions and deliberate limits_ in `docs/backlog/dashboard.md` |
 

@@ -282,6 +282,18 @@ const states: Record<
   },
 };
 
+/** Test setup: opens each closed category toggle until none is closed. */
+async function openAll(el: HTMLElementTagNameMap["venue-routing-grid"]): Promise<void> {
+  for (;;) {
+    const closed = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'button.toggle[aria-expanded="false"]',
+    );
+    if (closed === null) return;
+    closed.click();
+    await el.updateComplete;
+  }
+}
+
 describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (theme) => {
   test.each(Object.keys(states))("%s", async (name) => {
     const state = states[name]!;
@@ -291,7 +303,7 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
     host.append(el);
     await el.updateComplete;
     if (state.expand) {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(el);
       await el.updateComplete;
     }
     if (state.search) {
@@ -389,7 +401,7 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     Object.assign(el, { model });
     host.append(el);
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await openAll(el);
     await el.updateComplete;
     const td = el.shadowRoot!.querySelector<HTMLElement>(cellSelector)!;
     const cell = td.querySelector<HTMLButtonElement>('button[data-test="routing-cell"]')!;

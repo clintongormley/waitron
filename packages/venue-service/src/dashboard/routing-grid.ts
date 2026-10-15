@@ -5,7 +5,6 @@ import { styleMap } from "lit/directives/style-map.js";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { isStationColour, type StationColour } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -35,7 +34,6 @@ import type { RoutingCellEditorCell, RoutingCellSave } from "./routing-cell-edit
 import {
   blankZoneCell,
   cellPeriodLines,
-  collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
@@ -126,7 +124,7 @@ export class RoutingGrid extends LitElement {
       }
       .toolbar {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-3);
@@ -135,22 +133,14 @@ export class RoutingGrid extends LitElement {
         min-inline-size: 0;
       }
       .toolbar:has(wt-combobox) {
-        grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--wt-space-6) * 6)) auto;
+        grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--wt-space-6) * 6));
       }
       .toolbar wt-combobox {
         min-inline-size: 0;
       }
       @container (max-width: 40rem) {
         .toolbar:has(wt-combobox) {
-          grid-template-columns: minmax(0, 1fr) auto;
-        }
-        .toolbar wt-combobox {
-          grid-column: 1 / -1;
-          grid-row: 2;
-        }
-        .toolbar wt-button {
-          grid-column: 2;
-          grid-row: 1;
+          grid-template-columns: minmax(0, 1fr);
         }
       }
       .count {
@@ -438,7 +428,8 @@ export class RoutingGrid extends LitElement {
     this.#blank = blankZoneCell(model, lookups);
     this.#searchOf = routingSearch(model);
     this.#searched = null;
-    this.expanded = pruneExpanded(model, this.expanded);
+    const previous = changed.get("model") as RoutingView | null | undefined;
+    this.expanded = pruneExpanded(previous ?? model, model, this.expanded);
     if (this.period !== null && !offeredPeriods(model).some(({ id }) => id === this.period)) {
       this.period = null;
     }
@@ -927,7 +918,10 @@ export class RoutingGrid extends LitElement {
       data-category=${id}
       aria-expanded=${expanded ? "true" : "false"}
       @click=${() => {
-        this.#setOpen(search, expanded ? collapseCategory(open, id) : expandCategory(open, id));
+        this.#setOpen(
+          search,
+          expanded ? collapseCategory(this.model!, open, id) : expandCategory(open, id),
+        );
       }}
     >
       <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${name}
@@ -1039,14 +1033,6 @@ export class RoutingGrid extends LitElement {
     const model = this.model;
     if (model === null) return nothing;
     const search = this.#search();
-    const open = search?.open ?? this.expanded;
-    const categories =
-      search === undefined
-        ? model.categories.map(({ id }) => id)
-        : search.rows.flatMap(({ entry: { row } }) =>
-            row.kind === "category" ? [row.categoryId] : [],
-          );
-    const allOpen = categories.length > 0 && categories.every((id) => open.has(id));
     const rows: readonly { entry: GridRow; found?: SearchRow }[] =
       search === undefined
         ? visibleRoutingRows(model, this.expanded).map((entry) => ({ entry }))
@@ -1070,12 +1056,7 @@ export class RoutingGrid extends LitElement {
             this.searchOpen = null;
           }}
         ></wt-input
-        >${this.#periodField(model)}<wt-button
-          variant="secondary"
-          data-test=${allOpen ? "collapse-all" : "expand-all"}
-          @click=${() => this.#setOpen(search, allOpen ? collapseAll() : expandAll(model))}
-          >${t(allOpen ? "routing.collapse_all" : "routing.expand_all")}</wt-button
-        >
+        >${this.#periodField(model)}
       </div>
       <span class="count" role="status"
         >${search === undefined ? "" : matchCount(search.count)}</span

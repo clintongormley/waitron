@@ -184,31 +184,18 @@ list does not exist.
    colours, which still marks those other stations use. One shared component, also used by periods
    (A719) and seasons (A721); category colours keep their dialog.
 
-## A726. Routes: collapsing hides inherited rows at any depth, no Expand/Collapse button, Clear setting on the left
-
-**A726 (owner, 2026-10-15).** Files: `packages/venue-service/src/dashboard/routing-grid-model.ts`,
-`routing-grid.ts`, `routing-cell-editor.ts`.
-
-1. **Collapsing a category hides every inherited row inside it, at any depth; a row with its own
-   route stays.** Owner: "when Agave is collapsed, only Clandestina and Corralejo Blue remain
-   visible". Today a category's products show whenever its own arrow is open, even under a collapsed
-   parent (`visibleRoutingRows`, `routing-grid-model.ts:101`): with Santet Deli Co collapsed,
-   AGAVE's inherited products still show.
-2. **Collapsing reaches everything inside:** it closes the arrows of the categories under it, so an
-   open arrow always means its inherited rows show. Opening a category under a collapsed parent
-   still shows its inherited rows.
-3. **The Expand/Collapse button goes** (A656 made the two one button). Search still opens what
-   matches.
-4. **In the cell editor, "Clear setting" stays red and moves to the left of the bottom row, beside
-   Cancel**, away from Save (owner: on the left, not quiet).
-
 ## Decisions and deliberate limits
 
-- **Routes keeps one Expand/Collapse control beside Search (A656, owner 2026-10-14).**
-  It reads Collapse all while every category is open, and Expand all otherwise. On a phone,
-  Period follows on its own row so Search keeps room. The editor calls its fallback Station
-  (Estación) until it holds a period route, then Any other time (El resto del tiempo).
-  Its two route fields share the row evenly, and both station fields end together.
+- **Routes has no Expand/Collapse control, and closing a category closes everything inside it
+  (A726, owner 2026-10-15, replacing A656's one Expand/Collapse button).** A closed category shows
+  only the rows with a route of their own below it, at any depth, with their path; opening a
+  category under a closed parent still lists all its products. Search fills the toolbar's row,
+  sharing it with Period where there are periods; on a phone, Period takes its own row below
+  Search. The editor calls its fallback Station (Estación) until it holds a period route, then Any
+  other time (El resto del tiempo). Its two route fields share the row evenly, and both station
+  fields end together. Clear setting stays red and sits at the left of the editor's bottom row,
+  after Cancel; Save is alone on the right — the owner's exception to the `cancel` slot holding
+  only Cancel or Back ([design-system.md](../developers/design-system.md)).
 
 - **A counter order moved to a table sends its unsent dishes to the kitchen at the move (A660,
   owner 2026-10-15: (C), keep the rule).** A bill entering table service from another service mode

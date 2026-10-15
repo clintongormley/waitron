@@ -81,6 +81,11 @@ export class RoutingCellEditor extends LitElement {
       .line wt-button {
         margin-block-start: var(--wt-space-2);
       }
+      .cancel-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
       .form > wt-combobox {
         grid-column: 1 / 3;
       }
@@ -680,34 +685,34 @@ export class RoutingCellEditor extends LitElement {
           slot="footer"
           .error=${[unplaced, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
         >
-          <wt-button
-            slot="cancel"
-            data-test="cancel-cell"
-            variant="secondary"
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (current())
-                void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-            }}
-            >${t("prep.cancel")}</wt-button
-          >
-          ${
-            stored
-              ? html`<wt-button
-                  slot="secondary"
-                  data-test="clear-cell"
-                  variant="danger"
-                  ?disabled=${this.busy}
-                  @click=${() => {
-                    if (current())
-                      this.dispatchEvent(
-                        new CustomEvent("routing-cell-clear", { bubbles: true, composed: true }),
-                      );
-                  }}
-                  >${t("routing.clear")}</wt-button
-                >`
-              : nothing
-          }
+          <div slot="cancel" class="cancel-group">
+            <wt-button
+              data-test="cancel-cell"
+              variant="secondary"
+              ?disabled=${this.busy}
+              @click=${() => {
+                if (current())
+                  void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+              }}
+              >${t("prep.cancel")}</wt-button
+            >
+            ${
+              stored
+                ? html`<wt-button
+                    data-test="clear-cell"
+                    variant="danger"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (current())
+                        this.dispatchEvent(
+                          new CustomEvent("routing-cell-clear", { bubbles: true, composed: true }),
+                        );
+                    }}
+                    >${t("routing.clear")}</wt-button
+                  >`
+                : nothing
+            }
+          </div>
           <wt-button
             data-test="save-cell"
             variant=${s.variant}

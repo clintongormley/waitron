@@ -118,13 +118,19 @@ type Editor = HTMLElementTagNameMap["routing-cell-editor"];
 /** The cell's button; `null` where the cell draws none. */
 const combo = (el: RoutingGrid, row: string, zone: string) =>
   cell(el, row, zone).querySelector<HTMLButtonElement>('button[data-test="routing-cell"]');
+/** Test setup: opens each closed category toggle until none is closed. */
+async function openAll(el: RoutingGrid): Promise<void> {
+  for (;;) {
+    const closed = root(el).querySelector<HTMLButtonElement>(
+      'button.toggle[aria-expanded="false"]',
+    );
+    if (closed === null) return;
+    closed.click();
+    await el.updateComplete;
+  }
+}
 
-describe("the single tree control", () => {
-  const controls = (el: RoutingGrid) => [
-    ...root(el).querySelectorAll<HTMLElement>(".toolbar wt-button"),
-  ];
-  const label = (el: RoutingGrid) => controls(el).map((button) => button.textContent!.trim());
-
+describe("the toolbar", () => {
   it("keeps the search-count status rendered before the first query", async () => {
     const { el } = await mount();
     const status = root(el).querySelector<HTMLElement>('[role="status"]')!;
@@ -139,33 +145,14 @@ describe("the single tree control", () => {
     expect(getComputedStyle(status).display).not.toBe("none");
   });
 
-  it("changes from Expand to Collapse only while every category is open", async () => {
+  it("holds the search and no button", async () => {
     const { el } = await mount();
-    expect(label(el)).toEqual(["Expand all"]);
-    await userEvent.click(controls(el)[0]!);
-    await el.updateComplete;
-    expect(label(el)).toEqual(["Collapse all"]);
-    await userEvent.click(root(el).querySelector('button[data-category="cocktails"]')!);
-    await el.updateComplete;
-    expect(label(el)).toEqual(["Expand all"]);
-    await userEvent.click(controls(el)[0]!);
-    await el.updateComplete;
-    expect(label(el)).toEqual(["Collapse all"]);
-    await userEvent.click(controls(el)[0]!);
-    await el.updateComplete;
-    expect(label(el)).toEqual(["Expand all"]);
-    expect(rowLabels(el)[1]).toBe("▸ Drinks");
+    const toolbar = root(el).querySelector(".toolbar")!;
+    expect(toolbar.querySelectorAll("wt-button, button")).toHaveLength(0);
+    expect([...toolbar.children].map((child) => child.localName)).toEqual(["wt-input"]);
   });
 
-  it("has no open categories when the model has none", async () => {
-    const { el } = await mount(routing({ categories: [], products: [], cells: [] }));
-    expect(label(el)).toEqual(["Expand all"]);
-    await userEvent.click(controls(el)[0]!);
-    await el.updateComplete;
-    expect(label(el)).toEqual(["Expand all"]);
-  });
-
-  it("offers Collapse when the search's categories are already open, leaving the ordinary tree alone", async () => {
+  it("closing an open category of the search leaves the ordinary tree alone", async () => {
     const { el } = await mount();
     const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
     await input.updateComplete;
@@ -173,72 +160,76 @@ describe("the single tree control", () => {
     await userEvent.fill(native, "moj");
     await el.updateComplete;
     expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
-    expect(label(el)).toEqual(["Collapse all"]);
-    await userEvent.click(controls(el)[0]!);
+    await userEvent.click(root(el).querySelector<HTMLElement>('button[data-category="drinks"]')!);
     await el.updateComplete;
     expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
-    expect(label(el)).toEqual(["Expand all"]);
     await userEvent.fill(native, "");
     await el.updateComplete;
     expect(rowLabels(el)[1]).toBe("▸ Drinks");
   });
 
-  it.each([390, 1280])(
-    "keeps search and the one button on one full row at %i px",
-    async (width) => {
-      await page.viewport(width, 800);
-      const { el } = await mount();
-      const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
-      await input.updateComplete;
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const buttons = controls(el);
-      expect(buttons).toHaveLength(1);
-      const search = input.getBoundingClientRect();
-      const button = buttons[0]!.getBoundingClientRect();
-      const toolbar = root(el).querySelector(".toolbar")!.getBoundingClientRect();
-      expect(search.width).toBeGreaterThan(0);
-      expect(search.left).toBeCloseTo(toolbar.left, 0);
-      expect(button.right).toBeCloseTo(toolbar.right, 0);
-      expect(Math.abs(search.top - button.top)).toBeLessThanOrEqual(1);
-      expect(button.left).toBeGreaterThan(search.right);
-    },
-  );
+  it.each([390, 1280])("gives the search the whole row at %i px", async (width) => {
+    await page.viewport(width, 800);
+    const { el } = await mount();
+    const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await input.updateComplete;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const search = input.getBoundingClientRect();
+    const toolbar = root(el).querySelector(".toolbar")!.getBoundingClientRect();
+    expect(search.width).toBeGreaterThan(0);
+    expect(search.left).toBeCloseTo(toolbar.left, 0);
+    expect(search.right).toBeCloseTo(toolbar.right, 0);
+  });
+
+  const withLunch = () =>
+    routing({
+      periods: [
+        {
+          id: "lunch",
+          name: "Lunch",
+          departmentId: "dining",
+          departmentName: "Dining",
+          colour: "blue",
+          productIds: ["mojito"],
+        },
+      ],
+    });
 
   it.each(["en", "es"] as const)(
-    "keeps the phone search usable beside %s controls when periods exist",
+    "puts Period on its own row below the search on a phone, in %s",
     async (locale) => {
       setLocale(locale);
       await page.viewport(390, 800);
-      const { el } = await mount(
-        routing({
-          periods: [
-            {
-              id: "lunch",
-              name: "Lunch",
-              departmentId: "dining",
-              departmentName: "Dining",
-              colour: "blue",
-              productIds: ["mojito"],
-            },
-          ],
-        }),
-      );
+      const { el } = await mount(withLunch());
       const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
       await field.updateComplete;
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       expect(window.innerWidth).toBe(390);
       const search = field.getBoundingClientRect();
       const period = root(el).querySelector("[name=period]")!.getBoundingClientRect();
-      const button = controls(el)[0]!.getBoundingClientRect();
-      expect(search.width).toBeGreaterThan(
-        2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min")),
-      );
-      expect(Math.abs(search.top - button.top)).toBeLessThanOrEqual(1);
+      const toolbar = root(el).querySelector(".toolbar")!.getBoundingClientRect();
+      expect(search.left).toBeCloseTo(toolbar.left, 0);
+      expect(search.right).toBeCloseTo(toolbar.right, 0);
       expect(period.top).toBeGreaterThanOrEqual(search.bottom);
       expect(period.left).toBeCloseTo(search.left, 0);
-      expect(period.right).toBeCloseTo(button.right, 0);
+      expect(period.right).toBeCloseTo(search.right, 0);
     },
   );
+
+  it("puts Period beside the search, at the row's end, on a wide screen", async () => {
+    await page.viewport(1280, 800);
+    const { el } = await mount(withLunch());
+    const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await field.updateComplete;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const search = field.getBoundingClientRect();
+    const period = root(el).querySelector("[name=period]")!.getBoundingClientRect();
+    const toolbar = root(el).querySelector(".toolbar")!.getBoundingClientRect();
+    expect(search.left).toBeCloseTo(toolbar.left, 0);
+    expect(period.left).toBeGreaterThan(search.right);
+    expect(period.right).toBeCloseTo(toolbar.right, 0);
+    expect(period.top).toBeLessThan(search.bottom);
+  });
 });
 const trigger = (box: HTMLButtonElement) => box;
 /** The station the cell's button draws, and whether it is drawn as inherited. */
@@ -351,7 +342,7 @@ function boxes(text: Text, start = 0, end = text.length): DOMRect[] {
 const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
 describe("venue-routing-grid", () => {
-  it("Expand all and Collapse all change the rendered rows, and focus stays on the trigger", async () => {
+  it("a category's toggle opens and closes its rows, and focus stays on the toggle", async () => {
     const { el } = await mount();
     expect(rowLabels(el)).toEqual([
       "All categories",
@@ -379,8 +370,10 @@ describe("venue-routing-grid", () => {
       "Bread",
     ]);
 
-    const expandAll = root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!;
-    await userEvent.click(expandAll);
+    const cocktails = root(el).querySelector<HTMLButtonElement>(
+      'button[data-category="cocktails"]',
+    )!;
+    await userEvent.click(cocktails);
     await el.updateComplete;
     expect(rowLabels(el)).toEqual([
       "All categories",
@@ -388,18 +381,17 @@ describe("venue-routing-grid", () => {
       "▾ Cocktails",
       "Mojito",
       "Cola",
-      "▾ Food",
+      "▸ Food",
       "Burger",
       "No category",
       "Bread",
     ]);
-    expect(root(el).activeElement).toBe(expandAll);
+    expect(root(el).activeElement).toBe(cocktails);
 
-    const collapseAll = root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!;
-    await userEvent.click(collapseAll);
+    await userEvent.click(drinks);
     await el.updateComplete;
     expect(rowLabels(el)[1]).toBe("▸ Drinks");
-    expect(root(el).activeElement).toBe(collapseAll);
+    expect(root(el).activeElement).toBe(drinks);
   });
 
   it("orders columns Every zone then zones, and rows All then the tree then No category", async () => {
@@ -423,7 +415,7 @@ describe("venue-routing-grid", () => {
 
   it("shows inherited results muted, blank where they repeat the row's Every zone, and explicit ones unmuted, including explicit-equal", async () => {
     const { el } = await mount(routing(), {});
-    root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await openAll(el);
     await el.updateComplete;
     // Explicit.
     expect(shown(combo(el, "c:drinks", "every")!)).toEqual({ text: "Bar", muted: false });
@@ -475,7 +467,7 @@ describe("venue-routing-grid", () => {
 
   it("the editor offers active stations, then No preparation, and no Clear for an inherited cell; an inactive saved station is described, not offered", async () => {
     const { el } = await mount();
-    root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await openAll(el);
     await el.updateComplete;
     const editor = await openEditor(el, combo(el, "p:cola", "every")!);
     const box = field(editor, "target");
@@ -981,7 +973,7 @@ describe("venue-routing-grid", () => {
 
     it("a product row storing its own station shows and names only that station", async () => {
       const { el } = await mount();
-      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(el);
       await el.updateComplete;
       expect(text(el, "p:burger", "every")).toBe("Kitchen");
       expect(name(el, "p:burger", "every")).toBe("Food › Burger, Every zone: Kitchen, set here");
@@ -1108,7 +1100,7 @@ describe("venue-routing-grid", () => {
 
     it("draws a station set here bold in the text colour, and a blank cell empty", async () => {
       const { el } = await mount();
-      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(el);
       await el.updateComplete;
       for (const [row, zone] of [
         ["c:drinks", "every"],
@@ -1206,7 +1198,7 @@ describe("venue-routing-grid", () => {
     it("draws a category's name medium and a product's normal", async () => {
       await page.viewport(1280, 800);
       const { el } = await mount(santet());
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await openAll(el);
       await el.updateComplete;
       const weight = (row: string) =>
         getComputedStyle(texts(rowHeader(el, row))[0]!.parentElement!).fontWeight;
@@ -1217,7 +1209,7 @@ describe("venue-routing-grid", () => {
     it("lines a row's name up with the station beside it, in a row as tall as a tap target", async () => {
       await page.viewport(1280, 800);
       const { el } = await mount(santet());
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await openAll(el);
       await el.updateComplete;
       const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
       for (const row of ["c:agave", "p:leche", "all"]) {
@@ -1236,7 +1228,7 @@ describe("venue-routing-grid", () => {
     it("at phone width breaks a row's name between words, never inside a word that fits", async () => {
       await page.viewport(390, 800);
       const { el } = await mount(santet());
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await openAll(el);
       await el.updateComplete;
       for (const row of ["c:santet", "c:agave", "c:cafes", "p:leche"]) {
         const [text] = texts(rowHeader(el, row));
@@ -1304,7 +1296,7 @@ describe("venue-routing-grid", () => {
         "Bread, Terrace: No preparation, set here. Staff lunch: Bar",
       );
       // Inherited in the Every zone column: muted, not italic, with the deciding cell's lines.
-      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(el);
       await el.updateComplete;
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
@@ -1377,7 +1369,7 @@ describe("venue-routing-grid", () => {
           "line: Staff lunch: Bar",
         ]);
         el.model = flagged(["lunch"]);
-        root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+        await openAll(el);
         await el.updateComplete;
         expect(drawn(el, "p:cola", "every")).toEqual([
           "line: Lunch: Kitchen",
@@ -1409,7 +1401,7 @@ describe("venue-routing-grid", () => {
 
     it("opens the editor with the cell's place, choice, lines, products and zone department", async () => {
       const { el } = await mount(timed());
-      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(el);
       await el.updateComplete;
       const own = await openEditor(el, combo(el, "c:drinks", "every")!);
       expect(own.open).toBe(true);
@@ -1544,7 +1536,7 @@ describe("venue-routing-grid", () => {
     });
     const expanded = async (model: RoutingView) => {
       const mounted = await mount(model);
-      root(mounted.el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await openAll(mounted.el);
       await mounted.el.updateComplete;
       return mounted;
     };
@@ -1704,7 +1696,7 @@ describe("venue-routing-grid", () => {
     const toggle = (el: RoutingGrid, id: string) =>
       root(el).querySelector<HTMLButtonElement>(`button[data-category="${id}"]`)!;
 
-    it("is a wt-input named search, labelled, before Expand all", async () => {
+    it("is a wt-input named search, labelled, first in the toolbar", async () => {
       const { el } = await mount();
       const field = searchField(el);
       expect(field.type).toBe("search");
@@ -1715,9 +1707,7 @@ describe("venue-routing-grid", () => {
       await field.updateComplete;
       expect(searchInput(el).getAttribute("aria-label")).toBe("Search categories and products");
       const toolbar = [...root(el).querySelector(".toolbar")!.children];
-      expect(toolbar.indexOf(field)).toBeLessThan(
-        toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
-      );
+      expect(toolbar.indexOf(field)).toBe(0);
       expect(status(el)).toBe("");
     });
 
@@ -1787,7 +1777,7 @@ describe("venue-routing-grid", () => {
         "Bread",
       ]);
       await search(el, "coc");
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await openAll(el);
       await el.updateComplete;
       expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
       await userEvent.click(toggle(el, "drinks"));
@@ -1821,14 +1811,18 @@ describe("venue-routing-grid", () => {
       expect(mark.getBoundingClientRect().width).toBeGreaterThanOrEqual(word - 0.5);
     });
 
-    it("Collapse all during search closes every category of the search", async () => {
+    it("closing a category during search closes the arrows under it", async () => {
       const { el } = await mount();
       await search(el, "coc");
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await openAll(el);
       await el.updateComplete;
-      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!);
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+      await userEvent.click(toggle(el, "drinks"));
       await el.updateComplete;
       expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
+      await userEvent.click(toggle(el, "drinks"));
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▸ Cocktails"]);
     });
   });
 });
@@ -1846,7 +1840,7 @@ describe("station colours", () => {
   const colourOf = (el: RoutingGrid, row: string, zone: string) =>
     cell(el, row, zone).dataset.stationColour;
   const expanded = async (el: RoutingGrid) => {
-    root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await openAll(el);
     await el.updateComplete;
   };
 
@@ -2208,7 +2202,7 @@ describe("one period", () => {
   }
   async function mountExpanded(model = twoDepartments()) {
     const mounted = await mount(model);
-    root(mounted.el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await openAll(mounted.el);
     await mounted.el.updateComplete;
     return mounted;
   }
@@ -2240,9 +2234,6 @@ describe("one period", () => {
     const toolbar = [...root(el).querySelector(".toolbar")!.children];
     const search = root(el).querySelector('wt-input[name="search"]')!;
     expect(toolbar.indexOf(box)).toBe(toolbar.indexOf(search) + 1);
-    expect(toolbar.indexOf(box)).toBeLessThan(
-      toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
-    );
     const one = await mount(twoDepartments({ periods: [lunch, dinner, brunch] }));
     expect(periodField(one.el)!.options).toEqual([
       { value: "", label: "All periods" },
@@ -2608,5 +2599,138 @@ describe("one period", () => {
     const { el } = await mount(twoDepartments());
     expect(periodField(el)!.label).toBe("Periodo");
     expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+  });
+});
+
+describe("collapsing a category", () => {
+  /** The owner's example: AGAVE's products inherit, except Clandestina and Corralejo Blue. */
+  const agave = (overrides: Partial<RoutingView> = {}) =>
+    routing({
+      zones: [{ id: "front", name: "Front Bar", departmentId: null }],
+      categories: [
+        { id: "santet", name: "Santet Deli Co", parentId: null },
+        { id: "agave", name: "AGAVE", parentId: "santet" },
+        { id: "clandestina", name: "CLANDESTINA", parentId: "agave" },
+        { id: "mezcal", name: "MEZCAL", parentId: "clandestina" },
+      ],
+      products: [
+        { id: "clandestina-p", name: "Clandestina", categoryId: "agave" },
+        { id: "corralejo", name: "Corralejo Blue", categoryId: "agave" },
+        { id: "blanco", name: "Tequila Blanco", categoryId: "agave" },
+        { id: "shot", name: "Shot", categoryId: "clandestina" },
+        { id: "smoke", name: "Smoke", categoryId: "mezcal" },
+      ],
+      cells: [
+        {
+          row: { kind: "product", productId: "clandestina-p" },
+          zoneId: null,
+          target: station("bar"),
+        },
+        { row: { kind: "product", productId: "corralejo" }, zoneId: null, target: station("bar") },
+      ],
+      ...overrides,
+    });
+  const toggle = (el: RoutingGrid, id: string) =>
+    root(el).querySelector<HTMLButtonElement>(`button[data-category="${id}"]`)!;
+  const everything = [
+    "All categories",
+    "▾ Santet Deli Co",
+    "▾ AGAVE",
+    "▾ CLANDESTINA",
+    "▾ MEZCAL",
+    "Smoke",
+    "Shot",
+    "Clandestina",
+    "Corralejo Blue",
+    "Tequila Blanco",
+  ];
+
+  it("hides the inherited rows at every depth and keeps the own-route rows with their path", async () => {
+    const { el } = await mount(agave());
+    await openAll(el);
+    expect(rowLabels(el)).toEqual(everything);
+    await userEvent.click(toggle(el, "santet"));
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual([
+      "All categories",
+      "▸ Santet Deli Co",
+      "▸ AGAVE",
+      "Clandestina",
+      "Corralejo Blue",
+    ]);
+  });
+
+  it("re-opening the parent shows its children's arrows closed", async () => {
+    const { el } = await mount(agave());
+    await openAll(el);
+    await userEvent.click(toggle(el, "santet"));
+    await el.updateComplete;
+    await userEvent.click(toggle(el, "santet"));
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual([
+      "All categories",
+      "▾ Santet Deli Co",
+      "▸ AGAVE",
+      "Clandestina",
+      "Corralejo Blue",
+    ]);
+    expect(toggle(el, "agave").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opening a child under a closed parent shows its inherited rows", async () => {
+    const { el } = await mount(agave());
+    await userEvent.click(toggle(el, "agave"));
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual([
+      "All categories",
+      "▸ Santet Deli Co",
+      "▾ AGAVE",
+      "▸ CLANDESTINA",
+      "Clandestina",
+      "Corralejo Blue",
+      "Tequila Blanco",
+    ]);
+  });
+
+  const moved = (parentId: string) =>
+    agave({
+      categories: [
+        { id: "santet", name: "Santet Deli Co", parentId: null },
+        { id: "food", name: "Food", parentId: null },
+        { id: "agave", name: "AGAVE", parentId },
+        { id: "clandestina", name: "CLANDESTINA", parentId: "agave" },
+        { id: "mezcal", name: "MEZCAL", parentId: "clandestina" },
+      ],
+    });
+
+  it("a refresh that moves an open category under a closed one closes it and the arrows inside", async () => {
+    const { el } = await mount(moved("santet"));
+    await userEvent.click(toggle(el, "agave"));
+    await el.updateComplete;
+    await userEvent.click(toggle(el, "clandestina"));
+    await el.updateComplete;
+    expect(rowLabels(el)).toContain("Tequila Blanco");
+    el.model = moved("food");
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual([
+      "All categories",
+      "▸ Food",
+      "▸ AGAVE",
+      "Clandestina",
+      "Corralejo Blue",
+      "▸ Santet Deli Co",
+    ]);
+  });
+
+  it("a refresh that moves an open category under an open one keeps it open", async () => {
+    const { el } = await mount(moved("santet"));
+    await userEvent.click(toggle(el, "agave"));
+    await el.updateComplete;
+    await userEvent.click(toggle(el, "food"));
+    await el.updateComplete;
+    el.model = moved("food");
+    await el.updateComplete;
+    expect(toggle(el, "agave").getAttribute("aria-expanded")).toBe("true");
+    expect(rowLabels(el)).toContain("Tequila Blanco");
   });
 });
