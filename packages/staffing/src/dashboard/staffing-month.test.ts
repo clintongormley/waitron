@@ -754,3 +754,35 @@ describe("the month opens its rota week", () => {
     expect(cell(el, "2026-12-01").textContent).toContain("2 unfilled");
   });
 });
+
+describe("week links stay within their month cells", () => {
+  it.each(["390px", "1280px"])("fits the link below its day at %s", async (width) => {
+    const { el } = await mount({ width });
+    el.canOpenRota = true;
+    await el.updateComplete;
+    for (const link of root(el).querySelectorAll<HTMLElement>("[data-rota-week]")) {
+      const td = link.closest("td")!;
+      const box = td.querySelector<HTMLElement>(".day")!.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(link.getBoundingClientRect().top + 0.5);
+      expect(link.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        td.getBoundingClientRect().bottom + 0.5,
+      );
+    }
+    expect(el.scrollWidth).toBeLessThanOrEqual(parseInt(width));
+  });
+});
+
+describe("week link labels fit narrow month columns", () => {
+  it.each(["en", "es"] as const)("keeps the %s label inside a phone column", async (locale) => {
+    setLocale(locale);
+    const { el } = await mount({ width: "310px" });
+    el.canOpenRota = true;
+    await settled(el);
+    for (const link of root(el).querySelectorAll<HTMLElement>("[data-rota-week]")) {
+      const button = link.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? link;
+      const td = link.closest("td")!.getBoundingClientRect();
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(td.right + 0.5);
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
+  });
+});

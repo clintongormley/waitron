@@ -5650,6 +5650,12 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   The snapshot before the isolated probe includes two A650 Codex review processes; the probe
   passed in 62,597 ms. Neither that pass nor the later successful hook retry establishes
   the cause of either deadline overrun.
+  On 2026-10-15, A585-6's normal hook reached its current 171,000 ms overall deadline at
+  171,087 ms, during `core/0157_mature_sir_ram` migrate (419 ms into that phase). Its unchanged
+  migration inputs were checked against main; an isolated main walk passed in 157,630 ms at
+  recorded host load 12.09–13.22, versus 22.07 after the hook failure. This does not establish
+  CPU load as the cause. Lane F retained `receipts/a585-6/push2.log` and
+  `receipts/a585-6/main-migration-upgrade.log`.
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux

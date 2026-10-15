@@ -111,11 +111,34 @@ export class StaffingMonthView extends LitElement {
         padding: 0;
         vertical-align: top;
       }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .rota-week {
+        flex: none;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-1);
+        border: 0;
+        border-radius: var(--wt-radius-sm);
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+        cursor: pointer;
+      }
+      .rota-week:hover {
+        background: var(--wt-color-surface-raised);
+      }
       .day {
+        flex: 1;
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
-        height: 100%;
         min-width: 0;
         min-height: calc(var(--wt-tap-min) * 2);
         padding: var(--wt-space-1);
@@ -134,6 +157,7 @@ export class StaffingMonthView extends LitElement {
         cursor: pointer;
       }
       button.day:focus-visible,
+      .rota-week:focus-visible,
       .chip button:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
@@ -517,31 +541,33 @@ export class StaffingMonthView extends LitElement {
       ?data-outside=${!day.inMonth}
       ?data-closed=${day.closedAllDay}
     >
-      ${
-        opens
-          ? html`<button
-              type="button"
-              class="day"
-              tabindex=${stop ? 0 : -1}
-              aria-label=${label}
-              aria-current=${isToday ? "date" : nothing}
-              @click=${() => this.#openDay(day)}
-              @focus=${() => {
-                this.focusDate = day.date;
-              }}
-            >
-              ${body}
-            </button>`
-          : html`<div
-              class="day"
-              role="group"
-              aria-label=${label}
-              aria-current=${isToday ? "date" : nothing}
-            >
-              ${body}
-            </div>`
-      }
-      ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<wt-button variant="ghost" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</wt-button>` : nothing}
+      <div class="cell">
+        ${
+          opens
+            ? html`<button
+                type="button"
+                class="day"
+                tabindex=${stop ? 0 : -1}
+                aria-label=${label}
+                aria-current=${isToday ? "date" : nothing}
+                @click=${() => this.#openDay(day)}
+                @focus=${() => {
+                  this.focusDate = day.date;
+                }}
+              >
+                ${body}
+              </button>`
+            : html`<div
+                class="day"
+                role="group"
+                aria-label=${label}
+                aria-current=${isToday ? "date" : nothing}
+              >
+                ${body}
+              </div>`
+        }
+        ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<button type="button" class="rota-week" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</button>` : nothing}
+      </div>
     </td>`;
   }
 
