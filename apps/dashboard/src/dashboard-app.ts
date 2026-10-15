@@ -431,7 +431,8 @@ export class DashboardApp extends LitElement {
         transform: translateY(-50%);
       }
 
-      .strip-button[aria-expanded="true"] > .icon-tooltip {
+      /* As specific as the shared hover rule, which would otherwise show it under the open panel. */
+      .icon-button.strip-button[aria-expanded="true"] > .icon-tooltip {
         display: none;
       }
 
@@ -517,7 +518,7 @@ export class DashboardApp extends LitElement {
       .nav-group .group-icon {
         position: absolute;
         inset-inline-start: calc(-1 * var(--wt-space-1));
-        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-md)) / 2);
+        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-sm)) / 2);
       }
 
       .nav-group-label {
@@ -2215,7 +2216,7 @@ export class DashboardApp extends LitElement {
                 ? nothing
                 : searching
                   ? html`<div class="nav-group" data-test="nav-group-${group.id}">
-                      <wt-icon class="group-icon" name=${group.icon}></wt-icon>
+                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <span class="chevron-space"></span>
                     </div>`
@@ -2228,7 +2229,7 @@ export class DashboardApp extends LitElement {
                       @click=${(e: MouseEvent) =>
                         this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                     >
-                      <wt-icon class="group-icon" name=${group.icon}></wt-icon>
+                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
                     </button>`

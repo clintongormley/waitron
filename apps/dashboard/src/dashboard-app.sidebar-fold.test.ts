@@ -105,6 +105,25 @@ it("draws each headed section icon on its header, from a registered path", async
   }
 });
 
+it("leaves a space-1 gap between each header's icon and its label, centred on the label's line", async () => {
+  await atSize(1280, 800, async () => {
+    const { el } = await mountApp();
+    const probe = document.createElement("div");
+    probe.style.width = "var(--wt-space-1)";
+    el.shadowRoot!.append(probe);
+    const gap = probe.getBoundingClientRect().width;
+    probe.remove();
+    expect(gap).toBeGreaterThan(0);
+    for (const id of Object.keys(SECTION_ICONS)) {
+      const header = el.shadowRoot!.querySelector(`[data-test=nav-group-${id}]`)!;
+      const icon = header.querySelector<HTMLElement>(".group-icon")!.getBoundingClientRect();
+      const label = header.querySelector<HTMLElement>(".nav-group-label")!.getBoundingClientRect();
+      expect(label.left - icon.right, id).toBeGreaterThanOrEqual(gap);
+      expect((icon.top + icon.bottom) / 2, id).toBeCloseTo((label.top + label.bottom) / 2, 0);
+    }
+  });
+});
+
 it("draws the section icons in the text colour, not the header label's primary colour", async () => {
   const { el, host } = await mountApp();
   host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
@@ -515,6 +534,20 @@ describe("a section with several pages opens a panel beside its icon", () => {
       });
       await el.updateComplete;
       expect(panel(el)).toBeNull();
+    });
+  });
+
+  it("hides its icon's tooltip while open, with the pointer still on the icon", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      const team = stripButton(el, "team");
+      const tooltip = team.querySelector<HTMLElement>(".icon-tooltip")!;
+      await userEvent.hover(team);
+      expect(getComputedStyle(tooltip).display).not.toBe("none");
+      await userEvent.click(team);
+      await el.updateComplete;
+      expect(team.matches(":hover")).toBe(true);
+      expect(getComputedStyle(tooltip).display).toBe("none");
     });
   });
 
