@@ -195,7 +195,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
 - **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
-  left open by A741. The bill still shows its Full invoice line and payment refuses it; the server
+  left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the server
   accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
 
 - **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not

@@ -890,7 +890,7 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
-- **A741, owner decision 2026-10-15: one large-bill limit of €3,000.** A sale of exactly
+- **A741, owner decision 2026-10-15: one large-bill limit of €3,000** (#1774). A sale of exactly
   €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,
   `packages/fiscal-verifactu/src/backend.ts`), inside the 3,010.00 that `@waitron/verifactu`'s
   validator applies. The till asks whether a large bill is for different people at the server's
