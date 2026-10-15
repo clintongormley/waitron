@@ -5,6 +5,7 @@ import {
   deviceProfiles,
   devices,
   locations,
+  pagePrinters,
   printers,
   restrictRefused,
   withTransaction,
@@ -31,9 +32,11 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
     cashDrawerPrinterIds: [],
+    invoicePrinterIds: [],
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterDefaultId: null,
     ...partial,
   };
 }
@@ -55,6 +58,24 @@ async function seedPrinter(location: string, name: string): Promise<string> {
     .insert(printers)
     .values({ locationId: location, name, transport: "network_tcp", host: "10.0.0.1" })
     .returning({ id: printers.id });
+  return row!.id;
+}
+
+async function seedPagePrinter(location: string, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(pagePrinters)
+    .values({
+      locationId: location,
+      name,
+      host: "10.0.0.9",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+    })
+    .returning({ id: pagePrinters.id });
   return row!.id;
 }
 
@@ -736,4 +757,74 @@ describe("a deleted printer on a profile's lists", () => {
     await inTx((tx) => setProfilePrinterLists(tx, profileId, next));
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(next);
   });
+});
+
+describe("a profile's invoice printer list", () => {
+  let loc: LocationId;
+  let receipt: string;
+  let office: string;
+
+  beforeEach(async () => {
+    await seedTenant(suite.db);
+    loc = await seedLocation("Here");
+    receipt = await seedPrinter(loc, "Bar");
+    office = await seedPagePrinter(loc, "Office");
+  });
+
+  it("stores a page printer and a receipt printer in the order given, with the default", async () => {
+    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const saved = lists({ invoicePrinterIds: [office, receipt], invoicePrinterDefaultId: office });
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(saved);
+    const rows = await suite.db
+      .select({
+        printerId: deviceProfilePrinters.printerId,
+        pagePrinterId: deviceProfilePrinters.pagePrinterId,
+      })
+      .from(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, profileId))
+      .orderBy(deviceProfilePrinters.position);
+    expect(rows).toEqual([
+      { printerId: null, pagePrinterId: office },
+      { printerId: receipt, pagePrinterId: null },
+    ]);
+  });
+
+  it("refuses an id in neither printer table with printer.not_found, storing nothing", async () => {
+    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const stored = lists({ receiptPrinterIds: [receipt] });
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, stored));
+    const e = await captureError(() =>
+      inTx((tx) =>
+        setProfilePrinterLists(tx, profileId, lists({ invoicePrinterIds: [office, "nowhere"] })),
+      ),
+    );
+    expect(e).toBeInstanceOf(AppError);
+    expect([(e as AppError).code, (e as AppError).params]).toEqual([
+      "printer.not_found",
+      { id: "nowhere" },
+    ]);
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(stored);
+  });
+
+  it.each([
+    ["receipt", { receiptPrinterIds: ["OFFICE"] }],
+    ["payment slip", { paymentSlipPrinterIds: ["OFFICE"] }],
+    ["cash drawer", { cashDrawerPrinterIds: ["OFFICE"] }],
+  ] as const)(
+    "refuses a page printer on the %s list with printer.not_found, not a constraint error",
+    async (_role, partial) => {
+      const { profileId } = await seedDevice(suite.db, { locationId: loc });
+      const [key] = Object.keys(partial) as (keyof ProfilePrinterLists)[];
+      const e = await captureError(() =>
+        inTx((tx) => setProfilePrinterLists(tx, profileId, lists({ [key!]: [office] }))),
+      );
+      expect(e).toBeInstanceOf(AppError);
+      expect([(e as AppError).code, (e as AppError).params]).toEqual([
+        "printer.not_found",
+        { id: office },
+      ]);
+      expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(lists({}));
+    },
+  );
 });

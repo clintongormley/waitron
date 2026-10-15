@@ -189,6 +189,8 @@ type ProfileRow = {
   receiptPrinterDefaultId: string | null;
   paymentSlipPrinterDefaultId: string | null;
   cashDrawerPrinterDefaultId: string | null;
+  invoicePrinterIds: string[];
+  invoicePrinterDefaultId: string | null;
 };
 
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
@@ -241,6 +243,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -268,6 +272,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -311,6 +317,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: null,
       allowedZoneIds: null,
@@ -2041,6 +2049,8 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: [place.terrace],
       startingZoneId: place.terrace,

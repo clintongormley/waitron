@@ -2,7 +2,7 @@
 import "@waitron/printing";
 import { deviceProfilePrinters, devices, nowIso, printerHolders, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, asc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import type { ProfilePrinterRole } from "./device-printers.js";
@@ -111,7 +111,7 @@ async function readStatesWith(
     .where(inArray(devices.id, [...deviceIds]));
   if (deviceRows.length === 0) return { states: new Map(), printers: new Map(), listed: [] };
   const profileIds = [...new Set(deviceRows.map((device) => device.profileId))];
-  const profileRows = await tx
+  const profileRows: ListedPrinter[] = (await tx
     .select({
       profileId: deviceProfilePrinters.deviceProfileId,
       role: deviceProfilePrinters.role,
@@ -123,14 +123,13 @@ async function readStatesWith(
     .from(deviceProfilePrinters)
     .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
     .where(
-      withLists
-        ? inArray(deviceProfilePrinters.deviceProfileId, profileIds)
-        : and(
-            inArray(deviceProfilePrinters.deviceProfileId, profileIds),
-            eq(deviceProfilePrinters.isDefault, true),
-          ),
+      and(
+        inArray(deviceProfilePrinters.deviceProfileId, profileIds),
+        ne(deviceProfilePrinters.role, "invoice"),
+        withLists ? undefined : eq(deviceProfilePrinters.isDefault, true),
+      ),
     )
-    .orderBy(asc(deviceProfilePrinters.position));
+    .orderBy(asc(deviceProfilePrinters.position))) as ListedPrinter[];
   const defaultsOf = new Map<string, Map<ProfilePrinterRole, string>>();
   for (const device of deviceRows) {
     defaultsOf.set(
@@ -457,9 +456,10 @@ function listedAt(tx: Transaction, profileId: string, locationId: string): Promi
     .where(
       and(
         eq(deviceProfilePrinters.deviceProfileId, profileId),
+        ne(deviceProfilePrinters.role, "invoice"),
         eq(printers.locationId, locationId),
       ),
-    );
+    ) as Promise<Listed[]>;
 }
 
 /** Returns the device's choices as they stand afterwards. */

@@ -6,6 +6,7 @@ import {
   deviceProfiles,
   devices,
   locations,
+  pagePrinters,
   printers,
   withTransaction,
 } from "@waitron/db";
@@ -105,6 +106,8 @@ const NO_DRAWERS_OR_DEFAULTS = {
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
 };
 
 describe("device-profile store against a real migrated database", () => {
@@ -141,6 +144,8 @@ describe("device-profile store against a real migrated database", () => {
         receiptPrinterDefaultId: null,
         paymentSlipPrinterDefaultId: null,
         cashDrawerPrinterDefaultId: null,
+        invoicePrinterIds: [],
+        invoicePrinterDefaultId: null,
       });
       const fetched = await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id));
       expect(fetched).toEqual(created);
@@ -214,6 +219,8 @@ describe("device-profile store against a real migrated database", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
     });
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
     const listed = await inTx((tx) => listDeviceProfiles(tx));
@@ -276,6 +283,8 @@ describe("device-profile store against a real migrated database", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
     });
   });
 
@@ -369,6 +378,8 @@ describe("device-profile store against a real migrated database", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
     });
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await rowCount()).toBe(1); // update, never insert a duplicate
@@ -754,6 +765,54 @@ describe("device-profile store against a real migrated database", () => {
     expect(emptied.receiptPrinterIds).toEqual([]);
     expect(emptied.paymentSlipPrinterIds).toEqual([p2!.id]);
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(emptied);
+  });
+
+  it("lists a page printer on a profile's invoice list by its id, never as null", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .returning({ id: locations.id });
+    const [bar] = await suite.db
+      .insert(printers)
+      .values({ locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .returning({ id: printers.id });
+    const [office] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: location!.id,
+        name: "Office",
+        host: "10.0.0.9",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      })
+      .returning({ id: pagePrinters.id });
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Invoices",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        printerLists: {
+          receiptPrinterIds: [bar!.id],
+          paymentSlipPrinterIds: [],
+          ...NO_DRAWERS_OR_DEFAULTS,
+          invoicePrinterIds: [office!.id, bar!.id],
+          invoicePrinterDefaultId: office!.id,
+        },
+      }),
+    );
+    const [listed] = await inTx((tx) => listDeviceProfiles(tx));
+    expect(listed).toEqual(created);
+    expect(listed!.invoicePrinterIds).toEqual([office!.id, bar!.id]);
+    expect(listed!.invoicePrinterDefaultId).toBe(office!.id);
+    expect(listed!.receiptPrinterIds).toEqual([bar!.id]);
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {

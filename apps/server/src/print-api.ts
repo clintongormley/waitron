@@ -7,7 +7,7 @@ import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
@@ -1589,6 +1589,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           })
           .from(deviceProfilePrinters)
           .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+          .where(isNotNull(deviceProfilePrinters.printerId))
           .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
       );
       return c.json(rows);

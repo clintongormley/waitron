@@ -45,9 +45,11 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
     receiptPrinterIds: [],
     paymentSlipPrinterIds: [],
     cashDrawerPrinterIds: [],
+    invoicePrinterIds: [],
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterDefaultId: null,
     ...partial,
   };
 }
