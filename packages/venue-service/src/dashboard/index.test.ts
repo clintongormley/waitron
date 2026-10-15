@@ -252,14 +252,14 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
     expect(timetable.screen).toEqual({
       id: "opening-hours",
-      navLabelKey: "nav.opening_hours",
+      navLabelKey: "nav.calendar",
       group: "operations",
       order: 15,
       requiresPermission: "venue_service.manage",
       readPermission: "venue.view",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.opening_hours"]).toBe("Calendar");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.opening_hours"]).toBe("Calendario");
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.calendar"]).toBe("Calendar");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.calendar"]).toBe("Calendario");
     const handle = timetable.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,

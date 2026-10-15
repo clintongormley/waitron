@@ -31,6 +31,7 @@ import {
   CALENDAR_OWN_VIEW_IDS,
   registerCatalogue,
   t as tKit,
+  type CalendarViewEntry,
   type DashboardCalendarView,
   type DashboardFurtherScreen,
   type DashboardRequest,
@@ -1199,8 +1200,9 @@ export class DashboardApp extends LitElement {
 
   /**
    * Runs on every probe/login and rebuilds the maps from scratch, so a module disabled server-side
-   * since the last session stops showing. Unknown nav groups or settings tabs, and repeated screen
-   * or panel ids, throw rather than silently dropping or replacing a contribution.
+   * since the last session stops showing. Unknown nav groups or settings tabs, repeated screen,
+   * panel or calendar view ids, and a calendar view id that is one of the Calendar's own words
+   * throw rather than silently dropping or replacing a contribution.
    */
   #activate(enabled: readonly string[]): void {
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
@@ -1252,11 +1254,7 @@ export class DashboardApp extends LitElement {
           screen,
           handle: contributed.create(ctx),
         });
-        if (
-          this.#sessionPermissions.includes(screen.requiresPermission) ||
-          (screen.readPermission !== undefined &&
-            this.#sessionPermissions.includes(screen.readPermission))
-        ) {
+        if (this.#mayRead(screen)) {
           const group = this.#navGroups.get(screen.group) ?? [];
           group.push(screen);
           this.#navGroups.set(screen.group, group);
@@ -1270,7 +1268,7 @@ export class DashboardApp extends LitElement {
   }
 
   /** Gathered before any module's screens are created, because each module gets its own `ctx`. */
-  #calendarViews(enabled: readonly string[]): { view: DashboardCalendarView; canWrite: boolean }[] {
+  #calendarViews(enabled: readonly string[]): CalendarViewEntry[] {
     const ids = new Set<string>(CALENDAR_OWN_VIEW_IDS);
     const views: DashboardCalendarView[] = [];
     for (const c of DASHBOARD_MODULES) {
@@ -1282,12 +1280,21 @@ export class DashboardApp extends LitElement {
         views.push(view);
       }
     }
-    const holds = (permission: string | undefined) =>
-      permission !== undefined && this.#sessionPermissions.includes(permission);
     return views
-      .filter((view) => holds(view.requiresPermission) || holds(view.readPermission))
+      .filter((view) => this.#mayRead(view))
       .sort((a, b) => a.order - b.order)
-      .map((view) => ({ view, canWrite: holds(view.requiresPermission) }));
+      .map((view) => ({
+        view,
+        canWrite: this.#sessionPermissions.includes(view.requiresPermission),
+      }));
+  }
+
+  /** A module's screen, panel or Calendar view opens to its write permission or its read one. */
+  #mayRead(item: { requiresPermission: string; readPermission?: string }): boolean {
+    return (
+      this.#sessionPermissions.includes(item.requiresPermission) ||
+      (item.readPermission !== undefined && this.#sessionPermissions.includes(item.readPermission))
+    );
   }
 
   /**
@@ -1694,12 +1701,7 @@ export class DashboardApp extends LitElement {
       render: () => panel.render(this.api, this.#sessionPermissions.includes("venue.configure")),
     }));
     const modules = this.#activePanels
-      .filter(
-        ({ panel }) =>
-          this.#sessionPermissions.includes(panel.requiresPermission) ||
-          (panel.readPermission !== undefined &&
-            this.#sessionPermissions.includes(panel.readPermission)),
-      )
+      .filter(({ panel }) => this.#mayRead(panel))
       .map(({ panel, handle }) => ({
         key: panel.id,
         tab: panel.tab as VenueSettingsTab,
@@ -1709,7 +1711,6 @@ export class DashboardApp extends LitElement {
     return [...core, ...modules].sort((a, b) => a.order - b.order);
   }
 
-  /** The module permission check here matches the one `#activate` applies to the nav. */
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
@@ -1725,13 +1726,7 @@ export class DashboardApp extends LitElement {
     if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);
-      if (
-        active &&
-        (this.#sessionPermissions.includes(active.screen.requiresPermission) ||
-          (active.screen.readPermission !== undefined &&
-            this.#sessionPermissions.includes(active.screen.readPermission)))
-      )
-        return requested;
+      if (active && this.#mayRead(active.screen)) return requested;
     }
     return "overview";
   }

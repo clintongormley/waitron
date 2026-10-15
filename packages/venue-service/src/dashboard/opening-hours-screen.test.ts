@@ -1930,14 +1930,15 @@ describe("the Calendar's module views", () => {
     await expect
       .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
       .not.toBeNull();
-    const length = history.length;
+    const push = vi.spyOn(history, "pushState");
     (el as Screen & { calendar?: unknown }).calendar = {
       ctx: { request: async () => ({}) },
       views: [{ view: rota, canWrite: true }],
     };
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
     expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2027-03");
-    expect(history.length).toBe(length);
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
     expect(switchLabels(el)).toEqual(["Opening hours", "Rota"]);
     expect(checked(el)).toBe("hours");
   });
@@ -1973,9 +1974,10 @@ describe("the Calendar's module views", () => {
     expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
   });
 
-  // The words the screen routes itself, in `followUrl` and `openCalendarView`: the app refuses a
-  // module view by these names only while the kit's list holds every one.
-  it.each(["year", "month", "season", "special-day", "date", "calendar", "hours"])(
+  // The words the screen routes itself, in `followUrl` and `openCalendarView`, and the old `week`
+  // address that opens the season painter: the app refuses a module view by these names only while
+  // the kit's list holds every one.
+  it.each(["year", "month", "season", "special-day", "date", "calendar", "hours", "week"])(
     "keeps its own view word %s in the kit's list of words no module view may take",
     (word) => {
       expect(CALENDAR_OWN_VIEW_IDS).toContain(word);

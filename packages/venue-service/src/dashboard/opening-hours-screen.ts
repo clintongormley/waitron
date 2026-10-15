@@ -4,15 +4,14 @@ import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   t as tKit,
+  type CalendarViewEntry,
   type CalendarViewHost,
-  type DashboardCalendarView,
   type DashboardModuleContext,
   type DashboardScreenHandle,
 } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   decodePathSegment,
-  encodePathSegment,
   leaveCoordinatorFor,
   UrlStateController,
   navigationGuardFor,
@@ -28,7 +27,14 @@ import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
 import type { OrdinaryDateOpen } from "./opening-hours-month.js";
 import { seasonTints } from "./season-tint.js";
-import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import {
+  calendarViewPath,
+  hoursPath,
+  openingHoursPath,
+  seasonPainterPath,
+  specialDayPainterPath,
+} from "./opening-hours-paths.js";
+import { segmentedStyles } from "./segmented-styles.js";
 import "./special-day-painter.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
@@ -53,11 +59,10 @@ type PainterAddress = { seasonId: string; departmentId: string; zoneId: string }
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
 type SpecialAddress = { specialDayId: string | null; date: LocalDate | null };
 const painterEntryKey = "openingHoursPainter";
-const screenPath = "/manage/opening-hours";
 /** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
 export type CalendarViews = {
   ctx: DashboardModuleContext;
-  views: readonly { view: DashboardCalendarView; canWrite: boolean }[];
+  views: readonly CalendarViewEntry[];
 };
 /** The module view an address names: its id and the `<key>/<value>` pairs after it. */
 type ModuleAddress = { id: string; params: Readonly<Record<string, string>> };
@@ -66,6 +71,7 @@ type ModuleAddress = { id: string; params: Readonly<Record<string, string>> };
 export class OpeningHoursScreen extends LitElement {
   static override styles = [
     baseStyles,
+    segmentedStyles,
     css`
       :host {
         display: block;
@@ -96,39 +102,6 @@ export class OpeningHoursScreen extends LitElement {
       }
       .title h1 {
         margin: 0;
-      }
-      .segmented {
-        display: inline-flex;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        overflow: hidden;
-      }
-      .segmented label {
-        position: relative;
-        display: inline-flex;
-      }
-      .segmented input {
-        position: absolute;
-        opacity: 0;
-        inset: 0;
-        margin: 0;
-        cursor: pointer;
-      }
-      .segmented span {
-        display: inline-flex;
-        align-items: center;
-        min-block-size: var(--wt-tap-min);
-        padding: 0 var(--wt-space-4);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-      .segmented input:checked + span {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-      }
-      .segmented input:focus-visible + span {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
       }
       .month-back:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
@@ -272,7 +245,7 @@ export class OpeningHoursScreen extends LitElement {
    *  URL controller reads only the keys it is configured with. */
   private moduleParams() {
     const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
-    const parts = path.slice(screenPath.length + 1).split("/");
+    const parts = path.slice(openingHoursPath.length + 1).split("/");
     const params: Record<string, string> = {};
     for (let i = 0; i + 1 < parts.length; i += 2) {
       if (parts[i] === "view") continue;
@@ -297,24 +270,16 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected) return;
     if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
     if (!this.calendarView(view)) return;
-    const url = this.calendarUrl();
-    // A `view` pair would name a second view in the address.
-    const pairs = Object.entries(params).filter(([key]) => key !== "view");
-    url.pathname = [screenPath, "view", view, ...pairs.flat()]
-      .map((part, i) => (i === 0 ? part : encodePathSegment(part)))
-      .join("/");
-    void this.writeAddress(url);
+    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)));
   }
-  private calendarUrl() {
+  private calendarUrl(pathname: string) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
     url.searchParams.delete("station");
+    url.pathname = pathname;
     return url;
   }
   private hoursUrl(params: Readonly<Record<string, string>>) {
-    const url = this.calendarUrl();
-    const month = parseCalendarMonth(params["month"]);
-    url.pathname = `${screenPath}/view/${month ? `month/month/${month}` : "year"}`;
-    return url;
+    return this.calendarUrl(hoursPath(parseCalendarMonth(params["month"])));
   }
   /** The switch carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
@@ -325,33 +290,36 @@ export class OpeningHoursScreen extends LitElement {
         : "";
     this.openCalendarView(id, month ? { month } : {});
   }
-  private viewHandle(entry: { view: DashboardCalendarView }) {
-    const { view } = entry;
+  private static readonly ViewHost = class implements CalendarViewHost {
+    constructor(
+      private readonly screen: OpeningHoursScreen,
+      private readonly id: string,
+    ) {}
+    get month() {
+      return this.screen.moduleMonth();
+    }
+    get params() {
+      const shown = this.screen.moduleView;
+      return shown?.id === this.id ? shown.params : {};
+    }
+    get canWrite() {
+      return this.screen.calendarView(this.id)?.canWrite ?? false;
+    }
+    /** A field, so a view may hand `host.open` on alone. */
+    readonly open = (view: string, params: Record<string, string>) =>
+      this.screen.openCalendarView(view, params);
+  };
+  private viewHandle({ view }: CalendarViewEntry) {
     let handle = this.viewHandles.get(view.id);
     if (!handle) {
-      const month = () => this.moduleMonth();
-      const params = () => (this.moduleView?.id === view.id ? this.moduleView.params : {});
-      const canWrite = () => this.calendarView(view.id)?.canWrite ?? false;
-      const host: CalendarViewHost = {
-        get month() {
-          return month();
-        },
-        get params() {
-          return params();
-        },
-        get canWrite() {
-          return canWrite();
-        },
-        open: (target, next) => this.openCalendarView(target, next),
-      };
-      handle = view.create(this.calendar!.ctx, host);
+      handle = view.create(this.calendar!.ctx, new OpeningHoursScreen.ViewHost(this, view.id));
       this.viewHandles.set(view.id, handle);
     }
     return handle;
   }
   private calendarHeading() {
     const views = this.calendar?.views ?? [];
-    const heading = html`<h1>${t("nav.opening_hours")}</h1>`;
+    const heading = html`<h1>${t("nav.calendar")}</h1>`;
     if (views.length === 0) return heading;
     const chosen = this.moduleView?.id ?? "hours";
     const option = (value: string, label: string) =>
@@ -369,7 +337,7 @@ export class OpeningHoursScreen extends LitElement {
       <div
         class="segmented"
         role="radiogroup"
-        aria-label=${t("nav.opening_hours")}
+        aria-label=${t("nav.calendar")}
         data-test="calendar-switch"
       >
         ${option("hours", t("opening.title"))}

@@ -17,7 +17,7 @@ export interface DashboardModuleContext {
   renderPanel?: DashboardPanelRenderer;
   /** The enabled modules' Calendar views the person may read, ordered by `order`, each with whether
    * the person holds its `requiresPermission`. */
-  calendarViews?: readonly { view: DashboardCalendarView; canWrite: boolean }[];
+  calendarViews?: readonly CalendarViewEntry[];
 }
 
 export type DashboardPanelRenderer = (
@@ -58,7 +58,7 @@ export interface CalendarViewHost {
 }
 
 /** The Calendar's own address view words, which no module view may take; `hours` is how a view
- * asks to return to Opening hours. */
+ * asks to return to Opening hours, and `week` is an old address that opens the season painter. */
 export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
   "year",
   "month",
@@ -67,6 +67,7 @@ export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
   "date",
   "calendar",
   "hours",
+  "week",
 ];
 
 /** A view a module adds to the Calendar (the Opening hours screen) beside Opening hours. */
@@ -78,6 +79,12 @@ export interface DashboardCalendarView {
   requiresPermission: string;
   readPermission?: string;
   create(ctx: DashboardModuleContext, host: CalendarViewHost): DashboardScreenHandle;
+}
+
+/** A Calendar view as the app hands it on: the view, and whether the person may change it. */
+export interface CalendarViewEntry {
+  view: DashboardCalendarView;
+  canWrite: boolean;
 }
 
 /** A Venue settings tab key; the app validates each contributed panel's tab against its own list. */

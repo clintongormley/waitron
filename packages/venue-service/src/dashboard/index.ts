@@ -74,7 +74,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
     {
       screen: {
         id: "opening-hours",
-        navLabelKey: "nav.opening_hours",
+        navLabelKey: "nav.calendar",
         group: "operations",
         order: 15,
         requiresPermission: "venue_service.manage",

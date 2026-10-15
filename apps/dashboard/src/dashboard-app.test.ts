@@ -2708,7 +2708,7 @@ describe("dashboard-app", () => {
       expect(overview(el)).toBeNull();
     });
 
-    it.each(["year", "month", "season", "special-day", "date", "calendar", "hours"])(
+    it.each(["year", "month", "season", "special-day", "date", "calendar", "hours", "week"])(
       "refuses to mount when a view takes the Calendar's own view word %s",
       async (id) => {
         const el = await mountWith([viewModule([view(id, 1)])], [`${id}.write`]);
