@@ -3521,9 +3521,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
-  each line's price before any discount and the whole-bill discount once per rate (Part 2c), closing
-  where a part portion of an extra is stored (owner 2026-10-15: "we don't offer half portions"; in
-  2c or its own PR), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+  extras only on a dish sold by the unit, so no half portion of an extra is stored (Part 2d, its own
+  PR), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - **A661's six wording and behaviour choices were built on the recommended defaults (left open by
@@ -3549,8 +3548,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **The till's on-screen receipt is a second copy of the layout (left open by A663 Part 1a).** It
   prints its own unit-price line, rates as «21.00%», «4 ud» where paper prints «4», «Base» where
-  paper prints «Base imponible», and a full invoice's discounts with VAT, so A663's changes do not reach it; bring it into line with the
-  printed receipt.
+  paper prints «Base imponible», and a full invoice's discounts with VAT: each discount of a dish
+  under the dish and a whole-bill discount once, where a printed full invoice shows a dish's own
+  discount under it and the whole-bill discount once per rate at the end, all before VAT. So A663's
+  changes do not reach it; bring it into line with the printed receipt.
   [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
 
 - **On an A4 full invoice, a caption and its amount can split across pages (left open by A663

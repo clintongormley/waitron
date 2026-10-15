@@ -44,6 +44,9 @@ export function saleLineRows(
     menuVersionId: line.menuVersionId ?? null,
     lineGross: line.lineGross == null ? null : stringToCents(line.lineGross),
     ...(line.listGross == null ? {} : { listGross: stringToCents(line.listGross) }),
+    ...(line.listUnitPriceGross == null
+      ? {}
+      : { listUnitPriceGross: stringToCents(line.listUnitPriceGross) }),
     classification: line.classification ?? null,
     correctsLineId: corrective ? (line.correctsLineId ?? null) : null,
   }));

@@ -232,6 +232,17 @@ export interface TillSaleLine {
    * differs from `gross`. F1 replay reads it from the saved sale line.
    */
   listGross?: string;
+  /**
+   * The unit price with VAT per price quantity before any comp or discount, read from the filed
+   * sale line; present only with listGross, on a full invoice.
+   */
+  listUnitPriceGross?: string;
+  /**
+   * Presentation only. On a full invoice's line whose order line an adjustment on this bill split
+   * into several dish rows: the index in lines of the family's first row. The family shares its
+   * own discount.
+   */
+  dishFamily?: number;
   /** The comps and discounts printed beneath this row's dish; absent when there are none. */
   adjustments?: ReceiptAdjustment[];
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.

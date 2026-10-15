@@ -374,15 +374,9 @@ just a green typecheck.
   incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
   What is left:
-  - **Part 2c: each line's price before any discount, and the whole-bill discount once per rate**
-    (owner, Q9 and Q10). A new column on `sale_lines` keeps the price before any discount, so a
-    weighed line under one kilo prints its value; a whole-bill discount prints one row per rate at
-    the end of the table instead of a share under each dish.
-  - **A part portion of an extra.** A review of Part 2 found an order can store half a portion of a
-    per-portion extra (half a dish, in a venue-made unit with no scale). The owner, 2026-10-15: "we
-    don't offer half portions" — find where it enters and refuse it at the source with a domain
-    error code (in Part 2c or its own small PR); if it turns out to be a real product feature, ask
-    the owner with the example instead.
+  - **Part 2d: extras only on a dish sold by the unit**, so no half portion of an extra is stored:
+    refuse extras on a dish whose unit has a scale or allows decimals (owner, 2026-10-15; its
+    own PR, see the plan's Part 2d).
   - **Part 3: guests and the amount per person** when the table's guests were entered.
     Joined tables' counts are added together when they join (or when guests move onto a seated
     table), so the party's own count holds the sum, or no count when either party had none or the sum
@@ -397,7 +391,9 @@ just a green typecheck.
   for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
   also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
   rate's base «Base» (`labels.base`) where paper now prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
-  invoice's discounts with VAT where paper now prints them before VAT. Bring it
+  invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
+  of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
+  dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed.
 
 ## On an A4 full invoice, a caption and its amount can split across pages
@@ -581,6 +577,12 @@ returns `null`. This checks those readers, not every sale path.
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.
+
+- **After a dish's own discount and a whole-bill discount, a part moved by a split that is not an
+  adjustment's prints its own discount in the end row (A663 Part 2c).** A full invoice finds a dish's
+  family through the link an adjustment's split leaves; any other split leaves none, so the moved
+  part's own discount is counted with the whole-bill one in the end row at its rate. The table still
+  comes to the filed bases.
 
 - **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
   from `formatReceipt` retains one sale, tender, header and drawer, then replays without another

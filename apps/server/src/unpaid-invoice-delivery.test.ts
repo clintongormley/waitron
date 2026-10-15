@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   devices,
@@ -7,9 +7,11 @@ import {
   invoiceSeries,
   pagePrinters,
   printJobs,
+  saleLines,
   sales,
   saleSettlements,
   tenants,
+  workingOrderLines,
   workingOrders,
   withTransaction,
   type Transaction,
@@ -199,6 +201,33 @@ describe("unpaid invoice delivery", () => {
       expect(after.settlements).toEqual(before.settlements);
     },
   );
+
+  it("stores each line's unit price before any discount on an unpaid invoice, and nothing on an untouched line", async () => {
+    const orderId = await tabWith(venue, "Caña", "Caña");
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: 400 })
+        .where(and(eq(workingOrderLines.workingOrderId, orderId), eq(workingOrderLines.lineNo, 1))),
+    );
+
+    const { saleId } = await withTransaction(suite.db, (tx) => issue(tx, orderId));
+
+    const saved = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          listGross: saleLines.listGross,
+          listUnitPriceGross: saleLines.listUnitPriceGross,
+        })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, saleId))
+        .orderBy(saleLines.lineNo),
+    );
+    expect(saved).toEqual([
+      { listGross: 400, listUnitPriceGross: 400 },
+      { listGross: null, listUnitPriceGross: null },
+    ]);
+  });
 
   it("ignores a stale email draft on a simplified unpaid invoice", async () => {
     const { orderId } = await bill("email");

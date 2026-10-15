@@ -50,6 +50,8 @@ export interface RecordSaleLine {
   lineGross?: string | null;
   /** VAT-inclusive line total before discounts, frozen for receipt replay. */
   listGross?: string | null;
+  /** VAT-inclusive unit price per priceQuantity before any discount, frozen for receipt replay. */
+  listUnitPriceGross?: string | null;
   /** The product's reporting chain, as the line recorded it when it was added. */
   classification?: SaleLineClassification | null;
   /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`

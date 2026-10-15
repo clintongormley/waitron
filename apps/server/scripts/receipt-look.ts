@@ -253,7 +253,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.00",
     "1.00",
   ),
-  // A comped weighed line, under one kilo.
+  // A comped weighed line under one kilo with no stored unit price.
   "full-comped-weighed": fullInvoice(
     [
       BLOODY_MARY,
@@ -297,6 +297,137 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     [{ rate: "10.00", base: "73.64", tax: "7.36" }],
     "81.00",
     "19.00",
+  ),
+  // J1: 0.123 kg of jamón at 24,00 €/kg, 10% off its own, beside a counted dish.
+  "full-weighed-own-discount": fullInvoice(
+    [
+      BLOODY_MARY,
+      filed(
+        "0.123",
+        "Jamón ibérico",
+        "2.65",
+        { unitPrice: "19.62", base: "2.41", tax: "0.24", rate: "10.00" },
+        {
+          listGross: "2.95",
+          listUnitPriceGross: "24.00",
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "0.30" }],
+        },
+        "kg",
+      ),
+    ],
+    [{ rate: "10.00", base: "16.05", tax: "1.60" }],
+    "17.65",
+    "2.35",
+  ),
+  // J2: the same jamón comped.
+  "full-weighed-comped": fullInvoice(
+    [
+      BLOODY_MARY,
+      filed(
+        "0.123",
+        "Jamón ibérico",
+        "0.00",
+        { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "10.00" },
+        {
+          listGross: "2.95",
+          listUnitPriceGross: "24.00",
+          adjustments: [{ kind: "comp", amount: "2.95" }],
+        },
+        "kg",
+      ),
+    ],
+    [{ rate: "10.00", base: "13.64", tax: "1.36" }],
+    "15.00",
+    "5.00",
+  ),
+  // S1: the burger's own 10%, then 10% off the whole bill; the croquetas are one dish split in two.
+  "full-own-and-bill-discount": fullInvoice(
+    [
+      filed(
+        "1",
+        "Hamburguesa",
+        "9.72",
+        { unitPrice: "8.03", base: "8.03", tax: "1.69", rate: "21.00" },
+        {
+          listGross: "12.00",
+          listUnitPriceGross: "12.00",
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
+        },
+      ),
+      filed(
+        "2",
+        "Croquetas",
+        "6.00",
+        { unitPrice: "2.48", base: "4.96", tax: "1.04", rate: "21.00" },
+        { listGross: "6.66", listUnitPriceGross: "3.33", dishFamily: 1 },
+      ),
+      filed(
+        "0.123",
+        "Jamón ibérico",
+        "2.66",
+        { unitPrice: "19.67", base: "2.42", tax: "0.24", rate: "10.00" },
+        { listGross: "2.95", listUnitPriceGross: "24.00" },
+        "kg",
+      ),
+      filed(
+        "1",
+        "Pizza",
+        "8.09",
+        { unitPrice: "6.69", base: "6.69", tax: "1.40", rate: "21.00" },
+        { listGross: "9.00", listUnitPriceGross: "9.00" },
+      ),
+      filed(
+        "1",
+        "Aceitunas",
+        "1.36",
+        { unitPrice: "1.12", base: "1.12", tax: "0.24", rate: "21.00" },
+        { listGross: "1.50", listUnitPriceGross: "1.50", parentLineNo: 4 },
+      ),
+      filed(
+        "1",
+        "Croquetas",
+        "2.99",
+        { unitPrice: "2.47", base: "2.47", tax: "0.52", rate: "21.00" },
+        { listGross: "3.33", listUnitPriceGross: "3.33", dishFamily: 1 },
+      ),
+    ],
+    [
+      { rate: "21.00", base: "23.27", tax: "4.89" },
+      { rate: "10.00", base: "2.42", tax: "0.24" },
+    ],
+    "30.82",
+    "9.18",
+    { billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.42" }] },
+  ),
+  // S9: the Rioja comped, then 10% off the whole bill.
+  "full-comp-and-bill-discount": fullInvoice(
+    [
+      filed(
+        "1",
+        "Rioja crianza",
+        "0.00",
+        { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "21.00" },
+        {
+          listGross: "30.00",
+          listUnitPriceGross: "30.00",
+          adjustments: [{ kind: "comp", amount: "27.00" }],
+        },
+      ),
+      filed(
+        "1",
+        "Pan de pueblo",
+        "2.25",
+        { unitPrice: "2.05", base: "2.05", tax: "0.20", rate: "10.00" },
+        { listGross: "2.50", listUnitPriceGross: "2.50" },
+      ),
+    ],
+    [
+      { rate: "21.00", base: "0.00", tax: "0.00" },
+      { rate: "10.00", base: "2.05", tax: "0.20" },
+    ],
+    "2.25",
+    "2.75",
+    { billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.25" }] },
   ),
 };
 

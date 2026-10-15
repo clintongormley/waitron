@@ -32,6 +32,37 @@ describe("withReceiptListPrices", () => {
     expect(saved.map((line) => line.listGross)).toEqual([undefined, "32.48", "0.03"]);
     expect(saved.map((line) => line.lineGross)).toEqual(["3.00", "29.23", "0.02"]);
   });
+
+  it("hands over the unit price before any discount exactly where it hands over the list total", () => {
+    const [discounted, unchanged, unadjusted] = withReceiptListPrices(
+      [filed("0.123", "2.66"), filed("1.000", "3.33"), filed("1.000", "3.00")],
+      [decimal("24.00"), decimal("3.33"), null].map((listUnitGross) => ({ listUnitGross })),
+    );
+
+    expect(discounted).toMatchObject({ listGross: "2.95", listUnitPriceGross: "24.00" });
+    expect(unchanged).not.toHaveProperty("listGross");
+    expect(unchanged).not.toHaveProperty("listUnitPriceGross");
+    expect(unadjusted).not.toHaveProperty("listGross");
+    expect(unadjusted).not.toHaveProperty("listUnitPriceGross");
+  });
+  it("hands over both on a comped line charged nothing", () => {
+    const [comped] = withReceiptListPrices(
+      [filed("1.000", "0.00")],
+      [{ listUnitGross: decimal("12.00") }],
+    );
+
+    expect(comped).toMatchObject({ listGross: "12.00", listUnitPriceGross: "12.00" });
+  });
+
+  it("hands over the price per price unit on a line priced by portions, its total scaled by them", () => {
+    // 0.150 kg at €0.01 per 0.050 kg is €0.03 before the discount, charged €0.02.
+    const [portioned] = withReceiptListPrices(
+      [{ ...filed("0.150", "0.02"), priceQuantity: "0.050" }],
+      [{ listUnitGross: decimal("0.01") }],
+    );
+
+    expect(portioned).toMatchObject({ listGross: "0.03", listUnitPriceGross: "0.01" });
+  });
 });
 
 describe("ticketLinesFrom", () => {
@@ -112,5 +143,14 @@ describe("ticketLinesFrom", () => {
     const [line] = ticketLinesFrom({ lines: [child] }, [{ listUnitGross: decimal("0.01") }]);
 
     expect(line).toMatchObject({ quantity: "0.150", gross: "0.02", listGross: "0.03" });
+  });
+
+  it("gives the screen and the simplified receipt the list total but not the unit price behind it", () => {
+    const [line] = ticketLinesFrom({ lines: [filed("0.123", "2.66")] }, [
+      { listUnitGross: decimal("24.00") },
+    ]);
+
+    expect(line).toMatchObject({ listGross: "2.95" });
+    expect(line).not.toHaveProperty("listUnitPriceGross");
   });
 });

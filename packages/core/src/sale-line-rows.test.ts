@@ -33,6 +33,39 @@ describe("saleLineRows", () => {
     });
   });
 
+  it("stores the unit price before any discount in cents", () => {
+    const line: RecordSaleLine = {
+      lineNo: 1,
+      name: "Jamón",
+      descriptions: { "es-ES": "Jamón" },
+      quantity: "0.123",
+      unitPrice: "17.63",
+      vatRate: "10.00",
+      lineTotal: "2.16",
+      lineGross: "2.38",
+      listGross: "2.95",
+      listUnitPriceGross: "24.00",
+    };
+    expect(saleLineRows("sale-1", [line])[0]).toMatchObject({
+      listUnitPriceGross: 2400,
+      listGross: 295,
+    });
+  });
+
+  it("leaves the unit price before any discount unset when none is given", () => {
+    const line: RecordSaleLine = {
+      lineNo: 1,
+      name: "Burger",
+      descriptions: { "en-GB": "Burger" },
+      quantity: "1",
+      unitPrice: "8.93",
+      vatRate: "21.00",
+      lineTotal: "8.93",
+      listUnitPriceGross: null,
+    };
+    expect(saleLineRows("sale-1", [line])[0]).not.toHaveProperty("listUnitPriceGross");
+  });
+
   it("leaves an explicitly absent list total unset on a corrective line", () => {
     const line = {
       lineNo: 1,

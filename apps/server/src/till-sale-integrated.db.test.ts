@@ -454,6 +454,23 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
   return rawCentsToDecimal(rows[0]!.total);
 }
 
+/** Each filed line's total and unit price before any comp or discount, in cents, in line order. */
+function filedListPrices(workingOrderId: string) {
+  return suite.db.all<{ list_gross: number | null; list_unit_price_gross: number | null }>(
+    sql`select l.list_gross, l.list_unit_price_gross from sale_lines l
+        join sales s on s.id = l.sale_id
+        where s.working_order_id = ${workingOrderId} order by l.line_no`,
+  );
+}
+
+/** Store a price before any discount above the line's charged price. */
+function setListUnitPrice(workingOrderId: string, lineNo: number, cents: number): void {
+  suite.db.run(
+    sql`update working_order_lines set list_unit_price_gross = ${cents}
+        where working_order_id = ${workingOrderId} and line_no = ${lineNo}`,
+  );
+}
+
 /** The `payments` rows for this order — provider/state/external_ref, plus whether `sale_id` points at
  *  the filed sale (the association witness). */
 async function paymentsFor(
@@ -1186,6 +1203,29 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
+  it("retrieved (open) order: a captured card stores each line's unit price before any discount", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "2" },
+      ],
+    });
+    setListUnitPrice(id, 1, 200);
+    const { deps } = integratedDeps(cfg, suite.db);
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(filedListPrices(id)).toEqual([
+      { list_gross: 200, list_unit_price_gross: 200 },
+      { list_gross: null, list_unit_price_gross: null },
+    ]);
+  });
+
   it("an open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
@@ -1532,6 +1572,44 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(payments[0]!.state).toBe("captured");
     expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING row, not a fresh one
     expect(payments[0]!.linkedToSale).toBe(true);
+  });
+
+  it("recovers a lost-T2 captured payment storing each line's unit price before any discount", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const { deps, client } = integratedDeps(cfg, suite.db);
+    const id = randomUUID();
+    await withTransaction(suite.db, async (tx) => {
+      await createOpenOrder(
+        tx,
+        cfg,
+        id,
+        [
+          { menuItemId: cafe.menuItemId, quantity: "1" },
+          { menuItemId: cafe.menuItemId, quantity: "2" },
+        ],
+        null,
+        { zoneId: cafe.zoneId },
+      );
+      await insertCapturedPayment(tx, {
+        origin: cfg.origin,
+        workingOrderId: id,
+        provider: "stripe",
+        paymentRef: `pi-ref-${randomUUID()}`,
+        amount: decimal("4.50"),
+        settledAt: new Date(),
+        externalRef: `pi_lost_${randomUUID()}`,
+      });
+    });
+    setListUnitPrice(id, 1, 200);
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(filedListPrices(id)).toEqual([
+      { list_gross: 200, list_unit_price_gross: 200 },
+      { list_gross: null, list_unit_price_gross: null },
+    ]);
   });
 
   it("files a recovered capture under the device that took the card, not the one retrying", async () => {

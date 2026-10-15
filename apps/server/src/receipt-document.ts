@@ -13,11 +13,13 @@ import {
 } from "@waitron/shared";
 import {
   beforeVatFigures,
-  groupDiscounts,
+  invoiceDiscounts,
   isFiled,
   quantityText,
+  type FiguredGroup,
   type FiguredLine,
   type FiledLine,
+  type GroupDiscount,
 } from "./receipt-figures.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
@@ -246,15 +248,12 @@ export function buildReceiptDocument({
   const withRate = filedRates.length > 1;
   const anyFiled = !simplified && filedRates.length > 0;
   const billAdjustments = result.billAdjustments ?? [];
-  const invoiceHasLineAdjustments = result.lines.some(
-    (line) => (line.adjustments ?? []).length > 0,
-  );
   let tableRows: ReceiptTableRow[] = [];
-  let tablesPrinted = 0;
+  const printedTables: ReceiptTableRow[][] = [];
   const endTable = (): void => {
     if (tableRows.length === 0) return;
     const table: ReceiptTable = {
-      ...(tablesPrinted === 0
+      ...(printedTables.length === 0
         ? {
             header: {
               units: label.unitsColumn,
@@ -269,7 +268,7 @@ export function buildReceiptDocument({
       withRate,
     };
     elements.push({ kind: "table", table });
-    tablesPrinted++;
+    printedTables.push(tableRows);
     tableRows = [];
   };
   const rateCell = (rate: string): { rate: string } => ({ rate: formatVatRate(rate, locale) });
@@ -287,29 +286,44 @@ export function buildReceiptDocument({
     amount: formatAmount(amount, locale),
     ...rateCell(line.net.rate),
   });
-  const tableGroup = (dish: FiledLine, options: readonly FiledLine[]): void => {
-    const dishFigured = figured(dish);
-    const optionsFigured = options.map(figured);
-    tableRows.push(filedRow(dishFigured, 0));
-    for (const answer of answers(dish)) {
+  const discountRow = (discount: GroupDiscount, indent: number): ReceiptTableRow => ({
+    units: "",
+    item: discount.comp
+      ? label.comp
+      : discount.named !== null
+        ? adjustmentLabel(discount.named, locale, label)
+        : label.discount,
+    ...(indent > 0 ? { itemIndent: indent } : {}),
+    price: "",
+    amount: `-${formatAmount(discount.amount, locale)}`,
+    ...rateCell(discount.rate),
+  });
+  const groups = groupByParent(result.lines);
+  const filedGroups: FiguredGroup[] = [];
+  if (!simplified) {
+    // groupByParent keeps the lines' order, so a dish's index is the count of lines before it.
+    let dishIndex = 0;
+    groups.forEach(({ dish, options }, at) => {
+      const index = dishIndex;
+      dishIndex += 1 + options.length;
+      if (!isFiled(dish) || !options.every(isFiled)) return;
+      filedGroups.push({
+        at,
+        family: dish.dishFamily ?? index,
+        lines: [dish, ...options].map(figured),
+      });
+    });
+  }
+  const discounts = invoiceDiscounts(filedGroups, billAdjustments);
+  const tableGroup = ({ at, lines }: FiguredGroup): void => {
+    const [dishFigured, ...optionsFigured] = lines;
+    tableRows.push(filedRow(dishFigured!, 0));
+    for (const answer of answers(dishFigured!.line)) {
       tableRows.push({ units: "", item: answer, itemIndent: 2, price: "", amount: "" });
     }
     for (const option of optionsFigured) tableRows.push(filedRow(option, 2));
-    const lines = [dishFigured, ...optionsFigured];
-    for (const discount of groupDiscounts(lines, billAdjustments, invoiceHasLineAdjustments)) {
-      const item = discount.comp
-        ? label.comp
-        : discount.named !== null
-          ? adjustmentLabel(discount.named, locale, label)
-          : label.discount;
-      tableRows.push({
-        units: "",
-        item,
-        itemIndent: 2,
-        price: "",
-        amount: `-${formatAmount(discount.amount, locale)}`,
-        ...rateCell(discount.rate),
-      });
+    for (const discount of discounts.under.get(at) ?? []) {
+      tableRows.push(discountRow(discount, 2));
     }
   };
   const withVatGroup = ({ dish, options }: LineGroup): void => {
@@ -341,17 +355,18 @@ export function buildReceiptDocument({
       for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);
     }
   };
-  for (const group of groupByParent(result.lines)) {
-    const { dish, options } = group;
-    if (!simplified && isFiled(dish) && options.every(isFiled)) {
-      tableGroup(dish, options);
+  let nextFiled = 0;
+  groups.forEach((group, at) => {
+    if (filedGroups[nextFiled]?.at === at) {
+      tableGroup(filedGroups[nextFiled++]!);
     } else {
       endTable();
       withVatGroup(group);
     }
-  }
+  });
   endTable();
-  if (tablesPrinted > 0) text(`    ${label.pricesExcludeVat}`, 4);
+  for (const discount of discounts.atEnd) printedTables.at(-1)?.push(discountRow(discount, 0));
+  if (printedTables.length > 0) text(`    ${label.pricesExcludeVat}`, 4);
   if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
   rule();
   const vatRows = (): void => {
