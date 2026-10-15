@@ -26,7 +26,9 @@ import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
 import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
-import type { OrdinaryDateOpen } from "./opening-hours-month.js";
+import type { CalendarDayOpen, OrdinaryDateOpen } from "./opening-hours-month.js";
+import "./calendar-day-box.js";
+import { openingHoursDay } from "./opening-hours-day.js";
 import { seasonTints } from "./season-tint.js";
 import {
   calendarViewPath,
@@ -46,7 +48,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { businessDateToday } from "./business-date.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
-import { browserToday, format } from "./hours-view.js";
+import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 
@@ -141,6 +143,13 @@ export class OpeningHoursScreen extends LitElement {
   private monthDetach?: () => void;
   private watchedMonth = "";
   @state() private ordinary?: OrdinaryDateOpen;
+  /** The Month's date whose day box is drawn. */
+  @state() private dayBox?: CalendarDayOpen;
+  /** The date the drawn box was last shown for: a close sent while another date's box waits to be
+   *  shown belongs to the old box. */
+  private dayBoxShown?: LocalDate;
+  /** What a box button does once the box has closed. */
+  private afterDayBox?: () => unknown;
   @state() private readError = "";
   @state() private busy = false;
   @state() private namedAction?: OpenSpecialDay;
@@ -484,6 +493,13 @@ export class OpeningHoursScreen extends LitElement {
       departments.find((d) => d.active) ??
       departments[0]
     );
+  }
+  protected override updated(changed: PropertyValues) {
+    if (
+      this.dayBox &&
+      (changed.has("dayBox") || changed.has("monthModel") || changed.has("departmentId"))
+    )
+      void this.placeDayBox();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     // A new list without the shown view returns to Opening hours, replacing the address naming it.
@@ -997,19 +1013,102 @@ export class OpeningHoursScreen extends LitElement {
     if (!this.isConnected || this.painter) return;
     void this.openPainter(event.detail.seasonId);
   }
-  private openOrdinary(event: CustomEvent<OrdinaryDateOpen>) {
+  private openDayBox(event: CustomEvent<CalendarDayOpen>) {
     event.stopPropagation();
     if (
       !this.isConnected ||
-      this.readOnly ||
-      this.busy ||
-      this.namedAction ||
-      this.ordinary ||
       event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-month")
     )
       return;
-    this.ordinary = event.detail;
-    this.readKnownSpecialDays();
+    this.afterDayBox = undefined;
+    this.dayBox = event.detail;
+  }
+  private async placeDayBox() {
+    const open = this.dayBox;
+    await this.shadowRoot?.querySelector("opening-hours-month")?.updateComplete;
+    const drawn = this.shadowRoot?.querySelector("calendar-day-box");
+    await Promise.all(
+      [drawn, ...(drawn?.children ?? [])].map(
+        (node) => (node as LitElement | null)?.updateComplete,
+      ),
+    );
+    if (!this.isConnected || this.dayBox !== open || !open) return;
+    const anchor = open.returnTo();
+    const box = this.shadowRoot?.querySelector("calendar-day-box");
+    if (!anchor || !box) {
+      this.dayBox = undefined;
+      return;
+    }
+    box.show(anchor);
+    this.dayBoxShown = open.date;
+  }
+  private dayBoxClosed(event: Event) {
+    event.stopPropagation();
+    if (!this.dayBox || this.dayBox.date !== this.dayBoxShown) return;
+    this.dayBox = undefined;
+    this.dayBoxShown = undefined;
+    const act = this.afterDayBox;
+    this.afterDayBox = undefined;
+    act?.();
+  }
+  private dayBoxTemplate() {
+    const open = this.dayBox;
+    const read = this.monthModel;
+    const day = open && read?.days.find((row) => row.date === open.date);
+    if (!day || !read) return nothing;
+    const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
+      ? this.departmentId
+      : "";
+    const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
+    const season = read.seasons.find(({ id }) => id === shown.seasonId);
+    const act = (run: () => unknown) => () => {
+      if (this.dayBox !== open) return;
+      this.afterDayBox = run;
+      this.shadowRoot?.querySelector("calendar-day-box")?.hide();
+    };
+    const holidays = read.days.flatMap((row) => row.holidays);
+    return html`<calendar-day-box
+      .heading=${formatDate(day.date)}
+      .name=${shown.name}
+      .nameKind=${shown.nameKind}
+      .line=${shown.line}
+      .rows=${shown.rows}
+      @calendar-day-box-close=${this.dayBoxClosed}
+    >
+      ${
+        this.readOnly
+          ? nothing
+          : shown.specialDayId
+            ? html`<wt-button
+                variant="secondary"
+                data-test="special-edit"
+                @click=${act(() =>
+                  this.openSpecialPainter({ specialDayId: shown.specialDayId, date: null }),
+                )}
+                >${t("special.edit")}</wt-button
+              >`
+            : html`<wt-button
+                variant="secondary"
+                data-test="special-add"
+                @click=${act(() =>
+                  this.openSpecialPainter({ specialDayId: null, date: day.date }, holidays),
+                )}
+                >${t("day.make_special")}</wt-button
+              >`
+      }
+      ${
+        season
+          ? html`<wt-button
+              variant="secondary"
+              data-test="edit-week"
+              @click=${act(() => this.openPainter(season.id))}
+              >${format(this.readOnly ? "day.show_week" : "day.edit_week", {
+                season: season.name,
+              })}</wt-button
+            >`
+          : nothing
+      }
+    </calendar-day-box>`;
   }
   private ordinaryDialog() {
     const open = this.ordinary;
@@ -1108,7 +1207,7 @@ export class OpeningHoursScreen extends LitElement {
         .departments=${this.model!.departments}
         .readOnly=${this.readOnly}
         @special-day-action=${this.openNamedDay}
-        @ordinary-date-open=${this.openOrdinary}
+        @calendar-day-open=${this.openDayBox}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
           write({ view: "month", month: event.detail.month, date: null });
@@ -1118,7 +1217,7 @@ export class OpeningHoursScreen extends LitElement {
           write({ department: event.detail.departmentId || null, zone: null });
         }}
         >${this.viewSwitch()}</opening-hours-month
-      >`;
+      >${this.dayBoxTemplate()}`;
   }
   override render() {
     return html`${this.calendarHeading()}

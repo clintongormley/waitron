@@ -485,6 +485,13 @@ describe("links into the special-day painter", () => {
   }
   const dateButton = (month: HTMLElementTagNameMap["opening-hours-month"], date: string) =>
     month.shadowRoot!.querySelector<HTMLElement>(`td[data-date="${date}"] button`)!;
+  async function monthBox(el: Screen, date: string, test: string) {
+    dateButton(await shownMonth(el), date).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(`calendar-day-box [data-test=${test}]`))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>(`calendar-day-box [data-test=${test}]`)!.click();
+  }
 
   it("the Year's Edit on a special day's date opens the painter on it, and closing goes back to that year", async () => {
     const { el } = await mount("/manage/opening-hours/view/year/year/2026");
@@ -525,7 +532,7 @@ describe("links into the special-day painter", () => {
 
   it("the Month's special date opens the painter on its special day, and its public holiday a new day pre-filled", async () => {
     const { el } = await mount("/manage/opening-hours/view/month/month/2026-12");
-    dateButton(await shownMonth(el), "2026-12-14").click();
+    await monthBox(el, "2026-12-14", "special-edit");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/special-day/company");
@@ -534,7 +541,7 @@ describe("links into the special-day painter", () => {
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/month/month/2026-12");
     await expect.poll(() => painterOf(el)).toBeNull();
-    dateButton(await shownMonth(el), "2026-12-08").click();
+    await monthBox(el, "2026-12-08", "special-add");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/date/2026-12-08");
@@ -543,45 +550,13 @@ describe("links into the special-day painter", () => {
 
   it("the ordinary date's Make this a special day opens a new day on that date", async () => {
     const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
-    dateButton(await shownMonth(el), "2026-12-10").click();
-    await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")?.open).toBe(true);
-    const dialog = el.shadowRoot!.querySelector("ordinary-date-dialog")!;
-    await dialog.updateComplete;
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=make-special]")!.click();
+    await monthBox(el, "2026-12-10", "special-add");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/date/2026-12-10");
     const painter = await shownPainter(el);
     expect(chips(painter)).toEqual(["2026-12-10"]);
     expect(nameOf(painter)).toBe("");
-    expect(writes).toEqual([]);
-  });
-
-  it("the ordinary date's Add to a special day opens that day with the date in its draft, saving nothing", async () => {
-    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
-    dateButton(await shownMonth(el), "2026-12-10").click();
-    await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")?.open).toBe(true);
-    const dialog = el.shadowRoot!.querySelector("ordinary-date-dialog")!;
-    await expect.poll(() => dialog.specialDays.length).toBe(3);
-    dialog
-      .shadowRoot!.querySelector("[name=specialDayId]")!
-      .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "sd1" }, bubbles: true, composed: true }),
-      );
-    await dialog.updateComplete;
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to-special]")!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/special-day/special-day/sd1/date/2026-12-10");
-    const painter = await shownPainter(el);
-    await expect
-      .poll(() => chips(painter))
-      .toEqual(["2026-12-10", "2026-12-14", "2026-12-15", "2026-12-25"]);
-    expect(
-      frame(painter).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=save]",
-      )!.disabled,
-    ).toBe(false);
     expect(writes).toEqual([]);
   });
 });

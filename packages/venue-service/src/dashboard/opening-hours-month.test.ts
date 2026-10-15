@@ -6,8 +6,7 @@ import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import { DEPARTMENTS, holiday, monthModel } from "../testing/opening-hours-month-fixture.js";
-import type { SpecialDayAction } from "./special-day-action.js";
-import type { OpeningHoursMonthView } from "./opening-hours-month.js";
+import type { CalendarDayOpen, OpeningHoursMonthView } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 
 const hosts: HTMLElement[] = [];
@@ -515,60 +514,39 @@ describe("Opening hours month", () => {
     expect(sent).toEqual([]);
   });
 
-  it("opens the special day on a special date, as the year view does", async () => {
+  it("sends calendar-day-open for every date, neighbours too", async () => {
     const el = await mount();
-    const sent = events<SpecialDayAction>(el, "special-day-action");
-    const ordinary = events<unknown>(el, "ordinary-date-open");
-    dayButton(el, "2026-12-14").click();
-    expect(ordinary).toEqual([]);
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      kind: "open",
-      date: "2026-12-14",
-      specialDay: { id: "company", name: "Company dinners" },
-      holidays: [],
-    });
-    expect(sent[0]!.visibleHolidays!.map((h) => h.name)).toEqual([
-      "Immaculate Conception",
-      "Christmas Day",
-    ]);
-    expect(sent[0]!.returnTo()).toBe(dayButton(el, "2026-12-14"));
-  });
-
-  it("asks to open a new special day on a public holiday with no special day, with the holiday", async () => {
-    const el = await mount();
-    const sent = events<SpecialDayAction>(el, "special-day-action");
-    dayButton(el, "2026-12-08").click();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ kind: "open", date: "2026-12-08", specialDay: null });
-    expect(sent[0]!.holidays.map((h) => h.name)).toEqual(["Immaculate Conception"]);
-  });
-
-  it("opens an ordinary date with its season, faint neighbouring dates too", async () => {
-    const el = await mount();
-    const sent = events<{ date: string; seasonId: string | null; returnTo: () => unknown }>(
-      el,
-      "ordinary-date-open",
-    );
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     const special = events<unknown>(el, "special-day-action");
-    dayButton(el, "2026-12-09").click();
-    dayButton(el, "2026-11-30").click();
+    const ordinary = events<unknown>(el, "ordinary-date-open");
+    const dates = ["2026-12-14", "2026-12-08", "2026-12-09", "2026-11-30"];
+    for (const date of dates) dayButton(el, date).click();
     expect(special).toEqual([]);
-    expect(sent.map(({ date, seasonId }) => ({ date, seasonId }))).toEqual([
-      { date: "2026-12-09", seasonId: "winter" },
-      { date: "2026-11-30", seasonId: "autumn" },
-    ]);
-    expect(sent[0]!.returnTo()).toBe(dayButton(el, "2026-12-09"));
+    expect(ordinary).toEqual([]);
+    expect(sent.map(({ date }) => date)).toEqual(dates);
+    sent.forEach(({ date, returnTo }) => expect(returnTo()).toBe(dayButton(el, date)));
   });
 
   it("read-only, hides the write actions and opens nothing from a date", async () => {
     const el = await mount(monthModel(), { readOnly: true });
     expect(root(el).querySelector("season-chips")).toBeNull();
-    expect(root(el).querySelectorAll("button.day")).toHaveLength(0);
+    expect(root(el).querySelectorAll("button.day")).toHaveLength(
+      root(el).querySelectorAll("td[data-date]").length,
+    );
     expect(text(cell(el, "2026-12-14").querySelector('[data-test="name"]'))).toBe(
       "Company dinners",
     );
     expect(testId(el, "previous-month")).not.toBeNull();
+  });
+
+  it("a viewer's dates are buttons too", async () => {
+    const el = await mount(monthModel(), { readOnly: true });
+    const cells = root(el).querySelectorAll("td[data-date]").length;
+    expect(cells).toBeGreaterThan(0);
+    expect(root(el).querySelectorAll("button.day")).toHaveLength(cells);
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+    dayButton(el, "2026-12-14").click();
+    expect(sent.map(({ date }) => date)).toEqual(["2026-12-14"]);
   });
 
   it("in station mode over one row, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
@@ -916,14 +894,17 @@ describe("Opening hours month", () => {
 
   it("returns focus to the date's button while it is drawn, and to nothing once it is gone", async () => {
     const el = await mount();
-    const special = events<SpecialDayAction>(el, "special-day-action");
-    const ordinary = events<{ returnTo: () => HTMLElement | null }>(el, "ordinary-date-open");
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     dayButton(el, "2026-12-14").click();
     dayButton(el, "2026-12-09").click();
-    el.readOnly = true;
+    expect(sent[0]!.returnTo()).toBe(dayButton(el, "2026-12-14"));
+    el.model = monthModel({
+      month: "2027-03",
+      days: monthModel().days.map((day) => ({ ...day, date: addDays(day.date, 91) })),
+    });
     await el.updateComplete;
-    expect(special[0]!.returnTo()).toBeNull();
-    expect(ordinary[0]!.returnTo()).toBeNull();
+    expect(sent[0]!.returnTo()).toBeNull();
+    expect(sent[1]!.returnTo()).toBeNull();
   });
 
   it("keeps focus where it is on a key that does not move, and at the grid's edge", async () => {

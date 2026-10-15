@@ -13,7 +13,6 @@ import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
-import type { SpecialDayAction } from "./special-day-action.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
@@ -24,6 +23,12 @@ export interface MonthDepartment {
   name: string;
   zones: readonly { id: string; name: string }[];
   periods: readonly { id: string; name: string; colour: CalendarColour }[];
+}
+
+/** What `calendar-day-open` carries; `returnTo` finds the date's button while it is drawn. */
+export interface CalendarDayOpen {
+  date: LocalDate;
+  returnTo: () => HTMLElement | null;
 }
 
 /** What `ordinary-date-open` carries: a date no special day or public holiday holds. */
@@ -62,8 +67,8 @@ interface Row {
 
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
  *  per department (or one department and its zones), from the server's month read alone. A date sends
- *  `special-day-action` on a special day or public holiday and `ordinary-date-open` otherwise; ‹ ›
- *  send `month-change` and the picker `month-department-change`. */
+ *  `calendar-day-open`, except in station mode, where dates are plain; ‹ › send `month-change` and
+ *  the picker `month-department-change`. */
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
@@ -307,29 +312,10 @@ export class OpeningHoursMonthView extends LitElement {
     target.focus();
   }
 
-  #action(day: Day, trigger: HTMLElement): void {
-    const model = this.model!;
-    const date = day.date;
-    this.#emit<SpecialDayAction>("special-day-action", {
-      kind: "open",
+  #open(date: LocalDate): void {
+    this.#emit<CalendarDayOpen>("calendar-day-open", {
       date,
-      specialDay: day.specialDay ? { ...day.specialDay } : null,
-      holidays: structuredClone(day.holidays),
-      visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
-      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
-    });
-  }
-
-  #open(day: Day, trigger: HTMLElement): void {
-    if (day.specialDay || day.holidays.length) {
-      this.#action(day, trigger);
-      return;
-    }
-    const date = day.date;
-    this.#emit<OrdinaryDateOpen>("ordinary-date-open", {
-      date,
-      seasonId: day.seasonId,
-      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
+      returnTo: () => this.#dayButton(date),
     });
   }
 
@@ -483,7 +469,7 @@ export class OpeningHoursMonthView extends LitElement {
       ?data-closed=${day.closedAllDay}
     >
       ${
-        this.readOnly
+        this.stationMode
           ? html`<div
               class="day"
               role="group"
@@ -498,7 +484,7 @@ export class OpeningHoursMonthView extends LitElement {
               tabindex=${day.date === stop ? 0 : -1}
               aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
-              @click=${(event: Event) => this.#open(day, event.currentTarget as HTMLElement)}
+              @click=${() => this.#open(day.date)}
               @focus=${() => {
                 this.focusDate = day.date;
               }}
