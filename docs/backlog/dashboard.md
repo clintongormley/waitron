@@ -1106,6 +1106,8 @@ navbar sections)".
   unfolding the sidebar), whether the folded state is remembered per browser, and the icon for each
   group (Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing,
   Settings). Icons follow design-system.md.
+- **Design (2026-10-15):** [the plan](../superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md)
+  and [its drawings](mockups/a654-sidebar-icons/); four questions to the owner, build after the answers.
 
 ## A657 — Cancel leaves without asking
 

@@ -3839,7 +3839,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   Each sidebar section (Overview, Reporting, Service, Products and menus, Venue operations, Team,
   Purchasing, Settings) needs an icon; only Settings has one today. Phones keep today's drawer. Clicking a section header already folds
   that section's links away, but nothing narrows the sidebar.
-  [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons)
+  [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons). Design with four
+  owner questions: [plan](superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md),
+  [drawings](backlog/mockups/a654-sidebar-icons/) (2026-10-15).
 
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
   dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes
