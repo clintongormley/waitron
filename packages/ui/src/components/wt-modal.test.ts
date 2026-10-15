@@ -311,6 +311,108 @@ test.each([
   expect(dialogOf(modal).getBoundingClientRect().width).toBeCloseTo(350, 0);
 });
 
+test("reflects its height and re-sizes an open modal when the height changes", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(undefined, 'size="standard"');
+  const dialog = dialogOf(modal);
+  expect(modal.hasAttribute("height")).toBe(false);
+  expect(dialog.getBoundingClientRect().height).toBeCloseTo(852, 0);
+  modal.height = "medium";
+  await modal.updateComplete;
+  expect(modal.getAttribute("height")).toBe("medium");
+  expect(dialog.getBoundingClientRect().height).toBeCloseTo(512, 0);
+  modal.height = undefined;
+  await modal.updateComplete;
+  expect(modal.hasAttribute("height")).toBe(false);
+  expect(dialog.getBoundingClientRect().height).toBeCloseTo(852, 0);
+});
+
+const EVERY_SIZE = ['size="compact"', 'size="standard"', 'size="wide"', "", 'size="full"'];
+
+test.each(EVERY_SIZE)(
+  "is the medium height, centred, at 1280 × 900 when medium (%s)",
+  async (size) => {
+    await page.viewport(1280, 900);
+    const modal = await openModal(undefined, `${size} height="medium"`);
+    const rect = dialogOf(modal).getBoundingClientRect();
+    expect(rect.height).toBeCloseTo(512, 0);
+    expect(900 - rect.bottom).toBeCloseTo(rect.top, 0);
+  },
+);
+
+test("resizes one medium modal through its own height token", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(undefined, 'size="standard" height="medium"');
+  modal.style.setProperty("--wt-modal-medium-height", "300px");
+  expect(dialogOf(modal).getBoundingClientRect().height).toBeCloseTo(300, 0);
+});
+
+// At 1280 × 450 every size's max-height leaves 450 - 2 × 24px: the base rule's --wt-space-5 and
+// full's --wt-modal-inline-margin are both 24px at this width.
+test.each(EVERY_SIZE)(
+  "stops a medium modal at the window less its margins at 1280 × 450 (%s)",
+  async (size) => {
+    await page.viewport(1280, 450);
+    try {
+      const modal = await openModal(undefined, `${size} height="medium"`);
+      const rect = dialogOf(modal).getBoundingClientRect();
+      expect(px("var(--wt-modal-inline-margin)")).toBeCloseTo(24, 0);
+      expect(rect.height).toBeCloseTo(402, 0);
+      expect(rect.top).toBeCloseTo(24, 0);
+      expect(450 - rect.bottom).toBeCloseTo(24, 0);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
+test.each(EVERY_SIZE)(
+  "scrolls a medium modal's long body while its footer actions stay put (%s)",
+  async (size) => {
+    await page.viewport(1280, 900);
+    const modal = await openModal(
+      '<div style="height: 1800px">Long form</div>',
+      `${size} height="medium"`,
+    );
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const dialog = dialogOf(modal);
+    const save = modal.querySelectorAll("wt-button")[1]!;
+    await save.updateComplete;
+    const box = dialog.getBoundingClientRect();
+    expect(box.height).toBeCloseTo(512, 0);
+    const before = save.getBoundingClientRect();
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(before.bottom).toBeLessThan(box.bottom);
+    body.scrollTop = body.scrollHeight;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(save.getBoundingClientRect().top).toBe(before.top);
+    expect(dialog.scrollHeight).toBe(dialog.clientHeight);
+  },
+);
+
+test.each(EVERY_SIZE)(
+  "keeps a medium modal at its height with short content, footer at the bottom (%s)",
+  async (size) => {
+    await page.viewport(1280, 900);
+    const modal = await openModal(
+      '<div style="height: 40px">Short notice</div>',
+      `${size} height="medium"`,
+    );
+    const dialog = dialogOf(modal);
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    await modal.querySelector("wt-form-actions")!.updateComplete;
+    const box = dialog.getBoundingClientRect();
+    expect(box.height).toBeCloseTo(512, 0);
+    expect(body.scrollHeight).toBe(body.clientHeight);
+    // The footer is the dialog's last row, so only the dialog's own border lies below it.
+    expect(box.bottom - footer.getBoundingClientRect().bottom).toBeCloseTo(
+      parseFloat(getComputedStyle(dialog).borderBottomWidth),
+      0,
+    );
+  },
+);
+
 test.each(["compact", "standard", "full"])(
   "keeps a wide and an unsized modal opened inside a %s modal at the wide width",
   async (size) => {

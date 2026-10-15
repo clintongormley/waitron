@@ -542,6 +542,7 @@ export class RoutingCellEditor extends LitElement {
       html`<wt-modal
         open
         size="standard"
+        height="medium"
         heading=${this.cell.label}
         .dismissible=${!this.busy}
         .beforeClose=${this.beforeClose}

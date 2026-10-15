@@ -48,6 +48,7 @@ test("defines the structural contract", () => {
     "--wt-modal-max-width",
     "--wt-modal-compact-width",
     "--wt-modal-standard-width",
+    "--wt-modal-medium-height",
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-form-max-width",
@@ -156,6 +157,15 @@ test("the modal sizes run compact, then standard, then wide", () => {
   expect(standard).toBe(672);
   expect(compact).toBeLessThan(standard);
   expect(standard).toBeLessThan(wide);
+});
+
+test("the medium modal height is 32rem, shorter than a full-height modal in a 1280 × 800 window", () => {
+  // At 1280px wide a full-height modal leaves 24px (--wt-space-5) above and below: 800 - 48 = 752.
+  const el = mount();
+  expect(token(el, "--wt-modal-medium-height")).toBe("32rem");
+  const medium = lengthPx(el, "var(--wt-modal-medium-height)");
+  expect(medium).toBe(512);
+  expect(medium).toBeLessThan(752);
 });
 
 test("a standard modal holds a form at the form width beside a classic scrollbar", () => {
