@@ -1551,9 +1551,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
   (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
   makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
-  closed rows are grey tracks; a zone's bar shows its own hours; the Staffing month follows. Points
-  1–2 landed in #1765; the Week button is A722's, "Seasons…" and the chips' ✎ A721's; 3–7
-  remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  the Staffing month follows. Points
+  1, 2, 5 and 6 landed in #1765 and #1770; the Week button is A722's, "Seasons…" and the chips' ✎
+  A721's; 3, 4 and 7 remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
@@ -2239,15 +2239,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   table reaches `refuseUnseatable` on the server (`joinMergeMembers`,
   `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
   the server's refusal is the backstop.
-
-- **A729 — Ask the owner whether A715's "the last count saved wins" also holds for the party Name window
-  (2026-10-15; owner to decide, left open by A717).** A715's decision (`docs/backlog/till.md`,
-  _Decisions and deliberate limits_) names only a guest count in the Guests or Split a table window.
-  The Name window behaves the same way: a name typed there replaces a name another till saved while
-  the window was open, once this till has received that change, with no warning: the save sends the
-  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`). A717 made the window show and compare against that other
-  name, but did not change what Save does. **Next action:** ask the owner; if the answer is the same,
-  widen the A715 decision to name the Name window.
 
 - **A730 — The floor's Rename window may keep comparing against the name it opened with after the
   name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**

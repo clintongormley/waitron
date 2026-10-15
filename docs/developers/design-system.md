@@ -3863,8 +3863,13 @@ Opening hours' Year.
   column heading names the weekday) and a Today marker. Each date shows its special day's name
   and its public holiday's name, the holiday's in red and given once when the two are the same,
   and a bar of hours per active department, or, with one department picked,
-  a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
-  that day says "<name> closed". A date closed all day adds Closed to its first name, or reads Closed with none, draws its names in the closed date's colour, and at phone width shows its names alone. Above the dates, ‹, the month's name, ›, the
+  a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
+  less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
+  closes, and pointing at a closed time inside the department's hours names it, as does the date's
+  spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
+  hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
+  Closed to its first name, or reads Closed with none, and draws its names in the closed date's
+  colour. Above the dates, ‹, the month's name, ›, the
   Year / Month switch and the Show department picker share one row, which wraps at phone width; ‹ › step months. Arrow keys move between
   dates, with one Tab stop. A special-day date opens the special-day painter on its day, and a
   public holiday with no special day opens it on a new day pre-filled with the holiday. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it

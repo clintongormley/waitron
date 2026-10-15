@@ -1475,10 +1475,13 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
-- **A guest count typed in the Guests or Split a table window replaces a count another till saved
-  while the window was open, once this till has received that change: the last count saved wins,
-  with no warning (A715, owner 2026-10-15).** Asked whether such a save should be refused so the
-  waiter sees the other count first, the owner answered "(a) keep it — the last count saved wins".
+- **A guest count typed in the Guests or Split a table window, or a party name typed in the Name
+  window, replaces a count or name another till saved while the window was open, once this till
+  has received that change: the last one saved wins, with no warning (A715, owner 2026-10-15;
+  the Name window by the owner's answer, 2026-10-15).** Asked whether such a save should be
+  refused so the waiter sees the other count first, the owner answered "(a) keep it — the last count
+  saved wins", and gave the same answer, (a), for the Name window. The Name window's save sends the
+  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`).
 - **Guests: the waiter changes the count at any time, joined tables add their counts, and only Split
   a table asks again (A713, owner 2026-10-15).** Owner's words: "add joined counts. the waiter should
   always be able to update the number of people sitting at a table. when they split, the waiter
