@@ -49,7 +49,7 @@ export function openingHoursDay(
         name: periods.get(range.periodId) ?? "",
         start: range.startsAt,
         end: range.endsAt,
-      }),
+      }).trim(),
     );
   const closed = (pieces: readonly ClosedRange[]) =>
     pieces.map(({ startsAt, endsAt }) =>
@@ -67,15 +67,12 @@ export function openingHoursDay(
         },
         ...read.zones.map((zone) => {
           const own = zoneOwnHours(read.ranges, zone.closed, day);
-          const text = !own.closed.length
-            ? format("day.as_department", { name })
-            : !own.ranges.length
-              ? t("hours.closed")
-              : [...list(own.ranges), ...closed(own.closed)].join(" · ");
-          return {
-            name: names.get(zone.zoneId) ?? "",
-            text,
-          };
+          const row = { name: names.get(zone.zoneId) ?? "" };
+          if (!own.closed.length) return { ...row, text: format("day.as_department", { name }) };
+          const text = own.ranges.length
+            ? [...list(own.ranges), ...closed(own.closed)].join(" · ")
+            : t("hours.closed");
+          return { ...row, text, strong: true };
         }),
       ];
     });

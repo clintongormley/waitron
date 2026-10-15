@@ -13,6 +13,21 @@ function dayBox(date: LocalDate, departmentId = "", model: OpeningHoursMonth = m
   return openingHoursDay(day, model.seasons, DEPARTMENTS, departmentId);
 }
 
+function terraceClosed(date: LocalDate, closed: { startsAt: string; endsAt: string }[]) {
+  const model = monthModel();
+  model.days = model.days.map((d) =>
+    d.date === date
+      ? {
+          ...d,
+          departments: d.departments.map((dep) =>
+            dep.departmentId === "rest" ? { ...dep, zones: [{ zoneId: "terrace", closed }] } : dep,
+          ),
+        }
+      : d,
+  );
+  return model;
+}
+
 const ALL_DAY = "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 20:00–23:00";
 
 describe("openingHoursDay", () => {
@@ -35,6 +50,7 @@ describe("openingHoursDay", () => {
     expect(dayBox("2026-12-01").rows[1]).toEqual({
       name: "Terrace",
       text: "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
+      strong: true,
     });
   });
 
@@ -113,15 +129,40 @@ describe("openingHoursDay", () => {
           }
         : d,
     );
-    expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({ name: "Terrace", text: "Closed" });
+    expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({
+      name: "Terrace",
+      text: "Closed",
+      strong: true,
+    });
   });
 
   it("reads an id the department list lacks as an empty name, as the Month does", () => {
     const model = monthModel();
     const day = model.days.find((d) => d.date === "2026-12-01")!;
     expect(openingHoursDay(day, model.seasons, [], "rest").rows).toEqual([
-      { name: "", text: " 08:00–11:00 ·  13:00–16:00 ·  20:00–23:00", strong: true },
-      { name: "", text: " 08:00–11:00 ·  13:00–16:00 ·  22:00–23:00 · closed 20:00–22:00" },
+      { name: "", text: "08:00–11:00 · 13:00–16:00 · 20:00–23:00", strong: true },
+      {
+        name: "",
+        text: "08:00–11:00 · 13:00–16:00 · 22:00–23:00 · closed 20:00–22:00",
+        strong: true,
+      },
     ]);
+  });
+
+  it("lists only the part of a zone's closure inside its department's hours", () => {
+    const model = terraceClosed("2026-12-15", [{ startsAt: "22:00", endsAt: "04:00" }]);
+    expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({
+      name: "Terrace",
+      text: "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 20:00–22:00 · closed 22:00–23:00",
+      strong: true,
+    });
+  });
+
+  it("reads a zone closed only outside its department's hours as its department", () => {
+    const model = terraceClosed("2026-12-15", [{ startsAt: "23:30", endsAt: "04:00" }]);
+    expect(dayBox("2026-12-15", "", model).rows[1]).toEqual({
+      name: "Terrace",
+      text: "as Restaurant",
+    });
   });
 });
