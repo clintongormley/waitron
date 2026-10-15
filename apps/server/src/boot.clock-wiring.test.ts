@@ -7,10 +7,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult, type FiscalDutyDeps } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
+import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
+import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
+import { withCapturedStdout, waitForEvent } from "./testing/boot-harness.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 
@@ -32,6 +36,33 @@ vi.mock("./backup-supervisor.js", async (original) => {
 vi.mock("./cloud-snapshot-worker.js", async (original) => {
   const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
   return { ...actual, createCloudSnapshotWorker: vi.fn(actual.createCloudSnapshotWorker) };
+});
+
+// The loop lingers after its abort, so a close() that did not await it would resolve first.
+const loop = vi.hoisted(() => ({ lingerMs: 500, ended: false }));
+vi.mock("./content-suggestion-runner.js", async (original) => {
+  const actual = await original<typeof import("./content-suggestion-runner.js")>();
+  return {
+    ...actual,
+    createContentSuggestionRunner: vi.fn(
+      (...args: Parameters<typeof actual.createContentSuggestionRunner>) => {
+        const runner = actual.createContentSuggestionRunner(...args);
+        return {
+          ...runner,
+          run: vi.fn(async (...run: Parameters<typeof runner.run>) => {
+            await runner.run(...run);
+            await new Promise((resolve) => setTimeout(resolve, loop.lingerMs));
+            loop.ended = true;
+          }),
+          wake: vi.fn(runner.wake),
+        };
+      },
+    ),
+  };
+});
+vi.mock("./content-suggestions-api.js", async (original) => {
+  const actual = await original<typeof import("./content-suggestions-api.js")>();
+  return { ...actual, mountContentSuggestionsApi: vi.fn(actual.mountContentSuggestionsApi) };
 });
 
 const drain = vi.hoisted(() => ({ calls: [] as FiscalDutyDeps[] }));
@@ -63,7 +94,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
 describe("boot's authority clock wiring", () => {
-  it("raises the drift alert from a sample the fiscal drain observes", async () => {
+  it("raises the drift alert from a sample the fiscal drain observes, and runs the Translate all loop until close", async () => {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
     const [port] = await freePorts(1);
@@ -162,6 +193,38 @@ describe("boot's authority clock wiring", () => {
           dayCutover: "05:00",
           cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
         });
+
+      const listed = await fetch(
+        `http://127.0.0.1:${port}/management-api/content-suggestions?language=es`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect(listed.status).toBe(200);
+      expect(await listed.json()).toMatchObject({
+        service: "not_connected",
+        cloudOrigin: "https://cloud.example",
+        run: null,
+      });
+      expect(createContentSuggestionRunner).toHaveBeenCalledOnce();
+      const runner = vi.mocked(createContentSuggestionRunner).mock.results[0]!.value as ReturnType<
+        typeof createContentSuggestionRunner
+      >;
+      expect(runner.run).toHaveBeenCalledOnce();
+      const [signal, options] = vi.mocked(runner.run).mock.calls[0]!;
+      expect(signal.aborted).toBe(false);
+      const deps = vi.mocked(mountContentSuggestionsApi).mock.calls[0]![1];
+      expect(runner.wake).not.toHaveBeenCalled();
+      deps.wake();
+      expect(runner.wake).toHaveBeenCalledOnce();
+      const logged = await withCapturedStdout(async (lines) => {
+        options!.onError!(new AppError("cloud.unavailable", {}));
+        return waitForEvent(lines, "content.suggestion_runner_failed");
+      });
+      expect(logged).toMatchObject({ errorCode: "cloud.unavailable" });
+
+      await server.close();
+      server = undefined;
+      expect(signal.aborted).toBe(true);
+      expect(loop.ended).toBe(true);
     } finally {
       try {
         if (server !== undefined) await server.close();
@@ -171,6 +234,9 @@ describe("boot's authority clock wiring", () => {
       drain.calls = [];
       clocks.archive = undefined;
       vi.mocked(createCloudSnapshotWorker).mockClear();
+      vi.mocked(createContentSuggestionRunner).mockClear();
+      vi.mocked(mountContentSuggestionsApi).mockClear();
+      loop.ended = false;
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
   });

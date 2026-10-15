@@ -6,6 +6,7 @@ import {
 import {
   hasLiveLease,
   installationClient,
+  markRevoked,
   pendingRequest,
   projectCloudInstallation,
   readCloudInstallation,
@@ -15,6 +16,7 @@ import {
 } from "./cloud-installation.js";
 import {
   collectTranslation,
+  type OnRefusal,
   releaseTranslation,
   submitTranslation,
   translationStatus,
@@ -374,16 +376,29 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.unavailable", {});
     }
   }
+  // A refresh can renew the lease while a call waits on Cloud; dropping that fresh lease on the
+  // old one's invalid_proof would only force another renewal. The connection can also be paired
+  // again meanwhile, and the old installation's refusal says nothing about the new one.
+  const recordRefusal: OnRefusal = (refusal, used, publicKey) =>
+    run(async () => {
+      const state = await read();
+      if (!state?.lifecycle || state.publicKey !== publicKey) return;
+      const c = state.lifecycle;
+      if (refusal === "revoked") markRevoked(c);
+      else if (JSON.stringify(c.lease) === used) delete c.lease;
+      else return;
+      await save(state);
+    }, true);
   return {
     translation: {
       submit: async (operationId: string, body: string, signal?: AbortSignal) =>
-        submitTranslation(await leaseState(signal), operationId, body, signal),
+        submitTranslation(await leaseState(signal), operationId, body, signal, recordRefusal),
       status: async (jobId: string, signal?: AbortSignal) =>
-        translationStatus(await leaseState(signal), jobId, signal),
+        translationStatus(await leaseState(signal), jobId, signal, recordRefusal),
       collect: async (jobId: string, signal?: AbortSignal) =>
-        collectTranslation(await leaseState(signal), jobId, signal),
+        collectTranslation(await leaseState(signal), jobId, signal, recordRefusal),
       release: async (jobId: string, signal?: AbortSignal) =>
-        releaseTranslation(await leaseState(signal), jobId, signal),
+        releaseTranslation(await leaseState(signal), jobId, signal, recordRefusal),
     },
     async translationService(): Promise<"on" | "off" | "not_connected"> {
       const state = await read();

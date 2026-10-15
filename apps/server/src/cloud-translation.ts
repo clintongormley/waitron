@@ -80,6 +80,16 @@ const REASONS: Partial<Record<CloudJobState, readonly CloudReason[]>> = {
 // `JSON.stringify` does: no whitespace between tokens, and keys and language tags not escaped. The
 // contract does not say so.
 export const COLLECT_REPLY_BYTES = 1000 * ((128 + 20 * 500 + 10 * 2 * 500) * 6 + 1024) + 1024;
+/**
+ * Told before the call rejects, so the connection can record what the refusal means for it.
+ * `lease` is the saved lease the call was signed with, as JSON, and `publicKey` the installation
+ * key it was signed by.
+ */
+export type OnRefusal = (
+  refusal: "revoked" | "invalid_proof",
+  lease: string,
+  publicKey: string,
+) => Promise<void>;
 const LIMITS: Record<TranslationAction, { reply: number; ms: number }> = {
   "translation-submit": { reply: 65536, ms: 60000 },
   "translation-status": { reply: 65536, ms: 8000 },
@@ -123,6 +133,7 @@ async function exchange(
   signedBody: string,
   extra: { body?: string },
   signal?: AbortSignal,
+  onRefusal?: OnRefusal,
 ): Promise<Record<string, unknown>> {
   const lease = state.lifecycle?.lease;
   if (!state.view?.registration || state.lifecycle?.revoked || !lease)
@@ -130,11 +141,8 @@ async function exchange(
   if (signedBody.length > 4096) throw new AppError("cloud.request_invalid", {});
   const limits = LIMITS[action];
   try {
-    const envelope = translationEnvelope(state, action, {
-      operationId,
-      lease: JSON.stringify(lease),
-      signedBody,
-    });
+    const used = JSON.stringify(lease);
+    const envelope = translationEnvelope(state, action, { operationId, lease: used, signedBody });
     const response = await fetch(`${state.origin}/api/installations/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -160,7 +168,14 @@ async function exchange(
     } catch {
       if (response.ok) unavailable();
     }
-    if (!response.ok) throw refusalOf(response.status, value);
+    if (!response.ok) {
+      const code = object(value) ? value.error : undefined;
+      if (response.status === 403 && code === "revoked")
+        await onRefusal?.("revoked", used, state.publicKey);
+      if (response.status === 401 && code === "invalid_proof")
+        await onRefusal?.("invalid_proof", used, state.publicKey);
+      throw refusalOf(response.status, value);
+    }
     if (!object(value) || value.version !== 1) unavailable();
     return value;
   } catch (error) {
@@ -176,6 +191,7 @@ export async function submitTranslation(
   operationId: string,
   body: string,
   signal?: AbortSignal,
+  onRefusal?: OnRefusal,
 ): Promise<{ jobId: string; state: CloudJobState; total: number }> {
   const v = await exchange(
     state,
@@ -184,6 +200,7 @@ export async function submitTranslation(
     submitSignedBody(body),
     { body },
     signal,
+    onRefusal,
   );
   if (!uuid(v.jobId) || !jobState(v.state) || !whole(v.total)) unavailable();
   return { jobId: v.jobId, state: v.state, total: v.total };
@@ -193,8 +210,17 @@ export async function translationStatus(
   state: SavedCloudState,
   jobId: string,
   signal?: AbortSignal,
+  onRefusal?: OnRefusal,
 ): Promise<TranslationStatus> {
-  const v = await exchange(state, "translation-status", randomUUID(), jobBody(jobId), {}, signal);
+  const v = await exchange(
+    state,
+    "translation-status",
+    randomUUID(),
+    jobBody(jobId),
+    {},
+    signal,
+    onRefusal,
+  );
   if (
     v.jobId !== jobId ||
     !jobState(v.state) ||
@@ -247,8 +273,17 @@ export async function collectTranslation(
   state: SavedCloudState,
   jobId: string,
   signal?: AbortSignal,
+  onRefusal?: OnRefusal,
 ): Promise<SuggestionResults> {
-  const v = await exchange(state, "translation-collect", randomUUID(), jobBody(jobId), {}, signal);
+  const v = await exchange(
+    state,
+    "translation-collect",
+    randomUUID(),
+    jobBody(jobId),
+    {},
+    signal,
+    onRefusal,
+  );
   if (
     v.jobId !== jobId ||
     (v.state !== "done" && v.state !== "partly_done") ||
@@ -264,7 +299,16 @@ export async function releaseTranslation(
   state: SavedCloudState,
   jobId: string,
   signal?: AbortSignal,
+  onRefusal?: OnRefusal,
 ): Promise<void> {
-  const v = await exchange(state, "translation-release", randomUUID(), jobBody(jobId), {}, signal);
+  const v = await exchange(
+    state,
+    "translation-release",
+    randomUUID(),
+    jobBody(jobId),
+    {},
+    signal,
+    onRefusal,
+  );
   if (v.jobId !== jobId || v.state !== "collected") unavailable();
 }

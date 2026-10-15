@@ -257,6 +257,12 @@ export function pendingRequest(
     body,
   };
 }
+export function markRevoked(c: CloudInstallationState): void {
+  c.revoked = true;
+  c.unavailable = false;
+  delete c.pending;
+  delete c.lease;
+}
 export function installationClient(
   state: SavedCloudState,
   save: (state: SavedCloudState) => Promise<void>,
@@ -298,10 +304,7 @@ export function installationClient(
       );
       if (!response.ok) {
         if (response.status === 403 && object(value) && value.error === "revoked") {
-          c.revoked = true;
-          c.unavailable = false;
-          delete c.pending;
-          delete c.lease;
+          markRevoked(c);
           await save(state);
           return;
         }

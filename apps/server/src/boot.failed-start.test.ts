@@ -24,6 +24,7 @@ import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { runCloudWorker } from "./cloud-worker.js";
+import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
@@ -58,6 +59,13 @@ vi.mock("./box-reach.js", async (importOriginal) => {
 vi.mock("./cloud-worker.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./cloud-worker.js")>();
   return { ...actual, runCloudWorker: vi.fn(actual.runCloudWorker) };
+});
+vi.mock("./content-suggestion-runner.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./content-suggestion-runner.js")>();
+  return {
+    ...actual,
+    createContentSuggestionRunner: vi.fn(actual.createContentSuggestionRunner),
+  };
 });
 vi.mock("./cloud-snapshot-loop.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./cloud-snapshot-loop.js")>();
@@ -109,6 +117,7 @@ afterEach(async () => {
   vi.mocked(listBoxIpv4).mockReset();
   vi.mocked(subscribeToChanges).mockReset();
   vi.mocked(runCloudWorker).mockClear();
+  vi.mocked(createContentSuggestionRunner).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
   vi.mocked(startMenuActivation).mockClear();
   vi.mocked(startAppendOnlyWatch).mockClear();
@@ -568,6 +577,48 @@ describe("a start that fails after the venue folder is opened gives the folder b
 
     await expect(startServer(env)).rejects.toBe(failure);
     expect(snapshotStopped).toBe(true);
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("stops the Translate all runner before waiting for it", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = {
+      ...(await tradingEnv(venueDir, state, { landing: true })),
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example",
+    };
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const { createContentSuggestionRunner: realCreate } = await vi.importActual<
+      typeof import("./content-suggestion-runner.js")
+    >("./content-suggestion-runner.js");
+    let runSignal: AbortSignal | undefined;
+    vi.mocked(createContentSuggestionRunner).mockImplementationOnce((deps) => ({
+      ...realCreate(deps),
+      // Like the real loop, this returns only once its signal aborts.
+      run: (signal) => {
+        runSignal = signal;
+        return new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    }));
+    const deadline = new AbortController();
+    const outcome = startServer(env).then(
+      () => "started",
+      (error: unknown) => error,
+    );
+    const stuck = delay(20_000, "the unwind waited on a runner nobody had stopped", {
+      signal: deadline.signal,
+    }).catch(() => "deadline cancelled");
+
+    try {
+      expect(await Promise.race([outcome, stuck])).toBe(failure);
+    } finally {
+      deadline.abort();
+    }
+    expect(createContentSuggestionRunner).toHaveBeenCalledOnce();
+    expect(runSignal?.aborted).toBe(true);
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 

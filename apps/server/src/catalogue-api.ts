@@ -1,5 +1,9 @@
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
-import { isProductOrdering, nonBlankTranslations } from "@waitron/catalogue";
+import {
+  isProductOrdering,
+  nonBlankTranslations,
+  type TranslationContext,
+} from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -774,6 +778,15 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
   );
 }
 
+export function translationContextFor(
+  deps: Pick<CatalogueApiDeps, "venueLocale" | "contentLanguageRules">,
+): TranslationContext {
+  return {
+    fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
+    required: deps.contentLanguageRules?.required ?? [],
+  };
+}
+
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   const epoch = crypto.randomUUID();
   let sequence = 0;
@@ -870,10 +883,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
   mountMenuHomeRoutes(app, gated, log);
-  mountContentTranslationsApi(app, gated, log, {
-    fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
-    required: deps.contentLanguageRules?.required ?? [],
-  });
+  mountContentTranslationsApi(app, gated, log, translationContextFor(deps));
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
