@@ -1689,7 +1689,10 @@ export class TillTableOrderScreen extends LitElement {
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one.
     const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
-    if (partySwitched) this.counting = null;
+    if (partySwitched) {
+      this.naming = null;
+      this.counting = null;
+    }
     if (
       this.splitGuests !== null &&
       (partySwitched || !this.party?.tableIds.includes(this.splitGuests.tableId))
