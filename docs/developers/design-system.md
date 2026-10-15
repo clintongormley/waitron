@@ -3926,16 +3926,14 @@ and `/view/date` with no date or a bad one by the month view. After provisioning
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
-- **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
-  Edit and Delete. ‹ › step years, a month's name, drawn as a link ending in ›, opens that
+- **Year.** A date opens the day box (below); pointing at a special day or public holiday names
+  it. ‹ › step years, a month's name, drawn as a link ending in ›, opens that
   month (below), and the season chips rename, move, add and delete seasons
-  (`season-chips.ts`), and a chip's name opens the season painter. Make opens the special-day painter (Forms above,
-  hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is
-  a public holiday, and Edit opens it on the stored day. The Year's Delete asks in its own
-  confirmation, saying so when the day repeats every year, and opens no painter.
+  (`season-chips.ts`), and a chip's name opens the season painter.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
-  grid. On a special day that is also a public holiday, the date panel and the day's accessible
-  name give the holiday's name beside the special day's; the grid itself shows only the marks.
+  grid. On a special day that is also a public holiday, the day's accessible
+  name gives the holiday's name beside the special day's; the grid itself shows only the marks,
+  and the day box only the special day's name.
 - **Month.** `/view/month/month/<yyyy-mm>` (`opening-hours-month.ts`); with no month, the month
   holding the venue's today. It draws the whole Monday-to-Sunday weeks covering the month, the
   neighbouring months' dates faint, and each date heading carries only the day's number (the
@@ -3944,19 +3942,30 @@ Opening hours' Year.
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
   less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
-  closes, and pointing at a closed time inside the department's hours names it, as does the date's
-  spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
+  closes, a closed time inside the department's hours is hatched while the zone has some hours that
+  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
   colour. Above the dates, ‹, the month's name, ›, the
   Year / Month switch and the Show department picker share one row, which wraps at phone width; ‹ › step months. Arrow keys move between
-  dates, with one Tab stop. A special-day date opens the special-day painter on its day, and a
-  public holiday with no special day opens it on a new day pre-filled with the holiday. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
-  says which season's week the date follows and offers Edit the <season> week (the season
-  painter on that season), Make this a special day… (the special-day painter on a new day holding
-  the date) and a special-day picker with Add, which opens the painter on the chosen day with the
-  date added as an unsaved change. A venue viewer gets the month read-only: its dates are not
-  buttons.
+  dates, with one Tab stop. A date opens the day box (below), for a viewer too; in station mode
+  (the Times tab of Prep stations) the dates are plain.
+- **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
+  `@waitron/venue-service/dashboard/calendar-day-box` for other screens, and Staffing's month and
+  A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that
+  opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
+  It is headed by the date, with the special day's name, or else the public holiday's, beside it;
+  then a line saying which season's standard hours the date follows, or that a special day replaces
+  them; then each department's hours followed by its zones' (in the Month, with one department
+  picked, that department alone). A zone that follows its department reads "as <department>"; a
+  zone with hours of its own lists them and its closed times, in bold as a department is. Opened
+  from the Year, it reads its date's month and says Loading… until that read answers. Make a
+  special day (Edit special day on a special-day date) opens the special-day painter (Forms above,
+  hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is a
+  public holiday, or on the stored day; Edit <season>'s standard week opens the season painter. A
+  viewer's box has no special-day button and offers Show <season>'s standard week, read-only. A
+  button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
+  the date when focus was inside. A special day is deleted from its painter, which asks first.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. A chip's name opens the season
   painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
@@ -3981,7 +3990,7 @@ Opening hours' Year.
   official list needs it. `opening-hours-year.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads the country calendar.
 
-In Opening hours, a period stays on one line in the week grid and date panel, so hours wrap only
+In Opening hours, a period stays on one line in the week grid, so hours wrap only
 between periods.
 
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
