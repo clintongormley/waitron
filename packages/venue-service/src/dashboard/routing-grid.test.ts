@@ -125,6 +125,20 @@ describe("the single tree control", () => {
   ];
   const label = (el: RoutingGrid) => controls(el).map((button) => button.textContent!.trim());
 
+  it("keeps the search-count status rendered before the first query", async () => {
+    const { el } = await mount();
+    const status = root(el).querySelector<HTMLElement>('[role="status"]')!;
+    expect(status.textContent).toBe("");
+    expect(getComputedStyle(status).display).not.toBe("none");
+    const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await field.updateComplete;
+    await userEvent.fill(field.shadowRoot!.querySelector<HTMLInputElement>("input")!, "moj");
+    await el.updateComplete;
+    expect(root(el).querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toBe("1 match");
+    expect(getComputedStyle(status).display).not.toBe("none");
+  });
+
   it("changes from Expand to Collapse only while every category is open", async () => {
     const { el } = await mount();
     expect(label(el)).toEqual(["Expand all"]);

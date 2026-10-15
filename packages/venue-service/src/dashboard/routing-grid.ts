@@ -157,9 +157,6 @@ export class RoutingGrid extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
       }
-      .count:empty {
-        display: none;
-      }
       mark {
         background: var(--wt-color-highlight);
         color: var(--wt-color-on-highlight);
