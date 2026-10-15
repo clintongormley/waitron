@@ -4635,10 +4635,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   still need features over their existing tables.
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **Working-time export has two remaining review follow-ups.** Check whether a valid closed
-  snapshot can name someone only in a frozen summary before testing that name-collection path.
-  Decide how PDF `null`/`true`/`false` should read in each language while preserving CSV scalars.
-  [Detail](backlog/workforce.md#working-time-export-review-follow-ups).
+- **Frozen-summary name collection needs a valid test case.** Check whether a supported closed
+  snapshot can name someone only in its summary before testing the defensive name-collection path.
+  [Detail](backlog/workforce.md#frozen-summary-name-collection).
+
+- **Choose readable PDF flags for working-time exports.** Decide how `null`, `true` and `false`
+  should read in each language while preserving CSV scalars.
+  [Detail](backlog/workforce.md#pdf-boolean-and-empty-values).
 
 - **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
   January closes makes 1 February resolve to 26 January–2 February, which closure refuses
@@ -4659,7 +4662,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
   2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
-  [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
+  [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, its remaining rota work builds on the clocking and Hours readers.
   Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
   (#1681); part 2 (staffing paint storage and routes, the slot and matching library) landed
   (#1686); part 3 (the Calendar with module views, the staffing month read and the Staffing view's
@@ -4737,7 +4740,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   an address, not replace one.
 - **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
   (today one `convenio_config` per location); a running total of hours clocked and rostered against
-  hours due, annual leave counted, with the yearly overtime cap. After A585; plan with A10
+  hours due, annual leave counted, with the yearly overtime cap. After A585; build on the working-time record
   ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
 - **A587. Availability** — "can't work Wednesdays", preferred days; the `availability` table exists
   unused. Shown in A585's picker and warnings. After A586.
@@ -6447,7 +6450,7 @@ partial scope; the detail for a live thread is in its area.
 | 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (_Payments and card readers_); payroll export (integrate-not-build)                                                       |
 | 14  | Bookings                     | Bookings-1, now the `@waitron/bookings` module (#270, #273)                                                                                                                                                                                                                                                                                                                                                                       | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits                                                                                            |
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
-| 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal                                                                                                                                                                                                                                                                                               | A10 part 6: export/access screens; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
+| 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
 | 18  | Menu/recipes/allergens       | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu schedule (publishing landed, #677); customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
