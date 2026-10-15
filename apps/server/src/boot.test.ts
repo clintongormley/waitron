@@ -1711,6 +1711,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(till.status).toBe(200);
       expect(await till.json()).toMatchObject({
         simplifiedInvoiceLimit: "3000.00",
+        fullInvoices: false,
       });
 
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.

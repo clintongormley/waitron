@@ -105,6 +105,7 @@ export async function clockApp(
     nodeId: "node",
     servers: [],
     simplifiedInvoiceLimit: null,
+    fullInvoices: false,
   };
   const write = (status: TillClockState["state"]) => {
     state = clockState(status, `entry-${++entries}`, state.personId, false);

@@ -1501,6 +1501,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         servers: routableServers(held),
         // So the basket refuses an order over it as it is entered, not at the pay step.
         simplifiedInvoiceLimit: deps.cfg.simplifiedInvoiceLimit,
+        // refuseUnavailableFullInvoice (./working-order.ts) refuses every F1; keep the two in step.
+        fullInvoices: false,
       });
     }),
   );

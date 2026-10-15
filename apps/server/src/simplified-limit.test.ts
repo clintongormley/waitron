@@ -226,6 +226,31 @@ describe("a counter sale", () => {
     expect(orderRow(id)).toBeUndefined();
   });
 
+  // Whoever switches full invoices on changes both halves of this case together.
+  it("tells the till full invoices are off while an F1 is refused", async () => {
+    const boot = await send(limited, venue.cookie, "GET", "/api/till");
+    expect(boot.status).toBe(200);
+    expect(boot.json.fullInvoices).toBe(false);
+
+    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: randomUUID(),
+      lines: linesOf(counter, { Mitad: 1 }),
+      zoneId: counter.zoneId,
+      tender: { method: "cash", amount: "1600.00" },
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+  });
+
   it.each([
     ["/api/sales", false],
     ["/api/sales", true],
