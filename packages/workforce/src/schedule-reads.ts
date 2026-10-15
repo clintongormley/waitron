@@ -65,9 +65,10 @@ export async function listShiftsForPerson(
     role: string | null;
     roster_version_id: string | null;
   }>(sql`
-    select id, location_id, starts_at, starts_offset_minutes, ends_at,
+    select shifts.id, shifts.location_id, starts_at, starts_offset_minutes, ends_at,
       ends_offset_minutes, role, roster_version_id
     from shifts
+    join roster_versions rv on rv.id = shifts.roster_version_id and rv.status = 'published'
     where person_id = ${input.personId}
       and ${shiftLocalDate} >= ${input.from}
       and ${shiftLocalDate} < ${input.to}

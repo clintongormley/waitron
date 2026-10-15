@@ -491,7 +491,7 @@ export const QUERY_DEPENDENCIES = {
   getBumpMode: ["locations"],
   getKitchenTimingDefaults: ["kitchen_timing_defaults"],
   listMyAbsences: ["absences"],
-  listMyShifts: ["shifts", "employments", "locations"],
+  listMyShifts: ["shifts", "roster_versions", "employments", "locations"],
   listMySwaps: ["shift_swaps", "shifts"],
   getLocations: ["locations"],
   getPlannedVsActual: ["roster_versions", "locations", "shifts", "time_entries", "employments"],
