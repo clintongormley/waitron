@@ -1,7 +1,9 @@
 import type { Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
 import { sql, type SQL } from "drizzle-orm";
+import { batches } from "./batches.js";
 import { contentLanguagesOr } from "./content-languages.js";
+import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import type {
   TranslationOwners,
@@ -33,23 +35,17 @@ export type ResolvedTranslationTarget =
       inheritedNames: Record<string, string>;
       structure: TranslationStructure;
     };
+export interface TranslationSettings {
+  config: ContentLanguages;
+  required: string[];
+}
 export interface TranslationResolution {
   language: string;
   config: ContentLanguages;
   required: string[];
   targets: ResolvedTranslationTarget[];
 }
-const KINDS: readonly TranslationGapKind[] = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-];
+export type TranslationRow = NamedRow;
 type NamedRow = {
   kind: TranslationGapKind;
   id: string;
@@ -86,31 +82,66 @@ function checkedRefs(refs: readonly TranslationRef[], limit: number): void {
     seen.add(`${ref.kind}:${ref.id}`);
   }
 }
-async function configuration(tx: Transaction, language: string, context: TranslationContext) {
-  if (typeof language !== "string" || contentLanguageCode(language) !== language) invalid();
+// What the translations dialog lists at all: a live row in its right role. The absent read below
+// applies the same fragment, so the two cannot drift apart.
+const LIVE_CANDIDATE = sql`active = 1 and owner_active = 1 and child_active = 1 and root_matched = 1
+      and (kind not in ('product', 'variant', 'menu', 'section', 'included_menu') or
+        (kind = 'product' and role = 'product') or (kind = 'variant' and role = 'variant') or
+        (kind = 'menu' and role = 'menu_root') or (kind = 'section' and role = 'section') or
+        (kind = 'included_menu' and role = 'menu_root' and parent_role in ('menu_root', 'section')))`;
+// The paging cursor compares a row's position with `KINDS.indexOf`, so both read the one list.
+const POSITION = sql`case kind ${sql.join(
+  KINDS.map((kind, index) => sql`when ${kind} then ${index}`),
+  sql` `,
+)} end`;
+// The listing's rule for a row blank in one language, `language` and `path` being SQL for the code
+// and its JSON path; listing one language and collecting every gap share it so they cannot drift.
+function blankIn(language: SQL, path: SQL, defaultLanguage: string): SQL {
+  return sql`(kind <> 'extra_list' or (names is not null and names <> '{}'))
+      and (kind <> 'included_menu' or names is not null)
+      and (kind = 'unit' or kind = 'included_menu' or names not in ('{}') or (${language} <> ${defaultLanguage} and names is null) or (${language} <> ${defaultLanguage} and names = '{}'))
+      and trim(coalesce(json_extract(case when kind = 'included_menu' then json_patch(inherited, names) else names end, ${path}), '')) = ''`;
+}
+const ABSENT = sql`kind in ('product', 'variant', 'option_list', 'option_label', 'menu', 'section')
+      and (names is null or names = '{}')`;
+export async function readTranslationSettings(
+  tx: Transaction,
+  context: TranslationContext,
+): Promise<TranslationSettings> {
   const saved = await tx.execute<{ default_language: string; languages: string }>(
     sql`select default_language, languages from content_languages where id = 1`,
   );
   const row = saved.rows[0];
-  const config = contentLanguagesOr(
-    row
-      ? { defaultLanguage: row.default_language, languages: JSON.parse(row.languages) as string[] }
-      : undefined,
-    context.fallbackLanguage,
-  );
-  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
   return {
-    language,
-    config,
+    config: contentLanguagesOr(
+      row
+        ? {
+            defaultLanguage: row.default_language,
+            languages: JSON.parse(row.languages) as string[],
+          }
+        : undefined,
+      context.fallbackLanguage,
+    ),
     required: [...new Set(context.required.map(contentLanguageCode))].sort(),
   };
 }
+async function configuration(tx: Transaction, language: string, context: TranslationContext) {
+  if (typeof language !== "string" || contentLanguageCode(language) !== language) invalid();
+  const { config, required } = await readTranslationSettings(tx, context);
+  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
+  return { language, config, required };
+}
 // Each filtered branch binds at most one batch of ids; ownership joins never load an editor's graph.
-function namedRows(refs?: readonly TranslationRef[]): SQL {
+function namedRows(
+  refs?: readonly TranslationRef[],
+  kinds: readonly TranslationGapKind[] = KINDS,
+): SQL {
   const filter = (kind: TranslationGapKind, id: SQL) =>
-    refs
-      ? sql`${id} in (select json_extract(value, '$.id') from json_each(${JSON.stringify(refs)}) where json_extract(value, '$.kind') = ${kind})`
-      : sql`1`;
+    !kinds.includes(kind)
+      ? sql`0`
+      : refs
+        ? sql`${id} in (select json_extract(value, '$.id') from json_each(${JSON.stringify(refs)}) where json_extract(value, '$.kind') = ${kind})`
+        : sql`1`;
   return sql`
     select 'product' as kind, p.id, p.name, p.customer_name as names, null as inherited,
       p.parent_id as owner, null as owner_name, null as container, null as child, null as child_menu,
@@ -148,6 +179,10 @@ function namedRows(refs?: readonly TranslationRef[]): SQL {
       null, null, null, null, 1, 1, 1, null, 1
     from units u where ${filter("unit", sql`u.id`)}
   `;
+}
+/** Every row of `kinds` the translations dialog may list, in any language and gap or not. */
+export function liveTranslationRows(kinds: readonly TranslationGapKind[]): SQL {
+  return sql`select * from (${namedRows(undefined, kinds)}) where ${LIVE_CANDIDATE}`;
 }
 function ownersOf(row: NamedRow): TranslationOwners | null {
   if (
@@ -206,7 +241,7 @@ function resolved(
   language: string,
   config: ContentLanguages,
   required: string[],
-): ResolvedTranslationTarget {
+): Extract<ResolvedTranslationTarget, { state: "present" }> {
   const names = row.names === null ? null : (JSON.parse(row.names) as Record<string, string>);
   const inheritedNames =
     row.inherited === null ? {} : (JSON.parse(row.inherited) as Record<string, string>);
@@ -317,6 +352,25 @@ async function readTargets(
       : missing(ref, state.config, state.required, state.language);
   });
 }
+/** The rows `refs` name, keyed `kind:id`, read without the route's checks or its bound on `refs`. */
+export async function readTranslationRows(
+  tx: Transaction,
+  refs: readonly TranslationRef[],
+): Promise<Map<string, TranslationRow>> {
+  const rows = new Map<string, TranslationRow>();
+  for (const batch of batches(refs))
+    for (const row of (await tx.execute<NamedRow>(namedRows(batch))).rows)
+      rows.set(`${row.kind}:${row.id}`, row);
+  return rows;
+}
+/** What {@link resolveTranslationTargets} answers for `row` in `language`, with no read. */
+export function resolveTranslationRow(
+  row: TranslationRow,
+  language: string,
+  settings: TranslationSettings,
+): Extract<ResolvedTranslationTarget, { state: "present" }> {
+  return resolved(row, language, settings.config, settings.required);
+}
 export async function resolveTranslationTargets(
   tx: Transaction,
   language: string,
@@ -356,18 +410,9 @@ export async function listTranslationTargets(
   const state = await configuration(tx, language, context);
   const path = `$."${language}"`;
   const projection = sql`with candidates as (${namedRows()}), gaps as (
-    select kind, id, case kind when 'product' then 0 when 'variant' then 1 when 'option_list' then 2
-      when 'option_label' then 3 when 'extra_list' then 4 when 'menu' then 5 when 'section' then 6
-      when 'included_menu' then 7 else 8 end as position
-    from candidates where active = 1 and owner_active = 1 and child_active = 1 and root_matched = 1
-      and (kind not in ('product', 'variant', 'menu', 'section', 'included_menu') or
-        (kind = 'product' and role = 'product') or (kind = 'variant' and role = 'variant') or
-        (kind = 'menu' and role = 'menu_root') or (kind = 'section' and role = 'section') or
-        (kind = 'included_menu' and role = 'menu_root' and parent_role in ('menu_root', 'section')))
-      and (kind <> 'extra_list' or (names is not null and names <> '{}'))
-      and (kind <> 'included_menu' or names is not null)
-      and (kind = 'unit' or kind = 'included_menu' or names not in ('{}') or (${language} <> ${state.config.defaultLanguage} and names is null) or (${language} <> ${state.config.defaultLanguage} and names = '{}'))
-      and trim(coalesce(json_extract(case when kind = 'included_menu' then json_patch(inherited, names) else names end, ${path}), '')) = ''
+    select kind, id, ${POSITION} as position
+    from candidates where ${LIVE_CANDIDATE}
+      and ${blankIn(sql`${language}`, sql`${path}`, state.config.defaultLanguage)}
   )`;
   const count = await tx.execute<{ total: number }>(
     sql`${projection} select count(*) as total from gaps`,
@@ -388,6 +433,44 @@ export async function listTranslationTargets(
     total: count.rows[0]!.total,
     next: refs.length === 50 && last ? JSON.stringify(last) : null,
   };
+}
+
+/**
+ * The live products, variants, options lists, options labels, menus and sections whose
+ * customer-facing name is stored as null or `{}`, in the dialog's order. Under the default language
+ * {@link listTranslationTargets} leaves these out. Extras lists, includes and units are never absent here: an absent extras list's name reaches
+ * no order or receipt, an include fixing no name is listed under the included menu, and a unit's
+ * name is required.
+ */
+export async function listAbsentTranslationRefs(tx: Transaction): Promise<TranslationRef[]> {
+  const result = await tx.execute<{ kind: TranslationGapKind; id: string }>(sql`
+    with candidates as (${namedRows()})
+    select kind, id from candidates
+    where ${LIVE_CANDIDATE} and ${ABSENT}
+    order by ${POSITION}, id`);
+  return result.rows.map(({ kind, id }) => ({ kind, id }));
+}
+
+/**
+ * In one read, the row of every ref {@link listTranslationTargets} lists under any of `config`'s
+ * languages, and of every ref {@link listAbsentTranslationRefs} lists, in the dialog's order.
+ */
+export async function listTranslationGapRows(
+  tx: Transaction,
+  config: ContentLanguages,
+): Promise<TranslationRow[]> {
+  const blank = blankIn(
+    sql`language.value`,
+    sql`'$."' || language.value || '"'`,
+    config.defaultLanguage,
+  );
+  const result = await tx.execute<NamedRow>(sql`
+    with candidates as (${namedRows()})
+    select * from candidates
+    where ${LIVE_CANDIDATE} and ((${ABSENT}) or exists (
+      select 1 from json_each(${JSON.stringify(config.languages)}) as language where ${blank}))
+    order by ${POSITION}, id`);
+  return result.rows;
 }
 
 export function projectTranslationTarget(

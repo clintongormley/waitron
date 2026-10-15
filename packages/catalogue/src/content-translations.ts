@@ -7,11 +7,12 @@ import {
   type TranslationStructure,
 } from "./content-translation-targets.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
-import type {
-  TranslationBatch,
-  TranslationEdit,
-  TranslationOwners,
-  TranslationTarget,
+import {
+  TRANSLATION_NAME_BYTES,
+  type TranslationBatch,
+  type TranslationEdit,
+  type TranslationOwners,
+  type TranslationTarget,
 } from "./content-translation-types.js";
 import {
   validateTranslationNames,
@@ -25,6 +26,7 @@ import {
   writeSectionTranslation,
   writeIncludedMenuTranslation,
 } from "./content-translation-writes.js";
+import { deleteSavedSuggestions } from "./content-suggestion-store.js";
 import "./errors.js";
 
 const writers = {
@@ -175,11 +177,11 @@ function checkedBatch(batch: TranslationBatch): TranslationEdit[] {
       typeof value.expected !== "string" ||
       typeof value.text !== "string" ||
       !value.text.trim() ||
-      Buffer.byteLength(value.text, "utf8") > 4096 ||
+      Buffer.byteLength(value.text, "utf8") > TRANSLATION_NAME_BYTES ||
       (Object.hasOwn(value, "defaultText") &&
         (typeof value.defaultText !== "string" ||
           !value.defaultText.trim() ||
-          Buffer.byteLength(value.defaultText, "utf8") > 4096))
+          Buffer.byteLength(value.defaultText, "utf8") > TRANSLATION_NAME_BYTES))
     )
       invalid();
     const key = `${value.kind}:${value.id}`;
@@ -317,5 +319,6 @@ export async function saveContentTranslations(
   }
   if (!retried)
     for (const entry of proposed) await writers[entry.target.kind](tx, entry, entry.names!);
+  await deleteSavedSuggestions(tx, language, resolution.config.defaultLanguage, edits);
   return { saved: proposed.map((entry) => entry.target) };
 }

@@ -7,3 +7,4 @@ export * from "./extras.js";
 export * from "./sections.js";
 export * from "./publication.js";
 export * from "./settings.js";
+export * from "./suggestions.js";

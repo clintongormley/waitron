@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { sql } from "drizzle-orm";
+import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
 import { contentTranslationGapsIn, readContentTranslationCandidates } from "./content-languages.js";
 import type {
   LanguageTranslationGaps,
@@ -14,18 +15,6 @@ export type {
   TranslationGapKind,
   TranslationGapReason,
 } from "./content-translation-report-types.js";
-
-const KIND_ORDER: readonly TranslationGapKind[] = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-];
 
 /** One row of a table the report names; `absent` uses the gap query's own test, null or `'{}'`. */
 type NamedRow = {

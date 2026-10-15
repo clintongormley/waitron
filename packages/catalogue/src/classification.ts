@@ -2,6 +2,8 @@ import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolm
 import type { ChangeSource } from "@waitron/shared";
 
 const STATE = "menu configuration; copied to a standby, never drained back";
+const SUGGESTIONS =
+  "translation suggestions waiting for a person's review; copied to a standby, never drained back";
 
 export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("category_details", "state", STATE),
@@ -32,6 +34,8 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("menu_publications", "state", STATE),
   classify("menu_scheduled_publications", "state", STATE),
+  classify("content_suggestion_jobs", "state", SUGGESTIONS),
+  classify("content_suggestions", "state", SUGGESTIONS),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(
