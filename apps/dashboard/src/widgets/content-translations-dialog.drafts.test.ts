@@ -661,6 +661,28 @@ describe("rows the page leaves out", () => {
     expect(sizes).toEqual([50, 10]);
     expect(field(el, "e00")!.value).toBe("CLIENT-ca e00");
   });
+  it("reads no item by reference on another language's page for suggestions that cannot fill it", async () => {
+    const { el, api } = await open(
+      venue({
+        listed: [target("one")],
+        omitted: [target("done", { selectedText: "Hecho", effectiveSelectedText: "Hecho" })],
+        suggestions: [
+          suggestion("s1", "one"),
+          suggestion("s2", "done", {
+            language: null,
+            text: null,
+            fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" },
+          }),
+          suggestion("s3", "done", { language: null, text: null, placeholder: true }),
+          suggestion("s4", "done", { language: "en", text: "CLIENT-en done" }),
+        ],
+      }),
+    );
+    expect(field(el, "one")!.value).toBe("CLIENT-es one");
+    expect(
+      api.getContentTranslationTargets.mock.calls.filter(([, query]) => query.targets),
+    ).toEqual([]);
+  });
   it("stops reading omitted items once the dialog closes during a read", async () => {
     const ids = Array.from({ length: 60 }, (_, n) => `e${String(n).padStart(2, "0")}`);
     const state = oneLanguage({
@@ -692,6 +714,9 @@ describe("rows the page leaves out", () => {
     el.open = false;
     await el.updateComplete;
     release();
+    await api.getContentTranslationTargets.mock.results.at(-1)!.value;
+    // The scan resumes a few microtasks after the held read; one task turn runs them all, so a
+    // further read would already have been made.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(targetReads()).toBe(3);
   });
@@ -724,6 +749,22 @@ describe("the 100-draft limit and continuing later", () => {
       expected: "baseline-099",
       text: "CLIENT-es 099",
     });
+  });
+  it("says the general limit, not the suggestion count, once every filled suggestion is edited", async () => {
+    const rows = Array.from({ length: 101 }, (_, n) => target(String(n).padStart(3, "0")));
+    const { el } = await open(
+      venue({ listed: rows, suggestions: rows.map((row) => suggestion(`s${row.id}`, row.id)) }),
+    );
+    for (let n = 0; n < 100; n += 1) {
+      if (n === 50) await click(el, "next");
+      await edit(el, String(n).padStart(3, "0"), `Mine ${n}`);
+    }
+    expect(q(el, "[data-test=suggestion-capacity]")).toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[role=status]")].some(
+        (node) => node.textContent!.trim() === t("translations.capacity"),
+      ),
+    ).toBe(true);
   });
   it("closing keeps every suggestion for the next opening", async () => {
     const { el, api } = await open(

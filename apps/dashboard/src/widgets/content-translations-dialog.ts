@@ -321,14 +321,17 @@ export class ContentTranslationsDialog extends LitElement {
     );
     // Under the default language the page leaves out a name stored as null or `{}`
     // (`listTranslationTargets`, packages/catalogue/src/content-translation-targets.ts), so a
-    // suggestion for one is read by reference and becomes a row of its own.
+    // suggestion for one is read by reference and becomes a row of its own. Only a suggestion
+    // with text in this page's language could fill such a row; reading the rest every refresh
+    // would fetch items only to drop them.
     const listed = new Set(rows.map(translationKey));
     const index = indexSuggestions(suggestions, language, first!.config.defaultLanguage);
     const omitted = new Map<string, TranslationRef>();
     for (const view of suggestions) {
       const ref = { kind: view.kind, id: view.itemId };
       const key = translationKey(ref);
-      if (!listed.has(key) && !index.get(key)!.stale) omitted.set(key, ref);
+      const entry = index.get(key)!;
+      if (!listed.has(key) && !entry.stale && entry.text !== null) omitted.set(key, ref);
     }
     const omittedRefs = [...omitted.values()];
     for (let offset = 0; offset < omittedRefs.length; offset += 50) {
@@ -908,7 +911,7 @@ export class ContentTranslationsDialog extends LitElement {
                 >
               </div>
               ${
-                this.model.unfilledCount > 0
+                this.model.unfilledCount > 0 && this.model.suggestedCount > 0
                   ? html`<p role="status" data-test="suggestion-capacity">
                       ${fill("suggestions.capacity", { shown: String(this.model.suggestedCount) })}
                     </p>`
