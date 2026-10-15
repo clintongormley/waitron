@@ -95,6 +95,7 @@ it("rejects malformed cached lifecycle state and changed lease bindings without 
     for (const change of [
       { lease: { payload: "bad", signature: "bad" } },
       { pending: { action: "renew", operationId: "bad", body: "{}", lease: "" } },
+      { pending: { action: ["renew"], operationId: randomUUID(), body: "{}", lease: "" } },
       { view: { ...saved.lifecycle.view, venueId: randomUUID() } },
     ]) {
       await writeFile(
@@ -309,13 +310,37 @@ it("accepts the four services in any order", async () => {
   }
 });
 
-it.each([
+it.each<[string, (s: unknown[]) => unknown[]]>([
   [
     "an unknown fourth service",
     (s: unknown[]) => [s[0], s[1], s[2], { ...(s[3] as object), service: "telepathy" }],
   ],
   ["a service listed twice", (s: unknown[]) => [s[0], s[1], s[2], s[0]]],
   ["an original service missing", (s: unknown[]) => [s[3], s[1], s[2]]],
+  ...[0, 1, 2].map((i): [string, (s: unknown[]) => unknown[]] => [
+    `a list repeating entry ${i}'s service`,
+    (s) => {
+      const e = s[i] as Record<string, unknown>;
+      return [s[0], s[1], s[2], { ...e, service: [e.service] }];
+    },
+  ]),
+  ...[0, 1, 2, 3].flatMap((i) =>
+    (
+      [
+        ["service", (entry: Record<string, unknown>) => [entry.service]],
+        ["state", () => ["ready"]],
+        ["health", () => ["healthy"]],
+        ["failure", () => ["unavailable"]],
+      ] as const
+    ).map(([field, value]): [string, (s: unknown[]) => unknown[]] => [
+      `a list as entry ${i}'s ${field}`,
+      (s) =>
+        s.map((entry, j) => {
+          const e = entry as Record<string, unknown>;
+          return j === i ? { ...e, [field]: value(e) } : e;
+        }),
+    ]),
+  ),
 ])("refuses a reply with %s", async (_name, change) => {
   const f = await installationFixture();
   try {

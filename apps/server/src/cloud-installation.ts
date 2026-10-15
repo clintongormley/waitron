@@ -54,6 +54,8 @@ const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const uuid = (v: unknown) =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
+const oneOf = (allowed: readonly string[], v: unknown) =>
+  typeof v === "string" && allowed.includes(v);
 const date = (v: unknown) =>
   v === null || (typeof v === "string" && Number.isFinite(Date.parse(v)));
 function unavailable(): never {
@@ -80,13 +82,14 @@ function readView(value: unknown, state: SavedCloudState): View {
   for (const s of value.services) {
     if (
       !object(s) ||
-      !(SERVICES as readonly string[]).includes(String(s.service)) ||
+      !oneOf(SERVICES, s.service) ||
       services.some((v) => v.service === s.service) ||
-      !["unconfigured", "provisioning", "ready", "failed"].includes(String(s.state)) ||
-      !["unknown", "healthy", "degraded", "failed"].includes(String(s.health)) ||
+      !oneOf(["unconfigured", "provisioning", "ready", "failed"], s.state) ||
+      !oneOf(["unknown", "healthy", "degraded", "failed"], s.health) ||
       (s.failure !== null &&
-        !["unavailable", "authentication", "configuration", "storage", "capacity"].includes(
-          String(s.failure),
+        !oneOf(
+          ["unavailable", "authentication", "configuration", "storage", "capacity"],
+          s.failure,
         )) ||
       !date(s.observedAt) ||
       !object(s.configuration) ||
@@ -179,7 +182,7 @@ export function readCloudInstallation(
     const p = value.pending;
     if (
       !object(p) ||
-      !["renew", "configuration", "report", "revoke"].includes(String(p.action)) ||
+      !oneOf(["renew", "configuration", "report", "revoke"], p.action) ||
       !uuid(p.operationId) ||
       typeof p.lease !== "string" ||
       p.lease.length > 4096 ||
@@ -291,7 +294,7 @@ export function installationClient(
         chunks.push(chunk);
       }
       const value: unknown = JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)),
+        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
       );
       if (!response.ok) {
         if (response.status === 403 && object(value) && value.error === "revoked") {

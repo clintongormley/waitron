@@ -45,8 +45,16 @@ export function translationEnvelope(
   };
 }
 
-export type CloudJobState =
-  "queued" | "running" | "done" | "partly_done" | "failed" | "collected" | "expired";
+const JOB_STATES = [
+  "queued",
+  "running",
+  "done",
+  "partly_done",
+  "failed",
+  "collected",
+  "expired",
+] as const;
+export type CloudJobState = (typeof JOB_STATES)[number];
 export type CloudReason =
   "limit_reached" | "provider_failed" | "provider_unavailable" | "consent_required";
 export interface TranslationStatus {
@@ -58,15 +66,6 @@ export interface TranslationStatus {
   reason?: CloudReason;
 }
 
-const JOB_STATES: readonly string[] = [
-  "queued",
-  "running",
-  "done",
-  "partly_done",
-  "failed",
-  "collected",
-  "expired",
-];
 // The contract's reasons table: which reasons each finished state may carry.
 const REASONS: Partial<Record<CloudJobState, readonly CloudReason[]>> = {
   partly_done: ["limit_reached", "provider_failed"],
@@ -92,7 +91,7 @@ const object = (v: unknown): v is Record<string, unknown> =>
 const uuid = (v: unknown): v is string =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 const jobState = (v: unknown): v is CloudJobState =>
-  typeof v === "string" && JOB_STATES.includes(v);
+  typeof v === "string" && (JOB_STATES as readonly string[]).includes(v);
 const whole = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
