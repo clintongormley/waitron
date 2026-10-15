@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
@@ -185,7 +185,7 @@ export class StaffingSeasonPainter extends LitElement {
     super.disconnectedCallback();
   }
 
-  protected override willUpdate(_changes: PropertyValues<this>): void {
+  protected override willUpdate(): void {
     if (this.seasonId && this.seasonId !== this.readFor) this.load();
     if (this.api && !this.watchingRoles) {
       this.watchingRoles = true;
