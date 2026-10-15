@@ -68,9 +68,11 @@ Order and draft snapshots retain the admitted worker, original location and comm
 Payment callbacks qualify the original request instead of creating later human activity. Party
 names, bill-request flags and group reminder timing do not count as order or payment activity.
 
-My hours stays with part 5; no placeholder is offered. Parts 4–6 remain open: answering questions,
-corrections, hours and the export/access screens. The period-read cost and correction waiting-list
-follow-ups remain below.
+Part 4 has an [answering and corrections plan](../superpowers/plans/2026-10-15-a10-4-answers-and-corrections-plan.md).
+It plans the sign-in questions, Fix my hours, till PIN decisions and dashboard correction queue;
+those routes and screens remain to be implemented. My hours stays with part 5; no placeholder is
+offered. Parts 4–6 remain open: answering questions, corrections, hours and the export/access
+screens. The period-read cost and correction waiting-list follow-ups remain open.
 
 
 ## A10 period read cost

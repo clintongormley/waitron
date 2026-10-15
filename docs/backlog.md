@@ -4567,8 +4567,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   clock-outs at the last later activity, retain questions for missing times and automatic finishes,
   and send missing-time reminders through the venue's email setup. Automatic ends count immediately;
   only admins may self-approve a later correction, with a stored flag (owner, 2026-10-14).
-  Left: answering questions at sign-in and correction screens (part 4), My hours and manager hours
-  screens (part 5), and PDF/CSV plus representatives' access (part 6). My hours is omitted until
+  Left: [answering questions and corrections](superpowers/plans/2026-10-15-a10-4-answers-and-corrections-plan.md)
+  (part 4, planned), My hours and manager hours screens (part 5), and PDF/CSV plus representatives'
+  access (part 6). My hours is omitted until
   its screen exists. The [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md)
   records the legal basis checked on 12 Oct 2026 and the October 2025 draft it builds to.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
@@ -4581,7 +4582,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A10 correction screens must derive which requests are still waiting.** An answered request’s
   immutable row stays `requested`; an overtaken target cannot be settled. Use response links and
   effective targets rather than the row’s status alone; preserve stale requests in history.
-  Carry this into part 4’s plan.
+  The [part-4 plan](superpowers/plans/2026-10-15-a10-4-answers-and-corrections-plan.md) includes
+  this derivation; keep the issue open until its response and overtaken-target checks run.
 
 - **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
   and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
