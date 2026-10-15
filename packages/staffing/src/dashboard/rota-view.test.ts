@@ -122,12 +122,15 @@ describe("the Rota by area", () => {
     await vi.waitFor(() =>
       expect(area(el).shadowRoot!.querySelector("[data-slot=empty]")!.textContent).toContain("Ana"),
     );
-    expect(request).toHaveBeenLastCalledWith(
-      "/management-api/staffing/rota?week=2026-11-30",
-      "GET",
-      undefined,
-      { passive: true },
-    );
+    expect(request.mock.calls.slice(-2)).toEqual([
+      ["/management-api/staffing/rota?week=2026-11-30", "GET", undefined, { passive: true }],
+      [
+        "/management-api/roster/breaches?locationId=location&period=2026-11-30",
+        "GET",
+        undefined,
+        { passive: true },
+      ],
+    ]);
   });
   it("shows published weeks without slot actions", async () => {
     const el = await mount(

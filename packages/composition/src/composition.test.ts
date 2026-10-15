@@ -44,6 +44,7 @@ import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import {
   WORKFORCE_ES_MIGRATIONS,
   WORKFORCE_ES_VOCABULARY,
+  WORKFORCE_ES_CHANGE_SOURCES,
   WORKFORCE_ES_RECORD_EXPORT,
 } from "@waitron/workforce-es";
 import {
@@ -197,6 +198,7 @@ describe("ALL_MODULES vocabulary seat", () => {
   it("workforce-es declares the Spain labour module's own vocabulary, by reference", () => {
     const wfes = ALL_MODULES.find((m) => m.name === "workforce-es");
     expect(wfes?.vocabulary).toBe(WORKFORCE_ES_VOCABULARY);
+    expect(wfes?.changes).toBe(WORKFORCE_ES_CHANGE_SOURCES);
   });
 });
 

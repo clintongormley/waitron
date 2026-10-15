@@ -45,6 +45,14 @@ filled in, uses `wt-help-tooltip`, whose button closes on outside click or Escap
 Nothing guards that hint-or-"?" rule across screens, and other setup screens may still break it
 (backlog A237).
 
+### Dialog footer controls must occupy the primitive's real slots
+
+`wt-form-actions` offers `cancel` on the left, `secondary` beside the primary action, and the
+unnamed primary slot. A control assigned another slot is not painted. The A585-7 Chromium LOOK
+found hidden Cancel, Delete and Back controls even though direct `.click()` tests passed.
+`packages/staffing/src/dashboard/shift-edit-dialog.test.ts` and `publish-dialog.test.ts` now check
+their native buttons' rendered width; those tests cover the staffing dialogs, not other callers.
+
 ## A screen does not draw its own form field
 
 A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive
@@ -375,6 +383,13 @@ checks those names against shipped resources. A rejected subscription closes the
 stream, so a misspelled name affects other screens too. The guard catches unknown names, not missing
 SQL dependencies or disabled-module combinations. Cost: the live-updates run-it review found this
 unguarded coupling.
+
+The dependency list belongs in `live-queries.ts`. The guard reads that catalogue and does not
+inspect an inline list in a client method. A585-7's review renamed such an inline dependency to an
+unknown name and the guard passed; moving the names into the catalogue made it refuse them.
+The fix also registered the labour module's own change source. Its real subscription probe changed
+from HTTP 400 to 200, with a shifts-only 200 control. The warning read follows the rota's live
+observation once; a second independent observation had fetched the warnings twice per notice.
 
 ## Another module's view inside the Calendar is a `calendarViews` entry
 

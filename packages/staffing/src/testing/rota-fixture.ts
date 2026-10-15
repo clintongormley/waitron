@@ -32,6 +32,8 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
     end: 660,
   });
   return {
+    locationId: "location",
+    timeZone: "Europe/Madrid",
     week,
     version: { id: "draft", status: "draft", changedSincePublished: true },
     days: Array.from({ length: 7 }, (_, n) => ({
@@ -121,6 +123,7 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
         contractedMinutes: null,
       },
     ],
+    openSwaps: [],
     absences: [{ personId: "laia", startsOn: day(4), endsOn: day(4) }],
     areas: [
       { area: rotaArea, name: "Kitchen", active: true },
@@ -145,6 +148,8 @@ export function rotaApi(
   const request = vi.fn(async (path: string, method: string, body: unknown) => {
     if (method === "GET" && path.includes("/rota?"))
       return read(decodeURIComponent(path.split("week=")[1]!));
+    if (method === "GET" && path.includes("/roster/breaches?"))
+      return { breaches: [], ruleset: null };
     if (method === "POST" && path.endsWith("/rota/shifts")) return { shiftId: "new" };
     throw new Error(`unexpected ${method} ${path} ${JSON.stringify(body)}`);
   });

@@ -1344,6 +1344,11 @@ found no route in this file that raises it (not established).
 
 ### workforce-api.ts — boundary `workforce-api.ts:65` (map `:45-63`)
 
+> 2026-10-15: A585-7 lets roster publication proceed without configured labour rules. The new
+> warnings read still answers `convenio.not_found` as 409. The observations below record the
+> publication path before that change.
+
+
 Codes checked 13 / match 12 / mismatch 3 rows, all places where NO code is raised. Fitting:
 `roster.not_found`, `shift.not_found`, `swap.not_found`, `absence.not_found` (path, 404);
 `roster.draft_exists`, `roster.not_draft`, `roster.already_published`, `roster.period_already_published`,

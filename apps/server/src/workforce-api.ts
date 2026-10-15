@@ -311,6 +311,9 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         });
         const ruleset = await resolveWorkTimeRuleset(tx, {
           locationId: version.locationId,
+        }).catch((error: unknown) => {
+          if (error instanceof AppError && error.code === "convenio.not_found") return undefined;
+          throw error;
         });
         const previous = await tx
           .select({ id: rosterVersions.id })

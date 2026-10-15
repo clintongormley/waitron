@@ -12,6 +12,7 @@ describe("the public surface", () => {
         "prepareTimeRecordExport",
         "WORKFORCE_ES_RECORD_EXPORT",
         "WORKFORCE_ES_CLASSIFICATION",
+        "WORKFORCE_ES_CHANGE_SOURCES",
         "WORKFORCE_ES_CONFIGURATION_TRANSFER",
         "WORKFORCE_ES_MIGRATIONS",
         "WORKFORCE_ES_VOCABULARY",

@@ -15,6 +15,7 @@ import { AppError, normaliseUuid } from "@waitron/shared";
 import { parseCalendarMonth } from "@waitron/venue-service";
 import {
   addRotaShift,
+  changeRotaWeek,
   isRotaWeek,
   readRotaWeek,
   removeRotaShift,
@@ -186,6 +187,18 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         if (!isRotaWeek(week)) throw new AppError("management.request_invalid", { field: "week" });
         return c.json(
           await gatedBy("schedule.manage", sessionId, (tx) => readRotaWeek(tx, ctx.cfg, week)),
+        );
+      }),
+    );
+    app.post(`${ROOT}/rota/change-week`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = record(await readJsonBody<unknown>(c), "body", new Set(["week"]));
+        if (!isRotaWeek(body.week))
+          throw new AppError("management.request_invalid", { field: "week" });
+        const week = body.week;
+        return c.json(
+          await gatedBy("schedule.manage", sessionId, (tx) => changeRotaWeek(tx, ctx.cfg, week)),
         );
       }),
     );

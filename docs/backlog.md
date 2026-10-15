@@ -4707,12 +4707,21 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
-- **A585. Staffing needs and the rota** — add the Calendar's Rota view by person, live labour
-  warnings, publishing and changing a week, then retire the old Rota screen and free-text staff
-  role. The area view and slot filling are built. Parts 7–8 remain in the order of the
+- **A585. Staffing needs and the rota** — retire the old Rota screen and free-text staff
+  role. Both Calendar Rota views, slot filling and shift editing, live labour warnings, publishing
+  and changing a published week are built. Part 8 remains in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
   [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
   [mockups](backlog/mockups/a585-staffing/) define the remaining views.
+- **Copy rota assignments in one read.** `changeRotaWeek` reads an assignment per copied shift.
+  Measure a large week under the venue write queue, then batch that read while preserving the
+  shift-id map and rollback checks. Query cost is unmeasured; A585-7 review finding.
+- **Reuse the rota picker's baseline labour checks.** `candidateWarnings` validates the unchanged
+  week once per candidate on each redraw. Measure a large picker, then share that baseline across
+  its candidates without sharing candidate-specific warnings. A585-7 review; cost unmeasured.
+- **The dashboard live-query guard misses inline dependency lists.** The A585-7 review put an
+  unknown name inside `client.ts`; `scripts/live-subscriptions.test.ts` stayed green because it
+  reads `live-queries.ts` declarations. Add a guard that refuses inline lists and a failing control.
 - **Rota warnings: pin the outer query's local-date boundaries.** The offset-aware in-week filter
   is covered, but replacing the unattached-shift query's local date with UTC leaves the warnings
   cases green. Add cases at the outer edges of its three-week window; see

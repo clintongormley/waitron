@@ -1,3 +1,4 @@
+import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
 import type { AreaRef } from "../slots.js";
@@ -137,6 +138,44 @@ export class StaffingApi {
       },
       apply,
     );
+  }
+  watchRotaWarnings(
+    queries: QueryController,
+    locationId: string,
+    week: string,
+    apply: (read: { breaches: RosterBreach[]; ruleset: WorkTimeRuleset | null }) => void,
+  ): Promise<void> {
+    return queries.watch(
+      "rota-warnings",
+      {
+        key: `staffing:rota-warnings:${locationId}:${week}`,
+        dependencies: QUERY_DEPENDENCIES["rota-warnings"].map((type) => ({ type })),
+        read: async () => {
+          try {
+            return await this.request<{ breaches: RosterBreach[]; ruleset: WorkTimeRuleset }>(
+              `/management-api/roster/breaches?locationId=${encodeURIComponent(locationId)}&period=${encodeURIComponent(week)}`,
+              "GET",
+              undefined,
+              { passive: true },
+            );
+          } catch (error) {
+            // On this read, 409 means that rules are not configured; the host owns its country code.
+            if ((error as { status?: number } | null)?.status === 409)
+              return { breaches: [], ruleset: null };
+            throw error;
+          }
+        },
+      },
+      apply,
+    );
+  }
+  changeRotaWeek(
+    week: string,
+  ): Promise<{ versionId: string; openSwaps: { swapId: string; fromShiftId: string }[] }> {
+    return this.request("/management-api/staffing/rota/change-week", "POST", { week });
+  }
+  publishRota(versionId: string): Promise<{ breaches: RosterBreach[] }> {
+    return this.request(`/management-api/roster/${encodeURIComponent(versionId)}/publish`, "POST");
   }
   addRotaShift(input: RotaShiftInput): Promise<{ shiftId: string }> {
     return this.request("/management-api/staffing/rota/shifts", "POST", input);

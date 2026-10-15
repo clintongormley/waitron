@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lte, inArray, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { readLocationClock } from "@waitron/reporting";
@@ -10,7 +10,7 @@ import {
   offsetMinutes,
   readDayPlan,
 } from "@waitron/venue-service";
-import { WorkforceBackend, absences, employments, shifts } from "@waitron/workforce";
+import { WorkforceBackend, absences, employments, shifts, shiftSwaps } from "@waitron/workforce";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { parseArea } from "./paint-rules.js";
 import { mondayOf, readRotaRows } from "./rota-data.js";
@@ -69,6 +69,8 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
   const holds = (personId: string, staffRoleId: string) =>
     roles.some((r) => r.id === staffRoleId && r.holderIds.includes(personId));
   return {
+    locationId: cfg.locationId,
+    timeZone: clock.timeZone,
     week,
     version: version
       ? {
@@ -117,6 +119,31 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
         })),
     })),
     shifts: placed,
+    openSwaps: placed.length
+      ? await tx
+          .select({
+            swapId: shiftSwaps.id,
+            fromShiftId: shiftSwaps.fromShiftId,
+            toShiftId: shiftSwaps.toShiftId,
+          })
+          .from(shiftSwaps)
+          .where(
+            and(
+              inArray(shiftSwaps.status, ["requested", "accepted"]),
+              or(
+                inArray(
+                  shiftSwaps.fromShiftId,
+                  placed.map((s) => s.shiftId),
+                ),
+                inArray(
+                  shiftSwaps.toShiftId,
+                  placed.map((s) => s.shiftId),
+                ),
+              ),
+            ),
+          )
+          .orderBy(asc(shiftSwaps.id))
+      : [],
     people: people.map((p) => ({
       ...p,
       staffRoleIds: roles.filter((r) => r.holderIds.includes(p.personId)).map((r) => r.id),
@@ -304,4 +331,21 @@ export async function removeRotaShift(tx: Transaction, cfg: Cfg, shiftId: string
   const row = await writableShift(tx, cfg, shiftId);
   if (row.rosterVersionId === null) await unattachedWeek(tx, cfg, row);
   await backend.removeShift(tx, { shiftId });
+}
+
+export async function changeRotaWeek(tx: Transaction, cfg: Cfg, week: string) {
+  if (!isRotaWeek(week)) throw invalid("week");
+  const { version } = await backend.getRoster(tx, { ...cfg, period: week });
+  if (!version) throw invalid("week");
+  if (version.status === "draft")
+    throw new AppError("roster.draft_exists", { locationId: cfg.locationId });
+  const copied = await backend.copyPublishedToDraft(tx, { versionId: version.id });
+  for (const [original, shiftId] of copied.shiftIds) {
+    const [row] = await tx
+      .select()
+      .from(shiftAssignments)
+      .where(eq(shiftAssignments.shiftId, original));
+    if (row) await tx.insert(shiftAssignments).values({ ...row, shiftId });
+  }
+  return { versionId: copied.versionId, openSwaps: copied.openSwaps };
 }
