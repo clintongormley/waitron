@@ -280,7 +280,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   (A741); `sale.over_simplified_limit` is reworded, since it says the till cannot issue a full
   invoice; and someone decides whether the server should go on accepting a saved F1 choice
   (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which lifts its check on an
-  order growing past the limit. A741 left that last one unchanged.
+  order growing past the limit. A741 left that last one unchanged; a bill already saved as F1 still
+  shows its Full invoice line, payment refuses it, and the till offers no way back to a simplified
+  invoice.
   The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 

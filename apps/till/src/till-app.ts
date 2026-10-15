@@ -2331,7 +2331,7 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages staff may choose, the location's own first. */
   @state() private receiptLanguages: string[] = [];
-  /** Off unless the server says so: a server too old to send it issues none. */
+  /** Off unless the server sends true. */
   @state() private fullInvoices = false;
   #simplifiedInvoiceLimit: string | null = null;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
