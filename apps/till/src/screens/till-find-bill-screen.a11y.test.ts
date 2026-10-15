@@ -92,15 +92,13 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
         )!,
       );
       await expectNoA11yViolations(host);
-      transactions
-        .querySelector('[name="dates"]')!
-        .dispatchEvent(
-          new CustomEvent("wt-change", {
-            detail: { value: "custom" },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+      transactions.querySelector('[name="dates"]')!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "custom" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       await el.updateComplete;
       await vi.waitFor(() =>
         expect(transactions.querySelector('wt-input[name="from"]')).not.toBeNull(),
