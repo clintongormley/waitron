@@ -214,7 +214,7 @@ it("transfer membership is unordered and Confirm accepts whole lines directly", 
   expect(app.protectionAtSubmit).toEqual([false]);
   expect((await question(app)).open).toBe(false);
 });
-it("Back protects the staged table choice and explicit bill choice submits directly", async () => {
+it("Back protects the staged table choice, and the bill choice opens the guests window whose confirm submits", async () => {
   const { app, screen } = await mount("split-table");
   expect(unload()).toBe(false);
   await click(screen, '[data-target="t2"]');
@@ -223,8 +223,15 @@ it("Back protects the staged table choice and explicit bill choice submits direc
   expect((await question(app)).open).toBe(true);
   await answer(app, "keep");
   await click(screen, '[data-target="other"]');
+  const guests = screen.shadowRoot!.querySelector("till-split-guests-dialog")!;
+  await guests.updateComplete;
+  guests.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+  await screen.updateComplete;
   expect(app.commands).toEqual([
-    { type: "split-table", detail: { tableId: "t2", billId: "other" } },
+    {
+      type: "split-table",
+      detail: { tableId: "t2", billId: "other", guests: { staying: 2, leaving: null } },
+    },
   ]);
   expect(app.protectionAtSubmit).toEqual([false]);
 });

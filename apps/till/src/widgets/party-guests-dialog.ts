@@ -1,0 +1,209 @@
+import { LitElement, css, html, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
+import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  draftScopeFor,
+  saveActionState,
+} from "@waitron/ui";
+import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
+import { parseGuestCount, sameGuestCount } from "./guest-count.js";
+import { t } from "../i18n/t.js";
+
+export interface PartyGuestsDetail {
+  /** null clears the count. */
+  guestCount: number | null;
+}
+
+@customElement("till-party-guests-dialog")
+export class TillPartyGuestsDialog extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      .fields {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-4);
+        width: var(--wt-form-max-width);
+        max-width: 100%;
+      }
+    `,
+  ];
+
+  /** The party's tables, as the heading names them. */
+  @property() tables = "";
+  @property() value = "";
+  @property({ attribute: false }) savedValue: string | undefined;
+  @property() refusal = "";
+
+  @state() private attempted = false;
+
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  #baseline?: string;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (changed.has("savedValue")) this.#followStored();
+  }
+
+  #track(): void {
+    this.#baseline ??= this.savedValue ?? this.value;
+    const { coordinator, scope } = draftScopeFor<string>(this, {
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: sameGuestCount,
+      restore: (value) => (this.value = value),
+    });
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline);
+  }
+
+  /** A count stored elsewhere while the window is open becomes what Save compares against, and
+   * replaces the field only while the field still reads the previous stored count. */
+  #followStored(): void {
+    const stored = this.savedValue;
+    if (stored === undefined || sameGuestCount(stored, this.#baseline!)) return;
+    if (sameGuestCount(this.value, this.#baseline!)) this.value = stored;
+    this.#baseline = stored;
+    this.#scope!.commit(stored);
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  override async firstUpdated(): Promise<void> {
+    await this.renderRoot.querySelector<WtDialog>("wt-dialog")!.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("wt-input")!.focus();
+  }
+
+  #invalid(): boolean {
+    return this.attempted && parseGuestCount(this.value) === undefined;
+  }
+
+  #fieldError(): string {
+    if (this.#invalid()) return t("seat.guest_count_invalid");
+    return this.refusal;
+  }
+
+  #onInput(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    this.value = event.detail.value;
+    this.#scope?.changed();
+    this.refusal = "";
+  }
+
+  async #save(): Promise<void> {
+    if (!this.isConnected || !this.active) return;
+    if (saveActionState(this.#scope).unchanged) return;
+    this.attempted = true;
+    this.refusal = "";
+    const parsed = parseGuestCount(this.value);
+    if (parsed === undefined) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
+    this.#baseline = this.value;
+    this.#scope?.commit(this.value);
+    this.dispatchEvent(
+      new CustomEvent<PartyGuestsDetail>("party-guests-confirm", {
+        detail: parsed,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#leave) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#reportClose();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportClose();
+  }
+
+  #reportClose(): void {
+    this.dispatchEvent(new CustomEvent("party-guests-cancel", { bubbles: true, composed: true }));
+  }
+
+  override render() {
+    const error = this.#fieldError();
+    const saveAction = saveActionState(this.#scope);
+    return html`<wt-dialog
+      ${trackDialog()}
+      .open=${this.active}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
+      .heading=${t("table.guests_title").replace("{tables}", () => this.tables)}
+      @wt-close=${(event: Event) => this.#closed(event)}
+    >
+      <div class="fields">
+        <wt-input
+          name="guestCount"
+          autocomplete="off"
+          .label=${t("seat.guest_count")}
+          .value=${live(this.value)}
+          .error=${error}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
+          @keydown=${(event: KeyboardEvent) =>
+            submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-guests-save]"))}
+        ></wt-input>
+        <wt-form-actions .error=${error === "" ? "" : t("form.fix_fields")}>
+          <wt-button
+            slot="cancel"
+            data-guests-cancel
+            variant="secondary"
+            @click=${() => this.#cancel()}
+          >
+            ${t("action.cancel")}
+          </wt-button>
+          <wt-button
+            data-guests-save
+            variant=${saveAction.variant}
+            ?disabled=${saveAction.unchanged || this.#invalid()}
+            @click=${() => void this.#save()}
+          >
+            ${t("table.guests_save")}
+          </wt-button>
+        </wt-form-actions>
+      </div>
+    </wt-dialog>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "till-party-guests-dialog": TillPartyGuestsDialog;
+  }
+}

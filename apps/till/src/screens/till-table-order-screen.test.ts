@@ -4216,6 +4216,13 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el)).toEqual(["t1", "t3", "t20"]);
     });
 
+    async function confirmSplitGuests(el: TillTableOrderScreen): Promise<void> {
+      const dialog = el.shadowRoot!.querySelector("till-split-guests-dialog")!;
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+    }
+
     it("Split a table picks one of the party's tables, then one of its open or presented bills other than the main one, or none", async () => {
       const { el } = await mount({
         lines: [pendingLine],
@@ -4244,6 +4251,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="wo-check"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+      await confirmSplitGuests(el);
 
       click(el, "[data-move-split]");
       await el.updateComplete;
@@ -4253,10 +4261,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       click(el, '[data-target="none"]');
       await el.updateComplete;
+      await confirmSplitGuests(el);
 
       expect(split).toEqual([
-        { tableId: "t5", billId: "wo-check" },
-        { tableId: "t5", billId: null },
+        { tableId: "t5", billId: "wo-check", guests: { staying: 3, leaving: null } },
+        { tableId: "t5", billId: null, guests: { staying: 3, leaving: null } },
       ]);
     });
 
@@ -4414,6 +4423,220 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
     });
 
+    /** Split a table's guests window, open after picking table `tableId` and then bill `billId`. */
+    async function toSplitGuests(el: TillTableOrderScreen, tableId: string, billId: string) {
+      await toMenu(el);
+      click(el, '[data-action="split-table"]');
+      await el.updateComplete;
+      click(el, `[data-target="${tableId}"]`);
+      await el.updateComplete;
+      click(el, `[data-target="${billId}"]`);
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-split-guests-dialog");
+      if (dialog === null) throw new Error("the guests window must open");
+      await dialog.updateComplete;
+      return dialog;
+    }
+
+    function splitGuestsInput(
+      dialog: HTMLElementTagNameMap["till-split-guests-dialog"],
+      name: string,
+    ): HTMLInputElement {
+      return dialog
+        .shadowRoot!.querySelector<HTMLElement>(`wt-input[name="${name}"]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    }
+
+    it("Split a table asks for each side's guests once the bill is chosen, the staying side prefilled with the party's count", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...partyTables(true),
+        bills: partyBills().bills,
+      });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "wo-check");
+
+      expect(dialog.stayingLabel).toBe("Mesa 4");
+      expect(dialog.leavingLabel).toBe("Mesa 5");
+      expect(dialog.staying).toBe("3");
+      expect(dialog.leaving).toBe("");
+      expect(el.shadowRoot!.querySelector("[data-split-table]")).toBeNull();
+      expect(split).toEqual([]);
+    });
+
+    it("Split a table's guests window starts the staying side empty when the party has no count", async () => {
+      const floor = partyTables(true);
+      const party = { ...floor.party, guestCount: null };
+      const tables = floor.tables.map((table) =>
+        table.party?.id === party.id ? { ...table, party } : table,
+      );
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", party, tables });
+      const dialog = await toSplitGuests(el, "t4", "none");
+
+      expect(dialog.stayingLabel).toBe("Mesa 5");
+      expect(dialog.leavingLabel).toBe("Mesa 4");
+      expect(dialog.staying).toBe("");
+    });
+
+    it("confirming Split a table's guests window sends split-table with the table, the bill and both sides' guests", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...partyTables(true),
+        bills: partyBills().bills,
+      });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "none");
+      const leaving = splitGuestsInput(dialog, "leavingGuests");
+      leaving.value = "2";
+      leaving.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+
+      expect(split).toEqual([{ tableId: "t5", billId: null, guests: { staying: 3, leaving: 2 } }]);
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+    });
+
+    it("cancelling Split a table's guests window sends nothing and leaves the menu usable", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...partyTables(true),
+        bills: partyBills().bills,
+      });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "wo-check");
+
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-cancel]")!.click();
+      await expect.poll(() => el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+
+      expect(split).toEqual([]);
+      click(el, "[data-move-split]");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-action="split-table"]')).not.toBeNull();
+    });
+
+    it("keeps what the waiter typed on the staying side when the party's count changes under Split a table's guests window", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "none");
+      const staying = splitGuestsInput(dialog, "stayingGuests");
+      staying.value = "4";
+      staying.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      expect(dialog.staying).toBe("4");
+      expect(splitGuestsInput(dialog, "stayingGuests").value).toBe("4");
+      const leaving = splitGuestsInput(dialog, "leavingGuests");
+      leaving.value = "2";
+      leaving.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+      expect(split).toEqual([{ tableId: "t5", billId: null, guests: { staying: 4, leaving: 2 } }]);
+    });
+
+    it("moves an untouched staying side of Split a table's guests window to a count stored elsewhere, and splits with it", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "none");
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      expect(splitGuestsInput(dialog, "stayingGuests").value).toBe("6");
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+      expect(split).toEqual([
+        { tableId: "t5", billId: null, guests: { staying: 6, leaving: null } },
+      ]);
+    });
+
+    it("reopens Split a table's guests window with the counts sent and the refusal under the named field when the app hands one back", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const split = heard(el, "split-table");
+
+      el.splitRefusal = {
+        tableId: "t5",
+        billId: "wo-check",
+        staying: "3",
+        leaving: "1000",
+        field: "leaving",
+        message: t("seat.guest_count_invalid"),
+      };
+      await el.updateComplete;
+
+      const dialog = el.shadowRoot!.querySelector("till-split-guests-dialog")!;
+      await dialog.updateComplete;
+      expect(dialog.staying).toBe("3");
+      expect(dialog.leaving).toBe("1000");
+      expect(dialog.stayingRefusal).toBe("");
+      expect(dialog.leavingRefusal).toBe(t("seat.guest_count_invalid"));
+      const leaving = splitGuestsInput(dialog, "leavingGuests");
+      leaving.value = "2";
+      leaving.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+
+      expect(split).toEqual([
+        { tableId: "t5", billId: "wo-check", guests: { staying: 3, leaving: 2 } },
+      ]);
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+    });
+
+    it("does not reopen Split a table's guests window for a refusal about a table the party no longer holds", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+
+      el.splitRefusal = {
+        tableId: "t9",
+        billId: null,
+        staying: "3",
+        leaving: "1000",
+        field: "leaving",
+        message: t("seat.guest_count_invalid"),
+      };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+    });
+
+    it("closes Split a table's guests window, sending nothing, when the screen switches to another party", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const split = heard(el, "split-table");
+      await toSplitGuests(el, "t5", "none");
+
+      el.party = { ...floor.party, id: "v8", revision: 1, tableIds: ["t4", "t5", "t7"] };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+      expect(split).toEqual([]);
+    });
+
+    it("closes Split a table's guests window, sending nothing, when the party no longer holds the chosen table", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const split = heard(el, "split-table");
+      await toSplitGuests(el, "t5", "none");
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, tableIds: ["t4"] };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+      expect(split).toEqual([]);
+    });
+
     it("Name the party opens the name dialog with the party's name, and sends name-party { name }", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
       const named = heard(el, "name-party");
@@ -4455,6 +4678,138 @@ describe("till-table-order-screen", () => {
       dialog.dispatchEvent(new CustomEvent("party-name-cancel", { bubbles: true, composed: true }));
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+    });
+
+    it("offers Guests right after Name the party whenever a party is open", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      await toMenu(el);
+      const guests = el.shadowRoot!.querySelector('[data-action="guests"]')!;
+      expect(guests.textContent!.trim()).toBe(t("table.action_guests"));
+      expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(guests);
+    });
+
+    it("Guests opens the guests dialog with the party's count, and sends guests-party { guestCount }", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const counted = heard(el, "guests-party");
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; savedValue: string; tables: string; refusal: string }
+      >("till-party-guests-dialog")!;
+      expect(dialog.value).toBe("3");
+      expect(dialog.savedValue).toBe("3");
+      expect(dialog.tables).toBe("Mesa 4, 5");
+      expect(dialog.refusal).toBe("");
+
+      dialog.dispatchEvent(
+        new CustomEvent("party-guests-confirm", {
+          detail: { guestCount: 5 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(counted).toEqual([{ guestCount: 5 }]);
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+    });
+
+    it("Guests opens with an empty field when the party has no count", async () => {
+      const floor = partyTables();
+      const party = { ...floor.party, guestCount: null };
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, party });
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; savedValue: string }
+      >("till-party-guests-dialog")!;
+      expect(dialog.value).toBe("");
+      expect(dialog.savedValue).toBe("");
+    });
+
+    it("reopens the guests dialog with the count sent and the refusal beside the field when the app hands one back", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+
+      el.guestsRefusal = { value: "1000", message: t("seat.guest_count_invalid") };
+      await el.updateComplete;
+
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { value: string; refusal: string }>(
+        "till-party-guests-dialog",
+      )!;
+      expect(dialog.value).toBe("1000");
+      expect(dialog.refusal).toBe(t("seat.guest_count_invalid"));
+      dialog.dispatchEvent(
+        new CustomEvent("party-guests-cancel", { bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+    });
+
+    it("closes the guests dialog, sending nothing, when the screen switches to another party", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const counted = heard(el, "guests-party");
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).not.toBeNull();
+
+      el.party = { ...floor.party, id: "v8", revision: 1, tableIds: ["t4", "t5", "t7"] };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+      expect(counted).toEqual([]);
+    });
+
+    it("keeps the guests dialog open when only the same party's count changes", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-party-guests-dialog");
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBe(dialog);
+    });
+
+    it("moves an untouched Guests window to a count stored elsewhere, so the opening count can still be saved", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const counted = heard(el, "guests-party");
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-party-guests-dialog")!;
+      await dialog.updateComplete;
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      const field = dialog.shadowRoot!.querySelector("wt-input")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(input.value).toBe("6");
+      const save = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "wt-button[data-guests-save]",
+      )!;
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      for (const value of ["4", "3"]) {
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await dialog.updateComplete;
+      }
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+      save.click();
+      await el.updateComplete;
+      expect(counted).toEqual([{ guestCount: 3 }]);
     });
 
     it("merge lists the party's other untouched bills only, and dispatches merge-bills { fromBillId }", async () => {

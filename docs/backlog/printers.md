@@ -415,6 +415,10 @@ just a green typecheck.
      [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
   6. **Guests and the amount per person** when the table's guests were entered.
+     Joined tables' counts are added together when they join (or when guests move onto a seated
+     table), so the party's own count holds the sum, or no count when either party had none or the sum
+     is over 999; a bill split by item prints no guests line (A713, owner 2026-10-15, in
+     [till.md](till.md#decisions-and-deliberate-limits)).
 
 ## The till's on-screen receipt is a second copy of the layout
 

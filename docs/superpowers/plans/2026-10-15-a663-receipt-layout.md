@@ -1621,6 +1621,17 @@ family (`partyFamily`, `parties.ts:431-437`). The survivor keeps only its own gu
 "table 4 (2 guests) joins table 5 (3 guests)" the survivor's bill holds both tables' food but says
 3 guests: dividing by it would be wrong.
 
+> **2026-10-15, A713:** this describes the code before A713. A guest count now has more writers:
+> the till's Guests sets or clears it at any time (`PUT /api/parties/:id/guests`); a Join, or a Move
+> guests onto a seated table, leaves the surviving party with both counts added together, or none
+> when either is unknown or the sum is over 999 (`combineParties`, `apps/server/src/table-actions.ts`);
+> and Split a table asks each side's count. The owner chose to add joined counts
+> ([till.md](../../backlog/till.md#decisions-and-deliberate-limits)), so a merged party's own count
+> already holds the sum. A bill split by item still has no count of its own. So the Rule's "no other
+> party was merged into it" condition and its "a merged party's bill print[s] neither" as it applies
+> to the survivor, the reader's `partyFamily` check, and Step 1's expectation of undefined for the
+> survivor's bill no longer match the owner's choice: a survivor's bill can print its own count.
+
 Rule (Q2 default): print «4 comensales · por persona  101,75 €» when the sale's bill belongs to a
 party with a guest count, that party holds no other bill that is not `abandoned`
 (`workingOrderStatus`, `orders.ts:29-36`), no other party was merged into it (`partyFamily` returns
@@ -1897,6 +1908,15 @@ count, so the receipt would say «3 comensales · por persona 50,00 €» when 5
 entered only when a table is seated, so the till has no count for the joined party. Alternative: add
 the joined tables' counts together («5 comensales · por persona 30,00 €») — right when each table's
 count was entered, wrong when one was left blank.
+
+> **2026-10-15, A713:** this describes the code before A713. A guest count now has more writers:
+> the till's Guests sets or clears it at any time (`PUT /api/parties/:id/guests`); a Join, or a Move
+> guests onto a seated table, leaves the surviving party with both counts added together, or none
+> when either is unknown or the sum is over 999 (`combineParties`, `apps/server/src/table-actions.ts`);
+> and Split a table asks each side's count. The owner chose to add joined counts
+> ([till.md](../../backlog/till.md#decisions-and-deliberate-limits)), so a merged party's own count
+> already holds the sum. A bill split by item still has no count of its own. Q2's joined-tables half is
+> answered by that choice.
 
 **Q3 — Where the drink/food switch lives.** (Part 4 withdrawn 2026-10-15; no answer needed.)
 The spec says "a venue setting" (point 7, and the mockup's legend: «a venue setting, off by

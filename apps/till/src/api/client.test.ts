@@ -2832,6 +2832,25 @@ describe("TillApi", () => {
     );
   });
 
+  it("splitTable sends each side's guest count as the body's guests when given one", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", mainBillId: null }));
+    const api = new TillApi("", fetchStub);
+
+    await api.splitTable("v1", "tbl-4", null, 3, { staying: 3, leaving: null });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/split-table",
+      expect.objectContaining({
+        body: JSON.stringify({
+          tableId: "tbl-4",
+          billId: null,
+          expectedPartyRevision: 3,
+          guests: { staying: 3, leaving: null },
+        }),
+      }),
+    );
+  });
+
   it("setPartyName PUTs the name, or null to clear it, and the revision to the party's /name route", async () => {
     const fetchStub = vi.fn(async () => jsonResponse({ revision: 4, name: "Ana" }));
     const api = new TillApi("", fetchStub);
@@ -2868,6 +2887,47 @@ describe("TillApi", () => {
     await expect(
       new TillApi("", fetchStub).setPartyName("v1", "x".repeat(41), 3),
     ).rejects.toMatchObject({ code: "management.request_invalid", field: "name" });
+  });
+
+  it("setPartyGuests PUTs the count, or null to clear it, and the revision to the party's /guests route", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ revision: 4, guestCount: 5 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.setPartyGuests("v1", 5, 3)).resolves.toEqual({ revision: 4, guestCount: 5 });
+    await api.setPartyGuests("v1", null, 4);
+
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      1,
+      "/api/parties/v1/guests",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        body: JSON.stringify({ guestCount: 5, expectedPartyRevision: 3 }),
+      }),
+    );
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      2,
+      "/api/parties/v1/guests",
+      expect.objectContaining({
+        body: JSON.stringify({ guestCount: null, expectedPartyRevision: 4 }),
+      }),
+    );
+  });
+
+  it("setPartyGuests surfaces a refusal naming the field as { code, field }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "guestCount" } } },
+          400,
+        ),
+      );
+
+    await expect(new TillApi("", fetchStub).setPartyGuests("v1", 1000, 3)).rejects.toMatchObject({
+      code: "management.request_invalid",
+      field: "guestCount",
+    });
   });
 
   it("mergeBills POSTs { fromBillId } to the /merge route of the bill merged into, and answers nothing", async () => {

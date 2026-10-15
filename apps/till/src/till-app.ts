@@ -189,7 +189,12 @@ import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import { otherPartyRead, shownTableNames } from "./widgets/table-targets.js";
-import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
+import type {
+  BillPayDetail,
+  MoveBillDetail,
+  SplitRefusal,
+  SplitTableDetail,
+} from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
@@ -487,6 +492,20 @@ function seatedTables(tables: readonly TableState[], named: readonly string[]): 
     for (const member of mergeMembersOf(tables, table)) held.add(member.id);
   }
   return [...held];
+}
+
+/** The side of a split whose count the server refused, by the field its refusal names. */
+function refusedSplitSide(
+  refused: { code?: string; field?: string } | undefined,
+): "staying" | "leaving" | undefined {
+  if (refused?.code !== "management.request_invalid") return undefined;
+  if (refused.field === "guests.staying") return "staying";
+  if (refused.field === "guests.leaving") return "leaving";
+  return undefined;
+}
+
+function guestField(count: number | null): string {
+  return count === null ? "" : String(count);
 }
 
 function isPartyOutOfDate(error: unknown): boolean {
@@ -2232,6 +2251,8 @@ export class TillApp extends LitElement {
   @state() private finishRefused = false;
   /** A name the server refused for the party, and why, which the table screen shows beside its field. */
   @state() private nameRefusal: { name: string; message: string } | null = null;
+  @state() private guestsRefusal: { value: string; message: string } | null = null;
+  @state() private splitRefusal: SplitRefusal | null = null;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
   @state() private editSentLines = true;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
@@ -6780,6 +6801,8 @@ export class TillApp extends LitElement {
     this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
     this.finishRefused = false;
     this.nameRefusal = null;
+    this.guestsRefusal = null;
+    this.splitRefusal = null;
     this.reprintSent = [];
     if (guestCount === undefined) {
       this.orderParty = table?.party ?? null;
@@ -8835,18 +8858,35 @@ export class TillApp extends LitElement {
    * screen stays with this party: at another of its tables when the open one left, and on its main
    * bill when the bill on screen left with the table. With no main bill, the party's bills are read
    * and {@link billToOpen} picks one, unless the waiter has left the party ({@link #hasLeftParty})
-   * by the time they answer.
+   * by the time they answer. A refusal of one side's count goes back to the screen's guests window
+   * under that side's field, unless the waiter has left the party since; any other is said on the
+   * banner.
    */
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId } = (event as CustomEvent<{ tableId: string; billId: string | null }>)
-      .detail;
+    const { tableId, billId, guests } = (event as CustomEvent<SplitTableDetail>).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
+    this.splitRefusal = null;
     try {
-      await this.api.splitTable(party.id, tableId, billId, party.revision);
+      await this.api.splitTable(party.id, tableId, billId, party.revision, guests);
     } catch (error) {
+      const refused = error as { code?: string; field?: string } | undefined;
+      const side = refusedSplitSide(refused);
+      if (side !== undefined) {
+        if (visit === this.#orderVisit && this.orderParty?.id === party.id)
+          this.splitRefusal = {
+            tableId,
+            billId,
+            staying: guestField(guests.staying),
+            leaving: guestField(guests.leaving),
+            field: side,
+            message: t("seat.guest_count_invalid"),
+          };
+        return;
+      }
       await this.#onTableRefusal(error);
       return;
     }
@@ -8883,6 +8923,34 @@ export class TillApp extends LitElement {
       if (refused?.code === "management.request_invalid" && refused.field === "name") {
         if (visit === this.#orderVisit && this.orderParty?.id === party.id)
           this.nameRefusal = { name: name ?? "", message: t("table.name_too_long") };
+        return;
+      }
+      await this.#onTableRefusal(error);
+      return;
+    }
+    await this.#reloadOrder();
+  }
+
+  /** A refusal of the count itself goes back to the screen's field, unless the waiter has left the
+   * party since; any other is said on the banner. */
+  async #onGuestsParty(event: Event): Promise<void> {
+    const { guestCount } = (event as CustomEvent<{ guestCount: number | null }>).detail;
+    const party = this.orderParty;
+    if (party === null) return;
+    const visit = this.#orderVisit;
+    this.errorKey = undefined;
+    this.guestsRefusal = null;
+    try {
+      const counted = await this.api.setPartyGuests(party.id, guestCount, party.revision);
+      this.#notePartyRevision(party.id, counted.revision);
+    } catch (error) {
+      const refused = error as { code?: string; field?: string } | undefined;
+      if (refused?.code === "management.request_invalid" && refused.field === "guestCount") {
+        if (visit === this.#orderVisit && this.orderParty?.id === party.id)
+          this.guestsRefusal = {
+            value: guestCount === null ? "" : String(guestCount),
+            message: t("seat.guest_count_invalid"),
+          };
         return;
       }
       await this.#onTableRefusal(error);
@@ -10515,6 +10583,8 @@ export class TillApp extends LitElement {
       .billBalance=${this.billBalance}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
+      .guestsRefusal=${this.guestsRefusal}
+      .splitRefusal=${this.splitRefusal}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
       .canOpenStation=${this.#allowsDestination("station")}
@@ -10568,6 +10638,8 @@ export class TillApp extends LitElement {
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
+          .guestsRefusal=${this.guestsRefusal}
+          .splitRefusal=${this.splitRefusal}
           .busy=${this.submitting || this.invoiceRecipientReading}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
@@ -10845,6 +10917,7 @@ export class TillApp extends LitElement {
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
+        @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
         @merge-bills=${(event: Event) => void this.#onMergeBills(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}

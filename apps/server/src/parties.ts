@@ -221,6 +221,16 @@ export async function setPartyName(
   return { revision, name };
 }
 
+export async function setPartyGuests(
+  tx: Transaction,
+  args: { partyId: string; guestCount: number | null; expectedPartyRevision: number },
+): Promise<{ revision: number; guestCount: number | null }> {
+  const revision = await checkAndBumpParty(tx, args.partyId, args.expectedPartyRevision, "open", {
+    guestCount: args.guestCount,
+  });
+  return { revision, guestCount: args.guestCount };
+}
+
 /**
  * Refuse an order sent to a bill that is not an open bill of the party, in this order: a
  * bill of another party (or of none) first, then a paid, an abandoned and a presented one. An id
@@ -388,6 +398,7 @@ export async function checkAndBumpParty(
   partyId: string,
   expectedPartyRevision: number,
   requiredState: "open",
+  alsoSet: { guestCount?: number | null } = {},
 ): Promise<number> {
   const [party] = await tx
     .select({ state: parties.state, revision: parties.revision })
@@ -400,7 +411,10 @@ export async function checkAndBumpParty(
     throw new AppError("party.out_of_date", { partyId, revision: party.revision });
   }
   const revision = party.revision + 1;
-  await tx.update(parties).set({ revision }).where(eq(parties.id, partyId));
+  await tx
+    .update(parties)
+    .set({ ...alsoSet, revision })
+    .where(eq(parties.id, partyId));
   return revision;
 }
 

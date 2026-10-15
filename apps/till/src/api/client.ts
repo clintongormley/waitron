@@ -4025,7 +4025,8 @@ export class TillApi {
 
   /**
    * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`. Rejects, among others, `table.not_shared`,
+   * when it is null → `POST /api/parties/:id/split-table`. `guests`, when given, is each side's
+   * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
    * `table.not_joined`, `party.main_bill_stays`, `group.held_leaves_party` and `party.out_of_date`.
    */
   splitTable(
@@ -4033,6 +4034,7 @@ export class TillApi {
     tableId: string,
     billId: string | null,
     expectedPartyRevision: number,
+    guests?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
     mainBillId: string | null;
@@ -4042,6 +4044,7 @@ export class TillApi {
       tableId,
       billId,
       expectedPartyRevision,
+      ...(guests === undefined ? {} : { guests }),
     });
   }
 
@@ -4053,6 +4056,20 @@ export class TillApi {
     expectedPartyRevision: number,
   ): Promise<{ revision: number; name: string | null }> {
     return this.#request(`/api/parties/${partyId}/name`, "PUT", { name, expectedPartyRevision });
+  }
+
+  /** Set the party's guest count, or clear it with null → `PUT /api/parties/:id/guests`. A count
+   * that is not a whole number from 1 to 999 is `management.request_invalid` naming the field
+   * `guestCount`. */
+  setPartyGuests(
+    partyId: string,
+    guestCount: number | null,
+    expectedPartyRevision: number,
+  ): Promise<{ revision: number; guestCount: number | null }> {
+    return this.#request(`/api/parties/${partyId}/guests`, "PUT", {
+      guestCount,
+      expectedPartyRevision,
+    });
   }
 
   /**

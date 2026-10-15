@@ -1572,3 +1572,78 @@ describe("combineParties", () => {
     expect(await activeTablesOf(v, luis.partyId)).toEqual([m7, m4]);
   });
 });
+
+describe("guest counts when parties combine", () => {
+  it.each(["merge", "separate"] as const)(
+    "a join adds the joined party's guests to the receiving party's (bills %s)",
+    async (bills) => {
+      const [m4, m7] = await tables(`Comensales juntar ${bills}`, 4, 7);
+      const ana = await seat(v, m4, 3);
+      const luis = await seat(v, m7, 2);
+
+      const joining = await opts(ana.partyId, luis.partyId, bills);
+      await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
+
+      expect((await partyRow(v, ana.partyId)).guestCount).toBe(5);
+      expect((await partyRow(v, luis.partyId)).guestCount).toBe(2);
+    },
+  );
+
+  it.each(["merge", "separate"] as const)(
+    "moving guests onto a seated table adds them to its party's (bills %s)",
+    async (bills) => {
+      const [m4, m7] = await tables(`Comensales mover ${bills}`, 4, 7);
+      const ana = await seat(v, m4, 2);
+      const luis = await seat(v, m7, 3);
+
+      const moving = await opts(ana.partyId, luis.partyId, bills);
+      await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+      expect((await partyRow(v, luis.partyId)).guestCount).toBe(5);
+      expect((await partyRow(v, ana.partyId)).guestCount).toBe(2);
+    },
+  );
+
+  it.each([
+    [2, null],
+    [null, 3],
+    [null, null],
+    [999, 999],
+    [500, 500],
+  ])("from %j into %j leaves the receiving party with no count", async (fromCount, intoCount) => {
+    const [m4, m7] = await tables(`Comensales ${fromCount} ${intoCount}`, 4, 7);
+    const from = await seat(v, m4, fromCount);
+    const into = await seat(v, m7, intoCount);
+
+    await act((tx) =>
+      combineParties(tx, v.cfg, {
+        from: from.partyId,
+        into: into.partyId,
+        bills: "merge",
+        tables: "join",
+        operatorId: OPERATOR,
+      }),
+    );
+
+    expect((await partyRow(v, into.partyId)).guestCount).toBeNull();
+    expect((await partyRow(v, from.partyId)).guestCount).toBe(fromCount);
+  });
+
+  it("keeps a sum of exactly the largest count", async () => {
+    const [m4, m7] = await tables("Comensales tope", 4, 7);
+    const from = await seat(v, m4, 499);
+    const into = await seat(v, m7, 500);
+
+    await act((tx) =>
+      combineParties(tx, v.cfg, {
+        from: from.partyId,
+        into: into.partyId,
+        bills: "merge",
+        tables: "leave",
+        operatorId: OPERATOR,
+      }),
+    );
+
+    expect((await partyRow(v, into.partyId)).guestCount).toBe(999);
+  });
+});

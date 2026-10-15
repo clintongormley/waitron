@@ -2158,6 +2158,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
   the server's refusal is the backstop.
 
+- **A714 — The party Name window stays open, and saves to the new party, when the order screen
+  switches party under it (2026-10-15; open, A713 review).** `#rememberOrderParty`
+  (`apps/till/src/till-app.ts`) points the open order screen at whichever party now holds the table,
+  for instance after another till joins it into its own party; the Name window does not close, and
+  its name is then saved to that other party. A713 closed its Guests and Split a table windows on a
+  party change. Found by reading, plus the reviewer's real-Chromium probe of the Guests window; the
+  Name window itself was not probed. **Next action:** close it on a party change, as A713 does.
+  [Detail](backlog/till.md#the-party-name-window-stays-open-and-saves-to-the-new-party-when-the-order-screen-switches-party-under-it)
+
+- **A715 — A guest count typed in the till's Guests or Split window replaces a count changed on
+  another till while the window was open (2026-10-15; owner to decide, A713 review).** Both windows
+  follow a count stored elsewhere while the field still reads the previous stored count; once the
+  waiter has typed a different count, it is sent with the party's current revision, so when this till
+  has already received the other till's change, the typed count replaces it without a warning. **Next action:** ask the owner whether that save should
+  instead be refused, so the waiter sees the other count first.
+
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
   it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill

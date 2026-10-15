@@ -285,6 +285,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     joinTables: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: false }),
     splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", mainBillId: "wo-check" }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
+    setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -2017,15 +2018,194 @@ describe("till-app: table actions on the party", () => {
     });
     const order = await openMesa(el, "t5");
 
-    emit(order, "split-table", { tableId: "t5", billId: "wo-check" });
+    const guests = { staying: null, leaving: null };
+    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3);
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
     expect(tableOrder(el)!.party).toEqual(afterSplit[0]!.party);
 
-    emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null });
+    emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guests });
     await flush(el);
-    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4);
+    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, guests);
+  });
+
+  it("passes the guests the waiter gave each side of a split to the split", async () => {
+    const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const afterSplit = [
+      seated({}, { revision: 4, tableIds: ["t4"], guestCount: 3 }),
+      seated(
+        { id: "t5", label: "5" },
+        { id: "v-split", revision: 0, tableIds: ["t5"], guestCount: 2 },
+      ),
+      mesa7,
+      mesa9,
+    ];
+    const reads = floorThat([atTwo, mesa5, mesa7, mesa9], afterSplit);
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      splitTable: vi.fn(async () => {
+        reads.other.acted = true;
+        return { partyId: "v-split", mainBillId: null };
+      }),
+    });
+    const order = await openMesa(el, "t4");
+
+    emit(order, "split-table", {
+      tableId: "t5",
+      billId: null,
+      guests: { staying: 3, leaving: 2 },
+    });
+    await flush(el);
+
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, { staying: 3, leaving: 2 });
+    expect(tableOrder(el)!.party?.guestCount).toBe(3);
+  });
+
+  describe("a refusal of one side's count of a split", () => {
+    const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const floorOfTwo = () => vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]);
+
+    it.each([
+      ["guests.staying", "staying", { staying: 1000, leaving: 2 }, "1000", "2"],
+      ["guests.leaving", "leaving", { staying: 3, leaving: null }, "3", ""],
+    ] as const)(
+      "hands %s back to Split a table's guests window, beside the field, without a banner",
+      async (field, side, guests, staying, leaving) => {
+        const { el } = await mountApp({
+          getTablesState: floorOfTwo(),
+          splitTable: vi.fn().mockRejectedValue({ code: "management.request_invalid", field }),
+        });
+        const order = await openMesa(el, "t4");
+
+        emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+        await flush(el);
+
+        expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
+        expect(tableOrder(el)!.splitRefusal).toEqual({
+          tableId: "t5",
+          billId: "wo-check",
+          staying,
+          leaving,
+          field: side,
+          message: t("seat.guest_count_invalid"),
+        });
+        const dialog = tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")!;
+        expect(dialog.staying).toBe(staying);
+        expect(dialog.leaving).toBe(leaving);
+        expect(banner(el)).toBeNull();
+      },
+    );
+
+    it("hands the refusal to the order card on a handheld", async () => {
+      const { el } = await mountApp({
+        getTablesState: floorOfTwo(),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        splitTable: vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+      emit(shell(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const card = () =>
+        tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+
+      emit(card(), "split-table", {
+        tableId: "t5",
+        billId: null,
+        guests: { staying: 3, leaving: 1000 },
+      });
+      await flush(el);
+
+      expect(card().splitRefusal).toMatchObject({ field: "leaving", leaving: "1000" });
+      const dialog = card().shadowRoot!.querySelector("till-split-guests-dialog")!;
+      expect(dialog.leavingRefusal).toBe(t("seat.guest_count_invalid"));
+    });
+
+    it("says a refusal naming no field of the window on the banner", async () => {
+      const { el } = await mountApp({
+        getTablesState: floorOfTwo(),
+        splitTable: vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", field: "guests" }),
+      });
+      const order = await openMesa(el, "t4");
+
+      emit(order, "split-table", {
+        tableId: "t5",
+        billId: null,
+        guests: { staying: 3, leaving: 2 },
+      });
+      await flush(el);
+
+      expect(tableOrder(el)!.splitRefusal).toBeNull();
+      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+      expect(banner(el)).not.toBeNull();
+    });
+
+    it("drops a refusal that arrives after the waiter has opened another party's table", async () => {
+      let refuse!: (reason: unknown) => void;
+      const { el } = await mountApp({
+        getTablesState: floorOfTwo(),
+        splitTable: vi.fn(
+          () =>
+            new Promise<never>((_resolve, reject) => {
+              refuse = reject;
+            }),
+        ),
+      });
+      const order = await openMesa(el, "t4");
+      emit(order, "split-table", {
+        tableId: "t5",
+        billId: null,
+        guests: { staying: 3, leaving: 1000 },
+      });
+      await flush(el);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+
+      refuse({ code: "management.request_invalid", field: "guests.leaving" });
+      await flush(el);
+
+      expect(tableOrder(el)!.party?.id).toBe("v7");
+      expect(tableOrder(el)!.splitRefusal).toBeNull();
+      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+      expect(banner(el)).toBeNull();
+    });
+
+    it("does not hand a refused split to the next table opened", async () => {
+      const { el } = await mountApp({
+        getTablesState: floorOfTwo(),
+        splitTable: vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+      });
+      const order = await openMesa(el, "t4");
+      emit(order, "split-table", {
+        tableId: "t5",
+        billId: null,
+        guests: { staying: 3, leaving: 1000 },
+      });
+      await flush(el);
+
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+
+      expect(tableOrder(el)!.splitRefusal).toBeNull();
+    });
   });
 
   it("opens the party's main bill once the bill on screen has gone with the table split off", async () => {
@@ -2070,6 +2250,7 @@ describe("till-app: table actions on the party", () => {
     ["party.main_bill_stays", "split-table", { tableId: "t4", billId: "wo-4" }, "splitTable"],
     ["group.held_leaves_party", "split-table", { tableId: "t4", billId: "wo-check" }, "splitTable"],
     ["party.not_open", "name-party", { name: "Ana" }, "setPartyName"],
+    ["party.not_open", "guests-party", { guestCount: 4 }, "setPartyGuests"],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
@@ -2211,6 +2392,160 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)!.textContent).toContain(
       t("party.changed_tables").replace("{tables}", "4, 9"),
     );
+  });
+});
+
+describe("till-app: the party's guest count", () => {
+  const guestsShown = (el: TillApp) =>
+    floor(el)!.shadowRoot!.querySelector('[data-table="t4"] .party')!.textContent!.trim();
+
+  it("sets the count at the revision it read, and the floor then shows the new count", async () => {
+    const counted = seated({}, { revision: 4, guestCount: 5 });
+    const reads = floorThat([mesa4, mesa7, mesa9], [counted, mesa7, mesa9]);
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      setPartyGuests: vi.fn(async () => {
+        reads.other.acted = true;
+        return { revision: 4, guestCount: 5 };
+      }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "guests-party", { guestCount: 5 });
+    await flush(el);
+    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", 5, 3);
+    expect(tableOrder(el)!.party).toEqual(counted.party);
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    expect(guestsShown(el)).toContain(`${t("floor.guests")}: 5`);
+  });
+
+  it("notes the revision the count answered, so the next action sends it", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+
+    emit(order, "guests-party", { guestCount: 4 });
+    await flush(el);
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+
+    expect(api.setPartyName).toHaveBeenCalledWith("v1", "Ana", 4);
+  });
+
+  it("clears the count with null", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+
+    emit(order, "guests-party", { guestCount: null });
+    await flush(el);
+
+    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", null, 3);
+  });
+
+  it("hands a refusal of the count back to the screen, beside the field, without a banner", async () => {
+    const { el } = await mountApp({
+      setPartyGuests: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "guests-party", { guestCount: 4 });
+    await flush(el);
+
+    expect(tableOrder(el)!.guestsRefusal).toEqual({
+      value: "4",
+      message: t("seat.guest_count_invalid"),
+    });
+    expect(banner(el)).toBeNull();
+  });
+
+  it("says another refusal on the banner, not beside the field", async () => {
+    const { el } = await mountApp({
+      setPartyGuests: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "name" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "guests-party", { guestCount: 4 });
+    await flush(el);
+
+    expect(tableOrder(el)!.guestsRefusal).toBeNull();
+    expect(banner(el)).not.toBeNull();
+  });
+
+  it("does not hand a refused count to the next table opened", async () => {
+    const { el } = await mountApp({
+      setPartyGuests: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
+    });
+    const order = await openMesa(el);
+    emit(order, "guests-party", { guestCount: 4 });
+    await flush(el);
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    expect(tableOrder(el)!.guestsRefusal).toBeNull();
+  });
+
+  it("drops a refusal of the count that arrives after the waiter has opened another party's table", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      setPartyGuests: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "guests-party", { guestCount: 4 });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    refuse({ code: "management.request_invalid", field: "guestCount" });
+    await flush(el);
+
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.guestsRefusal).toBeNull();
+    expect(tableOrder(el)!.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("hands a refusal of the count to the order card on a handheld", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+      setPartyGuests: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    emit(shell(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const card = () =>
+      tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+
+    emit(card(), "guests-party", { guestCount: 4 });
+    await flush(el);
+
+    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", 4, 3);
+    expect(card().guestsRefusal).toEqual({ value: "4", message: t("seat.guest_count_invalid") });
+    expect(card().shadowRoot!.querySelector("till-party-guests-dialog")).not.toBeNull();
   });
 });
 
