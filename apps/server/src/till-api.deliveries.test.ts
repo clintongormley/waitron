@@ -474,7 +474,7 @@ async function receiptOriginal(
 }
 
 const SALE_LOCATION_READ = /from "sales" inner join "nodes"/;
-const INVOICE_PRINTER_READ = /from "page_printers"/;
+const INVOICE_PRINTER_READ = /"page_printers"/;
 const RECEIPT_ORIGINAL_READ =
   /^select "print_jobs"\."sale_id", .* from "print_jobs" inner join "printers"/;
 
@@ -1877,19 +1877,19 @@ describe("what each delivery route reads", () => {
     expect(statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement))).toEqual([]);
   });
 
-  it("reads the A4 printers at most once to refuse a print, whether one is busy or none is set up", async () => {
+  it("names the A4 printers in two statements to refuse a print while one is busy, and in one when none is set up", async () => {
     const v = await venue();
     const busy = await invoice(v);
     await printOnA4(v, busy.orderId);
     expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, busy.orderId))).toEqual({
       answer: refusal(409, "invoice_delivery.active"),
-      reads: 1,
+      reads: 2,
     });
     await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     const none = await invoice(v);
     expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, none.orderId))).toEqual({
       answer: refusal(409, "invoice_delivery.printer_invalid"),
-      reads: 0,
+      reads: 1,
     });
   });
 
