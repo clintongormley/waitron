@@ -4471,13 +4471,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   password manager on 2026-10-08 and reported that it works well; other password managers are
   untried. Left open by A331 batch 3a (#1401).
 
-- **Other purchases-screen, staff-screen and roster-screen tests still send made-up create and update
-  events** (`create-purchase`, `update-purchase`, `create-person`, `save-person`, `update-shift`)
+- **Other purchases-screen and staff-screen tests still send made-up create and update
+  events** (`create-purchase`, `update-purchase`, `create-person`, `save-person`)
   instead of pressing the form's button; they pass, but never prove the button works. Left open by
   A331 batch 3a (#1401).
 
 - **Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor
-  closes until focus is back on a field inside the dialog** — seen in the purchase and shift forms'
+  closes until focus is back on a field inside the dialog** — seen in the purchase form's
   tests, not changed and not tried by hand (the tests put it there with `focus()`; a click was not
   tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`, A397.2): after a put-back, focus
   is on the page body and the dialog is no longer modal; the measurements attribute this to how
@@ -4702,12 +4702,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
-- **A585. Staffing needs and the rota** — retire the old Rota screen and free-text staff
-  role. Both Calendar Rota views, slot filling and shift editing, live labour warnings, publishing
-  and changing a published week are built. Part 8 remains in the order of the
-  [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
-  [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
-  [mockups](backlog/mockups/a585-staffing/) define the remaining views.
 - **Copy rota assignments in one read.** `changeRotaWeek` reads an assignment per copied shift.
   Measure a large week under the venue write queue, then batch that read while preserving the
   shift-id map and rollback checks. Query cost is unmeasured; A585-7 review finding.

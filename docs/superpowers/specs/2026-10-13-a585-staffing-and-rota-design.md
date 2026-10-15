@@ -1,5 +1,9 @@
 # A585 — Staffing needs and the rota: who the venue needs, when, and who fills it
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review of this written spec.
 
 > 2026-10-15 implementation pointer: part 5 adds published-only own shifts, copying a published

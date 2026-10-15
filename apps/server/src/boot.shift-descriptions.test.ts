@@ -28,7 +28,7 @@ for (const enabled of [true, false]) {
         null,
       ),
     });
-    it("uses enabled contributions on both own-shift routes and serves the fallback without staffing tables", async () => {
+    it("uses enabled contributions on both own-shift routes and serves null descriptions without staffing tables", async () => {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
       const session = await withTransaction(suite.db, (tx) =>
@@ -55,7 +55,6 @@ for (const enabled of [true, false]) {
             startsOffsetMinutes: 60,
             endsAt: "2026-01-05T17:00:00Z",
             endsOffsetMinutes: 60,
-            role: "Legacy bar",
           })
           .returning();
         if (enabled) {
@@ -118,8 +117,8 @@ for (const enabled of [true, false]) {
           expect(await response.json()).toEqual([
             expect.objectContaining({
               id: shiftId,
-              role: "Legacy bar",
-              description: enabled ? "Kitchen · Sous chef" : "Legacy bar",
+
+              description: enabled ? "Kitchen · Sous chef" : null,
             }),
           ]);
         }

@@ -1815,7 +1815,7 @@ describe("TillApi", () => {
 
   it("listMyShifts GETs the schedule shifts window and returns the rows", async () => {
     // Typed `MyShift[]` so the mock is a compile-time proof the client shape carries every field the
-    // server sends (offsets, role, rosterVersionId).
+    // server sends (offsets, description, rosterVersionId).
     const shifts: MyShift[] = [
       {
         id: "s1",
@@ -1824,7 +1824,6 @@ describe("TillApi", () => {
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T17:00:00Z",
         endsOffsetMinutes: 0,
-        role: "bar",
         description: "bar",
         rosterVersionId: null,
       },

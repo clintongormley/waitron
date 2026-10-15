@@ -235,7 +235,6 @@ export async function addRotaShift(
     ...interval,
     versionId,
     personId: input.personId,
-    role: null,
   });
   await tx
     .insert(shiftAssignments)

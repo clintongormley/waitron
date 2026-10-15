@@ -36,7 +36,6 @@ const shift: MyShift = {
   endsAt: "2026-10-07T17:00:00Z",
   startsOffsetMinutes: 0,
   endsOffsetMinutes: 0,
-  role: "bar",
   description: "bar",
   rosterVersionId: null,
 };

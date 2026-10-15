@@ -73,7 +73,6 @@ import "./screens/service-status-screen.js";
 import "./screens/kitchen-screen.js";
 import { VENUE_SETTINGS_TABS } from "./screens/venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
-import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
@@ -123,7 +122,6 @@ const CORE_SCREENS = [
   "catalogue-defaults",
   "content-languages",
   "venue-settings",
-  "roster",
   "approvals",
   "planned-actual",
   "purchases",
@@ -251,7 +249,6 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "section-team",
     items: [
       { screen: "staff", labelKey: "nav.staff" },
-      { screen: "roster", labelKey: "nav.roster" },
       { screen: "approvals", labelKey: "nav.approvals" },
       { screen: "planned-actual", labelKey: "nav.planned_actual" },
     ],
@@ -2405,8 +2402,6 @@ export class DashboardApp extends LitElement {
           .panels=${this.#settingsPanels()}
           @venue-identity-changed=${() => void this.#rereadVenueName()}
         ></dashboard-venue-settings-screen>`;
-      case "roster":
-        return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":
         return html`<dashboard-approvals-screen .api=${this.api}></dashboard-approvals-screen>`;
       case "planned-actual":

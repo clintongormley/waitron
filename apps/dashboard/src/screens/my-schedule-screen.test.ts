@@ -19,7 +19,6 @@ const shifts: MyShift[] = [
     startsOffsetMinutes: 0,
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
-    role: "bar",
     description: "bar",
     rosterVersionId: null,
   },
@@ -251,8 +250,8 @@ describe("my-schedule-screen", () => {
     resolve();
   });
 
-  it("labels a role-less shift without a trailing role, and names an off-roster swap party by raw id", async () => {
-    const roleless: MyShift = { ...shifts[0]!, id: "s-noRole", role: null, description: null };
+  it("labels an undescribed shift without a trailing separator, and names an off-roster swap party by raw id", async () => {
+    const roleless: MyShift = { ...shifts[0]!, id: "s-noRole", description: null };
     const fromStranger: MySwap = {
       ...offeredToMe,
       id: "sw-stranger",
@@ -266,7 +265,7 @@ describe("my-schedule-screen", () => {
     await flush(el);
     const shiftText = el.shadowRoot!.querySelector("[data-test=shift-s-noRole]")!.textContent ?? "";
     expect(shiftText).toContain("2026-05-04 09:00–17:00");
-    expect(shiftText).not.toContain("·"); // no role separator when role is null
+    expect(shiftText).not.toContain("·");
     expect(
       el.shadowRoot!.querySelector("[data-test=swap-sw-stranger]")!.textContent ?? "",
     ).toContain("ghost");
@@ -548,7 +547,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
 
   it("keeps the chosen shift when my shifts refresh in a different order", async () => {
     const liveData = new LiveData();
-    const second: MyShift = { ...shifts[0]!, id: "s2", role: "cocina", description: "cocina" };
+    const second: MyShift = { ...shifts[0]!, id: "s2", description: "cocina" };
     const api = Object.assign(
       stubApi({ listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, second]) }),
       { liveData },
@@ -792,7 +791,7 @@ describe("my-schedule-screen — each list's own load failure", () => {
   });
 });
 
-it("shows the module description instead of the legacy free-text role", async () => {
+it("shows the module description in the shift label", async () => {
   const { el } = await mount(
     stubApi({
       listMyShifts: vi

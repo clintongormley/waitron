@@ -557,7 +557,6 @@ describe("configuration transfer database path", () => {
         weekday: 1,
         startsMinute: 1020,
         endsMinute: 120,
-        role: "bar",
       });
       await tx.insert(convenioConfig).values({
         id: "99999999-aaaa-aaaa-aaaa-999999999999",

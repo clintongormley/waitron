@@ -21,12 +21,7 @@ import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import {
-  requireBodyUuid,
-  requireNullableString,
-  requirePeriod,
-  requireUuidParam,
-} from "@waitron/server-kit";
+import { requireBodyUuid, requirePeriod, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
@@ -235,7 +230,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         "startsOffsetMinutes",
       );
       const endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
-      const role = requireNullableString(body.role, "role");
       const shiftId = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
         const id = await backend.addShift(tx, {
           versionId,
@@ -245,7 +239,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           startsOffsetMinutes,
           endsAt,
           endsOffsetMinutes,
-          role,
         });
         await markAttendanceSourceChanged(tx, "shift", id);
         return id;
@@ -272,7 +265,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         );
       if (body.endsOffsetMinutes !== undefined)
         patch.endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
-      if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
       await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
         await markAttendanceSourceChanged(tx, "shift", shiftId);
         await backend.updateShift(tx, patch);

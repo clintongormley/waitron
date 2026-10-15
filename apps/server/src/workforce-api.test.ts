@@ -235,7 +235,6 @@ describe("mountWorkforceApi — shift routes", () => {
     startsOffsetMinutes: 0,
     endsAt: `${day}T17:00:00Z`,
     endsOffsetMinutes: 0,
-    role: "bar",
   });
 
   it("POST …/roster/:versionId/shifts adds a shift (201) and GET roster shows it", async () => {
@@ -266,7 +265,6 @@ describe("mountWorkforceApi — shift routes", () => {
       startsOffsetMinutes: 60,
       endsAt: "2026-03-29T02:00:00Z",
       endsOffsetMinutes: 120,
-      role: "bar",
     };
     const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body });
     expect(added.status).toBe(201);
@@ -292,12 +290,12 @@ describe("mountWorkforceApi — shift routes", () => {
     });
     const { shiftId } = (await add.json()) as { shiftId: string };
     const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, {
-      body: { role: "kitchen" },
+      body: { endsAt: "2026-04-13T16:00:00Z" },
     });
     expect(res.status).toBe(204);
   });
 
-  it("PATCH …/roster/shifts/:shiftId moves the person and times it names and keeps the role", async () => {
+  it("PATCH …/roster/shifts/:shiftId moves the person and times it names and retains the other fields", async () => {
     const app = mountApp();
     const versionId = await draftVersion("2026-06-01");
     const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
@@ -332,7 +330,6 @@ describe("mountWorkforceApi — shift routes", () => {
       startsOffsetMinutes: 120,
       endsAt: "2026-06-01T18:00:00Z",
       endsOffsetMinutes: 60,
-      role: "bar",
     });
   });
 
@@ -340,7 +337,7 @@ describe("mountWorkforceApi — shift routes", () => {
     ["personId", "2026-06-08", { personId: "not-a-uuid" }],
     ["endsAt", "2026-06-15", { endsAt: "nope" }],
     ["endsOffsetMinutes", "2026-06-22", { endsOffsetMinutes: 900 }],
-    ["role", "2026-06-29", { role: 5 }],
+    ["startsOffsetMinutes", "2026-06-29", { startsOffsetMinutes: 900 }],
   ])("PATCH …/roster/shifts/:shiftId refuses a malformed %s", async (field, week, body) => {
     const app = mountApp();
     const versionId = await draftVersion(week);
@@ -463,7 +460,6 @@ describe("mountWorkforceApi — publish", () => {
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T14:00:00Z",
         endsOffsetMinutes: 0,
-        role: null,
       },
     });
     const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
@@ -487,7 +483,6 @@ describe("mountWorkforceApi — publish", () => {
         startsOffsetMinutes: 0,
         endsAt: "2026-05-11T20:00:00Z",
         endsOffsetMinutes: 0,
-        role: null,
       },
     });
     const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);

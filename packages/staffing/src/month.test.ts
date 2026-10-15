@@ -290,7 +290,6 @@ describe("rota counts in the staffing month", () => {
         endsAt: "2026-08-14T14:00:00Z",
         startsOffsetMinutes: 120,
         endsOffsetMinutes: 120,
-        role: null,
       });
       const [role] = await tx
         .select()

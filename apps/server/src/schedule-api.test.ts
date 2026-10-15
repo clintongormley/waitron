@@ -114,7 +114,6 @@ async function insertShift(personId: string, startsAt: string, endsAt: string): 
       startsOffsetMinutes: 0,
       endsAt,
       endsOffsetMinutes: 0,
-      role: "bar",
       rosterVersionId,
     })
     .returning({ id: shifts.id });
@@ -148,7 +147,7 @@ async function insertAbsence(personId: string, startsOn: string, endsOn: string)
 }
 
 describe("mountScheduleApi — shifts", () => {
-  it("returns a module's description for an owned shift and the free-text fallback for an undescribed one", async () => {
+  it("returns a module's description for an owned shift and null for an undescribed one", async () => {
     const described = await insertShift(me, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
     const fallback = await insertShift(me, "2026-10-06T09:00:00Z", "2026-10-06T17:00:00Z");
     await insertShift(colleague, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
@@ -168,7 +167,7 @@ describe("mountScheduleApi — shifts", () => {
       })),
     ).toEqual([
       { id: described, description: "Kitchen · Sous chef" },
-      { id: fallback, description: "bar" },
+      { id: fallback, description: null },
     ]);
     const noModule = await send(
       mountApp(),
@@ -178,7 +177,7 @@ describe("mountScheduleApi — shifts", () => {
     );
     expect(
       ((await noModule.json()) as { description: string }[]).map((row) => row.description),
-    ).toEqual(["bar", "bar"]);
+    ).toEqual([null, null]);
   });
 
   it("keeps draft, unattached and superseded shifts out of the person's schedule", async () => {

@@ -1,5 +1,9 @@
 # Forward-only scheduled menu publication — implementation plan (W99)
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > **For agentic workers:** implement each task test-first: write the failing behavioural test, run
 > it and watch it fail for the stated reason, then the minimal implementation. Use
 > `superpowers:subagent-driven-development`; one implementer per task, in this worktree

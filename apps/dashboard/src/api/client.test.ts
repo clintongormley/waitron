@@ -1032,7 +1032,6 @@ describe("DashboardApi — roster", () => {
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",
       endsOffsetMinutes: 0,
-      role: null,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ shiftId: "s1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -1048,12 +1047,12 @@ describe("DashboardApi — roster", () => {
   it("updateShift PATCHes and removeShift DELETEs (both 204 → void)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.updateShift("s1", { role: "bar" });
+    await api.updateShift("s1", { endsAt: "2026-03-02T18:00:00Z" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster/shifts/s1", {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ role: "bar" }),
+      body: JSON.stringify({ endsAt: "2026-03-02T18:00:00Z" }),
     });
     await api.removeShift("s1");
     expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/roster/shifts/s1", {
@@ -1227,7 +1226,6 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T17:00:00Z",
         endsOffsetMinutes: 0,
-        role: "bar",
         description: "bar",
         rosterVersionId: null,
       },

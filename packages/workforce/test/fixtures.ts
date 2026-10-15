@@ -107,7 +107,6 @@ export async function insertDraftShift(
     startsOffsetMinutes?: number;
     endsAt?: string;
     endsOffsetMinutes?: number;
-    role?: string | null;
     rosterVersionId?: string | null;
   },
 ): Promise<string> {
@@ -120,7 +119,6 @@ export async function insertDraftShift(
       startsOffsetMinutes: params.startsOffsetMinutes ?? 0,
       endsAt: params.endsAt ?? "2026-01-05T17:00:00Z",
       endsOffsetMinutes: params.endsOffsetMinutes ?? 0,
-      role: params.role ?? null,
       rosterVersionId: params.rosterVersionId ?? null,
     })
     .returning({ id: shifts.id });
@@ -190,7 +188,6 @@ export async function insertShiftTemplate(
     weekday?: number;
     startsMinute?: number;
     endsMinute?: number;
-    role?: string | null;
   },
 ): Promise<string> {
   const [row] = await db
@@ -201,7 +198,6 @@ export async function insertShiftTemplate(
       weekday: params.weekday ?? 0,
       startsMinute: params.startsMinute ?? 1080,
       endsMinute: params.endsMinute ?? 1440,
-      role: params.role ?? null,
     })
     .returning({ id: shiftTemplates.id });
   return row!.id;

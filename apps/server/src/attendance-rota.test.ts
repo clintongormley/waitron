@@ -74,7 +74,6 @@ const shiftBody = (day = "2026-01-05") => ({
   endsAt: `${day}T13:00:00Z`,
   startsOffsetMinutes: 60,
   endsOffsetMinutes: 60,
-  role: null,
 });
 async function add(versionId: string, day = "2026-01-05") {
   const response = await send("POST", `roster/${versionId}/shifts`, shiftBody(day));
@@ -221,7 +220,9 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
       fingerprint: "previous assignment",
       nextDueAt: "2099-01-01T00:00:00.000Z",
     });
-    expect((await send("PATCH", `roster/shifts/${id}`, { role: "bar" })).status).toBe(204);
+    expect(
+      (await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })).status,
+    ).toBe(204);
     expect(await suite.db.select().from(attendanceSourceState)).toContainEqual(
       expect.objectContaining({
         key: `shift:${id}`,
@@ -237,7 +238,9 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
       .update(locations)
       .set({ dayCutover: "06:00" })
       .where(eq(locations.id, locationId));
-    expect((await send("PATCH", `roster/shifts/${id}`, { role: "bar" })).status).toBe(204);
+    expect(
+      (await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })).status,
+    ).toBe(204);
     expect(await days()).toEqual([
       expect.objectContaining({
         businessDay: "2026-01-05",
@@ -322,7 +325,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
             : action === "add"
               ? await send("POST", `roster/${draft}/shifts`, shiftBody("2026-01-06"))
               : action === "edit"
-                ? await send("PATCH", `roster/shifts/${id}`, { role: "bar" })
+                ? await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })
                 : action === "remove"
                   ? await send("DELETE", `roster/shifts/${id}`)
                   : await send("POST", `roster/${draft}/publish`);

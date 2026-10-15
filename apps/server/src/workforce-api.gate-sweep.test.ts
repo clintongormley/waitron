@@ -199,7 +199,6 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
         startsOffsetMinutes: 0,
         endsAt: "2026-03-02T13:00:00Z",
         endsOffsetMinutes: 0,
-        role: null,
       }),
     );
     await expect403(

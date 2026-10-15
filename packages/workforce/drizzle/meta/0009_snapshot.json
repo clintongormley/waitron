@@ -1,0 +1,2574 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d1a49e0b-7ee0-47c5-8e9a-b483a62cdbd1",
+  "prevId": "b6746fb5-e040-4667-9b61-3342a59fecb7",
+  "tables": {
+    "absences": {
+      "name": "absences",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "absence_kind": {
+          "name": "absence_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_on": {
+          "name": "starts_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_on": {
+          "name": "ends_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'requested'"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_by_person_id": {
+          "name": "decided_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "absences_person_idx": {
+          "name": "absences_person_idx",
+          "columns": [
+            "person_id",
+            "starts_on"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "absences_person_fk": {
+          "name": "absences_person_fk",
+          "tableFrom": "absences",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "absences_decided_by_person_fk": {
+          "name": "absences_decided_by_person_fk",
+          "tableFrom": "absences",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "decided_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "absences_range_ck": {
+          "name": "absences_range_ck",
+          "value": "\"absences\".\"ends_on\" >= \"absences\".\"starts_on\""
+        },
+        "absences_absence_kind_ck": {
+          "name": "absences_absence_kind_ck",
+          "value": "\"absences\".\"absence_kind\" in ('holiday', 'sick_leave', 'leave', 'unpaid')"
+        },
+        "absences_status_ck": {
+          "name": "absences_status_ck",
+          "value": "\"absences\".\"status\" in ('requested', 'approved', 'rejected')"
+        }
+      }
+    },
+    "attendance_day_work": {
+      "name": "attendance_day_work",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "business_day": {
+          "name": "business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_at": {
+          "name": "start_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_at": {
+          "name": "end_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dirty_revision": {
+          "name": "dirty_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "evaluated_revision": {
+          "name": "evaluated_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "next_due_at": {
+          "name": "next_due_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deferred_shift_ids": {
+          "name": "deferred_shift_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        }
+      },
+      "indexes": {
+        "attendance_day_work_scope_uq": {
+          "name": "attendance_day_work_scope_uq",
+          "columns": [
+            "location_id",
+            "business_day"
+          ],
+          "isUnique": true
+        },
+        "attendance_day_work_due_idx": {
+          "name": "attendance_day_work_due_idx",
+          "columns": [
+            "location_id",
+            "next_due_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_day_work_location_id_locations_id_fk": {
+          "name": "attendance_day_work_location_id_locations_id_fk",
+          "tableFrom": "attendance_day_work",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_day_work_bounds_ck": {
+          "name": "attendance_day_work_bounds_ck",
+          "value": "\"attendance_day_work\".\"end_at\" > \"attendance_day_work\".\"start_at\""
+        },
+        "attendance_day_work_revision_ck": {
+          "name": "attendance_day_work_revision_ck",
+          "value": "\"attendance_day_work\".\"dirty_revision\" > 0 and \"attendance_day_work\".\"evaluated_revision\" >= 0 and \"attendance_day_work\".\"evaluated_revision\" <= \"attendance_day_work\".\"dirty_revision\""
+        }
+      }
+    },
+    "attendance_mail": {
+      "name": "attendance_mail",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "claim_token": {
+          "name": "claim_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient": {
+          "name": "recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_mail_question_uq": {
+          "name": "attendance_mail_question_uq",
+          "columns": [
+            "question_id"
+          ],
+          "isUnique": true
+        },
+        "attendance_mail_due_idx": {
+          "name": "attendance_mail_due_idx",
+          "columns": [
+            "status",
+            "next_attempt_at",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_mail_question_id_attendance_questions_id_fk": {
+          "name": "attendance_mail_question_id_attendance_questions_id_fk",
+          "tableFrom": "attendance_mail",
+          "tableTo": "attendance_questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_mail_status_ck": {
+          "name": "attendance_mail_status_ck",
+          "value": "\"attendance_mail\".\"status\" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'cancelled')"
+        },
+        "attendance_mail_outcome_ck": {
+          "name": "attendance_mail_outcome_ck",
+          "value": "\"attendance_mail\".\"outcome\" in ('sent', 'rejected', 'unknown')"
+        },
+        "attendance_mail_claim_ck": {
+          "name": "attendance_mail_claim_ck",
+          "value": "(\"attendance_mail\".\"claim_token\" is null and \"attendance_mail\".\"claimed_at\" is null) or (\"attendance_mail\".\"claim_token\" is not null and \"attendance_mail\".\"claimed_at\" is not null)"
+        },
+        "attendance_mail_sending_ck": {
+          "name": "attendance_mail_sending_ck",
+          "value": "\"attendance_mail\".\"status\" <> 'sending' or (\"attendance_mail\".\"claim_token\" is not null and \"attendance_mail\".\"recipient\" is not null)"
+        }
+      }
+    },
+    "attendance_operation_facts": {
+      "name": "attendance_operation_facts",
+      "columns": {
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offset_minutes": {
+          "name": "offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "business_day": {
+          "name": "business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_operation_facts_source_uq": {
+          "name": "attendance_operation_facts_source_uq",
+          "columns": [
+            "source",
+            "key"
+          ],
+          "isUnique": true
+        },
+        "attendance_operation_facts_day_idx": {
+          "name": "attendance_operation_facts_day_idx",
+          "columns": [
+            "location_id",
+            "business_day",
+            "person_id",
+            "at"
+          ],
+          "isUnique": false
+        },
+        "attendance_operation_facts_pending_idx": {
+          "name": "attendance_operation_facts_pending_idx",
+          "columns": [
+            "outcome",
+            "sequence"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_operation_facts_person_id_persons_id_fk": {
+          "name": "attendance_operation_facts_person_id_persons_id_fk",
+          "tableFrom": "attendance_operation_facts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_operation_facts_location_id_locations_id_fk": {
+          "name": "attendance_operation_facts_location_id_locations_id_fk",
+          "tableFrom": "attendance_operation_facts",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_operation_facts_source_ck": {
+          "name": "attendance_operation_facts_source_ck",
+          "value": "\"attendance_operation_facts\".\"source\" in ('session', 'draft', 'order', 'whole-payment', 'bill-payment', 'refund', 'clock')"
+        },
+        "attendance_operation_facts_kind_ck": {
+          "name": "attendance_operation_facts_kind_ck",
+          "value": "\"attendance_operation_facts\".\"kind\" in ('sign-in', 'order', 'payment', 'break')"
+        },
+        "attendance_operation_facts_outcome_ck": {
+          "name": "attendance_operation_facts_outcome_ck",
+          "value": "\"attendance_operation_facts\".\"outcome\" in ('pending', 'qualifying', 'refused')"
+        },
+        "attendance_operation_facts_offset_ck": {
+          "name": "attendance_operation_facts_offset_ck",
+          "value": "\"attendance_operation_facts\".\"offset_minutes\" between -840 and 840"
+        }
+      }
+    },
+    "attendance_questions": {
+      "name": "attendance_questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "business_day": {
+          "name": "business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_at": {
+          "name": "start_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_at": {
+          "name": "end_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shift_key": {
+          "name": "shift_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "missing_kinds": {
+          "name": "missing_kinds",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "open_entry_id": {
+          "name": "open_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "automatic_entry_id": {
+          "name": "automatic_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolved_by_entry_id": {
+          "name": "resolved_by_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidence_keys": {
+          "name": "evidence_keys",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "canonical_question_id": {
+          "name": "canonical_question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "inactive_reason": {
+          "name": "inactive_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_questions_shift_uq": {
+          "name": "attendance_questions_shift_uq",
+          "columns": [
+            "person_id",
+            "location_id",
+            "shift_key"
+          ],
+          "isUnique": true
+        },
+        "attendance_questions_subject_uq": {
+          "name": "attendance_questions_subject_uq",
+          "columns": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "isUnique": true
+        },
+        "attendance_questions_own_idx": {
+          "name": "attendance_questions_own_idx",
+          "columns": [
+            "person_id",
+            "active",
+            "resolved_by_entry_id",
+            "business_day",
+            "start_at",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_questions_person_id_persons_id_fk": {
+          "name": "attendance_questions_person_id_persons_id_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_location_id_locations_id_fk": {
+          "name": "attendance_questions_location_id_locations_id_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_open_fk": {
+          "name": "attendance_questions_open_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "open_entry_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_automatic_fk": {
+          "name": "attendance_questions_automatic_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "automatic_entry_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_resolution_fk": {
+          "name": "attendance_questions_resolution_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "resolved_by_entry_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_questions_canonical_fk": {
+          "name": "attendance_questions_canonical_fk",
+          "tableFrom": "attendance_questions",
+          "tableTo": "attendance_questions",
+          "columnsFrom": [
+            "canonical_question_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_questions_kind_ck": {
+          "name": "attendance_questions_kind_ck",
+          "value": "\"attendance_questions\".\"kind\" in ('automatic-out', 'missing-times')"
+        },
+        "attendance_questions_bounds_ck": {
+          "name": "attendance_questions_bounds_ck",
+          "value": "\"attendance_questions\".\"end_at\" > \"attendance_questions\".\"start_at\""
+        },
+        "attendance_questions_activity_ck": {
+          "name": "attendance_questions_activity_ck",
+          "value": "(\"attendance_questions\".\"active\" = 1 and \"attendance_questions\".\"inactive_reason\" is null and \"attendance_questions\".\"canonical_question_id\" is null) or (\"attendance_questions\".\"active\" = 0 and \"attendance_questions\".\"inactive_reason\" is not null)"
+        },
+        "attendance_questions_canonical_ck": {
+          "name": "attendance_questions_canonical_ck",
+          "value": "\"attendance_questions\".\"canonical_question_id\" is null or \"attendance_questions\".\"canonical_question_id\" <> \"attendance_questions\".\"id\""
+        },
+        "attendance_questions_automatic_ck": {
+          "name": "attendance_questions_automatic_ck",
+          "value": "(\"attendance_questions\".\"kind\" = 'automatic-out' and \"attendance_questions\".\"open_entry_id\" is not null and \"attendance_questions\".\"automatic_entry_id\" is not null and json_array_length(\"attendance_questions\".\"missing_kinds\") = 0) or (\"attendance_questions\".\"kind\" = 'missing-times' and \"attendance_questions\".\"automatic_entry_id\" is null and json_array_length(\"attendance_questions\".\"missing_kinds\") > 0)"
+        }
+      }
+    },
+    "attendance_response_commands": {
+      "name": "attendance_response_commands",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by_person_id": {
+          "name": "requested_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "authorized_by_person_id": {
+          "name": "authorized_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "input": {
+          "name": "input",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entry_ids": {
+          "name": "entry_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_response_commands_question_idx": {
+          "name": "attendance_response_commands_question_idx",
+          "columns": [
+            "person_id",
+            "question_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_response_commands_requested_by_person_id_persons_id_fk": {
+          "name": "attendance_response_commands_requested_by_person_id_persons_id_fk",
+          "tableFrom": "attendance_response_commands",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_response_commands_authorized_by_person_id_persons_id_fk": {
+          "name": "attendance_response_commands_authorized_by_person_id_persons_id_fk",
+          "tableFrom": "attendance_response_commands",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_response_commands_person_id_persons_id_fk": {
+          "name": "attendance_response_commands_person_id_persons_id_fk",
+          "tableFrom": "attendance_response_commands",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_response_commands_location_id_locations_id_fk": {
+          "name": "attendance_response_commands_location_id_locations_id_fk",
+          "tableFrom": "attendance_response_commands",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "attendance_response_commands_question_fk": {
+          "name": "attendance_response_commands_question_fk",
+          "tableFrom": "attendance_response_commands",
+          "tableTo": "attendance_questions",
+          "columnsFrom": [
+            "question_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_response_commands_action_ck": {
+          "name": "attendance_response_commands_action_ck",
+          "value": "\"attendance_response_commands\".\"action\" in ('confirm', 'request', 'propose', 'approve', 'decline', 'accept', 'disagree')"
+        },
+        "attendance_response_commands_entries_ck": {
+          "name": "attendance_response_commands_entries_ck",
+          "value": "json_valid(\"attendance_response_commands\".\"entry_ids\") and json_type(\"attendance_response_commands\".\"entry_ids\") = 'array' and json_array_length(\"attendance_response_commands\".\"entry_ids\") > 0"
+        }
+      }
+    },
+    "attendance_source_state": {
+      "name": "attendance_source_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "record_kind": {
+          "name": "record_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "endpoint": {
+          "name": "endpoint",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completed": {
+          "name": "completed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "previous_days": {
+          "name": "previous_days",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "next_due_at": {
+          "name": "next_due_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "attendance_source_state_scope_uq": {
+          "name": "attendance_source_state_scope_uq",
+          "columns": [
+            "location_id",
+            "source",
+            "record_kind",
+            "key"
+          ],
+          "isUnique": true
+        },
+        "attendance_source_state_watch_idx": {
+          "name": "attendance_source_state_watch_idx",
+          "columns": [
+            "location_id",
+            "record_kind",
+            "next_due_at",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendance_source_state_location_id_locations_id_fk": {
+          "name": "attendance_source_state_location_id_locations_id_fk",
+          "tableFrom": "attendance_source_state",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "attendance_source_state_source_ck": {
+          "name": "attendance_source_state_source_ck",
+          "value": "\"attendance_source_state\".\"source\" in ('session', 'draft', 'order', 'group', 'whole-payment', 'bill-payment', 'refund', 'clock', 'rota', 'operation')"
+        },
+        "attendance_source_state_kind_ck": {
+          "name": "attendance_source_state_kind_ck",
+          "value": "\"attendance_source_state\".\"record_kind\" in ('scan', 'watch')"
+        },
+        "attendance_source_state_shape_ck": {
+          "name": "attendance_source_state_shape_ck",
+          "value": "(\"attendance_source_state\".\"record_kind\" = 'scan' and \"attendance_source_state\".\"generation\" is not null and \"attendance_source_state\".\"cursor\" is not null and \"attendance_source_state\".\"endpoint\" is not null and \"attendance_source_state\".\"completed\" is not null and \"attendance_source_state\".\"cursor\" >= 0 and \"attendance_source_state\".\"endpoint\" >= 0 and \"attendance_source_state\".\"cursor\" <= \"attendance_source_state\".\"endpoint\") or (\"attendance_source_state\".\"record_kind\" = 'watch' and \"attendance_source_state\".\"generation\" is null and \"attendance_source_state\".\"cursor\" is null and \"attendance_source_state\".\"endpoint\" is null and \"attendance_source_state\".\"completed\" is null)"
+        }
+      }
+    },
+    "availability": {
+      "name": "availability",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weekday": {
+          "name": "weekday",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "available_from_minute": {
+          "name": "available_from_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "available_to_minute": {
+          "name": "available_to_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "availability_person_idx": {
+          "name": "availability_person_idx",
+          "columns": [
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "availability_person_fk": {
+          "name": "availability_person_fk",
+          "tableFrom": "availability",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "availability_weekday_ck": {
+          "name": "availability_weekday_ck",
+          "value": "\"availability\".\"weekday\" between 0 and 6"
+        },
+        "availability_from_minute_ck": {
+          "name": "availability_from_minute_ck",
+          "value": "\"availability\".\"available_from_minute\" between 0 and 1440"
+        },
+        "availability_to_minute_ck": {
+          "name": "availability_to_minute_ck",
+          "value": "\"availability\".\"available_to_minute\" between 0 and 1440"
+        },
+        "availability_window_ck": {
+          "name": "availability_window_ck",
+          "value": "\"availability\".\"available_to_minute\" > \"availability\".\"available_from_minute\""
+        },
+        "availability_effective_ck": {
+          "name": "availability_effective_ck",
+          "value": "\"availability\".\"effective_to\" is null or \"availability\".\"effective_to\" >= \"availability\".\"effective_from\""
+        }
+      }
+    },
+    "employments": {
+      "name": "employments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contracted_minutes_per_week": {
+          "name": "contracted_minutes_per_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contract_type": {
+          "name": "contract_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pay_rate": {
+          "name": "pay_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "employments_person_idx": {
+          "name": "employments_person_idx",
+          "columns": [
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "employments_person_fk": {
+          "name": "employments_person_fk",
+          "tableFrom": "employments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "employments_contracted_minutes_ck": {
+          "name": "employments_contracted_minutes_ck",
+          "value": "\"employments\".\"contracted_minutes_per_week\" >= 0"
+        },
+        "employments_dates_ck": {
+          "name": "employments_dates_ck",
+          "value": "\"employments\".\"end_date\" is null or \"employments\".\"end_date\" >= \"employments\".\"start_date\""
+        }
+      }
+    },
+    "pay_period_closures": {
+      "name": "pay_period_closures",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_end": {
+          "name": "period_end",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clock": {
+          "name": "clock",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scheduled_close_at": {
+          "name": "scheduled_close_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "snapshot": {
+          "name": "snapshot",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sequence_no": {
+          "name": "sequence_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prev_closure_hash": {
+          "name": "prev_closure_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closure_hash": {
+          "name": "closure_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "pay_period_closures_chain_position_uq": {
+          "name": "pay_period_closures_chain_position_uq",
+          "columns": [
+            "node_id",
+            "location_id",
+            "sequence_no"
+          ],
+          "isUnique": true
+        },
+        "pay_period_closures_period_uq": {
+          "name": "pay_period_closures_period_uq",
+          "columns": [
+            "location_id",
+            "period_start",
+            "period_end"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "pay_period_closures_node_id_nodes_id_fk": {
+          "name": "pay_period_closures_node_id_nodes_id_fk",
+          "tableFrom": "pay_period_closures",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "pay_period_closures_location_id_locations_id_fk": {
+          "name": "pay_period_closures_location_id_locations_id_fk",
+          "tableFrom": "pay_period_closures",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pay_period_closures_period_ck": {
+          "name": "pay_period_closures_period_ck",
+          "value": "\"pay_period_closures\".\"period_end\" > \"pay_period_closures\".\"period_start\""
+        },
+        "pay_period_closures_sequence_ck": {
+          "name": "pay_period_closures_sequence_ck",
+          "value": "\"pay_period_closures\".\"sequence_no\" > 0"
+        },
+        "pay_period_closures_predecessor_ck": {
+          "name": "pay_period_closures_predecessor_ck",
+          "value": "(\"pay_period_closures\".\"sequence_no\" = 1 and \"pay_period_closures\".\"prev_closure_hash\" is null)\n  or (\"pay_period_closures\".\"sequence_no\" > 1 and \"pay_period_closures\".\"prev_closure_hash\" is not null)"
+        },
+        "pay_period_closures_hash_ck": {
+          "name": "pay_period_closures_hash_ck",
+          "value": "length(\"pay_period_closures\".\"closure_hash\") = 64 and \"pay_period_closures\".\"closure_hash\" not glob '*[^0-9A-F]*'"
+        }
+      }
+    },
+    "pay_period_settings": {
+      "name": "pay_period_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "frequency": {
+          "name": "frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'monthly'"
+        },
+        "anchor_date": {
+          "name": "anchor_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pay_period_settings_singleton_ck": {
+          "name": "pay_period_settings_singleton_ck",
+          "value": "\"pay_period_settings\".\"id\" = 1"
+        },
+        "pay_period_settings_frequency_ck": {
+          "name": "pay_period_settings_frequency_ck",
+          "value": "\"pay_period_settings\".\"frequency\" in ('monthly', 'weekly', 'fortnightly')"
+        },
+        "pay_period_settings_anchor_ck": {
+          "name": "pay_period_settings_anchor_ck",
+          "value": "(\"pay_period_settings\".\"frequency\" <> 'fortnightly' and \"pay_period_settings\".\"anchor_date\" is null)\n    or (\"pay_period_settings\".\"frequency\" = 'fortnightly' and \"pay_period_settings\".\"anchor_date\" is not null\n      and date(\"pay_period_settings\".\"anchor_date\", '+0 days') is not null\n      and date(\"pay_period_settings\".\"anchor_date\", '+0 days') = \"pay_period_settings\".\"anchor_date\" and strftime('%w', \"pay_period_settings\".\"anchor_date\") = '1')"
+        }
+      }
+    },
+    "roster_versions": {
+      "name": "roster_versions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_end": {
+          "name": "period_end",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "published_by_person_id": {
+          "name": "published_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "roster_versions_location_idx": {
+          "name": "roster_versions_location_idx",
+          "columns": [
+            "location_id"
+          ],
+          "isUnique": false
+        },
+        "roster_versions_published_period_uq": {
+          "name": "roster_versions_published_period_uq",
+          "columns": [
+            "location_id",
+            "period_start",
+            "period_end"
+          ],
+          "isUnique": true,
+          "where": "\"roster_versions\".\"status\" = 'published'"
+        }
+      },
+      "foreignKeys": {
+        "roster_versions_location_fk": {
+          "name": "roster_versions_location_fk",
+          "tableFrom": "roster_versions",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "roster_versions_published_by_person_fk": {
+          "name": "roster_versions_published_by_person_fk",
+          "tableFrom": "roster_versions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "published_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "roster_versions_period_ck": {
+          "name": "roster_versions_period_ck",
+          "value": "\"roster_versions\".\"period_end\" >= \"roster_versions\".\"period_start\""
+        },
+        "roster_versions_publish_shape_ck": {
+          "name": "roster_versions_publish_shape_ck",
+          "value": "(\"roster_versions\".\"status\" = 'draft') = (\"roster_versions\".\"published_at\" is null)"
+        },
+        "roster_versions_status_ck": {
+          "name": "roster_versions_status_ck",
+          "value": "\"roster_versions\".\"status\" in ('draft', 'published', 'superseded')"
+        }
+      }
+    },
+    "shift_swaps": {
+      "name": "shift_swaps",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by_person_id": {
+          "name": "requested_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "from_shift_id": {
+          "name": "from_shift_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "to_person_id": {
+          "name": "to_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "to_shift_id": {
+          "name": "to_shift_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'requested'"
+        },
+        "decided_by_person_id": {
+          "name": "decided_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "shift_swaps_from_shift_idx": {
+          "name": "shift_swaps_from_shift_idx",
+          "columns": [
+            "from_shift_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "shift_swaps_requested_by_person_fk": {
+          "name": "shift_swaps_requested_by_person_fk",
+          "tableFrom": "shift_swaps",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shift_swaps_to_person_fk": {
+          "name": "shift_swaps_to_person_fk",
+          "tableFrom": "shift_swaps",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "to_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shift_swaps_from_shift_fk": {
+          "name": "shift_swaps_from_shift_fk",
+          "tableFrom": "shift_swaps",
+          "tableTo": "shifts",
+          "columnsFrom": [
+            "from_shift_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shift_swaps_to_shift_fk": {
+          "name": "shift_swaps_to_shift_fk",
+          "tableFrom": "shift_swaps",
+          "tableTo": "shifts",
+          "columnsFrom": [
+            "to_shift_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "shift_swaps_decided_by_person_fk": {
+          "name": "shift_swaps_decided_by_person_fk",
+          "tableFrom": "shift_swaps",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "decided_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "shift_swaps_status_ck": {
+          "name": "shift_swaps_status_ck",
+          "value": "\"shift_swaps\".\"status\" in ('requested', 'accepted', 'approved', 'rejected')"
+        }
+      }
+    },
+    "shift_templates": {
+      "name": "shift_templates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weekday": {
+          "name": "weekday",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_minute": {
+          "name": "starts_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_minute": {
+          "name": "ends_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "shift_templates_location_idx": {
+          "name": "shift_templates_location_idx",
+          "columns": [
+            "location_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "shift_templates_location_fk": {
+          "name": "shift_templates_location_fk",
+          "tableFrom": "shift_templates",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "shift_templates_label_ck": {
+          "name": "shift_templates_label_ck",
+          "value": "length(\"shift_templates\".\"label\") > 0"
+        },
+        "shift_templates_weekday_ck": {
+          "name": "shift_templates_weekday_ck",
+          "value": "\"shift_templates\".\"weekday\" between 0 and 6"
+        },
+        "shift_templates_starts_minute_ck": {
+          "name": "shift_templates_starts_minute_ck",
+          "value": "\"shift_templates\".\"starts_minute\" between 0 and 1440"
+        },
+        "shift_templates_ends_minute_ck": {
+          "name": "shift_templates_ends_minute_ck",
+          "value": "\"shift_templates\".\"ends_minute\" between 0 and 1440"
+        }
+      }
+    },
+    "shifts": {
+      "name": "shifts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_offset_minutes": {
+          "name": "starts_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_offset_minutes": {
+          "name": "ends_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "roster_version_id": {
+          "name": "roster_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "shifts_person_starts_idx": {
+          "name": "shifts_person_starts_idx",
+          "columns": [
+            "person_id",
+            "starts_at"
+          ],
+          "isUnique": false
+        },
+        "shifts_roster_version_idx": {
+          "name": "shifts_roster_version_idx",
+          "columns": [
+            "roster_version_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "shifts_person_fk": {
+          "name": "shifts_person_fk",
+          "tableFrom": "shifts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_location_fk": {
+          "name": "shifts_location_fk",
+          "tableFrom": "shifts",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_roster_version_fk": {
+          "name": "shifts_roster_version_fk",
+          "tableFrom": "shifts",
+          "tableTo": "roster_versions",
+          "columnsFrom": [
+            "roster_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "shifts_starts_offset_ck": {
+          "name": "shifts_starts_offset_ck",
+          "value": "\"shifts\".\"starts_offset_minutes\" between -840 and 840"
+        },
+        "shifts_ends_offset_ck": {
+          "name": "shifts_ends_offset_ck",
+          "value": "\"shifts\".\"ends_offset_minutes\" between -840 and 840"
+        },
+        "shifts_interval_ck": {
+          "name": "shifts_interval_ck",
+          "value": "\"shifts\".\"ends_at\" > \"shifts\".\"starts_at\""
+        }
+      }
+    },
+    "time_entries": {
+      "name": "time_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entry_kind": {
+          "name": "entry_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_at": {
+          "name": "event_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_offset_minutes": {
+          "name": "event_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "captured_by_source": {
+          "name": "captured_by_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "captured_by_device_id": {
+          "name": "captured_by_device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recorded_by_person_id": {
+          "name": "recorded_by_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corrects_entry_id": {
+          "name": "corrects_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "correction_reason": {
+          "name": "correction_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "correction_status": {
+          "name": "correction_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "correction_actor_id": {
+          "name": "correction_actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "self_approved": {
+          "name": "self_approved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "author_kind": {
+          "name": "author_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "correction_direction": {
+          "name": "correction_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "missing_entry_kind": {
+          "name": "missing_entry_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "responds_to_entry_id": {
+          "name": "responds_to_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pay_period_closure_id": {
+          "name": "pay_period_closure_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entry_hash": {
+          "name": "entry_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prev_entry_hash": {
+          "name": "prev_entry_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sequence_no": {
+          "name": "sequence_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_first_entry": {
+          "name": "is_first_entry",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "time_entries_subject_identity_uq": {
+          "name": "time_entries_subject_identity_uq",
+          "columns": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "isUnique": true
+        },
+        "time_entries_person_event_idx": {
+          "name": "time_entries_person_event_idx",
+          "columns": [
+            "person_id",
+            "event_at"
+          ],
+          "isUnique": false
+        },
+        "time_entries_corrects_entry_idx": {
+          "name": "time_entries_corrects_entry_idx",
+          "columns": [
+            "corrects_entry_id"
+          ],
+          "isUnique": false
+        },
+        "time_entries_chain_position_uq": {
+          "name": "time_entries_chain_position_uq",
+          "columns": [
+            "node_id",
+            "location_id",
+            "sequence_no"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "time_entries_person_fk": {
+          "name": "time_entries_person_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_location_fk": {
+          "name": "time_entries_location_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_captured_by_device_fk": {
+          "name": "time_entries_captured_by_device_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "captured_by_device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_recorded_by_person_fk": {
+          "name": "time_entries_recorded_by_person_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "recorded_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_node_fk": {
+          "name": "time_entries_node_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_corrects_entry_fk": {
+          "name": "time_entries_corrects_entry_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "corrects_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_correction_actor_fk": {
+          "name": "time_entries_correction_actor_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "correction_actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_response_fk": {
+          "name": "time_entries_response_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "responds_to_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_response_subject_fk": {
+          "name": "time_entries_response_subject_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "responds_to_entry_id",
+            "person_id",
+            "location_id"
+          ],
+          "columnsTo": [
+            "id",
+            "person_id",
+            "location_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_closure_fk": {
+          "name": "time_entries_closure_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "pay_period_closures",
+          "columnsFrom": [
+            "pay_period_closure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "time_entries_author_kind_ck": {
+          "name": "time_entries_author_kind_ck",
+          "value": "\"time_entries\".\"author_kind\" is null or \"time_entries\".\"author_kind\" in ('worker','manager','automatic')"
+        },
+        "time_entries_correction_direction_ck": {
+          "name": "time_entries_correction_direction_ck",
+          "value": "\"time_entries\".\"correction_direction\" is null or \"time_entries\".\"correction_direction\" in ('worker_request','manager_proposal')"
+        },
+        "time_entries_missing_entry_kind_ck": {
+          "name": "time_entries_missing_entry_kind_ck",
+          "value": "\"time_entries\".\"missing_entry_kind\" is null or \"time_entries\".\"missing_entry_kind\" in ('in','out','break_start','break_end')"
+        },
+        "time_entries_author_ck": {
+          "name": "time_entries_author_ck",
+          "value": "coalesce((\"time_entries\".\"author_kind\" = 'automatic' and \"time_entries\".\"recorded_by_person_id\" is null)\n      or (\"time_entries\".\"author_kind\" is null and \"time_entries\".\"recorded_by_person_id\" is not null)\n      or (\"time_entries\".\"author_kind\" in ('worker','manager') and \"time_entries\".\"recorded_by_person_id\" is not null), 0)"
+        },
+        "time_entries_event_offset_ck": {
+          "name": "time_entries_event_offset_ck",
+          "value": "\"time_entries\".\"event_offset_minutes\" between -840 and 840"
+        },
+        "time_entries_correction_shape_ck": {
+          "name": "time_entries_correction_shape_ck",
+          "value": "(\"time_entries\".\"author_kind\" is null and \"time_entries\".\"correction_direction\" is null\n          and \"time_entries\".\"missing_entry_kind\" is null and \"time_entries\".\"responds_to_entry_id\" is null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and \"time_entries\".\"entry_kind\" <> 'confirmation'\n          and ((\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n            and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"correction_reason\" is not null\n            and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null)))\n        or (\"time_entries\".\"entry_kind\" in ('in','out','break_start','break_end')\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null\n          and \"time_entries\".\"responds_to_entry_id\" is null and \"time_entries\".\"pay_period_closure_id\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'confirmation' and \"time_entries\".\"responds_to_entry_id\" is not null\n          and \"time_entries\".\"author_kind\" is not null\n          and ((\"time_entries\".\"author_kind\" = 'worker' and \"time_entries\".\"pay_period_closure_id\" is null)\n            or (\"time_entries\".\"author_kind\" = 'automatic' and \"time_entries\".\"pay_period_closure_id\" is not null))\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'correction' and \"time_entries\".\"correction_reason\" is not null\n          and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and ((\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"missing_entry_kind\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"missing_entry_kind\" is not null\n              and \"time_entries\".\"correction_direction\" is not null and \"time_entries\".\"author_kind\" is not null)))"
+        },
+        "time_entries_entry_hash_ck": {
+          "name": "time_entries_entry_hash_ck",
+          "value": "length(\"time_entries\".\"entry_hash\") = 64 and \"time_entries\".\"entry_hash\" not glob '*[^0-9A-F]*'"
+        },
+        "time_entries_sequence_no_ck": {
+          "name": "time_entries_sequence_no_ck",
+          "value": "\"time_entries\".\"sequence_no\" > 0"
+        },
+        "time_entries_chaining_ck": {
+          "name": "time_entries_chaining_ck",
+          "value": "(\"time_entries\".\"is_first_entry\" and \"time_entries\".\"prev_entry_hash\" is null)\n          or (not \"time_entries\".\"is_first_entry\" and \"time_entries\".\"prev_entry_hash\" is not null)"
+        },
+        "time_entries_event_at_second_ck": {
+          "name": "time_entries_event_at_second_ck",
+          "value": "\"time_entries\".\"event_at\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'"
+        },
+        "time_entries_recorded_at_second_ck": {
+          "name": "time_entries_recorded_at_second_ck",
+          "value": "\"time_entries\".\"recorded_at\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'"
+        },
+        "time_entries_entry_kind_ck": {
+          "name": "time_entries_entry_kind_ck",
+          "value": "\"time_entries\".\"entry_kind\" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation')"
+        },
+        "time_entries_captured_by_source_ck": {
+          "name": "time_entries_captured_by_source_ck",
+          "value": "\"time_entries\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+        },
+        "time_entries_captured_by_source_device_ck": {
+          "name": "time_entries_captured_by_source_device_ck",
+          "value": "(\"time_entries\".\"captured_by_source\" = 'device') = (\"time_entries\".\"captured_by_device_id\" is not null)"
+        },
+        "time_entries_correction_status_ck": {
+          "name": "time_entries_correction_status_ck",
+          "value": "\"time_entries\".\"correction_status\" in ('requested', 'approved', 'declined', 'disputed')"
+        }
+      }
+    },
+    "workforce_chains": {
+      "name": "workforce_chains",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sequence_no": {
+          "name": "sequence_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "last_entry_id": {
+          "name": "last_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_entry_hash": {
+          "name": "last_entry_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_recorded_at": {
+          "name": "last_recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "workforce_chains_node_id_nodes_id_fk": {
+          "name": "workforce_chains_node_id_nodes_id_fk",
+          "tableFrom": "workforce_chains",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workforce_chains_location_id_locations_id_fk": {
+          "name": "workforce_chains_location_id_locations_id_fk",
+          "tableFrom": "workforce_chains",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workforce_chains_last_entry_id_time_entries_id_fk": {
+          "name": "workforce_chains_last_entry_id_time_entries_id_fk",
+          "tableFrom": "workforce_chains",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "last_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workforce_chains_node_id_location_id_pk": {
+          "columns": [
+            "node_id",
+            "location_id"
+          ],
+          "name": "workforce_chains_node_id_location_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "workforce_chains_pointer_ck": {
+          "name": "workforce_chains_pointer_ck",
+          "value": "(\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_entry_hash\" is null)\n          and (\"workforce_chains\".\"last_entry_id\" is null) = (\"workforce_chains\".\"last_recorded_at\" is null)"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

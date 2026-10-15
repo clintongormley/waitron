@@ -68,7 +68,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
         );
         return shifts.map((shift) => ({
           ...shift,
-          description: descriptions?.get(shift.id) ?? shift.role,
+          description: descriptions?.get(shift.id) ?? null,
         }));
       });
       return c.json(rows);

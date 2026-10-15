@@ -381,7 +381,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         );
         return shifts.map((shift) => ({
           ...shift,
-          description: descriptions?.get(shift.id) ?? shift.role,
+          description: descriptions?.get(shift.id) ?? null,
         }));
       });
       return c.json(rows);

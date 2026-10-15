@@ -1,5 +1,9 @@
 # W69 editable-form inventory
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > **2026-10-12, A493:** The old receipt-page scopes are retired. Protected department receipt dialogs and the independent Venue language card own their drafts. Earlier contracts below are historical.
 > See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
 
