@@ -3483,6 +3483,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
   another location is believed refused when the delivery is reserved; untested.
 
+- **The print queue's Resend does not follow the till's rule for a full invoice's printer (left open
+  by A661).** A till refuses to resend an original a print request sent, when that printer is not
+  the till's invoice printer (`receiptPrinterWithdrawn`,
+  `apps/server/src/invoice-delivery-status.ts`). The dashboard's
+  `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply
+  that rule. Decide whether a manager's resend should.
+
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
