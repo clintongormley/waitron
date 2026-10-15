@@ -1,4 +1,11 @@
 import {
+  createFirstSetupCoordinator,
+  createFirstSetupStore,
+  assertOtherSetupAllowed,
+  assertVenueFirstSetupAllowed,
+  inspectFirstSetupMarker,
+} from "@waitron/provisioning";
+import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
   missingBeforeMigration,
@@ -814,6 +821,9 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
+    const marker = await inspectFirstSetupMarker(config.venueDir, config.stateDir);
+    if (config.till !== undefined && marker !== null)
+      await assertVenueFirstSetupAllowed(config.venueDir);
     await assertDeploymentMatches(
       stampProbe.venue,
       config.environment,
@@ -949,12 +959,26 @@ async function bootServer(
             environment: config.environment,
           })
         : undefined;
+    const firstSetupCoordinator = createFirstSetupCoordinator();
+    const firstSetupStore = createFirstSetupStore({
+      venueDir: config.venueDir,
+      stateDir: config.stateDir,
+      coordinator: firstSetupCoordinator,
+    });
+    const firstSetup = {
+      coordinator: firstSetupCoordinator,
+      assertOtherAllowed: async () => assertOtherSetupAllowed(await firstSetupStore.read()),
+    };
     mountSetup(
       app,
       {
         environment: config.environment,
+        firstSetup,
         devMode: config.devMode,
-        operations: createSetupOperationStore(config.stateDir),
+        operations: createSetupOperationStore(config.stateDir, undefined, {
+          coordinator: firstSetupCoordinator,
+          guard: firstSetup.assertOtherAllowed,
+        }),
         cloudRecovery,
         previewRestore: (request) =>
           previewRecoveryArchive({

@@ -1,6 +1,12 @@
 // setup-app.ts's own text: the page title and every refusal and outcome the shell hands a screen.
 
 export const shellEn = {
+  "shell.first_setup.owner_required": "Resume setup in its owner tab.",
+  "shell.first_setup.attempt_conflict": "Another setup attempt owns this venue.",
+  "shell.first_setup.attempt_uncertain":
+    "This assignment may have been used. Resume the saved attempt; do not assign it again.",
+  "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
+
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
   "shell.reload_open_till": "Reload to open the till",
@@ -129,6 +135,14 @@ export const shellEn = {
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
+  "shell.first_setup.owner_required": "Reanuda la configuración en la pestaña de su responsable.",
+  "shell.first_setup.attempt_conflict":
+    "Otro intento de configuración tiene el control de este local.",
+  "shell.first_setup.attempt_uncertain":
+    "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
+  "shell.first_setup.attempt_invalid":
+    "No se puede leer la configuración guardada. Contacta con soporte.",
+
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",
   "shell.reload_open_till": "Recargar para abrir la caja",

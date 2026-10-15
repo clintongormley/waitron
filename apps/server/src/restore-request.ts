@@ -1,3 +1,5 @@
+import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
+import { lockVenueDatabase } from "@waitron/db";
 import { chmod, copyFile, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -282,6 +284,14 @@ export async function runStagedRestore(
     }
     await clearNodeKey(deps.stateDir);
     throw error;
+  }
+  if ((await inspectFirstSetupMarker(deps.venueDir)) !== null) {
+    const claimHold = await lockVenueDatabase(deps.venueDir);
+    try {
+      await assertVenueFirstSetupAllowed(deps.venueDir);
+    } finally {
+      claimHold.release();
+    }
   }
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;

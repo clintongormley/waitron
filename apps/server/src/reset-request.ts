@@ -1,3 +1,4 @@
+import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -93,6 +94,7 @@ export async function runStagedReset(
   }
   const hold = await lock(deps.venueDir);
   try {
+    await assertVenueFirstSetupAllowed(deps.venueDir);
     const reason = await refusal(deps, raw);
     if (reason !== null) {
       await rm(markerPath, { force: true });
