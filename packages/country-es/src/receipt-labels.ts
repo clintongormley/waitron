@@ -29,6 +29,8 @@ export const SPAIN_RECEIPT_LABELS = {
     duplicate: "DUPLICADO",
     practice: "PRUEBA - SIN COBRO REAL",
     phone: "Tel.",
+    simplifiedInvoice: "Factura simplificada",
+    vatIncludedAtRate: "IVA {rate} incluido",
   },
   "ca-ES": {
     nif: "NIF",
@@ -54,6 +56,8 @@ export const SPAIN_RECEIPT_LABELS = {
     duplicate: "DUPLICAT",
     practice: "PROVA - SENSE COBRAMENT REAL",
     phone: "Tel.",
+    simplifiedInvoice: "Factura simplificada",
+    vatIncludedAtRate: "IVA {rate} inclòs",
   },
   "gl-ES": {
     nif: "NIF",
@@ -79,6 +83,8 @@ export const SPAIN_RECEIPT_LABELS = {
     duplicate: "DUPLICADO",
     practice: "PROBA - SEN COBRO REAL",
     phone: "Tel.",
+    simplifiedInvoice: "Factura simplificada",
+    vatIncludedAtRate: "IVE {rate} incluído",
   },
   "eu-ES": {
     nif: "IFZ",
@@ -104,5 +110,7 @@ export const SPAIN_RECEIPT_LABELS = {
     duplicate: "BIKOIZKARIA",
     practice: "PROBA - BENETAKO KOBRANTZARIK GABE",
     phone: "Tel.",
+    simplifiedInvoice: "Faktura erraztua",
+    vatIncludedAtRate: "BEZa {rate} barne",
   },
 } as const satisfies Readonly<Record<string, ReceiptLabels>>;
