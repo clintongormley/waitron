@@ -208,6 +208,44 @@ describe("till-split-guests-dialog", () => {
     }
   });
 
+  for (const side of ["staying", "leaving"] as const) {
+    const other: Side = side === "staying" ? "leaving" : "staying";
+    it(`shows a refusal of the ${side} count under that field, keeps Split enabled, and clears it once that field changes`, async () => {
+      const el = await mountDialog({
+        staying: "3",
+        leaving: "1000",
+        [`${side}Refusal`]: "Count refused",
+      });
+      const seen = captured(el);
+      await confirm(el).updateComplete;
+
+      expect(field(el, side).error).toBe("Count refused");
+      expect(field(el, other).error).toBe("");
+      expect(bottom(el).error).toBe(t("form.fix_fields"));
+      expect(confirm(el).disabled).toBe(false);
+
+      await type(el, other, other === "staying" ? "4" : "2");
+      expect(field(el, side).error).toBe("Count refused");
+
+      await type(el, side, "2");
+      expect(field(el, side).error).toBe("");
+      expect(bottom(el).error).toBe("");
+      confirm(el).click();
+      expect(seen.split).toHaveLength(1);
+    });
+  }
+
+  it("clears a refusal when Split is pressed again", async () => {
+    const el = await mountDialog({ staying: "3", leaving: "2", leavingRefusal: "Count refused" });
+    const seen = captured(el);
+
+    confirm(el).click();
+    await el.updateComplete;
+
+    expect(seen.split).toEqual([{ staying: 3, leaving: 2 }]);
+    expect(field(el, "leaving").error).toBe("");
+  });
+
   it("reports Cancel without counts", async () => {
     const el = await mountDialog();
     const seen = captured(el);

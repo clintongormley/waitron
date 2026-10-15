@@ -48,7 +48,7 @@ import type {
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "./basket.js";
-import type { OtherDraft } from "../screens/till-table-order-screen.js";
+import type { OtherDraft, SplitRefusal } from "../screens/till-table-order-screen.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 import { PHONE_WIDTH } from "./language-chooser-styles.js";
 
@@ -242,6 +242,7 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
+  @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
   @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
@@ -534,6 +535,7 @@ export class TillCardGrid extends LitElement {
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .guestsRefusal=${this.guestsRefusal}
+          .splitRefusal=${this.splitRefusal}
           .busy=${this.busy}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheld}

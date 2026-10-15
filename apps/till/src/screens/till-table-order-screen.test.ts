@@ -4562,6 +4562,55 @@ describe("till-table-order-screen", () => {
       ]);
     });
 
+    it("reopens Split a table's guests window with the counts sent and the refusal under the named field when the app hands one back", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const split = heard(el, "split-table");
+
+      el.splitRefusal = {
+        tableId: "t5",
+        billId: "wo-check",
+        staying: "3",
+        leaving: "1000",
+        field: "leaving",
+        message: t("seat.guest_count_invalid"),
+      };
+      await el.updateComplete;
+
+      const dialog = el.shadowRoot!.querySelector("till-split-guests-dialog")!;
+      await dialog.updateComplete;
+      expect(dialog.staying).toBe("3");
+      expect(dialog.leaving).toBe("1000");
+      expect(dialog.stayingRefusal).toBe("");
+      expect(dialog.leavingRefusal).toBe(t("seat.guest_count_invalid"));
+      const leaving = splitGuestsInput(dialog, "leavingGuests");
+      leaving.value = "2";
+      leaving.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+
+      expect(split).toEqual([
+        { tableId: "t5", billId: "wo-check", guests: { staying: 3, leaving: 2 } },
+      ]);
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+    });
+
+    it("does not reopen Split a table's guests window for a refusal about a table the party no longer holds", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+
+      el.splitRefusal = {
+        tableId: "t9",
+        billId: null,
+        staying: "3",
+        leaving: "1000",
+        field: "leaving",
+        message: t("seat.guest_count_invalid"),
+      };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
+    });
+
     it("closes Split a table's guests window, sending nothing, when the screen switches to another party", async () => {
       const floor = partyTables(true);
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
@@ -4746,7 +4795,9 @@ describe("till-table-order-screen", () => {
       await field.updateComplete;
       const input = field.shadowRoot!.querySelector("input")!;
       expect(input.value).toBe("6");
-      const save = dialog.shadowRoot!.querySelector("wt-button[data-guests-save]")!;
+      const save = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "wt-button[data-guests-save]",
+      )!;
       await save.updateComplete;
       expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
       for (const value of ["4", "3"]) {

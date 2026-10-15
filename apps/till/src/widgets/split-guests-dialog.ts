@@ -44,6 +44,8 @@ export class TillSplitGuestsDialog extends LitElement {
    * waiter has not changed that side. */
   @property({ attribute: false }) savedStaying: string | undefined;
   @property() leaving = "";
+  @property() stayingRefusal = "";
+  @property() leavingRefusal = "";
 
   @state() private attempted = false;
 
@@ -111,16 +113,25 @@ export class TillSplitGuestsDialog extends LitElement {
     return this.attempted && parseGuestCount(this[side]) === undefined;
   }
 
+  #fieldError(side: Side): string {
+    if (this.#invalid(side)) return t("seat.guest_count_invalid");
+    return side === "staying" ? this.stayingRefusal : this.leavingRefusal;
+  }
+
   #onInput(side: Side, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active) return;
     this[side] = event.detail.value;
     this.#scope?.changed();
+    if (side === "staying") this.stayingRefusal = "";
+    else this.leavingRefusal = "";
   }
 
   async #confirm(): Promise<void> {
     if (!this.isConnected || !this.active) return;
     this.attempted = true;
+    this.stayingRefusal = "";
+    this.leavingRefusal = "";
     const staying = parseGuestCount(this.staying);
     const leaving = parseGuestCount(this.leaving);
     if (staying === undefined || leaving === undefined) {
@@ -167,7 +178,7 @@ export class TillSplitGuestsDialog extends LitElement {
       autocomplete="off"
       .label=${label}
       .value=${live(this[side])}
-      .error=${this.#invalid(side) ? t("seat.guest_count_invalid") : ""}
+      .error=${this.#fieldError(side)}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(side, event)}
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(
@@ -179,6 +190,7 @@ export class TillSplitGuestsDialog extends LitElement {
 
   override render() {
     const invalid = this.#invalid("staying") || this.#invalid("leaving");
+    const marked = this.#fieldError("staying") !== "" || this.#fieldError("leaving") !== "";
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -189,7 +201,7 @@ export class TillSplitGuestsDialog extends LitElement {
       <div class="fields">
         ${this.#field("staying", "stayingGuests", this.stayingLabel)}
         ${this.#field("leaving", "leavingGuests", this.leavingLabel)}
-        <wt-form-actions .error=${invalid ? t("form.fix_fields") : ""}>
+        <wt-form-actions .error=${marked ? t("form.fix_fields") : ""}>
           <wt-button
             slot="cancel"
             data-split-guests-cancel

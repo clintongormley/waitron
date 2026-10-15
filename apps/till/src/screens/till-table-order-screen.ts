@@ -242,7 +242,18 @@ export interface MoveBillDetail {
 export interface SplitTableDetail {
   tableId: string;
   billId: string | null;
-  guests?: SplitGuestsDetail;
+  guests: SplitGuestsDetail;
+}
+
+/** The app's answer to a split whose count for one side the server refused: what was sent, and
+ * why, shown under that side's field. */
+export interface SplitRefusal {
+  tableId: string;
+  billId: string | null;
+  staying: string;
+  leaving: string;
+  field: "staying" | "leaving";
+  message: string;
 }
 
 /** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
@@ -1196,6 +1207,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
+  @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
   /** The visible half of the app's guard against a second group command while one runs. */
@@ -1313,6 +1325,8 @@ export class TillTableOrderScreen extends LitElement {
     tableId: string;
     billId: string | null;
     staying: string;
+    leaving: string;
+    refusal: { field: "staying" | "leaving"; message: string } | null;
   } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
@@ -1667,6 +1681,10 @@ export class TillTableOrderScreen extends LitElement {
     }
     if (changed.has("guestsRefusal") && this.guestsRefusal !== null) {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
+    }
+    if (changed.has("splitRefusal") && this.splitRefusal !== null) {
+      const { tableId, billId, staying, leaving, field, message } = this.splitRefusal;
+      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message } };
     }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one.
@@ -4641,7 +4659,13 @@ export class TillTableOrderScreen extends LitElement {
 
   #splitTable(tableId: string, billId: string | null): void {
     this.#closeActions();
-    this.splitGuests = { tableId, billId, staying: this.#savedGuests() };
+    this.splitGuests = {
+      tableId,
+      billId,
+      staying: this.#savedGuests(),
+      leaving: "",
+      refusal: null,
+    };
   }
 
   #splitGuestsDialog(): TemplateResult | typeof nothing {
@@ -4657,6 +4681,9 @@ export class TillTableOrderScreen extends LitElement {
       .leavingLabel=${leaving === undefined ? "" : tableShownName(leaving)}
       .staying=${splitting.staying}
       .savedStaying=${this.#savedGuests()}
+      .leaving=${splitting.leaving}
+      .stayingRefusal=${splitting.refusal?.field === "staying" ? splitting.refusal.message : ""}
+      .leavingRefusal=${splitting.refusal?.field === "leaving" ? splitting.refusal.message : ""}
       @split-guests-confirm=${(event: Event) => {
         event.stopPropagation();
         this.splitGuests = null;
