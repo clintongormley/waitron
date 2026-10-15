@@ -6,6 +6,8 @@ export { FISCAL_VOCABULARY } from "./vocabulary.js";
 export { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 export { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
+export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./cloud-evidence.js";
+export type { CloudAllocationReceipt, ReceiptTrust } from "./cloud-evidence.js";
 export { assertFiscalRestoreCommitted } from "./restore-committed.js";
 export { FISCAL_SLOT } from "./slot.js";
 export { isCertKind } from "./aeat-transport.js";
@@ -75,3 +77,7 @@ export type {
   StandbyAllocationEvidence,
   StandbyAllocationEvidenceSource,
 } from "./allocated-standby.js";
+export {
+  createCloudAllocationPreparation,
+  readCloudAllocationReport,
+} from "./cloud-preparation.js";

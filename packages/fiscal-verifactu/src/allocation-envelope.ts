@@ -10,6 +10,7 @@ import {
   matchesInstallationChecksum,
 } from "./allocation-identity.js";
 import { verifyPaperEvidence, type PaperCustodianTrust } from "./paper-evidence.js";
+import { readCloudAllocationReceipt, type ReceiptTrust } from "./cloud-evidence.js";
 
 export interface FiscalAllocation {
   readonly version: 1;
@@ -79,7 +80,11 @@ export interface AllocationContext {
         readonly currentEntryState:
           "consumed-for-event" | "reserved" | "consumed-elsewhere" | "retired" | "abandoned";
       }
-    | { readonly kind: "cloud" }
+    | {
+        readonly kind: "cloud";
+        readonly trust?: ReceiptTrust | null;
+        readonly receipt?: unknown;
+      }
     | {
         readonly kind: "emergency";
         readonly draw: EmergencyDraw;
@@ -314,6 +319,19 @@ function validateEnvelope(
       return refuse("emergency_uncertainty_missing");
     if (!replay && context.authority.knownIdentities?.includes(input.installationIdentity))
       return refuse("identity_known");
+  } else if (input.source === "cloud" && context.authority.kind === "cloud") {
+    const receipt = readCloudAllocationReceipt(context.authority.receipt, context.authority.trust);
+    if (receipt === null) return refuse("reservation_untrusted");
+    if (receipt.payload.state !== "consumed")
+      return refuse(
+        receipt.payload.state === "reserved" ? "reservation_not_consumed" : "reservation_abandoned",
+      );
+    if (
+      receipt.payload.mode !== context.mode ||
+      !isDeepStrictEqual(receipt.payload.allocation, input) ||
+      !isDeepStrictEqual(receipt.payload.approval, permission)
+    )
+      return refuse("reservation_mismatch");
   } else {
     if (
       (input.source !== "paper" && input.source !== "initial-paper") ||

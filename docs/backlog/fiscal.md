@@ -216,6 +216,37 @@ approval; W41s-6 no longer holds that dependency.
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
+`04cb54637d2fd714e959f749f3d800b5444ee4c8`, Node v26.11.1, calling
+`validateReserve` from `packages/fiscal-allocation/src/validation.ts` with the same recovery
+request accepts `operatorId: "local-administrator"` but refuses
+`operatorId: {kind: "recovery-key", nodeId: "replacement-node", eventId: "restore-event"}`
+with `invalid_input`. Cloud's `ClaimBinding` still declares a string, and its parser calls
+`text(o.operatorId)`. The approved Cloud plan already requires the tagged key operator.
+Keep the local key-only authority model; neither a made-up person nor a Cloud account can replace
+it. The Cloud owner must correct its own contract and run Task 7's scheduled joint test against
+the pinned Waitron candidate. The Waitron receipt verifier and HTTP client are in progress;
+this check does not qualify a complete restore or enable Cloud production custody.
+
+**2026-10-15 local adapter checkpoint:** the [configured module preparation and reconciliation
+adapter](../developers/cloud-fiscal-allocation.md) have local archive/bucket restore, exact
+committed replay, old-backup refusal, unchanged historical rows and sale-with-zero-network cases.
+A consumed receipt is retained before a local attempt; its stable report is collected only
+from a matching committed result. Reporting is an explicit adapter call, without a background
+scheduler. Cloud's separately scheduled joint test and the branch's final reviews/gates remain
+open. No production custody, signing or continuity policy is selected by this checkpoint.
+Cloud's operator correction subsequently landed as [Cloud #132](https://github.com/waitron-io/waitron-cloud/pull/132)
+at `a7a29f4a73e5115a8f2e9c381eab97710dad4645`; the scheduled joint result still gates completion.
+
+**2026-10-15 implementation boundary:** C3 supplies the signed consumed-receipt verifier,
+configured manual recovery preparation, public receipt retention and explicit report APIs. Both
+FULL reviews were triaged; the report journal publishes complete files, checks the encoded proof
+before binding a new operation and checks the expected receipt in live and cached replies.
+The operator-contract correction is Cloud #132. Source and acceptance checks are documented in
+[the adapter guide](../developers/cloud-fiscal-allocation.md). Production custody/signing/continuity
+policy and a running host reporting caller remain separate work. The dated checkpoints above
+record the earlier branch state rather than current open implementation work.
+
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
 The owner approved the exact archive changes; the original archive/target suites pass 36 cases.

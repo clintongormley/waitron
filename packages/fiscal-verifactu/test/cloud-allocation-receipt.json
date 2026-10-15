@@ -1,0 +1,88 @@
+{
+  "sourceCommit": "8b59faa8188a9b12c43e87ec370de8f0dc1c16eb",
+  "issuer": "fixture-registry",
+  "keyId": "965f22535298c93cc60939d841d001b700cd928a8a027a07e0a8c9438cdf2d2b",
+  "publicKey": "MCowBQYDK2VwAyEAam7iNMdAxPrDi1w-4y78PWA3d6OKFkpS-95gfUptXg4",
+  "packet": "WAITRON-FISCAL-ALLOCATION-1:eyJrZXlJZCI6Ijk2NWYyMjUzNTI5OGM5M2NjNjA5MzlkODQxZDAwMWI3MDBjZDkyOGE4YTAyN2EwN2UwYThjOTQzOGNkZjJkMmIiLCJwYXlsb2FkIjp7ImFsbG9jYXRpb24iOnsiYWxsb2NhdGlvbklkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIiwiZW52aXJvbm1lbnQiOiJwcmVwcm9kdWN0aW9uIiwiaW5zdGFsbGF0aW9uSWRlbnRpdHkiOiJDMDAwMDQyIiwiaXNzdWVkQXQiOiIyMDI2LTEwLTEzVDEwOjAwOjAwLjAwMFoiLCJyZXNlcnZhdGlvbkV2aWRlbmNlIjp7ImF1dGhvcml0eUlkIjoiZml4dHVyZS1hdXRob3JpdHkiLCJraW5kIjoiY2xvdWQiLCJyZXNlcnZhdGlvbklkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwicmVzZXJ2YXRpb25TZXF1ZW5jZSI6IjQyIn0sInNlcmllcyI6W3siY29kZSI6IkEtQzAwMDA0MiIsInB1cnBvc2UiOiJzdGFuZGFyZCJ9LHsiY29kZSI6IkZGLUMwMDAwNDIiLCJwdXJwb3NlIjoiZnVsbCJ9LHsiY29kZSI6IlItQzAwMDA0MiIsInB1cnBvc2UiOiJyZWN0aWZpY2F0aXZlIn1dLCJzb2Z0d2FyZUlkIjoiV1QiLCJzb3VyY2UiOiJjbG91ZCIsInRheHBheWVyTmlmIjoiODk4OTAwMDFLIiwidmVyc2lvbiI6MX0sImFwcHJvdmFsIjp7ImNvbmZpcm1lZEF0IjoiMjAyNi0xMC0xM1QxMDowMDowMC4wMDBaIiwiZXZlbnRJZCI6ImV2ZW50LTEiLCJpbmNpZGVudEV2aWRlbmNlIjoiaW5jaWRlbnQtMSIsIm5vUGFyYWxsZWxSZWNvdmVyeSI6dHJ1ZSwib2xkTWFjaGluZUFic2VudCI6ZmFsc2UsIm9sZE1hY2hpbmVPZmZsaW5lIjp0cnVlLCJvcGVyYXRvcklkIjoib3BlcmF0b3ItMSIsInNvdXJjZUlkIjoic291cmNlLTEiLCJ0YXJnZXROb2RlSWQiOiJub2RlLTEiLCJ2ZXJzaW9uIjoxfSwiYmluZGluZyI6eyJldmVudElkIjoiZXZlbnQtMSIsImluY2lkZW50RXZpZGVuY2UiOiJpbmNpZGVudC0xIiwib3BlcmF0b3JJZCI6Im9wZXJhdG9yLTEiLCJzb3VyY2VJZCI6InNvdXJjZS0xIiwidGFyZ2V0Tm9kZUlkIjoibm9kZS0xIn0sImNsb3VkQWNjb3VudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDA0IiwiY29udGludWl0eSI6eyJhdXRob3JpdHlJZCI6ImZpeHR1cmUtYXV0aG9yaXR5IiwiY0hpZ2hXYXRlciI6NDIsImhpc3RvcnlEaWdlc3QiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwia2V5SWQiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwib2JzZXJ2ZWRBdCI6IjIwMjYtMTAtMTNUMTA6MDA6MDAuMDAwWiIsInJlcXVlc3ROb25jZSI6Im5vbmNlLTEiLCJzY29wZSI6eyJlbnZpcm9ubWVudCI6InByZXByb2R1Y3Rpb24iLCJzb2Z0d2FyZUlkIjoiV1QiLCJ0YXhwYXllck5pZiI6Ijg5ODkwMDAxSyJ9LCJzZXF1ZW5jZSI6IjQyIiwic2lnbmF0dXJlIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVEiLCJ3cml0ZXJGZW5jZSI6IjIifSwiY3VzdG9keVZlcnNpb24iOiJjdXN0b2R5LTEiLCJlbnRpdGxlbWVudFZlcnNpb24iOiJlbnRpdGxlbWVudC0xIiwiaXNzdWVyIjoiZml4dHVyZS1yZWdpc3RyeSIsIm1vZGUiOiJyZWNvdmVyeSIsInJlY2VpcHRJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwNSIsInJlY29yZGVkQXQiOiIyMDI2LTEwLTEzVDEwOjAwOjAwLjAwMFoiLCJzdGF0ZSI6ImNvbnN1bWVkIiwidmVudWVJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsInZlcnNpb24iOjF9LCJzaWduYXR1cmUiOiJvLVpfcDlJVXEyYm5fRER4ZENhckNYWnFvMktkbk81azh6TFc5QjYwRzYzSW9NcUp0LUI3T1NuVTN2YkZxdFZGd2JSOGl1cWdBMlpGSmxIUW9kcUxCdyJ9",
+  "receipt": {
+    "payload": {
+      "version": 1,
+      "issuer": "fixture-registry",
+      "receiptId": "10000000-0000-4000-8000-000000000005",
+      "state": "consumed",
+      "allocation": {
+        "version": 1,
+        "allocationId": "10000000-0000-4000-8000-000000000003",
+        "taxpayerNif": "89890001K",
+        "softwareId": "WT",
+        "environment": "preproduction",
+        "installationIdentity": "C000042",
+        "series": [
+          {
+            "code": "A-C000042",
+            "purpose": "standard"
+          },
+          {
+            "code": "FF-C000042",
+            "purpose": "full"
+          },
+          {
+            "code": "R-C000042",
+            "purpose": "rectificative"
+          }
+        ],
+        "source": "cloud",
+        "issuedAt": "2026-10-13T10:00:00.000Z",
+        "reservationEvidence": {
+          "kind": "cloud",
+          "authorityId": "fixture-authority",
+          "reservationId": "10000000-0000-4000-8000-000000000001",
+          "reservationSequence": "42"
+        }
+      },
+      "binding": {
+        "eventId": "event-1",
+        "operatorId": "operator-1",
+        "sourceId": "source-1",
+        "targetNodeId": "node-1",
+        "incidentEvidence": "incident-1"
+      },
+      "mode": "recovery",
+      "approval": {
+        "version": 1,
+        "eventId": "event-1",
+        "operatorId": "operator-1",
+        "sourceId": "source-1",
+        "targetNodeId": "node-1",
+        "incidentEvidence": "incident-1",
+        "oldMachineOffline": true,
+        "oldMachineAbsent": false,
+        "noParallelRecovery": true,
+        "confirmedAt": "2026-10-13T10:00:00.000Z"
+      },
+      "cloudAccountId": "10000000-0000-4000-8000-000000000004",
+      "venueId": "10000000-0000-4000-8000-000000000002",
+      "custodyVersion": "custody-1",
+      "entitlementVersion": "entitlement-1",
+      "continuity": {
+        "authorityId": "fixture-authority",
+        "scope": {
+          "taxpayerNif": "89890001K",
+          "softwareId": "WT",
+          "environment": "preproduction"
+        },
+        "sequence": "42",
+        "cHighWater": 42,
+        "historyDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "writerFence": "2",
+        "requestNonce": "nonce-1",
+        "observedAt": "2026-10-13T10:00:00.000Z",
+        "keyId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "signature": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ"
+      },
+      "recordedAt": "2026-10-13T10:00:00.000Z"
+    },
+    "keyId": "965f22535298c93cc60939d841d001b700cd928a8a027a07e0a8c9438cdf2d2b",
+    "signature": "o-Z_p9IUq2bn_DDxdCarCXZqo2KdnO5k8zLW9B60G63IoMqJt-B7OSnU3vbFqtVFwbR8iuqgA2ZFJlHQodqLBw"
+  }
+}
