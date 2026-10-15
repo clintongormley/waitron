@@ -159,6 +159,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
   Fiscal: the owner lands it.
 
+- **Can a simplified invoice carry an operation date different from its issue date?** If it can,
+  art. 7.1.c requires that date on the receipt, and the document builder prints one only on a full
+  invoice (`apps/server/src/receipt-document.ts`). Check, then print it there too if needed.
+
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid**, by
   value, instead of being set to €0 (V0555-17, binding). Only bills mixing rates are affected (the
   deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at cost
@@ -3484,9 +3488,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
-- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** One row
-  per item on a full invoice, the registered
-  address once or labelled, "× 2" for quantities, and guests and per person. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
+  base and VAT on a one-rate simplified receipt (Part 2b), each line's price before any discount
+  and the whole-bill discount once per rate (Part 2c), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - **A661's six wording and behaviour choices were built on the recommended defaults (left open by
@@ -3511,9 +3515,19 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   that rule. Decide whether a manager's resend should.
 
 - **The till's on-screen receipt is a second copy of the layout (left open by A663 Part 1a).** It
-  prints its own unit-price line and rates as «21.00%», so A663's changes do not reach it; bring it
-  into line with the printed receipt.
+  prints its own unit-price line, rates as «21.00%», «4 ud» where paper prints «4», and a full
+  invoice's discounts with VAT, so A663's changes do not reach it; bring it into line with the
+  printed receipt.
   [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
+
+- **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
+  Part 2).** A caption too long to share its line with the amount prints, then the amount moves to
+  the next page when the page is full (`apps/server/src/invoice-page.ts:250-253`).
+  [Detail](backlog/printers.md#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages)
+
+- **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
+  open by A663 Part 2).** Each row checks only its own room (`apps/server/src/invoice-page.ts:232`).
+  [Detail](backlog/printers.md#the-a4-item-tables-header-can-sit-alone-at-a-page-foot)
 
 - **Quantities print with "." whatever the receipt language (left open by A663 Part 1a)**
   («0.35 kg» on a Spanish receipt).
