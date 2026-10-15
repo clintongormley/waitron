@@ -71,15 +71,13 @@ beforeEach(async () => {
     });
     for (let i = 0; i < 105; i++) {
       const id = newId();
-      await tx
-        .insert(sessions)
-        .values({
-          id,
-          tokenHash: hashSessionToken(id),
-          personId,
-          deviceId,
-          openedAt: i === 104 ? "2026-01-05T16:40:00Z" : "2026-01-05T10:00:00Z",
-        });
+      await tx.insert(sessions).values({
+        id,
+        tokenHash: hashSessionToken(id),
+        personId,
+        deviceId,
+        openedAt: i === 104 ? "2026-01-05T16:40:00Z" : "2026-01-05T10:00:00Z",
+      });
     }
     await recordAttendanceFact(tx, {
       source: "order",

@@ -40,17 +40,15 @@ it("an admitted future cutover change does not block activity on its already dis
       publishedAt: "2026-01-04T12:00:00Z",
     })
     .returning();
-  await suite.db
-    .insert(shifts)
-    .values({
-      locationId,
-      personId: worker!.id,
-      rosterVersionId: version!.id,
-      startsAt: "2026-01-07T09:00:00.000Z",
-      endsAt: "2026-01-07T17:00:00.000Z",
-      startsOffsetMinutes: 60,
-      endsOffsetMinutes: 60,
-    });
+  await suite.db.insert(shifts).values({
+    locationId,
+    personId: worker!.id,
+    rosterVersionId: version!.id,
+    startsAt: "2026-01-07T09:00:00.000Z",
+    endsAt: "2026-01-07T17:00:00.000Z",
+    startsOffsetMinutes: 60,
+    endsOffsetMinutes: 60,
+  });
   const now = new Date("2026-01-05T12:00:00Z");
   await withTransaction(suite.db, (tx) =>
     beginAttendanceDiscovery(tx, { locationId, generation: "before-settings" }),
