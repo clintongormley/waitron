@@ -2080,13 +2080,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free, already grouped, zone mismatch) only after the seats are typed.
   The request log is in #1699.
 
-- **A698 — the held-orders card's Move to table offers free tables in an area that does not seat
-  guests (2026-10-15; open; left open by A690, #1731).** Its picker (`#picker`,
-  `apps/till/src/widgets/held-orders.ts`) lists every table but those joined out of service; moving a
-  held bill to a free table there reaches `refuseUnseatable` through `moveBill`
-  (`resolveDestination`, `apps/server/src/move-bill.ts`). A690 fixed the order screen's lists with
-  the floor's `seatsGuests` (`apps/till/src/state/floor-today.ts`); the card has no zones yet.
-
 - **A697 — the order screen's table lists offer tables in a closed area (2026-10-15; open; left open
   by A690, #1731).** Move guests to a table in another area is refused while that area takes no new
   orders (`assertZoneTakesNewOrders` in `moveGuests`, `apps/server/src/table-actions.ts`), and so is

@@ -15717,6 +15717,36 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(moveBill).toHaveBeenCalledTimes(2);
   });
 
+  it("held-order Move to table reads area policies on the counter and on reopening", async () => {
+    const listZones = vi.fn().mockResolvedValue([
+      { ...floorZone, serviceMode: "prepay" },
+      { ...floorZone, id: "dining" },
+    ]);
+    const { el } = await counterWith({
+      listZones,
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa9, { ...mesa9, id: "dining-table", zoneId: "dining" }]),
+    });
+    const held = heldList(el);
+    const move = held.shadowRoot!.querySelector<HTMLElement>(".move")!;
+    await userEvent.click(move);
+    await flush(el);
+    await vi.waitFor(() => {
+      expect(held.shadowRoot!.querySelector('[data-target="t9"]')).toBeNull();
+      expect(held.shadowRoot!.querySelector('[data-target="dining-table"]')).not.toBeNull();
+    });
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!);
+    await flush(el);
+    listZones.mockResolvedValue([floorZone, { ...floorZone, id: "dining" }]);
+    await userEvent.click(move);
+    await flush(el);
+    await vi.waitFor(() => {
+      expect(held.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
+      expect(held.shadowRoot!.querySelector('[data-target="dining-table"]')).not.toBeNull();
+    });
+  });
+
   it("reads the floor when Move to table opens, and gives it to the held orders", async () => {
     const { el, c } = await counterWith();
     const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;

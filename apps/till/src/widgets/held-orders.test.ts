@@ -4,7 +4,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
-import type { HeldOrderSummary, TableParty, TableState } from "../api/client.js";
+import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
 
 const mesa: HeldOrderSummary = {
   id: "wo-1",
@@ -365,6 +365,51 @@ describe("till-held-orders: moving a counter order to a table", () => {
       codeMessage("table.needs_clearing"),
     );
   });
+
+  it.each(["prepay", "ticket_then_pay", null] as const)(
+    "leaves free tables in a %s area out of Move to table, keeping seated parties and table service",
+    async (serviceMode) => {
+      const zone: FloorZone = {
+        id: "z1",
+        name: "Counter",
+        displayOrder: 0,
+        active: true,
+        closesAt: null,
+        closed: false,
+        hasPlan: true,
+        serviceMode,
+      };
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [mesa],
+        zones: [zone, { ...zone, id: "dining", serviceMode: "table_tab" }],
+        tables: [
+          tableRow("free-counter", "1"),
+          tableRow("seated-counter", "2", { party: luis, condition: "held" }),
+          tableRow("free-dining", "3", { zoneId: "dining" }),
+          tableRow("unknown-area", "4", { zoneId: "unknown" }),
+        ],
+      });
+
+      await openPicker(el);
+
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
+          (row) => row.dataset.target,
+        ),
+      ).toEqual(["seated-counter", "free-dining", "unknown-area"]);
+      const moved = heard(el, "move-held-order");
+      target(el, "free-dining")!.click();
+      await el.updateComplete;
+      expect(moved).toEqual([
+        {
+          orderId: mesa.id,
+          tableId: "free-dining",
+          seated: null,
+          bills: "merge",
+        },
+      ]);
+    },
+  );
 
   it("lists the tables in number order, whatever order the floor sends them in", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {

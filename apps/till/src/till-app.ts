@@ -9744,6 +9744,7 @@ export class TillApp extends LitElement {
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
+        .zones=${this.zones}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
         .operatorName=${this.operatorName}
@@ -10104,7 +10105,10 @@ export class TillApp extends LitElement {
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
-        @move-held-order-open=${() => this.#onFloorRefresh()}
+        @move-held-order-open=${() => {
+          this.#onFloorRefresh();
+          void this.#refreshFloorZones();
+        }}
         @move-held-order=${(event: CustomEvent<MoveHeldOrderDetail>) => {
           if (event.detail.orderId === this.#store.id) {
             const held = event.composedPath().find((node) => node instanceof TillHeldOrders);
