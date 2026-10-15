@@ -33,7 +33,7 @@ the picture is kept as drawn.
 
 ## How the work is cut
 
-Six pull requests (a seventh, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+Seven pull requests (an eighth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
 two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
 #1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
@@ -45,7 +45,8 @@ request holds.
 | 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
 | 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item with the item and its discount before VAT, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page; a count in «ud» printed bare on both documents | 2.1, 2.2, 2.3a, 2.3b, 2.3c-1, 2.3c-2, 2.3d, 2.4, 2.5, 2.6 (ten dispatches) | Now: Part 1b (#1756) and A661 (#1745) have landed |
 | 2b | A one-rate simplified receipt prints «Base imponible» and «IVA» under TOTAL instead of «IVA 10% incluido» (owner, Q11) | Written at the start of the part | After Part 2 has landed |
-| 2c | Each sale line stores its price before any discount, so every line prints its own price and discount (owner, Q9); the whole-bill discount prints once per VAT rate at the end of the table (owner, Q10). A database change | Written at the start of the part | After Part 2b has landed |
+| 2c | Each sale line stores its price before any discount, so every line prints its own price and discount (owner, Q9); the whole-bill discount prints once per VAT rate at the end of the table (owner, Q10). A database change | 2c.1, 2c.2, 2c.3a, 2c.3b, 2c.4, 2c.5, 2c.6, 2c.7, 2c.8 (nine dispatches) | After Part 2b has landed (#1772) |
+| 2d | Extras only on a dish sold by the unit: the server refuses them on a dish whose unit has a scale or decimals, and the till stops offering them (owner, 2026-10-15: "we don't offer half portions"). No migration | 2d.1, 2d.2, 2d.3 | After Part 2c has landed |
 | 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
@@ -56,7 +57,9 @@ alternatives after Part 2 was built on the defaults. Part 2 lands as built: it i
 commits, and a database change deserves its own pull request. Part 2b (Q11) is small and changes no
 database; Part 2c (Q9 and Q10 together, since both change the discount rows) adds a column to
 `sale_lines`. Until Part 2c lands, `main` prints a whole-bill discount under each dish, the default
-the owner did not choose; nothing is live, and Part 2c replaces it. Then Part 3.
+the owner did not choose; nothing is live, and Part 2c replaces it. Part 2d (added 2026-10-15, at
+Part 2c's start) closes the half portion of an extra that Part 2's review found; it touches ordering
+and the till, not receipts, so it is its own small pull request after Part 2c. Then Part 3.
 
 Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: on paper and on the A4
 page, the only place a unit price is printed beside a quantity is the full invoice's «Precio sin
@@ -79,7 +82,7 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
   `feat/a663-2-full-invoice-layout`, `feat/a663-2b-one-rate-vat-lines`,
-  `feat/a663-2c-price-before-discount`, `feat/a663-3-guests`.
+  `feat/a663-2c-price-before-discount`, `feat/a663-2d-whole-dish-extras`, `feat/a663-3-guests`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -92,9 +95,10 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
   owner approved (Q9) to add one column to `sale_lines` that must reach no fiscal record; see Part 2c.
 - **If a point turns out to need a change to what is filed or hashed, STOP that point** and add it
   to "Owner questions" in this plan instead of building it.
-- **Review path: FULL for every part** (CLAUDE.md §5 — a printed invoice is a legal document):
-  per-task reviews, then `/finish-branch` with the Codex run-it seat run twice (the second told to
-  set this plan's checklist aside and test what it does not name).
+- **Review path: FULL for every part that changes what prints** (CLAUDE.md §5 — a printed invoice
+  is a legal document): per-task reviews, then `/finish-branch` with the Codex run-it seat run twice
+  (the second told to set this plan's checklist aside and test what it does not name). Part 2d
+  prints nothing and touches no risk trigger: LIGHT (see Part 2d).
 - **Keep existing behavioural assertions.** Many suites read the printed receipt back as text
   (`apps/server/src/testing/decode-ticket.ts`). When a layout change moves a line, update the test's
   expectation of WHERE or HOW it prints, never delete the fact it checks (that the NIF, the TOTAL,
@@ -1308,7 +1312,7 @@ For a dish group whose every line has `net`, each line gets four cells, the figu
    so two 0.05 kg portions are stored as 0.100: the row prints «2 · Queso extra · 1,24 · 2,48», which
    adds up, where «0.100 kg» beside a price per 0.05 would not. When the division is not a whole
    number (an extra on a dish sold as a fraction of a unit with no scale — say 0.5 of a venue-made «l» —
-   stores half its portion; a dish on a scale cannot carry extras, `extras.unsupported_product`,
+   stores half its portion, which Part 2d refuses; a dish on a scale cannot carry extras, `extras.unsupported_product`,
    `apps/server/src/working-order.ts`; a hand-built test line can store anything), the cell falls back to the quantity and unit name as for
    any other line (`quantityText`, Task 2.3a). This follows the owner's Q4 answer, «we don't need
    the portion size».
@@ -2398,119 +2402,794 @@ and `bill-refunds.card.test.ts`.
 
 # Part 2c — each line's price before any discount, and the whole-bill discount once per rate (owner Q9, Q10)
 
-Branch `feat/a663-2c-price-before-discount`, from `main` after Part 2b has landed. Its own pull
-request. **Review path: FULL** — a migration on `sale_lines`, an append-only fiscal ledger table
-(`appendOnly("sale_lines", …)`, `packages/db/src/classification.ts:18`) — with the Codex run-it
-seat twice. **Migration: one** (a new column).
+Branch `feat/a663-2c-price-before-discount`, from `main` after Part 2b has landed (#1772). Its own
+pull request. **Review path: FULL** — a migration on `sale_lines`, an append-only fiscal ledger
+table (`appendOnly("sale_lines", …)`, `packages/db/src/classification.ts:18`) — with the Codex
+run-it seat twice. **Migration: one** (a new column).
 
-This section states the scope only. The part's test-first tasks are written at its start, before
-anything is built, and reviewed by a fresh-context reader against this section and the owner's Q9
-and Q10 answers. Step 1 below is answered, and written into this section, before any task that
-builds Q10's rows is written. Line numbers are from Part 2's branch on 2026-10-15; re-check them on
-`main` first.
+The tasks below were written at the part's start, on 2026-10-15. Every line number in this part was
+read on `main` at `20db8418f`. A fresh-context reader checks them against this section and the
+owner's Q9 and Q10 answers before any implementer is dispatched.
+
+Words used in this part:
+
+- **own discount**: a comp or discount made on one dish. Its record in `adjustments` names a line.
+- **whole-bill discount**: a discount made on the bill. Its record names no line. (The till refuses
+  a comp on the whole bill, `adjustments-apply.ts:415`, so this is always a discount.)
+- **bill share**: the part of a whole-bill discount that one line carries. The till never stores it:
+  it lowers each line's price instead (`spread`, `apps/server/src/adjustments-apply.ts:351-367`).
+- **dish family**: the rows of a bill that adjustments split from one order line, with their extras.
+  An adjustment can split a line in two: part of a line discounted (`carved`), or a discount that
+  cannot give every unit the same cent price (three croquetas at 3,33 € less 10% become two at 3,00
+  and one at 2,99). Each record lists the rows it split, `{ from, to }`
+  (`reprice`, `adjustments-apply.ts:778` and `:797`; `BillAdjustment.splits`,
+  `packages/adjustments/src/record.ts:176-184`).
 
 ## Step 1 — can a dish's own discount be told apart from its share of a whole-bill discount?
 
-**Open: what reading the code shows, not yet measured.**
+**Measured 2026-10-15. Yes, when the bill's records can be placed, and per dish family — not per
+row.**
 
-- The answer does not come from the new column. Every comp and discount on a bill is a row in
-  `adjustments`: one on a dish names its line, one on the whole bill names none, and each holds what
-  it took off, with VAT (`reduction`; `readBillAdjustments`,
-  `packages/adjustments/src/record.ts:187-212`). A whole-bill discount is not recorded per line: it
-  lowers each line's price (`spreadBillDiscount`, `packages/adjustments/src/spread.ts:308`).
-- The receipt reads those rows when it prints and puts each one on its row or on the bill
-  (`apps/server/src/receipt-adjustments.ts:79-112`), but only when every row finds its line and the
-  list totals less everything taken off equal what was charged (`:113-120`). Otherwise each dish
-  gets one entry for everything it lost (`perDish`, `:143`).
-- So, when every row is placed, a line's share of the whole-bill discount with VAT is its list
-  total less its charged total less its own reductions; before VAT, its own discount is the base of
-  its list total less the base of (list total − own reductions), and the bill's share is the rest
-  down to the filed base. When the rows are not placed, the two cannot be told apart.
+**How it was measured.** Two throwaway database tests, both deleted afterwards, built the same way as
+Part 2's measurement: bills on `provisionAdjustmentVenue`, adjusted with `applyAdjustment`, given a
+customer with `setOrderInvoiceChoice`, filed through `completeBillPayment`, and read back with
+`readSettledTicket` / `receiptLines` and `readBillAdjustments`.
 
-Step 1 measures this with a throwaway database test, as Part 2's "What a filed line holds" did: S1,
-a dish discounted after a whole-bill discount, and a line split by one. It writes the result here.
+- A research agent's `apps/server/src/zz-a663-2c-measure.test.ts`, run with
+  `CLAUDECODE= AI_AGENT= pnpm --filter @waitron/server exec vitest run src/zz-a663-2c-measure.test.ts --coverage.enabled=false`:
+  8, then 10, then 11 passed.
+- The plan writer's `apps/server/src/zz-a663-2c-plan.test.ts`, the same command: 8 passed and 1
+  failed (J2's bill came to 0,00 €, which a bill payment refuses — a fault in the probe, not the
+  code); rerun with a bread added to J2, 3 passed; then 1 passed (S14).
 
-Worked example, S1's burger: 12,00 € at 21%, 10% off the burger, then 10% off the whole bill; its
-filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, rounding half up,
-2026-10-15, assuming the burger's own discount took 1,20 (12,00 → 10,80); not run through the code:
+**Where the price before any discount comes from today.** `working_order_lines.list_unit_price_gross`
+is set in one place, `reprice` (`adjustments-apply.ts:761-767`): only if it is empty, before any
+split, on every row whose price the adjustment changes. A split copies it (`carveLines`,
+`apps/server/src/working-order.ts:4079`). `setPrice` (`adjustments-apply.ts:728-747`) never changes
+it. A row a whole-bill discount takes nothing from is left out (`spread`, `:364`). Measured: only a
+whole-bill discount (S5) sets it (Rioja 30,00, bread 2,50); dish then bill (S1) and bill then dish
+(S6) give the burger 12,00; a comped wine (S8 comp then bill, S9 bill then comp) keeps 30,00 and is
+charged 0,00; part of a line discounted (S10) leaves the untouched part at 3,33, its price. In every
+case it was the price before ANY discount. The check that could have failed: the list total rebuilt
+from it (`listGrossOf`, `apps/server/src/receipt-lines.ts:74-88`: unit × quantity ÷ price quantity,
+rounded once to the cent, half up) equalled the stored `sale_lines.list_gross` on every line of
+every bill.
 
-- If they can be told apart: «1 Hamburguesa 9,92 9,92 21%», then under it «Descuento 10% -0,99
-  21%» (9,92 − 8,93, since 10,80 ÷ 1,21 = 8,93); the remaining 0,90 (8,93 − 8,03) is part of the
-  «Descuento 10% … 21%» row at the end of the table.
-- If not: the burger's row holds both, «Descuento -1,89 21%» (plain «Descuento», Part 2's rule for
-  two discounts on one dish), and the 21% row at the end holds only the other dishes' shares.
+**The split, per dish family.** For each dish family and VAT rate, all before VAT:
 
-## Scope — Q9: each line's price before any discount
+- its **discount** is the sum of its lines' discounts (amount − filed base, Part 2's rule);
+- its **own** part is what its own records took off, with VAT, taken out of VAT once:
+  `baseFromGross(Σ own reductions, rate)`, kept between 0 and the discount;
+- its **bill share** is the rest, discount − own.
 
-- A new nullable money column on `sale_lines`: the line's unit price with VAT before any comp or
-  discount, in whole cents, converted at the row (CLAUDE.md §3; its name is chosen in the tasks).
-  The value already exists on the order line: `working_order_lines.list_unit_price_gross`
-  (`packages/db/src/schema/orders.ts:216-218`: "the unit price the line had when an adjustment first
-  touched it … null on a line no adjustment has touched"), read as `OrderLineIdentity.listUnitGross`
-  (`apps/server/src/working-order.ts:967-968`, `:1003-1004`). Today it reaches the sale only as a
-  line total, `listGross` (`listGrossOf`, `apps/server/src/receipt-lines.ts:74-88`).
-- **Where it is written.** Every till path hands its lines to filing through
-  `withReceiptListPrices` (`receipt-lines.ts:66-71`; called at `till-sale.ts:919`, `:1522`, `:1684`,
-  `bill-payments.ts:706`, `working-order.ts:6115`). `RecordSaleLine` gains the field beside
-  `listGross` (`packages/core/src/sale-line.ts:51-52`), and `saleLineRows` writes it beside
-  `listGross` (`packages/core/src/sale-line-rows.ts:46`), the one insert that `recordSale`
-  (`record-sale.ts:351`), `recordSubstitution` (`record-substitution.ts:229`) and
-  `recordCorrection` (`record-correction.ts:204`, `:308`) use. What a corrective line stores is
-  decided in the tasks (a credit negates `listGross` today, `apps/server/src/cancel-credit.ts:106`).
-- **Where it is read.** The full invoice's reader of filed lines
-  (`receipt-adjustments.ts:42-77`, beside `listGross` at `:51` and `:64`), which paper and A4 share
-  (A4 reaches it through `receiptLines`, `apps/server/src/invoice-document.ts:62-82`). Then
-  `beforeVatFigures` (`apps/server/src/receipt-figures.ts:38-57`) takes the stored price instead of
-  dividing the list total back, and loses the early return for less than one priced unit (`:45`).
-- The owner's example: «0.123 kg Jamón ibérico 21,82 2,68 10%» and «Descuento 10% -0,26 10%»
-  (24,00 ÷ 1,10 = 21,82; 2,95 ÷ 1,10 = 2,68; 2,68 − 2,42 = 0,26; Python `Decimal`, half up,
-  2026-10-15). A comped weighed line prints its value and an «Invitación» row.
-- A line filed before Part 2c has the column null and prints as Part 2 prints it. No backfill
-  (pre-live, CLAUDE.md §3).
+Measured, with the own part worked from the records (figures in euros, before VAT; the base per
+rate is the filed record's):
 
-## Scope — Q10: the whole-bill discount once per rate
+| Bill | What was done | Dish family | Discount | Own | Bill share |
+| ---- | ------------- | ----------- | -------- | --- | ---------- |
+| S1 | 10% off the burger, then 10% off the bill | Hamburguesa (12,00 at 21%) | 1,89 | 0,99 | 0,90 |
+| S1 | | Croquetas, 2 + 1 (split by the bill discount) | 0,82 | 0 | 0,82 |
+| S1 | | Pizza + Aceitunas | 0,87 | 0 | 0,87 |
+| S1 | | Jamón 0.123 kg (10%), with the stored price | 0,26 | 0 | 0,26 |
+| S5 | 10% off the bill | Rioja (21%); Pan (10%) | 2,48; 0,22 | 0 | 2,48; 0,22 |
+| S6 | 10% off the bill, then 10% off the burger | Hamburguesa | 1,89 | 0,89 | 1,00 |
+| S7 | 10% off 3 croquetas, then 10% off the bill | Croquetas, 2 + 1 (split by their own discount) | 1,57 | 0,83 | 0,74 |
+| S8 | the wine comped, then 10% off the bill | Rioja | 24,79 | 24,79 | 0 |
+| S9 | 10% off the bill, then the wine comped | Rioja | 24,79 | 22,31 | 2,48 |
+| S10 | half off 1 of 3 croquetas, then 10% off the bill | Croquetas, 2 + 1 (carved) | 2,06 | 1,38 | 0,68 |
+| S13b | 10% off a pizza with an extra, then 10% off the bill | Pizza + Aceitunas | 1,66 | 0,87 | 0,79 |
+| S14 | 10% off 3 croquetas, then 1% off the bill | Croquetas, 2 + 1 | 0,89 | 0,83 | 0,06 |
 
-- `groupDiscounts` (`receipt-figures.ts:71-102`) and the table builder that calls it
-  (`receipt-document.ts:290-313`) stop putting a whole-bill share under each dish. A dish's row
-  carries its own discount only. After the last item, one row per VAT rate the whole-bill discount
-  reached: «Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%» (S5, the owner's example; the label
-  rule is Part 2's). Each is the sum of that rate's lines' shares before VAT, so the table still
-  comes to the record's base, rate by rate.
-- «Base imponible» and «IVA» stay the record's own figures.
-- How a dish with both discounts prints follows Step 1's measured answer.
+(S6's measured filed figures are the research agent's; the own figure is `baseFromGross(1,08)` =
+0,89, from the record's 1,08 € with VAT. The other rows are the plan writer's probe. Every figure was
+recomputed with the script under "The rule this part builds".)
 
-## Scope — a part portion of an extra (owner, 2026-10-15 ~21:15)
+What the probes showed, and why the split is per dish family:
 
-Part 2's run-it review found an order can store half a portion of a per-portion extra (half a
-dish, in a venue-made unit with no scale), printing «0.075 kg  Queso extra  1,24  1,86». The owner:
-"we don't offer half portions". So no layout is designed for it. Instead: find exactly where such
-a quantity is stored (`file:line`, and a probe that reproduces it); if the product should not offer
-it, refuse the fractional quantity where it enters (till, server route or domain check) with a
-domain error code, test first, no data migration (pre-live). If it turns out to be a real feature
-(something sold by weight that carries per-portion extras), stop and ask the owner with the example.
-Decide at this part's start whether it rides in Part 2c or its own small pull request, and say which.
+- **A record names one row, but its money can come off several.** S11 (10% off 3 croquetas, no bill
+  discount): the 1,00 € comes off two rows (2 at 3,00 and 1 at 2,99), but the record names only the
+  first. S13a (10% off a pizza with an extra): the 1,05 € record names the pizza, but 0,15 of it came
+  off the olives. Row by row, that misplaces money: in S11 the first row's "bill share" came out
+  −0,28 and the third's +0,28 on a bill with no whole-bill discount at all.
+- **Per dish family it is right.** The record's own money is matched against the whole family's
+  discount. S13a, per family: own 0,87, bill share 0. S13b: own 0,87, bill share 0,79.
+- **The family needs the split list, not just the dish group.** S14: the croquetas' first row alone
+  has a discount of 0,59, less than the own 0,83, so per dish group the own row would be cut to 0,59
+  and 0,30 of the croquetas' own discount would print in the whole-bill row (0,40 instead of 0,16).
+  Linking the two croquetas rows through the record's split list gives own 0,83 and bill share 0,06.
+- **When the records cannot be placed, the two cannot be told apart.** `receiptLines` falls back to
+  one combined entry per dish (`perDish`, `apps/server/src/receipt-adjustments.ts:143`) when a
+  record's row is no longer on the bill (`:104-107`) or when the list totals less every record do not
+  equal what was charged (`:114-120`; it falls back at `:126`). Measured, the till's own flow S12:
+  10% off the burger, 10% off the bill, then the burger moved to a bill of its own with `splitBill`.
+  The new bill has no records and falls back (the burger loses 2,28 € with VAT, 1,89 before VAT); the
+  old bill's burger record points at a missing row, so it falls back too. Cancelling part of a
+  discounted line also falls back (`receipt-adjustments.test.ts`, "falls back to what each dish
+  lost…").
+
+**The rules Part 2c builds from this** (the full rule is under "The rule this part builds"):
+
+1. With **no whole-bill record** on the bill, everything a dish family lost is its own discount, as
+   Part 2 prints it today.
+2. When the **records cannot be placed**, the dish prints one plain «Descuento» row for everything it
+   lost and nothing reaches the end rows. S1's burger then prints «Descuento -1,89 21%» instead of
+   «Descuento 10% -0,99 21%» with 0,90 inside the end row «Descuento 10% -2,59 21%».
+3. Otherwise, each dish family's own part prints under the dish, and its bill share joins the end
+   row of its rate.
+
+**One known limit.** A split made by anything other than an adjustment leaves no record
+(`packages/adjustments/src/record.ts:110-111`): moving part of a line to another guest group of the
+same bill (`apps/server/src/order-groups.ts:791`, `splitLinesWithinOrder`) or splitting it into
+units (`splitUnitsWithinOrder`, `working-order.ts:4207-4216`). If that happens after an own discount
+and the bill also has a whole-bill discount, the moved part's own loss prints in the end row instead
+of under the dish. Every figure still adds up to the record's base per rate; only where a few cents
+print moves. Nothing stores which order line such a row came from (`working_order_lines` has no
+column for it), so this part does not try.
+
+## For the owner — two notes, no decision needed
+
+- **The jamón example.** Your example's «Descuento 10% -0,26 10%» is S1's jamón, whose 0,26 is its
+  share of the whole-bill discount; under your Q10 answer that share prints in the 10% row at the
+  end of the table, not under the jamón. A jamón with its own 10% off (J1, measured: 0.123 kg at
+  24,00 €/kg, charged 2,65, filed base 2,41) prints «0.123 kg Jamón ibérico 21,82 2,68» and
+  «Descuento 10% -0,27». A comped one (J2, measured: filed base 0,00) prints «0.123 kg Jamón ibérico
+  21,82 2,68» and «Invitación -2,68».
+- **A dish comped after a whole-bill discount (S9).** The whole-bill discount took 3,00 € off the
+  wine first, and the comp then took the 27,00 € left. The invoice follows the records: «Invitación
+  -22,31 21%» under the wine (27,00 ÷ 1,21), and the wine's 2,48 inside the end row «Descuento 10%
+  -2,48 21%». Why: the end rows are the whole-bill discount's own figures. The simplified receipt
+  prints that discount as «Descuento 10% -3,25», and the record holds 3,25. Printing the whole wine as
+  «Invitación -24,79» would take the wine's share out of the whole-bill discount, so its rows would no
+  longer be that discount before VAT. The other order (S8, comp first) prints «Invitación -24,79» and
+  the whole-bill row has nothing from the wine, because the discount took nothing from it.
+
+## The rule this part builds
+
+Replaces Part 2's points 1–3 and "A discount on the whole bill"; Part 2's points 4, its units, and
+its with-VAT fallback for a group without `net` are unchanged.
+
+**A line's figures** (`beforeVatFigures`, `apps/server/src/receipt-figures.ts:38-57`), all before
+VAT:
+
+- When the filed line has the new stored price (`listUnitPriceGross`): price =
+  `baseFromGross(listUnitPriceGross, rate)`; amount = `baseFromGross(listGross, rate)`; discount =
+  amount − filed base. No special case below one priced unit: S1's jamón prints «21,82 2,68».
+- When it has none (a sale filed before Part 2c, or a line no adjustment touched): Part 2's rule,
+  unchanged, including the filed figures below one priced unit.
+- In both, a discount that would be negative prints the filed price and base and no discount (Part
+  2's guard). A credit line stores negative totals and a positive price (Task 2c.2), so its discount
+  is negative and it prints its filed figures, as it does today.
+
+**A dish's own row and the end rows** (new `invoiceDiscounts`, replacing `groupDiscounts`,
+`receipt-figures.ts:71-102`). For each dish family and each rate its lines carry, in the order the
+rates first appear in the family:
+
+- discount = the sum of its lines' `beforeVatFigures` discounts;
+- own =
+  - the discount, when the invoice has no whole-bill adjustment (rule 1, and rule 2: a fallback
+    returns no `billAdjustments`, `receipt-adjustments.ts:126`);
+  - 0, when no line of the family carries an own entry;
+  - the discount, when the family's lines carry more than one rate (the records do not say which
+    rate an own reduction came off, so no share is split out);
+  - otherwise `baseFromGross(Σ own entries' amounts, rate)`, kept between 0 and the discount;
+- bill share = discount − own.
+
+An own amount that is not zero prints as one row under the dish group of the family that carries an
+own entry first (in printed order; the family's first group when none does), indented 2, at its rate.
+Its label:
+
+- «Invitación» when every line of the family at that rate has a filed base of zero;
+- else the own entry's words (`adjustmentLabel`, `apps/server/src/receipt-document.ts:86-99`) when
+  the family carries exactly one own entry and the row holds no bill share (the more-than-one-rate
+  case holds one);
+- else plain «Descuento».
+
+The bill shares add up per rate into **end rows**, after the last item and before «Precios sin
+IVA», one per rate whose sum is not zero, in the order the rates first appear on the invoice: no
+units, no price, the label not indented, the amount as «-2,48», the rate when the table has a rate
+column. The label is the whole-bill adjustment's words when the bill has exactly one, else plain
+«Descuento».
+
+So the table still comes to the record's base, rate by rate: for each rate, amounts − own rows − end
+row = the filed bases, because own + bill share = discount for every family. «Base imponible» and
+«IVA» stay the record's own `vatBreakdown`.
+
+Worked examples (the probe's filed figures; computed with the script below, `python3 -I`, Decimal,
+half up, 2026-10-15):
+
+| Bill | Rows the table prints (21% and 10%) | Table − rows = record base |
+| ---- | ----------------------------------- | -------------------------- |
+| S5 | Rioja 24,79; Pan 2,27; end «Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%» | 22,31; 2,05 |
+| S1 | Hamburguesa 9,92, «Descuento 10% -0,99 21%»; Croquetas 5,50; Jamón «0.123 kg … 21,82 2,68»; Pizza 7,44, Aceitunas 1,24; Croquetas 2,75; end «Descuento 10% -2,59 21%», «Descuento 10% -0,26 10%» | 23,27; 2,42 |
+| S9 | Rioja 24,79, «Invitación -22,31 21%»; Pan 2,27; end «-2,48 21%», «-0,22 10%» | 0,00; 2,05 |
+| S7 | Croquetas 5,50, «Descuento 10% -0,83»; Hamburguesa 9,92; Croquetas 2,75; end «Descuento 10% -1,73» | 15,61 |
+| S10 | Croquetas 5,50; Hamburguesa 9,92; Croquetas 2,75, «Descuento 50% -1,38»; end «Descuento 10% -1,67» | 15,12 |
+| S11 (no whole-bill discount) | Croquetas 5,50, «Descuento 10% -0,82»; Croquetas 2,75 | 7,43 |
+| J1 (own 10%, no whole-bill discount) | «0.123 kg Jamón ibérico 21,82 2,68», «Descuento 10% -0,27» | 2,41 |
+
+```python
+from decimal import Decimal as D, ROUND_HALF_UP
+c = D("0.01")
+def bfg(g, r): return (D(g) * 100 / (100 + D(r))).quantize(c, ROUND_HALF_UP)  # baseFromGross
+print(bfg("24.00", 10), bfg("2.95", 10), bfg("2.95", 10) - D("2.41"))       # 21.82 2.68 0.27
+burger_bill = bfg("12.00", 21) - D("8.03") - bfg("1.20", 21)                   # 0.90
+cro = (bfg("6.66", 21) - D("4.96")) + (bfg("3.33", 21) - D("2.47"))           # 0.82
+piz = (bfg("9.00", 21) - D("6.69")) + (bfg("1.50", 21) - D("1.12"))           # 0.87
+print(bfg("1.20", 21), burger_bill + cro + piz, bfg("2.95", 10) - D("2.42"))  # 0.99 2.59 0.26
+s14 = (bfg("6.66", 21) - D("4.91")) + (bfg("3.33", 21) - D("2.45"))           # 0.89
+print(s14 - bfg("1.00", 21) + bfg("12.00", 21) - D("9.82"))                   # 0.16
+```
 
 ## Migration
 
-- One drizzle generation, for the column alone. It is expected to be an `ALTER TABLE … ADD`, not a
-  rebuild. If drizzle-kit writes a rebuild, stop: list every foreign key that points at `sale_lines`
-  first (CLAUDE.md §3). The column comes from `packages/db/src/schema/columns.ts` (`money()`).
-- Run the checks CLAUDE.md §3 lists after a regeneration (`scripts/schema-constraints.test.ts`,
-  `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts`,
-  `scripts/migrations-match-schema.test.ts`, `packages/fiscal-verifactu/src/inmutabilidad.test.ts`)
-  and the upgrade test from §2 (`scripts/migration-upgrade.test.ts`).
+- One drizzle generation, for the column alone: `pnpm --filter @waitron/db db:generate`
+  (`packages/db/package.json`, `drizzle-kit generate` with `packages/db/drizzle.config.ts`). It must
+  write one ``ALTER TABLE `sale_lines` ADD `list_unit_price_gross` integer;``, as `list_gross`'s
+  did (`packages/db/drizzle/0103_full_invoice_model.sql:28`). If it writes a rebuild
+  (`__new_sale_lines`), STOP: a rebuild of `sale_lines` runs a `DROP TABLE` with foreign keys on
+  (CLAUDE.md §3), and `sale_lines` is pointed at by its own `parent_line_id` and `corrects_line_id`
+  (`packages/db/src/schema/sales.ts:221-230`; ``grep -n 'REFERENCES `sale_lines`' packages/*/drizzle/*.sql``
+  on 2026-10-15 found no other table's key). Report that and stop rather than ship a rebuild.
+- Let drizzle-kit number and name it; never edit `_journal.json` or a snapshot by hand.
+- The column is `money()` from `packages/db/src/schema/columns.ts`: whole cents, converted at the row
+  by `saleLineRows` (`stringToCents`) and read back with `centsToDecimal`.
+- Checks after generating (CLAUDE.md §3's list, plus the upgrade test from §2), from the worktree
+  root: `pnpm exec vitest run scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/journal-monotonic.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migration-upgrade.test.ts`
+  and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
+  A new nullable column with no key, no index and no check changes no table's class, adds no
+  foreign key, and needs no `packages/migrations/migrations.manifest.json` change (`sale_lines` is
+  already in the core set's `appendOnlyTables`).
+- No backfill and no data migration: a sale filed before Part 2c keeps the column null and prints as
+  Part 2 prints it (CLAUDE.md §3, pre-live).
 
 ## The fiscal constraint
 
-- No hashed field, no change to the alta writer, to invoice numbering, to `registros_facturacion`
-  or to the QR text, and no golden or `inmutabilidad` test edited. The fiscal gate (Global
-  Constraints) and the whole `@waitron/fiscal-verifactu` and `@waitron/core` suites run unedited
-  and PASS.
-- `git grep sale_lines` over `packages/fiscal-verifactu/src` outside tests, on 2026-10-15, finds
-  only `privileges.expected.ts:96`. That grep is not the proof: the tasks follow the alta writer's
-  call chain and say which inputs it reads. The comment at `sale-line-rows.ts:8-9` ("the fiscal
-  breakdown is never built from these rows") is checked the same way.
-- Backlog: take Part 2c out of the A663 entry's list of what is left.
+No hashed field, no change to the alta writer, to invoice numbering, to `registros_facturacion` or
+to the QR text. The new value is written ONLY by `saleLineRows`
+(`packages/core/src/sale-line-rows.ts:46`, beside `listGross`) and read ONLY by the full invoice's
+reader (`receiptLines`, `apps/server/src/receipt-adjustments.ts:42-77`).
+
+**The alta writer's call chain, and what it reads** (followed 2026-10-15):
+
+- `recordSale` (`packages/core/src/record-sale.ts:164`) inserts the rows (`:351`) and then calls
+  `backend.recordSale` (`:368-381`) with `origin`, `nodeId`, `saleId`, `seriesId`, `seriesCode`,
+  `invoiceNumber`, `issuedAt`, `offsetMinutes`, `descriptionOfOperation`, `total`, `vatBreakdown` and
+  `counterparty`. No line is passed: `SaleForFiscalRecord` has no lines
+  (`packages/fiscal/src/backend.ts:43-60`).
+- `vatBreakdown` is the caller's (every till path hands in `rateLines`' breakdown), or, when none is
+  given, `deriveVatBreakdown` → `buildVatBreakdown` (`record-sale.ts:126-158`), which reads each
+  line's `vatRate` and `lineTotal` only.
+- The Veri\*Factu writer (`packages/fiscal-verifactu/src/backend.ts:207-260`) builds the alta from
+  that breakdown, `total`, `counterparty`, the series and number, the dates and the description, and
+  chains it with `appendToChain`. Nothing under `packages/fiscal-verifactu/src` reads `sale_lines`
+  outside tests except the privilege map (`privileges.expected.ts:96`).
+- A credit (`recordCorrection`) reads the corrected invoice's `sale_lines` for `id`, `quantity`,
+  `lineTotal` and `productId` only (`packages/core/src/record-correction.ts:209-219`) and checks a
+  whole credit line for line on those (`assertReversesLineForLine`, `:346`).
+- So the comment at `sale-line-rows.ts:8-9`, "The fiscal breakdown is never built from these rows",
+  holds for the new column: the breakdown comes from the caller or from `vatRate` and `lineTotal` of
+  the lines handed in, never from the stored rows.
+
+**How the tasks prove it, by running:**
+
+- `packages/core/src/record-sale.test.ts:1546`, "files the same fiscal record, sale header and
+  pre-existing line columns with or without the new fields", files the same sale with and without
+  the optional line fields and asserts the backend received the same input. Task 2c.2 adds the new
+  column to its `NEW` list (`:1567-1576`; its table check at `:1577-1582` fails until it does) and a
+  `listUnitPriceGross` to `classifiedLines` (`:1461-1473`). That addition IS the proof that the new
+  field reaches no fiscal record; the earlier version of this plan said the `@waitron/core` suite
+  would run unedited, which this test makes impossible. No existing assertion in it changes.
+- The fiscal gate (Global Constraints) and the whole `@waitron/fiscal-verifactu` suite run unedited
+  and PASS (Task 2c.2 and Task 2c.8). Any of them needing an edit is a STOP.
+- `apps/server/scripts/demo-seed/seed-sales.golden.test.ts` (the Spanish practice sales, row for
+  row) runs unedited: it compares a fixed column list (`:52-79`) and skips columns a later migration
+  adds (`:9`), and the seed files no `listUnitPriceGross`.
+
+## Tasks
+
+Nine dispatches, in order. Each leaves the branch green.
+
+| Task | What | Main files |
+| ---- | ---- | ---------- |
+| 2c.1 | The column and its migration | `packages/db` |
+| 2c.2 | The field on a sale line, its row, a credit's copy, and the fiscal proof | `packages/core`, `cancel-credit.ts` |
+| 2c.3a | Every till path stores it: the shared helper, and the bill-payment and immediate paths | `receipt-lines.ts` |
+| 2c.3b | The card capture, card recovery and unpaid-invoice paths store it (tests only) | test files |
+| 2c.4 | The reader and the line figures use it | `receipt-adjustments.ts`, `receipt-figures.ts` |
+| 2c.5 | The reader marks each dish family | `receipt-adjustments.ts`, `till-sale.ts` |
+| 2c.6 | Own rows and end rows as a pure function | `receipt-figures.ts` |
+| 2c.7 | The full invoice prints them; the suites it ripples into | `receipt-document.ts` |
+| 2c.8 | LOOK, the gates, the backlog | `receipt-look.ts`, docs |
+
+### Task 2c.1: The column and its migration
+
+**Files:**
+- Modify: `packages/db/src/schema/sales.ts` (beside `listGross`, `:206-207`)
+- Create (generated): `packages/db/drizzle/0159_<drizzle's name>.sql`,
+  `packages/db/drizzle/meta/0159_snapshot.json`; modify (generated) `meta/_journal.json`
+
+- [ ] **Step 1: Schema.** Add, after `listGross: money("list_gross"),`:
+  ```ts
+  // The unit price with VAT, per `price_quantity`, before any comp or discount; null when nothing
+  // changed the line's price. Presentation only: no fiscal record reads it.
+  listUnitPriceGross: money("list_unit_price_gross"),
+  ```
+- [ ] **Step 2: See the guard fail.**
+  `pnpm exec vitest run scripts/migrations-match-schema.test.ts` (from the worktree root) — FAIL:
+  the core set no longer matches the schema.
+- [ ] **Step 3: Generate.** `pnpm --filter @waitron/db db:generate`. Open the new `.sql`: exactly
+  one ``ALTER TABLE `sale_lines` ADD `list_unit_price_gross` integer;``. A rebuild → STOP (see
+  "Migration").
+- [ ] **Step 4: Checks.** The "Migration" command list — PASS, reading each `Tests` count. Then
+  `pnpm --filter @waitron/db exec tsc --noEmit` and `pnpm --filter @waitron/db exec vitest run` — PASS.
+- [ ] **Step 5: Commit** (`git commit -s`), naming the generated file and that it only adds a column.
+
+### Task 2c.2: The field on a sale line, its row, a credit's copy, and the fiscal proof
+
+**Decision — what a corrective line stores.** A whole-invoice credit (`reversedLines`,
+`apps/server/src/cancel-credit.ts:79-111`) copies the original's `listUnitPriceGross` **unchanged,
+not negated**: it is a price per unit, like `unitPrice`, which the credit also keeps positive
+(`:91`), while the quantity and the totals turn negative (`:89`, `:93`, `:105-106`). The object is
+checked `satisfies Required<RecordSaleLine>` (`:109`), so the compiler demands the field. A partial
+correction's or a substitution's lines come from their callers; the field is optional and
+`recordSubstitution` has no caller under `apps/` today (`git grep -n "recordSubstitution("`).
+
+**Files:** `packages/core/src/sale-line.ts` (`:51-52`), `packages/core/src/sale-line-rows.ts`
+(`:46`), `packages/core/src/sale-line-rows.test.ts`, `packages/core/src/record-sale.test.ts`,
+`apps/server/src/cancel-credit.ts`
+
+- [ ] **Step 1: Failing tests.**
+  - `sale-line-rows.test.ts`, beside "stores the undiscounted gross line total…" (`:17`):
+    ```ts
+    it("stores the unit price before any discount in cents", () => {
+      const line: RecordSaleLine = {
+        lineNo: 1, name: "Jamón", descriptions: { "es-ES": "Jamón" }, quantity: "0.123",
+        unitPrice: "17.63", vatRate: "10.00", lineTotal: "2.16", lineGross: "2.38",
+        listGross: "2.95", listUnitPriceGross: "24.00",
+      };
+      expect(saleLineRows("sale-1", [line])[0]).toMatchObject({ listUnitPriceGross: 2400, listGross: 295 });
+    });
+    it("leaves the unit price before any discount unset when none is given", () => {
+      const line: RecordSaleLine = {
+        lineNo: 1, name: "Burger", descriptions: { "en-GB": "Burger" }, quantity: "1",
+        unitPrice: "8.93", vatRate: "21.00", lineTotal: "8.93", listUnitPriceGross: null,
+      };
+      expect(saleLineRows("sale-1", [line])[0]).not.toHaveProperty("listUnitPriceGross");
+    });
+    ```
+  - `record-sale.test.ts:1546`: add `"list_unit_price_gross"` to `NEW` (`:1567-1576`), and
+    `listUnitPriceGross: index === 0 ? "13.31" : undefined` to `classifiedLines` beside its
+    `listGross` (`:1471`). Change nothing else in the case.
+  - The credit's copy (`cancel-credit.ts`) has no failing test in this task: the original sale
+    line holds no value until Task 2c.3a's paths write one, so its test is in Task 2c.3a. Here the
+    compiler is the check (`satisfies Required<RecordSaleLine>`).
+- [ ] **Step 2:** `pnpm --filter @waitron/core exec vitest run src/sale-line-rows.test.ts src/record-sale.test.ts`
+  — FAIL (type error or missing property; the `NEW` list check fails until the row writes it — read
+  why each fails).
+- [ ] **Step 3: Code.** `RecordSaleLine` gains, after `listGross`:
+  `/** VAT-inclusive unit price per priceQuantity before any discount, frozen for receipt replay. */ listUnitPriceGross?: string | null;`.
+  `saleLineRows` writes
+  `...(line.listUnitPriceGross == null ? {} : { listUnitPriceGross: stringToCents(line.listUnitPriceGross) })`
+  beside `listGross`. `reversedLines` adds
+  `listUnitPriceGross: row.listUnitPriceGross === null ? null : centsToDecimal(row.listUnitPriceGross),`.
+  Leave the comment at `sale-line-rows.ts:8-9` as it is (it holds; see "The fiscal constraint").
+- [ ] **Step 4:** Run, all PASS, reading each `Tests` count:
+  `pnpm --filter @waitron/core exec vitest run && pnpm --filter @waitron/core exec tsc --noEmit && pnpm --filter @waitron/server exec tsc --noEmit`;
+  `pnpm --filter @waitron/server exec vitest run src/cancel-invoiced-order.test.ts` (unchanged, PASS);
+  the fiscal gate (Global Constraints) unedited; `pnpm --filter @waitron/fiscal-verifactu exec vitest run` unedited.
+- [ ] **Step 5: Commit**, the body saying which `@waitron/core` test gained lines and why (the
+  proof that the field reaches no fiscal record), and that no existing assertion changed.
+
+### Task 2c.3a: Every till path stores it — the shared helper, the bill-payment and immediate paths
+
+All five till filing paths hand their lines through `withReceiptListPrices`
+(`apps/server/src/receipt-lines.ts:66-71`): `fileImmediateSale` (`till-sale.ts:919`),
+`finalizeCapture` (`:1522`), `finalizeRecovery` (`:1684`), `issueWhenFullyPaid`
+(`bill-payments.ts:706`) and `issueUnpaidInvoice` (`working-order.ts:6115`). So one change there
+covers them all; this task and 2c.3b prove each path.
+
+**Rule:** `withReceiptListPrices` adds `listUnitPriceGross` (the order line's
+`identities[i].listUnitGross`, as a string) exactly when it adds `listGross` — that is, only when the
+line's total at that price differs from its charged total (`listGrossOf`, `:74-88`). `ticketLinesFrom`
+(`:42-64`) keeps adding `listGross` alone: the simplified receipt and the till's screen do not get the
+new field.
+
+**Files:** `apps/server/src/receipt-lines.ts`, `apps/server/src/receipt-lines.test.ts`,
+`apps/server/src/receipt-adjustments.test.ts`, `apps/server/src/cancel-invoiced-order.test.ts`, and
+one immediate-sale suite (below)
+
+- [ ] **Step 1: Failing tests.**
+  - `receipt-lines.test.ts`, in `describe("withReceiptListPrices")` (`:21`): a line with
+    `listUnitGross` 24.00, quantity 0.123, charged 2.66 gets `{ listGross: "2.95", listUnitPriceGross: "24.00" }`;
+    a line whose `listUnitGross` gives back its charged total gets neither; a line with
+    `listUnitGross: null` gets neither. And in `describe("ticketLinesFrom")`, the discounted line has
+    `listGross` and `not.toHaveProperty("listUnitPriceGross")`.
+  - `receipt-adjustments.test.ts:256-262` (the bill-payment path, `completeBillPayment`): read
+    `listUnitPriceGross: saleLines.listUnitPriceGross` beside `listGross`, and expect
+    `[{ listGross: 1200, listUnitPriceGross: 1200 }, { listGross: null, listUnitPriceGross: null }]`.
+  - The immediate path (`fileImmediateSale`, reached by `recordTillSale` with a held order): find a
+    case that pays a held order through `recordTillSale` (`git grep -n "recordTillSale" -- 'apps/server/src/*.test.ts'`,
+    e.g. `working-order.pay-and-dispatch.test.ts`); add a case that writes
+    `list_unit_price_gross` on the order's first line above its price (as
+    `till-api.service-periods.test.ts:945-948` does), pays it, and reads `sale_lines`: the first line
+    stores that price in cents and a `list_gross`; an untouched line stores null in both.
+  - The credit's copy (Task 2c.2), in `cancel-invoiced-order.test.ts` beside "credits the whole
+    invoice in the rectificative series…" (`:370`): with `list_unit_price_gross` written on the
+    order's first line above its price before the invoice is issued, the credit note's line stores
+    the same `list_unit_price_gross` (not negated) and the original's `list_gross` negated.
+- [ ] **Step 2:** Run the four files — FAIL (`listUnitPriceGross` null or missing).
+- [ ] **Step 3: Code** in `receipt-lines.ts` as the rule says; widen `withReceiptListPrices`' return
+  type to `T & { listGross?: string; listUnitPriceGross?: string }`.
+- [ ] **Step 4:** Run the four files, then `pnpm --filter @waitron/server exec tsc --noEmit`, and
+  the receipt suites (Global Constraints) — PASS; nothing printed changes yet. **Commit.**
+
+### Task 2c.3b: The card capture, card recovery and unpaid-invoice paths store it
+
+Tests only; the code is Task 2c.3a's. Each test is proved by deletion: at its own call site, replace
+`withReceiptListPrices(...)` by `withReceiptListPrices(...).map(({ listUnitPriceGross: _, ...line }) => line)`,
+see that test fail, restore.
+
+**Files:** `apps/server/src/till-sale-integrated.db.test.ts` (capture: beside "retrieved (open)
+order: files the STORED locked lines at pay…", `:1163`; recovery: beside "recovers a lost-T2
+captured payment…", `:1506`), and an `issueUnpaidInvoice` suite (`apps/server/src/testing/issue-order.ts`'s
+`issueOrderInvoice` is the helper; `unpaid-invoice-delivery.test.ts` uses it).
+
+- [ ] **Step 1:** In each, a case that writes `list_unit_price_gross` on a line above its price before
+  filing, files through that path, and asserts the stored `sale_lines.list_unit_price_gross` (cents)
+  and `list_gross`, and null on an untouched line.
+- [ ] **Step 2:** Run each file — PASS. Do the deletion at each call site in turn (`till-sale.ts:1522`,
+  `:1684`, `working-order.ts:6115`), run that file, see the new case FAIL, restore. Record each in
+  the commit body.
+- [ ] **Step 3: Commit.**
+
+### Task 2c.4: The reader and the line figures use the stored price
+
+**Files:** `apps/server/src/till-sale.ts` (`TillSaleLine`, `:216-247`),
+`apps/server/src/receipt-adjustments.ts` (`:42-77`), `apps/server/src/receipt-figures.ts`
+(`beforeVatFigures`, `:38-57`), `apps/server/src/receipt-figures.test.ts`,
+`apps/server/src/receipt-adjustments.test.ts`
+
+- `TillSaleLine` gains, after `listGross`:
+  `/** The unit price with VAT per price quantity before any comp or discount, read from the filed sale line; present only with listGross, on a full invoice. */ listUnitPriceGross?: string;`
+- The filed-line reader selects `listUnitPriceGross: saleLines.listUnitPriceGross` and sets it only
+  when both it and `listGross` are not null, beside `listGross` (`:64`). It deletes any
+  `listUnitPriceGross` from the display line as it does `listGross` (`:61`).
+- `beforeVatFigures`: when `line.listGross` and `line.listUnitPriceGross` are both present, price =
+  `baseFromGross(decimal(listUnitPriceGross), rate)`, amount = `baseFromGross(listGross, rate)`,
+  discount = amount − filed base, with the negative guard kept; no under-one-unit return. Otherwise,
+  today's code unchanged.
+
+- [ ] **Step 1: Failing tests** (`receipt-figures.test.ts`, in `describe("beforeVatFigures")`, `:28`;
+  the `filed`/`net` helpers are the file's own):
+  ```ts
+  it("prints a weighed line under one kilo at its stored price before any discount (owner, Q9)", () => {
+    // J1, measured: 0.123 kg at 24,00 €/kg, 10% off, charged 2,65, filed base 2,41.
+    expect(beforeVatFigures(filed({ quantity: "0.123", gross: "2.65", listGross: "2.95",
+      listUnitPriceGross: "24.00", net: net("19.62", "2.41", "10.00") })))
+      .toEqual({ price: "21.82", amount: "2.68", discount: "0.27" });
+  });
+  it("gives a comped weighed line its value (owner, Q9)", () => {
+    // J2, measured: the same jamón comped, filed at 0,00.
+    expect(beforeVatFigures(filed({ quantity: "0.123", gross: "0.00", listGross: "2.95",
+      listUnitPriceGross: "24.00", net: net("0.00", "0.00", "10.00") })))
+      .toEqual({ price: "21.82", amount: "2.68", discount: "2.68" });
+  });
+  it("prints a credit line's filed figures", () => {
+    // A whole credit negates the totals and keeps the price (Task 2c.2).
+    expect(beforeVatFigures(filed({ quantity: "-0.123", gross: "-2.65", listGross: "-2.95",
+      listUnitPriceGross: "24.00", net: net("19.62", "-2.41", "10.00") })))
+      .toEqual({ price: "19.62", amount: "-2.41", discount: "0.00" });
+  });
+  ```
+  The existing case "keeps the filed price and base for less than one priced unit" (`:66`) stays as
+  it is: it has no stored price, which is a sale filed before Part 2c.
+  In `receipt-adjustments.test.ts`'s F1 case (`:99-181`, Burger 10% off and 0.250 kg Ham): the
+  receipt's first line has `listUnitPriceGross: "12.00"`, and the Ham line has none (nothing changed
+  its price). Add a case beside it: 0.123 kg of Ham with 10% off, F1, filed through
+  `completeBillPayment` as that case does; its line reads back `listGross: "2.95"`,
+  `listUnitPriceGross: "24.00"`, and `beforeVatFigures` of it is `{ price: "21.82", amount: "2.68",
+  discount: "0.27" }`.
+- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/receipt-figures.test.ts src/receipt-adjustments.test.ts` — FAIL.
+- [ ] **Step 3: Code** as described.
+- [ ] **Step 4:** Run them — PASS; `pnpm --filter @waitron/server exec tsc --noEmit`; then the receipt
+  suites (Global Constraints). A full invoice with a discounted line under one priced unit now prints
+  its price, amount and discount; expect failures only where a test filed such a line through a till
+  path and read its paper back. Update each one's expected figures (WHERE/HOW, keeping the fact it
+  checks) and name it in the commit. Regenerate the two `.bin` files and check
+  `git diff --stat -- apps/server/src/testing/*.bin` is empty: their fixture has no stored price. If
+  they differ, STOP. **Commit.**
+
+### Task 2c.5: The reader marks each dish family
+
+**Rule.** In `receiptLines`, only on the path where every record was placed (`:120-124`), and only on
+lines that carry `net`: join row indices with a union-find, linking each record's `splits`
+(`{ from, to }`, both looked up in `rowIndex`, `:81-83`; an edge whose row is not on the bill is
+skipped) and each dish with its options (`groupByParent`). Every line in a joined set that holds more
+than one dish group gets `dishFamily`: the index in `lines` of the set's first row. A line alone in
+its dish group's set gets nothing. The fallback (`perDish`) sets nothing.
+
+**Files:** `apps/server/src/till-sale.ts` (`TillSaleLine`), `apps/server/src/receipt-adjustments.ts`,
+`apps/server/src/receipt-adjustments.test.ts`
+
+- `TillSaleLine` gains:
+  `/** Presentation only. On a full invoice's line whose order line an adjustment on this bill split into several dish rows: the index in lines of the family's first row. The family shares its own discount (Part 2c). */ dishFamily?: number;`
+  It reaches the till's response too, where nothing reads it (`apps/till/src/api/client.ts:798`
+  declares its own `TillSaleLine`).
+
+- [ ] **Step 1: Failing tests** (`receipt-adjustments.test.ts`, F1 cases filed as `:99-181` does):
+  - S11: 3 Croquetas, 10% off line 1, F1 → the two croquetas rows (indices 0 and 1 of the receipt's
+    lines; the split row is numbered 2) both have `dishFamily: 0`.
+  - S7: 3 Croquetas and a Burger, 10% off the croquetas, then 10% off the bill → rows 0 and 2 have
+    `dishFamily: 0`; the burger (row 1) has no `dishFamily`.
+  - S1-like (Burger 10% off, then 10% off the bill, with 3 Croquetas split by the bill discount): the
+    two croquetas rows share `dishFamily` = the first one's index; the burger has none.
+  - A simplified receipt of S11 (no customer) has no `dishFamily` on any line.
+  - The fallback: S11, then cancel part of the discounted line (as "falls back to what each dish
+    lost…" does) → no line has `dishFamily`.
+- [ ] **Step 2:** Run the file — FAIL. **Step 3:** Implement. **Step 4:** Run it, the receipt
+  suites, and `pnpm --filter @waitron/server exec tsc --noEmit` — PASS. A response pinned with
+  `toEqual` that now carries `dishFamily` is updated to include it, named in the commit. **Commit.**
+
+### Task 2c.6: Own rows and end rows (pure function)
+
+**Files:** `apps/server/src/receipt-figures.ts`, `apps/server/src/receipt-figures.test.ts`
+
+**Interfaces:**
+
+```ts
+export interface FiguredGroup {
+  /** The group's position in `groupByParent(result.lines)`. */
+  at: number;
+  /** `dish.dishFamily` when set, else the dish's own index in `result.lines`. */
+  family: number;
+  lines: readonly FiguredLine[];
+}
+export interface InvoiceDiscounts {
+  /** Own rows to print under a group, keyed by `FiguredGroup.at`. */
+  under: ReadonlyMap<number, GroupDiscount[]>;
+  /** One row per rate, in the order rates first appear in `groups`; never zero. */
+  atEnd: GroupDiscount[];
+}
+/** "The rule this part builds". `groups` holds the invoice's groups whose lines all have `net`. */
+export function invoiceDiscounts(
+  groups: readonly FiguredGroup[],
+  billAdjustments: readonly ReceiptAdjustment[],
+): InvoiceDiscounts;
+```
+
+`GroupDiscount` keeps its shape (`rate`, `amount`, `comp`, `named`). An end row has `comp: false`
+and `named` = the sole bill adjustment or null. `groupDiscounts` stays until Task 2c.7 removes it.
+
+- [ ] **Step 1: Failing tests** (`describe("invoiceDiscounts")`). Lines are built with the file's
+  `filed`/`net` helpers and `figured = (line) => ({ line, figures: beforeVatFigures(line) })`;
+  `TEN = { kind: "discount", percentBp: 1000, amount: … }` with each bill's own amount. Each figure
+  is the probe's (Step 1) and was recomputed with the script above.
+  1. **S5** (Rioja 30,00 at 21% filed 22,31; Pan 2,50 at 10% filed 2,05; bill 3,25): `under` is
+     empty; `atEnd` is `[{ rate: "21.00", amount: "2.48", comp: false, named: BILL },
+     { rate: "10.00", amount: "0.22", comp: false, named: BILL }]`.
+  2. **S1** (Burger 12,00 filed 8,03 with own 1,20; Croquetas 2 × 3,33 filed 4,96 and 1 × 3,33
+     filed 2,47, family 1; Jamón 0.123 kg list 2,95 at 24,00 filed 2,42 at 10%; Pizza 9,00 filed
+     6,69 with Aceitunas 1,50 filed 1,12; bill 3,42): `under` = `{ 0: [{ rate: "21.00", amount:
+     "0.99", comp: false, named: own 10% }] }`; `atEnd` = `[{ "21.00", "2.59" }, { "10.00", "0.26" }]`
+     (in `toMatchObject` form).
+  3. **S9** (Rioja list 30,00 filed 0,00 with own comp 27,00; Pan 2,50 filed 2,05; bill 3,25):
+     `under` = `{ 0: [{ rate: "21.00", amount: "22.31", comp: true }] }`; `atEnd` =
+     `[{ "21.00", "2.48" }, { "10.00", "0.22" }]`.
+  4. **S14, the family link** (Croquetas 2 × 3,33 filed 4,91 with own 1,00 and 1 × 3,33 filed 2,45,
+     both family 0; Burger 12,00 filed 9,82; bill 1%, 0,21): `under` = `{ 0: [{ "21.00", "0.83",
+     named: own 10% }] }`, `atEnd` = `[{ "21.00", "0.16" }]`. Control, run once while writing the
+     test and recorded in the commit: give the second croquetas group `family: 2` (unlinked) and the
+     own row comes out 0,59 and the end row 0,40, so the test fails.
+  5. **S11, no whole-bill discount** (the same two croquetas rows filed 4,96 and 2,47, own 1,00, no
+     bill): `under` = `{ 0: [{ "21.00", "0.82", named: own 10% }] }`, `atEnd` = `[]`.
+  6. **A family with two rates** (synthetic: Pizza list 9,00 at 21% filed 6,02 with own 10% of
+     1,05, and its extra list 1,50 at 10% filed 1,11; a bill discount of 1,00): `under` =
+     `{ 0: [{ "21.00", "1.42", named: null }, { "10.00", "0.25", named: null }] }`; `atEnd` = `[]`.
+     (7,44 − 6,02 and 1,36 − 1,11.)
+  7. **The fallback shape** (S12: the Burger alone, list 12,00 filed 8,03, one entry `{ kind:
+     "discount", amount: "2.28" }`, no bill adjustments): `under` = `{ 0: [{ "21.00", "1.89", named:
+     { kind: "discount", amount: "2.28" } }] }` — the builder prints that as plain «Descuento».
+  8. **Nothing negative, and nothing from an untouched line**: across cases 1–7, every amount in
+     `under` and `atEnd` is greater than zero; a group with no `listGross` adds no row.
+  9. **The table still adds up**: for cases 1–6, per rate, Σ figures.amount − Σ `under` amounts −
+     the `atEnd` amount = Σ `net.base`.
+  Port `groupDiscounts`' cases (`:109-224`) whose facts still hold to `invoiceDiscounts` (one row
+  named by a dish's one adjustment over its extras; a comp is an invitation; two discounts on one dish
+  print plain; rates 10 and 10.00 are one rate; no invitation while an extra beside the comped dish is
+  charged; each rate its own row). The two whose subject the owner changed (Q10) — "names a whole-bill
+  discount under a dish only when no dish has one of its own" (`:158`) and "does not name a dish's own
+  discount when the bill has one too" (`:170`) — become cases 1 and 2 above; name them in the commit.
+- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/receipt-figures.test.ts` — FAIL.
+- [ ] **Step 3: Implement** with `@waitron/shared`'s decimal helpers and `baseFromGross`; no `Number`.
+- [ ] **Step 4:** Run — PASS; `pnpm --filter @waitron/server exec tsc --noEmit`. **Commit.**
+
+### Task 2c.7: The full invoice prints the own rows under the dish and the whole-bill rows at the end
+
+**Files:** `apps/server/src/receipt-document.ts` (`:237-354`), `apps/server/src/receipt-figures.ts`
+(remove `groupDiscounts`), `apps/server/src/receipt-document.test.ts`, then the suites it ripples
+into.
+
+- Before the item loop (`:344`), build the `FiguredGroup` list of the filed groups and call
+  `invoiceDiscounts` once. `tableGroup` (`:290-312`) pushes the `under` rows of its group (label:
+  `label.comp` when `comp`, else `adjustmentLabel(named)` when `named`, else `label.discount`) in
+  place of `groupDiscounts`. After the loop and before the final `endTable()` (`:353`), push each
+  `atEnd` row: `{ units: "", item, price: "", amount: "-" + formatAmount(amount), ...rateCell(rate) }`
+  with no `itemIndent`. Remove `invoiceHasLineAdjustments` (`:249-251`) and `groupDiscounts`.
+- A4 draws `table` rows itself (Task 2.5), so it needs nothing; Task 2c.8 looks at it.
+
+- [ ] **Step 1: Failing tests** (`receipt-document.test.ts`):
+  - Rewrite "puts a whole-bill discount under each dish, before VAT, at its rate" (`:591`) — its
+    subject is the default the owner replaced (Q10) — as «prints a whole-bill discount once per rate
+    at the end of the table (owner, Q10)»: the same input; rows
+    `[["Rioja crianza", "24,79", "21%"], ["Pan de pueblo", "2,27", "10%"], ["Descuento 10%", "-2,48", "21%"], ["Descuento 10%", "-0,22", "10%"]]`;
+    the two end rows have no `itemIndent`; no amount row starts «Descuento» (kept from the old case).
+  - «keeps a dish's own discount under it and its bill share at the end»: a burger (list 12,00,
+    filed 8,03 at 21%, own `{ kind: "discount", percentBp: 1000, amount: "1.20" }`) and a Pan (list
+    2,50, filed 2,05 at 10%), with one bill adjustment `{ kind: "discount", percentBp: 1000, amount:
+    "1.33" }` (the burger's 1,08 and the bread's 0,25 with VAT). Rows, as `[item, amount, rate]`:
+    `["Hamburguesa", "9,92", "21%"]`, `["Descuento 10%", "-0,99", "21%"]`, `["Pan de pueblo", "2,27",
+    "10%"]`, `["Descuento 10%", "-0,90", "21%"]`, `["Descuento 10%", "-0,22", "10%"]`. (9,92 − 8,03 =
+    1,89; own 1,20 ÷ 1,21 = 0,99; 1,89 − 0,99 = 0,90; 2,27 − 2,05 = 0,22.)
+  - «prints the jamón under a kilo at its price, with its own discount (owner, Q9)»: J1's line
+    (`listUnitPriceGross: "24.00"`) prints `{ units: "0.123 kg", price: "21,82", amount: "2,68" }`
+    and then `{ item: "Descuento 10%", amount: "-0,27" }`.
+  - «prints a comped jamón's value and an invitation»: J2's line prints `price: "21,82", amount:
+    "2,68"`, then `{ item: "Invitación", amount: "-2,68" }`.
+  - «prints one plain discount for everything a dish lost when the records could not be placed»:
+    the burger with a single `{ kind: "discount", amount: "2.28" }` and no `billAdjustments` prints
+    `["Descuento", "-1,89"]` under it and no end row.
+- [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/receipt-document.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4:** Run it, then the receipt suites (Global Constraints, check memory first). Update each
+  failing assertion's WHERE or HOW, keeping the fact it checks; a case whose subject is a whole-bill
+  share printed under a dish is rewritten to assert the end row, and named in the commit as one the
+  owner's Q10 answer changed. Regenerate the two `.bin` files: they must not change (the fixture has
+  no whole-bill discount and no stored price; `git diff --stat -- apps/server/src/testing/*.bin`
+  empty). If they change, STOP and find out why. **Commit**, the body listing every changed assertion,
+  before → after.
+
+### Task 2c.8: LOOK, the gates and the backlog
+
+- [ ] **Step 1: LOOK.** Extend `apps/server/scripts/receipt-look.ts` (run as its first line says:
+  `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts <out-dir>`) with full invoices for:
+  J1 (0.123 kg jamón, own 10%) beside a counted dish; J2 (the comped jamón); S1 (two rates, an own
+  discount and a whole-bill discount); and S9 (a wine comped after a whole-bill discount). Change the
+  existing S5 sample's comment if it says the discount prints under each dish. Open every 58 mm, 80 mm
+  and A4 picture and the PDF. Check: the jamón prints «21,82 2,68»; the own rows sit under their
+  dish, indented; the end rows sit after the last item, not indented, in the amount column, with
+  their rates; «Precios sin IVA» comes after them; on 58 mm the two-line rows hold; on A4 the end
+  rows line up with the other amounts. Write what you saw to
+  `~/waitron-campaign-c/a663-2c-look-report.md`.
+- [ ] **Step 2: Gates.** The fiscal gate (Global Constraints), unedited — PASS. The whole
+  `@waitron/fiscal-verifactu` suite, unedited — PASS. `@waitron/core`'s suite — PASS, with no change
+  but Task 2c.2's additions (`git diff --stat origin/main -- packages/core packages/fiscal-verifactu`
+  shows only `sale-line.ts`, `sale-line-rows.ts` and the two test files). The migration checks
+  ("Migration") again — PASS.
+- [ ] **Step 3: Backlog.** In `docs/backlog.md` (the A663 entry, about `:3541-3545`) and
+  `docs/backlog/printers.md` (its "What is left", about `:377-385`): take Part 2c out; replace the
+  "part portion of an extra" item with Part 2d (one line: extras are refused on a dish not sold by
+  the unit, see the plan). In both files' entry "The till's on-screen receipt is a second copy of the
+  layout", add that the till still prints a whole-bill discount once with VAT and a dish's discounts
+  with VAT, where a full invoice now prints the dish's own discount under it and the whole-bill
+  discount per rate at the end. Add to `docs/backlog/printers.md` (under A663, as a deliberate limit)
+  the known limit from Step 1: a split that is not an adjustment's leaves no link, so after an own
+  discount and a whole-bill discount a moved part's own loss prints in the end row.
+- [ ] **Step 4: Commit, then `/finish-branch`** (FULL, Codex twice).
+
+---
+
+# Part 2d — extras only on a dish sold by the unit (owner, 2026-10-15 ~21:15)
+
+Branch `feat/a663-2d-whole-dish-extras`, from `main` after Part 2c has landed. Its own small pull
+request: it changes ordering code and the till, not receipts, and has no migration. **Review path:
+LIGHT** (no per-task reviewer). It changes a route's refusal, but none of the risk triggers (no
+fiscal figure, migration, permission, concurrency or shared data contract: the till turns an error
+into words by its code alone, `apps/till/src/i18n/codes.ts:3-5`). `/finish-branch`'s fresh-context
+read and its Codex run-it seat still run, and the part ends with the till check in Task 2d.3.
+
+## What was found (a research agent, 2026-10-15)
+
+- Part 2's run-it review found an order can store half a portion of a per-portion extra: half a
+  dish, in a venue-made unit with no scale, prints «0.075 kg  Queso extra  1,24  1,86». The owner:
+  "we don't offer half portions".
+- Reproduced in a throwaway worktree (`till-sale.test.ts` with `setupModifierVenue(true)`): a burger
+  in a venue-made «l» unit (3 decimal places, no scale) with one Queso extra (a 150 ml portion),
+  through `recordTillSale`: 1 test passed — 0.5 l stored the Queso as 75 ml at the per-150 ml price.
+- Why. A unit has decimal places and an optional scale (`hardware_unit`,
+  `packages/catalogue/src/schema/units.ts:12-21`). A venue-made unit never has a scale (`createUnit`,
+  `packages/catalogue/src/units.ts:89-104`); the seeded «l» has 3 places and no scale
+  (`packages/catalogue/src/provisioning.ts:126-130`). The server decides "sold by count" from the
+  scale alone (`apps/server/src/working-order.ts:687`; `legacyPricingUnit`,
+  `packages/catalogue/src/operations.ts:287-289`), and the extras guard refuses extras only when the
+  dish is not sold by count (`working-order.ts:722-730`). An extra's quantity is portion × picks ×
+  dish quantity (`apps/server/src/modifier-selection.ts:120-121`;
+  `packages/catalogue/src/pricing.ts:319-323`).
+- The guard's comment and the error's note (`apps/server/src/errors.ts:287-291`) say it exists so a
+  fractional dish never bills a fraction of an extra. A unit with decimals but no scale slips past.
+- The till offers it today: a product whose unit has a scale or any decimals goes to the quantity
+  entry (`apps/till/src/widgets/product-pick.ts:26-27`, `apps/till/src/widgets/tender-pay.ts:391-399`),
+  and `#addWeight` then opens the extras picker (`tender-pay.ts:678-690`); the basket's Edit button
+  re-opens it (`apps/till/src/widgets/basket.ts:497-509`); `tender-pay.test.ts:1605` asserts
+  fractional pricing of picks on such a dish. The till has no wording for
+  `extras.unsupported_product` (`git grep -n unsupported_product -- apps/till/src` prints nothing).
+- A prototype of the server change below passed all 48 server test files that send extras picks
+  (1961 tests), run by that agent.
+
+## Decision (default, owner FYI)
+
+**Extras are offered only on a dish sold by the unit**: refuse them when the dish's unit has a scale
+OR allows any decimal places — the till's own test, `soldByTheUnit`
+(`apps/till/src/widgets/product-name.ts:82-85`). FYI for the owner: a dish sold in whole litres («1
+l» of sangría) cannot carry extras either, because its unit allows decimals; to sell it with extras,
+sell it in a unit with no decimals (a jug). Options lists (questions such as "how cooked?") stay
+allowed on any dish, as today (`docs/developers/modifiers.md:203-205`).
+
+The error code stays `extras.unsupported_product`. Its `pricingUnit` parameter would say "each" for
+a litre dish, which is wrong, so it becomes `soldBy: "weight" | "fraction"` ("weight" when the unit
+has a scale, "fraction" when it only has decimal places). Pre-live, a parameter may change freely
+(CLAUDE.md §3); its two test readers are `till-sale.test.ts:2133` and `working-order.test.ts:7432`.
+
+## Tasks
+
+Line numbers read on `main` at `20db8418f`; re-check them on Part 2d's base.
+
+### Task 2d.1: The server refuses extras on a dish not sold by the unit
+
+**Files:** `apps/server/src/working-order.ts` (`:683-690`, `:722-730`), `apps/server/src/errors.ts`
+(`:287-291`), `apps/server/src/till-sale.test.ts`, `apps/server/src/working-order.test.ts`,
+`docs/developers/modifiers.md` (`:203-205`)
+
+- [ ] **Step 1: Failing tests.**
+  - `till-sale.test.ts`, beside case (c) at `:2118-2135`: a dish in a venue-made unit with 3 decimal
+    places and no scale, sold as `quantity: "0.5"` with one extras pick → rejects with
+    `{ code: "extras.unsupported_product", params: { productId, soldBy: "fraction" } }`; and the
+    same dish as `quantity: "1"` with the pick is refused the same way (the rule is the unit's, not
+    the quantity's). Make the unit with `createUnit` in the case's own venue, as the research agent's
+    probe did with `setupModifierVenue(true)`.
+  - Case (c) itself and `working-order.test.ts:7432`: `pricingUnit: "weight"` becomes
+    `soldBy: "weight"`.
+  - A dish counted in the Each unit with a pick still sells (an existing case covers it; name it).
+- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/till-sale.test.ts src/working-order.test.ts` — FAIL.
+- [ ] **Step 3: Code.** The guard refuses when `selection.unit.hardwareUnit !== null ||
+  selection.unit.precision > 0`, with `soldBy` as decided. Rewrite the guard's comment and the
+  error's note to say a dish not sold by the unit carries no extras, and why (a child is priced at
+  dish quantity × picks). Update `modifiers.md:203-205` to the same rule.
+- [ ] **Step 4:** Run the 48 files that send extras picks
+  (`git grep -l -E "extras: \[|extrasPick\(" -- 'apps/server/src/*.test.ts'`, check memory first),
+  then `pnpm --filter @waitron/server exec tsc --noEmit` — PASS. **Commit.**
+
+### Task 2d.2: The till offers no extras on a dish not sold by the unit, and words the refusal
+
+**Files:** `apps/till/src/widgets/tender-pay.ts` (`#addWeight`, `:678-690`),
+`apps/till/src/widgets/basket.ts` (`:497-509`), the modifier picker it opens
+(`apps/till/src/widgets/modifier-picker.ts`), `apps/till/src/i18n/codes.ts`, and their tests
+(`tender-pay.test.ts`, `tender-pay-weighed-dish.test.ts`, `basket.test.ts`, `modifier-picker.test.ts`)
+
+- [ ] **Step 1: Failing tests.**
+  - `tender-pay.test.ts:1605` ("collects a fractional quantity before the picker, and prices each
+    pick per fractional unit") asserts what the owner ruled out: rewrite it as «a dish not sold by
+    the unit offers its options but no extras». After the quantity, a dish with only extras lists is
+    added straight to the basket; a dish with an options list opens the picker showing that list and
+    no extras list. Name it in the commit as a check the owner's answer changed.
+  - `basket.test.ts`: such a line's Edit button opens the picker without extras lists, or shows no
+    Edit button when the dish offers only extras.
+  - `codes.ts`: `extras.unsupported_product` has English and Spanish wording (EN "Extras can only be
+    added to a dish sold by the unit." / ES "Solo se pueden añadir extras a un plato que se vende por
+    unidades."), with a test that the till's message for that code is not the generic sentence.
+- [ ] **Step 2:** Run the till files (`pnpm --filter @waitron/till exec vitest run <files>`; the till
+  runs in real Chromium, so check `memory_pressure | grep free` first) — FAIL.
+- [ ] **Step 3: Code**, using `soldByTheUnit` to decide.
+- [ ] **Step 4:** Run them, the till's `typecheck` and lint on the changed files — PASS. **Commit.**
+
+### Task 2d.3: The till check, LOOK and the backlog
+
+- [ ] **Step 1: The till check.** Start the dev stack (`wa-wt demo <worktree-name>`), make a dish in
+  a decimal unit with an extras list, and on the till: enter 0.5, see no extras offered; Edit the line,
+  see no extras. A counted dish still offers its extras. Screenshot both; record in
+  `~/waitron-campaign-c/a663-2d-look-report.md`.
+- [ ] **Step 2: Backlog.** Take Part 2d out of the A663 entry in `docs/backlog.md` and
+  `docs/backlog/printers.md`.
+- [ ] **Step 3: Commit, then `/finish-branch`** (LIGHT).
 
 ---
 
@@ -2794,7 +3473,9 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
   as visible as the rest; the caption keeps the other lines' size and weight.
 - Names used across tasks: `ReceiptStyle`, `TextStyle`, `textBandHeight`, `formatVatRate`,
   `formatAmount`, `ReceiptTable`, `ReceiptTableRow`, `tableLines`, `baseFromGross`,
-  `beforeVatFigures`, `groupDiscounts`, `GroupDiscount`, `quantityText`, `readReceiptGuests`,
+  `beforeVatFigures`, `groupDiscounts` (replaced in Part 2c by `invoiceDiscounts`, `FiguredGroup`,
+  `InvoiceDiscounts`), `GroupDiscount`, `quantityText`, `listUnitPriceGross` (`sale_lines`,
+  `RecordSaleLine`, `TillSaleLine`), `dishFamily`, `readReceiptGuests`,
   `drinkFoodSubtotals`, label keys as in Tasks 1.2, 2.1, 3.1 and 4.5.
 
 ---
