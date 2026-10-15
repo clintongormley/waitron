@@ -912,3 +912,17 @@ test("an end resize of a block kept on the day's last quarter hour sends a block
   ]);
   expect(() => parseBlocks(seen[0]!.blocks, "blocks", "06:10")).not.toThrow();
 });
+
+test("a press on the end edge of a block that crosses the changeover, released where it landed, changes nothing", async () => {
+  const el = await grid({ mon: [{ ...headChef, startsAt: "05:00", endsAt: "08:00" }] });
+  el.cutover = "06:10";
+  await el.updateComplete;
+  const seen = changes(el);
+  const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
+  pointAt(el, "mon", strip.top + strip.height / 2, "pointerdown", edge(el, "mon", 0, "end"));
+  pointAt(el, "mon", strip.top + strip.height / 2, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  const box = column(el, "mon").getBoundingClientRect();
+  expect(block(el, "mon").getBoundingClientRect().bottom).toBeCloseTo(box.bottom, 0);
+});

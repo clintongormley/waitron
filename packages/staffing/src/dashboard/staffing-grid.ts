@@ -8,7 +8,6 @@ import {
   ColumnStroke,
   CopyChooser,
   OverflowFade,
-  clockAt,
   columnMenu,
   hourLines,
   isDeleteKey,
@@ -22,10 +21,12 @@ import {
   MAX_BLOCK_MINUTES,
   addBlock,
   changeBlock,
+  clockAt,
   copyDay,
   deleteBlock,
   laneLayout,
   resizeBlock,
+  span,
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
@@ -45,13 +46,14 @@ export interface StaffingChange {
 const DAY = 1440;
 const MAX_HEADCOUNT = 50;
 
-/** A range's span; one saved before a changeover change can cross it, and is drawn up to it. */
-function spanOf(
-  block: Pick<StaffingBlock, "startsAt" | "endsAt">,
+/** Not `span`: a range crossing the changeover is drawn to it, as `slotsForDay` counts it, so a
+ *  block kept on the day's last quarter hour still shows. */
+function drawnSpan(
+  range: Pick<StaffingBlock, "startsAt" | "endsAt">,
   cutover: string,
 ): { start: number; end: number } {
-  const span = blockSpan(block, cutover);
-  return span.end > span.start ? span : { start: span.start, end: DAY };
+  const { start, end } = blockSpan(range, cutover);
+  return end > start ? { start, end } : { start, end: DAY };
 }
 
 function sameBlock(a: StaffingBlock | undefined, b: StaffingBlock | undefined): boolean {
@@ -312,8 +314,8 @@ export class StaffingGrid extends LitElement {
       return;
     }
     const side = edge.dataset.edge === "start" ? "start" : "end";
-    const span = spanOf(block, this.cutover);
-    const [anchor, held] = side === "start" ? [span.end, span.start] : [span.start, span.end];
+    const { start, end } = span(block, this.cutover);
+    const [anchor, held] = side === "start" ? [end, start] : [start, end];
     if (this.#stroke.start(event, key, anchor, held))
       this.#resizing = { key, index: Number(edge.dataset.index), edge: side, anchor };
   }
@@ -433,7 +435,7 @@ export class StaffingGrid extends LitElement {
     index: number,
     place: { lane: number; lanes: number },
   ) {
-    const { start, end } = spanOf(block, this.cutover);
+    const { start, end } = drawnSpan(block, this.cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
     const colour = this.#role(block.staffRoleId)?.colour;
     if (this.readOnly)
@@ -470,7 +472,7 @@ export class StaffingGrid extends LitElement {
     </button>`;
   }
   #guide(range: StaffingGuideRange) {
-    const { start, end } = spanOf(range, this.cutover);
+    const { start, end } = drawnSpan(range, this.cutover);
     return html`<div
       class="guide"
       aria-hidden="true"
@@ -483,7 +485,7 @@ export class StaffingGrid extends LitElement {
     const blocks = this.#stretched(stretch);
     const block = blocks?.[this.#resizing?.index ?? blocks.length - 1];
     if (block === undefined) return nothing;
-    const { start, end } = spanOf(block, this.cutover);
+    const { start, end } = drawnSpan(block, this.cutover);
     return html`<div
       class="preview"
       data-colour=${this.#role(block.staffRoleId)?.colour ?? nothing}
