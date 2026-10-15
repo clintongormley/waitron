@@ -25,6 +25,12 @@ The owner's 2026-10-14 Lane E decisions supersede the earlier scope and order:
   original of the current master register and keep it with its named custodian. Record consumption
   on that original; label every other copy as a snapshot. Existing-custodian import still uses
   that custodian's current master. This settles the register format, not private-key retention.
+- **2026-10-15 at about 05:50, option B approved:** for a NEW guided kit, keep BOTH a
+  passphrase-protected signing-key file on the custodian's separate computer and a recoverable
+  secret paper copy. Explicitly save and successfully reopen the file before proceeding. Keep
+  both outside the box and venue backups; keep the secret paper separately from the public paper
+  master. Check the restoration path and say plainly that whoever holds the paper can sign.
+  This settles retention, not the full design or permission to build.
 
 **2026-10-15 decision update:** per the owner's handoff, W41s6 has landed in PR #1717; A680 has
 not landed. A680 owns kit-free Demo/Preparation and the separate readiness work described below.
@@ -39,12 +45,23 @@ does not rerun or replace them.
 Private-key retention and full-design/build approval remain open; the readiness allocation gap
 below still belongs to A679. This update records the landing, not a new wizard qualification.
 
+**2026-10-15 current handoff:** the 05:50 answer above supersedes the earlier open-retention
+notes. W41s6 #1717 and A680 #1718 have landed; W41sC3 also landed in
+[PR #1725](https://github.com/clintongormley/waitron/pull/1725). C3's adapter landing does not
+build wizard fetching. Keep the public-import route for existing custodians, including Cloud
+subscribers, until wizard fetching is separately designed. There is no C3 landing wait in this
+handoff and no new Cloud scope. The custody details below remain proposals for whole-design/build
+approval; the historical source reads and reproduction below have not been rerun.
+
 **2026-10-15 pointer (A680):** A680 gives Demo and Preparation a throwaway allocation with no
 kit. It does not build the throwaway allocation for Live's separate preproduction readiness test
 described below: the setup route's fiscal test accepts only a production Live request, which
 never asks for one. That allocation is not built yet; see the A679 entry in `docs/backlog.md`.
 
 ## Evidence and source reads
+
+Historical first-publication record, 2026-10-14. The dated landing updates above supersede its
+dependency status; the reproduction and source reads below are preserved as recorded.
 
 The driver reproduced fresh-reset Prepare on main `641665e4c0be3828a61ec98975bdfd461b5a5edb`:
 no `initialOperations`, HTTP 400 `sif.allocation_invalid / reauthentication_required`, a
@@ -122,14 +139,15 @@ A second venue consults the same master and takes the next free entry.
 3. Ask whether this taxpayer/software/production scope already has a current master. Existing:
    use its custodian and import signed public files. None: name a custodian and guide creation of
    the outside kit. BOTH routes are approved. Never silently start another master or reset names.
-4. **Approved register format:** print one writable paper original and keep it with the named
-   custodian. Record consumption on that original; label every other copy as a snapshot. Include
-   scope, generation/block IDs and the full public-key fingerprint. Reserve exact serials in the
-   master before printing a block. **Private-key retention remains proposed:** use a downloaded
-   self-contained browser tool on the custodian's separate computer, disconnected while handling
-   the key. Save an encrypted key file separately from the printed master and test reopening it
-   before releasing the in-memory key. Whether to retain additional secret paper is the next
-   owner decision; approval of the paper register does not authorise printing the private key.
+4. **Approved register and retention choices:** print one writable public paper original and keep
+   it with the named custodian. Record consumption on that original; label every other copy as a
+   snapshot. Include scope, generation/block IDs and the full public-key fingerprint. Reserve exact serials in the
+   master before printing a block. Keep BOTH a passphrase-protected file and secret recovery paper
+   for the same signing key on the outside custody path. **Proposed completion checks:** use the
+   offline tool below, explicitly save and reopen the file, then restore from the actual printed
+   paper in a separate tool session. Compare the complete fingerprint and sign/verify a harmless
+   local challenge before proceeding. Keep secret paper separately from the public master and
+   treat it as signing authority. These checks recover a key, never the current consumption register.
 5. Mark the entry consumed in that current master for the frozen event, source, node and Elena's
    planned ID. Record time, exact series and attempt history, then sign allocation/consumption
    receipts. Keep them with the master. Once consumed, the entry stays consumed.
@@ -169,12 +187,73 @@ abandoned event require explicit resolution. After consumption, use new evidence
 unless the committed replay above agrees; never reuse an uncertain assignment.
 Report a committed write separately from a failed refresh. Offer no blind restart or activation retry.
 
-Under the proposed encrypted-file retention route, private keys/passphrases stay in the outside
-tool's memory and explicit encrypted download only. The private-key retention format remains open.
-No uploads, analytics, network calls, browser storage, request/error logs or venue backups carry them.
-Use cryptographic randomness and no remote assets. No box endpoint generates a real custody key.
+The approved B decision adds explicit secret-paper export to the encrypted-file output. It is an
+exception to the earlier download-only boundary, never permission to send a secret to the box.
+Under the proposed acceptance requirements below, private keys, passphrases and recovered material
+stay in the separate offline tool's memory, apart from the explicit encrypted file and secret
+paper outputs. No uploads, analytics, network calls, browser storage, request/error logs or venue
+backups may carry them. Use cryptographic randomness and no remote assets. No box endpoint generates
+a real custody key.
 Bound public imports and reject secret-bearing files without echoing contents; audit references stay public.
 A680's disposable preproduction key is the separate approved exception, never real Live custody.
+
+## Custody and restoration acceptance requirements (PROPOSED, 2026-10-15)
+
+These details complete the proposal for the owner's whole-design approval. They are not previously
+approved facts or claims of tested encryption, printing or recovery behavior.
+
+- **Offline tool:** download a self-contained tool before handling secrets, then use it offline on
+  the custodian's separate computer. It must need no external resources, remote fonts or scripts,
+  analytics or network service. Secret handling must make no network requests and use no browser
+  persistence, automatic downloads, logs or crash reports containing secret material.
+- **Encrypted file:** choose and confirm a passphrase, explicitly save the protected key file,
+  then select that saved file and reopen it with the passphrase. Do not count a download click
+  or the original in-memory key as success. Derive its public key and compare the full fingerprint
+  with this kit before allowing the kit to proceed. The custodian keeps the file and access to its
+  passphrase outside the box and venue backups, separately from the public master.
+- **Secret paper:** explicitly print a versioned recovery document carrying the SAME private
+  signing key, its algorithm/encoding identifiers, complete public fingerprint and custody scope.
+  Use labelled, ordered transcription groups with completeness and corruption checks; support
+  restoration from the printed text without depending on a QR reader or a network service.
+  Label every page as secret, with the format version and page count. Do not put private-key
+  examples in these drawings or the public master. This proposal treats the paper itself as
+  sufficient to recover the key, without the encrypted file or its passphrase. Warn in EN/ES:
+  “Whoever holds this paper can sign.” / “Quien tenga este papel puede firmar.”
+- **Check the actual print:** start a separate offline tool session with no generated key or saved
+  file loaded. Transcribe the ACTUAL printed representation, not a preview or cached export.
+  Check its version, completeness, corruption checks and key structure, then derive the public key
+  and compare its complete fingerprint with the public master. Require an exact match before
+  signing anything. Sign and verify a fresh harmless local challenge with that restored key and
+  expected public key; it must have no allocation, consumption or activation effect. Proceed only
+  after the saved-file reopen and printed-paper restoration checks both succeed.
+- **Refusals:** malformed, incomplete, unsupported-version or corrupt paper, a wrong key or a
+  fingerprint mismatch must refuse before signing even the local challenge. Wrong-passphrase or
+  unreadable files must fail the file check. Explain the refusal without echoing secret input;
+  neither refusal may fall back to the original key, mint a replacement or mark a check complete.
+- **Secret boundary:** file and paper recovery run only in the separate offline tool. Neither
+  source nor recovered secrets may enter the box, venue backups, browser storage, logs or network.
+  Only the explicit encrypted file and secret print are permitted secret outputs. Use a local
+  printer outside the box; instructions must cover print queues, failed pages and disposal of
+  spoiled secret prints. Do not promise that the tool erases printer or operating-system copies.
+  Keep the protected file and secret paper apart from the public original; store the paper where
+  access is limited to signing custody. Public receipts and snapshots contain no secret material.
+- **Restoring custody:** the named custodian continues using the SAME single current paper master
+  after recovering a key. Recovering the key grants neither current-consumption knowledge nor
+  permission to create a second writable master. Consult the original before every assignment;
+  neither a fingerprint match, signature, old backup nor snapshot establishes currency.
+  The new-kit original-print action must not become a way to reprint a second writable master;
+  later public copies are labelled snapshots.
+- **Changing custodian:** explicitly hand over the same current master, its consumption/attempt
+  records and the protected file, passphrase access and secret paper. Record the named successor
+  and handover on that master; stop assignments during handover. The successor checks the file
+  and actual paper as above and confirms current consumption before resuming. Account explicitly
+  for retained secret copies with the outgoing custodian; do not imply their access disappears.
+  There must be no invisible second writable master and no automatic key rotation.
+- **Loss or uncertainty:** losing the current master or all usable signing copies stops new
+  signing and assignments until explicit incident resolution outside the box. Uncertain master
+  currency or disputed custody also stops new assignments. Preserve known consumption and attempt
+  evidence; do not guess free names, roll back a register, automatically create a fresh master or
+  claim guaranteed recovery. This proposal adds no legal policy or automatic rotation policy.
 
 ## Host persistence, module boundary and schema
 
@@ -198,26 +277,23 @@ Source read: `packages/fiscal-verifactu/src/schema/sif.ts` already holds a text 
 superseded. No second identity conversion or ledger migration is indicated by this read. A new SQL
 ownership/trust representation would need a migration; do not edit shipped SQL or add compatibility.
 
-## Remaining decisions and driver handoff
+## Whole-design approval and driver handoff
 
-**Next owner question, one at a time:** “For a NEW guided kit, should the custodian retain the
-private signing key as an encrypted file only, or also keep a secret paper recovery copy?”
-Recommend the encrypted file only, with an explicit save and successful reopen before proceeding.
-This avoids adding a second secret format to print, protect and restore. Additional secret paper
-would need its own checked export/import and custody instructions; it is not the public master
-register. These are proposed requirements, not implemented encryption or recovery guarantees.
-Keep the key outside the box and venue backups with either choice. After this answer, settle the
-custodian details and remaining design before seeking full-design/build approval. Ownership and
-the paper-original master are settled and must not be asked again. Paper blocks and uploaded
-snapshots confer no current authority.
-Cloud fetching/reconciliation remains W41sC3. Use the paper route for subscribers until then;
-that default creates no new owner question.
+**Next owner question:** “Do you approve the complete A679 Live setup design, including these
+proposed custody, restoration and handover checks, and authorise its build?” The 05:50 retention
+answer is not that approval. BOTH routes, local-network ownership, one paper-original current
+master and file PLUS secret-paper retention are settled; do not ask those questions again.
+Public blocks and uploaded snapshots confer no current authority. C3 landed in #1725; use public
+import for subscribers until wizard fetching is separately designed, without expanding this scope.
 
 The four [static EN/ES drawings](../../backlog/mockups/a679-first-fiscal-setup/) keep 1280/390 widths
-and show the Live/Production outside-kit checkpoint. BOTH routes and the paper-original master
-are approved; the drawings' encrypted-key retention remains proposed. Keep the shared form contract,
-semantic names, EN/ES inline and bottom errors,
+and show the Live/Production outside-kit checkpoint. BOTH routes, the paper-original master and
+file PLUS secret-paper retention are approved; restoration checks and layouts remain proposed.
+Keep the shared form contract, semantic names, EN/ES inline and bottom errors,
 quiet unavailable actions, draft protection and 44px targets. No top error summary.
-The driver owns fresh-context builder review, XML/render/visual checks and later joint A679/A680
-wizard/restart/concurrency/refusal validation in both themes, signed commits and docs-only locked
-landing. No plan is written now; full-design/build approval remains outstanding.
+The driver owns documentation validation, XML/render/visual checks and later joint A679/A680
+wizard/restart/concurrency/refusal validation in both themes, signed commits and publishing.
+Check all four drawings for EN/ES text fit at their 1280/390 widths. Later product acceptance must
+exercise actual printed recovery, wrong paper, wrong passphrases, secret boundaries, custody
+handover and loss/uncertainty stops; this documentation revision runs none of those checks.
+No implementation plan is written now; full-design/build approval remains outstanding.

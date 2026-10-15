@@ -321,13 +321,19 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Live proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) has EN/ES
   phone and desktop drawings. The owner approved current local-network ownership at 22:35;
   on 2026-10-15 at 05:10, one paper original was approved for a new kit's current master, with
-  consumption recorded there and every other copy labelled a snapshot. Signing-key retention
-  is the next decision. W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717)
+  consumption recorded there and every other copy labelled a snapshot. At about 05:50 the owner
+  chose B: a passphrase-protected key file PLUS secret recovery paper for the same signing key,
+  outside the box and venue backups, with a successful saved-file reopen and a checked paper
+  restoration path. Whoever holds the secret paper can sign; keep it apart from the public master.
+  W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717)
   and A680 in [#1718](https://github.com/clintongormley/waitron/pull/1718).
   Build A679 on A680 before W41s-7. A680 gives Demo and Preparation a throwaway allocation with
   no kit; a throwaway allocation for Live's separate preproduction readiness test is not built yet
-  (the setup route's fiscal test accepts only a production Live request, which never asks for one). Joint validation and
-  full-design approval remain open; Live activation needs real production custody. Detail:
+  (the setup route's fiscal test accepts only a production Live request, which never asks for one).
+  W41sC3 landed in [#1725](https://github.com/clintongormley/waitron/pull/1725); its adapter does
+  not build wizard fetching. Keep public import until that route is separately designed. Next seek
+  whole-design/build approval, including the proposed custody checks; the retention answer does
+  not grant it. Joint qualification remains open. No implementation plan yet. Detail:
   [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,

@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1032" viewBox="0 0 1280 1032" role="img" aria-labelledby="title desc" lang="en">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1280" viewBox="0 0 1280 1280" role="img" aria-labelledby="title desc" lang="en">
 <title id="title">Keep your custodian kit · LIVE / PRODUCTION · BOTH ROUTES APPROVED</title>
-<desc id="desc">Static Live/Production wireframe. Both routes are approved: a guided first outside kit and import from an existing custodian. Kit retention details remain proposed. The private key and one current master stay outside the box; only signed public files return to it. No working controls.</desc>
+<desc id="desc">Static Live/Production wireframe. Both routes are approved: a guided first outside kit and import from an existing custodian. Encrypted file plus secret paper approved 2026-10-15; recovery checks and layout proposed. The private key and one current master stay outside the box; only signed public files return to it. No working controls.</desc>
 <!-- Static export of UI colour, spacing, radius and target-size tokens. -->
 <style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#16181d;font-size:14px} .muted{fill:#5c626e}.small{font-size:12px}.heading{font-size:22px;font-weight:600}.group{font-size:18px;font-weight:600}.strong{font-weight:600}.link{fill:#1a5fd0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}</style>
-<rect x="0" y="0" width="1280" height="1032" rx="0" fill="#f7f7f8"/>
+<rect x="0" y="0" width="1280" height="1280" rx="0" fill="#f7f7f8"/>
 <rect x="0" y="0" width="1280" height="36" rx="0" fill="#e3ebfb"/>
 <text x="32" y="23" class="small strong link">LIVE / PRODUCTION · BOTH ROUTES APPROVED</text>
 <rect x="0" y="36" width="1280" height="68" rx="0" fill="#ffffff"/>
@@ -25,7 +25,7 @@
 <text x="44" y="457" class="small link">Import public files</text>
 <text x="44" y="477" class="small link">on the box.</text>
 <text x="300" y="148" class="small strong muted">Custodian tool · separate computer</text>
-<text x="840" y="148" class="small muted">Kit retention details proposed</text>
+<text x="840" y="148" class="small muted">B approved · recovery checks proposed</text>
 <text x="300" y="190" class="heading">Keep your custodian kit</text>
 <text x="300" y="219" class="muted">Keep the signing key and current register outside the Waitron box.</text>
 <text x="300" y="241" class="muted">Only signed public files go back to the box.</text>
@@ -34,34 +34,45 @@
 <text x="324" y="328" class="small muted">Production · Custodian: Elena</text>
 <text x="324" y="356" class="strong">Proposed first entry: S000001</text>
 <text x="774" y="356" class="mono">A-S000001 · FF-S000001 · R-S000001</text>
-<rect x="300" y="410" width="928" height="184" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="324" y="443" class="group">1. Keep the private signing key</text>
-<text x="324" y="473" class="muted">Save an encrypted key file on the custodian’s computer.</text>
-<text x="324" y="495" class="muted">Keep it separate from the printed register and venue backups.</text>
+<rect x="300" y="410" width="928" height="350" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="324" y="443" class="group">1. Keep encrypted file AND secret paper</text>
+<text x="324" y="473" class="muted">Save the passphrase-protected file and reopen that saved file before continuing.</text>
+<text x="324" y="495" class="muted">Versioned secret paper carries the SAME key and full public fingerprint.</text>
 <rect x="324" y="522" width="224" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="436.0" y="549" text-anchor="middle" class="link strong">Download key file</text>
-<text x="572" y="549" class="small muted">Not yet retained</text>
-<rect x="300" y="614" width="928" height="222" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="324" y="647" class="group">2. Keep one current master register</text>
-<text x="324" y="676" class="muted">Keep this master outside the box. Update it before each use.</text>
-<text x="324" y="698" class="muted">Other printouts are snapshots; they cannot replace the master.</text>
-<rect x="324" y="728" width="172" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="410.0" y="755" text-anchor="middle" class="link strong">Print register</text>
-<rect x="508" y="728" width="180" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="598.0" y="755" text-anchor="middle" class="link strong">Download register</text>
-<text x="732" y="745" class="small strong">Public-key fingerprint</text>
-<text x="732" y="770" class="small muted">Compare the full fingerprint from the current master</text>
-<text x="732" y="790" class="small muted">in a separate confirmation step on the box.</text>
-<rect x="324" y="858" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
-<text x="354" y="872">I reopened the saved key file.</text>
-<rect x="324" y="892" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
-<text x="354" y="906">I kept one writable current master.</text>
-<text x="324" y="936" class="small muted">Next: mark this entry used in the current master, then sign.</text>
-<text x="324" y="956" class="small muted">It stays used even if setup is abandoned.</text>
-<text x="324" y="996" class="small muted">Confirm both items to continue.</text>
-<rect x="918" y="970" width="104" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="970.0" y="997" text-anchor="middle" class="link strong">Back</text>
-<rect x="1034" y="970" width="170" height="44" rx="8" fill="#f0f1f4" stroke="#d6d9e0"/>
-<text x="1119.0" y="997" text-anchor="middle" class="muted">Continue</text>
-<text x="32" y="997" class="small muted">Static design drawing · no working controls</text>
+<text x="436.0" y="549" text-anchor="middle" class="link strong">Download encrypted file</text>
+<rect x="560" y="522" width="224" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="672.0" y="549" text-anchor="middle" class="link strong">Print secret paper</text>
+<rect x="796" y="522" width="384" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="988.0" y="549" text-anchor="middle" class="link strong">Check printed recovery</text>
+<text x="324" y="594" class="strong">Whoever holds this paper can sign. Store it apart from the public master.</text>
+<text x="324" y="622" class="muted">In a separate offline session, restore from the actual printed paper, not the preview.</text>
+<text x="324" y="648" class="muted">Match the full fingerprint, then sign and verify a harmless local challenge.</text>
+<text x="324" y="674" class="muted">Wrong or malformed paper: refuse before signing.</text>
+<text x="324" y="706" class="small muted">Offline tool, no remote resources. Keep secrets outside the box and venue backups.</text>
+<text x="324" y="730" class="small muted">Only the explicitly saved encrypted file and secret print leave tool memory.</text>
+<rect x="300" y="780" width="928" height="222" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="324" y="813" class="group">2. Keep one current master register</text>
+<text x="324" y="842" class="muted">One writable public paper original, outside the box. Record each use there.</text>
+<text x="324" y="864" class="muted">Every other copy says SNAPSHOT; it cannot replace the current original.</text>
+<rect x="324" y="894" width="172" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="410.0" y="921" text-anchor="middle" class="link strong">Print master original</text>
+<rect x="508" y="894" width="180" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="598.0" y="921" text-anchor="middle" class="link strong">Download snapshot</text>
+<text x="732" y="911" class="small strong">Public-key fingerprint</text>
+<text x="732" y="936" class="small muted">Compare the full fingerprint from the current master</text>
+<text x="732" y="956" class="small muted">in a separate confirmation step on the box.</text>
+<rect x="324" y="1024" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="354" y="1038">I reopened the saved key file.</text>
+<rect x="324" y="1058" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="354" y="1072">I restored the actual print and checked the fingerprint and local challenge.</text>
+<rect x="324" y="1092" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="354" y="1106">I kept one writable current master.</text>
+<text x="324" y="1136" class="small muted">Next: mark this entry used in the current master, then sign.</text>
+<text x="324" y="1156" class="small muted">It stays used even if setup is abandoned.</text>
+<text x="324" y="1196" class="small muted">Complete all three checks to continue.</text>
+<rect x="918" y="1170" width="104" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="970.0" y="1197" text-anchor="middle" class="link strong">Back</text>
+<rect x="1034" y="1170" width="170" height="44" rx="8" fill="#f0f1f4" stroke="#d6d9e0"/>
+<text x="1119.0" y="1197" text-anchor="middle" class="muted">Continue</text>
+<text x="32" y="1255" class="small muted">Proposed static layout · no working controls</text>
 </svg>

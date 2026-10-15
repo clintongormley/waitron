@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1360" viewBox="0 0 390 1360" role="img" aria-labelledby="title desc" lang="es">
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1700" viewBox="0 0 390 1700" role="img" aria-labelledby="title desc" lang="es">
 <title id="title">Conserva tu kit de custodia · EN VIVO / PRODUCCIÓN · AMBAS VÍAS APROBADAS</title>
-<desc id="desc">Dibujo estático de configuración en vivo/producción. Ambas vías están aprobadas: primer kit externo guiado e importación de archivos de un responsable existente. Los detalles de conservación siguen propuestos. La clave privada y el único maestro actual quedan fuera de la caja; solo se importan archivos públicos firmados. No hay controles funcionales.</desc>
+<desc id="desc">Dibujo estático de configuración en vivo/producción. Ambas vías están aprobadas: primer kit externo guiado e importación de archivos de un responsable existente. Archivo cifrado más papel secreto aprobados el 15-10-2026; comprobaciones de recuperación y disposición propuestas. La clave privada y el único maestro actual quedan fuera de la caja; solo se importan archivos públicos firmados. No hay controles funcionales.</desc>
 <!-- Static export of UI colour, spacing, radius and target-size tokens. -->
 <style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#16181d;font-size:14px} .muted{fill:#5c626e}.small{font-size:12px}.heading{font-size:22px;font-weight:600}.group{font-size:18px;font-weight:600}.strong{font-weight:600}.link{fill:#1a5fd0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}</style>
-<rect x="0" y="0" width="390" height="1360" rx="0" fill="#f7f7f8"/>
+<rect x="0" y="0" width="390" height="1700" rx="0" fill="#f7f7f8"/>
 <rect x="0" y="0" width="390" height="36" rx="0" fill="#e3ebfb"/>
 <text x="16" y="23" class="small strong link">EN VIVO / PRODUCCIÓN · AMBAS VÍAS APROBADAS</text>
 <rect x="0" y="36" width="390" height="68" rx="0" fill="#ffffff"/>
@@ -12,8 +12,8 @@
 <text x="16" y="128" class="small strong">Configuración en vivo / Producción</text>
 <text x="16" y="151" class="small muted">Herramienta de custodia · equipo separado</text>
 <text x="16" y="184" class="small link strong">Paso 2 de 4 · Conservar kit</text>
-<text x="16" y="202" class="small muted">Conservación del kit propuesta</text>
-<text x="16" y="222" class="heading">Conserva tu kit de custodia</text>
+<text x="16" y="202" class="small muted">B aprobada · comprobaciones propuestas</text>
+<text x="16" y="230" class="heading">Conserva tu kit de custodia</text>
 <text x="16" y="252" class="muted">Guarda el kit en el equipo del responsable.</text>
 <text x="16" y="274" class="muted">A la caja solo van archivos públicos.</text>
 <rect x="16" y="296" width="358" height="132" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
@@ -21,38 +21,53 @@
 <text x="32" y="343" class="small muted">Producción · Responsable: Elena</text>
 <text x="32" y="373" class="strong">Entrada propuesta: S000001</text>
 <text x="32" y="400" class="mono">A-S000001 · FF-S000001 · R-S000001</text>
-<rect x="16" y="444" width="358" height="218" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="32" y="474" class="group">1. Conserva la clave privada</text>
-<text x="32" y="505" class="muted">Guarda un archivo de clave cifrado.</text>
-<text x="32" y="527" class="muted">Sepáralo de la caja, las copias del</text>
-<text x="32" y="549" class="muted">restaurante y el registro impreso.</text>
-<rect x="32" y="580" width="214" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="139.0" y="607" text-anchor="middle" class="link strong">Descargar clave</text>
-<text x="32" y="644" class="small muted">Aún no conservado</text>
-<rect x="16" y="678" width="358" height="292" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="32" y="708" class="group">2. Conserva el maestro actual</text>
-<text x="32" y="739" class="muted">Guarda un único maestro fuera de la caja.</text>
-<text x="32" y="761" class="muted">Actualízalo antes de cada uso.</text>
-<text x="32" y="783" class="muted">Las demás impresiones son copias.</text>
-<rect x="32" y="814" width="156" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="110.0" y="841" text-anchor="middle" class="link strong">Imprimir registro</text>
-<rect x="200" y="814" width="158" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="279.0" y="841" text-anchor="middle" class="link strong">Descargar registro</text>
-<text x="32" y="889" class="small strong">Huella de la clave pública</text>
-<text x="32" y="917" class="small muted">Compara la huella completa del maestro</text>
-<text x="32" y="937" class="small muted">por separado en la caja.</text>
-<rect x="24" y="993" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
-<text x="54" y="1007">He abierto el archivo de clave guardado.</text>
-<rect x="24" y="1031" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
-<text x="54" y="1045">Conservo un único maestro actual.</text>
-<text x="24" y="1087" class="small muted">Después: anota el uso de la entrada y firma.</text>
-<text x="24" y="1109" class="small muted">Abandonar no deja la entrada libre.</text>
-<text x="24" y="1146" class="small muted">Confirma ambos puntos para continuar.</text>
-<rect x="16" y="1166" width="112" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
-<text x="72.0" y="1193" text-anchor="middle" class="link strong">Atrás</text>
-<rect x="140" y="1166" width="234" height="44" rx="8" fill="#f0f1f4" stroke="#d6d9e0"/>
-<text x="257.0" y="1193" text-anchor="middle" class="muted">Continuar</text>
-<text x="16" y="1240" class="small link">¿Ya tienes responsable?</text>
-<text x="16" y="1260" class="small link">Importa archivos públicos en la caja.</text>
-<text x="16" y="1327" class="small muted">Dibujo estático · controles sin funcionamiento</text>
+<rect x="16" y="444" width="358" height="500" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="32" y="474" class="group">1. Conserva archivo Y papel</text>
+<text x="32" y="505" class="muted">Guarda el archivo cifrado con contraseña.</text>
+<text x="32" y="527" class="muted">Ábrelo de nuevo antes de continuar.</text>
+<text x="32" y="549" class="muted">El papel secreto lleva la MISMA clave.</text>
+<rect x="32" y="572" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="195.0" y="599" text-anchor="middle" class="link strong">Descargar archivo cifrado</text>
+<rect x="32" y="628" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="195.0" y="655" text-anchor="middle" class="link strong">Imprimir papel secreto</text>
+<text x="32" y="700" class="strong">Quien tenga este papel puede firmar.</text>
+<text x="32" y="722" class="muted">Guárdalo separado del maestro público.</text>
+<text x="32" y="744" class="small muted">Papel versionado · huella pública completa</text>
+<text x="32" y="766" class="muted">En otra sesión de la herramienta sin red:</text>
+<text x="32" y="788" class="muted">restaura desde el papel ya impreso.</text>
+<text x="32" y="810" class="muted">Compara la huella completa; firma</text>
+<text x="32" y="832" class="muted">y verifica un reto local sin efectos.</text>
+<text x="32" y="854" class="small muted">Papel erróneo o mal formado: no firmes.</text>
+<rect x="32" y="878" width="326" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="195.0" y="905" text-anchor="middle" class="link strong">Comprobar recuperación impresa</text>
+<text x="32" y="936" class="small muted">Sin almacenamiento del navegador ni red.</text>
+<rect x="16" y="960" width="358" height="292" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="32" y="990" class="group">2. Conserva el maestro actual</text>
+<text x="32" y="1021" class="muted">Un original público editable, fuera de la caja.</text>
+<text x="32" y="1043" class="muted">Actualízalo antes de cada uso.</text>
+<text x="32" y="1065" class="muted">Toda otra copia dice: INSTANTÁNEA.</text>
+<rect x="32" y="1096" width="156" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="110.0" y="1123" text-anchor="middle" class="link strong">Imprimir original</text>
+<rect x="200" y="1096" width="158" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="279.0" y="1123" text-anchor="middle" class="link strong">Descargar copia</text>
+<text x="32" y="1171" class="small strong">Huella de la clave pública</text>
+<text x="32" y="1199" class="small muted">Compara la huella completa del maestro</text>
+<text x="32" y="1219" class="small muted">por separado en la caja.</text>
+<rect x="24" y="1275" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="54" y="1289">He abierto el archivo de clave guardado.</text>
+<rect x="24" y="1313" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="54" y="1327">He comprobado el papel impreso.</text>
+<text x="54" y="1349" class="small muted">Huella completa y firma/verificación local.</text>
+<rect x="24" y="1371" width="18" height="18" rx="4" fill="#ffffff" stroke="#7d8390"/>
+<text x="54" y="1385">Conservo un único maestro actual.</text>
+<text x="24" y="1427" class="small muted">Después: anota el uso de la entrada y firma.</text>
+<text x="24" y="1449" class="small muted">Abandonar no deja la entrada libre.</text>
+<text x="24" y="1486" class="small muted">Completa las tres comprobaciones.</text>
+<rect x="16" y="1506" width="112" height="44" rx="8" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="72.0" y="1533" text-anchor="middle" class="link strong">Atrás</text>
+<rect x="140" y="1506" width="234" height="44" rx="8" fill="#f0f1f4" stroke="#d6d9e0"/>
+<text x="257.0" y="1533" text-anchor="middle" class="muted">Continuar</text>
+<text x="16" y="1580" class="small link">¿Ya tienes responsable?</text>
+<text x="16" y="1600" class="small link">Importa archivos públicos en la caja.</text>
+<text x="16" y="1667" class="small muted">Propuesta estática · controles sin función</text>
 </svg>

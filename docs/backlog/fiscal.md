@@ -257,6 +257,40 @@ in [#1718](https://github.com/clintongormley/waitron/pull/1718), so neither it n
 the design. The Live-readiness allocation, joint qualification and full-design/build approval
 remain open. The paper-register decision does not approve printing a private signing key.
 
+**2026-10-15 at about 05:50, owner decision B:** a NEW guided kit keeps BOTH a
+passphrase-protected signing-key file on the named custodian's separate computer and recoverable
+secret paper for the SAME key. Explicitly save and successfully reopen the file before proceeding;
+check the paper restoration path. Keep both outside the box and venue backups, and the secret paper
+separately from the public master. Say plainly that whoever holds the paper can sign. This supersedes the
+earlier open-retention notes; it is not whole-design/build approval.
+
+**Current A679 custody proposal, 2026-10-15:** the
+[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md#custody-and-restoration-acceptance-requirements-proposed-2026-10-15)
+now specifies proposed acceptance requirements for an offline tool with no remote resources,
+explicit encrypted-file save/reopen, and versioned secret paper with the same signing key and full
+public fingerprint. Before proceeding, restore from the ACTUAL printed representation in a separate
+tool session, compare the full fingerprint, then sign/verify a harmless local challenge. Malformed
+or wrong paper refuses before signing. Secrets stay outside the box, backups, logs, browser storage
+and network, with only the explicit encrypted file and secret print as secret outputs. These are
+requirements for approval, not tested crypto or product behavior.
+
+Key recovery continues under the same named custodian and single current paper original; it never
+recovers current consumption or authorises a second master. A change of custodian explicitly hands
+over that original, its records and protected keys, with no invisible second writable master.
+Losing the master or all usable signing copies stops new signing pending explicit outside incident
+resolution. Uncertain currency stops new assignments. No guessed names, automatic fresh master,
+rollback, automatic rotation, new legal policy or recovery guarantee is proposed.
+
+**2026-10-15 dependency/handoff update:** W41s6 #1717, A680 #1718 and W41sC3
+[#1725](https://github.com/clintongormley/waitron/pull/1725) have landed. The earlier instruction
+to wait for C3 is historical. Adapter landing does not build Cloud wizard fetching; keep public
+import for existing custodians, including subscribers, until fetching is separately designed.
+No new Cloud scope belongs here. The source reads and reproduction above remain historical.
+The next owner question is full-design/build
+approval of the complete proposal, including custody and handover checks, rather than another
+retention question. Live readiness allocation and joint qualification remain open; no implementation
+plan is written yet.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
