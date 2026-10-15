@@ -984,8 +984,8 @@ describe("ordering extras and options — parent + child lines", () => {
    *  - "Hamburguesa" (each, 9.00 general) + extras "Extras" (min 0, max 3): Bacon 0.50 at the BACON
    *    product's own reduced rate, Queso 0.75 at general.
    *  - "Menú" (each, 12.00 general) + options "Tamaño" (Pequeño / Grande), which must be answered.
-   *  - "Jamón" (weight, 24.90 reduced), carrying "Extras" too — a pick on a weighed dish is what the
-   *    pricing-unit refusal is about, so the list has to be genuinely offered there.
+   *  - "Jamón" (weight, 24.90 reduced), carrying "Extras" too — a pick on a weighed dish is what
+   *    `extras.unsupported_product` refuses, so the list has to be genuinely offered there.
    *  - "Combo" (each, 8.00 general) + options "Salsa", whose "Alioli" label is withdrawn.
    *  - "Plato" (each, 10.00 general) + extras "Guarnición" (min 2, max 3): Patatas 1.00, Ensalada 1.50.
    *
@@ -2116,7 +2116,7 @@ describe("ordering extras and options — parent + child lines", () => {
       params: { extraListId: v.extrasListId },
     });
 
-    // (c) an extras pick on a WEIGHED dish keeps the each-only contract: a child is priced
+    // (c) an extras pick on a WEIGHED dish is refused (`soldBy: "weight"`): a child is priced
     // dishQuantity × pickQuantity, so 0.250 kg of ham would bill a quarter of a rasher.
     await expect(
       recordTillSale(deps, v.cfg, {

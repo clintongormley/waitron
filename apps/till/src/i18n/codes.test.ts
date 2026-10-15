@@ -662,10 +662,10 @@ it("asks for a manager when a sale has no department, without directing staff to
 
 it("tells staff extras go only on a dish sold by the unit, in both languages, not the generic sentence", () => {
   expect(codeMessage("extras.unsupported_product", "en")).toBe(
-    "Extras can only be added to a dish sold by the unit.",
+    "Extras can only be added to a dish sold by the unit. Remove them and try again",
   );
   expect(codeMessage("extras.unsupported_product", "es")).toBe(
-    "Solo se pueden añadir extras a un plato que se vende por unidades.",
+    "Solo se pueden añadir extras a un plato que se vende por unidades. Quítalos e inténtalo de nuevo",
   );
   expect(codeMessage("extras.unsupported_product", "en")).not.toBe(
     codeMessage("server.internal", "en"),

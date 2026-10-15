@@ -1471,13 +1471,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `packages/catalogue/src/pricing.ts` (`quantity` of an extra = dish quantity × portion × picks) an
   extra on 250 ml of a dish would be billed 250 times. Read, not run.
 
-- **The till decides whether a dish offers extras from the dish's own unit, the server from the
-  chosen variant's** (left open by A663 Part 2d). A variant carries its own unit
-  (`selectMenuVariant`, `packages/catalogue/src/variants.ts`), and the server's refusal reads it;
-  the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`) reads the dish's. So a counted
-  dish whose variant is sold in a decimal unit is offered extras that the server then refuses with
-  `extras.unsupported_product`. Read, not run.
-
 - **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
   action:** decide whether the picker should list variants.

@@ -268,7 +268,7 @@ export class TillModifierPicker extends LitElement {
     }
   }
 
-  /** The lists this dish offers, in offer order. A product the till synthesised (a retrieved line
+  /** The lists the till offers on this dish (`offeredListsOf`), in offer order. A product the till synthesised (a retrieved line
    * with no live offer) carries none, and then the dialog has only its variants to ask about. */
   get #offered() {
     return offeredListsOf(this.product);

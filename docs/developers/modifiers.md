@@ -202,8 +202,8 @@ the basket resolved, and decides what is stored:
   malformed pick is `extras.invalid` naming the field.
 - A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
   refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
-  priced dish × pick would bill a fraction of an extra. An options answer on such a dish is still
-  allowed.
+  priced dish × pick would carry a weight or a fraction of an extra, not a number of them. An
+  options answer on such a dish is still allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
@@ -300,10 +300,11 @@ marked with whether it can be sold now; nothing in `apps/till` outside its tests
 `GET /api/products`, the route over `listAvailableProducts`.
 
 Nothing else on those two payloads describes a modifier. The till's picker walks
-`offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
-a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and tender-pay's
-weighed quantity — decide whether a dish needs a picker from that field or from an available
-variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
+`offeredModifiers` through `offeredListsOf` (`apps/till/src/state/order-line.ts`), which drops every
+extras list on a dish not sold by the unit (`apps/till/src/widgets/modifier-picker.ts`), and the two
+surfaces that ADD a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and
+tender-pay's weighed quantity — decide whether a dish needs a picker from those lists or from an
+available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
 
 Six things it is worth knowing about that payload:
 

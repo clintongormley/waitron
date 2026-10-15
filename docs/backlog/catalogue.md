@@ -938,6 +938,9 @@ From "Extras and Options — deliberate limits, and what is left open"
   optional options list is a possible future change, not built.
 - **A variant offers its parent's lists and cannot override them**; a per-variant attachment row
   is a possible later addition.
+- **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
+  has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
+  it with extras, sell it in a unit with no decimals (a jug).
 
 From A344 (#1375, a menu's Price overrides tab shows its clashes):
 
