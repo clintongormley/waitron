@@ -372,8 +372,7 @@ just a green typecheck.
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
   receipt, rendered from the code on 2026-10-14.
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md)
-  — five pull requests; Parts 1a, 1b, 2 and 3 buildable now (A661 landed, #1745); Part 4 after
-  owner questions Q1, Q3, Q6.
+  — Part 1a landed; Parts 1b, 2 and 3 buildable now (A661 landed, #1745).
   1. **The simplified receipt.**
      - The QR code, «QR tributario:» and VERI\*FACTU stay first. AEAT's QR specification v0.5.0, §3,
        requires the QR at the start of the invoice (quoted in
@@ -389,6 +388,7 @@ just a green typecheck.
        the data keeps the caption's size. The same call as the till screen's larger TOTAL on
        2026-10-01 (`docs/compliance/verifactu-findings.md`, C115). The VERI\*FACTU line may be
        printed in bold for margin.
+       TOTAL is drawn double size (Part 1a's pull request); its place after the items is still open.
      - With one VAT rate, one line «IVA 10% incluido». Art. 7.1.f asks for the rate only, and for the
        base of each rate only when there are several, which keep their Base lines.
   2. **The full invoice.**
@@ -413,19 +413,24 @@ just a green typecheck.
      address always prints (2026-10-10, A366 slice 7, the note atop
      [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
-  5. **VAT rates with significant digits only**, in the receipt language's decimal mark: "10%",
-     "17,5%". Today each item prints "10.00%" and the summary "10%".
+  5. Delivered by Part 1a's pull request.
   6. **Guests and the amount per person** when the table's guests were entered.
-  7. **A drink/food subtotal, as a venue setting, off by default.** Researched 2026-10-14 by an
-     agent reading the sources below (not re-fetched here): no Spanish rule asks for it. Everything
-     served on the premises is 10% VAT, alcohol included: Ley 37/1992 art. 91.Uno.2.2º, «los de
-     restaurantes y, en general, el suministro de comidas y bebidas para consumir en el acto». For
-     takeaway, alcohol and sugary soft drinks are 21%: DGT ruling V2254-22, «con excepción de las
-     bebidas alcohólicas y las bebidas refrescantes, zumos y gaseosas con azúcares o edulcorantes
-     añadidos». Either way the per-rate breakdown already separates them. Italy does not require it
-     either; the Rome receipt's lines are most likely its till's own sales-department totals (an
-     inference). Deciding which products are drink needs a product setting or a category rule;
-     settle which.
+  7. **A drink/food subtotal** — dropped by the owner on 2026-10-15, with the questions it raised
+     (Q1, Q3, Q6).
+
+## The till's on-screen receipt is a second copy of the layout
+
+- **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's receipt
+  itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
+  … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
+  for a filed sale), so A663's rate spelling, and later its item table, do not reach it. Bring it
+  into line with the printed receipt; A661 (#1745), which changed that file, has landed.
+
+## Quantities print with "." whatever the receipt language
+
+- **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt):
+  `trimQuantityForDisplay` (`apps/server/src/receipt-lines.ts`) takes no language. A663 keeps
+  today's form; this entry is to print the language's decimal mark («0,35 kg»).
 
 ## A command queued behind a slow pair can run out of time
 
