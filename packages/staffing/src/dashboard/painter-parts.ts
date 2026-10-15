@@ -44,13 +44,31 @@ export const sameDay = (a: readonly StaffingBlock[] = [], b: readonly StaffingBl
       block.endsAt === b[index]!.endsAt,
   );
 
-export function droppedNotice(names: readonly string[]): string {
-  const list = new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
+const listOf = (names: readonly string[]) =>
+  new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
     type: "conjunction",
   }).format(names);
-  return tf(names.length === 1 ? "staffing.painter.removed_one" : "staffing.painter.removed_many", {
-    names: list,
-  });
+
+/** What a painter says beside Save when a re-read dropped edits: the areas, then the dates, that
+ *  are gone. Empty when it dropped none. */
+export function droppedNotice(areas: readonly string[], dates: readonly string[] = []): string {
+  return [
+    areas.length
+      ? tf(areas.length === 1 ? "staffing.painter.removed_one" : "staffing.painter.removed_many", {
+          names: listOf(areas),
+        })
+      : "",
+    dates.length
+      ? tf(
+          dates.length === 1
+            ? "staffing.painter.dates_removed_one"
+            : "staffing.painter.dates_removed_many",
+          { dates: listOf(dates) },
+        )
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** The edit a refusal names: `staffing.invalid` whose field is `edits.<i>…` names the i-th sent. */
@@ -95,7 +113,8 @@ export function areaPicker(
 export interface PaintRowOptions {
   staffRoles: readonly StaffRole[];
   chosen: string | undefined;
-  headcount: number;
+  /** Read when How many changes or is left, so its handlers never see a stale number. */
+  headcount: () => number;
   rolesError: string | undefined;
   choose: (staffRoleId: string) => void;
   setHeadcount: (headcount: number) => void;
@@ -131,7 +150,7 @@ export function paintRow(options: PaintRowOptions) {
       label=${t("staffing.grid.how_many")}
       min="1"
       max=${MAX_HEADCOUNT}
-      .value=${String(headcount)}
+      .value=${String(headcount())}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         // A blank waits for the field to be left, so it can be cleared and typed again.
@@ -139,13 +158,13 @@ export function paintRow(options: PaintRowOptions) {
         const value = Number(event.detail.value);
         const next = Number.isInteger(value)
           ? Math.min(Math.max(value, 1), MAX_HEADCOUNT)
-          : headcount;
+          : headcount();
         options.setHeadcount(next);
         (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value = String(next);
       }}
       @focusout=${(event: FocusEvent) => {
         (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value =
-          String(headcount);
+          String(headcount());
       }}
     ></wt-number-stepper>
     ${

@@ -549,6 +549,91 @@ it("drops the edits of an area a re-read no longer has, and says so beside Save"
   expect(frame(painter).refusal).toBe("");
 });
 
+it("drops an edit on a date a re-read no longer has, and names the date beside Save", async () => {
+  const { read, held } = heldRereads();
+  const { painter } = await mount({ read });
+  await paint(painter, "day", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  await paint(painter, "eve", []);
+  const fresh = specialDayStaffing();
+  for (const area of fresh.areas) area.dates = area.dates.filter(({ dateId }) => dateId !== "eve");
+  held.answer(fresh);
+  await settle(painter);
+  expect(grid(painter).columns.map(({ key }) => key)).toEqual(["day"]);
+  expect(frame(painter).refusal).toBe(
+    "Thu 24 Dec was removed from this special day; its changes were dropped.",
+  );
+  expect(saveButton(painter).disabled).toBe(true);
+});
+
+it("names a removed area and removed dates together, and in Spanish", async () => {
+  setLocale("es");
+  const { read, held } = heldRereads();
+  const { painter } = await mount({ read });
+  await paint(painter, "day", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  await paint(painter, "eve", []);
+  await paint(painter, "day", []);
+  await pick(painter, "department:dep-bar");
+  await paint(painter, "eve", [dinner]);
+  const fresh = specialDayStaffing();
+  fresh.areas = fresh.areas
+    .filter(({ name }) => name !== "Bar")
+    .map((area) => ({ ...area, dates: [] }));
+  held.answer(fresh);
+  await settle(painter);
+  expect(frame(painter).refusal).toBe(
+    "Bar se eliminó; sus cambios se descartaron. " +
+      "jue 24 dic y vie 25 dic se quitaron de este día especial; sus cambios se descartaron.",
+  );
+});
+
+it("says the special day has no dates, and draws no grid to paint", async () => {
+  const { painter } = await mount({
+    read: async () => ({
+      ...specialDayStaffing(),
+      areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
+      guides: {},
+    }),
+  });
+  expect(frame(painter).heading).toBe("Christmas");
+  expect(byTest(painter, "no-dates")!.textContent).toBe("This special day has no dates yet.");
+  expect(grid(painter)).toBeNull();
+  expect(picker(painter)).toBeNull();
+  expect(byTest(painter, "paint-row")).toBeNull();
+});
+
+it("says in Spanish that the special day has no dates", async () => {
+  setLocale("es");
+  const { painter } = await mount({
+    read: async () => ({
+      ...specialDayStaffing(),
+      areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
+    }),
+  });
+  expect(byTest(painter, "no-dates")!.textContent).toBe("Este día especial aún no tiene fechas.");
+});
+
+it("How many shows the number just chosen when it is left before the painter draws again", async () => {
+  const { painter } = await mount();
+  const howMany = root(painter).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+    "wt-number-stepper[name=headcount]",
+  )!;
+  howMany.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "5" }, bubbles: true, composed: true }),
+  );
+  howMany.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+  expect(howMany.value).toBe("5");
+  howMany.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "2.5" }, bubbles: true, composed: true }),
+  );
+  expect(howMany.value).toBe("5");
+  await settle(painter);
+  expect(grid(painter).headcount).toBe(5);
+});
+
 it("speaks Spanish", async () => {
   setLocale("es");
   const { painter } = await mount();

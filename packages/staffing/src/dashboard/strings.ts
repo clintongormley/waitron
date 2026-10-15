@@ -98,6 +98,11 @@ const en = {
   "staffing.painter.removed_one": "{names} was removed; its changes were dropped.",
   "staffing.painter.removed_many": "{names} were removed; their changes were dropped.",
   "staffing.painter.no_areas": "This venue has no departments or prep stations yet.",
+  "staffing.painter.dates_removed_one":
+    "{dates} was removed from this special day; its changes were dropped.",
+  "staffing.painter.dates_removed_many":
+    "{dates} were removed from this special day; their changes were dropped.",
+  "staffing.painter.no_dates": "This special day has no dates yet.",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -190,6 +195,11 @@ const es: Record<keyof typeof en, string> = {
   "staffing.painter.removed_many": "{names} se eliminaron; sus cambios se descartaron.",
   "staffing.painter.no_areas":
     "Este local aún no tiene departamentos ni estaciones de preparación.",
+  "staffing.painter.dates_removed_one":
+    "{dates} se quitó de este día especial; sus cambios se descartaron.",
+  "staffing.painter.dates_removed_many":
+    "{dates} se quitaron de este día especial; sus cambios se descartaron.",
+  "staffing.painter.no_dates": "Este día especial aún no tiene fechas.",
 };
 
 export const STAFFING_STRINGS = { en, es };

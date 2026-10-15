@@ -477,7 +477,7 @@ export class StaffingSeasonPainter extends LitElement {
             ? paintRow({
                 staffRoles: this.staffRoles,
                 chosen,
-                headcount: this.headcount,
+                headcount: () => this.headcount,
                 rolesError: this.rolesError,
                 choose: (staffRoleId) => {
                   this.chosen = staffRoleId;

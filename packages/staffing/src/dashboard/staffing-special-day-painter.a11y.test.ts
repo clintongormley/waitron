@@ -192,6 +192,15 @@ const states: Record<string, () => Promise<void>> = {
     });
     expect(shadow(el).querySelector("[data-test=no-areas]")).not.toBeNull();
   },
+  "no dates": async () => {
+    const el = await painter({
+      read: async () => ({
+        ...specialDayStaffing(),
+        areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
+      }),
+    });
+    expect(shadow(el).querySelector("[data-test=no-dates]")).not.toBeNull();
+  },
   loading: async () => {
     const el = await painter({ read: () => new Promise(() => undefined) });
     expect(shadow(el).querySelector("[data-test=loading]")).not.toBeNull();

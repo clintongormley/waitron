@@ -207,13 +207,28 @@ export class StaffingSpecialDayPainter extends LitElement {
   }
 
   /** Each date not edited takes the fresh read; an edited date stays, now against the fresh one.
-   *  An area the fresh read no longer has loses its edits, named in the notice. Every area in the
-   *  draft came from `previous`. */
+   *  An area or a date the fresh read no longer has loses its edits, named in the notice. Every
+   *  area and date in the draft came from `previous`. */
   private take(fresh: Draft, previous: SpecialDayStaffing | undefined): void {
     const gone = [...this.draft]
       .filter(([key, dates]) => !fresh.has(key) && !sameDates(dates, this.baseline.get(key)))
       .map(([key]) => previous!.areas.find(({ area }) => areaKey(area) === key)!.name);
-    if (gone.length) this.notice = droppedNotice(gone);
+    const lost = new Set<string>();
+    for (const [key, dates] of this.draft) {
+      const kept = fresh.get(key);
+      if (!kept) continue;
+      for (const [dateId, day] of dates)
+        if (!kept.has(dateId) && !sameEntry(day, this.baseline.get(key)?.get(dateId)))
+          lost.add(dateId);
+    }
+    const goneDates = lost.size
+      ? previous!.areas[0]!.dates.filter(({ dateId }) => lost.has(dateId))
+      : [];
+    if (gone.length || goneDates.length)
+      this.notice = droppedNotice(
+        gone,
+        goneDates.map(({ date }) => dateLabel(date)),
+      );
     const draft: Draft = new Map();
     for (const [key, dates] of fresh) {
       const current = this.draft.get(key);
@@ -347,6 +362,8 @@ export class StaffingSpecialDayPainter extends LitElement {
         : html`<p class="message" data-test="loading">${t("staffing.painter.loading")}</p>`;
     if (!read.areas.length)
       return html`<p class="message" data-test="no-areas">${t("staffing.painter.no_areas")}</p>`;
+    if (!read.areas[0]!.dates.length)
+      return html`<p class="message" data-test="no-dates">${t("staffing.painter.no_dates")}</p>`;
     const columns = this.columns(read);
     const guides = read.guides[shown] ?? {};
     return html`<staffing-grid
@@ -373,6 +390,7 @@ export class StaffingSpecialDayPainter extends LitElement {
     const read = this.read;
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
+    const paintable = !!read?.areas[0]?.dates.length;
     return html`<painter-frame
         .open=${true}
         .heading=${read ? read.name : t("staffing.painter.heading")}
@@ -386,16 +404,16 @@ export class StaffingSpecialDayPainter extends LitElement {
         @painter-close=${() => this.open("staffing", this.addressParams())}
       >
         ${
-          read?.areas.length
+          paintable
             ? areaPicker(read.areas, shown, this.saving, (value) => this.pick(value))
             : nothing
         }
         ${
-          read?.areas.length && !this.readOnly
+          paintable && !this.readOnly
             ? paintRow({
                 staffRoles: this.staffRoles,
                 chosen,
-                headcount: this.headcount,
+                headcount: () => this.headcount,
                 rolesError: this.rolesError,
                 choose: (staffRoleId) => {
                   this.chosen = staffRoleId;
