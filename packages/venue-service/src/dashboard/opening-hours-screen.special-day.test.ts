@@ -151,7 +151,7 @@ async function mount(address: string, readOnly = false, failing: string[] = []) 
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
-  await expect.poll(() => el.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot?.querySelector("[data-test=view-switch]")).not.toBeNull();
   await el.updateComplete;
   return { el, ...recorded };
 }
@@ -179,8 +179,8 @@ async function cancel(painter: SpecialDayPainter) {
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
   await settle(painter);
 }
-const tabs = (el: Screen) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
+const checkedView = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")?.value;
 
 describe("the special-day painter's address", () => {
   it("opens a stored special day over the Year on a direct load, fed the screen's model and api, and closes to the Year", async () => {
@@ -192,7 +192,7 @@ describe("the special-day painter's address", () => {
     expect(painter.model.departments.map(({ id }) => id)).toEqual(["d1", "d2"]);
     expect(painter.readOnly).toBe(false);
     expect(nameOf(painter)).toBe("Christmas dinners");
-    expect(tabs(el).value).toBe("year");
+    expect(checkedView(el)).toBe("year");
     await cancel(painter);
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
     await expect.poll(() => painterOf(el)).toBeNull();
@@ -317,7 +317,7 @@ describe("the special-day painter's address", () => {
     const { el } = await mount(from);
     await expect.poll(() => location.pathname).toBe(to);
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
-    expect(tabs(el).value).toBe("year");
+    expect(checkedView(el)).toBe("month");
   });
 });
 

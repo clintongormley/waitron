@@ -94,7 +94,7 @@ async function mount(
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
-  await expect.poll(() => el.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot?.querySelector("[data-test=view-switch]")).not.toBeNull();
   await el.updateComplete;
   return el;
 }
@@ -107,7 +107,7 @@ async function mountApp(address?: string) {
   document.body.append(app);
   await app.updateComplete;
   const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-  await expect.poll(() => el.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot?.querySelector("[data-test=view-switch]")).not.toBeNull();
   return { app, el };
 }
 /** Records each pushed entry's path. Chromium caps a tab's history at 50 entries, and earlier
@@ -123,8 +123,12 @@ async function shownPainter(el: Screen) {
   await settle(painter);
   return painter;
 }
-const tabs = (el: Screen) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!;
+const checkedView = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")?.value;
+const switchViews = (el: Screen) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLInputElement>("[data-test=view-switch] input")].map(
+    (input) => input.value,
+  );
 async function cancel(painter: SeasonPainter) {
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
   await settle(painter);
@@ -152,7 +156,7 @@ describe("the season painter's address", () => {
     ]);
     expect(painter.api).toBe(el.api);
     expect(painter.model.departments.map(({ id }) => id)).toEqual(["d1", "d2", "d3"]);
-    expect(tabs(el).value).toBe("year");
+    expect(checkedView(el)).toBe("year");
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
     el.api.rereadWatches();
     await expect.poll(() => painterOf(el)!.model).not.toBe(painter.model);
@@ -360,7 +364,7 @@ describe("links into the painter", () => {
       .toBe(`/manage/opening-hours/view/season/season/${painted}`);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
-    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
+    expect(switchViews(el)).toEqual(["year", "month"]);
   });
 
   it.each([
@@ -377,7 +381,7 @@ describe("links into the painter", () => {
     expect(new URLSearchParams(location.search).has("station")).toBe(false);
     expect(pushed()).toEqual([]);
     await shownPainter(el);
-    expect(tabs(el).items.map(({ key }) => key)).toEqual(["year"]);
+    expect(switchViews(el)).toEqual(["year", "month"]);
   });
 
   it("a season chip asking for a week while the painter is open changes nothing", async () => {

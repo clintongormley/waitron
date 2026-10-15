@@ -200,7 +200,9 @@ async function hours(
   const screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = api;
   app.append(screen);
-  await expect.poll(() => screen.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();
+  await expect
+    .poll(() => screen.shadowRoot?.querySelector("[data-test=view-switch]"))
+    .not.toBeNull();
   async function replace(next: OpeningHoursModel) {
     model = next;
     live.invalidate([{ type: "departments" }, { type: "floor_zones" }]);

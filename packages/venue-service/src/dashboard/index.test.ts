@@ -271,17 +271,19 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     const screen = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
     expect(screen.api.liveData).toBe(liveData);
     expect(screen.readOnly).toBe(true);
-    await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-test=view-switch]")).not.toBeNull(),
+    );
     const year = () => screen.shadowRoot!.querySelector("opening-hours-year");
     await vi.waitFor(() =>
       expect(year()?.shadowRoot?.querySelector("[data-test=year]")).not.toBeNull(),
     );
-    expect(year()!.shadowRoot!.querySelector("[data-test=add-special-day]")).toBeNull();
+    expect(year()!.readOnly).toBe(true);
     render(handle.render(false), container);
     await screen.updateComplete;
     expect(screen.readOnly).toBe(false);
     await year()!.updateComplete;
-    expect(year()!.shadowRoot!.querySelector("[data-test=add-special-day]")).not.toBeNull();
+    expect(year()!.readOnly).toBe(false);
     const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).find(
       ([path]) => path === "/management-api/venue-service/opening-hours",
     )!;

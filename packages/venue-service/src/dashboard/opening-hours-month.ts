@@ -600,7 +600,9 @@ export class OpeningHoursMonthView extends LitElement {
         <h2 data-test="month" aria-live="polite">
           ${formatMonthName(Number(current.slice(5, 7)))} ${year}
         </h2>
-        ${step(1, "next-month", "month.next", "›")} ${model ? this.#tools(model) : nothing}
+        ${step(1, "next-month", "month.next", "›")}
+        <slot name="switch"></slot>
+        ${model ? this.#tools(model) : nothing}
       </div>
       ${model ? this.#grid(model) : nothing}`;
   }

@@ -566,6 +566,7 @@ export class OpeningHoursYearView extends LitElement {
         ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
         <h2 data-test="year" aria-live="polite">${model.year}</h2>
         ${step(1, "next-year", "hours.calendar.next_year", "›")}
+        <slot name="switch"></slot>
         ${
           this.readOnly
             ? nothing

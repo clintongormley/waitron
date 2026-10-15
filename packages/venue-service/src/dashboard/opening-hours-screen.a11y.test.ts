@@ -4,6 +4,7 @@ import { registerCatalogue, setLocale, type DashboardRequest } from "@waitron/da
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import "./opening-hours-screen.js";
 
@@ -135,6 +136,39 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       .not.toBeNull();
     await screen.updateComplete;
     expect(screen.shadowRoot!.querySelector("[data-test=calendar-switch]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+  test.each([
+    [
+      "the Year / Month switch on the Year",
+      "/manage/opening-hours/view/year",
+      "opening-hours-year",
+    ],
+    [
+      "the Year / Month switch on the Month",
+      "/manage/opening-hours/view/month/month/2026-12",
+      "opening-hours-month",
+    ],
+  ] as const)("%s", async (_state, path, view) => {
+    setLocale("en");
+    history.replaceState(null, "", path);
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    const ready = request("ready");
+    screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked.includes("/opening-hours/month?"))
+        return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
+      const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
+      return asked.includes("/opening-hours/year?")
+        ? read
+        : { ...read, departments: structuredClone(DEPARTMENTS) };
+    }) as DashboardRequest);
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=view-switch]"))
+      .not.toBeNull();
+    await expect.poll(() => screen.shadowRoot!.querySelector(view)?.model).toBeDefined();
+    await screen.shadowRoot!.querySelector(view)!.updateComplete;
     await expectNoA11yViolations(host);
   });
 });
