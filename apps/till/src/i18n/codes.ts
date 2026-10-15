@@ -3,6 +3,22 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "party.not_found": {
+    en: "The table order could not be found.",
+    es: "No se ha encontrado el pedido de la mesa.",
+  },
+  "kitchen_note.invalid": {
+    en: "Check the note for the kitchen.",
+    es: "Revisa la nota para cocina.",
+  },
+  "kitchen_note.too_long": {
+    en: "Use no more than 2,000 characters.",
+    es: "Usa un máximo de 2000 caracteres.",
+  },
+  "kitchen_note.out_of_date": {
+    en: "This note changed on another device. Read it again before editing.",
+    es: "Esta nota ha cambiado en otro dispositivo. Vuelve a leerla antes de editarla.",
+  },
   "attendance.read_failed": {
     en: "Your hours could not be read. Retry read.",
     es: "No se han podido consultar tus horas. Vuelve a consultarlas.",

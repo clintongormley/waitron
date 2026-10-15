@@ -44,6 +44,7 @@ describe("VENUE_SERVICE", () => {
       "getOrderContext",
       "keepPeriodOpen",
       "keepZoneOpen",
+      "kitchenNoteKey",
       "listDepartmentSentTransfers",
       "listDepartmentTransferDestinations",
       "listIncomingDepartmentTransfers",
@@ -68,6 +69,7 @@ describe("VENUE_SERVICE", () => {
       "readEditSentLines",
       "readIncomingDepartmentTransfer",
       "readKeepOpen",
+      "readKitchenNotes",
       "readKitchenTicketGrouping",
       "readLinesSoldInEach",
       "readPrintHeldWork",
@@ -110,6 +112,7 @@ describe("VENUE_SERVICE", () => {
       "withdrawDepartmentTransfer",
       "withdrawPendingDepartmentTransfers",
       "writeDepartmentReceipt",
+      "writeKitchenNote",
     ]);
   });
 

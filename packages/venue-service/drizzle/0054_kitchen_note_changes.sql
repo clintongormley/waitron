@@ -1,0 +1,1 @@
+ALTER TABLE `kitchen_notices` ADD `order_note_change` text;
