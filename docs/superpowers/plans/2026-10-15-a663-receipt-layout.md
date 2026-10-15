@@ -40,7 +40,7 @@ request holds.
 | ---- | ---------------- | ----- | --------- |
 | 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
 | 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
-| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item with the item and its discount before VAT, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page; a count in «ud» printed bare on both documents | 2.1, 2.2, 2.3a–2.3d, 2.4, 2.5, 2.6 (nine dispatches) | Now: Part 1b (#1756) and A661 (#1745) have landed |
+| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item with the item and its discount before VAT, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page; a count in «ud» printed bare on both documents | 2.1, 2.2, 2.3a, 2.3b, 2.3c-1, 2.3c-2, 2.3d, 2.4, 2.5, 2.6 (ten dispatches) | Now: Part 1b (#1756) and A661 (#1745) have landed |
 | 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
@@ -196,8 +196,11 @@ Quotes are copied from that text.
    ever carry an operation date different from its issue date was not checked. It is outside A663;
    Task 2.6 adds it to the backlog as a question to check, not as a defect.
 
-The spec's own claim about art. 6.2.c — that the amount column, being each item's amount before VAT,
-already gives each item's base — is consistent with the quoted words.
+Art. 6.2.c (each item's base when several rates apply) is met by the full invoice's table: each
+item's base is its amount less its discount row, and the base per rate prints below (Part 2, "The
+rule this part builds"). (Revised 2026-10-15: the spec's claim that the amount column alone gives
+each item's base stopped being true once the owner's Q5 answer put the amount before the
+discount.)
 
 ---
 
@@ -1243,10 +1246,11 @@ figures.
 
 ### The rule this part builds
 
-For a dish group whose every line has `net`, each line gets three figures, all before VAT:
+For a dish group whose every line has `net`, each line gets four cells, the figures all before VAT:
 
-1. **Amount** (Importe): `baseFromGross(listGross, rate)` when the line has a `listGross`, else
-   the filed `net.base`. `baseFromGross` is the one function the sale itself used
+1. **Amount** (Importe): `baseFromGross(listGross, rate)` when the line has a `listGross`, except a
+   line under one priced unit (point 2) or one point 3 sends back to its filed figures; else the
+   filed `net.base`. `baseFromGross` is the one function the sale itself used
    (`pricing.ts:80-84`, today private to `@waitron/catalogue`; Task 2.3a exports it rather than
    copying it).
 2. **Price** (Precio): the filed `net.unitPrice` when the line has no `listGross`. When it has one
@@ -1261,7 +1265,6 @@ For a dish group whose every line has `net`, each line gets three figures, all b
    price per kilo cannot be recovered, so that line prints its filed price and base, and no discount
    of its own (owner question Q9). The price is per the line's price quantity, with nothing after
    it: an extra priced 1,24 per 0.05 portion prints «1,24» (owner, Q4).
-
    ```python
    from decimal import Decimal as D, ROUND_HALF_UP
    import random
@@ -1272,8 +1275,21 @@ For a dish group whose every line has `net`, each line gets three figures, all b
        if total and (total / n).quantize(cent, ROUND_HALF_UP) != u: wrong[n >= 1] += 1
    print(wrong)
    ```
-3. **Discount**: amount − filed `net.base`. Never negative: a list total is never below the
-   charged total, and `baseFromGross` never decreases as its input grows.
+3. **Discount**: amount − filed `net.base`. On a till-filed line it is never negative: a list total
+   is never below the charged total, and `baseFromGross` never decreases as its input grows. A line
+   whose stored figures disagree (a list total of 10,00 € at 21% beside a filed base of 9,50 would
+   give 8,26 − 9,50 = −1,24 and print «--1,24») prints its filed price and base and no discount of
+   its own, as point 2's short weighed line does.
+4. **Units** (Uds) for a line whose price quantity is not 1 (an extra priced per portion): the
+   number of portions, quantity ÷ priceQuantity, as a bare count. The sale line stores the portion
+   times the picks (`physicalQuantity`, `apps/server/src/modifier-selection.ts:120-121`, multiplied
+   by the dish quantity in `grossBasketWithOptions`, `packages/catalogue/src/pricing.ts:319-323`),
+   so two 0.05 kg portions are stored as 0.100: the row prints «2 · Queso extra · 1,24 · 2,48», which
+   adds up, where «0.100 kg» beside a price per 0.05 would not. When the division is not a whole
+   number (an extra on a weighed dish of 0.35 kg would store 0.35 × the portion; a hand-built test
+   line can store anything), the cell falls back to the quantity and unit name as for
+   any other line (`quantityText`, Task 2.3a). This follows the owner's Q4 answer, «we don't need
+   the portion size».
 
 So each line comes to its filed base exactly, and the table comes to the record's base, rate by
 rate, on every till path (measured above). **The totals section always prints the record's
@@ -1499,19 +1515,25 @@ discount row was computed the same way while revising: `"".rjust(3) + " " + "  D
 - [ ] **Step 3:** Implement `tableLines` with `wrapText` from `@waitron/printing`.
 - [ ] **Step 4:** Run — PASS. **Commit.**
 
-### Task 2.3: The full invoice's figures, layout and units (four dispatches: 2.3a–2.3d)
+### Task 2.3: The full invoice's figures, layout and units (five dispatches: 2.3a–2.3d)
 
-Four implementer dispatches, in order: **2.3a** the before-VAT figures and the bare count as pure
-functions; **2.3b** the full invoice's layout and its own tests; **2.3c** the other suites it
-ripples into and the saved `.bin` files; **2.3d** the bare count on the simplified receipt and its
-ripple. 2.3b's commit leaves the suites 2.3c updates failing on purpose; 2.3c is dispatched
-straight after it.
+Five implementer dispatches, in order: **2.3a** the before-VAT figures and the bare count as pure
+functions; **2.3b** the full invoice's layout and its own tests; **2.3c-1** the paper and A4 suites
+it ripples into and the saved `.bin` files; **2.3c-2** the database and API suites it ripples into;
+**2.3d** the bare count on the simplified receipt and its ripple. 2.3b's commit leaves the suites
+2.3c-1 and 2.3c-2 update failing on purpose; they are dispatched straight after it, and the branch
+is green again only after 2.3c-2.
 
 #### Task 2.3a: Before-VAT figures and the bare count (pure functions)
 
 **Files:**
 - Modify: `packages/catalogue/src/pricing.ts:80-84` (export `baseFromGross`; nothing else changes
   there — `@waitron/catalogue`'s index already re-exports `pricing.ts`)
+- Modify: `apps/server/scripts/demo-seed/seed-sales.ts:130-133`: delete its own copy of
+  `baseFromGross` and the comment calling the catalogue's "package-private"; import it from
+  `@waitron/catalogue` (the file already imports from there, `:26`), and change "from
+  `baseFromGross` above" in the comment at `:135-136` to "from `baseFromGross`". Remove any import
+  the deleted copy leaves unused (`HUNDRED` if nothing else reads it).
 - Create: `apps/server/src/invoice-figures.ts`
 - Test: `apps/server/src/invoice-figures.test.ts`
 
@@ -1529,28 +1551,34 @@ export function beforeVatFigures(line: FiledLine): { price: Decimal; amount: Dec
 export interface GroupDiscount {
   /** The lines' `net.rate`, as filed. */
   rate: string;
-  /** The group's discounts before VAT at this rate, added; never zero (a zero prints no row). */
+  /** The `discount` of `beforeVatFigures` for the group's lines at this rate, added; never zero
+   *  (a zero prints no row). */
   amount: Decimal;
   /** Every line of the group at this rate has a filed base of zero. */
   comp: boolean;
   /** The adjustment whose words name the row, or null for plain «Descuento». */
   named: ReceiptAdjustment | null;
 }
-/** One entry per rate the group's lines carry, in the order the rates first appear. Every line of
- *  `group` must have `net`. `billAdjustments` and `invoiceHasLineAdjustments` choose `named`. */
+/** One entry per rate the group's lines carry, in the order the rates first appear, rates grouped
+ *  with `compareDecimal` ("10" and "10.00" are one rate). Every line of `group` must have `net`.
+ *  `billAdjustments` and `invoiceHasLineAdjustments` choose `named`. */
 export function groupDiscounts(
   group: LineGroup,
   billAdjustments: readonly ReceiptAdjustment[],
   invoiceHasLineAdjustments: boolean,
 ): GroupDiscount[];
-/** "4" for a count in the Each unit or a line with no unit; "0.35 kg" for any other unit. */
+/** "4" for a count in the Each unit or a line with no unit; "2" for two portions of an extra
+ *  priced per portion; "0.35 kg" for any other unit. */
 export function quantityText(
-  line: Pick<TillSaleLine, "quantity" | "unitName" | "soldInEach">,
+  line: Pick<TillSaleLine, "quantity" | "unitName" | "soldInEach" | "net">,
   namesLocale: string,
 ): string;
 ```
 
-`quantityText` prints the bare quantity when the line has no unit name, when `soldInEach` is
+`quantityText` first handles a line whose `net.priceQuantity` is not 1 (`compareDecimal`): when
+`divideDecimal(quantity, priceQuantity, 3)` is a whole number it prints that number of portions
+bare, trimmed with `trimQuantityForDisplay` («2»); when it is not, it carries on as below. It
+prints the bare quantity when the line has no unit name, when `soldInEach` is
 true, or when any stored entry of `unitName` is `EACH_UNIT.abbreviation` in that entry's language
 (`Object.entries(unitName).some(([language, text]) => EACH_UNIT.abbreviation[language.split("-")[0]!] === text)`;
 a sale line's unit name is stored under one content-language code, `working-order.ts:800-802`).
@@ -1614,6 +1642,12 @@ describe("beforeVatFigures", () => {
     // S1's Jamón: 0.123 kg at 24,00 €/kg; 2,95 ÷ 0.123 would give 23,98 a kilo, not 24,00.
     expect(beforeVatFigures(filed({ quantity: "0.123", gross: "2.66", listGross: "2.95", net: net("19.69", "2.42", "10.00") })))
       .toEqual({ price: "19.69", amount: "2.42", discount: "0.00" });
+  });
+
+  it("prints the filed figures, and no discount, when the list total would leave a negative one", () => {
+    // 10,00 ÷ 1,21 = 8,26, below the filed base 9,50: a row would read «--1,24».
+    expect(beforeVatFigures(filed({ gross: "11.50", listGross: "10.00", net: net("9.50", "9.50", "21.00") })))
+      .toEqual({ price: "9.50", amount: "9.50", discount: "0.00" });
   });
 
   it("prices an extra per its portion (owner, Q4)", () => {
@@ -1684,6 +1718,16 @@ describe("quantityText", () => {
   ])("prints %j as %s", (line, expected) => {
     expect(quantityText(line, "es-ES")).toBe(expected);
   });
+
+  it("counts an extra priced per portion in portions, and falls back when that is not whole", () => {
+    const portion = (quantity: string) => ({
+      quantity,
+      unitName: { es: "kg" },
+      net: net("1.24", "2.48", "21.00", "0.050"),
+    });
+    expect(quantityText(portion("0.100"), "es-ES")).toBe("2");
+    expect(quantityText(portion("0.075"), "es-ES")).toBe("0.075 kg");
+  });
 });
 ```
 
@@ -1696,7 +1740,7 @@ alone is 7,44 − 6,69 = 0,75. Re-run any figure you doubt the same way before t
 
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/invoice-figures.test.ts` — FAIL (module missing).
 - [ ] **Step 3:** Export `baseFromGross` from `pricing.ts`; implement the three functions.
-- [ ] **Step 4:** Run it again — PASS; then `pnpm --filter @waitron/catalogue exec vitest run src/pricing.test.ts && pnpm --filter @waitron/catalogue exec tsc --noEmit && pnpm --filter @waitron/server exec tsc --noEmit` — PASS. **Commit.**
+- [ ] **Step 4:** Run it again — PASS; then `pnpm --filter @waitron/catalogue exec vitest run src/pricing.test.ts && pnpm --filter @waitron/catalogue exec tsc --noEmit && pnpm --filter @waitron/server exec tsc --noEmit && pnpm exec eslint apps/server/scripts/demo-seed/seed-sales.ts apps/server/src/invoice-figures.ts` — PASS. **Commit.**
 
 #### Task 2.3b: The full invoice's heading, customer block, table and totals
 
@@ -1723,8 +1767,9 @@ the roll renderer calls `tableLines` and the A4 page lays out real columns (Task
   `groupDiscounts` entry: `{ units: "", item, itemIndent: 2, price: "", amount: "-" +
   formatAmount(amount), rate }`, where `item` is `label.comp` when `comp`, else
   `adjustmentLabel(named)` when `named`, else `label.discount`. Otherwise the group prints as "A
-  dish group with a line that has no `net`" says. The table's `withRate` is true when its lines
-  carry more than one distinct rate. After the items, `text(label.pricesExcludeVat, 4)` when a
+  dish group with a line that has no `net`" says. `withRate` is decided once for the whole invoice
+  and given to every table on it: true when the lines with `net` carry more than one distinct rate,
+  rates compared with `compareDecimal`, never as strings (fixtures write both "10" and "10.00"). After the items, `text(label.pricesExcludeVat, 4)` when a
   table was printed; then the bill's adjustments only when no line has `net`.
 - Totals section: for each entry of `result.vatBreakdown`, `row(\`${label.taxableBase} ${rate}\`,
   formatMoney(base))` and `row(\`${label.vat} ${rate}\`, formatMoney(tax))`; then a rule; then
@@ -1832,7 +1877,7 @@ it("prints an extra priced per portion at its price per portion and nothing afte
     net: { unitPrice: "1.24", priceQuantity: "0.050", base: "2.48", tax: "0.52", rate: "21" },
   });
   const rows = tableOf(buildReceiptDocument(input)).rows;
-  expect(rows.find((r) => r.item === "Queso extra")).toMatchObject({ itemIndent: 2, price: "1,24", amount: "2,48" });
+  expect(rows.find((r) => r.item === "Queso extra")).toMatchObject({ units: "2", itemIndent: 2, price: "1,24", amount: "2,48" });
   expect(rows.some((r) => r.price.includes("/"))).toBe(false);
 });
 
@@ -1894,26 +1939,82 @@ below it (`:74-111`), change `"Base 21%"`/`"Base 17,5%"`/`"Base 10%"` to «Base 
 - [ ] **Step 3:** Implement as described. Add the `table` case to `receipt-ticket.ts` and the
   temporary one to `invoice-page.ts`, and a `receipt-ticket.test.ts` case that a full invoice's
   printed lines (`printedLines`) contain the 80 mm table's header and its first row.
-- [ ] **Step 4:** Run `receipt-document.test.ts`, `receipt-ticket.test.ts`, `receipt-table.test.ts`
-  and `invoice-figures.test.ts` — PASS. **Commit**, naming in the message the suites left failing
-  for Task 2.3c.
+- [ ] **Step 4:** Run `pnpm --filter @waitron/server exec vitest run src/receipt-document.test.ts src/receipt-table.test.ts src/invoice-figures.test.ts`
+  and, for the new roll-paper case only, `pnpm --filter @waitron/server exec vitest run src/receipt-ticket.test.ts -t "<its title>"`
+  — PASS. The rest of `receipt-ticket.test.ts` and the suites listed in Tasks 2.3c-1 and 2.3c-2
+  stay red until those tasks; do not fix them here. **Commit**, naming in the message the suites
+  left failing for 2.3c-1 and 2.3c-2.
 
-#### Task 2.3c: The suites the full invoice's layout ripples into
+#### Task 2.3c-1: The paper and A4 suites the full invoice's layout ripples into
 
-**Files:** the receipt suites (Global Constraints, "Running the receipt suites"); expect updates in
-`invoice-pdf.test.ts` (`:73-75`), `invoice-language.test.ts` (`:17-19`, `:35`, `:51`, `:67`),
-`till-api.fiscal-sale-paths.test.ts`, `till-sale-integrated.db.test.ts`, and the three "Factura
-completa" assertions (`bill-payments.test.ts`, `orders-invoice-deliveries.test.ts`,
-`till-api.deliveries.test.ts`), which now look for «FACTURA» and the invoice number. Regenerate
-`apps/server/src/testing/full-invoice-58mm.bin` and `full-invoice-80mm.bin`.
+Found 2026-10-15 with
+`/usr/bin/grep -n -E 'Factura completa|fullInvoice|Precio sin IVA|IVA incluido\)|Base [0-9,]+%|€ / [0-9]|"Factura"|\["Fecha"|FULL_INVOICE|full-invoice-(58|80)mm|Oinarria|Base 1' apps/server/src/*.test.ts`
+(run from the worktree root), then sorted by whether the file opens a database (`useVenueDb`).
+These open none. A `Base N%` hit on a simplified receipt with several rates keeps «Base»; only a
+full invoice's changes to «Base imponible».
 
-- [ ] **Step 1:** Run the receipt suites; list each failure.
+**Files:**
+- `apps/server/src/receipt-ticket.test.ts`, the full-invoice cases: "prints saved issue offset
+  $offset …" (`:126`), "prints the saved operation day in $locale …" (`:170`), "identifies
+  VAT-inclusive F1 reductions …" (`:245`, its «(IVA incluido)» rows), "prints VAT beside each F1
+  dish and extra …" (`:308-357`, reads up to «Base 21%» at `:354`), "keeps the F2 gross layout even
+  when net facts are present" (`:360-381`, its «Factura completa»/«Precio sin IVA» absence checks
+  stay true), "labels F1 net lines in %s without changing a sub-unit price quantity" (`:384-418`,
+  pins «2,50 € / 0.1 kg» at `:417` for 0.32 kg of jamón priced per 0.100 kg: 0.32 ÷ 0.100 is
+  3.2 portions, not whole, so the row reads «0.32 kg Jamón 2,50 8,00» — the quantity and unit
+  kept, the price alone, owner Q4; assert that row and that no «/» prints), "prints the filed combined quantity for an F1 extra …" (`:422-454`, «Precio sin IVA
+  2,00 € / 1» at `:454`), "prints distinct F1 net prices and weighted price quantities …"
+  (`:458-497`, `:485-493`), the two F1 address cases (`:501`, `:541`), "emits the mandated
+  elements in the art. 7.1 order" (`:1009-1028`, check whether it is F1), "prints every fixed word
+  in $locale" (`:2483-2494`, its `full` invoice), "keeps the goods, the VAT breakdown and the total
+  in left-aligned columns" (`:2830-2843`), and "puts one blank line above and below the logo on
+  $name" (`:2964-2969`, the full-invoice case expects «Factura completa» before the logo: the
+  logo now opens the business block with nothing of the invoice's above it, so `before` becomes
+  `[]`).
+- `apps/server/src/invoice-pdf.test.ts`: "carries the saved identity, dates, discounted amounts
+  and cent-exact VAT summary" (`:50-78`: «Factura FF/1» and «Fecha 18 ago 2026, 0:34» at `:69-70`,
+  and `:73-75`), and "leaves half a line above and below a drawn logo …" (`:451-460`, expects
+  «Factura completa» just before the logo at `:457`).
+- `apps/server/src/invoice-language.test.ts` (`:15-19`, `:31-35`, `:47-51`, `:65-67`; it reads only
+  the fixture, through the PDF).
+- `apps/server/src/invoice-raster.test.ts` and `apps/server/src/receipt-styles.test.ts` (both use
+  the fixture; run them, change only what fails).
+- Regenerate `apps/server/src/testing/full-invoice-58mm.bin` and `full-invoice-80mm.bin`.
+
+Command: `pnpm --filter @waitron/server exec vitest run src/receipt-ticket.test.ts src/invoice-pdf.test.ts src/invoice-language.test.ts src/invoice-raster.test.ts src/receipt-styles.test.ts src/receipt-document.test.ts`
+
+- [ ] **Step 1:** Run the command; list each failure.
 - [ ] **Step 2:** Update each assertion's WHERE or HOW, never the fact it checks (a «Precio sin
   IVA 10,00 € / 1» check becomes the table row; «Descuento 10% (IVA incluido) -1,21 €» becomes
-  «Descuento 10% -1,00»; «Base 21% 9,00 €» becomes «Base imponible 21% 9,00 €»).
-- [ ] **Step 3:** Regenerate the `.bin` files; run the receipt suites — PASS (read the `Tests` count).
+  «Descuento 10% -1,00»; «Base 21% 9,00 €» becomes «Base imponible 21% 9,00 €»; «Factura FF/1»
+  becomes «FACTURA FF/1»).
+- [ ] **Step 3:** Regenerate the `.bin` files; run the command — PASS (read the `Tests` count).
 - [ ] **Step 4: Commit**, the message naming each changed assertion and listing the decoded text
   of the `.bin` files before and after (`printedLines`).
+
+#### Task 2.3c-2: The database and API suites the full invoice's layout ripples into
+
+The same grep's files that open a database, plus the suites that file real full invoices and read
+them back (the earlier plan named them; the grep finds no layout string in the last two, so expect
+few or no changes there):
+
+**Files:**
+- `apps/server/src/bill-payments.test.ts:1325`, `orders-invoice-deliveries.test.ts:1000`,
+  `till-api.deliveries.test.ts:960` — «Factura completa» becomes «FACTURA» and the invoice number.
+- `apps/server/src/page-print-api.test.ts` (`:1027-1030` render the fixture), `invoice-email.test.ts`
+  and `invoice-delivery.test.ts` (both import the fixture).
+- `apps/server/src/receipt-print.test.ts`, `receipt-language.test.ts`,
+  `receipt-adjustments.test.ts` (its F1 case, `:99-181`, reads net figures only),
+  `till-api.fiscal-sale-paths.test.ts`, `till-sale-integrated.db.test.ts`.
+
+Command: `pnpm --filter @waitron/server exec vitest run src/bill-payments.test.ts src/orders-invoice-deliveries.test.ts src/till-api.deliveries.test.ts src/page-print-api.test.ts src/invoice-email.test.ts src/invoice-delivery.test.ts src/receipt-print.test.ts src/receipt-language.test.ts src/receipt-adjustments.test.ts src/till-api.fiscal-sale-paths.test.ts src/till-sale-integrated.db.test.ts`
+(check `memory_pressure | grep free` first), then the whole receipt-suite command from Global
+Constraints, which must be green before the commit.
+
+- [ ] **Step 1:** Run the command; list each failure.
+- [ ] **Step 2:** Update each failing assertion's WHERE or HOW, keeping the fact it checks.
+- [ ] **Step 3:** Run the command, then the receipt-suite command — PASS (read each `Tests` count).
+- [ ] **Step 4: Commit**, naming each changed assertion.
 
 #### Task 2.3d: A bare count on the simplified receipt (owner, Q8)
 
@@ -2063,7 +2164,9 @@ existing A4 check: the QR first and 35 mm, the logo, pagination without clipping
   addresses match, one whose addresses differ, one whose domicile is the venue's address with a
   province added («Avinguda d'Icària 215, Bajos, 08005 Barcelona (Barcelona)»), a two-rate full
   invoice with a whole-bill discount (S5's figures), the owner's menu del día (one 10,00 € menu at
-  10% less 10%), one holding a weighed line («0.35 kg», `unitName: { es: "kg" }`) beside counted
+  10% less 10%), a comped weighed line of under one kilo (owner question Q9's gap: it prints «0,00
+  0,00» and no «Invitación»), an extra priced per portion (units «2», price «1,24»), one holding a
+  weighed line («0.35 kg», `unitName: { es: "kg" }`) beside counted
   lines (`unitName: { es: "ud" }`), and a simplified receipt with the same counted and weighed
   lines; run it; open every 58 mm, 80 mm and A4 picture and the PDF. Check the table columns line
   up, the discount rows sit in the amount column, the 58 mm two-rate invoice and the 58 mm invoice
@@ -2355,7 +2458,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 
 ## Self-review (done while writing)
 
-- Spec coverage: point 1 → Tasks 1.4 (Part 1a), 1.5 and 1.6 (Part 1b); point 2 → 2.3a–2.3c, 2.5,
+- Spec coverage: point 1 → Tasks 1.4 (Part 1a), 1.5 and 1.6 (Part 1b); point 2 → 2.3a–2.3c-2, 2.5,
   2.6 (operation date pinned); point 3 → 2.4; point 4 → 2.3b (the line it applies to is replaced;
   Q4); the owner's Q8 answer → 2.3a and 2.3d;
   point 5 → 1.3 (on paper and A4; the till's on-screen copy is a follow-up, Task 1.8); point 6 →
@@ -2373,7 +2476,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 ## Owner questions
 
 Answer by quoting the question number. Q4, Q5, Q7 and Q8 were answered on 2026-10-15 and Part 2
-builds the answers; Part 2 builds Q9's and Q10's defaults unless told otherwise; Part 3 can be
+builds the answers; Part 2 builds Q9's, Q10's and Q11's defaults unless told otherwise; Part 3 can be
 built on Q2's default; Q1, Q3 and Q6 were for Part 4, which the owner withdrew on 2026-10-15.
 
 **Q1 — How does the till know a product is a drink?** (Part 4 withdrawn 2026-10-15; no answer needed.)
@@ -2422,7 +2525,12 @@ to read that row.
 **Q4 — The "/ 4" on today's full invoice, and an extras portion's price.** ANSWERED 2026-10-15:
 «just the price per portion, we don't need the portion size». Part 2 prints «1,24» in the price
 column for an extra priced 1,24 € per 0.05 portion — no «/0.05», no unit, no conversion — and no
-"/ N" after any price (Task 2.3a's `beforeVatFigures`, Task 2.3b). The question as asked:
+"/ N" after any price (Task 2.3a's `beforeVatFigures`, Task 2.3b). Decided with it (review,
+2026-10-15): the till stores such an extra's quantity as portions × portion size (two 0.05 kg
+portions are stored as 0.100), so its units cell prints the number of portions, «2», and the row
+reads «2 Queso extra 1,24 2,48», which adds up; «0.100 kg» beside a price per 0.05 would not. When
+the stored quantity is not a whole number of portions, the cell keeps the quantity and unit as
+before (Task 2.3a's `quantityText`). The question as asked:
 The spec asks for "17,50 € × 2" instead of "17,50 € / 2". The number after "/" is not how many were
 sold: it is the quantity the price is FOR (`sale_lines.price_quantity`, printed at
 `apps/server/src/receipt-document.ts:133`), so "× 2" would be wrong. On a real sale it is 1 for
@@ -2452,7 +2560,8 @@ simplified receipt already prints the item and the discount with VAT (`receipt-d
 166-170, 245-251`; `receipt-adjustments.test.ts` "prints a paid bill's comp, percentage off a line
 and discount on the bill, adding up" prints «Rioja crianza 30,00» then «Descuento 20% -6,00»,
 passing 2026-10-15), and its one-rate «IVA 10% incluido» row from Part 1b stays (RD 1619/2012 art.
-7.1.f; the approved mockup), so it does not print the base on a one-rate receipt. Your example
+7.1.f; the approved mockup), so it does not print the base on a one-rate receipt — which differs
+from your simplified example; see Q11. Your example
 works out exactly: the till files the 10,00 € menu less 10% as base 8,18 and VAT 0,82, and the
 full invoice prints «1 Menú del día 9,09 9,09», «Descuento 10% -0,91», «Base imponible 10% 8,18 €»,
 «IVA 10% 0,82 €» (measured, Part 2 "The table's figures").
@@ -2510,6 +2619,10 @@ discount row of its own** — every figure on it is one the till stored, and art
 because the discount is inside that price. Alternative: store each line's price before any
 discount when the invoice is issued, so this line too prints «21,82 2,68» and «Descuento -0,26»;
 that is a new stored fact on every sale line (a database change), so it is yours to approve.
+The same default has one visible gap: such a weighed line that was **comped** (given free) prints
+«0,00 0,00» and no «Invitación» row, because what it was worth before the invitation is only
+recoverable from the stored total, which the default does not use below one kilo. It is in Task
+2.6's LOOK so you can see it; storing the price before any discount would close it too.
 
 **Q10 — A discount on the whole bill, on a full invoice.** (Part 2 builds the default unless told
 otherwise.)
@@ -2522,3 +2635,26 @@ at its rate.** Example, measured: a 30,00 € Rioja (21%) and a 2,50 € bread (
 the table («Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%»), as the receipt prints the bill
 discount once today. That reads more like the till, but when a dish also has its own discount the
 two cannot be told apart in what the till stores, so that dish's row would then hold both.
+
+**Q11 — The VAT lines on a one-rate simplified receipt.** (Part 2 builds the default unless told
+otherwise; nothing in Part 2 changes these lines.)
+Your Q5 answer wrote the simplified receipt as «menu 10 / discount 10% 1.00 / base imponible: 8,18
+/ iva: 0.82». The receipt you approved on 2026-10-14 (`1-simplified-receipt.png`), built in Part
+1b, prints one line instead when every item has the same VAT rate. Both are legal: RD 1619/2012
+art. 7.1.f asks a simplified invoice for the rate and, optionally, «IVA incluido», and for the base
+per rate only when it mixes rates. Default, as approved and built: **one line**.
+```
+1 Menú del día                 10,00
+  Descuento 10%                -1,00
+TOTAL                         9,00 €
+IVA 10% incluido              0,82 €
+```
+Alternative, as your Q5 example reads: **the base and the VAT**, as a full invoice prints them.
+```
+1 Menú del día                 10,00
+  Descuento 10%                -1,00
+TOTAL                         9,00 €
+Base imponible 10%            8,18 €
+IVA 10%                       0,82 €
+```
+A receipt with two rates already prints the base and the VAT for each rate either way.
