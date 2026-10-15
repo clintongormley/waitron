@@ -67,27 +67,26 @@ export class RoutingCellEditor extends LitElement {
       }
       .form {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
       }
       .line {
         display: grid;
-        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) auto;
-        gap: var(--wt-space-3);
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        row-gap: var(--wt-space-3);
         align-items: start;
       }
       .line wt-button {
         margin-block-start: var(--wt-space-2);
       }
-      @media (max-width: 40rem) {
-        .line {
-          grid-template-columns: minmax(0, 1fr) auto;
-          padding-inline-start: var(--wt-space-3);
-          border-inline-start: 2px solid var(--wt-color-border);
-        }
-        .line wt-combobox:first-child {
-          grid-column: 1 / -1;
-        }
+      .form > wt-combobox {
+        grid-column: 1 / 3;
+      }
+      .form > .note,
+      .form > .add {
+        grid-column: 1 / -1;
       }
       .note,
       .warning {
@@ -630,7 +629,7 @@ export class RoutingCellEditor extends LitElement {
           )}
           <wt-combobox
             name="target"
-            label=${t("routing.any_other_time")}
+            label=${t(this.draft.lines.length === 0 ? "routing.line_station" : "routing.any_other_time")}
             required
             search="never"
             .value=${this.draft.target}
