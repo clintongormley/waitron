@@ -149,3 +149,10 @@ export type {
   PayPeriodClosureView,
   TimeRecord,
 } from "./record-types.js";
+export { projectCorrectionItems } from "./attendance-responses.js";
+export type {
+  AttendanceChange,
+  AttendanceCommandPayload,
+  AttendanceResponseReceipt,
+  CorrectionItem,
+} from "./attendance-contract.js";

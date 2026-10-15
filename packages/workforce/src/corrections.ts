@@ -112,6 +112,72 @@ function validateSequence(entries: readonly TimeEntryRecord[]): void {
     }
   }
 }
+export function correctionGroupCanApply(
+  entries: readonly TimeEntryRecord[],
+  requests: readonly TimeEntryRecord[],
+): boolean {
+  const first = requests[0];
+  if (
+    !first ||
+    requests.length > 2 ||
+    new Set(requests.map((r) => r.entryId)).size !== requests.length
+  )
+    return false;
+  if (
+    requests.some(
+      (r) =>
+        r.entryKind !== "correction" ||
+        r.correctionStatus !== "requested" ||
+        r.personId !== first.personId ||
+        r.locationId !== first.locationId ||
+        r.extension?.direction !== first.extension?.direction ||
+        entries.some(
+          (e) =>
+            e.personId === r.personId &&
+            e.locationId === r.locationId &&
+            e.entryKind === "correction" &&
+            e.extension?.respondsToEntryId === r.entryId,
+        ),
+    )
+  )
+    return false;
+  if (requests.length === 2) {
+    const [start, end] = [...requests].sort(compareEvents);
+    if (
+      requests.some((r) => r.correctsEntryId) ||
+      start!.eventAt >= end!.eventAt ||
+      !(
+        (start!.extension?.missingEntryKind === "in" &&
+          end!.extension?.missingEntryKind === "out") ||
+        (start!.extension?.missingEntryKind === "break_start" &&
+          end!.extension?.missingEntryKind === "break_end")
+      )
+    )
+      return false;
+  }
+  const effective = effectiveClockEntries(entries).filter((e) => e.personId === first.personId);
+  const targets = new Set<string>();
+  const additions: TimeEntryRecord[] = [];
+  for (const request of requests) {
+    const target = request.correctsEntryId
+      ? effective.find(
+          (e) => e.entryId === request.correctsEntryId && e.locationId === request.locationId,
+        )
+      : undefined;
+    if (request.correctsEntryId && (!target || targets.has(request.correctsEntryId))) return false;
+    const kind = target?.entryKind ?? request.extension?.missingEntryKind;
+    if (!kind) return false;
+    if (target) targets.add(target.entryId);
+    additions.push({ ...request, entryKind: kind });
+  }
+  try {
+    validateSequence([...effective.filter((e) => !targets.has(e.entryId)), ...additions]);
+    return true;
+  } catch (error) {
+    if (error instanceof AppError && error.code === "correction.invalid") return false;
+    throw error;
+  }
+}
 function validateChange(
   entries: readonly TimeEntryRecord[],
   change: TimeEntryRecord,
@@ -145,6 +211,7 @@ function validateChange(
           (e) =>
             e.entryKind === "correction" &&
             e.correctionStatus === "requested" &&
+            !entries.some((answer) => answer.extension?.respondsToEntryId === e.entryId) &&
             e.personId === change.personId &&
             e.locationId === change.locationId &&
             !e.correctsEntryId &&

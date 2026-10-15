@@ -66,6 +66,7 @@ describe("the public surface", () => {
         "validateRoster",
         "comparePlannedVsActual",
         "projectWorkSessions",
+        "projectCorrectionItems",
         "projectTimeRecord",
         "summarisePeriod",
         "dailyContractedTargetMinutes",
