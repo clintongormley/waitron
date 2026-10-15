@@ -1,4 +1,6 @@
 export { WORKFORCE_MIGRATIONS } from "./migrations.js";
+export { executeAttendanceCommand, readAttendanceCommand } from "./attendance-response-commands.js";
+export { reconcileAttendanceResponses } from "./attendance-question-responses.js";
 export {
   attendanceDayWork,
   attendanceSourceState,
@@ -153,6 +155,8 @@ export { projectCorrectionItems } from "./attendance-responses.js";
 export type {
   AttendanceChange,
   AttendanceCommandPayload,
+  AttendanceCommand,
+  AttendanceCommandResult,
   AttendanceResponseReceipt,
   CorrectionItem,
 } from "./attendance-contract.js";

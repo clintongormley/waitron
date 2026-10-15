@@ -1,9 +1,14 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertAttendanceDay } from "./attendance-state.js";
 import type { AttendanceQuestion } from "./attendance-types.js";
 import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
+import { cancelUnclaimedAttendanceMail as cancelUnclaimed } from "./attendance-mail.js";
+import { answerForQuestion } from "./attendance-question-responses.js";
+import { readRecordedEntries } from "./record-reads.js";
+import { attendanceResponseCommands } from "./schema/attendance-responses.js";
+import { projectCorrectionItems } from "./attendance-responses.js";
 import "./errors.js";
 
 type QuestionRow = typeof attendanceQuestions.$inferSelect;
@@ -64,18 +69,6 @@ async function canonicalQuestion(tx: Transaction, id: string): Promise<QuestionR
     if (row.canonicalQuestionId === null) return row;
     next = row.canonicalQuestionId;
   }
-}
-
-async function cancelUnclaimed(tx: Transaction, questionId: string): Promise<void> {
-  await tx
-    .update(attendanceMail)
-    .set({ status: "cancelled" })
-    .where(
-      and(
-        eq(attendanceMail.questionId, questionId),
-        inArray(attendanceMail.status, ["pending", "rejected"]),
-      ),
-    );
 }
 
 async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Promise<void> {
@@ -183,7 +176,16 @@ export async function listPendingAttendanceQuestions(
       asc(attendanceQuestions.startAt),
       asc(attendanceQuestions.id),
     );
-  return rows.map(asQuestion);
+  const entries = await readRecordedEntries(tx, { personId });
+  const commands = await tx
+    .select()
+    .from(attendanceResponseCommands)
+    .where(eq(attendanceResponseCommands.personId, personId));
+  const items = projectCorrectionItems(entries, commands);
+  return rows.map((row) => ({
+    ...asQuestion(row),
+    missingKinds: answerForQuestion(row, entries, commands, items).missingKinds,
+  }));
 }
 
 export async function mergeAttendanceQuestions(

@@ -24,6 +24,15 @@ export type AttendanceCommandPayload =
     }
   | { action: "approve" | "decline" | "accept"; itemId: string }
   | { action: "disagree"; itemId: string; reason: string };
+export type AttendanceCommand = AttendanceCommandPayload & {
+  commandId: string;
+  expectedRevision: string;
+};
+export interface AttendanceCommandResult {
+  commandId: string;
+  entryIds: string[];
+  replayed: boolean;
+}
 export interface AttendanceResponseReceipt {
   id: string;
   requestedByPersonId: string;
