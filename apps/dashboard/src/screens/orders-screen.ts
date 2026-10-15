@@ -188,7 +188,12 @@ export class OrdersScreen extends LitElement {
     return row.kind === "bill" && row.invoiceNumber !== null && row.invoiceType !== "F1";
   }
 
-  #openPrint(row: OrderRowDto | null, mode: "receipt" | "invoice"): void {
+  /** The row carries no delivery status, so its menu cannot tell a copy; the dialog's heading does. */
+  #mayPrintInvoice(row: OrderRowDto): boolean {
+    return row.kind === "bill" && row.invoiceNumber !== null && row.invoiceType === "F1";
+  }
+
+  #openPrint(row: OrderRowDto, mode: "receipt" | "invoice"): void {
     this.reprintMode = mode;
     this.reprintRow = row;
   }
@@ -273,7 +278,16 @@ export class OrdersScreen extends LitElement {
                     }}
                     >${t("orders.reprint")}</wt-button
                   >`
-                : nothing
+                : this.#mayPrintInvoice(row)
+                  ? html`<wt-button
+                      variant="secondary"
+                      @click=${(event: Event) => {
+                        event.stopPropagation();
+                        this.#openPrint(row, "invoice");
+                      }}
+                      >${t("orders.print_invoice")}</wt-button
+                    >`
+                  : nothing
             }</wt-row-actions
           >`,
       },
@@ -404,11 +418,11 @@ export class OrdersScreen extends LitElement {
         .orderId=${this.openId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
-        @order-reprint=${(event: CustomEvent<{ id: string }>) => {
-          this.#openPrint(rows.find((row) => row.id === event.detail.id) ?? null, "receipt");
+        @order-reprint=${(event: CustomEvent<{ row: OrderRowDto }>) => {
+          this.#openPrint(event.detail.row, "receipt");
         }}
-        @order-invoice-print=${(event: CustomEvent<{ id: string }>) => {
-          this.#openPrint(rows.find((row) => row.id === event.detail.id) ?? null, "invoice");
+        @order-invoice-print=${(event: CustomEvent<{ row: OrderRowDto }>) => {
+          this.#openPrint(event.detail.row, "invoice");
         }}
         @wt-close=${() => {
           this.openId = null;

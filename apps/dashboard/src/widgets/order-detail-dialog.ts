@@ -267,11 +267,12 @@ export class OrderDetailDialog extends LitElement {
     }
   }
 
-  #ask(name: "order-reprint" | "order-invoice-print"): void {
+  /** Carries the detail's row: the open bill may have left the Orders list's loaded page. */
+  #ask(name: "order-reprint" | "order-invoice-print", row: OrderRowDto): void {
     if (this.orderId === null) return;
     this.dispatchEvent(
       new CustomEvent(name, {
-        detail: { id: this.orderId },
+        detail: { id: this.orderId, row },
         bubbles: true,
         composed: true,
       }),
@@ -302,7 +303,7 @@ export class OrderDetailDialog extends LitElement {
         ? html`<wt-button
             variant="secondary"
             data-test="print-invoice"
-            @click=${() => this.#ask("order-invoice-print")}
+            @click=${() => this.#ask("order-invoice-print", detail.row)}
             >${t(
               status.actions.print.designation === "duplicate"
                 ? "orders.print_invoice_copy"
@@ -341,7 +342,7 @@ export class OrderDetailDialog extends LitElement {
           >`
         : null,
       this.mayReprint(detail.row)
-        ? html`<wt-button variant="secondary" @click=${() => this.#ask("order-reprint")}
+        ? html`<wt-button variant="secondary" @click=${() => this.#ask("order-reprint", detail.row)}
             >${t("orders.reprint")}</wt-button
           >`
         : null,

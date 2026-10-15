@@ -67,6 +67,39 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
+/** A full invoice's detail whose original went to the A4 printer, listed second. */
+function fullDetail(row: OrderRowDto) {
+  return {
+    row,
+    lines: [],
+    invoices: [],
+    tenders: [],
+    payments: [],
+    party: null,
+    departure: null,
+    reprints: [],
+    invoicePdfDownloads: [],
+    deliveries: {
+      current: null,
+      originalCompleted: true,
+      originalPrinterId: "page-1",
+      actions: {
+        retryOriginal: null,
+        print: {
+          printers: [
+            { id: "printer-1", name: "Barra", kind: "receipt" },
+            { id: "page-1", name: "Oficina", kind: "a4" },
+          ],
+          designation: "duplicate",
+        },
+        receiptInstead: null,
+        email: null,
+      },
+      history: [],
+    },
+  };
+}
+
 async function loaded(api = stubApi()) {
   const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
   await vi.waitFor(() =>
@@ -322,8 +355,8 @@ describe("dashboard Orders", () => {
 
   it.each([
     ["a simplified invoice", "F2", ["View details", "Reprint receipt"]],
-    ["a full invoice", "F1", ["View details"]],
-  ] as const)("offers the row menu's Reprint receipt only for %s", async (_name, type, labels) => {
+    ["a full invoice", "F1", ["View details", "Print invoice"]],
+  ] as const)("offers the row menu's own print action for %s", async (_name, type, labels) => {
     const row = { ...ROW, invoiceType: type };
     const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
     const { el } = await loaded(api);
@@ -392,6 +425,83 @@ describe("dashboard Orders", () => {
     );
     expect(api.getOrderPrinters).not.toHaveBeenCalled();
   });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "opens a full invoice's printer list in invoice mode from its row menu (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const full = { ...ROW, invoiceType: "F1" as const };
+      const api = stubApi({
+        listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+        getOrder: vi.fn().mockResolvedValue(fullDetail(full)),
+      });
+      const { el } = await loaded(api);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const print = table
+        .shadowRoot!.querySelector("wt-row-actions")!
+        .querySelectorAll("wt-button")[1]!;
+      expect(print.textContent?.trim()).toBe(
+        locale === "en-GB" ? "Print invoice" : "Imprimir factura",
+      );
+      print.click();
+      const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+      await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
+      expect(picker.mode).toBe("invoice");
+      await vi.waitFor(() =>
+        expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+      );
+      expect(api.getOrderPrinters).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["a full invoice's Print a copy", "F1", "[data-test=print-invoice]", "invoice"],
+    ["a simplified invoice's Reprint receipt", "F2", "wt-form-actions wt-button", "receipt"],
+  ] as const)(
+    "opens %s from the detail after a refresh took the bill off the list",
+    async (_name, type, button, mode) => {
+      const shown = { ...ROW, invoiceType: type };
+      const detail =
+        type === "F1"
+          ? fullDetail(shown)
+          : {
+              row: shown,
+              lines: [],
+              invoices: [],
+              tenders: [],
+              payments: [],
+              party: null,
+              departure: null,
+              reprints: [],
+              invoicePdfDownloads: [],
+              deliveries: null,
+            };
+      const api = stubApi({
+        listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [shown] }),
+        getOrder: vi.fn().mockResolvedValue(detail),
+      });
+      (api.background.getOrder as ReturnType<typeof vi.fn>).mockResolvedValue(detail);
+      const { el } = await loaded(api);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+      const opened = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
+      await vi.waitFor(() => expect(opened.shadowRoot!.querySelector(button)).not.toBeNull());
+      (api.background.listOrderPages as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...PAGE,
+        rows: [],
+      });
+      api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);
+      await vi.waitFor(() => expect(table.rows).toHaveLength(0));
+      opened.shadowRoot!.querySelector<HTMLElement>(button)!.click();
+      const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+      await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
+      expect(picker.row?.invoiceNumber).toBe(ROW.invoiceNumber);
+      expect(picker.mode).toBe(mode);
+      expect(picker.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    },
+  );
 
   it("opens a simplified invoice's reprint in receipt mode", async () => {
     const { el } = await loaded();
