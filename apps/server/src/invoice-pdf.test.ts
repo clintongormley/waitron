@@ -648,6 +648,13 @@ describe("A4 columns and right-aligned amounts", () => {
     expect(right(named(page!.elements, "18,00"))).toBeCloseTo(CONTENT_RIGHT, 5);
   });
 
+  it("draws no rate on a row of a table without a rate column", async () => {
+    const [page] = await layoutOf([
+      { kind: "table", table: { header, rows: [{ ...row, rate: "10%" }], withRate: false } },
+    ]);
+    expect(texts(page!.elements).map((element) => element.text)).not.toContain("10%");
+  });
+
   it("lines up a table continuing after a line printed outside it", async () => {
     const [page] = await layoutOf([
       { kind: "table", table: { header, rows: [row], withRate: false } },

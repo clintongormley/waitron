@@ -163,7 +163,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     bold: boolean,
   ): void => place(page, at, value, right - width(value, size), size, bold);
   const linesPerPage = Math.floor((INVOICE_PAGE_HEIGHT - 2 * MARGIN) / LINE_HEIGHT);
-  const tableRow = (row: ReceiptTableRow, bold: boolean): void => {
+  const tableRow = (row: ReceiptTableRow, bold: boolean, withRate: boolean): void => {
     const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
     const itemLines = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
     if (itemLines.length === 0) itemLines.push("");
@@ -179,7 +179,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     }
     placeRight(page, top, row.price, columns.priceRight, BODY_SIZE, bold);
     placeRight(page, top, row.amount, columns.amountRight, BODY_SIZE, bold);
-    placeRight(page, top, row.rate ?? "", INVOICE_PAGE_WIDTH - MARGIN, BODY_SIZE, bold);
+    if (withRate)
+      placeRight(page, top, row.rate ?? "", INVOICE_PAGE_WIDTH - MARGIN, BODY_SIZE, bold);
   };
   for (const element of document.elements) {
     const previousWasRule = afterRule;
@@ -228,8 +229,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         break;
       }
       case "table":
-        if (element.table.header) tableRow(element.table.header, true);
-        for (const row of element.table.rows) tableRow(row, false);
+        if (element.table.header) tableRow(element.table.header, true, element.table.withRate);
+        for (const row of element.table.rows) tableRow(row, false, element.table.withRate);
         break;
       case "text":
       case "amount": {
