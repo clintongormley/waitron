@@ -1708,7 +1708,7 @@ are.
 ### A737. Find a bill becomes a page with Bills and Transactions tabs
 
 Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
-☰, with Back to the counter (board 4). Part 1 covers the page, lists and receipt printing; the
+☰, with Back to the counter (board 4). [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778) covers the page, lists and receipt printing; the
 post-invoice Refund action remains Part 2. The approved page contract is:
 
 - **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,

@@ -207,7 +207,7 @@ linked to a working order retains that order's delivery controls; an orderless r
 - [x] Run `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/pinned-actions-column.test.ts`. Let normal pre-push checks run once; wait for package coverage/merge CI on the current head. No whole-workspace local run solely to finish.
 - [x] Build `pnpm --filter @waitron/till build`; use only `wa-wt demo waitron-feat-a737-find-bill-page` for a needed live stack. LOOK in Chromium: both tabs/themes, desktop/phone, zero/50/51/101 rows, filters/date chips/loading/error, receipt return, Reprint/another language, existing unpaid collector and basket-preserving Back. Check actual controls, focus, range announcements and horizontal scrolling; retain receipts/screenshots. Stop only owned processes.
 - [x] Self-review Part 1 against A737/board 4 and this split. At Part 1 delivery record the split on A737's backlog heading/root entry, remove delivered page detail as appropriate and retain a distinct short Part 2 post-invoice Refund entry linked to its plan. Do not delete all of A737 or close the payments durable-refund entry; Part 2 owns those. Do not change A738–A740 or redesign decisions.
-- [ ] Announce readiness for `finish-branch` when Part 1 acceptance/validation is complete. Assess LIGHT/FULL from Part 1's own risk under the active lane rules; Part 2's FULL/two-review requirement is not a Part 1 gate. Follow the applicable normal whole-branch review, signed-off commits, hooks and current-head CI. Open/land Part 1 independently before starting the Part 2 PR; no new confirmation is needed for the authorised native implementation. This plan author does not commit, push, change campaign state or run finish.
+- [x] Announce readiness for `finish-branch` when Part 1 acceptance/validation is complete. Assess LIGHT/FULL from Part 1's own risk under the active lane rules; Part 2's FULL/two-review requirement is not a Part 1 gate. Follow the applicable normal whole-branch review, signed-off commits, hooks and current-head CI. Open/land Part 1 independently before starting the Part 2 PR; no new confirmation is needed for the authorised native implementation. This plan author does not commit, push, change campaign state or run finish.
 
 ## Plan self-review (2026-10-15)
 
@@ -225,3 +225,7 @@ so declining a navigation request keeps the page usable. Bills switch their paid
 received bill payments to linked tenders when the sale is settled. An issued, unsettled projection
 is tested with synthetic `not_applicable` invoice data; this does not claim the till can issue
 that invoice through its currently disabled F1 action. Existing writers remain unchanged.
+
+Driver verification and the independent Claude review are complete. The normal push hook passed
+6,694 root cases with coverage and scoped types. [PR #1778](https://github.com/clintongormley/waitron/pull/1778)
+records the final-head CI and landing gates; they must pass before the authorised merge.

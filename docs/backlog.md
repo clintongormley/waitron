@@ -2161,7 +2161,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. Record the attempt before contacting the provider, keep one key per attempt, and
   recover interrupted returns. Keep the existing permission, manager-PIN, manual-terminal and
-  cash-drawer rules. The page, lists and receipt printing are Part 1.
+  cash-drawer rules. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
   [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 
