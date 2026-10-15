@@ -101,6 +101,8 @@ export interface StaffingMonth {
 }
 
 export interface RotaWeek {
+  locationId: string;
+  timeZone: string;
   week: string;
   version: { id: string; status: "draft" | "published"; changedSincePublished: boolean } | null;
   days: {
@@ -111,6 +113,7 @@ export interface RotaWeek {
     notInSlot: { shiftId: string; outsideWeek: boolean }[];
   }[];
   shifts: import("./slots.js").PlacedShift[];
+  openSwaps: { swapId: string; fromShiftId: string; toShiftId: string | null }[];
   people: {
     personId: string;
     name: string;

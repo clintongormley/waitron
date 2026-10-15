@@ -12,6 +12,12 @@ Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review 
 > publishing, changing a week and retiring the old screen. The day-length question A644 remains
 > open; part 6 keeps the existing slot limit.
 
+
+> 2026-10-15 implementation pointer: part 7 adds the person view, labour warnings and candidate
+> previews, publication, changing a published week, and a protected shift editor with swap
+> confirmations. Part 8 still retires the old Rota screen and free-text role columns. See the
+> [part 7 plan](../plans/2026-10-13-a585-staffing-and-rota.md#part-a585-7--the-rota-by-person-warnings-publish-and-change-this-week).
+
 ## Why
 
 Opening hours say when each department serves customers: the Restaurant's Lunch, say, 13:00–16:00.

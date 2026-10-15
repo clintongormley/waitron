@@ -1,3 +1,5 @@
+import type { RosterBreach } from "@waitron/workforce/roster-validation";
+import { breachText, shiftBreaches } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -116,6 +118,7 @@ export class RotaByArea extends LitElement {
     `,
   ];
   @property({ attribute: false }) week!: RotaWeek;
+  @property({ attribute: false }) breaches: RosterBreach[] = [];
   @property({ attribute: false }) area!: AreaRef;
   @property({ type: Boolean }) editable = false;
   #person(shiftId: string) {
@@ -127,21 +130,44 @@ export class RotaByArea extends LitElement {
       new CustomEvent("pick-slot", { detail: { slot }, bubbles: true, composed: true }),
     );
   }
+  #edit(shiftId: string) {
+    this.dispatchEvent(
+      new CustomEvent("edit-shift", { detail: { shiftId }, bubbles: true, composed: true }),
+    );
+  }
+  #notes(shiftId: string) {
+    return html`${this.week.openSwaps.some((s) => s.fromShiftId === shiftId || s.toShiftId === shiftId) ? html`<small>${t("staffing.shift.swap_heading")}</small>` : nothing}${shiftBreaches(this.breaches, shiftId).map((b) => html`<small>${breachText(b)}</small>`)}`;
+  }
+  #card(shiftId: string, content: unknown, kind?: string) {
+    return this.editable
+      ? html`<button
+          class="card"
+          data-shift=${shiftId}
+          data-kind=${kind ?? nothing}
+          @click=${() => this.#edit(shiftId)}
+        >
+          ${content}${this.#notes(shiftId)}
+        </button>`
+      : html`<div class="card" data-shift=${shiftId} data-kind=${kind ?? nothing}>
+          ${content}${this.#notes(shiftId)}
+        </div>`;
+  }
   #slot(slot: Slot, status: SlotStatus, cutover: string) {
     const assigned =
       status.kind === "unfilled"
         ? nothing
         : html` <strong>${this.#person(status.shiftId)}</strong>
             ${status.kind === "partly_uncovered" ? html`<small>${tf("staffing.rota.uncovered", { times: status.uncovered.map((u) => `${minuteTime(u.start, cutover)}–${minuteTime(u.end, cutover)}`).join(", ") })}</small>` : nothing}
-            ${status.outsideRole ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}`;
+            ${status.outsideRole ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}
+            ${this.#notes(status.shiftId)}`;
     const content = html`<span>${slot.startsAt}–${slot.endsAt}</span>
       ${status.kind === "unfilled" ? html`<strong>${t("staffing.rota.unfilled")}</strong>` : assigned}`;
-    return status.kind === "unfilled" && this.editable
+    return this.editable
       ? html`<button
           class="card"
           data-kind=${status.kind}
           data-slot=${slot.key}
-          @click=${() => this.#pick(slot)}
+          @click=${() => (status.kind === "unfilled" ? this.#pick(slot) : this.#edit(status.shiftId))}
         >
           ${content}
         </button>`
@@ -152,12 +178,13 @@ export class RotaByArea extends LitElement {
     return html`${day.closedAllDay ? html`<small>${t("staffing.rota.closed")}</small>` : nothing}${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => this.#slot(s.slot, s.status, day.cutover))}${match?.over
       .map((id) => this.week.shifts.find((s) => s.shiftId === id)!)
       .filter((s) => s.staffRoleId === role.id)
-      .map(
-        (s) =>
-          html`<div class="card" data-kind="over">
-            ${shiftTime(s)} <strong>${this.#person(s.shiftId)}</strong
-            ><small>${t("staffing.rota.over")}</small>
-          </div>`,
+      .map((s) =>
+        this.#card(
+          s.shiftId,
+          html`${shiftTime(s)} <strong>${this.#person(s.shiftId)}</strong
+            ><small>${t("staffing.rota.over")}</small>`,
+          "over",
+        ),
       )}`;
   }
   override render() {
@@ -195,11 +222,12 @@ export class RotaByArea extends LitElement {
                 html`<td>
                   ${day.notInSlot.map((n) => {
                     const s = this.week.shifts.find((s) => s.shiftId === n.shiftId)!;
-                    return html`<div class="card">
-                      ${shiftTime(s)}
-                      <strong>${this.#person(n.shiftId)}</strong
-                      >${n.outsideWeek ? html`<small class="note">${t(s.businessDay < this.week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}
-                    </div>`;
+                    return this.#card(
+                      n.shiftId,
+                      html`${shiftTime(s)}
+                        <strong>${this.#person(n.shiftId)}</strong
+                        >${n.outsideWeek ? html`<small class="note">${t(s.businessDay < this.week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}`,
+                    );
                   })}
                 </td>`,
             )}

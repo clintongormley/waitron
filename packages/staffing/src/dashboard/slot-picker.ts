@@ -1,3 +1,5 @@
+import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
+import { candidateWarnings, breachText } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -65,6 +67,7 @@ export class SlotPicker extends LitElement {
   ];
   @property({ attribute: false }) week!: RotaWeek;
   @property({ attribute: false }) pickedSlot!: Slot;
+  @property({ attribute: false }) ruleset: WorkTimeRuleset | null = null;
   @property({ type: Boolean }) busy = false;
   @property() error = "";
   @state() private everyone = false;
@@ -133,6 +136,7 @@ export class SlotPicker extends LitElement {
             ${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}<small
               >${this.#status(p.personId)} · ${hours(p)}</small
             >
+            ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
           </button>`,
       )}
       ${

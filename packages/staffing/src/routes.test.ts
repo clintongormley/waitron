@@ -22,7 +22,7 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shifts, WorkforceBackend } from "@waitron/workforce";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
@@ -982,5 +982,60 @@ describe("Rota body references", () => {
       400,
       refusal("staff_role.not_found", { staffRoleId: badRole }),
     );
+  });
+});
+
+describe("changing a week through the route", () => {
+  const root = "/management-api/staffing/rota";
+  it("requires schedule.manage and strictly validates the week body before copying", async () => {
+    const r = await routed();
+    await answers(
+      await r.call("POST", `${root}/change-week`, r.staff, { week: "2026-11-30" }),
+      403,
+      refusal("authorization.not_permitted", { permission: "schedule.manage" }),
+    );
+    for (const body of [
+      null,
+      [],
+      {},
+      { week: null },
+      { week: "2026-12-01" },
+      { week: "2026-11-30", extra: true },
+    ]) {
+      expect((await r.call("POST", `${root}/change-week`, r.manager, body)).status).toBe(400);
+    }
+    await answers(
+      await r.call("POST", `${root}/change-week`, r.manager, { week: "2026-11-30" }),
+      400,
+      refusal("staffing.invalid", { field: "week" }),
+    );
+  });
+  it("copies only the route's location, returning the new version and pending swap list", async () => {
+    const r = await routed(),
+      role = await r.create("Waiter");
+    const added = await r.call("POST", `${root}/shifts`, r.manager, {
+      week: "2026-11-30",
+      businessDay: "2026-12-01",
+      personId: r.ana,
+      area: { kind: "department", id: r.departmentId },
+      staffRoleId: role.id,
+      startsAt: "09:00",
+      endsAt: "15:00",
+    });
+    expect(added.status).toBe(201);
+    const week = (await (await r.call("GET", `${root}?week=2026-11-30`, r.manager)).json()) as {
+      version: { id: string };
+    };
+    await withTransaction(suite.db, (t) =>
+      new WorkforceBackend().publishRoster(t, { versionId: week.version.id }),
+    );
+    const response = await r.call("POST", `${root}/change-week`, r.manager, { week: "2026-11-30" });
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as { versionId: string; openSwaps: unknown[] };
+    expect(result.versionId).not.toBe(week.version.id);
+    expect(result.openSwaps).toEqual([]);
+    expect(
+      (await r.call("POST", `${root}/change-week`, r.manager, { week: "2026-11-30" })).status,
+    ).toBe(409);
   });
 });

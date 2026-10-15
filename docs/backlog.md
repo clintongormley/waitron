@@ -4707,9 +4707,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
-- **A585. Staffing needs and the rota** — add the Calendar's Rota view by person, live labour
-  warnings, publishing and changing a week, then retire the old Rota screen and free-text staff
-  role. The area view and slot filling are built. Parts 7–8 remain in the order of the
+- **A585. Staffing needs and the rota** — retire the old Rota screen and free-text staff
+  role. Both Calendar Rota views, slot filling and shift editing, live labour warnings, publishing
+  and changing a published week are built. Part 8 remains in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
   [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
   [mockups](backlog/mockups/a585-staffing/) define the remaining views.

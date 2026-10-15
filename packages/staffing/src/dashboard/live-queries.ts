@@ -21,6 +21,7 @@ export const QUERY_DEPENDENCIES = {
     ...CALENDAR_MONTH_PLAN_READS,
   ],
   rota: [
+    "shift_swaps",
     "shifts",
     "roster_versions",
     "shift_assignments",

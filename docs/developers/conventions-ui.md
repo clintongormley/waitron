@@ -45,6 +45,14 @@ filled in, uses `wt-help-tooltip`, whose button closes on outside click or Escap
 Nothing guards that hint-or-"?" rule across screens, and other setup screens may still break it
 (backlog A237).
 
+### Dialog footer controls must occupy the primitive's real slots
+
+`wt-form-actions` offers `cancel` on the left, `secondary` beside the primary action, and the
+unnamed primary slot. A control assigned another slot is not painted. The A585-7 Chromium LOOK
+found hidden Cancel, Delete and Back controls even though direct `.click()` tests passed.
+`packages/staffing/src/dashboard/shift-edit-dialog.test.ts` and `publish-dialog.test.ts` now check
+their native buttons' rendered width; those tests cover the staffing dialogs, not other callers.
+
 ## A screen does not draw its own form field
 
 A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive

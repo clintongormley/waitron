@@ -10,6 +10,56 @@ import type { CalendarColour } from "../staffing-types.js";
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
+  "staffing.rota.by_area": "By area",
+  "staffing.rota.by_person": "By person",
+  "staffing.rota.view": "Rota view",
+  "staffing.shift.edit": "Edit shift",
+  "staffing.shift.add": "Add shift",
+  "staffing.shift.personId": "Person",
+  "staffing.shift.area": "Area",
+  "staffing.shift.staffRoleId": "Staff role",
+  "staffing.shift.startsAt": "From",
+  "staffing.shift.endsAt": "To",
+  "staffing.shift.invalid_personId": "Choose a person",
+  "staffing.shift.invalid_area": "Choose an active area",
+  "staffing.shift.invalid_staffRoleId": "Choose a staff role",
+  "staffing.shift.invalid_startsAt": "Choose a valid start time in 15-minute steps",
+  "staffing.shift.invalid_endsAt":
+    "Choose a later end time in this business day, in 15-minute steps",
+  "staffing.shift.delete_heading": "Delete shift",
+  "staffing.shift.delete_question": "Delete this shift?",
+  "staffing.shift.swap_heading": "Open swap request",
+  "staffing.shift.swap_changed":
+    "The swap request was made for the previous person and time. Save this change?",
+  "staffing.shift.swap_delete":
+    "Deleting this shift cancels requests offering it; requests taking it in return lose their return shift.",
+
+  "staffing.rota.change_week": "Change this week",
+  "staffing.rota.change_error": "Could not change this week: {reason}",
+  "staffing.rota.open_swap_one":
+    "1 swap request is open for this week; it stays attached to its shift.",
+  "staffing.rota.open_swaps":
+    "{count} swap requests are open for this week; they stay attached to their shifts.",
+
+  "staffing.rota.labour_count": "{count} labour warnings",
+  "staffing.rota.labour_one": "1 labour warning",
+  "staffing.rota.no_rules": "Labour rules are not set up",
+  "staffing.rota.warnings_error": "Could not load labour warnings: {reason}",
+  "staffing.rota.publish": "Publish week",
+  "staffing.rota.publish_anyway": "Publish anyway",
+  "staffing.rota.back": "Back to the rota",
+  "staffing.rota.no_warnings": "No labour warnings.",
+  "staffing.rota.publish_error": "Could not publish the week: {reason}",
+  "staffing.breach.rest_too_short": "{restMinutes} h rest; minimum {requiredMinutes} h",
+  "staffing.breach.exceeds_daily_max":
+    "{workDate}: {plannedMinutes} h planned; daily maximum {maxMinutes} h",
+  "staffing.breach.exceeds_weekly_max": "{plannedMinutes} h planned; weekly maximum {maxMinutes} h",
+  "staffing.breach.weekly_rest_insufficient":
+    "{longestRestMinutes} h weekly rest; minimum {requiredMinutes} h",
+  "staffing.breach.break_owed": "{minBreakMinutes} h break owed after {thresholdMinutes} h",
+  "staffing.breach.night_work": "{nightMinutes} h night work",
+  "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h overtime; cap {capMinutes} h",
+
   "staffing.rota.unfilled_count": "{count} unfilled",
   "staffing.rota.tab": "Rota",
   "staffing.rota.previous": "Previous week",
@@ -140,6 +190,57 @@ const en = {
 };
 
 const es: Record<keyof typeof en, string> = {
+  "staffing.rota.by_area": "Por área",
+  "staffing.rota.by_person": "Por persona",
+  "staffing.rota.view": "Vista del cuadrante",
+  "staffing.shift.edit": "Editar turno",
+  "staffing.shift.add": "Añadir turno",
+  "staffing.shift.personId": "Persona",
+  "staffing.shift.area": "Área",
+  "staffing.shift.staffRoleId": "Rol de personal",
+  "staffing.shift.startsAt": "Desde",
+  "staffing.shift.endsAt": "Hasta",
+  "staffing.shift.invalid_personId": "Elige una persona",
+  "staffing.shift.invalid_area": "Elige un área activa",
+  "staffing.shift.invalid_staffRoleId": "Elige un rol de personal",
+  "staffing.shift.invalid_startsAt": "Elige una hora de inicio válida en pasos de 15 minutos",
+  "staffing.shift.invalid_endsAt":
+    "Elige una hora de fin posterior en este día operativo, en pasos de 15 minutos",
+  "staffing.shift.delete_heading": "Eliminar turno",
+  "staffing.shift.delete_question": "¿Eliminar este turno?",
+  "staffing.shift.swap_heading": "Solicitud de cambio abierta",
+  "staffing.shift.swap_changed":
+    "La solicitud de cambio se hizo para la persona y el horario anteriores. ¿Guardar este cambio?",
+  "staffing.shift.swap_delete":
+    "Eliminar este turno cancela las solicitudes que lo ofrecen; las que lo toman a cambio pierden su turno de vuelta.",
+
+  "staffing.rota.change_week": "Cambiar esta semana",
+  "staffing.rota.change_error": "No se pudo cambiar esta semana: {reason}",
+  "staffing.rota.open_swap_one":
+    "Hay 1 solicitud de cambio abierta para esta semana; sigue vinculada a su turno.",
+  "staffing.rota.open_swaps":
+    "Hay {count} solicitudes de cambio abiertas para esta semana; siguen vinculadas a sus turnos.",
+
+  "staffing.rota.labour_count": "{count} avisos laborales",
+  "staffing.rota.labour_one": "1 aviso laboral",
+  "staffing.rota.no_rules": "Las reglas laborales no están configuradas",
+  "staffing.rota.warnings_error": "No se pudieron cargar los avisos laborales: {reason}",
+  "staffing.rota.publish": "Publicar semana",
+  "staffing.rota.publish_anyway": "Publicar de todos modos",
+  "staffing.rota.back": "Volver al cuadrante",
+  "staffing.rota.no_warnings": "Sin avisos laborales.",
+  "staffing.rota.publish_error": "No se pudo publicar la semana: {reason}",
+  "staffing.breach.rest_too_short": "{restMinutes} h de descanso; mínimo {requiredMinutes} h",
+  "staffing.breach.exceeds_daily_max":
+    "{workDate}: {plannedMinutes} h previstas; máximo diario {maxMinutes} h",
+  "staffing.breach.exceeds_weekly_max":
+    "{plannedMinutes} h previstas; máximo semanal {maxMinutes} h",
+  "staffing.breach.weekly_rest_insufficient":
+    "{longestRestMinutes} h de descanso semanal; mínimo {requiredMinutes} h",
+  "staffing.breach.break_owed": "{minBreakMinutes} h de pausa tras {thresholdMinutes} h",
+  "staffing.breach.night_work": "{nightMinutes} h de trabajo nocturno",
+  "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h extra; límite {capMinutes} h",
+
   "staffing.rota.unfilled_count": "{count} sin cubrir",
   "staffing.rota.tab": "Turnos",
   "staffing.rota.previous": "Semana anterior",

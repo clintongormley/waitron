@@ -504,7 +504,7 @@ describe("mountWorkforceApi — publish", () => {
     );
   });
 
-  it("409s publish when the location has no convenio_config (convenio.not_found)", async () => {
+  it("publishes without labour warnings when the location has no convenio_config (A585-7)", async () => {
     const app = mountApp();
     // A DIFFERENT location with no convenio row.
     const otherLoc = await withTransaction(suite.db, async (tx) => {
@@ -523,10 +523,14 @@ describe("mountWorkforceApi — publish", () => {
     });
     const { versionId } = (await create.json()) as { versionId: string };
     const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
-    expect(res.status).toBe(409);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "convenio.not_found" },
-    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ breaches: [] });
+    const roster = await send(
+      app,
+      "GET",
+      `/management-api/roster?locationId=${otherLoc}&period=2026-05-18`,
+    );
+    expect(await roster.json()).toMatchObject({ version: { id: versionId, status: "published" } });
   });
 
   it("404s publish of an unknown version (roster.not_found)", async () => {

@@ -256,7 +256,11 @@ describe("the Rota contribution", () => {
   it("uses the host's week and area, and falls back to the month's Monday for an invalid week address", async () => {
     const view = STAFFING_DASHBOARD.calendarViews!.find((v) => v.id === "rota")!;
     const fixture = await import("../testing/rota-fixture.js");
-    const request = vi.fn(async (path: string) => fixture.rotaWeek(path.split("week=")[1]!));
+    const request = vi.fn(async (path: string) =>
+      path.includes("/roster/breaches?")
+        ? { breaches: [], ruleset: null }
+        : fixture.rotaWeek(path.split("week=")[1]!),
+    );
     const address = {
       month: "2026-12",
       params: { week: "nonsense", area: "station:kitchen" } as Record<string, string>,
@@ -287,12 +291,15 @@ describe("the Rota contribution", () => {
     address.params = { week: "2026-12-07", area: "station:kitchen" };
     render(handle.render(), container);
     await vi.waitFor(() =>
-      expect(request).toHaveBeenLastCalledWith(
-        "/management-api/staffing/rota?week=2026-12-07",
-        "GET",
-        undefined,
-        { passive: true },
-      ),
+      expect(request.mock.calls.slice(-2)).toEqual([
+        ["/management-api/staffing/rota?week=2026-12-07", "GET", undefined, { passive: true }],
+        [
+          "/management-api/roster/breaches?locationId=location&period=2026-12-07",
+          "GET",
+          undefined,
+          { passive: true },
+        ],
+      ]),
     );
   });
 });

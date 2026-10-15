@@ -203,9 +203,10 @@ migration (owner, 2026-10-13). No backwards conversion was added.
 The owner's 2026-10-13 decision is to warn that a request exists rather than block changing the
 week. Pending requests follow the copies immediately; decided requests stay on the old shifts.
 Deleting the copied offered shift cascades its pending request while the published original stays
-visible. Part 7's approved plan requires a marker and confirmation saying that deletion cancels the
-request, and warns before changing its person or time. Build those controls with the first
-application caller of `copyPublishedToDraft`; part 5 adds only the library method. See
+visible. The Calendar's Rota marks shifts with pending requests and asks before deleting a shift
+or changing its person or time. Deleting an offered shift cancels its requests; deleting a return
+shift removes that side of the offer. The shift editor states those separate effects. The
+`changeRotaWeek` operation copies assignments in the same transaction as `copyPublishedToDraft`. See
 [Task 7.2](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
 
 
