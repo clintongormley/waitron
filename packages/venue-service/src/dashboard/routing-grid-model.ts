@@ -148,9 +148,29 @@ export function expandCategory(expanded: ReadonlySet<string>, id: string): Reado
   return new Set([...expanded, id]);
 }
 
-export function collapseCategory(expanded: ReadonlySet<string>, id: string): ReadonlySet<string> {
+/** Closes `id` and every category the fully expanded tree draws under it. */
+export function collapseCategory(
+  model: RoutingModel,
+  expanded: ReadonlySet<string>,
+  id: string,
+): ReadonlySet<string> {
+  return collapseIn(visibleRoutingRows(model, expandAll(model)), expanded, id);
+}
+
+function collapseIn(
+  tree: readonly GridRow[],
+  expanded: ReadonlySet<string>,
+  id: string,
+): Set<string> {
   const next = new Set(expanded);
   next.delete(id);
+  const at = tree.findIndex(({ row }) => row.kind === "category" && row.categoryId === id);
+  if (at === -1) return next;
+  const depth = tree[at]!.depth;
+  for (let i = at + 1; i < tree.length && tree[i]!.depth > depth; i++) {
+    const { row } = tree[i]!;
+    if (row.kind === "category") next.delete(row.categoryId);
+  }
   return next;
 }
 
@@ -158,17 +178,30 @@ export function expandAll(model: RoutingModel): ReadonlySet<string> {
   return new Set(model.categories.map((category) => category.id));
 }
 
-export function collapseAll(): ReadonlySet<string> {
-  return new Set();
-}
-
-/** Keeps the expanded categories the refreshed model still has; a new one starts collapsed. */
+/**
+ * Keeps the expanded categories the refreshed model still has; a new one starts collapsed. A
+ * category whose parent changed to one that is closed is collapsed with every arrow inside it, so
+ * an open arrow under a closed parent is always one a person opened there.
+ */
 export function pruneExpanded(
+  previous: RoutingModel,
   model: RoutingModel,
   expanded: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const known = new Set(model.categories.map((category) => category.id));
-  return new Set([...expanded].filter((id) => known.has(id)));
+  let next = new Set([...expanded].filter((id) => known.has(id)));
+  const parentBefore = new Map(previous.categories.map(({ id, parentId }) => [id, parentId]));
+  const parentNow = new Map(model.categories.map(({ id, parentId }) => [id, parentId]));
+  const tree = visibleRoutingRows(model, expandAll(model));
+  for (const { row } of tree) {
+    if (row.kind !== "category" || !next.has(row.categoryId)) continue;
+    const id = row.categoryId;
+    const parent = parentNow.get(id)!;
+    if (!parentBefore.has(id) || parentBefore.get(id) === parent) continue;
+    if (parent === null || parent === id || !known.has(parent) || next.has(parent)) continue;
+    next = collapseIn(tree, next, id);
+  }
+  return next;
 }
 
 /** Whether `visibleRoutingRows` lists the row once every category is expanded. */

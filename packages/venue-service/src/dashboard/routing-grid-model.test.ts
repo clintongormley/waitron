@@ -17,7 +17,6 @@ import {
 import {
   blankZoneCell,
   cellPeriodLines,
-  collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
@@ -265,7 +264,7 @@ describe("visibleRoutingRows", () => {
       "    C:a <root>",
       "    P:p <root>",
     ]);
-    expect(outline(visibleRoutingRows(venue, collapseCategory(one, "root")))).toEqual([
+    expect(outline(visibleRoutingRows(venue, collapseCategory(venue, one, "root")))).toEqual([
       "[All]",
       "  C:root",
     ]);
@@ -276,7 +275,114 @@ describe("visibleRoutingRows", () => {
       "      P:q <root/a>",
       "    P:p <root>",
     ]);
-    expect(outline(visibleRoutingRows(venue, collapseAll()))).toEqual(["[All]", "  C:root"]);
+    expect(outline(visibleRoutingRows(venue, new Set()))).toEqual(["[All]", "  C:root"]);
+  });
+
+  describe("collapsing a category closes every arrow inside it", () => {
+    // The owner's example: Santet Deli Co holds AGAVE, whose products inherit except two with
+    // routes of their own; MEZCAL sits two levels down, under CLANDESTINA.
+    const deli = () =>
+      model(
+        [
+          folder("santet", null, "Santet Deli Co"),
+          folder("agave", "santet", "AGAVE"),
+          folder("clandestina", "agave", "CLANDESTINA"),
+          folder("mezcal", "clandestina", "MEZCAL"),
+          folder("food", null, "Food"),
+        ],
+        [
+          item("clandestina-p", "agave", "Clandestina"),
+          item("corralejo", "agave", "Corralejo Blue"),
+          item("blanco", "agave", "Tequila Blanco"),
+          item("shot", "clandestina", "Shot"),
+          item("smoke", "mezcal", "Smoke"),
+          item("burger", "food", "Burger"),
+        ],
+        [productCell("clandestina-p"), productCell("corralejo")],
+      );
+
+    it("hides the inherited rows at every depth and keeps own-route rows with their path", () => {
+      const venue = deli();
+      let open = expandCategory(none, "santet");
+      open = expandCategory(open, "agave");
+      open = expandCategory(open, "clandestina");
+      open = expandCategory(open, "mezcal");
+      const closed = collapseCategory(venue, open, "santet");
+      expect([...closed]).toEqual([]);
+      expect(outline(visibleRoutingRows(venue, closed))).toEqual([
+        "[All]",
+        "  C:Food",
+        "  C:Santet Deli Co",
+        "    C:AGAVE <Santet Deli Co>",
+        "      P:Clandestina <Santet Deli Co/AGAVE>",
+        "      P:Corralejo Blue <Santet Deli Co/AGAVE>",
+      ]);
+    });
+
+    it("re-opening a child under the closed parent lists all its products, its own children closed", () => {
+      const venue = deli();
+      const open = collapseCategory(
+        venue,
+        new Set(["santet", "agave", "clandestina", "mezcal"]),
+        "santet",
+      );
+      expect(outline(visibleRoutingRows(venue, expandCategory(open, "agave")))).toEqual([
+        "[All]",
+        "  C:Food",
+        "  C:Santet Deli Co",
+        "    C:AGAVE <Santet Deli Co>",
+        "      C:CLANDESTINA <Santet Deli Co/AGAVE>",
+        "      P:Clandestina <Santet Deli Co/AGAVE>",
+        "      P:Corralejo Blue <Santet Deli Co/AGAVE>",
+        "      P:Tequila Blanco <Santet Deli Co/AGAVE>",
+      ]);
+    });
+
+    it("leaves the parent, the siblings and other trees open", () => {
+      const venue = deli();
+      const open = new Set(["santet", "agave", "clandestina", "mezcal", "food"]);
+      expect([...collapseCategory(venue, open, "clandestina")].sort()).toEqual([
+        "agave",
+        "food",
+        "santet",
+      ]);
+    });
+
+    it("follows a parent cycle as the tree draws it, without looping", () => {
+      const venue = model([folder("a", "b"), folder("b", "a"), folder("c", "b")], []);
+      expect([...collapseCategory(venue, new Set(["a", "b", "c"]), "b")]).toEqual(["a"]);
+    });
+
+    it("a refresh that moves an open category under a closed one closes it and the arrows inside", () => {
+      const before = model(
+        [folder("p"), folder("q"), folder("c", "q"), folder("d", "c")],
+        [item("x", "c"), item("y", "d")],
+      );
+      const after = model(
+        [folder("p"), folder("q"), folder("c", "p"), folder("d", "c")],
+        [item("x", "c"), item("y", "d")],
+      );
+      const kept = pruneExpanded(before, after, new Set(["q", "c", "d"]));
+      expect([...kept]).toEqual(["q"]);
+      expect(outline(visibleRoutingRows(after, kept))).toEqual(["[All]", "  C:p", "  C:q"]);
+    });
+
+    it("a refresh that moves an open category under an open one keeps it open", () => {
+      const before = model([folder("p"), folder("q"), folder("c", "q")], [item("x", "c")]);
+      const after = model([folder("p"), folder("q"), folder("c", "p")], [item("x", "c")]);
+      expect([...pruneExpanded(before, after, new Set(["p", "c"]))].sort()).toEqual(["c", "p"]);
+    });
+
+    it("a refresh that moves an open category to the top level keeps it open", () => {
+      const before = model([folder("q"), folder("c", "q"), folder("d", "q")], [item("x", "c")]);
+      const after = model([folder("q"), folder("c"), folder("d", "d")], [item("x", "c")]);
+      expect([...pruneExpanded(before, after, new Set(["c", "d"]))].sort()).toEqual(["c", "d"]);
+    });
+
+    it("a refresh keeps a category opened under a closed parent open while its parent stays", () => {
+      const venue = model([folder("p"), folder("c", "p")], [item("x", "c")]);
+      expect([...pruneExpanded(venue, venue, new Set(["c"]))]).toEqual(["c"]);
+    });
   });
 
   it("refresh keeps expansion, prunes removed ids, and starts new categories collapsed", () => {
@@ -286,7 +392,7 @@ describe("visibleRoutingRows", () => {
       [folder("root"), folder("fresh", "root")],
       [item("p", "root"), item("q", "fresh")],
     );
-    const kept = pruneExpanded(after, expanded);
+    const kept = pruneExpanded(before, after, expanded);
     expect([...kept]).toEqual(["root"]);
     expect(outline(visibleRoutingRows(after, kept))).toEqual([
       "[All]",
@@ -1408,7 +1514,7 @@ describe("searchRows", () => {
   });
 
   it("a closed ancestor hides the matches under it, and the count still includes them", () => {
-    const found = searchRows(deli(), "clan", collapseAll())!;
+    const found = searchRows(deli(), "clan", new Set())!;
     expect(lines(found.rows)).toEqual(["[All] parent", "  C:Santet Deli Co parent"]);
     expect(found.count).toBe(2);
     expect(found.open.size).toBe(0);
