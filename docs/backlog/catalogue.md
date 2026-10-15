@@ -830,6 +830,33 @@ shrunk to 1600 pixels (`STORED_LONG_EDGE`, `packages/media/src/prepare.ts`).
    building whether framing also produces a small copy for thumbnails; that question was its own
    entry until this one.
 
+## Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud
+
+Waitron's side of Translate all (A689, plan tasks 1 to 20) is on `main`, tested only against the
+fake Cloud in `apps/server/test/translation-cloud-fixture.ts`. Task 21 of
+[the plan](../superpowers/plans/2026-10-14-translate-all.md) runs it on the Santet venue against a
+local Cloud. It needs Cloud's side on Cloud's `main` first: its four translation routes, its worker
+and the `servicesVersion` 2 configuration reply.
+
+- **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
+  the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
+  proof, and the box answers that by dropping its lease
+  ([cloud-connection.md](../developers/cloud-connection.md)).
+- **Where the design lives.** Waitron's side is in
+  [the Translate all design](../superpowers/specs/2026-10-14-translate-all-design.md) and
+  [the plan](../superpowers/plans/2026-10-14-translate-all.md). Cloud's side and the wire contract
+  are in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md` and
+  `docs/waitron-integration-contract.md`. Cloud's plan is its
+  `docs/superpowers/plans/2026-10-14-translate-all.md` (24 tasks; 22 to 24 are owner-run
+  measurements with the real key), on waitron-cloud PR #131. The owner approved both specs and
+  both plans on 2026-10-14.
+- **The cap.** Translate all is meant to become a paid subscriber service in Waitron Cloud; for
+  now it is free for connected venues, capped per venue. The owner's approval covers the proposed
+  $5 per venue per month cap and Cloud's submit allowance (4 jobs in flight, 1 per address).
+  Cloud's spec still says "proposed" until its first implementation change updates it.
+- **When the check passes**, delete this entry (Task 21, Step 7); otherwise each failure becomes
+  its own entry.
+
 ## Decisions and deliberate limits
 
 **Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last

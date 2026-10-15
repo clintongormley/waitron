@@ -63,6 +63,12 @@ name at all is listed under your other languages as **No customer-facing name**,
 staff name is shown instead; an extras list is the exception, because its own name never reaches a
 receipt. Archived products, disabled lists and switched-off menus are not listed.
 
+If your venue is connected to Waitron Cloud and Translate all is switched on for it there,
+**Translate all** at the top of the dialog asks Cloud to suggest every missing customer-facing
+name, in every language. Each suggestion fills its empty field as a draft marked **Suggested**,
+and nothing reaches your diners until you save it; **Discard suggestion** removes one you do not
+want. When the suggestions are ready, the alerts bell tells you how many are waiting for review.
+
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no

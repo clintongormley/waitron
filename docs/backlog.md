@@ -1071,32 +1071,19 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
-  tasks 1–17 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
-  paid subscriber service in Waitron Cloud (the separate service, not this repository) that
-  translates every missing customer-facing name in one go; this repository would only call it,
-  behind the subscription. A machine translation needs the venue's review before a diner sees it.
-  **Designed 2026-10-14; the owner approved both specs the same day:** Waitron's side in
-  [the Translate all design](superpowers/specs/2026-10-14-translate-all-design.md), Cloud's side and
-  the wire contract in the Cloud repository's `docs/superpowers/specs/2026-10-14-translate-all-design.md`
-  and `docs/waitron-integration-contract.md`. For now it is free for connected venues, capped per venue.
-  **Plans, approved by the owner on 2026-10-14:** Waitron's in
-  [the Translate all plan](superpowers/plans/2026-10-14-translate-all.md) (21 tasks; tasks 1–20 test
-  against a fake Cloud, task 21 needs Cloud's side); Cloud's in its repository's
-  `docs/superpowers/plans/2026-10-14-translate-all.md` (24 tasks; 22–24 are owner-run measurements
-  with the real key), on waitron-cloud PR #131. The approval covers the proposed $5 per venue per
-  month cap and Cloud's submit allowance (4 in flight, 1 per address); Cloud's spec still says
-  "proposed" until its first implementation change updates it. **Tasks 1–4 (the box's Cloud calls
-  and a fake Cloud) are on `main`:** the box now asks for the service with `servicesVersion` 2, which
-  a Cloud without version 2 refuses, so Cloud's version 2 must be deployed before a box built from
-  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)). **Tasks 5–10 (the
-  catalogue's job and suggestion tables, collecting and building a job, recording a job, and
-  storing, listing and discarding suggestions) are on `main` too**, and so are **Tasks 11–12**: the
-  job runner, which starts with the server when a Cloud address is configured and works only while
-  the node is primary, and the three `/management-api/content-suggestions` routes. **Tasks 13–17
-  are on `main` too:** the translations dialog's Translate all bar, suggestions filled in as drafts
-  with Discard and Save, spelling-fix, placeholder and out-of-date notes, and the 100-draft limit.
-  The "translations ready" notice (Tasks 18–19) is not built yet.
+- **Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud once
+  Cloud's side exists** (plan `docs/superpowers/plans/2026-10-14-translate-all.md`, Task 21; left
+  open by A689's fifth PR). Cloud's `servicesVersion` 2 must be deployed before a box built from
+  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)).
+  [Detail](backlog/catalogue.md#translate-all-run-the-end-to-end-check-on-the-santet-venue-against-a-local-waitron-cloud)
+
+- **Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
+  the side-by-side translations dialog** (plan Decision 6; left open by A689's fifth PR). Today the
+  dialog shows such a fix only as a note on the item's row.
+
+- **Alert wording writes numbers without a thousands separator** (`formatParam`,
+  `packages/dashboard-kit/src/alert-messages.ts`); the Translate all notice reads "1050
+  suggestions". Left open by A689's fifth PR.
 
 - **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
   The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
@@ -1213,7 +1200,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
   This settles the two questions C122 and A172 left for the owner: whether a name blank in every
   language counts under the default language, and whether "Spanish filled, English blank" is still
-  a gap. Translate all (above) fills the same dialog and needs neither change.
+  a gap. Translate all fills the same dialog; its "Use fix" button waits for this change (entry above).
 
 - **Content languages and the image library (#339, #344) — what is left open.**
   [Operator guide](content-and-images.md). **A new picture consumer has to add a real database

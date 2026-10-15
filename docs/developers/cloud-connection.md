@@ -97,6 +97,48 @@ venue through the steps in
 [Reconnect a restored test server to its Cloud venue](#reconnect-a-restored-test-server-to-its-cloud-venue)
 instead.
 
+## Translate all
+
+Translate all asks Waitron Cloud to suggest the customer-facing names a venue is missing, so
+nobody has to type every translation by hand. The box sends Cloud each item that has no name in
+some enabled language, with its staff name, its category, the names it already has and the
+languages it lacks. It adds up to 300 items whose names someone has saved, as examples of the
+venue's style, and the venue's languages and country. It sends no prices, no people and no sales.
+
+A runner on the primary (`apps/server/src/content-suggestion-runner.ts`) makes every call to
+Cloud. When someone presses **Translate all**, the server records a job in
+`content_suggestion_jobs` and wakes the runner. The runner submits it, and while Cloud is still working it asks for
+progress again five seconds after each answer. Once Cloud has finished, the runner collects the
+results and stores them as suggestions. Then it releases the job, so Cloud deletes its copy at
+once; it releases a job Cloud reports as failed too. A job holds at most 1,000 items, context
+items included, and 1 MiB, so a venue missing more names than that is sent as several jobs in turn: storing one job's results
+records the next.
+
+A lost reply or a restart resumes from the job's row. The row keeps the job's body until Cloud
+accepts it, and the row's own id is the operation ID, so a retried submit signs the same
+fingerprint with the same operation ID and Cloud answers with the job it already made.
+
+The box also ends a job itself, without asking Cloud. It does so when the job is 24 hours old,
+counted from when the box recorded it; when Cloud's last configuration reply no longer lists the
+service as ready, or the connection is revoked; when Cloud refuses a call as a request it will
+never accept; and when Cloud says the job has expired. A job the box ends itself is marked
+released without a call to Cloud. Unless Cloud had already expired it, Cloud may still hold it
+until its own deletion: 24 hours
+after the job finished, or 24 hours after it was submitted if it never finished (the contract's
+`expired` state). The backlog entry "a job the box ends itself is marked released without a call
+to Cloud" covers what that leaves open.
+
+Translation calls take the connection's lock only to renew the access lease, or to record that
+Cloud refused the installation as revoked or its proof as invalid (`leaseState` and
+`recordRefusal` in `apps/server/src/cloud-client.ts`). They never hold it for the translation
+exchange itself, so a refresh or a report is not refused with `cloud.busy` while a status or
+collect call waits on Cloud. It can still be refused while a translation call holds the lock for
+one of those two things, because a refresh and a report do not wait for the lock.
+
+The submit signature covers a fingerprint of the job (`jobSha256`, `jobBytes`), not the job
+itself. The signing vectors are `apps/server/test/cloud-translation-vector.json` and the
+contract's "Shared test vectors" section.
+
 ## Local remote-access integration
 
 Cloud's [local remote-access runner](https://github.com/waitron-io/waitron-cloud/blob/main/docs/local-remote-access.md)

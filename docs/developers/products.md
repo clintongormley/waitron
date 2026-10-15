@@ -319,9 +319,12 @@ A content-language save that leaves out a language Waitron keeps enabled for the
 area's `requiredContentLocales` in the country pack) is refused (`content.language_required`,
 `writeContentLanguages` in `packages/catalogue/src/content-languages.ts`), but nothing makes that
 language's text complete. On the dashboard's Content languages page, **Edit translations** in a
-language's row menu opens the **Missing translations** report in a dialog (`listTranslationGapReport`,
+language's row menu opens the translations dialog (headed **Edit translations** and the language's name), which reads its rows 50 at a time
+through `GET /management-api/content-translations/:language` (`listTranslationTargets`,
+`packages/catalogue/src/content-translation-targets.ts`). The count on each language's row of the
+page comes from the gap report instead (`listTranslationGapReport`,
 `packages/catalogue/src/content-translation-report.ts`, read through
-`GET /management-api/content-translation-gaps`). For each enabled language it lists the report's own
+`GET /management-api/content-translation-gaps`). For each enabled language the dialog lists the report's own
 gaps for that language, marked **Partly translated** (only these stop that language becoming the
 default), and, for every language except the default, what has no customer-facing name at all,
 marked **No customer-facing name**, because there the staff name is shown in its place (an absent
@@ -332,6 +335,12 @@ the screen that edits it. Both the list and the default-change check leave out a
 variant of an archived product, a disabled options or extras list and its options, and what a
 switched-off menu owns. Image names (the media module's contribution) are checked on a change
 of default but are not in the list.
+
+Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled
+language in which an item has no customer-facing text, the default language included. Its
+results are suggestions: they fill empty fields as drafts and reach no diner until someone saves
+them. A default-language suggestion for an item with no customer-facing name in any language is
+shown as a row of its own, although the dialog's own default-language list still leaves such a name out.
 
 ## Content languages per region
 
