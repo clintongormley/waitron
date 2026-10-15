@@ -594,6 +594,45 @@ describe("invoiceDiscounts", () => {
     ]);
   });
 
+  it("keeps a dish's own row no larger than the discount its family's lines carry", () => {
+    // 1,01 at 21% is 0,83 before VAT; filed at 0,79 the line carries 0,04, while its own entry
+    // of 0,06 would be 0,05 before VAT.
+    const result = invoiceDiscounts(
+      [
+        group(
+          0,
+          0,
+          filed({
+            gross: "0.96",
+            listGross: "1.01",
+            net: net("0.79", "0.79", "21.00"),
+            adjustments: [{ kind: "discount", amount: "0.06" }],
+          }),
+        ),
+        group(
+          1,
+          1,
+          filed({ gross: "11.01", listGross: "12.00", net: net("9.10", "9.10", "21.00") }),
+        ),
+      ],
+      [{ kind: "discount", amount: "1.00" }],
+    );
+    expect(under(result)).toMatchObject({ 0: [{ rate: "21.00", amount: "0.04" }] });
+    expect(result.atEnd).toMatchObject([{ rate: "21.00", amount: "0.82" }]);
+  });
+
+  it("orders the end rows by where each rate first appears on the invoice, across families", () => {
+    const result = invoiceDiscounts(
+      [
+        group(0, 0, rioja),
+        group(1, 1, filed({ gross: "0.94", listGross: "1.04", net: net("0.90", "0.90", "4.00") })),
+        group(2, 0, pan),
+      ],
+      [s5Bill],
+    );
+    expect(result.atEnd.map((row) => row.rate)).toEqual(["21.00", "4.00", "10.00"]);
+  });
+
   describe("ported from groupDiscounts", () => {
     const pizza = filed({
       gross: "8.10",
@@ -681,8 +720,8 @@ describe("invoiceDiscounts", () => {
       );
       expect(under(result)).toMatchObject({
         0: [
-          { rate: "21.00", amount: "0.75" },
-          { rate: "10.00", amount: "0.14" },
+          { rate: "21.00", amount: "0.75", named: pizza.adjustments![0] },
+          { rate: "10.00", amount: "0.14", named: pizza.adjustments![0] },
         ],
       });
       expect(result.under.has(1)).toBe(false);
