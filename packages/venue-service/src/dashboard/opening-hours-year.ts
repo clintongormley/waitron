@@ -511,7 +511,10 @@ export class OpeningHoursYearView extends LitElement {
       ${step(1, "next-year", "hours.calendar.next_year", "›")}
       <slot name="switch"></slot>
     </div>`;
-    if (!model) return head;
+    return html`${head}${model ? this.#body(model) : nothing}`;
+  }
+
+  #body(model: OpeningHoursYear) {
     const days = new Map(model.days.map((day) => [day.date, day]));
     const tints = seasonTints(model.seasons);
     const header = html`<tr>
@@ -527,8 +530,7 @@ export class OpeningHoursYearView extends LitElement {
       [this.focusDate, this.selected, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
-    return html`${head}
-      <season-chips
+    return html`<season-chips
         .seasons=${model.seasons}
         .clockRevision=${model.clockRevision}
         .api=${this.api}

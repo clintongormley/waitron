@@ -304,6 +304,31 @@ describe("Opening hours year", () => {
     expect(root(el).children).toHaveLength(0);
   });
 
+  it("keeps the pressed › and its focus when the year's read arrives and when it is cleared", async () => {
+    const el = document.createElement("opening-hours-year");
+    el.year = 2027;
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    const next = root(el).querySelector<HTMLElement>('[data-test="next-year"]')!;
+    next.focus();
+    expect(root(el).activeElement).toBe(next);
+
+    el.model = yearModel();
+    await el.updateComplete;
+    expect(root(el).querySelector("table")).not.toBeNull();
+    expect(next.isConnected).toBe(true);
+    expect(root(el).querySelector('[data-test="next-year"]')).toBe(next);
+    expect(root(el).activeElement).toBe(next);
+
+    el.model = undefined;
+    await el.updateComplete;
+    expect(root(el).querySelector("table")).toBeNull();
+    expect(next.isConnected).toBe(true);
+    expect(root(el).querySelector('[data-test="next-year"]')).toBe(next);
+    expect(root(el).activeElement).toBe(next);
+  });
+
   it("asks for a month's first day when its name is chosen", async () => {
     const el = await mount();
     const opened: unknown[] = [];
