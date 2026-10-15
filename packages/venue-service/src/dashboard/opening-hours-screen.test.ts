@@ -1108,7 +1108,8 @@ describe("Year view", () => {
     const view = () => el.shadowRoot!.querySelector("opening-hours-year");
     yearDate(await shownYear(view), "2026-10-13").click();
     await expect.poll(() => boxOpen(el)).toBe(true);
-    await expect.poll(() => dayBox(el)?.message).toBe(t("opening.load_error"));
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    expect(dayBox(el)!.message).toBe("");
     expect(dayBox(el)!.line).toBe("");
     expect(boxButtons(el)).toEqual(["Edit special day", "Edit All year's standard week"]);
   });
@@ -1129,10 +1130,40 @@ describe("Year view", () => {
     }) as DashboardRequest);
     const view = () => el.shadowRoot!.querySelector("opening-hours-year");
     yearDate(await shownYear(view), "2026-12-10").click();
-    await expect.poll(() => dayBox(el)?.message).toBe(t("opening.load_error"));
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
     el.api.rereadWithSpecialDays();
     await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
     expect(dayBox(el)!.message).toBe("");
+    expect(dayBox(el)!.error).toBe("");
+  });
+
+  it("keeps the Year box's hours beside an error when a later reread of its month fails, until a reread succeeds", async () => {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    let failures = 0;
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    const el = await mount((async (path: string) => {
+      if (path.includes("/opening-hours/month?")) {
+        if (failures-- > 0) throw { code: "connection.failed" };
+        return monthModel({ month: "2026-12" });
+      }
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) return yearModel(Number(asked[1]));
+      return path.endsWith("/special-days") ? [] : model();
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year");
+    yearDate(await shownYear(view), "2026-12-10").click();
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.error).toBe("");
+    failures = 1;
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    expect(dayBox(el)!.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.message).toBe("");
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe("");
+    expect(dayBox(el)!.line).toBe("Winter standard hours");
   });
 
   it("Month after a date's box opens that date's month", async () => {
@@ -1633,6 +1664,22 @@ describe("Month view", () => {
     const alert = () => el.shadowRoot!.querySelector("[data-test=month-read-error]")?.textContent;
     await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
     expect(view()!.model?.month).toBe("2026-12");
+  });
+
+  it("an open Month box shows the error beside its hours when a later reread of its month fails, until a reread succeeds", async () => {
+    const { el, view, failNext } = await monthMount(
+      "/manage/opening-hours/view/month/month/2026-12",
+    );
+    const box = await ordinary(el, await shown(view));
+    expect(box.error).toBe("");
+    failNext(1);
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    expect(boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe("");
+    expect(boxOpen(el)).toBe(true);
   });
 
   it.each([

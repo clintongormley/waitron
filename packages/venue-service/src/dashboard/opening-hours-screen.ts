@@ -501,6 +501,7 @@ export class OpeningHoursScreen extends LitElement {
         changed.has("yearModel") ||
         changed.has("boxMonth") ||
         changed.has("boxMonthError") ||
+        changed.has("monthReadError") ||
         changed.has("departmentId"))
     )
       void this.placeDayBox();
@@ -970,6 +971,8 @@ export class OpeningHoursScreen extends LitElement {
   private dayBoxContent(date: LocalDate) {
     const year = this.view === "year" ? this.yearModel : undefined;
     const read = year ? this.boxMonth : this.monthModel;
+    // As the Month does, a failed reread leaves the last hours shown, with the error beside them.
+    const error = year ? this.boxMonthError : this.monthReadError;
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
       // The department picker is the Month's: the Year lists every department.
@@ -982,6 +985,7 @@ export class OpeningHoursScreen extends LitElement {
       return {
         shown,
         message: "",
+        error,
         specialDayId: shown.specialDayId,
         season: read.seasons.find(({ id }) => id === shown.seasonId),
         holidays: monthHolidays,
@@ -991,7 +995,8 @@ export class OpeningHoursScreen extends LitElement {
     const yearDay = year.days.find((row) => row.date === date);
     return {
       shown: undefined,
-      message: this.boxMonthError || t("day.loading"),
+      message: error ? "" : t("day.loading"),
+      error,
       specialDayId: yearDay?.specialDay?.id ?? null,
       season: year.seasons.find(({ id }) => id === yearDay?.seasonId),
       holidays: year.days.flatMap((row) => row.holidays),
@@ -1013,6 +1018,7 @@ export class OpeningHoursScreen extends LitElement {
       .line=${shown?.line ?? ""}
       .rows=${shown?.rows ?? []}
       .message=${content.message}
+      .error=${content.error}
       @calendar-day-box-close=${this.dayBoxClosed}
     >
       ${

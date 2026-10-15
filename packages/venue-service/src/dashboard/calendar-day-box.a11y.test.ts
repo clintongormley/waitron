@@ -27,6 +27,11 @@ async function mount(theme: "light" | "dark", state: string) {
     box.nameKind = "holiday";
     box.line = "Autumn standard hours";
     box.rows = [{ name: "Santet Deli Co", text: "Closed" }];
+  } else if (state === "a read error beside earlier hours") {
+    box.rows = [{ name: "Santet Deli Co", text: "Lunch 16:00–17:00" }];
+    box.error = "Opening hours could not be loaded.";
+  } else if (state === "a read error with nothing to show") {
+    box.error = "Opening hours could not be loaded.";
   } else {
     box.message = "Loading…";
   }
@@ -37,11 +42,14 @@ async function mount(theme: "light" | "dark", state: string) {
 }
 
 describe.each(["light", "dark"] as const)("calendar-day-box in %s", (theme) => {
-  test.each(["a special day with buttons", "a plain day with a long name", "a loading message"])(
-    "has no a11y violations: %s",
-    async (state) => {
-      const el = await mount(theme, state);
-      await expectNoA11yViolations(el);
-    },
-  );
+  test.each([
+    "a special day with buttons",
+    "a plain day with a long name",
+    "a loading message",
+    "a read error beside earlier hours",
+    "a read error with nothing to show",
+  ])("has no a11y violations: %s", async (state) => {
+    const el = await mount(theme, state);
+    await expectNoA11yViolations(el);
+  });
 });

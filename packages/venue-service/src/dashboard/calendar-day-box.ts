@@ -54,6 +54,11 @@ export class CalendarDayBox extends LitElement {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
       dl {
         display: grid;
         grid-template-columns: auto 1fr;
@@ -88,6 +93,8 @@ export class CalendarDayBox extends LitElement {
   @property() line = "";
   @property({ attribute: false }) rows: readonly DayBoxRow[] = [];
   @property() message = "";
+  /** A failed read, drawn as an alert beside the rows it leaves shown, if any. */
+  @property() error = "";
 
   @query("[popover]") private popup!: HTMLElement;
   @query("h2") private headingEl!: HTMLElement;
@@ -149,6 +156,7 @@ export class CalendarDayBox extends LitElement {
           : nothing
       }
       ${this.line ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}
+      ${this.error ? html`<p class="error" data-test="error" role="alert">${this.error}</p>` : nothing}
       ${
         this.message
           ? html`<p class="message" data-test="message" role="status">${this.message}</p>`

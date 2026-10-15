@@ -99,6 +99,27 @@ describe("calendar-day-box", () => {
     expect(root.querySelector("[data-test=line]")).toBeNull();
   });
 
+  it("draws an error as an alert beside its rows, instead of them when there are none, and drops it when cleared", async () => {
+    box.rows = [{ name: "Front Bar", text: "Open" }];
+    box.error = "Opening hours could not be loaded.";
+    await box.updateComplete;
+    const root = box.shadowRoot!;
+    const error = () => root.querySelector<HTMLElement>("[data-test=error]");
+    expect(error()!.getAttribute("role")).toBe("alert");
+    expect(error()!.textContent!.trim()).toBe("Opening hours could not be loaded.");
+    expect(root.querySelector("[data-test=message]")).toBeNull();
+    expect([...root.querySelectorAll("dl dt")].map((dt) => dt.textContent!.trim())).toEqual([
+      "Front Bar",
+    ]);
+    box.rows = [];
+    await box.updateComplete;
+    expect(error()!.textContent!.trim()).toBe("Opening hours could not be loaded.");
+    expect(root.querySelector("dl")).toBeNull();
+    box.error = "";
+    await box.updateComplete;
+    expect(error()).toBeNull();
+  });
+
   it("closes on Escape and returns focus to its anchor", async () => {
     box.show(anchor);
     await userEvent.keyboard("{Escape}");
