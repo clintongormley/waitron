@@ -926,6 +926,14 @@ describe("readSpecialDayPlan", () => {
     expect(texts.filter((text) => text.includes('"special_day_date_id" in'))).toEqual([]);
   });
 
+  it("plans no season for a date no season holds", async () => {
+    const v = await venue();
+    await db.delete(seasons).where(eq(seasons.locationId, v.cfg.locationId));
+    const id = await specialDay(v, "2030-12-13");
+    const found = await scoped((tx) => readSpecialDayPlan(tx, v.cfg, id));
+    expect(found!.plan.seasonIdOn).toEqual(new Map([["2030-12-13", null]]));
+  });
+
   it("answers null for a special day it does not hold or another location's", async () => {
     const v = await venue();
     const other = await venue();
