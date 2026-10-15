@@ -29,7 +29,9 @@ export function tableLines(table: ReceiptTable, columns: number): TableLine[] {
   const all = table.header ? [table.header, ...table.rows] : [...table.rows];
   const widest = (cell: (row: ReceiptTableRow) => string): number =>
     Math.max(0, ...all.map((row) => cell(row).length));
-  const unitsWidth = widest((row) => row.units);
+  const unitsRoom = Math.max(0, columns - 1 - MIN_ITEM_WIDTH);
+  const unitsFit = (row: ReceiptTableRow): boolean => row.units.length <= unitsRoom;
+  const unitsWidth = widest((row) => (unitsFit(row) ? row.units : ""));
   const priceWidth = widest((row) => row.price);
   const amountWidth = widest((row) => row.amount);
   const rateWidth = widest((row) => row.rate ?? "");
@@ -46,6 +48,8 @@ export function tableLines(table: ReceiptTable, columns: number): TableLine[] {
   const itemColumn = " ".repeat(unitsWidth + 1);
 
   const rowLines = (row: ReceiptTableRow): string[] => {
+    if (!unitsFit(row))
+      return [...wrapText(row.units, columns), ...rowLines({ ...row, units: "" })];
     const indent = row.itemIndent ?? 0;
     const [first = "", ...rest] = wrapText(" ".repeat(indent) + row.item, itemWidth, indent);
     const lead = row.units.padStart(unitsWidth) + " ";

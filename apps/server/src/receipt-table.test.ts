@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tableLines, type ReceiptTable } from "./receipt-table.js";
+import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
 
 const HEADER = { units: "Uds", item: "Concepto", price: "Precio", amount: "Importe", rate: "IVA" };
 const table = (withRate: boolean): ReceiptTable => ({
@@ -167,5 +167,45 @@ describe("a row with no figures", () => {
         .map((l) => l.text)
         .slice(-3),
     ).toEqual(["  1 Bloody Mary", "             13,64   13,64 10%", "      Sin hielo"]);
+  });
+});
+
+describe("a units cell too wide to leave a useful item column", () => {
+  const LONG_UNITS = "1 raciones de menú degustación";
+  const rows = (units: string): ReceiptTableRow[] => [
+    { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64" },
+    { units, item: "Menú", price: "72,73", amount: "72,73" },
+  ];
+
+  it("prints the units on their own line and lays out the rest as if the cell were empty", () => {
+    const lines = tableLines({ header: HEADER, withRate: false, rows: rows(LONG_UNITS) }, 30);
+    const empty = tableLines({ header: HEADER, withRate: false, rows: rows("") }, 30);
+    expect(lines.map((l) => l.text)).toEqual([
+      ...empty.slice(0, 2).map((l) => l.text),
+      LONG_UNITS,
+      ...empty.slice(2).map((l) => l.text),
+    ]);
+  });
+
+  it("wraps a units cell wider than the paper", () => {
+    const units = `1 ${"porción ".repeat(8).trim()}`;
+    const lines = tableLines({ header: HEADER, withRate: false, rows: rows(units) }, 30);
+    for (const line of lines) expect(line.text.length).toBeLessThanOrEqual(30);
+    expect(lines.map((l) => l.text.trim()).join(" ")).toContain(units);
+  });
+
+  it("never throws and never prints past the paper, whatever the units cell's width", () => {
+    for (const columns of [30, 42, 48])
+      for (const withRate of [false, true])
+        for (let width = 0; width <= 2 * columns; width++) {
+          const units = "x".repeat(width);
+          const table: ReceiptTable = {
+            header: HEADER,
+            withRate,
+            rows: [{ units, item: "Menú del día", price: "72,73", amount: "72,73", rate: "21%" }],
+          };
+          for (const line of tableLines(table, columns))
+            expect(line.text.length).toBeLessThanOrEqual(columns);
+        }
   });
 });

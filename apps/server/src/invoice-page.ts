@@ -13,6 +13,7 @@ const QR_SIZE = (35 * 72) / 25.4;
 const RULE_THICKNESS = 0.75;
 const COLUMN_GAP = 10;
 const INDENT_WIDTH = 5;
+const MIN_ITEM_WIDTH = 100;
 
 type PageText = {
   kind: "text";
@@ -71,6 +72,8 @@ function wrap(text: string, available: number, size: number): string[] {
 }
 
 interface Columns {
+  /** The widest units cell the units column holds; a wider one takes a line of its own. */
+  unitsRoom: number;
   unitsRight: number;
   itemLeft: number;
   itemWidth: number;
@@ -87,10 +90,19 @@ function columnsFor(tables: readonly ReceiptTable[]): Columns {
   const rateWidth = tables.some((table) => table.withRate) ? widest((row) => row.rate ?? "") : 0;
   const amountRight = rateWidth > 0 ? contentRight - rateWidth - COLUMN_GAP : contentRight;
   const priceRight = amountRight - widest((row) => row.amount) - COLUMN_GAP;
-  const unitsRight = MARGIN + widest((row) => row.units);
+  const itemRight = priceRight - widest((row) => row.price) - COLUMN_GAP;
+  const unitsRoom = Math.max(0, itemRight - MIN_ITEM_WIDTH - COLUMN_GAP - MARGIN);
+  const unitsWidths = rows.map((row) => width(row.units, BODY_SIZE));
+  const unitsRight = MARGIN + Math.max(0, ...unitsWidths.filter((units) => units <= unitsRoom));
   const itemLeft = unitsRight + COLUMN_GAP;
-  const itemWidth = priceRight - widest((row) => row.price) - COLUMN_GAP - itemLeft;
-  return { unitsRight, itemLeft, itemWidth, priceRight, amountRight };
+  return {
+    unitsRoom,
+    unitsRight,
+    itemLeft,
+    itemWidth: itemRight - itemLeft,
+    priceRight,
+    amountRight,
+  };
 }
 
 export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
@@ -164,6 +176,15 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   ): void => place(page, at, value, right - width(value, size), size, bold);
   const linesPerPage = Math.floor((INVOICE_PAGE_HEIGHT - 2 * MARGIN) / LINE_HEIGHT);
   const tableRow = (row: ReceiptTableRow, bold: boolean, withRate: boolean): void => {
+    if (width(row.units, BODY_SIZE) > columns.unitsRoom) {
+      text(row.units, MARGIN, INVOICE_PAGE_WIDTH - 2 * MARGIN, {
+        size: BODY_SIZE,
+        bold,
+        centered: false,
+      });
+      tableRow({ ...row, units: "" }, bold, withRate);
+      return;
+    }
     const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
     const itemLines = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
     if (itemLines.length === 0) itemLines.push("");

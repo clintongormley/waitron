@@ -3470,4 +3470,12 @@ describe("the full invoice's item table on roll paper (A663)", () => {
     expect(lines).toContain("Uds Concepto            Precio Importe IVA");
     expect(lines).toContain("  1 Menú del día con un  10,00   10,00 21%");
   });
+
+  it("prints a line whose unit's abbreviation nearly fills a 58 mm roll", () => {
+    const input = structuredClone(FULL_INVOICE_FIXTURE);
+    input.printer = { paperWidth: "58mm", resolution: "203dpi" };
+    input.result.lines[0]!.unitName = { es: "raciones de menú degustación" };
+    const lines = printedLines(formatReceipt(input));
+    expect(lines).toContain("1 raciones de menú degustación");
+  });
 });

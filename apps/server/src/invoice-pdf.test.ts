@@ -745,6 +745,39 @@ describe("A4 columns and right-aligned amounts", () => {
         expect(element.y + 14).toBeLessThanOrEqual(INVOICE_PAGE_HEIGHT - 36);
   });
 
+  it("puts a units cell too wide for its column on its own line, inside the page and over nothing", async () => {
+    const units = `1 ${"raciones de menú degustación ".repeat(5).trim()}`;
+    const [page] = await layoutOf([
+      {
+        kind: "table",
+        table: {
+          header: { ...header, rate: "IVA" },
+          rows: [
+            { ...row, rate: "21%" },
+            { units, item: "Menú", price: "72,73", amount: "72,73", rate: "10%" },
+          ],
+          withRate: true,
+        },
+      },
+    ]);
+    const elements = texts(page!.elements);
+    for (const element of elements) {
+      expect(element.x).toBeGreaterThanOrEqual(36);
+      expect(right(element)).toBeLessThanOrEqual(CONTENT_RIGHT + 1e-6);
+    }
+    for (const [index, a] of elements.entries())
+      for (const b of elements.slice(index + 1))
+        if (a.y === b.y) expect(right(a) <= b.x || right(b) <= a.x).toBe(true);
+    const at = (value: string) => named(page!.elements, value);
+    expect(at("Menú").x).toBe(at("Croquetas").x);
+    expect(right(at("12"))).toBeCloseTo(right(at("Uds.")), 5);
+    expect(at("Croquetas").x - right(at("12"))).toBeLessThan(20);
+    const unitsLines = elements.filter(
+      (element) => element.y < at("Menú").y && element.y > at("Croquetas").y,
+    );
+    expect(unitsLines.map((element) => element.text).join(" ")).toBe(units);
+  });
+
   it("gives a row with no item name a line of its own, and an amount with no caption one too", async () => {
     const [page] = await layoutOf([
       {
