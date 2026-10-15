@@ -1784,3 +1784,33 @@ native close, which Chromium queues for the next rendered frame.
 In
 Chromium a scripted click runs pending microtasks only after the whole dispatch; a real pointer
 click runs them after each listener.
+
+
+## An offline-drain fixture advances the fake AEAT clock when it reconnects
+
+The library fake compares an invoice date, parsed at UTC midnight, with its `serverNow`.
+An invoice issued after local midnight can therefore look future-dated to a fake still on
+the previous UTC day. Keep the fake's clock consistent with the fixture's reconnect time.
+This describes the fake's check, not a measured AEAT server rule.
+
+Measured for A693 on 2026-10-15, Node v26.11.1 and Vitest 4.1.11: the offline-drain
+case in `apps/server/src/transactional-series.test.ts`, with only `Date` faked, passed at
+`2026-10-14T12:00:00Z` in UTC, Madrid, Tokyo and New York. At `23:30:00Z` it passed in
+UTC and New York and failed in Madrid and Tokyo. Both failures submitted one record,
+then retained `rechazado` with code `1112`; the stored invoice date was `2026-10-15`
+and the fake's clock was still `2026-10-14T23:30:00Z`. The drain had sent the record
+and applied the fake's refusal. Advancing both the fake and reconnect time to
+`2026-10-15T12:00:00Z` passed all eight clock cases with the original series and
+acceptance assertions retained. The full file passed 16 cases under both host
+`TZ=Europe/Madrid` and `TZ=UTC`:
+
+```sh
+TZ=Europe/Madrid pnpm --filter @waitron/server exec vitest run src/transactional-series.test.ts
+TZ=UTC pnpm --filter @waitron/server exec vitest run src/transactional-series.test.ts
+```
+
+Deployment does not set a process time zone in `deploy/Dockerfile`'s runtime `ENV` or
+`deploy/compose.yml`'s app environment and mounts. A local
+`docker run --rm --network none node:26.11.1-slim node -e
+'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'` printed `UTC`.
+That base-image probe does not measure an operator's configured appliance.

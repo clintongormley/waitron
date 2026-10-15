@@ -5340,12 +5340,6 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **A693. `transactional-series.test.ts`'s offline-drain case failed under every time zone tried
-  whose date was ahead of UTC's (2026-10-15; check, fiscal drain).** `TZ=Europe/Madrid` and
-  `TZ=Asia/Tokyo` failed it, `TZ=UTC` and `TZ=America/New_York` passed; CI runs in UTC. Not yet run
-  under Madrid while its date matches UTC's. Next: run it under `TZ=Europe/Madrid` while the two
-  dates agree. [Detail](backlog/ci.md#a693-the-offline-drain-case-failed-under-madrid-and-tokyo-time-and-passed-under-utc-and-new-york-time).
-
 - **A674. `ci` can fail on a job GitHub has finished but not yet marked finished.** Its second
   step reads the jobs API and gives up after six tries ten seconds apart (`docs/developers/ci-and-gates.md`,
   "How the second step reads the API"). Main run 38573258715 (A659's merge, 2026-10-14) failed that

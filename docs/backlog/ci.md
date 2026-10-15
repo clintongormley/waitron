@@ -3,26 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## A693: the offline-drain case failed under Madrid and Tokyo time and passed under UTC and New York time
-
-"keeps the emergency series through offline drain and successful reconnection"
-(`apps/server/src/transactional-series.test.ts`) failed `expected +0 to be 1` on
-`online.recordsAccepted` on a clean checkout of `main` f1fea4bf0. Measured at 23:08 UTC on
-2026-10-14 (01:08 in Madrid, 15 October), one after the other: `TZ=UTC` passed 9 of 9 and
-`TZ=Europe/Madrid` failed it. CI runs in UTC and passed it at 22:46–22:51 UTC. Measured again at
-23:16 UTC on 2026-10-14 on A648's branch, with
-`TZ=<zone> pnpm exec vitest run src/transactional-series.test.ts -t 'offline drain and successful reconnection'`
-in `apps/server`: `America/New_York` (still 14 October) and `UTC` passed it; `Asia/Tokyo` and
-`Europe/Madrid` (both already 15 October) failed it with `expected +0 to be 1`. Not yet run: Madrid
-while its date matches UTC's, so "fails whenever the local date is ahead" is not separated from
-"fails in any zone east of UTC".
-
-Not traced: whether the test or the drain reads a local date where it should read Madrid's or
-UTC's. Next: run it under `TZ=Europe/Madrid` while the two dates agree, find the date the second
-drain compares, then fix it at the root. If the failure follows the date difference, a drain run in
-the hour or two each night when Madrid's date is ahead of UTC's (two in summer time, one in winter)
-may not file, which would be a product defect, not a test one.
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
