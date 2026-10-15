@@ -4330,7 +4330,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Every table but the party's own; Move guests also offers the party's own tables while it holds
    * more than one, since moving to one of them leaves the others. Join a table offers only the
    * party's zone, as `joinTables` refuses any other while the party's zone is known. A free table in
-   * an area that does not seat guests is left out, as `refuseUnseatable` refuses it for all three. */
+   * an area that does not seat guests is left out, as `refuseUnseatable` refuses it for Move guests,
+   * Join a table and Move this bill. */
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;

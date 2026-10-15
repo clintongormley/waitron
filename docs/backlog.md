@@ -2090,8 +2090,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A697 — the order screen's table lists offer tables in a closed area (2026-10-15; open; left
   open by A690).** Move guests to a table in another area is refused while that area takes no new
   orders (`assertZoneTakesNewOrders` in `moveGuests`, `apps/server/src/table-actions.ts`), and so
-  is Move this bill to another area (`adoptZone`, `apps/server/src/move-bill.ts`), free table or
-  held; `#tableTargets` (`apps/till/src/screens/till-table-order-screen.ts`) does not read
+  is moving an open bill to another area (`adoptZone`, `apps/server/src/move-bill.ts`), whether the
+  table is free or another party holds it; `#tableTargets` (`apps/till/src/screens/till-table-order-screen.ts`) does not read
   `zone.closed`, which the floor does.
 
 - **A691 — the floor still offers joining two seated parties where the server can refuse it
