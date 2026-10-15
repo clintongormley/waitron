@@ -4606,7 +4606,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
   (#1681); part 2 (staffing paint storage and routes, the slot and matching library) landed
   (#1686); part 3 (the Calendar with module views, the staffing month read and the Staffing view's
-  month) landed (#1735); parts 4–8 are open, in the order of the
+  month) landed (#1735); part 4 (the season-week and special-day staffing painters) landed
+  (#1742); parts 5–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
   formatting.** `stepMonth` and the first and last month in
