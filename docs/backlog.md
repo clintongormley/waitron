@@ -1090,12 +1090,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   a Cloud without version 2 refuses, so Cloud's version 2 must be deployed before a box built from
   `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)). **Tasks 5–10 (the
   catalogue's job and suggestion tables, collecting and building a job, recording a job, and
-  storing, listing and discarding suggestions) are on `main` too**; nothing calls them until the
-  runner and routes (Task 11 onwards).
+  storing, listing and discarding suggestions) are on `main` too**; until the runner and routes
+  (Task 11 onwards), only the translations save reaches them, deleting the saved items' waiting
+  suggestions.
 
 - **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
-  The box saves up to 200 languages; past 20 a job can hold no item at all, and the box sends it
-  anyway, so Cloud's 400 reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
+  The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
+  job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
   second PR). A box-side refusal before any job is built would say what is wrong.
 
 - **Translate all: open points from the review of A689's second PR.** (1) A suggestion's
@@ -1104,7 +1105,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   not noticed. (2) A waiting placeholder ("the name doesn't say what it is") stops every later run
   from asking for that item, even after its staff name is clarified, until someone discards it.
   (3) A variant whose product's staff name is over 500 characters is sent with no product as
-  context, because that product is left out of the job (plan Decisions 9 and 10).
+  context, because that product is left out of the job (plan Decisions 9 and 10). (4) The fake
+  Cloud refuses a language tag outside `^[a-z]{2,3}(-[A-Z]{2})?$`
+  (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
+  enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
+  `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the

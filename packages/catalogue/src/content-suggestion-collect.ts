@@ -97,9 +97,9 @@ export async function readLiveItems(
 export async function readSuggestionGaps(
   tx: Transaction,
   context: TranslationContext,
-  read?: TranslationSettings,
+  settings?: TranslationSettings,
 ): Promise<SuggestionGaps> {
-  const settings = read ?? (await readTranslationSettings(tx, context));
+  settings ??= await readTranslationSettings(tx, context);
   const { config } = settings;
   const gaps = new SuggestionGaps(settings);
   // Every gap row is live: the listing's liveness filter implies `isLiveTarget`.
