@@ -1753,14 +1753,14 @@ export class DashboardApp extends LitElement {
             ? this.renderRoot.querySelector("dashboard-my-schedule-screen")
             : null;
         const hoursPanel = retainedSchedule?.shadowRoot?.querySelector("dashboard-my-hours-panel");
-        const hoursDraft = hoursPanel?.shadowRoot?.querySelector(
-          "dashboard-attendance-proposal-dialog",
+        const hoursDrafts = Array.from(
+          hoursPanel?.shadowRoot?.querySelectorAll(
+            "dashboard-attendance-proposal-dialog, dashboard-attendance-export-dialog",
+          ) ?? [],
         );
-        // A tab change retains the schedule forms and releases only the Hours editor's draft.
+        // A tab change retains schedule forms while guarding the Hours dialogs it releases.
         const scopes = retainedSchedule
-          ? hoursDraft
-            ? [hoursDraft]
-            : []
+          ? hoursDrafts
           : requested === "profile"
             ? []
             : this.profileOpen && requested === this.screen && profile

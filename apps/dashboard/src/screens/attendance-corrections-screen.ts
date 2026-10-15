@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, type DashboardRequest, type LiveData } from "@waitron/dashboard-kit";
 import type {
+  AttendanceExportOptions,
   AttendanceChange,
   AttendanceCommand,
   AttendanceCommandResult,
@@ -11,6 +12,8 @@ import type {
   ManagerHours,
 } from "@waitron/dashboard-modules";
 import { baseStyles } from "@waitron/ui";
+import { AttendanceExportApi } from "../api/attendance-export.js";
+import "../widgets/attendance-export-dialog.js";
 import { HoursApi } from "../api/hours.js";
 import "../widgets/hours-record.js";
 import { AttendanceApi } from "../api/attendance.js";
@@ -125,6 +128,10 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @state() private hours: ManagerHours | null = null;
   @state() private periodDate = "";
   @state() private hoursReading = false;
+  @state() private exportOptions: AttendanceExportOptions | null = null;
+  @state() private exportOpen = false;
+  @state() private exportError = "";
+  #exportRead = 0;
   #hoursApi?: HoursApi;
   @state() private queue: CorrectionItem[] = [];
   @state() private view: AttendanceDayView | null = null;
@@ -161,6 +168,9 @@ export class AttendanceCorrectionsScreen extends LitElement {
   }
   override disconnectedCallback(): void {
     this.#generation++;
+    this.#exportRead++;
+    this.exportOpen = false;
+    this.exportOptions = null;
     this.#actionWait?.abort();
     this.#initialized = false;
     this.#pending = null;
@@ -177,10 +187,40 @@ export class AttendanceCorrectionsScreen extends LitElement {
         changed.has("mode"))
     )
       void this.#start();
+    if (this.isConnected && changed.has("locationId")) void this.#loadExportOptions();
+  }
+  async #loadExportOptions(): Promise<void> {
+    const read = ++this.#exportRead;
+    const generation = this.#generation,
+      location = this.locationId,
+      request = this.request;
+    this.exportOpen = false;
+    this.exportOptions = null;
+    this.exportError = "";
+    if (this.mode !== "hours" || !location || !request) return;
+    try {
+      const options = await new AttendanceExportApi(request).options(location);
+      if (
+        this.isConnected &&
+        read === this.#exportRead &&
+        generation === this.#generation &&
+        location === this.locationId &&
+        request === this.request &&
+        this.mode === "hours"
+      )
+        this.exportOptions = options;
+    } catch (error) {
+      if (this.isConnected && read === this.#exportRead && generation === this.#generation)
+        this.exportError = codeMessage(codeOf(error));
+    }
   }
   async #start(): Promise<void> {
     this.#initialized = true;
     this.#generation++;
+    this.#exportRead++;
+    this.exportOpen = false;
+    this.exportOptions = null;
+    this.exportError = "";
     this.#actionWait?.abort();
     for (const slot of ["lookups", "queue", "day", "hours"]) this.#queries.release(slot);
     this.hours = null;
@@ -315,6 +355,27 @@ export class AttendanceCorrectionsScreen extends LitElement {
         ></wt-input>
       </div>
       <div class="actions">
+        ${
+          this.exportOptions?.available && this.exportOptions.canExportAll
+            ? html`<wt-button
+                data-export
+                variant=${this.hours && !disabled ? "primary" : "secondary"}
+                .disabled=${disabled || !this.hours}
+                @click=${() => {
+                  if (
+                    this.hours &&
+                    !disabled &&
+                    this.isConnected &&
+                    this.mode === "hours" &&
+                    this.exportOptions?.available &&
+                    this.exportOptions.canExportAll
+                  )
+                    this.exportOpen = true;
+                }}
+                >${t("attendance_export.heading")}</wt-button
+              >`
+            : nothing
+        }
         <wt-button
           data-hours-previous
           variant="secondary"
@@ -612,7 +673,10 @@ export class AttendanceCorrectionsScreen extends LitElement {
     if (ownsBusy) this.busy = true;
     try {
       if (this.#pending) await this.#recover(this.#pending);
-      else await this.#refresh();
+      else {
+        await this.#refresh();
+        if (this.exportError) await this.#loadExportOptions();
+      }
     } finally {
       if (ownsBusy && generation === this.#generation) this.busy = false;
     }
@@ -740,6 +804,20 @@ export class AttendanceCorrectionsScreen extends LitElement {
       ${this.uncertain || this.retry ? html`<p role="status">${t(this.uncertain ? "attendance.uncertain" : "attendance.retry_response_message")}</p>` : nothing}
       ${this.readError || this.uncertain ? html`<wt-button data-retry-read variant="secondary" .disabled=${this.busy} @click=${() => void this.#retryRead()}>${t("attendance.retry_read")}</wt-button>` : nothing}
       ${this.retry ? html`<wt-button data-retry-command variant="primary" .disabled=${this.busy} @click=${() => this.#retryCommand()}>${t("attendance.retry_response")}</wt-button>` : nothing}
+      ${this.exportError ? html`<p class="error" role="alert" data-export-error>${this.exportError}</p>` : nothing}
+      <dashboard-attendance-export-dialog
+        mode="manager"
+        .open=${this.exportOpen}
+        .request=${this.request}
+        .scopeKey=${`${this.#generation}`}
+        .locationId=${this.locationId}
+        .period=${this.hours?.period ?? { start: "", end: "" }}
+        .people=${this.hours?.people ?? this.lookups?.people ?? []}
+        .personId=${this.personId || undefined}
+        @export-close=${() => {
+          this.exportOpen = false;
+        }}
+      ></dashboard-attendance-export-dialog>
       <dashboard-attendance-proposal-dialog
         .view=${this.view}
         .open=${this.editorOpen}

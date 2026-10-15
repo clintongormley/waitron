@@ -1,3 +1,4 @@
+import type { AttendanceExportDialog } from "./widgets/attendance-export-dialog.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { createRequest } from "@waitron/dashboard-kit";
@@ -48,6 +49,11 @@ async function mount(modules: string[], permissions: string[], role = "superviso
   const request = createRequest({
     fetchImpl: async (path) => {
       requests.push(path);
+      if (path.includes("export-options"))
+        return Response.json({
+          available: modules.includes("workforce-es"),
+          canExportAll: permissions.includes("report.export"),
+        });
       if (path.endsWith("/me/attendance/inbox"))
         return Response.json({
           personId: "boss",
@@ -257,5 +263,73 @@ it.each([
     expect(el.shadowRoot!.querySelector("[data-test=nav-hours]")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")).toBeNull();
     expect(requests).toEqual([]);
+  },
+);
+
+it.each(["own", "manager"] as const)(
+  "the real shell protects a dirty %s export on page leave and forced session teardown",
+  async (mode) => {
+    const { el } = await mount(
+      ["workforce", "workforce-es"],
+      ["workforce.correct", "report.export"],
+      mode === "own" ? "staff" : "manager",
+      mode === "own" ? "/manage/my-schedule" : "/",
+    );
+    if (mode === "own") {
+      const schedule = el.shadowRoot!.querySelector("dashboard-my-schedule-screen")!;
+      await userEvent.click(
+        schedule
+          .shadowRoot!.querySelector("wt-tabs")!
+          .shadowRoot!.querySelector('[data-key="hours"]')!,
+      );
+    } else {
+      const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
+      if (team.getAttribute("aria-expanded") === "false") await userEvent.click(team);
+      await userEvent.click(el.shadowRoot!.querySelector("[data-test=nav-hours]")!);
+    }
+    const parent = () =>
+      mode === "own"
+        ? el
+            .shadowRoot!.querySelector("dashboard-my-schedule-screen")
+            ?.shadowRoot?.querySelector("dashboard-my-hours-panel")
+        : el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen");
+    await expect.poll(() => parent()?.shadowRoot?.querySelector("[data-export]")).toBeTruthy();
+    await userEvent.click(parent()!.shadowRoot!.querySelector("[data-export]")!);
+    const dialog = parent()!.shadowRoot!.querySelector<AttendanceExportDialog>(
+      "dashboard-attendance-export-dialog",
+    )!;
+    await expect.poll(() => dialog.shadowRoot?.querySelector('[name="exportFrom"]')).toBeTruthy();
+    const field =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="exportFrom"]')!;
+    await field.updateComplete;
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "2020-01-01");
+    await dialog.updateComplete;
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
+    const choice = (decision: string) =>
+      el
+        .shadowRoot!.querySelector("wt-unsaved-changes")!
+        .dispatchEvent(
+          new CustomEvent("wt-unsaved-choice", {
+            detail: { decision },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+    choice("keep");
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBeFalsy();
+    expect(dialog.open).toBe(true);
+    expect(field.value).toBe("2020-01-01");
+    history.back();
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
+    choice("keep");
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBeFalsy();
+    expect(location.pathname).toBe(
+      mode === "own" ? "/manage/my-schedule/view/hours" : "/manage/hours",
+    );
+    expect(field.value).toBe("2020-01-01");
+    el.remove();
+    await dialog.updateComplete;
+    expect(dialog.open).toBe(false);
   },
 );
