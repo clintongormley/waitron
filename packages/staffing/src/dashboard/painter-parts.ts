@@ -39,6 +39,21 @@ export function guidesKeeper(): (
   };
 }
 
+/** Keeps one column-errors map while the refusal it is read from stays the same, as `guidesKeeper`
+ *  keeps the hours. */
+export function columnErrorsKeeper(): (
+  refused: { area?: string; column?: string; reason?: string } | undefined,
+  shown: string,
+) => ReadonlyMap<string, string> {
+  let kept: { refused: object; errors: ReadonlyMap<string, string> } | undefined;
+  return (refused, shown) => {
+    if (refused?.area !== shown || refused.column === undefined) return NOTHING_BY_KEY;
+    if (kept?.refused !== refused)
+      kept = { refused, errors: new Map([[refused.column, refused.reason!]]) };
+    return kept.errors;
+  };
+}
+
 export const painterStyles = css`
   :host {
     display: contents;

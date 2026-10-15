@@ -20,6 +20,7 @@ import {
   NOTHING_BY_KEY,
   areaPicker,
   droppedNotice,
+  columnErrorsKeeper,
   guidesKeeper,
   paintRow,
   painterStyles,
@@ -131,6 +132,7 @@ export class StaffingSeasonPainter extends LitElement {
   private watchingRoles = false;
   private weekColumns?: { locale: string; columns: readonly StaffingColumn[] };
   private readonly guides = guidesKeeper();
+  private readonly columnErrors = columnErrorsKeeper();
 
   readonly #roles = new QueryController(
     this,
@@ -419,11 +421,7 @@ export class StaffingSeasonPainter extends LitElement {
       .headcount=${this.headcount}
       .cutover=${read.cutover}
       .readOnly=${this.readOnly || this.saving}
-      .columnErrors=${
-        this.refused?.area === shown && this.refused.column !== undefined
-          ? new Map([[this.refused.column, this.refused.reason!]])
-          : NOTHING_BY_KEY
-      }
+      .columnErrors=${this.columnErrors(this.refused, shown)}
       @staffing-change=${(event: CustomEvent<StaffingChange>) => this.paint(shown, event)}
     ></staffing-grid>`;
   }

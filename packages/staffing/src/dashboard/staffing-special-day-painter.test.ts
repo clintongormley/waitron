@@ -165,7 +165,7 @@ it("keeps each area's edits while the picker moves between them, never writing t
   expect(open).not.toHaveBeenCalled();
 });
 
-it("hands the grid the same hours while only the paint changes, so it does not lay them out again", async () => {
+it("hands the grid the same hours map until the read, the area or the columns change", async () => {
   const { painter } = await mount();
   const guides = grid(painter).guides;
   await paint(painter, "eve", [dinner]);
@@ -327,6 +327,24 @@ it("a refusal naming an edit shows that area and marks its date, keeping the dra
   await paint(painter, "day", null);
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(frame(painter).refusal).toBe("");
+});
+
+it("hands the grid the same column errors while only something else changes", async () => {
+  const { painter } = await mount({
+    save: () => Promise.reject({ code: "staffing.invalid", params: { field: "edits.1.blocks.0" } }),
+  });
+  await paint(painter, "day", [dinner]);
+  await pick(painter, "station:st-kitchen");
+  await paint(painter, "day", [dinner]);
+  await pick(painter, "department:dep-bar");
+  saveButton(painter).click();
+  await settle(painter);
+  const errors = grid(painter).columnErrors;
+  expect(errors.size).toBe(1);
+  root(painter).querySelectorAll<HTMLElement>("[data-test^=staff-role-]")[1]!.click();
+  await settle(painter);
+  expect(grid(painter).chosen).toBe("sc");
+  expect(grid(painter).columnErrors).toBe(errors);
 });
 
 it("any other refusal shows its message beside Save and keeps the draft", async () => {
