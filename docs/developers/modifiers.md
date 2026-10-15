@@ -200,9 +200,10 @@ the basket resolved, and decides what is stored:
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
-- A pick on a dish that is not priced `each` is refused with `extras.unsupported_product`: a child
-  priced dish × pick would bill a fraction of an extra on a weighed dish. An options answer on a
-  weighed dish is still allowed.
+- A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
+  refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
+  priced dish × pick would bill a fraction of an extra. An options answer on such a dish is still
+  allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,

@@ -720,12 +720,15 @@ export async function priceOrderLines(
     const extraChildren = line[FROZEN_EXTRAS] ?? built.extraChildren;
     const optionSnapshots = line[FROZEN_OPTIONS] ?? built.optionSnapshots;
 
-    // A child is priced at dish quantity × pick quantity, so a dish sold by weight would bill a
-    // fraction of each extra.
-    if (extraChildren.length > 0 && product.pricingUnit !== "each") {
+    // A child is priced at dish quantity × pick quantity, so a dish whose unit allows a fraction
+    // would bill a fraction of each extra.
+    if (
+      extraChildren.length > 0 &&
+      (selection.unit.hardwareUnit !== null || selection.unit.precision > 0)
+    ) {
       throw new AppError("extras.unsupported_product", {
         productId: offer.productId,
-        pricingUnit: product.pricingUnit,
+        soldBy: selection.unit.hardwareUnit !== null ? "weight" : "fraction",
       });
     }
 

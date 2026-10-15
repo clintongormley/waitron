@@ -27,6 +27,7 @@ import {
   addProductToMenu,
   createOptionList,
   createProduct,
+  createUnit,
   deleteUnit,
   listAvailableProducts,
   listMembers,
@@ -2131,7 +2132,7 @@ describe("ordering extras and options — parent + child lines", () => {
       }),
     ).rejects.toMatchObject({
       code: "extras.unsupported_product",
-      params: { productId: v.jamonId, pricingUnit: "weight" },
+      params: { productId: v.jamonId, soldBy: "weight" },
     });
 
     // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
@@ -2153,6 +2154,45 @@ describe("ordering extras and options — parent + child lines", () => {
       code: "extras.limit_exceeded",
       params: { extraListId: v.guarnicionListId },
     });
+  });
+
+  // A unit made in the venue never has a scale but may allow decimals; the rule is the unit's, so
+  // a whole "1" of such a dish is refused as surely as "0.5".
+  it("refuses extras on a dish in a unit with decimal places and no scale, at any quantity", async () => {
+    const v = await setupModifierVenue();
+    const deps = { db: suite.db, backend, clock };
+    await withTransaction(suite.db, async (tx) => {
+      const litre = await createUnit(
+        tx,
+        {
+          name: { [v.defaultLanguage]: "Litro" },
+          abbreviation: { [v.defaultLanguage]: "l" },
+          precision: 3,
+        },
+        v.defaultLanguage,
+      );
+      await assignProductUnit(tx, v.burgerId, litre.id);
+      await republishMenus(tx);
+    });
+
+    for (const quantity of ["0.5", "1"]) {
+      await expect(
+        recordTillSale(deps, v.cfg, {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity,
+              extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
+            },
+          ],
+          tender: { method: "cash", amount: "20.00" },
+        }),
+      ).rejects.toMatchObject({
+        code: "extras.unsupported_product",
+        params: { productId: v.burgerId, soldBy: "fraction" },
+      });
+    }
   });
 
   // An extra that is Unavailable or Inactive is refused like a pick the list does not offer. Each
