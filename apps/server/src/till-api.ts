@@ -2817,12 +2817,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               acted = await actAndMerge();
             } else {
               // A merge can pass guests on after the join, so the kitchen is told once, at the end.
-              // Not widened to the target group's members as the floor's merge is, yet:
-              // docs/backlog.md, A704.
-              const holder = await holderOf(tx, tableId);
-              const parties = holder === null ? [partyId] : [partyId, holder];
-              const deliveredTo = [merge.moving, merge.target];
-              acted = await withMovedSlips(tx, sendCfg, { parties, deliveredTo }, actAndMerge);
+              acted = await withMovedSlips(
+                tx,
+                sendCfg,
+                { tables: [merge.moving, merge.target], targetGroupOf: merge.target },
+                actAndMerge,
+              );
             }
             // Last, so the route's own refusals answer first.
             await refuseTakenOff(tx, [tableId]);

@@ -851,3 +851,60 @@ describe("a counter order delivered to a table an action brings into or takes ou
     expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.t9!), name));
   });
 });
+
+describe("the till's Join pushing a table onto a group, as the kitchen sees it", () => {
+  /**
+   * Table 9 pushed onto free Counter 6 by the floor's merge route (no name); Long table renamed;
+   * guests at Long table with a Burger sent; then `before`, then the till joins them to Counter 6,
+   * dragging Long table onto it.
+   */
+  async function joinLongTableOntoCounter6(before: (zoneId: string, t9: string) => Promise<void>) {
+    const { table, zoneId } = await LONG_TABLE();
+    await post(
+      `/api/tables/${table.t9!}/today/merge`,
+      await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
+    );
+    await before(zoneId, table.t9!);
+    const name = suffixed("Fiesta");
+    await rename(table.long!, name);
+    const guests = await seat(v, table.long!, 12);
+    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+
+    const printed = await jobsFrom(async () =>
+      post(`/api/parties/${guests.partyId}/join`, {
+        zoneRevision: await readRevision(table.c6!),
+        tableId: table.c6!,
+        bills: "merge",
+        expectedPartyRevision: await revisionOf(v, guests.partyId),
+        otherPartyId: null,
+        merge: { moving: table.long!, target: table.c6!, side: "right", seats: 16 },
+      }),
+    );
+    return { table, name, slips: printed.filter(isMovedSlip).map((slip) => slip.join(" ")) };
+  }
+
+  /** The guests' own MOVED slip: from the name alone to the name over Counter 6 and the rest. */
+  async function guestsSlip(name: string, counter6: string) {
+    return fromTo(`${name} (${name})`, `${name} (${await labelOf(counter6)},`);
+  }
+
+  it("with no counter order at the group's tables prints one MOVED slip, for the guests' own Burger, from the name to the name over Counter 6 and the rest", async () => {
+    const { table, name, slips } = await joinLongTableOntoCounter6(async () => {});
+
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain(await guestsSlip(name, table.c6!));
+  });
+
+  it("with a counter order delivered to Table 9 also prints one MOVED slip for it, from Table 9 to the name, as the floor's merge does", async () => {
+    const { table, name, slips } = await joinLongTableOntoCounter6(async (zoneId, t9) => {
+      await deliveredCounterOrder(zoneId, t9);
+    });
+
+    expect((await floorRow(v, table.t9!)).today?.joinName).toBe(name);
+    const walkUp = fromTo(await labelOf(table.t9!), name);
+    expect(slips.filter((slip) => slip.includes(walkUp))).toHaveLength(1);
+    const guests = await guestsSlip(name, table.c6!);
+    expect(slips.filter((slip) => slip.includes(guests))).toHaveLength(1);
+    expect(slips).toHaveLength(2);
+  });
+});
