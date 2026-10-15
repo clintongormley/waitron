@@ -673,6 +673,147 @@ async function get(cookie: string, path: string) {
   };
 }
 
+async function departmentlessTill() {
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
+    .returning();
+  return { profileId: profile!.id, ...(await login(profile!.id)) };
+}
+
+describe("departmentless transfer monitoring", () => {
+  it.each([
+    ["incoming", { receiving: false, count: 0, requests: [] }],
+    ["sent", { requests: [] }],
+    ["selected tab", { requests: [] }],
+  ] as const)(
+    "answers repeated %s polls quietly without exposing another department's requests",
+    async (path, body) => {
+      const f = await ready();
+      await pending(f);
+      const till = await departmentlessTill();
+      logged.length = 0;
+      for (let poll = 0; poll < 2; poll++) {
+        const url =
+          path === "selected tab" ? requestPath(f.tab) : `/api/department-transfers/${path}`;
+        expect(await get(till.cookie, url)).toEqual({
+          status: 200,
+          body,
+        });
+      }
+      expect(logged).toEqual([]);
+    },
+  );
+
+  it("keeps detail, destinations and transfer writes refused", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    const till = await departmentlessTill();
+    for (const path of [
+      `/api/department-transfers/${id}`,
+      "/api/department-transfers/destinations",
+    ])
+      expect(await get(till.cookie, path)).toMatchObject({
+        status: 403,
+        body: { error: { code: "department_transfer.not_allowed" } },
+      });
+    for (const [path, body] of [
+      [requestPath(f.tab), { destinationDepartmentId: f.b }],
+      [resolutionPath(id, "withdraw"), {}],
+      [resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz, tableId: null }],
+      [resolutionPath(id, "decline"), { reason: "No" }],
+    ] as const)
+      expect(await post(till.cookie, path, body)).toMatchObject({
+        status: 403,
+        body: { error: { code: "department_transfer.not_allowed" } },
+      });
+    expect((await state(f.tab)).requests[0]!.status).toBe("pending");
+    expect((await state(f.tab)).context.zoneId).toBe(f.az);
+  });
+
+  for (const change of ["action", "admission", "suspended", "revoked"] as const)
+    it(`still refuses departmentless monitor reads after ${change}`, async () => {
+      const till = await departmentlessTill();
+      if (change === "action")
+        await suite.db
+          .update(deviceProfiles)
+          .set({ capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== "take-orders") })
+          .where(eq(deviceProfiles.id, till.profileId));
+      if (change === "admission")
+        await withTransaction(suite.db, (tx) =>
+          setProfileAdmission(tx, till.profileId, {
+            personExceptions: [{ personId, admitted: false }],
+          }),
+        );
+      if (change === "suspended")
+        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
+      if (change === "revoked")
+        await suite.db.update(devices).set({ active: false }).where(eq(devices.id, till.deviceId));
+      try {
+        for (const path of ["incoming", "sent", "events"])
+          expect(await get(till.cookie, `/api/department-transfers/${path}`)).toMatchObject({
+            status: change === "revoked" ? 401 : 403,
+            body: {
+              error: {
+                code: {
+                  action: "device.forbidden_action",
+                  admission: "device_profile.not_admitted",
+                  suspended: "person.suspended",
+                  revoked: "device.unauthorized",
+                }[change],
+              },
+            },
+          });
+      } finally {
+        if (change === "suspended")
+          await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, personId));
+      }
+    });
+
+  it("keeps its authenticated stream through heartbeats and notices a newly assigned receiving department", async () => {
+    const f = await ready();
+    const id = await pending(f);
+    const till = await departmentlessTill();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    logged.length = 0;
+    try {
+      const response = await app.request("/api/department-transfers/events", {
+        headers: { cookie: till.cookie },
+      });
+      expect(response.status).toBe(200);
+      reader = response.body!.getReader();
+      const text = (value: Uint8Array | undefined) => new TextDecoder().decode(value);
+      expect(text((await reader.read()).value)).toBe("event: ready\ndata: {}\n\n");
+      for (let heartbeat = 0; heartbeat < 2; heartbeat++) {
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(text((await reader.read()).value)).toBe("event: keepalive\ndata: {}\n\n");
+      }
+      expect(logged).toEqual([]);
+      await withTransaction(suite.db, async (tx) => {
+        await setProfileServiceScope(tx, v.cfg, till.profileId, {
+          departmentId: f.b,
+          allowedZoneIds: [f.bz],
+          startingZoneId: f.bz,
+        });
+        await setDepartmentTransferSettings(tx, v.cfg, f.b, {
+          receivingProfileId: till.profileId,
+          destinationDepartmentIds: [],
+        });
+      });
+      liveEvents.publish({ resources: [{ type: "department_transfer_desks" }] });
+      expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+      expect(await get(till.cookie, "/api/department-transfers/incoming")).toMatchObject({
+        status: 200,
+        body: { receiving: true, count: 1, requests: [{ id }] },
+      });
+    } finally {
+      await reader?.cancel();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("department transfer durable reads", () => {
   it("shows only configured usable destinations without granting destination browsing", async () => {
     const f = await ready();
