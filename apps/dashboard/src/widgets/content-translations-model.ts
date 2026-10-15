@@ -38,8 +38,8 @@ export class TranslationDrafts {
   #suggestions = new Map<string, RowSuggestion>();
   #filled = new Map<string, DraftValues>();
   /** What a suggestion had filled when a person's edit began, and the suggestion ids it came from;
-   * deleting any of those ids takes back each field still holding that text, even once a read no
-   * longer lists the suggestion. */
+   * a Discard that deletes any id of a suggestion sharing one of these ids takes back each field
+   * still holding that text, even once a read no longer lists the suggestion. */
   readonly #borrowed = new Map<string, DraftValues & { ids: readonly string[] }>();
   readonly #dismissed = new Set<string>();
   readonly #staleIds = new Set<string>();
@@ -194,7 +194,7 @@ export class TranslationDrafts {
   }
   suggestionFor(ref: TranslationRef): RowSuggestion | undefined {
     const found = this.#suggestions.get(translationKey(ref));
-    if (!found || found.ids.every((id) => this.#dismissed.has(id))) return undefined;
+    if (!found || found.ids.some((id) => this.#dismissed.has(id))) return undefined;
     return found.ids.some((id) => this.#staleIds.has(id)) ? { ...found, stale: true } : found;
   }
   suggest(found: ReadonlyMap<string, RowSuggestion>): void {
@@ -202,8 +202,8 @@ export class TranslationDrafts {
     this.#refill();
   }
   /** `deleted` defaults to every id of the row's current suggestion. `discarded` is the row's
-   * suggestion ids when its discard began: none of them fills the row again, nor does the row's
-   * current suggestion while it shares one of them. */
+   * suggestion ids when its discard began: no suggestion that includes any of them fills the row
+   * again, and an edit's untouched text borrowed from one is taken back. */
   unsuggest(ref: TranslationRef, deleted?: readonly string[], discarded?: readonly string[]): void {
     const key = translationKey(ref);
     const current = this.#suggestions.get(key)?.ids ?? [];
@@ -213,7 +213,7 @@ export class TranslationDrafts {
     if (current.some((id) => group.has(id))) for (const id of current) this.#dismissed.add(id);
     const values = this.#values.get(key);
     const borrowed = this.#borrowed.get(key);
-    if (borrowed && [...current, ...borrowed.ids].some((id) => gone.has(id))) {
+    if (borrowed && [...current, ...borrowed.ids].some((id) => group.has(id))) {
       if (values) {
         if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
         if (values.defaultText === borrowed.defaultText) values.defaultText = "";

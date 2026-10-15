@@ -323,7 +323,7 @@ describe("Translate all suggestions as drafts", () => {
             return { deleted: id };
           }
           await held;
-          throw { code: "cloud.unavailable" };
+          throw { code: "server.internal" };
         }),
       });
       expect(field(el, "one")!.value).toBe("CLIENT-es one");
@@ -336,7 +336,7 @@ describe("Translate all suggestions as drafts", () => {
         expect(field(el, "one")!.value).toBe("CLIENT-es one");
       }
       answer();
-      await vi.waitFor(() => expect(bottomMessage(el)).toBe(codeMessage("cloud.unavailable")));
+      await vi.waitFor(() => expect(bottomMessage(el)).toBe(codeMessage("server.internal")));
       await settle(el);
       expect(field(el, "one")!.value).toBe("");
       expect(q(el, "[data-test=suggested-product-one]")).toBeNull();
@@ -435,6 +435,49 @@ describe("Translate all suggestions as drafts", () => {
       ],
     });
   });
+  for (const refresh of [false, true])
+    it(`a Discard refused after another of the row's suggestions was deleted takes the suggested name out of a companion typed while it waited${refresh ? ", after a refresh between the two deletions" : ""}`, async () => {
+      const liveData = new LiveData();
+      const state = venue({
+        listed: [target("one", { defaultRequired: true })],
+        suggestions: [
+          suggestion("s0", "one", {
+            text: null,
+            fix: { field: "es", wrong: "Pann", right: "Pan" },
+          }),
+          suggestion("s1", "one"),
+          suggestion("s2", "one", { language: "en", text: "CLIENT-en one" }),
+        ],
+      });
+      let refuse!: () => void;
+      const held = new Promise<void>((resolve) => (refuse = resolve));
+      const { el, api } = await open(state, {
+        liveData,
+        discardContentSuggestion: vi.fn(async (id: string) => {
+          if (id === "s0") {
+            state.suggestions = state.suggestions.filter((view) => view.id !== id);
+            return { deleted: id };
+          }
+          await held;
+          throw { code: "server.internal" };
+        }),
+      });
+      await click(el, "discard-product-one");
+      await vi.waitFor(() => expect(api.discardContentSuggestion).toHaveBeenCalledWith("s1"));
+      if (refresh) {
+        liveData.invalidate([{ type: "content_suggestions" }]);
+        await vi.waitFor(() => expect(q(el, "[data-test=fix-product-one-es]")).toBeNull());
+      }
+      await edit(el, "one", "Mine", "defaultText");
+      refuse();
+      await vi.waitFor(() => expect(bottomMessage(el)).toBe(codeMessage("server.internal")));
+      await settle(el);
+      expect(field(el, "one")!.value).toBe("");
+      expect(field(el, "one", "defaultText")!.value).toBe("Mine");
+      await click(el, "save");
+      expect(field(el, "one")!.error).toBe(t("translations.required"));
+      expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    });
   it("Discard sends once while its own request or a save is being sent", async () => {
     let answer!: () => void;
     const { el, api } = await open(
@@ -599,7 +642,7 @@ describe("Translate all suggestions as drafts", () => {
           return { deleted: id };
         }
         await new Promise<void>((resolve) => (refuse = resolve));
-        throw { code: "cloud.unavailable" };
+        throw { code: "server.internal" };
       }),
     });
     await click(el, "discard-product-one");
@@ -621,7 +664,7 @@ describe("Translate all suggestions as drafts", () => {
     );
     refuse();
     await expect(api.discardContentSuggestion.mock.results[1]!.value).rejects.toEqual({
-      code: "cloud.unavailable",
+      code: "server.internal",
     });
     release();
     await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
@@ -636,6 +679,73 @@ describe("Translate all suggestions as drafts", () => {
       edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
     });
   });
+  for (const beforeRead of [false, true])
+    it(`a Discard on the Spanish page refused after the dialog reopened on French leaves the French row's suggestion usable${beforeRead ? ", answered before the French page's first read" : ""}`, async () => {
+      const state = venue({
+        config: { defaultLanguage: "en", languages: ["en", "es", "fr"] },
+        listed: [target("one")],
+        suggestions: [
+          suggestion("s1", "one"),
+          suggestion("s2", "one", {
+            language: "en",
+            text: null,
+            fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" },
+          }),
+        ],
+      });
+      let refuse!: () => void;
+      const { el, api } = await open(state, {
+        discardContentSuggestion: vi.fn(async (id: string) => {
+          if (id === "s1") {
+            state.suggestions = state.suggestions.filter((view) => view.id !== id);
+            return { deleted: id };
+          }
+          await new Promise<void>((resolve) => (refuse = resolve));
+          throw { code: "server.internal" };
+        }),
+      });
+      await click(el, "discard-product-one");
+      await vi.waitFor(() => expect(api.discardContentSuggestion).toHaveBeenCalledWith("s2"));
+      state.language = "fr";
+      state.suggestions = [
+        ...state.suggestions,
+        suggestion("s3", "one", { language: "fr", text: "CLIENT-fr one" }),
+      ];
+      let release = (): void => {};
+      if (beforeRead) {
+        const held = new Promise<void>((resolve) => (release = resolve));
+        const read = api.getContentSuggestions.getMockImplementation()!;
+        api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
+          const value = await read(language, after);
+          await held;
+          return value;
+        });
+      }
+      el.open = false;
+      await el.updateComplete;
+      el.language = "fr";
+      el.open = true;
+      if (beforeRead)
+        await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("fr"));
+      else await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-fr one"));
+      refuse();
+      await expect(api.discardContentSuggestion.mock.results[1]!.value).rejects.toEqual({
+        code: "server.internal",
+      });
+      release();
+      await vi.waitFor(() =>
+        expect(
+          q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")?.disabled,
+        ).toBe(false),
+      );
+      expect(field(el, "one")!.value).toBe("CLIENT-fr one");
+      expect(q(el, "[data-test=suggested-product-one]")).not.toBeNull();
+      await click(el, "save");
+      await vi.waitFor(() => expect(el.open).toBe(false));
+      expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("fr", {
+        edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "CLIENT-fr one" }],
+      });
+    });
   it("Save waits while a Discard is being sent, so it never sends the suggestion being discarded", async () => {
     let answer!: () => void;
     const { el, api } = await open(
