@@ -14,7 +14,6 @@ import {
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import {
-  PART_SEPARATOR,
   buildReceiptDocument,
   type ReceiptDocumentInput,
   type ReceiptIndent,
@@ -41,43 +40,17 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     const width = prepareText(indent.after).length;
     return width > available / 2 ? 2 : width;
   };
-  const textLines = (
-    text: string,
-    parts: readonly string[] | undefined,
-    indent: number,
-    columns: number,
-  ): string[] => {
-    const whole = wrapText(prepareText(text), columns, indent);
-    if (whole.length === 1 || parts === undefined) return whole;
-    const lines: string[] = [];
-    let current = "";
-    for (const part of parts.map(prepareText)) {
-      const joined = current === "" ? part : `${current}${PART_SEPARATOR}${part}`;
-      if (current === "" || joined.length <= columns) {
-        current = joined;
-        continue;
-      }
-      lines.push(...wrapText(current, columns, indent));
-      current = `${" ".repeat(indent)}${part}`;
-    }
-    return [...lines, ...wrapText(current, columns, indent)];
-  };
-  let lastBlank = false;
-  const blank = (): void => {
-    b.line();
-    lastBlank = true;
-  };
+  let afterRule = false;
   for (const element of document.elements) {
-    if (element.kind !== "align" && element.kind !== "logo") lastBlank = false;
+    if (element.kind !== "align" && element.kind !== "logo") afterRule = element.kind === "rule";
     switch (element.kind) {
       case "text": {
         const style = toTextStyle(element.style);
         const width = style.double ? Math.floor(columns / 2) : columns;
-        for (const line of textLines(
-          element.text,
-          element.parts,
-          indentation(element.indent, width),
+        for (const line of wrapText(
+          prepareText(element.text),
           width,
+          indentation(element.indent, width),
         )) {
           b.line(line, style);
         }
@@ -112,9 +85,6 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         }
         break;
       }
-      case "break":
-        blank();
-        break;
       case "rule":
         b.line("-".repeat(columns));
         break;
@@ -123,9 +93,9 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         break;
       case "logo":
         if (logo !== null) {
-          if (!lastBlank) b.line();
+          if (!afterRule) b.line();
           b.bitmap(logo);
-          blank();
+          b.line();
         }
         break;
       case "qr": {

@@ -119,8 +119,11 @@ function pictures(result: ReceiptPreviewResponse) {
   );
 }
 
-/** The venue's legal name and tax ID, on the one line an 80 mm receipt prints them on. */
-const legal = () => `Deli Test SL · NIF: ${taxId}`;
+/** The venue's legal name, on its own line; its tax ID is the line under it. */
+const legal = () => "Deli Test SL";
+const nif = () => `NIF: ${taxId}`;
+/** The ruled line that ends a section. */
+const RULE = expect.stringMatching(/^-+$/);
 
 function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
@@ -195,6 +198,7 @@ describe("POST /management-api/receipt-preview", () => {
     const answer = (await response.json()) as ReceiptPreviewResponse;
     expect(printedLines(answer)).toContain("Authored department");
     expect(printedLines(answer)).toContain(legal());
+    expect(printedLines(answer)).toContain(nif());
     expect(printedLines(answer)).toContain("Calle Mayor 1");
     expect(answer.marks.headerSubtitle).not.toBeNull();
     expect(answer.marks.address).not.toBeNull();
@@ -241,10 +245,10 @@ describe("POST /management-api/receipt-preview", () => {
     const name = lines.indexOf(legal());
     expect(name).toBeGreaterThanOrEqual(0);
     expect(lines[name - 1]).toBe("Calle Mayor 1, Madrid");
-    expect(lines.slice(name + 1, name + 4)).toEqual(["Calle Mayor 1", "28013 Madrid", ""]);
+    expect(lines.slice(name + 1, name + 5)).toEqual([nif(), "Calle Mayor 1", "28013 Madrid", RULE]);
     expect(lines.some((line) => line.startsWith("1  Café y tostada"))).toBe(true);
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
-    expect(lines.slice(change + 1).filter(Boolean)).toEqual(["Gracias por su visita"]);
+    expect(lines.slice(change + 1).filter(Boolean)).toEqual([RULE, "Gracias por su visita"]);
     expect(result.preview.text).toContain("5,50 €");
   });
 
@@ -325,8 +329,12 @@ describe("POST /management-api/receipt-preview", () => {
     expect(headerSubtitle).not.toBeNull();
     expect(headerSubtitle!.end - headerSubtitle!.start).toBe(2);
     expect(linesOf(result, headerSubtitle!.start, headerSubtitle!.end).join(" ")).toBe(header);
-    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 1)).toEqual([legal()]);
-    expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
+    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 2)).toEqual([legal(), nif()]);
+    // The footer is the last section, so the rule above it is drawn only when it is.
+    expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual([
+      RULE,
+      "Hasta pronto",
+    ]);
   });
 
   it("marks nothing for absent trim and marks the explicitly enabled location address", async () => {
@@ -338,10 +346,10 @@ describe("POST /management-api/receipt-preview", () => {
       footerMessage: null,
       phone: null,
       email: null,
-      address: { start: name + 1, end: name + 3 },
+      address: { start: name + 2, end: name + 4 },
       logo: null,
     });
-    expect(lines.slice(name + 1, name + 4)).toEqual(["Calle Mayor 1", "28013 Madrid", ""]);
+    expect(lines.slice(name + 1, name + 5)).toEqual([nif(), "Calle Mayor 1", "28013 Madrid", RULE]);
   });
 
   it("is drawn 512 dots wide (80 mm at 180 dpi) when the location has no active receipt printer", async () => {
@@ -700,6 +708,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(result.preview.text).not.toContain("VERI*FACTU");
     expect(result.preview.text).not.toContain("QR tributario");
     expect(printedLines(result)).toContain(legal());
+    expect(printedLines(result)).toContain(nif());
   });
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {
@@ -767,32 +776,31 @@ describe("the receipt preview's top block", () => {
     });
     const lines = printedLines(result);
     const name = lines.indexOf(legal());
-    expect(lines.slice(name - 1, name + 5)).toEqual([
+    expect(lines.slice(name - 1, name + 7)).toEqual([
       "Desde 1990",
       legal(),
+      nif(),
       "Calle Mayor 1",
       "28013 Madrid",
-      "Tel. 910 000 000 · hola@deli.test",
-      "",
+      "Tel. 910 000 000",
+      "hola@deli.test",
+      RULE,
     ]);
     const { address, phone, email, logo } = result.marks;
     expect(linesOf(result, address!.start, address!.end)).toEqual([
       "Calle Mayor 1",
       "28013 Madrid",
     ]);
-    expect(linesOf(result, phone!.start, phone!.end)).toEqual([
-      "Tel. 910 000 000 · hola@deli.test",
-    ]);
-    expect(linesOf(result, email!.start, email!.end)).toEqual([
-      "Tel. 910 000 000 · hola@deli.test",
-    ]);
+    expect(linesOf(result, phone!.start, phone!.end)).toEqual(["Tel. 910 000 000"]);
+    expect(linesOf(result, email!.start, email!.end)).toEqual(["hola@deli.test"]);
     expect(logo).toBeNull();
   });
 
   it("draws no address, and marks none, when the receipt switches it off", async () => {
     const result = await rendered({ printAddress: false });
     const lines = printedLines(result);
-    expect(lines[lines.indexOf(legal()) + 1]).toBe("");
+    const name = lines.indexOf(legal());
+    expect(lines.slice(name + 1, name + 3)).toEqual([nif(), RULE]);
     expect(result.marks).toEqual({
       headerSubtitle: null,
       footerMessage: null,

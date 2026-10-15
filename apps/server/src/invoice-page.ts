@@ -71,7 +71,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   const pages: InvoicePage[] = [{ elements: [] }];
   let y = MARGIN;
   let alignment: "left" | "center" = "left";
-  let afterBreak = false;
+  let afterRule = false;
   const rule = (): void => {
     pages.at(-1)!.elements.push({
       kind: "rule",
@@ -115,8 +115,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     }
   };
   for (const element of buildReceiptDocument({ ...input, surface: "a4" }).elements) {
-    const previousWasBreak = afterBreak;
-    if (element.kind !== "align") afterBreak = element.kind === "break";
+    const previousWasRule = afterRule;
+    if (element.kind !== "align") afterRule = element.kind === "rule";
     switch (element.kind) {
       case "align":
         alignment = element.alignment;
@@ -127,7 +127,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
           const pitch = 72 / 203;
           const logoWidth = raster.widthDots * pitch;
           const logoHeight = raster.heightDots * pitch;
-          if (!previousWasBreak) y += LINE_HEIGHT / 2;
+          if (!previousWasRule) y += LINE_HEIGHT / 2;
           room(logoHeight + LINE_HEIGHT / 2);
           pages.at(-1)!.elements.push({
             kind: "logo",
@@ -141,9 +141,6 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         }
         break;
       }
-      case "break":
-        y += LINE_HEIGHT / 2;
-        break;
       case "rule":
         room(LINE_HEIGHT / 2);
         rule();

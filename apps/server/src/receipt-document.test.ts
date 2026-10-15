@@ -36,7 +36,8 @@ describe("format-neutral invoice content", () => {
     const rows = document.elements.flatMap((element) =>
       element.kind === "amount" ? [[element.caption, element.amount]] : [],
     );
-    expect(text).toContain("Charcutería La Buena SL · NIF: B12345678");
+    expect(text).toContain("Charcutería La Buena SL");
+    expect(text).toContain("NIF: B12345678");
     expect(text).toContain(
       "Calle del domicilio fiscal original número 27, edificio de la plaza mayor, segunda planta, Madrid 28001",
     );
@@ -110,7 +111,8 @@ it.each(["thermal", "a4"] as const)(
       const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
       expect(text.includes("Current address")).toBe(surface === "thermal");
       expect(text.includes("Filed domicile")).toBe(domicile !== undefined);
-      expect(text).toContain("Filed issuer · NIF: B12345678");
+      expect(text).toContain("Filed issuer");
+      expect(text).toContain("NIF: B12345678");
       expect(text).not.toContain("Current mutable issuer");
       expect(text).not.toContain("Current mutable domicile");
     }
@@ -126,10 +128,10 @@ describe("the top block (A497)", () => {
   };
   const FULL = { ...SIMPLIFIED, invoiceType: "F1" as const };
 
-  /** The elements from the logo up to the blank line that closes the block. */
+  /** The elements from the logo up to the rule that closes the block. */
   function topBlock(document: ReturnType<typeof buildReceiptDocument>): unknown[] {
     const start = document.elements.findIndex((e) => e.kind === "logo");
-    const end = document.elements.findIndex((e, i) => i > start && e.kind === "break");
+    const end = document.elements.findIndex((e, i) => i > start && e.kind === "rule");
     return document.elements.slice(start, end);
   }
 
@@ -142,34 +144,38 @@ describe("the top block (A497)", () => {
     duplicate: true,
   };
   const t = (text: string) => ({ kind: "text", text, indent: 0 });
-  const joined = (...parts: string[]) => ({ ...t(parts.join(" · ")), parts });
+  const bold = (text: string) => ({ ...t(text), style: { bold: true } });
 
-  it("prints a simplified invoice's block in order, the legal name and tax ID on one line, in the language's own labels", () => {
+  it("prints a simplified invoice's block in order, one fact a line, in the language's own labels", () => {
     expect(
       topBlock(buildReceiptDocument({ ...input, result: SIMPLIFIED, invoiceLocale: "eu-ES" })),
     ).toEqual([
       { kind: "logo" },
-      t("Bar La Buena"),
+      bold("Bar La Buena"),
       t("Desde 1952"),
-      joined("Charcutería La Buena SL", "IFZ: B12345678"),
+      t("Charcutería La Buena SL"),
+      t("IFZ: B12345678"),
       t("Calle Mayor 1, Local 2"),
       t("03001 Alicante, Alicante/Alacant"),
-      joined("Tel. 912 345 678", "hola@labuena.es"),
+      t("Tel. 912 345 678"),
+      t("hola@labuena.es"),
       t("BIKOIZKARIA"),
     ]);
   });
 
-  it("prints a full invoice's filed domicile after the contact line and before the duplicate mark", () => {
+  it("prints a full invoice's filed domicile after the contact lines and before the duplicate mark", () => {
     expect(
       topBlock(buildReceiptDocument({ ...input, result: FULL, invoiceLocale: "es-ES" })),
     ).toEqual([
       { kind: "logo" },
-      t("Bar La Buena"),
+      bold("Bar La Buena"),
       t("Desde 1952"),
-      joined("Charcutería La Buena SL", "NIF: B12345678"),
+      t("Charcutería La Buena SL"),
+      t("NIF: B12345678"),
       t("Calle Mayor 1, Local 2"),
       t("03001 Alicante, Alicante/Alacant"),
-      joined("Tel. 912 345 678", "hola@labuena.es"),
+      t("Tel. 912 345 678"),
+      t("hola@labuena.es"),
       t("Filed domicile"),
       t("DUPLICADO"),
     ]);
@@ -178,7 +184,7 @@ describe("the top block (A497)", () => {
   it.each([
     { receipt: { phone: "912 345 678" }, want: "Tel. 912 345 678" },
     { receipt: { email: "hola@labuena.es" }, want: "hola@labuena.es" },
-  ])("prints the contact line with only the part that is set: $want", ({ receipt, want }) => {
+  ])("prints only the contact line that is set: $want", ({ receipt, want }) => {
     const block = topBlock(
       buildReceiptDocument({
         ...input,
@@ -192,7 +198,8 @@ describe("the top block (A497)", () => {
     );
     expect(block).toEqual([
       { kind: "logo" },
-      joined("Charcutería La Buena SL", "NIF: B12345678"),
+      bold("Charcutería La Buena SL"),
+      t("NIF: B12345678"),
       t(want),
     ]);
   });
@@ -203,7 +210,53 @@ describe("the top block (A497)", () => {
       const { elements } = buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, surface });
       const total = elements.findIndex((e) => e.kind === "amount" && e.caption === "TOTAL");
       expect(elements[total - 1]).toEqual({ kind: "rule" });
-      expect(elements.filter((e) => e.kind === "rule")).toHaveLength(1);
+      expect(elements[total - 2]).not.toEqual({ kind: "rule" });
     },
   );
+});
+
+describe("the business block, one fact per line, and ruled sections (A663)", () => {
+  it("puts one fact on each line of the business block, the first one bold", () => {
+    const document = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      surface: "thermal",
+      receiptHeader: { tradingName: "Santet Deli Co", printTradingName: true },
+      receipt: { phone: "910000000", email: "hola@santet.example" },
+      venueAddress: ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        invoiceType: "F2",
+        issuer: { venueName: "SANTET DELI CO S.L.", nif: "B00000000" },
+      },
+    });
+    const start = document.elements.findIndex((e) => e.kind === "logo");
+    const end = document.elements.findIndex((e, i) => i > start && e.kind === "rule");
+    expect(document.elements.slice(start + 1, end).filter((e) => e.kind === "text")).toEqual([
+      { kind: "text", text: "Santet Deli Co", indent: 0, style: { bold: true } },
+      { kind: "text", text: "SANTET DELI CO S.L.", indent: 0 },
+      { kind: "text", text: "NIF: B00000000", indent: 0 },
+      { kind: "text", text: "Avinguda d'Icària 215, Bajos", indent: 0 },
+      { kind: "text", text: "08005 Barcelona", indent: 0 },
+      { kind: "text", text: "Tel. 910000000", indent: 0 },
+      { kind: "text", text: "hola@santet.example", indent: 0 },
+    ]);
+  });
+
+  it("bolds the legal name when no trading name prints", () => {
+    const document = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      receiptHeader: undefined,
+    });
+    const first = document.elements.find(
+      (e) => e.kind === "text" && e.text.includes("Charcutería"),
+    );
+    expect(first).toMatchObject({ text: "Charcutería La Buena SL", style: { bold: true } });
+  });
+
+  it("separates every section with a rule and leaves no blank-line breaks", () => {
+    const kinds = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements.map((e) => e.kind);
+    expect(kinds).not.toContain("break");
+    expect(kinds.at(-1)).not.toBe("rule");
+    expect(kinds.filter((k) => k === "rule").length).toBeGreaterThanOrEqual(5);
+  });
 });

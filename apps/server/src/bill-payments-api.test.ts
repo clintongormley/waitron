@@ -4610,7 +4610,7 @@ describe("refund first (design §4.3, §6a)", () => {
     const printed = tickets[0]!;
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
-    expect(printed.slice(start + 1).filter((line) => line !== "")).toEqual([
+    expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
       "Efectivo 50,00 €",
       "Devolución -10,00 €",
     ]);

@@ -254,14 +254,19 @@ describe("A4 line above the total and space around the logo", () => {
   const textAt = (elements: InvoicePageElement[], start: string) =>
     elements.find((element) => element.kind === "text" && element.text.startsWith(start));
 
-  it("puts one rule across the content width directly above TOTAL", () => {
+  it("puts a rule across the content width directly above TOTAL, and rules between sections", () => {
     const elements = layoutInvoicePages(fixture)[0]!.elements;
     const total = elements.findIndex(
       (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
     );
     const rule = elements[total - 1];
-    expect(elements.filter((element) => element.kind === "rule")).toHaveLength(1);
+    const rules = elements.filter(
+      (element): element is Extract<InvoicePageElement, { kind: "rule" }> =>
+        element.kind === "rule",
+    );
     if (rule?.kind !== "rule") throw new Error(`expected a rule before TOTAL, got ${rule?.kind}`);
+    expect(rules.length).toBeGreaterThan(1);
+    for (const each of rules) expect([each.x, each.width]).toEqual([rule.x, rule.width]);
     expect(rule.x).toBe(36);
     expect(rule.width).toBeCloseTo(595.28 - 72, 2);
     expect(rule.thickness).toBeGreaterThan(0);
@@ -416,7 +421,7 @@ describe("A4 line above the total and space around the logo", () => {
     );
   });
 
-  it("does not stack the logo's space on the blank line after the QR", () => {
+  it("does not stack the logo's space on the rule after the QR", () => {
     const elements = layoutInvoicePages({
       ...fixture,
       logo,
@@ -424,7 +429,8 @@ describe("A4 line above the total and space around the logo", () => {
     })[0]!.elements;
     const index = elements.findIndex((element) => element.kind === "logo");
     const drawn = elements[index]!;
-    const legend = elements[index - 1]!;
+    expect(elements[index - 1]!.kind).toBe("rule");
+    const legend = elements[index - 2]!;
     expect(legend.kind === "text" && legend.text).toBe("VERI*FACTU");
     expect(drawn.y - (legend.y + LINE)).toBeCloseTo(LINE / 2, 5);
   });

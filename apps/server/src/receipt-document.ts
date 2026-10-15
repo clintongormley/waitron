@@ -43,17 +43,9 @@ export interface ReceiptDocumentInput {
 
 // The roll renderer resolves an indent after this prefix against the columns the line is drawn in.
 export type ReceiptIndent = number | { after: string };
-export const PART_SEPARATOR = " · ";
 export type ReceiptStyle = { bold?: true; double?: true };
 export type ReceiptElement =
-  // `parts` is set only on a line the document itself joined from them with PART_SEPARATOR.
-  | {
-      kind: "text";
-      text: string;
-      indent: ReceiptIndent;
-      parts?: readonly string[];
-      style?: ReceiptStyle;
-    }
+  | { kind: "text"; text: string; indent: ReceiptIndent; style?: ReceiptStyle }
   | {
       kind: "amount";
       caption: string;
@@ -61,7 +53,6 @@ export type ReceiptElement =
       indent: ReceiptIndent;
       style?: ReceiptStyle;
     }
-  | { kind: "break" }
   | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
   | { kind: "logo" }
@@ -124,12 +115,6 @@ export function buildReceiptDocument({
   const text = (text: string, indent: ReceiptIndent = 0, style?: ReceiptStyle): void => {
     elements.push({ kind: "text", text, indent, ...(style ? { style } : {}) });
   };
-  const joined = (parts: string[]): void => {
-    if (parts.length === 1) text(parts[0]!);
-    else if (parts.length > 1) {
-      elements.push({ kind: "text", text: parts.join(PART_SEPARATOR), indent: 0, parts });
-    }
-  };
   const row = (
     caption: string,
     amount: string,
@@ -138,8 +123,14 @@ export function buildReceiptDocument({
   ): void => {
     elements.push({ kind: "amount", caption, amount, indent, ...(style ? { style } : {}) });
   };
-  const line = (): void => {
-    elements.push({ kind: "break" });
+  const lastDrawn = (): number => {
+    let at = elements.length - 1;
+    while (at >= 0 && elements[at]!.kind === "align") at--;
+    return at;
+  };
+  // Ends a section; a section that drew nothing adds no second rule.
+  const rule = (): void => {
+    if (elements[lastDrawn()]?.kind !== "rule") elements.push({ kind: "rule" });
   };
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
@@ -171,7 +162,7 @@ export function buildReceiptDocument({
   };
   if (simulated) {
     text(label.practice);
-    line();
+    rule();
   }
 
   if (result.qr !== "") {
@@ -179,7 +170,7 @@ export function buildReceiptDocument({
     if (result.qrText) text(result.qrText.caption);
     elements.push({ kind: "qr", text: result.qr });
     if (result.qrText) text(result.qrText.legend);
-    line();
+    rule();
     align("left");
   }
 
@@ -188,20 +179,22 @@ export function buildReceiptDocument({
   align("center");
   elements.push({ kind: "logo" });
   const tradingName = receiptHeader?.tradingName?.trim();
-  if (receiptHeader?.printTradingName && tradingName && tradingName !== issuer.venueName.trim()) {
-    text(tradingName);
-  }
+  const printsTradingName =
+    receiptHeader?.printTradingName === true &&
+    !!tradingName &&
+    tradingName !== issuer.venueName.trim();
+  if (printsTradingName) text(tradingName, 0, { bold: true });
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  joined([issuer.venueName, `${label.nif}: ${issuer.nif}`]);
+  text(issuer.venueName, 0, printsTradingName ? undefined : { bold: true });
+  text(`${label.nif}: ${issuer.nif}`);
   if (surface === "thermal") {
     for (const line of venueAddress) text(line);
   }
-  joined(
-    [receipt.phone ? `${label.phone} ${receipt.phone}` : "", receipt.email ?? ""].filter(Boolean),
-  );
+  if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
+  if (receipt.email) text(receipt.email);
   if (result.invoiceType === "F1" && issuer.domicile) text(issuer.domicile);
   if (duplicate) text(label.duplicate);
-  line();
+  rule();
   align("left");
 
   text([result.orderLabel, `${label.order} ${result.orderNumber}`].filter(Boolean).join(" · "));
@@ -222,12 +215,12 @@ export function buildReceiptDocument({
       ),
     );
   }
-  line();
+  rule();
   if (result.invoiceType === "F1" && result.recipient) {
     text(result.recipient.legalName);
     text(`${label.nif}: ${result.recipient.taxId}`);
     text(result.recipient.address);
-    line();
+    rule();
   }
   for (const { dish, options } of groupByParent(result.lines)) {
     const unit =
@@ -282,14 +275,14 @@ export function buildReceiptDocument({
     }
   }
   for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
-  line();
+  rule();
   for (const v of result.vatBreakdown) {
     row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
     row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
   }
-  elements.push({ kind: "rule" });
+  rule();
   row(label.total, formatMoney(result.total, locale), 0, { double: true });
-  line();
+  rule();
   const t = result.tender;
   if (result.payments !== undefined && result.payments.length > 0) {
     for (const payment of result.payments) {
@@ -321,7 +314,7 @@ export function buildReceiptDocument({
       row(label.charged, formatMoney(t.charged, locale));
     }
   }
-  line();
+  rule();
 
   if (receipt.footerMessage) {
     align("center");
@@ -329,9 +322,11 @@ export function buildReceiptDocument({
     align("left");
   }
   if (simulated) {
-    line();
+    rule();
     text(label.practice);
   }
+  const last = lastDrawn();
+  if (elements[last]?.kind === "rule") elements.splice(last, 1);
 
   return { elements, duplicate, practice: simulated };
 }

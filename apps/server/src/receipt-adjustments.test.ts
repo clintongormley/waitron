@@ -481,7 +481,8 @@ describe("receiptLines", () => {
 
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
-    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
+    const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
+    expect(printed.slice(start, rule)).toEqual([
       at80("1 ud  Hamburguesa", "12,00 €"),
       at80("  Invitación", "-12,00 €"),
       at80("1 ud  Rioja crianza", "30,00 €"),
@@ -522,7 +523,8 @@ describe("receiptLines", () => {
     const start = printed.findIndex((line) => line.startsWith("Fecha")) + 2;
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
-    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
+    const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
+    expect(printed.slice(start, rule)).toEqual([
       at80("2 ud  Croquetas de jamón", "6,66 €"),
       at80("  Descuento", "-1,00 €"),
       at80("1 ud  Pan de pueblo", "2,50 €"),

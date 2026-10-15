@@ -240,7 +240,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     expect(
       printed
         .slice(start + 1)
-        .filter((line) => line !== "")
+        .filter((line) => line !== "" && !/^-+$/.test(line))
         .slice(0, 2),
     ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €"]);
   });
