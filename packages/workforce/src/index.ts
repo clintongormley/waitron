@@ -174,3 +174,4 @@ export type {
   AttendanceLookups,
 } from "./attendance-contract.js";
 export { WORKFORCE_PERMISSIONS } from "./permissions.js";
+export { readPersonHours, readManagerHours } from "./hours-reads.js";

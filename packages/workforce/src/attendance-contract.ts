@@ -1,4 +1,5 @@
-import type { TimeEntryRecord } from "./projection.js";
+import type { BusinessDayClock } from "@waitron/shared";
+import type { Period, TimeEntryRecord, WorkSession } from "./projection.js";
 import type { ClockEntryKind, TimeRecord } from "./record-types.js";
 import type { AttendanceDay } from "./attendance-types.js";
 
@@ -102,4 +103,57 @@ export interface AttendanceLookups {
   viewer: { personId: string; canSelfApprove: boolean };
   locations: { id: string; name: string; timeZone: string }[];
   people: { personId: string; displayName: string }[];
+}
+
+export type OwnAttendanceCommand = AttendanceCommand & {
+  action: "request" | "confirm" | "accept" | "disagree";
+};
+export interface HoursSelection {
+  kind: "week" | "month" | "pay-period";
+  date?: string;
+}
+export interface HoursDay {
+  date: string;
+  sessions: WorkSession[];
+  workedMinutes: number;
+}
+export interface HoursOpenShift {
+  start: TimeEntryRecord;
+  breakStart: TimeEntryRecord | null;
+}
+export interface HoursClosure {
+  closureId: string;
+  period: Period;
+  clock: BusinessDayClock;
+  scheduledCloseAt: string;
+  closedAt: string;
+  closureHash: string;
+  frozenWorkedMinutes: number;
+}
+export interface PersonHours {
+  personId: string;
+  locationId: string;
+  selection: HoursSelection;
+  period: Period;
+  businessDay: string;
+  clock: BusinessDayClock;
+  asOf: string;
+  days: HoursDay[];
+  workedMinutes: number;
+  record: TimeRecord;
+  openShifts: HoursOpenShift[];
+  pending: {
+    prompts: AttendancePrompt[];
+    items: CorrectionItem[];
+    automaticEntryIds: string[];
+  };
+  closures: HoursClosure[];
+}
+export interface ManagerHours {
+  locationId: string;
+  selection: HoursSelection;
+  period: Period;
+  businessDay: string;
+  asOf: string;
+  people: { personId: string; displayName: string; hours: PersonHours }[];
 }
