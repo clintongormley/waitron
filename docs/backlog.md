@@ -5241,6 +5241,22 @@ the tree. What remains, largest first:
   `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
   (2026-10-15), not measured against a real Cloud.
 
+- **A Translate all call that Cloud answers `revoked` or `invalid_proof` does not record the
+  revocation or drop the lease.** `apps/server/src/cloud-translation.ts` maps Cloud's translation
+  refusals but has no case for a 401; the configuration refresh in `cloud-installation.ts` does.
+  Due with A689's job runner (plan Tasks 11–12), which the plan does not yet say. Found by A689's
+  first PR review (#1729, 2026-10-15).
+
+- **A box that is not connected, or is revoked, refuses Translate all with `cloud.not_configured`,
+  whose dashboard wording was written for a server with no Cloud set up at all** ("Cloud services
+  are not available on this server yet"). The neighbouring Cloud calls use
+  `cloud.binding_conflict`. Owner to choose the code and the wording before A689's dashboard dialog
+  (plan Tasks 13–17). Raised by #1729's review.
+
+- **The signing and size-capped reading of a request to Cloud is repeated across the
+  `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
+  as a refactor larger than that PR (its simplify review, 2026-10-15).
+
 - **A stop made while `cloud-replacement.json` is unreadable is not recorded in it.** Owner to
   choose: refuse Stop access while the replacement file is unreadable, or record the stop somewhere
   that survives the repair. Left open by the Cloud connection integration (2026-09-24; #638, #808).
