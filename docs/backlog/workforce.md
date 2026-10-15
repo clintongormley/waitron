@@ -16,7 +16,7 @@ The trading server connects the till adapter to `clockIn`, `clockOut` and the br
 
 Left, as the legal minimum:
 
-- end-of-day automatic closure and the worker questions it creates;
+- answering automatic-finish and missing-time questions at sign-in;
 - correction requests and their approval, as routes and screens;
 - read access for the worker, their representatives and the labour inspectorate, with four years'
   retention, and a route that produces the export.
