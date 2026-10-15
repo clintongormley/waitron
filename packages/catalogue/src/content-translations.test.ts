@@ -12,8 +12,15 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct, updateMenuDetails } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
-import type { TranslationBatch, TranslationRef } from "./content-translation-types.js";
+import {
+  listTranslationTargets,
+  resolveTranslationTargets,
+} from "./content-translation-targets.js";
+import type {
+  TranslationBatch,
+  TranslationRef,
+  TranslationTarget,
+} from "./content-translation-types.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { setProductVariants } from "./variants.js";
 import { addMember, updateSection } from "./sections.js";
@@ -176,6 +183,54 @@ async function snapshot(tx: Transaction) {
 }
 
 describe("atomic content translations", () => {
+  it.each(["product", "variant", "option_list", "option_label", "menu", "section"] as const)(
+    "%s with no customer-facing name takes a default-language save, though that page leaves it out",
+    async (kind) => {
+      const ids = await fixture();
+      await app(async (tx) => {
+        if (kind === "product" || kind === "variant")
+          await tx.update(products).set({ customerName: null }).where(eq(products.id, ids[kind]));
+        else if (kind === "option_list")
+          await tx
+            .update(optionLists)
+            .set({ customerName: null })
+            .where(eq(optionLists.id, ids[kind]));
+        else if (kind === "option_label")
+          await tx
+            .update(optionLabels)
+            .set({ customerName: null })
+            .where(eq(optionLabels.id, ids[kind]));
+        else await tx.update(sections).set({ names: {} }).where(eq(sections.id, ids[kind]));
+      });
+      const listed = await app(async (tx) => {
+        const rows: TranslationTarget[] = [];
+        let after: string | undefined;
+        do {
+          const page = await listTranslationTargets(
+            tx,
+            "es",
+            after === undefined ? {} : { after },
+            context,
+          );
+          rows.push(...page.rows);
+          after = page.next ?? undefined;
+        } while (after !== undefined);
+        return rows;
+      });
+      expect(listed.some((row) => row.kind === kind && row.id === ids[kind])).toBe(false);
+      const request = await batch(ids, [kind], "es");
+      const result = await app((tx) => saveContentTranslations(tx, "es", request, context));
+      expect(result.saved[0]).toMatchObject({
+        kind,
+        id: ids[kind],
+        selectedText: `CLIENT English ${kind}`,
+      });
+      const stored = await app((tx) =>
+        resolveTranslationTargets(tx, "es", [{ kind, id: ids[kind] }], context),
+      );
+      expect(stored.targets[0]!.target.selectedText).toBe(`CLIENT English ${kind}`);
+    },
+  );
   it("saves nine own identities and preserves every other stored field", async () => {
     const ids = await fixture();
     const request = await batch(ids);

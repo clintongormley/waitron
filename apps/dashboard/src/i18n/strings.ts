@@ -582,6 +582,10 @@ export const en = {
   "suggestions.suggested": "Suggested",
   "suggestions.discard": "Discard suggestion",
   "suggestions.discard_named": "Discard the suggestion for {name}",
+  "suggestions.fix_internal": "Possible spelling fix: {wrong} → {right}",
+  "suggestions.fix_language": "Possible spelling fix in {language}: {wrong} → {right}",
+  "suggestions.placeholder": "This name doesn't say what it is, so there is no suggestion.",
+  "suggestions.stale": "This name changed after the suggestion was made.",
   "suggestions.translate_all": "Translate all",
   "suggestions.about":
     "Waitron Cloud can suggest every missing customer-facing name, in every language. Nothing reaches diners until you save it.",
@@ -3548,6 +3552,10 @@ export const es: Record<StringKey, string> = {
   "suggestions.suggested": "Sugerido",
   "suggestions.discard": "Descartar sugerencia",
   "suggestions.discard_named": "Descartar la sugerencia de {name}",
+  "suggestions.fix_internal": "Posible corrección: {wrong} → {right}",
+  "suggestions.fix_language": "Posible corrección en {language}: {wrong} → {right}",
+  "suggestions.placeholder": "Este nombre no dice qué es, así que no hay sugerencia.",
+  "suggestions.stale": "Este nombre cambió después de hacer la sugerencia.",
   "suggestions.translate_all": "Traducir todo",
   "suggestions.about":
     "Waitron Cloud puede sugerir todos los nombres para clientes que faltan, en todos los idiomas. Nada llega a los clientes hasta que lo guardas.",

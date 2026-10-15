@@ -28,6 +28,7 @@ import type {
   TranslationPage,
   TranslationTarget,
   TranslationGapKind,
+  TranslationRef,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -318,6 +319,32 @@ export class ContentTranslationsDialog extends LitElement {
       language,
       () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
     );
+    // Under the default language the page leaves out a name stored as null or `{}`
+    // (`listTranslationTargets`, packages/catalogue/src/content-translation-targets.ts), so a
+    // suggestion for one is read by reference and becomes a row of its own.
+    const listed = new Set(rows.map(translationKey));
+    const index = indexSuggestions(suggestions, language, first!.config.defaultLanguage);
+    const omitted = new Map<string, TranslationRef>();
+    for (const view of suggestions) {
+      const ref = { kind: view.kind, id: view.itemId };
+      const key = translationKey(ref);
+      if (!listed.has(key) && !index.get(key)!.stale) omitted.set(key, ref);
+    }
+    const omittedRefs = [...omitted.values()];
+    for (let offset = 0; offset < omittedRefs.length; offset += 50) {
+      const value = await read({ targets: omittedRefs.slice(offset, offset + 50) });
+      if (
+        generation !== this.#generation ||
+        revision !== this.#snapshotRevision ||
+        !this.open ||
+        !value
+      )
+        return undefined;
+      check(value);
+      rows.push(
+        ...value.rows.filter((row) => row.eligible && !(row.effectiveSelectedText ?? "").trim()),
+      );
+    }
     return { generation, revision, rows, retained, suggestions, config: first!.config };
   }
   async #readSuggestions(
@@ -694,6 +721,7 @@ export class ContentTranslationsDialog extends LitElement {
                 >${t(row.kind === "included_menu" ? "translations.scope_include" : row.kind === "menu" || row.kind === "section" ? "translations.scope_menu" : "translations.scope_shared")}</span
               >
               ${this.model!.isSuggested(row) ? html`<span part="translation-meta" data-test=${`suggested-${row.kind}-${row.id}`}>${t("suggestions.suggested")}</span>` : nothing}
+              ${this.#notes(row)}
               ${this.model!.changed(row) ? html`<span part="translation-meta" data-test=${`changed-${row.kind}-${row.id}`}>${t("translations.changed")}</span>` : nothing}
               ${row.eligible && this.model!.current(row)?.eligible !== false ? nothing : html`<span part="translation-meta" data-test=${`unavailable-${row.kind}-${row.id}`}>${t("translations.unavailable")}</span>`}
             </div>
@@ -701,7 +729,7 @@ export class ContentTranslationsDialog extends LitElement {
               ${this.#input(row, "text")}
               ${this.reviewRows.length && this.model!.changed(row) ? this.#reviewCell(row) : nothing}
               ${this.model!.needsDefault(row) && (this.model!.value(row, "text").trim() || this.model!.value(row, "defaultText").trim()) ? html`<span part="translation-meta">${fill("translations.default_needed", { language: this.#name(this.model!.defaultLanguage) })}</span>${this.#input(row, "defaultText")}` : nothing}
-              ${this.model!.isSuggested(row) ? html`<wt-button data-test=${`discard-${row.kind}-${row.id}`} variant="secondary" aria-label=${fill("suggestions.discard_named", { name: label(row) })} ?disabled=${this.busy || this.discarding.has(translationKey(row))} @click=${() => void this.#discard(row)}>${t("suggestions.discard")}</wt-button>` : nothing}
+              ${this.model!.suggestionFor(row) ? html`<wt-button data-test=${`discard-${row.kind}-${row.id}`} variant="secondary" aria-label=${fill("suggestions.discard_named", { name: label(row) })} ?disabled=${this.busy || this.discarding.has(translationKey(row))} @click=${() => void this.#discard(row)}>${t("suggestions.discard")}</wt-button>` : nothing}
             </div>
           </div>`,
       },
@@ -722,6 +750,12 @@ export class ContentTranslationsDialog extends LitElement {
     ];
     this.#heldColumns = { key, value };
     return value;
+  }
+  #notes(row: TranslationTarget) {
+    const found = this.model!.suggestionFor(row);
+    if (!found) return nothing;
+    const key = `${row.kind}-${row.id}`;
+    return html`${found.stale ? html`<span part="translation-meta" data-test=${`stale-${key}`}>${t("suggestions.stale")}</span>` : nothing}${found.placeholder ? html`<span part="translation-meta" data-test=${`placeholder-${key}`}>${t("suggestions.placeholder")}</span>` : nothing}${found.fixes.map((fix) => html`<span part="translation-meta" data-test=${`fix-${key}-${fix.field}`}>${fix.field === "internal" ? fill("suggestions.fix_internal", { wrong: fix.wrong, right: fix.right }) : fill("suggestions.fix_language", { language: this.#name(fix.field), wrong: fix.wrong, right: fix.right })}</span>`)}`;
   }
   #reviewCell(row: TranslationTarget) {
     const current = this.model!.current(row);

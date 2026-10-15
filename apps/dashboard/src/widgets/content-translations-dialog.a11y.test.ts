@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
-import type { DashboardApi, TranslationPage, TranslationTarget } from "../api/client.js";
+import type {
+  ContentSuggestionView,
+  DashboardApi,
+  TranslationPage,
+  TranslationTarget,
+} from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -207,3 +212,109 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
     },
   );
 });
+
+const note = (overrides: Partial<ContentSuggestionView>): ContentSuggestionView => ({
+  id: "s",
+  kind: "product",
+  itemId: "suggested",
+  language: null,
+  text: null,
+  placeholder: false,
+  fix: null,
+  stale: false,
+  ...overrides,
+});
+describe.each(["light", "dark"] as const)(
+  "translation dialog suggestion accessibility (%s)",
+  (theme) => {
+    it.each([390, 1280])(
+      "renders suggested, fix, placeholder and out-of-date rows in both languages at %i px",
+      async (width) => {
+        await page.viewport(width, 700);
+        for (const locale of ["en-GB", "es-ES"]) {
+          setLocale(locale);
+          cleanupWidgets();
+          const rows = [
+            { ...row, id: "suggested", name: "STAFF Croquetas de la casa" },
+            {
+              ...row,
+              id: "fixed",
+              name: "STAFF ZURRITO",
+              defaultText: "CLIENT-en Croquetes",
+              effectiveDefaultText: "CLIENT-en Croquetes",
+              defaultRequired: false,
+            },
+            { ...row, id: "placeholder", name: "STAFF ?? nuevo" },
+            { ...row, id: "stale", name: "STAFF Pan" },
+          ];
+          const api = {
+            getContentTranslationTargets: vi.fn(async () => result(rows)),
+            getContentSuggestions: vi.fn(async (language: string) => ({
+              language,
+              run: null,
+              service: "on" as const,
+              cloudOrigin: null,
+              next: null,
+              suggestions: [
+                note({ id: "s1", language: "es", text: "CLIENT-es Croquetas caseras" }),
+                note({ id: "s2", language: "en", text: "CLIENT-en Homemade croquettes" }),
+                note({
+                  id: "s3",
+                  itemId: "fixed",
+                  fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" },
+                }),
+                note({
+                  id: "s4",
+                  itemId: "fixed",
+                  language: "en",
+                  fix: { field: "en", wrong: "Croquetes", right: "Croquettes" },
+                }),
+                note({ id: "s5", itemId: "placeholder", placeholder: true }),
+                note({
+                  id: "s6",
+                  itemId: "stale",
+                  language: "es",
+                  text: "CLIENT-es Pan",
+                  stale: true,
+                }),
+              ],
+            })),
+            saveContentTranslations: vi.fn(),
+            discardContentSuggestion: vi.fn(),
+            startContentSuggestions: vi.fn(async () => ({ run: null })),
+          } as unknown as DashboardApi;
+          const { el, host } = await mountWidget<ContentTranslationsDialog>(
+            "dashboard-content-translations-dialog",
+            { api, language: "es", open: true },
+            theme,
+          );
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+          );
+          await el.updateComplete;
+          const table = el.shadowRoot!.querySelector("wt-data-table")!;
+          await table.updateComplete;
+          for (const selector of [
+            "[data-test=suggested-product-suggested]",
+            "[data-test=fix-product-fixed-internal]",
+            "[data-test=fix-product-fixed-en]",
+            "[data-test=placeholder-product-placeholder]",
+            "[data-test=stale-product-stale]",
+          ])
+            expect(table.shadowRoot!.querySelector(selector), selector).not.toBeNull();
+          const modal = el.shadowRoot!.querySelector("wt-modal")!;
+          await modal.updateComplete;
+          const native = modal.shadowRoot!.querySelector("dialog")!;
+          expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+          const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+          expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            element: native,
+            path: `__screenshots__/look/translate-all-${locale}-${theme}-${width}.png`,
+          });
+        }
+      },
+    );
+  },
+);

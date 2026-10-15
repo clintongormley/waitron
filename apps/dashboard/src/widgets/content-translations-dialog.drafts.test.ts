@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
+import { languageDisplayName } from "@waitron/shared";
 import type {
   ContentSuggestionRead,
   ContentSuggestionView,
@@ -10,7 +11,7 @@ import type {
   TranslationTarget,
 } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./content-translations-dialog.js";
 import type { ContentTranslationsDialog } from "./content-translations-dialog.js";
@@ -502,5 +503,196 @@ describe("Translate all suggestions as drafts", () => {
     expect(field(el, "one")!.value).toBe("CLIENT-es one");
     expect(q(el, "[data-test=suggested-product-one]")).not.toBeNull();
     expect(q(el, "[data-test=read-error]")).toBeNull();
+  });
+});
+
+describe("Translate all notes", () => {
+  it("shows a placeholder's note, fills nothing and offers Discard", async () => {
+    const { el } = await open(
+      venue({
+        listed: [target("one")],
+        suggestions: [suggestion("s1", "one", { language: null, text: null, placeholder: true })],
+      }),
+    );
+    expect(q(el, "[data-test=placeholder-product-one]")!.textContent!.trim()).toBe(
+      t("suggestions.placeholder"),
+    );
+    expect(field(el, "one")!.value).toBe("");
+    expect(q(el, "[data-test=suggested-product-one]")).toBeNull();
+    expect(q(el, "[data-test=discard-product-one]")).not.toBeNull();
+    expect(save(el).disabled).toBe(true);
+  });
+  it("shows a spelling fix to the internal name beside the editor link, and still fills", async () => {
+    const { el } = await open(
+      venue({
+        listed: [target("one")],
+        suggestions: [
+          suggestion("s1", "one"),
+          suggestion("s2", "one", {
+            language: null,
+            text: null,
+            fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" },
+          }),
+        ],
+      }),
+    );
+    expect(q(el, "[data-test=fix-product-one-internal]")!.textContent!.trim()).toBe(
+      fill("suggestions.fix_internal", { wrong: "ZURRITO", right: "ZURITO" }),
+    );
+    expect(field(el, "one")!.value).toBe("CLIENT-es one");
+    const row = field(el, "one")!.closest("tr")!;
+    expect(row.querySelector("a")!.getAttribute("href")).toBe("/manage/catalogue/product/one");
+  });
+  it("shows a fix to a name entered in another language as a note naming that language", async () => {
+    const { el } = await open(
+      venue({
+        listed: [target("one", { defaultText: "CLIENT-en Croquettes" })],
+        suggestions: [
+          suggestion("s1", "one", {
+            language: "en",
+            text: null,
+            fix: { field: "en", wrong: "Croquetes", right: "Croquettes" },
+          }),
+        ],
+      }),
+    );
+    expect(q(el, "[data-test=fix-product-one-en]")!.textContent!.trim()).toBe(
+      fill("suggestions.fix_language", {
+        language: languageDisplayName("en", currentLocale()),
+        wrong: "Croquetes",
+        right: "Croquettes",
+      }),
+    );
+    expect(field(el, "one")!.value).toBe("");
+  });
+  it("shows an out-of-date suggestion's note and fills nothing, as after a stale refusal", async () => {
+    const { el, api } = await open(
+      venue({
+        listed: [target("one"), target("two")],
+        suggestions: [suggestion("s1", "one", { stale: true }), suggestion("s2", "two")],
+      }),
+    );
+    expect(q(el, "[data-test=stale-product-one]")!.textContent!.trim()).toBe(
+      t("suggestions.stale"),
+    );
+    expect(field(el, "one")!.value).toBe("");
+    api.saveContentTranslations.mockRejectedValueOnce({
+      code: "content.translation_stale",
+      params: { kind: "product", id: "two" },
+    });
+    await click(el, "save");
+    await vi.waitFor(() => expect(q(el, "[data-test=stale-product-two]")).not.toBeNull());
+  });
+});
+
+describe("rows the page leaves out", () => {
+  const oneLanguage = (overrides: Partial<Venue> = {}) =>
+    venue({
+      language: "ca",
+      config: { defaultLanguage: "ca", languages: ["ca"] },
+      omitted: [target("empty", { defaultRequired: true })],
+      suggestions: [suggestion("s1", "empty", { language: "ca", text: "CLIENT-ca Croquetes" })],
+      ...overrides,
+    });
+  it("shows a one-language venue's suggestion for an empty name and saves it", async () => {
+    const { el, api } = await open(oneLanguage());
+    expect(api.getContentTranslationTargets).toHaveBeenCalledWith("ca", {
+      targets: [{ kind: "product", id: "empty" }],
+    });
+    expect(field(el, "empty")!.value).toBe("CLIENT-ca Croquetes");
+    expect(q(el, "[data-test=suggested-product-empty]")).not.toBeNull();
+    expect(q(el, "[data-test=complete]")).toBeNull();
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("ca", {
+      edits: [
+        { kind: "product", id: "empty", expected: "baseline-empty", text: "CLIENT-ca Croquetes" },
+      ],
+    });
+  });
+  it("keeps a page-omitted suggested row through a live refresh", async () => {
+    const liveData = new LiveData();
+    const { el, api } = await open(oneLanguage(), { liveData });
+    const reads = api.getContentTranslationTargets.mock.calls.length;
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(api.getContentTranslationTargets.mock.calls.length).toBeGreaterThanOrEqual(reads + 2),
+    );
+    await settle(el);
+    expect(field(el, "empty")!.value).toBe("CLIENT-ca Croquetes");
+    expect(q(el, "[data-test=suggested-product-empty]")).not.toBeNull();
+  });
+  it("leaves out an omitted item that is gone, named since, or whose suggestion is out of date", async () => {
+    const { el, api } = await open(
+      oneLanguage({
+        omitted: [
+          target("gone", { eligible: false, unavailableReason: "missing" }),
+          target("named", { selectedText: "Pa", effectiveSelectedText: "Pa" }),
+          target("old"),
+        ],
+        suggestions: [
+          suggestion("s1", "gone", { language: "ca" }),
+          suggestion("s2", "named", { language: "ca" }),
+          suggestion("s3", "old", { language: "ca", stale: true }),
+        ],
+      }),
+    );
+    expect(api.getContentTranslationTargets).toHaveBeenCalledWith("ca", {
+      targets: [
+        { kind: "product", id: "gone" },
+        { kind: "product", id: "named" },
+      ],
+    });
+    expect(q(el, "[data-test=complete]")).not.toBeNull();
+  });
+  it("reads omitted items fifty at a time", async () => {
+    const ids = Array.from({ length: 60 }, (_, n) => `e${String(n).padStart(2, "0")}`);
+    const { el, api } = await open(
+      oneLanguage({
+        omitted: ids.map((id) => target(id)),
+        suggestions: ids.map((id) =>
+          suggestion(`s-${id}`, id, { language: "ca", text: `CLIENT-ca ${id}` }),
+        ),
+      }),
+    );
+    const sizes = api.getContentTranslationTargets.mock.calls
+      .filter(([, query]) => query.targets)
+      .map(([, query]) => query.targets!.length);
+    expect(sizes).toEqual([50, 10]);
+    expect(field(el, "e00")!.value).toBe("CLIENT-ca e00");
+  });
+  it("stops reading omitted items once the dialog closes during a read", async () => {
+    const ids = Array.from({ length: 60 }, (_, n) => `e${String(n).padStart(2, "0")}`);
+    const state = oneLanguage({
+      omitted: ids.map((id) => target(id)),
+      suggestions: ids.map((id) =>
+        suggestion(`s-${id}`, id, { language: "ca", text: `CLIENT-ca ${id}` }),
+      ),
+    });
+    const base = fakeApi(state);
+    let held = false;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const liveData = new LiveData();
+    const { el, api } = await open(state, {
+      liveData,
+      getContentTranslationTargets: vi.fn(
+        async (language: string, query: { after?: string; targets?: TranslationRef[] }) => {
+          if (query.targets && held) await gate;
+          return base.getContentTranslationTargets(language, query);
+        },
+      ),
+    });
+    const targetReads = () =>
+      api.getContentTranslationTargets.mock.calls.filter(([, query]) => query.targets).length;
+    expect(targetReads()).toBe(2);
+    held = true;
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(targetReads()).toBe(3));
+    el.open = false;
+    await el.updateComplete;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(targetReads()).toBe(3);
   });
 });
