@@ -622,6 +622,22 @@ describe("PUT /api/parties/:id/guests", () => {
     expect(await partyRow(partyId)).toMatchObject({ guestCount: 2, revision });
   });
 
+  it.each([undefined, -1, 1.5, "0", null])(
+    "refuses the revision %j as a bad field, changing nothing",
+    async (expectedPartyRevision) => {
+      const { partyId, revision } = await seat(2);
+      const res = await put(`/api/parties/${partyId}/guests`, {
+        guestCount: 4,
+        expectedPartyRevision,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
+      });
+      expect(await partyRow(partyId)).toMatchObject({ guestCount: 2, revision });
+    },
+  );
+
   it("answers 409 party.not_open for a finished, a malformed or an unknown party", async () => {
     const { partyId, revision } = await seat(2);
     expect(
