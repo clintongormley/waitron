@@ -1,5 +1,7 @@
 # A679 proposed delivery screens and register
 
+**Owner update, 2026-10-15 at 22:15:** the authoritative design now groups each typed field in fours: register 20 entered/23 displayed, standard node key 47/57, combined 67/80. The 21:30 drawings below retain their historical groups of three and counts. They are not qualification of this amendment. Paper-to-Cloud import is no longer required; keep the paper PDF for later S/P allocations.
+
 **Owner update, 2026-10-15 at 21:30:** the existing pictures below are historical proposals.
 Their signing seed, custodian reference, mixed-case typing and old character counts are withdrawn.
 The [current design](../2026-10-15-a679-two-route-redesign.md) and

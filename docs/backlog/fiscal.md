@@ -234,16 +234,20 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## A venue without Cloud needs a usable paper-custodian route
 
-**Owner update, 2026-10-15 at 21:30:** remove the paper register’s custody signing key, including
-its seed and custodian reference. The current [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md)
-and [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) replace signature-based
-paper integrity with the current-record declaration, retained known facts and a typing-error check.
-Codes use a case-insensitive alphabet and groups of three. Original PDFs retain complete supplied
-history; typing preserves conservative S/P exclusion floors. Cloud receipts remain signed. Cloud’s
-existing signed-paper import does not admit the new unsigned record; a separately owned, reviewed
-admission contract and joint qualification remain required. Earlier custody, fingerprint and
-101/141-character proposals below are historical where superseded. This publication qualifies no
-new PDF, typed recovery or allocation behavior.
+**Owner update, 2026-10-15 at 22:15:** the current
+[design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
+[plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the
+21:30 removal of the paper custody signing key and group each typed field in fours.
+Register continuation takes 20 entered/23 displayed characters; a generated named
+node key takes 47/57; together, 67/80. Paper-to-Cloud import is no longer required
+because S/P and C names are disjoint. Keep your paper PDF when joining Cloud;
+later paper allocations, including after leaving Cloud, continue that existing
+S/P register. No unsigned-import contract or joint import qualification remains
+an open dependency; D74 is dropped. Signed Cloud receipts remain unchanged.
+Paper machine reporting remains unavailable unless separately decided, and no
+new reporting implementation is authorised. Earlier dated proposals and
+import-dependency receipts below are historical where superseded. This update
+qualifies no new runtime behavior.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
 [two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
@@ -271,6 +275,8 @@ burning every earlier S/P name, including unused reservations; it cannot reconst
 original signatures, qualify Cloud imports or replace the matching backup key. Existing full
 evidence remains intact. Actual Chrome download/upload, changed-resave, typed controls and owner
 print/typing qualification remain to build.
+
+**Superseded dependency, owner 2026-10-15 at 22:15:** the following source-reading receipt remains historical. Its import-build instructions and enablement prerequisites are no longer active requirements.
 
 **Paper-to-Cloud admission dependency found during plan review, 2026-10-15 (source reading only):**
 preserved Waitron `cc553697b`, `packages/fiscal-verifactu/src/initial-setup.ts:91–92`, binds the

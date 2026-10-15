@@ -1,4 +1,4 @@
-# A679 One-PDF Implementation Plan — replacement, 2026-10-15 21:30 revision
+# A679 One-PDF Implementation Plan — replacement, 2026-10-15 21:30 revision, amended at 22:15
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` for INLINE execution, one task at a time. Read `superpowers:test-driven-development` before implementation or tests. Observe the intended RED before implementing. Do not delegate automatically or reopen settled owner requirements.
 
@@ -8,11 +8,12 @@
 
 **Tech Stack:** TypeScript, Lit/shared controls, Hono, Web Crypto, existing durable JSON, Vitest, Playwright/installed Chrome. Proposed PDF dependencies remain PDFKit 0.20.2, PDF.js 6.4.299 and fontkit 2.0.4, subject to package/API qualification in Task 3.
 
-**Spec:** `docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md`, authoritative 21:30 revision.
+**Spec:** `docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md`, authoritative 21:30 revision as amended at 22:15.
 
 ## Authority and state
 
 - Owner decision: `/Users/clintongormley/waitron-campaign-e/questions.md:4565–4569`.
+- Owner amendment: `/Users/clintongormley/waitron-campaign-e/questions.md:4593–4595`; fours per typed field, no required paper-to-Cloud import, retained paper PDF and continued existing S/P register.
 - V2 scope: the same file, `4374–4381`; exact authority boundary at `4311–4323`.
 - Inherited allocation contract: Oct 4 design §9 and Oct 12 Cloud implementation plan.
 - Product inspected at `aa6c1b957508570d60b3652c5c0ac79044556993`.
@@ -47,7 +48,8 @@
 - V2 strict readers, password rebind, retirement, workspace selection and publication-only finish remain.
 - Any known/unknown existing register excludes the password-free no-master exception.
 - A731/A732/A733 remain separate before-go-live work; no repair-page mutations for them here.
-- Unsigned paper Cloud import/report stays unavailable until a separately owned contract lands.
+- Paper-to-Cloud import is not required and has no open build dependency. Joining Cloud retains the paper PDF; later paper allocations, including after leaving Cloud, continue the existing S/P register.
+- Unsigned paper machine reporting remains unavailable unless separately decided; this plan authorises no new reporting implementation.
 - No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change.
 - The owner’s removal covers paper-signature admission semantics, not an exception to H2 or protected assertions.
 - No scanner, QR, image decoding, camera, offline tool, PBKDF gate, ink or loss exercise.
@@ -163,12 +165,12 @@ Node-key format is display metadata, never a replacement secret value.
 **Files:** new `fiscal/paper-register-protocol.ts`, `paper-register-compact.ts`, sibling Node/browser tests and new synthetic fixture; fiscal package exports.
 **Interfaces:** `normaliseTypedCode(text:string):string`; `encodePosition(scope,position):Promise<PrintedPositionBlock>`; `decodePosition(fields,scope):Promise<RegisterPosition>`; `encodeNodeKey(key,scope,encoding):Promise<PrintedNodeBlock>`; `decodeNodeKey(fields,scope,nodeId,keyName):Promise<string>`.
 
-- [ ] RED: encode floors 42/7; assert `000 042`, `000 007`, eight check symbols, data count 20/display count 24.
+- [ ] RED: encode floors 42/7; assert `0000 42`, `0000 07`, eight check symbols, data count 20/display count 23.
 - [ ] RED: enter lowercase, `O/I/L` aliases, spaces/hyphens/tabs/newlines; expect identical decoded position/key.
-- [ ] RED: position `000 00A`, wrong scope/check, extra symbols and unsupported Unicode separators refuse.
-- [ ] RED: generated secret round trips byte-for-byte through 39 payload symbols plus eight check symbols; counts 47/61 and combined 67/85.
+- [ ] RED: position `0000 0A`, wrong scope/check, extra symbols and unsupported Unicode separators refuse.
+- [ ] RED: generated secret round trips byte-for-byte through 39 payload symbols plus eight check symbols; counts 47/57 and combined 67/80.
 - [ ] RED: raw192 final padding violations refuse; raw192 length must be exactly 39.
-- [ ] RED: imported UTF-8 keys preserve case, hyphens, underscores, spaces and Unicode; assert actual `ceil(8n/5)+8`.
+- [ ] RED: imported UTF-8 keys preserve case, hyphens, underscores, spaces and Unicode; for byte length n and m=ceil(8n/5), assert m+8 entered and m+floor((m−1)/4)+9 displayed; with the register, m+28 entered and m+floor((m−1)/4)+32 displayed.
 - [ ] RED: explicit wrong encoding refuses; use equal-length cases so length-based inference would fail.
 - [ ] RED: check scope/node/name/encoding/byte-length substitutions refuse before recovery use.
 - [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/paper-register-compact.test.ts src/paper-register-compact.browser.test.ts`.
@@ -178,7 +180,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] For general input infer byte length from canonical symbol count; reject impossible length residues and noncanonical re-encodings.
 - [ ] For raw192 reconstruct canonical base64url from decoded bytes; never case-fold that secret.
 - [ ] For UTF-8 decode fatally and preserve the exact supported text; no trimming or Unicode normalisation.
-- [ ] Print per-field groups of three; format labels are clicks, not typed symbols.
+- [ ] Print per-field groups of four; format labels are clicks, not typed symbols.
 - [ ] New active code imports no custody DER/seed/signing helper; leave historical signed codec assertions intact.
 - [ ] Repeat the exact command; require counted GREEN with no skipped named cases.
 - [ ] Commit: `git commit -s -m "feat: replace paper signer typing with checked positions and reversible keys"`.
@@ -281,30 +283,26 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Repeat both commands separately; require counted GREEN and absence of raw keys/PDFs in persisted fixtures.
 - [ ] Commit: `git commit -s -m "feat: enforce paper floors and kept-document binding across allocation consumers"`.
 
-## Task 6: Signed Cloud setup and honest unsigned-import limits
+## Task 6: Signed Cloud setup and retained paper continuity
 
-**Files:** new `fiscal/initial-cloud-setup.ts`, `register-cloud-export.ts`, tests; existing Cloud preparation/configuration and server/client route tests.
-**Interfaces:** `prepareInitialCloudSetup(context,input,evidence):InitialSetupImport`; `createInitialCloudRequest(context,venueId,operationId,incidentEvidence):CloudReserveInput`; `cloudPaperImportAvailability(history):{available:false,reason:"unsigned-format"|"checkpoint"|"recipient-admission"|"original-limits"}|{available:true,originalRequests:readonly unknown[]}`.
+**Files:** new `fiscal/initial-cloud-setup.ts`, tests; existing Cloud preparation/configuration and server/client route tests.
+**Interfaces:** `prepareInitialCloudSetup(context,input,evidence):InitialSetupImport`; `createInitialCloudRequest(context,venueId,operationId,incidentEvidence):CloudReserveInput`.
 
 - [ ] RED: untrusted/reserved/abandoned/unknown or changed scope/operator/event/source/target/bases receipt refuses.
 - [ ] RED: Cloud actor never substitutes for planned local administrator/recovery-key operator.
-- [ ] RED: unsigned full/checkpoint history is unavailable for legacy import and machine reporting; assert zero transport calls.
-- [ ] RED: legacy originals remain exact; invalid UUID recipient and consumed transfer cannot be “fixed” by remapping.
-- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/initial-cloud-setup.test.ts src/register-cloud-export.test.ts`.
+- [ ] RED: joining Cloud needs no paper-history import and retains the paper PDF; later paper allocations, including after leaving Cloud, continue its existing S/P register.
+- [ ] Keep unsigned paper import and paper machine reporting unavailable; assert zero transport calls. No new import or reporting implementation is authorised.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/initial-cloud-setup.test.ts`.
 - [ ] Separately run: `pnpm --filter @waitron/server exec vitest run src/first-fiscal-cloud.route.test.ts src/cloud-fiscal-allocation-client.test.ts src/cloud-fiscal-allocation.test.ts`.
 - [ ] Observe RED; dispatch signed Cloud before paper setup preparation and support setup mode without loosening recovery checks.
 - [ ] Keep public receipt verification on Node; browser structural reading grants no authority.
 - [ ] Preserve exact operation/request through status/retry, full session, CSRF, origin and independently configured capabilities.
-- [ ] Export frozen public request and import consumed packet through existing journey; missing portal file-import convenience stays explicitly unavailable.
 - [ ] Report C commitment afterward, outside activation/sale transaction, with existing machine authentication.
 - [ ] Preserve signed receipt bytes and independent issuer trust; no paper key is generated for C-only documents.
 - [ ] New unsigned imports/reports stay unavailable; propose no fake legacy packet or automatic Cloud signing upgrade.
-- [ ] Existing signed originals export only unchanged, at whole-block boundaries and within 20-object/16,384-byte limits.
-- [ ] Oversized indivisible legacy blocks refuse; do not re-sign or silently truncate them.
-- [ ] Cloud owner separately designs declared-fact/burn-floor admission, recipient attribution, continuity replay and authenticated retries.
-- [ ] Production adapters, first-operator admission, namespace discovery and genuine joint acceptance remain named dependencies.
+- [ ] Signed C setup production adapters, first-operator admission, namespace discovery and genuine joint acceptance remain named dependencies; paper-history import is not one.
 - [ ] Repeat both commands; label fixtures synthetic, not live enablement.
-- [ ] Commit: `git commit -s -m "feat: verify signed Cloud setup and expose unsigned paper import limits"`.
+- [ ] Commit: `git commit -s -m "feat: verify signed Cloud setup and retain paper register continuity"`.
 
 ## Task 7: V2 inspection and ownership recovery
 
@@ -364,7 +362,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Separately run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project browser src/setup/register-picker.browser.test.ts src/register-session.browser.test.ts`.
 - [ ] Observe RED; implement module-owned fiscal UI with generic opaque host actions.
 - [ ] Show frozen taxpayer/software/environment and backup node/key name; no extra identifier typing.
-- [ ] Show S/P ranges, 20/47/67 counts, history gap, typo-only check and equal-floor/unseen-stale limits.
+- [ ] Show S/P ranges, 20/47/67 entered and 23/57/80 displayed counts, history gap, typo-only check and equal-floor/unseen-stale limits.
 - [ ] Use shared inputs/required markers/semantic names, per-field errors and one bottom message.
 - [ ] Preserve caret on normalisation; passive reads, draft scopes and applicable save state follow existing contracts.
 - [ ] Typed material/drafts/Blob URLs stay memory-only; disposal clears references without promising physical memory erasure.
@@ -414,7 +412,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Qualify fourteen comparisons: paper/Cloud × fresh boxes, stale backup, old box return, interruption, bucket rebuild, reissue and declared clone.
 - [ ] Paper assertions cover next names, burned unused reservations, retained originals and no second activation.
 - [ ] Cloud fixtures cover exact signed receipts, lost replies and independent local commitment; genuine outside allocator/continuity probes stay Cloud-owned.
-- [ ] Include P42/C42 disjointness, old uploads after checkpoints, missing matching key and unsigned import/report unavailability.
+- [ ] Include P42/C42 disjointness, retained paper PDF across Cloud subscription changes, continued existing S/P positions, old uploads after checkpoints, missing matching key and zero unsigned paper import/report calls.
 - [ ] No ordinary restart/reprint/reissue/report/filing retry/finish activates a chain.
 - [ ] Inspect EN/ES × light/dark ×390/1280 actual screens/PDFs; axe, keyboard, focus, inner controls and computed theme colors.
 - [ ] Use synthetic secrets only in retained captures; dev stack uses `wa-wt onboarding <registered-worktree-name>`.
@@ -434,7 +432,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Compare protected paths against base/current main and Task 0’s boundary inventory; every other protected byte/assertion stays unchanged.
 - [ ] Audit the whole changed prose set, including READMEs/runbooks: no active seed/signature/head-tag/101/40-count or forged-sheet promises remain.
 - [ ] Historical docs receive dated pointers; old review/test receipts never qualify this revision.
-- [ ] Record A732’s now-unavailable signer mechanism and the separately owned unsigned Cloud contract without inventing queue items.
+- [ ] Record A732’s now-unavailable signer mechanism, the removed paper-to-Cloud import requirement and unavailable paper machine reporting; create no new dependency or queue item.
 - [ ] Keep A679 open until build acceptance; preserve A731/A732/A733 before-go-live requirements.
 - [ ] Run affected types/builds and focused checks; normal hook once, required current-head CI coverage/merge jobs.
 - [ ] Obtain the campaign’s two installed Claude run-it reviews on the complete candidate; inspect completed findings and fix test-first.
@@ -452,11 +450,11 @@ Node-key format is display metadata, never a replacement secret value.
 | Exact 20/47/67 codes, grouping and reversible secret | 1, 3, 9–11 |
 | Lossless full history versus burned checkpoint | 2–6, 10–11 |
 | Consumption/retention before unchanged activation writer | 4–5, 8–11 |
-| Signed C receipts and unavailable unsigned import/report | 6, 9–12 |
+| Signed C receipts, retained paper continuity and unavailable paper reporting | 6, 9–12 |
 | Every fresh consumer and dormant promotion | 4–5, 11–12 |
 | V2 authority, retirement, pre-open entry and exact finish | 7–9, 11 |
 | Matching backup key and separate old/new secrets | 1, 5, 10–11 |
 | Real Chrome/resave/attachment refusal and owner typing | 3, 11 |
 | Protected checks, reviews, hook, CI and honest claims | 0, 12 |
 
-After driver application, fresh review and docs publication, resume revised Task 1 inline/TDD. Cloud unsigned-history integration and A732’s replacement authority remain separately owned dependencies; no new generic permission gate is introduced for the owner’s settled signer removal.
+After driver application, fresh review and docs publication, resume revised Task 1 inline/TDD. A732’s replacement authority remains separately owned. Paper-to-Cloud import is not required and is not a build dependency. Paper machine reporting remains unavailable unless separately decided. No new permission gate or task is introduced.

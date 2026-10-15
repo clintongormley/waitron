@@ -338,9 +338,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [replacement implementation plan](superpowers/plans/2026-10-15-a679-one-pdf-implementation.md):
   one setup-page PDF, unsigned paper S/P history or the built signed Cloud C protocol, emergency E
   and repair-v2 rules. The owner’s 2026-10-15 21:30 change removes the paper custody signing key;
-  typed positions, checks and recovery keys use easy-to-type characters in groups of three.
-  Preserve the existing branch work. Original-recipient paper imports remain
-  unavailable pending the verified Cloud admission contract described in the detail. The N
+  typed positions, checks and recovery keys use easy-to-type characters grouped in fours
+  (owner 22:15). Keep the paper PDF when joining Cloud and continue its S/P register for
+  later paper allocations. Paper-to-Cloud import is no longer required. Preserve the existing branch work. The N
   proposal and old 44-step paper check/FOLLOW-UP are cancelled. Qualification opens the built
   PDF, re-uploads the original saved file, and checks continuation/recovery by typing from its printout. Scanning is not required.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).

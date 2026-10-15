@@ -1,12 +1,16 @@
 # A679: keep invoice names distinct after recovery
 
-**Owner update, 2026-10-15 at 21:30:** the paper register has no custody signing key. Continue
-from its original PDF or type 20 position/check characters, grouped by three, from the printout.
-A generated named node recovery key takes 47 characters; together, 67. The
-[authoritative revision](#authoritative-revision-owner-decision-2026-10-15-at-2130) below replaces
-conflicting earlier signing, trust, head-reference and typing proposals. Checks detect some typing
-mistakes, not forged or edited records. Earlier source, test and picture receipts remain historical;
-none qualifies this new implementation.
+**Owner update, 2026-10-15 at 22:15:** group each typed field independently in fours.
+Register continuation takes 20 entered characters, 23 including grouping spaces.
+A generated named node recovery key takes 47 entered characters, 57 displayed;
+together, 67 entered and 80 displayed. Paper-to-Cloud import is no longer required:
+paper S/P and Cloud C names are disjoint. When joining Cloud, keep your paper PDF
+for later paper allocations. When leaving Cloud, continue your existing S/P register.
+Signed Cloud receipts remain unchanged. Paper machine reporting remains unavailable;
+this decision authorises no new reporting implementation. The
+[authoritative revision](#authoritative-revision-owner-decision-2026-10-15-at-2130),
+amended below, overrides conflicting earlier requirements. Earlier source, test,
+drawing and import-dependency receipts remain historical and do not qualify this implementation.
 
 **Redesign under the owner’s existing requirements, 2026-10-15 at 18:55.** Product implementation stays paused. Behavior below is proposed; source observations are unverified at runtime except for the selected existing checks recorded in the qualification section. No Cloud, provider or physical-printer operation ran. The earlier `N` proposal is withdrawn.
 
@@ -437,7 +441,15 @@ reference and short head tag. The 21:30 revision below replaces that active form
 
 **Precedence:** this revision replaces the 19:35 manual-entry appendix and overrides conflicting statements in the earlier redesign. Those earlier statements and their qualification receipts remain historical evidence of their dated candidates. In particular, references to recovering a custody signer, signed new paper revisions, fingerprint enrolment for ordinary paper use, scanning, and the 101/79/40/141/119 character counts are superseded.
 
-Authority: `/Users/clintongormley/waitron-campaign-e/questions.md:4565–4569`. The owner approved removing the paper signing key and accepted that forged or edited paper cannot be detected. The owner also required case-insensitive, easy-to-type codes grouped in threes.
+**Amendment, owner 2026-10-15 at 22:15:** this amendment replaces the 21:30
+grouping and paper-to-Cloud import requirement. Authority:
+`/Users/clintongormley/waitron-campaign-e/questions.md:4593–4595`.
+Group every typed field independently in fours. Importing paper history into Cloud
+is not required because S/P and C names are disjoint. Keep the paper PDF when
+joining Cloud; later paper allocations, including after leaving Cloud, continue
+that same S/P register. No unsigned-import build dependency remains.
+
+Authority: `/Users/clintongormley/waitron-campaign-e/questions.md:4565–4569`. The owner approved removing the paper signing key and accepted that forged or edited paper cannot be detected. The owner also required case-insensitive, easy-to-type codes; the 22:15 amendment groups each field in fours.
 
 This is a design revision, not implementation qualification. Product head inspected: `aa6c1b957508570d60b3652c5c0ac79044556993`. No tests, services, PDF generation, browser journeys or physical typing ran during this revision.
 
@@ -462,7 +474,7 @@ First setup also requires the appropriate initial-machine absence declaration. R
 
 ## Keep, change and drop
 
-| Earlier requirement | Disposition under the 21:30 decision |
+| Earlier requirement | Disposition under the 21:30 decision and 22:15 amendment |
 | --- | --- |
 | Taxpayer-wide allocation history outside restored backups | **Keep.** One current paper register across all venues and nodes. |
 | Paper `S/P`, Cloud `C`, emergency `E128` | **Keep.** No new namespace. |
@@ -477,8 +489,8 @@ First setup also requires the appropriate initial-machine absence declaration. R
 | Typed checkpoint | **Keep with changed representation.** Unsigned, conservative burn floors; missing history remains explicit. |
 | Existing signed paper originals | **Keep unchanged as historical evidence.** Never rewrite, re-sign or reinterpret them as new unsigned originals. |
 | Signed Cloud receipts, issuer trust and current outside authority | **Keep.** Removing paper signatures removes none of Cloud’s signature checks. |
-| Existing Cloud `import-paper` for newly unsigned history | **Unavailable.** Requires a separately owned, explicitly versioned Cloud contract. |
-| Additive paper-to-Cloud history preservation | **Keep as a requirement with an unavailable integration dependency.** Do not claim existing signed import satisfies it. |
+| Existing Cloud `import-paper` for newly unsigned history | **Unavailable and not required.** No new import implementation is authorised. |
+| Additive paper-to-Cloud history preservation | **Drop as a requirement by owner decision, 22:15.** Keep the paper PDF when joining Cloud; later paper allocations, including after leaving Cloud, continue its existing S/P register. No unsigned-import dependency remains. |
 | V2 repair, retirement, exact finish and entry ordering | **Keep.** Paper signing removal grants no reset authority. |
 | Password-free empty-workspace exception | **Keep.** Absence of a signing key is no longer evidence that no register exists. Any existing or unknown register/authority history excludes this exception. |
 | A731 backup recovery from repair page | **Keep separately owned**, before go-live. |
@@ -515,9 +527,9 @@ No network request is added to a sale transaction. No allocation receipt establi
 
 New A679 typed recovery fields use `0123456789ABCDEFGHJKMNPQRSTVWXYZ`.
 
-Print uppercase, in groups of three from the left, with a shorter final group where necessary. Accept lowercase. Map `O/o` to `0` and `I/i/L/l` to `1`. Ignore ASCII spaces, hyphens, tabs and CR/LF in these typed fields. Reject other characters; do not guess further substitutions.
+Print uppercase, grouping each typed field independently in fours from the left, with a shorter final group where necessary. Accept lowercase. Map `O/o` to `0` and `I/i/L/l` to `1`. Ignore ASCII spaces, hyphens, tabs and CR/LF in these typed fields. Reject other characters; do not guess further substitutions.
 
-S/P positions use the **decimal subset** of this alphabet: exactly six digits after normalisation. They are not base32 numbers. Thus `000 042` means decimal 42. The printed alphabet excludes competing letter forms; aliases tolerate their accidental entry.
+S/P positions use the **decimal subset** of this alphabet: exactly six digits after normalisation. They are not base32 numbers. Thus `0000 42` means decimal 42. The printed alphabet excludes competing letter forms; aliases tolerate their accidental entry.
 
 Apply these transformations only to human-entered display codes. Never case-fold, strip separators from, or otherwise normalise an actual node secret, original attachment, signed object or Cloud packet.
 
@@ -525,10 +537,10 @@ Apply these transformations only to human-entered display codes. Never case-fold
 
 | Field | Data characters | Display |
 | --- | ---: | --- |
-| S position | 6 | `000 042` |
-| P position | 6 | `000 007` |
-| Check | 8 | `xxx xxx xx` |
-| **Register total** | **20** | **24 characters including grouping spaces** |
+| S position | 6 | `0000 42` |
+| P position | 6 | `0000 07` |
+| Check | 8 | `xxxx xxxx` |
+| **Register total** | **20** | **23 characters including grouping spaces** |
 
 Positions are the highest reserved/excluded values, `000000..999999`, not the next free candidates. Zero means no earlier allocation in that prefix.
 
@@ -559,23 +571,23 @@ The backup preview supplies `nodeId` and `keyName`; the frozen operation supplie
 | Case | Data characters | With grouping spaces |
 | --- | ---: | ---: |
 | First register generated by setup | 0 | 0 |
-| Continue printed register | 20 | 24 |
-| Generated named key alone | 39 + 8 = **47** | **61** |
-| Register plus generated named key | 20 + 47 = **67** | **85** |
-| Imported UTF-8 key alone | `m + 8`, where `m=ceil(8n/5)` | `m + floor((m−1)/3) + 10` |
-| Register plus imported UTF-8 key | `m + 28` | `m + floor((m−1)/3) + 34` |
+| Continue printed register | 20 | 23 |
+| Generated named key alone | 39 + 8 = **47** | **57** |
+| Register plus generated named key | 20 + 47 = **67** | **80** |
+| Imported nonempty UTF-8 key alone | `m + 8`, where `m=ceil(8n/5)` | `m + floor((m−1)/4) + 9` |
+| Register plus imported UTF-8 key | `m + 28` | `m + floor((m−1)/4) + 32` |
 
-Counts exclude labels, line breaks, clicks, existing passwords and separate authority inputs. Key and check are grouped as separate fields.
+Counts exclude labels, line breaks, clicks, existing passwords and separate authority inputs. Grouping restarts for each of the 6 + 6 + 8 register fields and payload + 8 key fields.
 
 No 40-character generated-key claim survives: 39 payload symbols plus eight check symbols is 47.
 
 ### Updated screen and printout
 
-The [drawing index](2026-10-15-a679-two-route-redesign/README.md#current-2130-typing-proposal)
-shows the three register fields and a separately named recovery-key block in English and Spanish,
-at phone/desktop widths and in both themes. The printout uses the same groups of three.
-Its [synthetic values](2026-10-15-a679-two-route-redesign/position-reference.json) calculate the
-proposed check domains; they are not production credentials or product-codec qualification.
+The screen and printout must group every typed field independently in fours.
+The [21:30 drawings](2026-10-15-a679-two-route-redesign/README.md#current-2130-typing-proposal)
+retain their historical grouping and counts; they do not qualify this amendment.
+Their [synthetic values](2026-10-15-a679-two-route-redesign/position-reference.json)
+calculate the proposed check domains; they are not product-codec, PDF or recovery qualification.
 
 ## Typed continuation and its limits
 
@@ -623,11 +635,11 @@ A stolen PDF contains a usable node recovery secret for its matching backup/veri
 
 Signed consumed C receipts remain verified against independent configured trust and exact local authority. C-only documents create no paper signer.
 
-New unsigned paper histories and typed checkpoints cannot use existing `import-paper` or paper machine reporting. Show **“Paper history import is not available for this register format.”** Retain the history locally and in the PDF; do not silently discard it.
+Paper-to-Cloud import is not required. Paper S/P and Cloud C names are disjoint, so joining Cloud does not require importing paper allocations to prevent duplicate names. Keep your paper PDF for any later paper allocation. Leaving Cloud continues your existing S/P register; it does not start a new paper register or free old names.
 
-A separately owned Cloud contract must distinguish declared unsigned facts and burn floors from legacy signed evidence, preserve original bytes, authenticate taxpayer/operator authority independently, retain omissions and uncertainty, resolve recipient attribution, and append through current outside continuity. Its implementation and enablement are not part of this Waitron PR.
+New unsigned paper histories and typed checkpoints remain unavailable to existing `import-paper`. No replacement unsigned-import contract, implementation or joint import qualification is an A679 dependency. Legacy signed originals remain unchanged; they do not turn subsequent unsigned history into signed evidence. The historical recipient-admission mismatch does not block this transition.
 
-Legacy signed public originals may remain parseable without rewriting them. Their presence does not make subsequent unsigned history a legacy signed import. The existing `first-setup:<attempt>` versus Cloud UUID recipient mismatch also remains unresolved.
+Paper machine reporting for unsigned history remains unavailable unless separately decided. This amendment authorises no new paper reporting implementation.
 
 **Implementation boundary:** the inspected activation chain still checks signed paper evidence. The owner’s explicit removal of paper signing authorises replacing that admission requirement with a distinct owner-declared branch. Keep the legacy signed branch strict and carry independent live operator authority through preparation. Source reading indicates the existing activation writer can remain unchanged; Task 4 must test that inference through the real path. H2 does not separately name these admission validators as protected. If implementation requires changing hashes, numbering, fiscal-record/activation writers, SQL, guards or an existing protected fiscal assertion, stop at that exact change and ask with its source lines. This documentation grants no such exception.
 
