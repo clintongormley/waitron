@@ -77,6 +77,52 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "19.69", amount: "2.42", discount: "0.00" });
   });
 
+  it("prints a weighed line under one kilo at its stored price before any discount (owner, Q9)", () => {
+    // J1, measured: 0.123 kg at 24,00 €/kg, 10% off, charged 2,65, filed base 2,41.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "0.123",
+          gross: "2.65",
+          listGross: "2.95",
+          listUnitPriceGross: "24.00",
+          net: net("19.62", "2.41", "10.00"),
+        }),
+      ),
+    ).toEqual({ price: "21.82", amount: "2.68", discount: "0.27" });
+  });
+
+  it("gives a comped weighed line its value (owner, Q9)", () => {
+    // J2, measured: the same jamón comped, filed at 0,00.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "0.123",
+          gross: "0.00",
+          listGross: "2.95",
+          listUnitPriceGross: "24.00",
+          net: net("0.00", "0.00", "10.00"),
+        }),
+      ),
+    ).toEqual({ price: "21.82", amount: "2.68", discount: "2.68" });
+  });
+
+  it("prints a credit line's filed figures", () => {
+    // A whole credit negates the totals and keeps the positive price, so its discount would be
+    // negative and the filed figures print.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "-0.123",
+          gross: "-2.65",
+          listGross: "-2.95",
+          listUnitPriceGross: "24.00",
+          net: net("19.62", "-2.41", "10.00"),
+        }),
+      ),
+    ).toEqual({ price: "19.62", amount: "-2.41", discount: "0.00" });
+  });
+
   it("prints the filed figures, and no discount, when the list total would leave a negative one", () => {
     // 10,00 ÷ 1,21 = 8,26, below the filed base 9,50: a row would read «--1,24».
     expect(

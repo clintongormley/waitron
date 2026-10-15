@@ -49,6 +49,7 @@ export async function receiptLines(
         rate: saleLines.vatRate,
         gross: saleLines.lineGross,
         listGross: saleLines.listGross,
+        listUnitPriceGross: saleLines.listUnitPriceGross,
       })
       .from(saleLines)
       .innerJoin(sales, eq(sales.id, saleLines.saleId))
@@ -59,9 +60,13 @@ export async function receiptLines(
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };
         delete display.listGross;
+        delete display.listUnitPriceGross;
         return {
           ...display,
           ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),
+          ...(row.listGross === null || row.listUnitPriceGross === null
+            ? {}
+            : { listUnitPriceGross: centsToDecimal(row.listUnitPriceGross) }),
           net: {
             unitPrice: centsToDecimal(row.unitPrice),
             priceQuantity: thousandthsToDecimal(row.priceQuantity),

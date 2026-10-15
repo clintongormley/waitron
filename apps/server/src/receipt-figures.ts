@@ -39,6 +39,13 @@ export function beforeVatFigures(line: FiledLine): BeforeVatFigures {
   const net = line.net;
   const filed = { price: decimal(net.unitPrice), amount: decimal(net.base), discount: ZERO };
   if (line.listGross === undefined) return filed;
+  if (line.listUnitPriceGross !== undefined) {
+    const rate = decimal(net.rate);
+    const amount = baseFromGross(decimal(line.listGross), rate);
+    const discount = subtractDecimal(amount, filed.amount);
+    if (compareDecimal(discount, ZERO) < 0) return filed;
+    return { price: baseFromGross(decimal(line.listUnitPriceGross), rate), amount, discount };
+  }
   const quantity = decimal(line.quantity);
   const priceQuantity = decimal(net.priceQuantity);
   // Under one priced unit the list price cannot be divided back exactly.

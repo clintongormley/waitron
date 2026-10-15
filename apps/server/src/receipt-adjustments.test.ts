@@ -16,6 +16,7 @@ import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
+import { beforeVatFigures, isFiled } from "./receipt-figures.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -150,6 +151,7 @@ describe("receiptLines", () => {
           quantity: "1",
           gross: "10.80",
           listGross: "12.00",
+          listUnitPriceGross: "12.00",
           net: { unitPrice: "8.93", priceQuantity: "1.000", base: "8.93", rate: "21.00" },
           adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
         },
@@ -161,6 +163,8 @@ describe("receiptLines", () => {
       ];
       expect(receipt.lines).toMatchObject(expected);
       expect(replay.lines).toMatchObject(expected);
+      expect(receipt.lines[1]).not.toHaveProperty("listUnitPriceGross");
+      expect(replay.lines[1]).not.toHaveProperty("listUnitPriceGross");
       expect(replay.vatBreakdown).toEqual([
         { rate: "21.00", base: "8.93", tax: "1.87" },
         { rate: "10.00", base: "5.45", tax: "0.55" },
@@ -197,6 +201,72 @@ describe("receiptLines", () => {
         { gross: "99.99", net: { base: "8.93", tax: "1.87" } },
         { gross: "99.99", net: { base: "5.45", tax: "0.55" } },
       ]);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+          .where(eq(tenants.id, 1)),
+      );
+    }
+  });
+
+  it("reads back a weighed F1 line's stored price before its discount", async () => {
+    const billId = await bill([{ name: "Ham", quantity: "0.123" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+    try {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
+          .where(eq(tenants.id, 1)),
+      );
+      const [order] = await inTx(venue, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, billId, {
+        revision: order!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      const receipt = await inTx(venue, async (tx) => {
+        const [payment] = await tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: billId,
+            submissionId: randomUUID(),
+            fingerprint: "receipt-f1-weighed-list-price",
+            kind: "contribution",
+            method: "card",
+            applied: 265,
+            state: "pending",
+            requestedBy: venue.supervisorId,
+            source: venue.cfg.origin.source,
+            deviceId: venue.cfg.origin.deviceId,
+          })
+          .returning();
+        return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!;
+      });
+      const [line] = receipt.lines;
+      expect(line).toMatchObject({
+        quantity: "0.123",
+        gross: "2.65",
+        listGross: "2.95",
+        listUnitPriceGross: "24.00",
+        net: { base: "2.41", rate: "10.00" },
+      });
+      if (!isFiled(line!)) throw new Error("the F1 line carries no filed figures");
+      expect(beforeVatFigures(line)).toEqual({ price: "21.82", amount: "2.68", discount: "0.27" });
     } finally {
       await inTx(venue, (tx) =>
         tx
