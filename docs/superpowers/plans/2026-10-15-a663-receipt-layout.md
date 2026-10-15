@@ -31,19 +31,27 @@ mockups are "drawn, not rendered": where this plan departs from a drawing, it sa
 
 ## How the work is cut
 
-Four pull requests. Each leaves `main` green and correct on its own; none needs a later one.
+Five pull requests: Part 1 is split in two (1a and 1b) so that the half that touches no file of
+lane A's open A661 branch can start now. Each leaves `main` green and correct on its own; none needs
+a later one. The task numbers are not changed by the split; the table says which tasks each pull
+request holds.
 
 | Part | What it delivers | Tasks | Can start |
 | ---- | ---------------- | ----- | --------- |
-| 1 | Bold and double-size lines on paper and A4; VAT rates as "10%"/"17,5%"; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL double size straight after the items, «IVA 10% incluido»); the full invoice's TOTAL drawn double size where it already sits | 7 | Now |
-| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | Now (after Part 1 lands) |
+| 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
+| 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed |
+| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed |
 | 3 | Guests and the amount per person | 3 | After A661 lands (it edits `receipt-print.ts`); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | After owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
-Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: the only place the code
-prints a unit price beside a quantity is the full invoice's «Precio sin IVA» line
-(`receipt-document.ts:129-140`, the `" / "` at line 133), and Part 2 replaces that line with the
-table's price column. See owner question Q4 for why the "/" is not turned into "×".
+Why 1b and 2 wait for A661: see "A661 overlap" below.
+
+Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: on paper and on the A4
+page, the only place a unit price is printed beside a quantity is the full invoice's «Precio sin
+IVA» line (`receipt-document.ts:129-140`, the `" / "` at line 133), and Part 2 replaces that line
+with the table's price column. The till's on-screen copy of the receipt prints the same line
+itself (`apps/till/src/screens/till-ticket-view.ts:84-108`, the `/` at `:91-92`); that screen is
+outside A663 (see "A661 overlap"). See owner question Q4 for why the "/" is not turned into "×".
 
 Point 2's "Fecha de operación only when it differs from the issue date" is already how the code
 behaves: both readers that feed a full invoice drop the operation date when it equals the issue day
@@ -56,13 +64,15 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 ## Global Constraints
 
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
-  Branch names: `feat/a663-1-receipt-layout`, `feat/a663-2-full-invoice-layout`,
-  `feat/a663-3-guests`, `feat/a663-4-drink-food-subtotals`. Every commit `git commit -s`.
+  Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
+  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`, `feat/a663-4-drink-food-subtotals`.
+  Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
 - **Fiscal gate, every part, run UNEDITED and passing before the part's PR:**
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
-  If either needs an edit to pass, STOP: something printed is reaching a filed record or a hash,
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/sale-amount.huella.test.ts src/money-conversion.huella.test.ts src/correction-amount.huella.test.ts`
+  (the last three are the record-fingerprint suites in `packages/fiscal-verifactu/src`, listed with
+  `ls packages/fiscal-verifactu/src/*.huella*.test.ts` on 2026-10-15). If any needs an edit to pass, STOP: something printed is reaching a filed record or a hash,
   which this item must never do. Nothing in this plan writes to `sales`, `sale_lines`,
   `registros_facturacion`, the QR text or any input of `computeHuella`.
 - **If a point turns out to need a change to what is filed or hashed, STOP that point** and add it
@@ -95,9 +105,9 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
   ```
 
   Read the `Tests` count in the output; a run without one proves nothing (CLAUDE.md §4).
-- **LOOK.** Part 1 Task 1.7 adds `apps/server/scripts/receipt-look.ts`, which writes PNG pictures of
-  real tickets (58 mm at 203 dpi, 80 mm at 180 dpi) and the A4 page. Every part ends by running it
-  and opening every picture. CLAUDE.md §4: a page asserted only as text has nothing checking that it
+- **LOOK.** Part 1a's Task 1.8 adds `apps/server/scripts/receipt-look.ts`, which writes PNG
+  pictures of real tickets (58 mm at 203 dpi, 80 mm at 180 dpi) and the A4 page; Task 1.7 and each
+  later part extend it. Every part ends by running it and opening every picture. CLAUDE.md §4: a page asserted only as text has nothing checking that it
   renders.
 
 ## A661 overlap — files to leave alone until it lands
@@ -105,30 +115,53 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 Lane A's branch `feat/a661-invoice-printer-on-device-profile` (worktree
 `/Users/clintongormley/workspace/worktrees/waitron-feat-a661-invoice-printer-on-device-profile`) is
 open, with no pull request yet (`gh pr list --head feat/a661-invoice-printer-on-device-profile`
-returned `[]` on 2026-10-15). `git diff --stat origin/main...HEAD` there, run 2026-10-15, lists 115
-files. The ones this plan could touch:
+returned `[]` on 2026-10-15). At its commit `c7a59d097`,
+`git -C /Users/clintongormley/workspace/worktrees/waitron-feat-a661-invoice-printer-on-device-profile diff --name-only origin/main...HEAD | wc -l`
+counted 125 files (run 2026-10-15, after a `git fetch`). The ones this plan could touch:
 
-- `apps/server/src/receipt-print.ts` and `apps/server/src/receipt-print.test.ts` (+66 and +106
-  lines there). **Parts 3 and 4 must edit `receipt-print.ts`** (`buildReceiptBytes`,
-  `receipt-print.ts:141-201`, is where the paper receipt gathers its inputs), so they start only
-  after A661 has merged.
+- `apps/server/src/receipt-print.ts` and `apps/server/src/receipt-print.test.ts` (+58/−2 and
+  +99/−1 lines there, `git diff --numstat`). **Parts 3 and 4 must edit `receipt-print.ts`**
+  (`buildReceiptBytes`, `receipt-print.ts:141-201`, is where the paper receipt gathers its inputs),
+  and **Task 1.5 must change `receipt-print.test.ts`**: it asserts the legal name and NIF joined by
+  " · " on one line (`receipt-print.test.ts:1968`, `:2175`, `:2201`, `:2216`, `:2256`) and phone and
+  email joined (`:2204`), which Task 1.5 puts on separate lines.
+- `apps/server/src/bill-payments.test.ts` asserts a printed "Factura completa"
+  (`bill-payments.test.ts:1297` on `main`), which Part 2 removes; A661 changes that file and adds
+  two more "Factura completa" assertions, in `orders-invoice-deliveries.test.ts` and
+  `till-api.deliveries.test.ts` (`:1000` and `:960` on A661's branch).
+- `apps/till/src/screens/till-ticket-view.ts` and its test: the till's on-screen copy of the
+  receipt, which prints its own «Precio sin IVA … / 1 ud» line and two-decimal rates ("21.00%",
+  `till-ticket-view.ts:91-92, 97, 104, 807, 811`). It is outside A663, and A661 changes it; Task
+  1.8 adds a backlog entry for it.
+- `apps/dashboard/src/api/client.ts` and `apps/dashboard/src/i18n/strings.ts` (both in A661's
+  list): Part 4's Task 4.2 edits them.
 - `apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`,
   `apps/server/src/management-api.ts`, `apps/server/src/orders-api.ts`,
   `apps/server/src/errors.ts`, `apps/server/src/invoice-delivery-*.ts`,
-  `apps/server/src/invoice-choice-delivery.ts`, `apps/till/src/screens/till-ticket-view.ts`: no
-  task here edits them.
+  `apps/server/src/invoice-choice-delivery.ts`: no task here edits them.
 - `docs/backlog.md` and `docs/backlog/printers.md`: each part's backlog edit is small; rebase over
   A661 if it lands first.
 - A661 adds core migrations `0155`–`0157` in `packages/db/drizzle/`. Part 4's migration (if Q1 keeps
   its default) is in the catalogue set (`packages/catalogue/drizzle/`, last entry today
   `0032_content_suggestions.sql`), so the numbers cannot collide.
 
-Parts 1 and 2 edit none of those files. Their layout changes can still break an assertion in
-`receipt-print.test.ts`. I read its assertions (2026-10-15): they look for words in the decoded
-ticket (`includes("TOTAL")`, `toContain("DUPLICADO")`, `"Ana · Mesa 4, 5 · Pedido"`, …), which this
-plan keeps readable, so I expect them to pass. That is a reading, not a run: if a Part 1 or 2 run
-shows `receipt-print.test.ts` failing and A661 has not merged, stop and wait for A661 rather than
-editing that file.
+**So:** Part 1a (Tasks 1.1, 1.3, 1.4, 1.8) starts now. None of its files —
+`packages/printing/src/{raster-text,escpos,index}.ts`,
+`apps/server/src/{receipt-money,receipt-document,receipt-ticket,invoice-page,invoice-pdf,invoice-raster}.ts`,
+their tests, the two `.bin` files and `apps/server/scripts/receipt-look.ts` — is in A661's list
+(checked one by one against that `--name-only` list on 2026-10-15); only its backlog edit to
+`docs/backlog/printers.md` is. The only printed "21.00%" assertions outside those files are in
+`apps/till/src/screens/till-ticket-view.test.ts` (`git grep -n -E "[0-9]\.[0-9]{2}%"` over
+`apps/server/src/*.test.ts` and `apps/till/src`), the till screen this item does not change. If a
+Part 1a run of the receipt suites still fails in a file A661 changes, stop: move that change to
+Part 1b rather than editing the file. Part 1b, Part 2, Part 3 and Part 4 start only after A661 has
+merged.
+
+**Whichever of A661 and A663 lands second** re-runs the receipt suites (Global Constraints) on top
+of the other and updates the layout assertions that fail — in the files above and in any the other
+branch added. It keeps what each one asserted (the facts printed: the NIF, the name, the heading,
+the TOTAL, …) and changes only where or how they print, and its PR description names every
+assertion it changed.
 
 ## Legal re-check — RD 1619/2012 arts. 6 and 7
 
@@ -187,9 +220,9 @@ exercises; each has its test added to the task named.
    column becomes too narrow. Expected: each item's name on its own line with its figures on the
    next, nothing truncated. Test in Task 2.2.
 4. **A full invoice line with no filed before-VAT figures** (`TillSaleLine.net` absent; the builder
-   already has a branch for it at `receipt-document.ts:213-222`). Expected: the item still prints,
-   with its amount, in the simplified row form rather than a table row with empty cells. Test in
-   Task 2.3.
+   already has a branch for it at `receipt-document.ts:213-222`). Expected: that item alone still
+   prints, with its amount, in the simplified row form rather than a table row with empty cells;
+   the other items stay in the table. Test in Task 2.3.
 5. **A venue address that matches the registered address except for case, commas or spacing.**
    Expected: printed once. And one that differs by a single real character (a different number):
    both printed, the registered one labelled. Test in Task 2.4.
@@ -198,9 +231,14 @@ exercises; each has its test added to the task named.
 
 # Part 1 — formatting, styles, ruled sections and the simplified receipt
 
-Branch `feat/a663-1-receipt-layout`. One pull request.
+Two pull requests:
 
-### Task 1.1: Bold and double-size lines in `@waitron/printing`, readable back as text
+- **Part 1a**, branch `feat/a663-1-receipt-layout`, starts now: Task 1.1, Task 1.3, Task 1.4, then
+  Task 1.8 (its own LOOK, fiscal gate and backlog step, written after Task 1.4 below).
+- **Part 1b**, branch `feat/a663-1b-receipt-layout`, from `main` after Part 1a **and A661** have
+  merged: Task 1.2, Task 1.5, Task 1.6a, Task 1.6b, Task 1.7.
+
+### Task 1.1: Bold and double-size lines in `@waitron/printing`, readable back as text (Part 1a)
 
 Today every line is one 28-dot picture drawn from the glyph table
 (`packages/printing/src/raster-text.ts:17-40`), and the decoder that tests and the dashboard's print
@@ -208,10 +246,13 @@ preview use (`readRasterText`, `raster-text.ts:72-108`) returns `undefined` for 
 not exactly a regular line. The glyphs are already Iosevka Term **Bold**
 (`packages/printing/src/glyphs.ts:1`), so "bold" here means one dot heavier: each glyph row ORed
 with itself shifted one dot right, kept inside its 12-dot cell. Measured 2026-10-15 (a throwaway
-script over `GLYPHS`, Node v26.11.1): of 339 glyphs, no emboldened glyph equals another glyph's
-regular picture; three pairs share an emboldened picture (soft hyphen and hyphen, Đ and Ð, en dash
-and hyphen), so the decoder takes the lowest code point among glyphs sharing a bold picture, the rule
-it already applies to regular pictures (`raster-text.ts:42-53`). Double size draws each glyph 2×2,
+`tsx` script over `GLYPHS` applying that rule to every row, Node v26.11.1): there are 339 glyphs.
+Three look the same bold as regular: space, no-break space and em dash (U+2014). The only bold
+picture equal to a DIFFERENT glyph's regular picture is the blank one (space and no-break space).
+Glyphs that share a bold picture form three groups — hyphen, soft hyphen and en dash; Đ and Ð;
+space and no-break space — the same three groups that already share a regular picture. So the
+decoder takes the lowest code point among glyphs sharing a bold picture, the rule it already
+applies to regular pictures (`raster-text.ts:42-53`). Double size draws each glyph 2×2,
 24 dots wide and 56 tall, over half as many cells starting at the same `offsetDots`, so a double
 line's right edge lines up with the normal lines' right edge.
 
@@ -368,8 +409,8 @@ export function drawTextBand(
 ```
 
 Add a second picture map beside `BY_PICTURE` built from `embolden` applied to each row (lowest code
-point first, skipping a glyph whose emboldened picture equals its own regular one, which is only the
-space). In `readRasterText`:
+point first, skipping a glyph whose emboldened picture equals its own regular one: space, no-break
+space and em dash, measured above). In `readRasterText`:
 - for `heightDots === TEXT_BAND_HEIGHT`, look a cell up in `BY_PICTURE` and then in the bold map;
 - for `heightDots === TEXT_BAND_HEIGHT * 2`, read `Math.floor(grid.columns / 2)` cells of 24 dots
   from `grid.offsetDots`, sampling every second row and every second dot, look each cell up in both
@@ -393,7 +434,7 @@ Expected: PASS, unchanged.
 
 - [ ] **Step 6: Commit** — `git add packages/printing/src && git commit -s -m "Printing: bold and double-size lines that read back as text (A663 task 1.1)"`
 
-### Task 1.2: Receipt labels for the simplified receipt
+### Task 1.2: Receipt labels for the simplified receipt (Part 1b)
 
 **Files:**
 - Modify: `packages/country/src/country.ts:56-80` (`RECEIPT_LABEL_KEYS`)
@@ -420,6 +461,7 @@ it("labels a simplified invoice and a single VAT rate in every Spanish receipt l
     expect(labels.simplifiedInvoice, locale).not.toBe("");
     expect(labels.vatIncludedAtRate, locale).toContain("{rate}");
   }
+  expect(SPAIN_RECEIPT_LABELS["es-ES"].simplifiedInvoice).toBe("Factura simplificada");
   expect(SPAIN_RECEIPT_LABELS["es-ES"].vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
 });
 ```
@@ -432,7 +474,7 @@ it("labels a simplified invoice and a single VAT rate in every Spanish receipt l
   `pnpm --filter @waitron/country exec tsc --noEmit && pnpm --filter @waitron/country-es exec tsc --noEmit`.
 - [ ] **Step 5: Commit** — `git commit -s -m "Receipt labels for a simplified invoice and a single VAT rate (A663 task 1.2)"`
 
-### Task 1.3: VAT rates with significant digits only, and amounts without the € sign
+### Task 1.3: VAT rates with significant digits only, and amounts without the € sign (Part 1a)
 
 Today a full invoice line prints `${label.base} ${line.net.rate}%` with the rate as stored, "10.00"
 (`receipt-document.ts:136-138`; the rate comes from `basisPointsToDecimal`,
@@ -541,7 +583,8 @@ export function formatAmount(value: string, locale: string): string {
 ```
 
 Use `formatVatRate(…, locale)` at `receipt-document.ts:136`, `:138`, `:261` and `:262` in place of
-`` `${…rate}%` ``. (`formatAmount` is used from Task 1.6 on.)
+`` `${…rate}%` ``. (`formatAmount` is used from Task 1.6 on, in Part 1b; in Part 1a only its own
+tests call it.)
 
 - [ ] **Step 4:** Run the two files again — PASS. The byte check ("keeps the captured F1 paper
   bytes", `receipt-document.test.ts:12-29`) should still pass, since the fixture's rates were already
@@ -550,10 +593,11 @@ Use `formatVatRate(…, locale)` at `receipt-document.ts:136`, `:138`, `:261` an
   for each width, with a one-off `tsx` command) only after `printedLines` shows the sole difference
   is a rate's spelling.
 - [ ] **Step 5:** Run the receipt suites (Global Constraints) — PASS after updating any expectation
-  that spelled a rate with two decimals.
+  that spelled a rate with two decimals (`receipt-ticket.test.ts:348-349, 481` today). If the
+  failing file is one A661 changes, stop (see "A661 overlap").
 - [ ] **Step 6: Commit** — message lists the decoded before/after lines of the `.bin` files.
 
-### Task 1.4: Styles on the document, drawn on paper and on A4
+### Task 1.4: Styles on the document, drawn on paper and on A4 (Part 1a)
 
 The document gains a `style` on text and amount elements. The roll renderer draws them with
 Task 1.1's styles; a double-size amount row wraps at half the columns with this rule (Review Focus
@@ -648,10 +692,190 @@ it("draws TOTAL at twice the body size", () => {
     by the same scale).
 - [ ] **Step 4:** Run the two files — PASS. Run the receipt suites; update any test that found TOTAL
   by an exact 28-dot line or by A4 size 10, keeping what it asserted (that TOTAL is printed, its
-  amount, its position after the VAT lines on a full invoice).
+  amount, its position after the VAT lines on a full invoice). If the failing file is one A661
+  changes, stop (see "A661 overlap"). Regenerate the two `.bin` files as in Task 1.3 Step 4 (the
+  full invoice's TOTAL is now double size), with the decoded before/after in the commit message.
 - [ ] **Step 5: Commit** — `git commit -s -m "Receipts: TOTAL drawn double size on paper and A4 (A663 task 1.4)"`
 
-### Task 1.5: Ruled sections and the business block, one fact per line
+### Task 1.8: Part 1a's LOOK, the fiscal gate and the backlog (Part 1a, done right after Task 1.4)
+
+Numbered 1.8 so no other task is renumbered; it is Part 1a's last task, done after Task 1.4 and
+before Part 1a's pull request.
+
+**Files:**
+- Create: `apps/server/scripts/receipt-look.ts` (not under coverage: `apps/server/vitest.config.ts:36`
+  excludes `scripts/**`; the other demo scripts there follow the same pattern, e.g.
+  `apps/server/scripts/daily-close-demo.ts`)
+- Modify: `docs/backlog/printers.md` (A663 entry: what Part 1a delivered, and two follow-ups)
+
+- [ ] **Step 1: Write the script.** Its samples use real units: a counted line carries
+  `unitName: { es: "ud" }` and a weighed one `unitName: { es: "kg" }`, because real receipts print
+  the unit (measured by the plan's reviewer on 2026-10-15: `4 ud  Hamburguesa` on a simplified
+  receipt, `0.35 kg  Jamón ibérico`; the code is `receipt-document.ts:207-211`, which prints
+  `${dish.quantity}${unit}` before the name).
+
+```ts
+// Writes PNG pictures of real receipts for a person to look at, never run by CI.
+// Run: pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts <out-dir>
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { escPosCommands } from "@waitron/printing/src/testing/escpos-commands.js";
+import type { EscSetting } from "@waitron/printing";
+import { formatReceipt } from "../src/receipt-ticket.js";
+import { renderInvoiceRaster } from "../src/invoice-raster.js";
+import { renderInvoicePdf } from "../src/invoice-pdf.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../src/testing/full-invoice-fixture.js";
+import type { ReceiptDocumentInput } from "../src/receipt-document.js";
+
+const { default: sharp } = await import("sharp"); // as invoice-raster.ts:16 loads it
+const out = process.argv[2] ?? "/tmp/a663-look";
+mkdirSync(out, { recursive: true });
+
+const PRINTERS: Record<string, EscSetting> = {
+  "58mm-203": { paperWidth: "58mm", resolution: "203dpi" },
+  "80mm-180": { paperWidth: "80mm", resolution: "180dpi" },
+};
+
+async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
+  const images = escPosCommands(bytes)
+    .filter((c) => c.name === "GS v 0")
+    .map((c) => ({ width: c.widthDots!, height: c.heightDots!, bits: bytes.subarray(c.offset + 8, c.offset + c.length) }));
+  const width = Math.max(...images.map((i) => i.width));
+  const height = images.reduce((sum, i) => sum + i.height, 0);
+  const pixels = Buffer.alloc(width * height, 255);
+  let top = 0;
+  for (const image of images) {
+    const stride = image.width / 8;
+    for (let y = 0; y < image.height; y++)
+      for (let x = 0; x < image.width; x++)
+        if (image.bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) pixels[(top + y) * width + x] = 0;
+    top += image.height;
+  }
+  await sharp(pixels, { raw: { width, height, channels: 1 } }).png().toFile(join(out, file));
+}
+
+const line = (quantity: string, name: string, gross: string, unit = "ud") => ({
+  descriptions: { "es-ES": name },
+  unitName: { es: unit },
+  quantity,
+  gross,
+});
+
+// The sale in 1-simplified-receipt.png: seven lines, one rate, cash.
+const MOCKUP: ReceiptDocumentInput = {
+  result: {
+    locale: "es-ES",
+    orderLabel: "Mesa 12",
+    orderNumber: 112,
+    invoiceNumber: "T-2026/000112",
+    issuedAt: "2026-10-13T14:53:00.000Z",
+    total: "407.00",
+    vatBreakdown: [{ rate: "10.00", base: "370.00", tax: "37.00" }],
+    lines: [
+      line("1", "Bloody Mary", "15.00"),
+      line("4", "Agua, pan y aceite", "24.00"),
+      line("4", "Menú degustación", "320.00"),
+      line("4", "Copa de tinto", "28.00"),
+      line("1", "Copa de blanco", "8.00"),
+      line("1", "Café doble", "4.00"),
+      line("1", "Orujo blanco", "8.00"),
+    ],
+    tender: { method: "cash", change: "13.00" },
+    qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=T-2026%2F000112&fecha=13-10-2026&importe=407.00",
+    qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+  },
+  issuer: { venueName: "SANTET DELI CO S.L.", nif: "B00000000" },
+  receiptHeader: { tradingName: "Santet Deli Co", printTradingName: true },
+  receipt: { footerMessage: "¡Gracias por su visita!" },
+  venueAddress: ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
+  invoiceLocale: "es-ES",
+};
+
+// A filed full invoice reads its rates in two-decimal form (Task 1.3), so the sample does too.
+const FULL = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+FULL.result.lines[0]!.net!.rate = "21.00";
+FULL.result.lines[1]!.net!.rate = "10.00";
+FULL.result.vatBreakdown = [
+  { rate: "21.00", base: "9.00", tax: "1.89" },
+  { rate: "10.00", base: "8.00", tax: "0.80" },
+];
+for (const filed of FULL.result.lines) filed.unitName = { es: "ud" };
+
+const SAMPLES: Record<string, ReceiptDocumentInput> = {
+  "simplified-one-rate": MOCKUP,
+  "simplified-two-rates": {
+    ...MOCKUP,
+    result: {
+      ...MOCKUP.result,
+      total: "83.10",
+      vatBreakdown: [
+        { rate: "10.00", base: "51.82", tax: "5.18" },
+        { rate: "21.00", base: "21.57", tax: "4.53" },
+      ],
+      lines: [
+        line("1", "Bloody Mary", "15.00"),
+        line("0.35", "Jamón ibérico", "42.00", "kg"),
+        line("2", "Refresco para llevar", "26.10"),
+      ],
+      tender: { method: "cash", change: "6.90" },
+    },
+  },
+  "simplified-big-total": {
+    ...MOCKUP,
+    result: {
+      ...MOCKUP.result,
+      total: "12345.67",
+      vatBreakdown: [{ rate: "10.00", base: "11223.34", tax: "1122.33" }],
+      lines: [line("1", "Banquete de boda", "12345.67")],
+      tender: { method: "cash", change: "0.00" },
+    },
+  },
+  "full-invoice": { ...FULL, surface: "thermal" },
+};
+
+for (const [name, input] of Object.entries(SAMPLES))
+  for (const [paper, printer] of Object.entries(PRINTERS))
+    await ticketPng(formatReceipt({ ...input, printer }), `${name}-${paper}.png`);
+
+const pages = await renderInvoiceRaster(FULL, 300);
+for (const [index, page] of pages.entries())
+  await sharp(page.pixels, { raw: { width: page.width, height: page.height, channels: 1 } })
+    .png()
+    .toFile(join(out, `full-invoice-a4-page${index + 1}.png`));
+writeFileSync(join(out, "full-invoice-a4.pdf"), await renderInvoicePdf(FULL));
+```
+
+The samples are pictures for a person, not fiscal fixtures: their figures add up (each total is
+the sum of its lines and of its bases and VAT) but no check reads them. The script must typecheck: `apps/server/tsconfig.json` includes `scripts`, so
+`pnpm --filter @waitron/server typecheck` covers it (and the pre-push hook runs it).
+
+- [ ] **Step 2: Run it and LOOK at what Part 1a changed, and only that.**
+  `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts /tmp/a663-look`, then open every
+  PNG and the PDF with the Read tool. Check: TOTAL twice the size of the other lines, on both
+  documents and both widths, right-aligned with the amounts above it; the 58 mm big total split
+  over two double lines («TOTAL», then «12.345,67 €»), nothing cut at the right edge; every rate
+  printed «10%» / «21%», never «10.00%», on paper and on the A4 page; TOTAL on A4 at twice the body
+  size. The rest of the layout is still today's (Part 1b changes it). Write what you saw in the
+  commit message ("opened 58mm-203 one-rate: …").
+- [ ] **Step 3: Fiscal gate** (Global Constraints), unedited, PASS.
+- [ ] **Step 4: Backlog** — in `docs/backlog/printers.md`'s A663 entry, per `docs/backlog.md` →
+  _How to keep this file honest_:
+  - point 5: delete its text, leave one line saying which pull request delivered it;
+  - point 1: add one line saying TOTAL is drawn double size (Part 1a's pull request), the rest of
+    the point still open;
+  - the "Plan:" line: Part 1a landed; Part 1b and Part 2 after A661.
+  Add two short follow-up entries in the same file, each its own `##` section:
+  - **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's
+    receipt itself (`apps/till/src/screens/till-ticket-view.ts`): it prints its own «Precio sin IVA
+    … / 1 ud» line and two-decimal rates («21.00%», `till-ticket-view.ts:91-92, 97, 104, 807, 811`
+    on 2026-10-15), so A663's rate spelling and later its table do not reach it. Bring it into line
+    with the printed receipt once A661 (which changes that file) has landed.
+  - **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt):
+    `trimQuantityForDisplay` (`apps/server/src/receipt-lines.ts:16-18`) takes no language. A663 keeps
+    today's form; this entry is to print the language's decimal mark («0,35 kg»).
+- [ ] **Step 5: Commit, then `/finish-branch <worktree>`** (FULL review path, Codex run-it ×2).
+
+### Task 1.5: Ruled sections and the business block, one fact per line (Part 1b)
 
 Both documents. Today the header joins name and NIF, and phone and email, with " · "
 (`receipt-document.ts:169`, `:173-175`), and sections are separated by blank lines (`line()`). The
@@ -677,7 +901,8 @@ found only these two files and their tests).
 - Modify: `apps/server/src/receipt-ticket.ts` (drop part-aware wrapping)
 - Modify: `apps/server/src/invoice-page.ts` (rules: see Step 3)
 - Test: `apps/server/src/receipt-document.test.ts`, `apps/server/src/receipt-ticket.test.ts`,
-  `apps/server/src/invoice-pdf.test.ts`, `apps/server/src/receipt-preview-api.test.ts`
+  `apps/server/src/invoice-pdf.test.ts`, `apps/server/src/receipt-preview-api.test.ts`,
+  `apps/server/src/receipt-print.test.ts` (changed by A661, which is why this task is in Part 1b)
 
 The existing `describe("the top block (A497)")` in `receipt-document.test.ts` (from line ~100) pins
 the block today: its `topBlock` helper ends at the first `break`, and its `joined` helper builds the
@@ -743,10 +968,19 @@ three bold lines that `printedLines` reads back as the name's words, and none is
   directly above TOTAL" plus "rules between sections", keeping its position and same-page checks.
   `receipt-preview-api.test.ts`'s marks (phone, email) find the blocks a field adds; with phone and
   email on their own lines each mark is now one line — update the expected marks, keep that each
-  field's mark is found.
+  field's mark is found. `receipt-print.test.ts` (as A661 left it) finds the header by
+  `"Deli Recibos SL · NIF: "` (`:1968`, `:2175`, `:2201`, `:2216`, `:2256` on `main`) and phone and
+  email by `"Tel. +34 910 000 000 · hola@deli.test"` (`:2204`): each becomes the name line, the
+  `NIF: …` line, the `Tel. …` line and the email line, keeping what each case checks.
 - [ ] **Step 5:** Regenerate the two `.bin` files as in Task 1.3 Step 4. **Commit.**
 
-### Task 1.6: The simplified receipt's own layout
+### Task 1.6: The simplified receipt's own layout (Part 1b, two dispatches: 1.6a and 1.6b)
+
+Done as two implementer dispatches so neither grows long: **Task 1.6a** builds the layout and its
+own tests (Steps 1–3 and 4a); **Task 1.6b** updates the other suites the layout ripples into and
+regenerates the saved `.bin` files if they changed (Steps 4b–5). 1.6a's commit leaves those other
+suites failing on purpose; 1.6b is dispatched straight after it, and no pull request is opened in
+between.
 
 For a simplified receipt (`invoiceType` not `"F1"`), after this task the paper reads, section by
 section (matching `1-simplified-receipt.png`):
@@ -759,9 +993,9 @@ QR tributario: / [QR] / VERI*FACTU
 Mesa 12 · Pedido 112   13 oct 2026, 16:53     ← amount row: order label, issue date
 Factura simplificada        T-2026/000112     ← amount row
 ---------------------------------
-1  Bloody Mary                   15,00        ← amounts without €
-4  Agua, pan y aceite            24,00
-   Descuento 10%                 -2,40
+1 ud  Bloody Mary                15,00        ← amounts without €
+4 ud  Agua, pan y aceite         24,00
+      Descuento 10%              -2,40
 ---------------------------------
 TOTAL                       407,00 €          ← double size
 IVA 10% incluido             37,00 €          ← one rate
@@ -774,7 +1008,9 @@ Cambio                       13,00 €
 
 With several rates the single «IVA x% incluido» line is replaced by today's pair per rate,
 `Base 10%` / `IVA 10%` (art. 7.1.f). The date keeps `Intl`'s own format ("13 oct 2026, 16:53",
-measured), not the mockup's comma-less drawing. A bill-wide discount
+measured), not the mockup's comma-less drawing. The quantity keeps today's form, the count and its
+unit name («1 ud», «0.35 kg», `receipt-document.ts:207-211`), not the mockup's bare «1»: see owner
+question Q8. A bill-wide discount
 (`result.billAdjustments`) stays in the items section, after the items. The full invoice keeps its
 heading rows, its per-item facts and its VAT-then-TOTAL order in this part (Part 2 replaces them);
 only Tasks 1.3–1.5 change it.
@@ -782,7 +1018,9 @@ only Tasks 1.3–1.5 change it.
 **Files:**
 - Modify: `apps/server/src/receipt-document.ts:181-266`
 - Modify: `apps/server/src/sample-receipt.ts` only if its tests need the new words
-- Test: `apps/server/src/receipt-ticket.test.ts`, `apps/server/src/receipt-document.test.ts`
+- Test (1.6a): `apps/server/src/receipt-ticket.test.ts`, `apps/server/src/receipt-document.test.ts`
+- Test (1.6b): the other receipt suites (Global Constraints); regenerate, if the byte check fails,
+  `apps/server/src/testing/full-invoice-58mm.bin` and `full-invoice-80mm.bin`
 
 **Interfaces:**
 - Consumes: `formatAmount`, `formatVatRate` (Task 1.3), labels `simplifiedInvoice`,
@@ -801,27 +1039,34 @@ const ONE_RATE: TillSaleResult = {
   total: "39.00",
   vatBreakdown: [{ rate: "10.00", base: "35.45", tax: "3.55" }],
   lines: [
-    { descriptions: { "es-ES": "Bloody Mary" }, quantity: "1", gross: "15.00" },
-    { descriptions: { "es-ES": "Agua, pan y aceite" }, quantity: "4", gross: "24.00" },
+    { descriptions: { "es-ES": "Bloody Mary" }, unitName: { es: "ud" }, quantity: "1", gross: "15.00" },
+    { descriptions: { "es-ES": "Agua, pan y aceite" }, unitName: { es: "ud" }, quantity: "4", gross: "24.00" },
   ],
   tender: { method: "cash", change: "11.00" },
   qr: "https://example.invalid/qr",
+  qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
 };
 
 it.each([PRINTER_58, PRINTER_80])("lays out a one-rate simplified receipt as approved ($paperWidth)", (printer) => {
   const lines = printedLines(formatReceipt({ result: ONE_RATE, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES", printer }))
     .map((line) => line.trim().replace(/\s+/g, " "));
   const at = (prefix: string) => lines.findIndex((line) => line.startsWith(prefix));
-  expect(lines).toContain("Factura simplificada T-2026/000112");
+  if (printer === PRINTER_80) {
+    expect(lines).toContain("Factura simplificada T-2026/000112");
+  } else {
+    // 34 characters do not fit 30 columns: the number moves to its own right-aligned line.
+    expect(lines[at("Factura simplificada") + 1]).toBe("T-2026/000112");
+  }
   expect(lines.some((line) => /^Mesa 12 · Pedido 112( 13 oct 2026, \d+:53)?$/.test(line))).toBe(true);
-  expect(lines).toContain("1 Bloody Mary 15,00");
+  expect(lines).toContain("1 ud Bloody Mary 15,00");
   expect(lines).toContain("TOTAL 39,00 €");
   expect(lines).toContain("IVA 10% incluido 3,55 €");
   expect(lines.some((line) => line.startsWith("Base"))).toBe(false);
-  expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
+  expect(at("1 ud Bloody Mary")).toBeLessThan(at("TOTAL"));
   expect(at("TOTAL")).toBeLessThan(at("IVA 10% incluido"));
   expect(at("IVA 10% incluido")).toBeLessThan(at("Efectivo"));
-  expect(at("VERI") === -1 || at("VERI") < at("Factura simplificada")).toBe(true);
+  expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
+  expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
 });
 
 it("keeps a base and a VAT line per rate when there are several", () => {
@@ -834,7 +1079,9 @@ it("keeps a base and a VAT line per rate when there are several", () => {
 
 (On 58 mm the order label and date do not fit on one 30-column line, so the date moves to its own
 right-aligned line — `labelAmountLines`' behaviour, `layout.ts:134-148`; the regular expression
-above accepts both.)
+above accepts both. «Factura simplificada T-2026/000112» splits the same way on 58 mm: the plan's
+reviewer measured it on 30 columns as `["Factura simplificada", "                 T-2026/000112"]`,
+and that split is accepted, as for the date.)
 
 - [ ] **Step 2:** Run the file — FAIL.
 - [ ] **Step 3: Implement.** For a simplified receipt: heading rows
@@ -845,162 +1092,48 @@ above accepts both.)
   when `result.vatBreakdown.length === 1`, or the Base/IVA pair per rate; then the payment section.
   When `result.vatBreakdown` is empty (a zero-total sale), print neither. The full invoice path is
   left as it is apart from Tasks 1.3–1.5.
-- [ ] **Step 4:** Run the file — PASS. Run the receipt suites; the biggest updates will be in
+- [ ] **Step 4a (Task 1.6a):** Run `receipt-ticket.test.ts` and `receipt-document.test.ts` — PASS,
+  updating only those two files' older expectations as Step 4b describes. Commit —
+  `git commit -s -m "The simplified receipt: ruled sections, TOTAL first and large, one VAT line for one rate (A663 task 1.6a)"`.
+- [ ] **Step 4b (Task 1.6b):** Run the receipt suites; the biggest updates will be in
   `receipt-ticket.test.ts`, `till-api.fiscal-sale-paths.test.ts`, `till-sale.test.ts`,
   `working-order.test.ts` and `receipt-language.test.ts`. For each failure, read what the test
   checks; keep that fact and change only the expected position or wording (for example `"Base 10%"`
   on a one-rate receipt becomes `"IVA 10% incluido"`; an item amount with "€" loses it).
   `receipt-ticket.test.ts`'s completeness test (the comment at `receipt-ticket.test.ts:30-31` says it
-  pins every art. 7.1 element) must still pass with its list of elements intact.
-- [ ] **Step 5: Commit** — `git commit -s -m "The simplified receipt: ruled sections, TOTAL first and large, one VAT line for one rate (A663 task 1.6)"`
+  pins every art. 7.1 element) must still pass with its list of elements intact. If the byte check
+  (`receipt-document.test.ts:12-29`) fails, regenerate the two `.bin` files as in Task 1.3 Step 4,
+  only after `printedLines` shows the differences are this task's.
+- [ ] **Step 5 (Task 1.6b): Commit** — `git commit -s -m "Receipt suites follow the simplified receipt's layout (A663 task 1.6b)"`, the message naming each changed assertion (and the decoded before/after of the `.bin` files if regenerated)
 
-### Task 1.7: LOOK, the fiscal gate and the backlog
+### Task 1.7: Part 1b's LOOK, the fiscal gate and the backlog (Part 1b)
 
 **Files:**
-- Create: `apps/server/scripts/receipt-look.ts` (not under coverage: `apps/server/vitest.config.ts:36`
-  excludes `scripts/**`; the other demo scripts there follow the same pattern, e.g.
-  `apps/server/scripts/daily-close-demo.ts`)
-- Modify: `docs/backlog/printers.md` (A663 entry: what Part 1 delivered)
+- Modify: `apps/server/scripts/receipt-look.ts` (created in Task 1.8, Part 1a)
+- Modify: `docs/backlog/printers.md` (A663 entry: what Part 1b delivered)
 
-- [ ] **Step 1: Write the script**
-
-```ts
-// Writes PNG pictures of real receipts for a person to look at, never run by CI.
-// Run: pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts <out-dir>
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { escPosCommands } from "@waitron/printing/src/testing/escpos-commands.js";
-import type { EscSetting } from "@waitron/printing";
-import { formatReceipt } from "../src/receipt-ticket.js";
-import { renderInvoiceRaster } from "../src/invoice-raster.js";
-import { renderInvoicePdf } from "../src/invoice-pdf.js";
-import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../src/testing/full-invoice-fixture.js";
-import type { ReceiptDocumentInput } from "../src/receipt-document.js";
-
-const { default: sharp } = await import("sharp"); // as invoice-raster.ts:16 loads it
-const out = process.argv[2] ?? "/tmp/a663-look";
-mkdirSync(out, { recursive: true });
-
-const PRINTERS: Record<string, EscSetting> = {
-  "58mm-203": { paperWidth: "58mm", resolution: "203dpi" },
-  "80mm-180": { paperWidth: "80mm", resolution: "180dpi" },
-};
-
-async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
-  const images = escPosCommands(bytes)
-    .filter((c) => c.name === "GS v 0")
-    .map((c) => ({ width: c.widthDots!, height: c.heightDots!, bits: bytes.subarray(c.offset + 8, c.offset + c.length) }));
-  const width = Math.max(...images.map((i) => i.width));
-  const height = images.reduce((sum, i) => sum + i.height, 0);
-  const pixels = Buffer.alloc(width * height, 255);
-  let top = 0;
-  for (const image of images) {
-    const stride = image.width / 8;
-    for (let y = 0; y < image.height; y++)
-      for (let x = 0; x < image.width; x++)
-        if (image.bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) pixels[(top + y) * width + x] = 0;
-    top += image.height;
-  }
-  await sharp(pixels, { raw: { width, height, channels: 1 } }).png().toFile(join(out, file));
-}
-
-const line = (quantity: string, name: string, gross: string) => ({
-  descriptions: { "es-ES": name },
-  quantity,
-  gross,
-});
-
-// The sale in 1-simplified-receipt.png: seven lines, one rate, cash.
-const MOCKUP: ReceiptDocumentInput = {
-  result: {
-    locale: "es-ES",
-    orderLabel: "Mesa 12",
-    orderNumber: 112,
-    invoiceNumber: "T-2026/000112",
-    issuedAt: "2026-10-13T14:53:00.000Z",
-    total: "407.00",
-    vatBreakdown: [{ rate: "10.00", base: "370.00", tax: "37.00" }],
-    lines: [
-      line("1", "Bloody Mary", "15.00"),
-      line("4", "Agua, pan y aceite", "24.00"),
-      line("4", "Menú degustación", "320.00"),
-      line("4", "Copa de tinto", "28.00"),
-      line("1", "Copa de blanco", "8.00"),
-      line("1", "Café doble", "4.00"),
-      line("1", "Orujo blanco", "8.00"),
-    ],
-    tender: { method: "cash", change: "13.00" },
-    qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=T-2026%2F000112&fecha=13-10-2026&importe=407.00",
-    qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
-  },
-  issuer: { venueName: "SANTET DELI CO S.L.", nif: "B00000000" },
-  receiptHeader: { tradingName: "Santet Deli Co", printTradingName: true },
-  receipt: { footerMessage: "¡Gracias por su visita!" },
-  venueAddress: ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
-  invoiceLocale: "es-ES",
-};
-
-const SAMPLES: Record<string, ReceiptDocumentInput> = {
-  "simplified-one-rate": MOCKUP,
-  "simplified-two-rates": {
-    ...MOCKUP,
-    result: {
-      ...MOCKUP.result,
-      total: "41.10",
-      vatBreakdown: [
-        { rate: "10.00", base: "13.64", tax: "1.36" },
-        { rate: "21.00", base: "21.57", tax: "4.53" },
-      ],
-      lines: [line("1", "Bloody Mary", "15.00"), line("2", "Refresco para llevar", "26.10")],
-      tender: { method: "cash", change: "8.90" },
-    },
-  },
-  "simplified-big-total": {
-    ...MOCKUP,
-    result: {
-      ...MOCKUP.result,
-      total: "12345.67",
-      vatBreakdown: [{ rate: "10.00", base: "11223.34", tax: "1122.33" }],
-      lines: [line("1", "Banquete de boda", "12345.67")],
-      tender: { method: "cash", change: "0.00" },
-    },
-  },
-  "full-invoice": { ...FULL_INVOICE_DOCUMENT_FIXTURE, surface: "thermal" },
-};
-
-for (const [name, input] of Object.entries(SAMPLES))
-  for (const [paper, printer] of Object.entries(PRINTERS))
-    await ticketPng(formatReceipt({ ...input, printer }), `${name}-${paper}.png`);
-
-const pages = await renderInvoiceRaster(FULL_INVOICE_DOCUMENT_FIXTURE, 300);
-for (const [index, page] of pages.entries())
-  await sharp(page.pixels, { raw: { width: page.width, height: page.height, channels: 1 } })
-    .png()
-    .toFile(join(out, `full-invoice-a4-page${index + 1}.png`));
-writeFileSync(join(out, "full-invoice-a4.pdf"), await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE));
-```
-
-The samples are pictures for a person, not fiscal fixtures: their figures add up (each total is
-the sum of its lines and of its bases and VAT) but no check reads them. The script must typecheck: `apps/server/tsconfig.json` includes `scripts`, so
-`pnpm --filter @waitron/server typecheck` covers it (and the pre-push hook runs it).
-
-- [ ] **Step 2: Run it and LOOK.** `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts /tmp/a663-look`,
-  then open every PNG with the Read tool. Check against the mockups: rules between every section,
-  the bold first line visibly heavier, TOTAL twice the size and right-aligned with the amounts above,
-  the 58 mm big total split over two double lines, nothing cut at the right edge. Write what you saw
-  in the commit message ("opened 58mm-203 one-rate: …").
-- [ ] **Step 3: Fiscal gate** — `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`, unedited, PASS.
-- [ ] **Step 4: Backlog** — in `docs/backlog/printers.md`'s A663 entry, mark points 1 and 5 done
-  (delete their text, leave one line saying which pull request delivered them) per
-  `docs/backlog.md` → _How to keep this file honest_.
-- [ ] **Step 5: Commit, then `/finish-branch <worktree>`** (FULL review path, Codex run-it ×2).
+- [ ] **Step 1: Run the script and LOOK.** Its samples already cover the simplified receipt with
+  one and two rates, a weighed line and a big total, and the full invoice; nothing is added unless
+  a check below needs a sample it lacks.
+  `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts /tmp/a663-look`, then open every
+  PNG with the Read tool. Check against the mockups: rules between every section, the bold first
+  line visibly heavier, «Factura simplificada» and its number (on 58 mm on two lines), TOTAL
+  straight after the items, «IVA 10% incluido» on the one-rate receipt and a Base/IVA pair per rate
+  on the two-rate one, item amounts without «€», «0.35 kg  Jamón ibérico» whole, nothing cut at the
+  right edge. Write what you saw in the commit message ("opened 58mm-203 one-rate: …").
+- [ ] **Step 2: Fiscal gate** (Global Constraints), unedited, PASS.
+- [ ] **Step 3: Backlog** — in `docs/backlog/printers.md`'s A663 entry, mark point 1 done (delete its
+  text, leave one line saying which pull requests delivered it) per `docs/backlog.md` → _How to keep
+  this file honest_.
+- [ ] **Step 4: Commit, then `/finish-branch <worktree>`** (FULL review path, Codex run-it ×2).
 
 ---
 
 # Part 2 — the full invoice
 
-Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1 has merged. Target layout
-(`2-full-invoice.png`):
+Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661
+changes `bill-payments.test.ts` and adds "Factura completa" assertions this part must update; see
+"A661 overlap"). Target layout (`2-full-invoice.png`):
 
 ```
 QR tributario: / [QR] / VERI*FACTU
@@ -1025,7 +1158,7 @@ Uds Concepto              Precio   Importe    ← bold header row
 Base imponible 10%                370,00 €
 IVA 10%                            37,00 €
 ------------------------------------------
-TOTAL                             407,00 €    ← double size, already from Part 1
+TOTAL                             407,00 €    ← double size, already from Part 1a
 ------------------------------------------
 Efectivo / Cambio
 ------------------------------------------
@@ -1034,6 +1167,13 @@ Efectivo / Cambio
 
 With more than one VAT rate the table gains a rate column after the amount ("10%", "21%"), and the
 base/VAT pair prints per rate.
+
+Units, as Q8's default: a line counted in the Each unit prints its bare count («4», as the mockup
+draws it); any other unit keeps its name, in today's quantity form («0.35 kg»; quantities keep "."
+whatever the language, see Task 1.8's follow-up). A weighed line widens the units column: on 58 mm
+(30 columns, no rate column) a «0.35 kg» cell is 7 wide, which leaves the item column 7 wide (30 − 7 − 6 − 7 − 3
+spaces), under the 10 that Task 2.2 needs, so every row of that invoice uses the two-line form. With
+bare counts only, the item column is 11 wide and one line a row fits; with «4 ud» kept, 10.
 
 ### Task 2.1: Labels for the full invoice
 
@@ -1091,7 +1231,8 @@ export interface ReceiptTableRow {
   itemIndent?: number;
 }
 export interface ReceiptTable {
-  header: ReceiptTableRow;
+  /** Absent on a table continuing after a line printed outside it (Task 2.3). */
+  header?: ReceiptTableRow;
   rows: readonly ReceiptTableRow[];
   withRate: boolean;
 }
@@ -1100,7 +1241,7 @@ export function tableLines(table: ReceiptTable, columns: number): { text: string
 ```
 
 Rule: column widths are the widest cell in each of units, price, amount and rate (header
-included); one space between columns; units, price, amount and rate are right-aligned; the item
+included when there is one); one space between columns; units, price, amount and rate are right-aligned; the item
 column takes what is left and wraps inside itself (`wrapText`, continuation lines indented to the
 item column). If the item column would be narrower than 10, each row prints in two lines instead:
 units and item across the full width, then the figures right-aligned on the next line (Review
@@ -1135,6 +1276,11 @@ describe("tableLines", () => {
     expect(tableLines(table(false), 42).map((l) => l.header)).toEqual([true, false, false]);
   });
 
+  it("prints no header line when the table has none", () => {
+    const { header: _, ...headless } = table(false);
+    expect(tableLines(headless, 42).map((l) => l.header)).toEqual([false, false]);
+  });
+
   it("adds a rate column with several rates", () => {
     expect(tableLines(table(true), 42)[1]!.text).toBe("  1 Bloody Mary          13,64   13,64 10%");
   });
@@ -1143,6 +1289,26 @@ describe("tableLines", () => {
     const long = { ...table(false), rows: [{ units: "1", item: "Menú degustación con maridaje de la casa", price: "72,73", amount: "72,73" }] };
     for (const line of tableLines(long, 30)) expect(line.text.length).toBeLessThanOrEqual(30);
     expect(tableLines(long, 30).map((l) => l.text).join(" ")).toContain("maridaje");
+  });
+
+  it("widens the units column for a weighed line", () => {
+    const weighed: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [
+        { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64" },
+        { units: "0.35 kg", item: "Jamón ibérico", price: "109,09", amount: "38,18" },
+      ],
+    };
+    expect(tableLines(weighed, 42).map((l) => l.text)).toEqual([
+      "    Uds Concepto            Precio Importe",
+      "      1 Bloody Mary          13,64   13,64",
+      "0.35 kg Jamón ibérico       109,09   38,18",
+    ]);
+    const narrow = tableLines(weighed, 30).map((l) => l.text);
+    expect(narrow).toContain("0.35 kg Jamón ibérico");
+    expect(narrow.some((line) => line.endsWith("109,09   38,18"))).toBe(true);
+    for (const line of narrow) expect(line.length).toBeLessThanOrEqual(30);
   });
 
   it("falls back to two lines a row when the item column would be under 10 on 58 mm", () => {
@@ -1156,13 +1322,21 @@ describe("tableLines", () => {
 
 (The expected strings were computed from the rule on 2026-10-15 with a three-line Python
 `rjust`/`ljust` script: units 3, price 6, amount 7, rate 3 wide; item 23 wide on 42 columns
-without a rate, 19 with one; on 30 columns with a rate the item would be 7, so the two-line form.)
+without a rate, 19 with one; on 30 columns with a rate the item would be 7, so the two-line form.
+The weighed case was computed the same way while revising: units 7 wide (header «Uds» right-aligned
+in it), item 19 on 42 columns, 7 on 30. 109,09 is 120,00 € a kilo before 10% VAT; 0.35 kg of it
+is 38,18.)
 
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/receipt-table.test.ts` — FAIL (module missing).
 - [ ] **Step 3:** Implement `tableLines` with `wrapText` from `@waitron/printing`.
 - [ ] **Step 4:** Run — PASS. **Commit.**
 
-### Task 2.3: The full invoice's heading, customer block, table and totals
+### Task 2.3: The full invoice's heading, customer block, table and totals (two dispatches: 2.3a and 2.3b)
+
+Done as two implementer dispatches: **Task 2.3a** builds the layout and its own tests (Steps 1–3
+and 4a); **Task 2.3b** updates the other suites it ripples into and regenerates the saved `.bin`
+files (Steps 4b–5). 2.3a's commit leaves those suites failing on purpose; 2.3b is dispatched
+straight after it.
 
 Replace, for `invoiceType === "F1"`, today's lines: "Factura completa" above the header
 (`receipt-document.ts:160`), the `Factura`/`Fecha` rows (`:181-190`), the per-item «Precio sin IVA» /
@@ -1176,19 +1350,34 @@ the thermal renderer calls `tableLines` and the A4 page lays out real columns (T
   `row(orderText, issueDate(…))`, then the operation-date row when present.
 - Customer section: `text(label.customer)`, legal name, `NIF: …`, address (today's three lines,
   `:200-205`, with the heading added).
-- Items section: one table. Each dish is a row: `units` = quantity plus unit name as today
-  (`:207-211`), `item` = name, `price` = `formatAmount(net.unitPrice)` (with the price-quantity
-  suffix per owner question Q4's default: nothing when `net.priceQuantity` is 1, otherwise
-  `/${trimQuantityForDisplay(net.priceQuantity)}${unit}`), `amount` = `formatAmount(net.base)`,
+- Items section: one table. Each dish is a row: `units` = the bare count when the line's unit name,
+  in the receipt language, is the Each unit's abbreviation (`EACH_UNIT.abbreviation`,
+  `packages/catalogue/src/units.ts:26`: «ud» in Spanish), otherwise quantity plus unit name as today
+  (`:207-211`) — owner question Q8's default. A sale line keeps only its unit's printed name
+  (`sale_lines.unit_name`, `packages/db/src/schema/sales.ts:181`), not which unit it was, while the
+  catalogue decides "is this Each" by the unit's identity because a venue can rename it
+  (`isEachUnit`, `units.ts:31-37`); so a venue that renamed its Each unit keeps seeing «4 <its
+  name>», the harmless direction. If building this turns out to need a new stored fact on a sale
+  line, STOP (Global Constraints) and keep «4 ud». `item` = name, `price` =
+  `formatAmount(net.unitPrice)` (with the price-quantity suffix per owner question Q4's default:
+  nothing when `net.priceQuantity` is 1, which is every product line; otherwise — an extras pick
+  priced per portion — `/${trimQuantityForDisplay(net.priceQuantity)}${unit}`, the price per the
+  portion as stored), `amount` = `formatAmount(net.base)`,
   `rate` = `formatVatRate(net.rate)`. Options answers are rows with only `item` (indent 2). Extras
   child lines are rows with `itemIndent: 2`. The table's `withRate` is true when the rows carry more
   than one distinct rate. Under the table: each line's adjustments as today's `takenOff` rows
   (owner question Q5's default — keep the «(IVA incluido)» amount, as its own row directly under the
   table row it belongs to), then bill-wide adjustments, then `text(label.pricesExcludeVat, 4)`.
-  **If any F1 line has no `net`** (Review Focus 4), print the items section exactly as a simplified
-  receipt's (Task 1.6) instead of a table, so no row has empty cells.
+  **A line with no `net`** (Review Focus 4) falls back on its own, not the whole section: the table
+  stops before it, the line prints as one amount row as a simplified receipt prints it — quantity
+  and name with ` (${label.vatIncluded})` added, and `formatMoney(listGross ?? gross)`
+  (`receipt-document.ts:216-221`), since the only amounts it has include VAT, followed by its
+  adjustments as today — and the lines after it continue in a further table. Only the first table carries the
+  header row (`ReceiptTable.header` becomes optional; Task 2.2's `tableLines` prints no header line
+  when it is absent). Each table measures its own columns, so in this rare case the two tables'
+  columns may not line up; no row has empty cells.
 - Totals section: per rate, `row(\`${label.taxableBase} ${formatVatRate(rate)}\`, base)` and
-  `row(\`${label.vat} ${formatVatRate(rate)}\`, tax)`; then a rule; then TOTAL (double, from Part 1).
+  `row(\`${label.vat} ${formatVatRate(rate)}\`, tax)`; then a rule; then TOTAL (double, from Part 1a).
 
 **Files:**
 - Modify: `apps/server/src/receipt-document.ts`
@@ -1196,8 +1385,11 @@ the thermal renderer calls `tableLines` and the A4 page lays out real columns (T
   header lines bold)
 - Modify: `apps/server/src/invoice-page.ts` (temporary: draw a `table` element as its
   `tableLines(table, 90)` text lines in the body font, so A4 keeps working until Task 2.5)
-- Test: `apps/server/src/receipt-document.test.ts`, `apps/server/src/receipt-ticket.test.ts`
-- Regenerate: the two `.bin` files
+- Test (2.3a): `apps/server/src/receipt-document.test.ts`, `apps/server/src/receipt-ticket.test.ts`
+- Test (2.3b): the other receipt suites, including `bill-payments.test.ts`,
+  `orders-invoice-deliveries.test.ts` and `till-api.deliveries.test.ts` (their "Factura completa"
+  assertions, see "A661 overlap")
+- Regenerate (2.3b): the two `.bin` files
 
 - [ ] **Step 1: Failing tests** (`receipt-document.test.ts`)
 
@@ -1216,6 +1408,22 @@ it("lists a full invoice's items as one table row each, before VAT", () => {
   expect(table.table.rows.map((r) => r.item)).toContain("Menú del día con un nombre especialmente largo");
 });
 
+it("prints a count in the Each unit bare and keeps any other unit's name", () => {
+  const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+  input.result.lines[0]!.unitName = { es: "ud" };
+  input.result.lines[1] = {
+    descriptions: { "es-ES": "Jamón ibérico" },
+    unitName: { es: "kg" },
+    quantity: "0.35",
+    gross: "42.00",
+    net: { unitPrice: "109.09", priceQuantity: "1.000", base: "38.18", tax: "3.82", rate: "10" },
+  };
+  const table = buildReceiptDocument(input).elements.find((e) => e.kind === "table");
+  if (table?.kind !== "table") throw new Error("no table");
+  expect(table.table.rows[0]).toMatchObject({ units: "1" });
+  expect(table.table.rows[1]).toMatchObject({ units: "0.35 kg", price: "109,09", amount: "38,18" });
+});
+
 it("prints no «Precio sin IVA» line and no per-item Base or IVA line", () => {
   const rows = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements.flatMap((e) =>
     e.kind === "amount" ? [e.caption] : [],
@@ -1231,12 +1439,15 @@ it("keeps the discount, with VAT, on its own line under its item (art. 6.1.f)", 
   expect(rows).toContainEqual(["Descuento 10% (IVA incluido)", "-1,21 €"]);
 });
 
-it("falls back to simplified item rows when a full invoice line has no filed net figures", () => {
+it("prints only the line with no filed net figures as an amount row, the rest as a table", () => {
   const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
   delete input.result.lines[0]!.net;
   const elements = buildReceiptDocument(input).elements;
-  expect(elements.some((e) => e.kind === "table")).toBe(false);
-  expect(elements.some((e) => e.kind === "amount" && e.caption.includes("Menú del día"))).toBe(true);
+  const plain = elements.find((e) => e.kind === "amount" && e.caption.includes("Menú del día"));
+  expect(plain).toMatchObject({ amount: "12,10 €" }); // the fixture's listGross, before its discount
+  expect(plain?.kind === "amount" && plain.caption.endsWith("(IVA incluido)")).toBe(true);
+  const tables = elements.flatMap((e) => (e.kind === "table" ? [e.table] : []));
+  expect(tables.flatMap((t) => t.rows.map((r) => r.item))).toEqual(["Agua mineral"]);
 });
 ```
 
@@ -1250,11 +1461,15 @@ mutable ones do not.
 
 - [ ] **Step 2:** Run the file — FAIL.
 - [ ] **Step 3:** Implement as described. Add the `table` case to `receipt-ticket.ts`.
-- [ ] **Step 4:** Run the file and `receipt-ticket.test.ts` — PASS. Regenerate the `.bin` files
-  (decoded before/after in the commit message). Run the receipt suites; expect updates in
-  `invoice-pdf.test.ts`, `invoice-language.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
-  `till-sale-integrated.db.test.ts`. Keep what each checks.
-- [ ] **Step 5: Commit.**
+- [ ] **Step 4a (Task 2.3a):** Run the file and `receipt-ticket.test.ts` — PASS (Task 2.2's
+  `receipt-table.test.ts` too). Commit.
+- [ ] **Step 4b (Task 2.3b):** Regenerate the `.bin` files (decoded before/after in the commit
+  message). Run the receipt suites; expect updates in `invoice-pdf.test.ts`,
+  `invoice-language.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
+  `till-sale-integrated.db.test.ts`, and the three "Factura completa" assertions (`bill-payments.test.ts`,
+  `orders-invoice-deliveries.test.ts`, `till-api.deliveries.test.ts`), which now look for
+  «FACTURA» and the invoice number. Keep what each checks.
+- [ ] **Step 5 (Task 2.3b): Commit**, the message naming each changed assertion.
 
 ### Task 2.4: The address once, or both with «Domicilio fiscal:»
 
@@ -1269,6 +1484,12 @@ with one space, and trimming. Equal → print only the venue lines. Different �
 then `«Domicilio fiscal:» <domicile>` as one text line. Only the registered address present (venue
 address switched off, or A4) → print it unlabelled, as today. Accents are not folded: "Icària" and
 "Icaria" count as different, so both print — a repetition, never a missing address.
+
+How often "print once" fires is not known: the registered address is typed as free text at setup
+(the «taxpayerDomicile» field, `apps/setup/src/screens/venue-screen.ts:772`), so a domicile written
+with a province or country added («…, 08005 Barcelona (Barcelona)») will not match the venue's
+address lines and both will print, labelled. That failure is the safe one (a repeated address, never
+a missing one); Task 2.6's LOOK includes such a domicile so the owner sees what it prints.
 
 **Files:**
 - Modify: `apps/server/src/receipt-document.ts:170-176`
@@ -1363,13 +1584,16 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
   Prove the new case by deletion: remove `sale.operationDate !== issueDay &&` at
   `invoice-document.ts:146` locally, see the case fail, restore it.
 - [ ] **Step 2: LOOK.** Extend `apps/server/scripts/receipt-look.ts` with a full invoice whose two
-  addresses match, one whose addresses differ, and a two-rate full invoice; run it; open every
+  addresses match, one whose addresses differ, one whose domicile is the venue's address with a
+  province added («Avinguda d'Icària 215, Bajos, 08005 Barcelona (Barcelona)»), a two-rate full
+  invoice, and one holding a weighed line («0.35 kg», `unitName: { es: "kg" }`) beside counted
+  lines (`unitName: { es: "ud" }`); run it; open every
   58 mm, 80 mm and A4 picture and the PDF. Check the table columns line up, the 58 mm two-rate
-  invoice uses the two-line rows, the A4 amounts sit on one right edge, «Domicilio fiscal:» appears
-  only when the addresses differ.
+  invoice and the 58 mm invoice with a weighed line use the two-line rows, the A4 amounts sit on one
+  right edge, «Domicilio fiscal:» appears only when the addresses differ.
 - [ ] **Step 3: Fiscal gate**, unedited, PASS.
 - [ ] **Step 4: Backlog.** In `docs/backlog/printers.md`, mark points 2, 3 and 4 done (point 4 by
-  the table; see Q4 for the per-quantity price). Add a short entry under the fiscal area
+  the table; see Q4 for an extras portion's price). Add a short entry under the fiscal area
   (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
   different from its issue date; art. 7.1.c then requires it on the receipt, and the document
   builder prints one only on a full invoice (`receipt-document.ts`)".
@@ -1379,8 +1603,8 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
 
 # Part 3 — guests and the amount per person
 
-Branch `feat/a663-3-guests`, from `main` after Part 1 has merged **and A661 has merged** (this part
-edits `receipt-print.ts`). Uses owner question Q2's default unless the owner has answered.
+Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged**
+(this part edits `receipt-print.ts`). Uses owner question Q2's default unless the owner has answered.
 
 Guests are stored on the party, not the bill: `parties.guest_count`, null or at least 1
 (`packages/db/src/schema/parties.ts:37, 62`), set when a table is seated
@@ -1388,9 +1612,23 @@ Guests are stored on the party, not the bill: `parties.guest_count`, null or at 
 `working_orders.party_id` (`packages/db/src/schema/orders.ts:108`), and a party can hold several
 bills when it is split (`parties.ts:22-31`). A sale names its bill in `sales.working_order_id`.
 
+Merged parties. A guest count is written only when a party is created (`insertParty`,
+`apps/server/src/parties.ts:247-256`; `git grep -n guestCount -- 'apps/server/src/*.ts'` on
+2026-10-15 found no other writer, and the two other party openings, `move-bill.ts:123-127` and
+`table-actions.ts:330-334`, pass `null`). When one party is merged into another, the absorbed party
+closes pointing at the survivor (`merged_into_party_id`, `table-actions.ts:289-292`), its main
+bill's items can be merged into the survivor's main bill (`mergeCheckedBills`,
+`table-actions.ts:259-270`), and the code treats a party and every party merged into it as one
+family (`partyFamily`, `parties.ts:431-437`). The survivor keeps only its own guest count, so after
+"table 4 (2 guests) joins table 5 (3 guests)" the survivor's bill holds both tables' food but says
+3 guests: dividing by it would be wrong.
+
 Rule (Q2 default): print «4 comensales · por persona  101,75 €» when the sale's bill belongs to a
-party with a guest count, and that party holds no other bill that is not `abandoned`
-(`workingOrderStatus`, `orders.ts:29-36`). A split bill prints neither. The per-person amount is
+party with a guest count, that party holds no other bill that is not `abandoned`
+(`workingOrderStatus`, `orders.ts:29-36`), no other party was merged into it (`partyFamily` returns
+only itself), and it was not itself merged into another (`merged_into_party_id` is null — whether a
+bill can still name a merged-away party when it is paid was not checked, so the reader refuses that
+case too). A split bill and a merged party's bill print neither. The per-person amount is
 `divideDecimal(total, guests, MONEY_SCALE)`, rounded half away from zero
 (`packages/shared/src/money.ts:100-101`). It is read when the receipt is printed, like the order
 label before issuance; nothing is stored.
@@ -1449,12 +1687,13 @@ the amount moves to its own line).
 ```ts
 export async function readReceiptGuests(tx: Transaction, saleId: string): Promise<number | undefined> {
   const [row] = await tx
-    .select({ partyId: parties.id, guests: parties.guestCount })
+    .select({ partyId: parties.id, guests: parties.guestCount, mergedInto: parties.mergedIntoPartyId })
     .from(sales)
     .innerJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId))
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(sales.id, saleId));
-  if (row === undefined || row.guests === null) return undefined;
+  if (row === undefined || row.guests === null || row.mergedInto !== null) return undefined;
+  if ((await partyFamily(tx, row.partyId)).length > 1) return undefined;
   const bills = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
@@ -1467,7 +1706,9 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
   seat/sale helpers — find the fixtures `till-api.receipt.test.ts` uses to seat a table and pay):
   a seated party of 4 paying one bill → 4; a party seated with no guest count → undefined; a counter
   sale → undefined; a party split into two bills → undefined for each; a party whose second bill was
-  abandoned → 4. Then a `receipt-print.test.ts` case: the printed receipt of a party-of-4 bill
+  abandoned → 4; a party of 3 that another party of 2 was merged into (`seatTable` both, then the
+  merge `table-actions.ts` performs) → undefined for the survivor's bill, and undefined for any bill
+  still on the absorbed party. Then a `receipt-print.test.ts` case: the printed receipt of a party-of-4 bill
   contains «4 comensales · por persona».
 - [ ] **Steps 2–5:** run (FAIL), implement, run (PASS) plus the receipt suites, commit.
 
@@ -1485,7 +1726,9 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 # Part 4 — the drink/food subtotal setting
 
 Branch `feat/a663-4-drink-food-subtotals`. **Waits for owner questions Q1, Q3 and Q6**, and for A661
-to merge (edits `receipt-print.ts`). The tasks below build the recommended defaults; if the owner
+to merge (this part edits `receipt-print.ts`, `apps/dashboard/src/api/client.ts` and
+`apps/dashboard/src/i18n/strings.ts`, all three changed by A661). Q3's default (a department switch)
+departs from the spec's "a venue setting"; build it only once the owner has answered Q3. The tasks below build the recommended defaults; if the owner
 chooses differently, rewrite this part before dispatching it.
 
 What exists to build on (read 2026-10-15):
@@ -1541,7 +1784,8 @@ else with `category.invalid`, `field: "drink"`), `packages/catalogue/src/configu
 **Files:** `apps/dashboard/src/widgets/catalogue-browser.ts` (a "Drinks" on/off item in a
 category's row menu, saved with `PATCH /management-api/categories/:id` `{ drink }`, the way the
 colour is saved from `category-color-form.ts`), `apps/dashboard/src/api/client.ts`
-(`CategorySummary.drink`), the dashboard's English and Spanish strings, tests beside each, including
+(`CategorySummary.drink`), the dashboard's English and Spanish strings
+(`apps/dashboard/src/i18n/strings.ts`; this file and `client.ts` are both changed by A661), tests beside each, including
 an axe check if a new control is added (CLAUDE.md §3).
 
 - [ ] Failing browser test: toggling "Drinks" sends `{ drink: true }` and the row shows the state.
@@ -1613,9 +1857,10 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 
 ## Self-review (done while writing)
 
-- Spec coverage: point 1 → Tasks 1.4–1.6; point 2 → 2.3, 2.5, 2.6 (operation date pinned); point 3
-  → 2.4; point 4 → 2.3 (the line it applies to is replaced; Q4); point 5 → 1.3; point 6 → Part 3;
-  point 7 → Part 4. The BOE re-check is done above; Task 2.6 records the one open legal question.
+- Spec coverage: point 1 → Tasks 1.4 (Part 1a), 1.5 and 1.6 (Part 1b); point 2 → 2.3, 2.5, 2.6
+  (operation date pinned); point 3 → 2.4; point 4 → 2.3 (the line it applies to is replaced; Q4);
+  point 5 → 1.3 (on paper and A4; the till's on-screen copy is a follow-up, Task 1.8); point 6 →
+  Part 3; point 7 → Part 4 (Q3 on where its switch lives). The BOE re-check is done above; Task 2.6 records the one open legal question.
 - The "VERI\*FACTU line may be printed in bold for margin" option in the spec is not taken: the
   roll font is already a bold face, and Orden HAC/1177/2024 art. 20.1.b asks only that the phrase be
   as visible as the rest; the caption keeps the other lines' size and weight.
@@ -1627,8 +1872,9 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 
 ## Owner questions
 
-Answer by quoting the question number. Parts 1 and 2 need no answer; Part 3 can be built on Q2's
-default; Part 4 waits for Q1, Q3 and Q6.
+Answer by quoting the question number. Parts 1a, 1b and 2 need no answer (Part 2 builds Q4's,
+Q5's and Q8's defaults unless told otherwise); Part 3 can be built on Q2's default; Part 4 waits for
+Q1, Q3 and Q6.
 
 **Q1 — How does the till know a product is a drink?** (Blocks Part 4.)
 Recommended: **mark categories.** In Products, a category's menu gets a "Drinks" switch; every
@@ -1638,27 +1884,49 @@ next month is too, with nothing to remember. The receipt uses the category each 
 was sold. Alternative: a "Drink" switch on every product — finer (a dessert wine filed under
 "Postres" could be a drink) but set product by product. Either needs one small database change.
 
-**Q2 — Guests on a split bill.** (Part 3 builds the default unless told otherwise.)
+**Q2 — Guests on a split bill, and on joined tables.** (Part 3 builds the default unless told
+otherwise.)
 Default: **a split bill prints no guests line.** Example: table 12 seats 4 and splits the bill in
 two; each half would otherwise say «4 comensales · por persona» of a half-total, which is wrong. A
 bill that is the table's only bill prints it. Alternative: print the guest count on every bill of
 the table and the per-person amount only on an unsplit one.
+**Joined tables print no guests line either.** Example: table 4 is seated with 2 guests and table 5
+with 3; table 4 joins table 5 and they pay one bill of 150,00 €. The till keeps only table 5's
+count, so the receipt would say «3 comensales · por persona 50,00 €» when 5 people ate. Guests are
+entered only when a table is seated, so the till has no count for the joined party. Alternative: add
+the joined tables' counts together («5 comensales · por persona 30,00 €») — right when each table's
+count was entered, wrong when one was left blank.
 
 **Q3 — Where the drink/food switch lives.** (Blocks Part 4.)
-Default: **in each department's receipt settings, beside "Print address"**, where every other
-receipt option already is; no database change. Example: the bar's receipts show the subtotals and
-the deli's do not. Alternative: one switch for the whole venue (needs a database change).
+The spec says "a venue setting" (point 7, and the mockup's legend: «a venue setting, off by
+default»); this plan's default departs from that, so it needs your yes.
+Default: **in each department's receipt settings, beside "Print address"**, which is where a
+printed receipt reads its options from today (`receipt-print.ts:166-182` reads the department's
+receipt). Example: the bar's receipts show the subtotals and the deli's do not. Alternative, as the
+spec says: **one switch for the whole venue.** That needs no database change either — the venue's
+own receipt settings are a one-row table holding plain JSON (`tenant_receipts.receipt`,
+`packages/db/src/schema/tenant-receipts.ts:18-25`) — but printing does not read those settings
+today: both the paper and the A4 path hand an empty venue layer to `resolveReceiptTrim`
+(`receipt-print.ts:182`, `invoice-document.ts:113`), so the venue switch would also teach printing
+to read that row.
 
-**Q4 — A price set for a quantity other than one, on a full invoice.**
-The spec asks for "17,50 € × 2" instead of "17,50 € / 2". In the code, the number after "/" is not
-how many were sold: it is the quantity the price is for. A cheese priced 2,50 € per 100 g sold as
-350 g prints today «2,50 € / 0.1 kg» — "2,50 € for each 0.1 kg"
-(`apps/server/src/receipt-document.ts:133`; the fixture at
-`apps/server/src/receipt-ticket.test.ts:396`). "2,50 € × 0.1 kg" would read as a multiplication and
-be wrong. In the new table the count sold already has its own column («Uds»), so for an ordinary
-price (per one) the price column shows just «13,64» and no "/" or "×" is printed at all. Default for
-a price per another quantity: «2,50/0,1 kg» in the price column. Alternative: convert to a price per
-one unit («25,00/kg»), which can need more than two decimals for some prices.
+**Q4 — The "/ 4" on today's full invoice, and an extras portion's price.**
+The spec asks for "17,50 € × 2" instead of "17,50 € / 2". The number after "/" is not how many were
+sold: it is the quantity the price is FOR (`sale_lines.price_quantity`, printed at
+`apps/server/src/receipt-document.ts:133`), so "× 2" would be wrong. On a real sale it is 1 for
+every product line, because a product is priced per one of its unit (neither `priceBasket` nor
+`grossBasketWithOptions` gives a dish any other quantity, `packages/catalogue/src/pricing.ts:208-226,
+294-315`; the column defaults to one,
+`packages/db/src/schema/sales.ts:184`): a real full invoice prints «13,64 € / 1 ud» or «… / 1 kg».
+The mockup's «5,45 € / 4» came from the mockup's own sample data, not from a real sale. Part 2's
+table removes that line (the count has its own «Uds» column and the price column shows «13,64»), so
+spec point 4 is met without a "/" or "×".
+The one case where the number is not 1 is an extras pick priced per portion
+(`apps/server/src/modifier-selection.ts:121`), which today prints, for example, «Precio sin IVA
+1,24 € / 0.05» (measured by the plan's reviewer). Default: **show the price per the portion, as
+stored**, «1,24/0.05» in the price column (with the unit's name when it has one, and "." until
+quantities follow the language, Task 1.8's follow-up). Alternative: convert it to a price per one
+unit («24,80»), a figure the receipt works out rather than one it was given.
 
 **Q5 — A discount on a full invoice: with or without VAT?**
 Today a full invoice prints a discount with VAT, labelled: «Descuento 10% (IVA incluido) −1,21 €».
@@ -1678,3 +1946,13 @@ The new receipt words in ca-ES, gl-ES and eu-ES (Tasks 1.2, 2.1, 3.1, 4.5) are t
 translations, written beside the existing words in `packages/country-es/src/receipt-labels.ts`; no
 native speaker has checked them. Default: ship them and correct any you or your asesor flag. The
 fixed Veri\*Factu texts («QR tributario:», «VERI\*FACTU») stay Spanish in every language, as today.
+
+**Q8 — Does a count print as a bare number?**
+Real receipts print the unit beside the count: «4 ud  Hamburguesa», «0.35 kg  Jamón ibérico»
+(measured by the plan's reviewer; the code is `receipt-document.ts:207-211`). Both mockups draw a
+bare «4». Default: **in the full invoice's table (Part 2), a count in units («ud») prints as a bare
+«4», and any other unit keeps its name («0.35 kg»).** Example: «4 Agua, pan y aceite 5,45 21,82» but
+«0.35 kg Jamón ibérico 109,09 38,18». On 58 mm paper a weighed line widens the «Uds» column so much
+that every row of that invoice prints on two lines (name, then figures); with only bare counts each
+row fits on one line. The simplified receipt (Part 1b) keeps «4 ud» as today; say so if you want it
+bare there too, and it joins Part 2. Alternative: keep «4 ud» in the table as well.
