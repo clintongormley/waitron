@@ -2484,6 +2484,17 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
 - «Base imponible» and «IVA» stay the record's own figures.
 - How a dish with both discounts prints follows Step 1's measured answer.
 
+## Scope — a part portion of an extra (owner, 2026-10-15 ~21:15)
+
+Part 2's run-it review found an order can store half a portion of a per-portion extra (half a
+dish, in a venue-made unit with no scale), printing «0.075 kg  Queso extra  1,24  1,86». The owner:
+"we don't offer half portions". So no layout is designed for it. Instead: find exactly where such
+a quantity is stored (`file:line`, and a probe that reproduces it); if the product should not offer
+it, refuse the fractional quantity where it enters (till, server route or domain check) with a
+domain error code, test first, no data migration (pre-live). If it turns out to be a real feature
+(something sold by weight that carries per-portion extras), stop and ask the owner with the example.
+Decide at this part's start whether it rides in Part 2c or its own small pull request, and say which.
+
 ## Migration
 
 - One drizzle generation, for the column alone. It is expected to be an `ALTER TABLE … ADD`, not a
