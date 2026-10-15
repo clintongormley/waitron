@@ -515,7 +515,7 @@ describe("invoiceDiscounts", () => {
     expect(result.atEnd.map((row) => row.rate)).toEqual(["21.00", "4.00", "10.00"]);
   });
 
-  describe("ported from groupDiscounts", () => {
+  describe("a family's own rows with no whole-bill discount", () => {
     const pizza = filed({
       gross: "8.10",
       listGross: "9.00",

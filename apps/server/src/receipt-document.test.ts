@@ -689,6 +689,24 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     ]);
   });
 
+  it("puts the end rows in the table with the header, before «Precios sin IVA», when an unfiled dish comes last", () => {
+    const input = burgerAndBread();
+    input.result.billAdjustments = [{ kind: "discount", percentBp: 1000, amount: "1.33" }];
+    input.result.lines.push({ descriptions: { "es-ES": "Café" }, quantity: "1", gross: "1.50" });
+    const elements = buildReceiptDocument(input).elements;
+    const tables = elements.flatMap((e) => (e.kind === "table" ? [e.table] : []));
+    expect(tables).toHaveLength(1);
+    expect(tables[0]!.header).toBeDefined();
+    expect(tables[0]!.rows.slice(-2).map((r) => [r.item, r.amount, r.rate])).toEqual([
+      ["Descuento 10%", "-0,90", "21%"],
+      ["Descuento 10%", "-0,22", "10%"],
+    ]);
+    const at = (found: (e: (typeof elements)[number]) => boolean) => elements.findIndex(found);
+    expect(at((e) => e.kind === "table")).toBeLessThan(
+      at((e) => e.kind === "text" && e.text.trim() === "Precios sin IVA"),
+    );
+  });
+
   it("prints one plain discount for everything a dish lost when the records could not be placed", () => {
     const input = burgerAndBread();
     input.result.lines[0]!.adjustments = [{ kind: "discount", amount: "2.28" }];

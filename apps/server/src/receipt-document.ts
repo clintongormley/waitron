@@ -249,11 +249,11 @@ export function buildReceiptDocument({
   const anyFiled = !simplified && filedRates.length > 0;
   const billAdjustments = result.billAdjustments ?? [];
   let tableRows: ReceiptTableRow[] = [];
-  let tablesPrinted = 0;
+  const printedTables: ReceiptTableRow[][] = [];
   const endTable = (): void => {
     if (tableRows.length === 0) return;
     const table: ReceiptTable = {
-      ...(tablesPrinted === 0
+      ...(printedTables.length === 0
         ? {
             header: {
               units: label.unitsColumn,
@@ -268,7 +268,7 @@ export function buildReceiptDocument({
       withRate,
     };
     elements.push({ kind: "table", table });
-    tablesPrinted++;
+    printedTables.push(tableRows);
     tableRows = [];
   };
   const rateCell = (rate: string): { rate: string } => ({ rate: formatVatRate(rate, locale) });
@@ -364,9 +364,9 @@ export function buildReceiptDocument({
       withVatGroup(group);
     }
   });
-  for (const discount of discounts.atEnd) tableRows.push(discountRow(discount, 0));
   endTable();
-  if (tablesPrinted > 0) text(`    ${label.pricesExcludeVat}`, 4);
+  for (const discount of discounts.atEnd) printedTables.at(-1)?.push(discountRow(discount, 0));
+  if (printedTables.length > 0) text(`    ${label.pricesExcludeVat}`, 4);
   if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
   rule();
   const vatRows = (): void => {
