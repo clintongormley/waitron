@@ -1,8 +1,7 @@
 # A668 — Allergen information in the editor, at publishing and on the till
 
-Date: 2026-10-14. Status: approved by the owner, 2026-10-15. How the till opens the info window and
-the line window was redrawn the same day by A738 (see `docs/backlog/till.md`, "A738"); where the two
-differ on the till, the owner's answer recorded below decides.
+Date: 2026-10-14. Status: approved by the owner, 2026-10-15, with four till answers given the same
+day after A738 (the counter screen) was designed: see _Owner answers on the till, 2026-10-15_.
 Companion spec: [A669 — an allergy at the table](2026-10-14-a669-allergy-at-the-table-design.md).
 
 ## Why
@@ -85,16 +84,38 @@ What exists today (read on `main` at c75800ed7, not run unless said):
    publish still goes ahead (warn, never block). Each dish named in the warning links to its
    product page.
 5. **The till's Allergens screen is deleted**, with its button, its print path and its strings.
-6. **Product buttons carry one "i" icon**, only when the dish has at least one allergen or diet
+6. **Product buttons carry one mark** (changed 2026-10-15: the `allergies` symbol, not an "i"), only when the dish has at least one allergen or diet
    label ticked (not for "contains none", not for an unreviewed dish). **A long press** opens an
    info window; no double tap, because a tap adds the dish.
 7. **The order list shows allergen icons after the dish name**, on unsent and sent lines; a long
    press opens the same window.
+   (Changed 2026-10-15: a long press on an order line opens the line window, below.)
 8. **The kitchen screens' "not reviewed" warning goes.**
 9. **Icons are Erudus's** (MIT), with the gaps filled as set out under _Icons_.
 10. **Accepted from my proposals without change:** one wording for each state; a variant using its
     parent's values shows them in italic; the open section has no second summary; implied diets
     are shown; the Products list shows a variant's allergens.
+
+## Owner answers on the till, 2026-10-15
+
+A738 redrew the counter screen the day after this spec, and four points differed. The owner's
+answers, which this spec now follows:
+
+1. **Every product button opens the info window on a long press**, whatever its allergens, and
+   only a dish with at least one allergen or diet label shows a mark. With a mouse, holding the
+   button down is the long press.
+2. **Only a long press opens it.** The mark is a hint, never a tap target: a tap anywhere on the
+   button adds the dish, and there is no double click on a product button (its first click would
+   add the dish). Owner: on a small device the buttons are sized to be easy to press; the
+   information must be there but is used seldom, so a long press is enough.
+3. **The mark is Material Symbols `allergies`** (option B of
+   [board 4](../../backlog/mockups/a668-allergen-icons/4-product-button-mark.png)). The owner
+   rejected the dish's own icons on the button (option A) for lack of space, and the "i" because it
+   invites a tap.
+4. **The info window has Add to order beside Close**, and **a long press on an order line, or a
+   double click with a mouse, opens the line window**: today's modifiers window with the dish's
+   allergens and diets and its note added (A738, `docs/backlog/till.md`), not this spec's info
+   window.
 
 ## Mockups
 
@@ -182,19 +203,20 @@ _Order of work_).
   (`docs/developers/products.md`, `docs/developers/design-system.md`, `docs/products.md`) are
   updated in the same change; the plan lists the lines (the operator guide's "printed allergen
   sheet" at `docs/products.md:30` is one).
-- **Product buttons:** `#productButton` draws the "i" in the top trailing corner when the dish's
+- **Product buttons:** `#productButton` draws the mark (`allergies`) in the top trailing corner when the dish's
   allergens hold at least one code or its diet holds at least one label. The name keeps room for
   it. A long press (the shared `Gestures` recogniser) opens the info window; a tap still adds the
   dish, and a long press never adds it.
 - **Info window:** the dish's name; "Contains" with one row per allergen — icon and name, kinds in
   brackets; "Dietary" with the labels; for an unreviewed dish, "Allergens not yet reviewed" in the
-  warning colour; one Close button. It opens for every dish, "i" or not, so a long press on an
+  warning colour; Close, and Add to order. It opens for every dish, marked or not, so a long press on an
   unreviewed dish tells staff rather than leaving them guessing (my addition, shown on board 3 and
   not objected to). It reads the till's product data; nothing new comes from the server.
 - **Order list:** on the counter basket and on both the unsent and sent lines of the table order
   screen, the line's as-served allergens (the dish plus its extras, as `asServedAllergens` computes
   them today) are drawn as icons after the name, followed by its diet labels as icons. A long press
-  on the line opens the same window. The "As served" row and `#dietRow` go. A line whose dish is
+  on the line, or a double click with a mouse, opens the line window (A738), which shows the same
+  allergens and diets. The "As served" row and `#dietRow` go. A line whose dish is
   unreviewed shows no icons.
 - **Kitchen screens:** the "not reviewed" span in `station-queue.ts` and `till-expo-screen.ts`
   goes; their allergen chips are otherwise unchanged by this work.
@@ -207,7 +229,8 @@ _Order of work_).
 - **Diet:** `halal` and plain `kosher` from Erudus; no meat and no fish from Pictogrammers'
   `meat-off` and `fish-off` (Apache-2.0); vegan and vegetarian drawn for Waitron, avoiding a V
   with a leaf (V-Label's registered mark).
-- **The "i":** Material Symbols `info` (Apache-2.0), as the dashboard's other icons are.
+- **The product button's mark:** Material Symbols `allergies` (Apache-2.0), as the dashboard's other
+  icons are.
 - The SVG paths live once in `packages/ui`, registered through `registerIcons` by both apps, with a
   one-line source note at the module. Their notices join `deploy/third-party/README.md` (MIT
   copyright and permission notice for Erudus; Apache-2.0 for Pictogrammers), which ships to
@@ -259,7 +282,7 @@ implementer's size:
    choice, the summaries, implied diets.
 3. The Products list's wording and variant cells; the publish warning on both paths with links.
 4. The icon set in `packages/ui` with its notices.
-5. The till: delete the Allergens screen; the "i", the long press and the info window; the order
+5. The till: delete the Allergens screen; the mark, the long press and the info window; the order
    list's icons; the kitchen screens' warning removed.
 
 ## Testing
@@ -274,8 +297,8 @@ implementer's size:
 - Publishing: `allergens_unreviewed` lists an unreviewed product and an unreviewed active variant,
   and not a reviewed one; the scheduled path opens the same confirmation; each name links to its
   page.
-- The till: the "i" appears for one allergen, for one diet label, and not for `{}` or `null`; a long
-  press opens the window and adds nothing, a tap adds and opens nothing (tested with
+- The till: the mark appears for one allergen, for one diet label, and not for `{}` or `null`; a long
+  press opens the window and adds nothing, a tap (on the mark too) adds and opens nothing (tested with
   `userEvent`, which runs the gesture's timers as a real press does); the order list draws icons
   on sent and unsent lines. Deleting the screen leaves no route to `till-view=allergens`.
 - Fixtures give a dish, a variant and an extra three different allergen sets, so a test passes only

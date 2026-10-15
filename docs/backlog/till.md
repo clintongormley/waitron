@@ -1779,9 +1779,12 @@ Board 1 is the target; board 2 the windows.
   list's limits, as the picker does now), plus two sections added: the dish's allergens and diets,
   and its note or "+ Add a note". A sent line shows its extras and note read-only. Tapping a note
   line in the order opens the same window.
-- **Product info** (board 2b) opens from an ⓘ on a product button, a long press or a double click:
-  description, allergens and diets, Add to order. A668 plans the same for product buttons; build
-  it once.
+- **Product info** (board 2b) opens **only on a long press** of a product button (owner,
+  2026-10-15; with a mouse, holding the button down): description, allergens and diets, Close and
+  Add to order. A tap anywhere on the button adds the dish, and there is no double click on it.
+  Only a dish with an allergen or diet label shows a mark, Material Symbols `allergies`, and the
+  mark is not a tap target; board 1's tappable ⓘ on product buttons is superseded. This is A668's
+  till slice (its spec, _Owner answers on the till_); build it once.
 - **Hold** opens a small window asking for a name (optional; empty names the order "Held 14:32")
   instead of today's inline field.
 - **Custom item** (board 2d): name, price, VAT rate (required, the invoice needs it) and where to
