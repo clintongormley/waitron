@@ -201,7 +201,12 @@ describe("a counter sale", () => {
     expect(answer.json.total).toBe("3000.00");
   });
 
+  // Paired with the refusal below: whoever switches full invoices on changes both.
   it("does not file an explicit walk-up F1 request as F2", async () => {
+    const boot = await send(limited, venue.cookie, "GET", "/api/till");
+    expect(boot.status).toBe(200);
+    expect(boot.json.fullInvoices).toBe(false);
+
     const before = written();
     const id = randomUUID();
     const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
@@ -224,31 +229,6 @@ describe("a counter sale", () => {
     });
     expect(written()).toEqual(before);
     expect(orderRow(id)).toBeUndefined();
-  });
-
-  // Whoever switches full invoices on changes both halves of this case together.
-  it("tells the till full invoices are off while an F1 is refused", async () => {
-    const boot = await send(limited, venue.cookie, "GET", "/api/till");
-    expect(boot.status).toBe(200);
-    expect(boot.json.fullInvoices).toBe(false);
-
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
-      workingOrderId: randomUUID(),
-      lines: linesOf(counter, { Mitad: 1 }),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "1600.00" },
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
-        countryCode: "ES",
-      },
-    });
-    expect(answer).toEqual({
-      status: 409,
-      json: { code: "sale.full_invoice_unavailable", params: {} },
-    });
   });
 
   it.each([
