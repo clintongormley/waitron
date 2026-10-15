@@ -25,7 +25,7 @@ set `TZ` or mount a local-time file; a local `node:26.11.1-slim` process reporte
 That probe does not measure an operator's configured appliance.
 
 **A696 audit/design, 2026-10-15:** the
-[unapproved design](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
+[audit and design proposal](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
 traces every discovered issuing, replay, resend, import and seed path. Driver probes extend the
 process-zone observation to held orders, unpaid invoices, table payments, reader capture/recovery,
 public unpaid departure and cancellation credits, core F1/F3 and R5, and emergency series.
@@ -34,13 +34,21 @@ fiscal payloads and rows; real AEAT acceptance, lost-response/restart and restor
 The 28-case disposable audit and 20 protected checks passed; the proposed venue-date expectation
 separately failed all eight UTC cases while eight Madrid controls passed. No product fix is built.
 
-Next: the owner decides whether new issue dates and generation offsets use the configured
-location zone. Then write the plan and build a separate FULL fiscal PR, preserving stored dates,
-offsets and hashes. A444's operation/service-date decision stays separate. The audit also found a
+**Decision update, 2026-10-15:** the owner chose the saved venue zone, including DST, for every
+new invoice date and record offset, ordinary receipt and till, independently of the process zone.
+Old records stay unchanged. See the [recorded decision](#decisions-and-deliberate-limits) and
+the [spec's dated answer](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
+This does not approve the full design, implementation plan or build.
+
+Next: settle the still-unresolved owner-usable repair path for a genuinely invalid or missing
+saved zone discovered after card capture, then seek full-design, plan and separate FULL fiscal
+PR build approval. No repair policy, new permission or tested repair tool is approved.
+Strict issuance-zone validation is unbuilt; the audit does not reproduce that proposed fault.
+A444's operation/service-date decision stays separate. The audit also found a
 source-only F2 presentation gap: `readReceiptIssuer` supplies the stored offset only for a named
-recipient, leaving ordinary receipt views to their runtime zone. The revised recommendation includes the saved offset in F2 printing and till display. The owner
-must also settle the repair path for an invalid zone discovered after card capture before a plan
-or build is approved; existing settings history locks do not provide that repair route.
+recipient, leaving ordinary receipt views to their runtime zone. The approved behavior includes
+consistent ordinary receipt and till dates; passing the saved offset remains a proposed mechanism.
+Existing settings history locks are retained; this decision authorizes no repair bypass.
 No stored fiscal row is to be rewritten.
 
 ## No sale over €3,010 can be made at all
@@ -806,6 +814,14 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **A696, owner decision 2026-10-15: “A — Venue's time zone”.** Every new invoice date and
+  record offset, ordinary receipt and till use the saved venue zone, including DST, independently
+  of the process zone. Old records, including their dates, offsets and hashes, stay unchanged.
+  Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 2026-10-15 ~05:12**, “OWNER ANSWER
+  to A696 question 1”; [spec decision](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
+  Full design, implementation plan and build remain unapproved. Malformed-zone repair after
+  card capture is unresolved; the answer grants no repair policy or permissions. A696 stays open
+  and A444 stays separate.
 - **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is
   refused and holds nothing; a cancellation of a refused original is set aside (`retenido`) with a
   filing case of its own and holds nothing; a record accepted with errors opens a filing case

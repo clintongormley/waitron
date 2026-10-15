@@ -1,12 +1,34 @@
 # A696: invoice dates and record offsets in the location's time zone
 
-**Status: unapproved design. Every recommendation below awaits owner approval.**
+**Status, updated 2026-10-15: venue-zone behavior approved; full design, implementation plan
+and build unapproved. Post-capture malformed-zone repair remains UNRESOLVED.**
 Audit baseline supplied by the driver: main `d0d2447d239062f21086e46a6cec3e8a9f311fa6`.
 Written 2026-10-15. This is an audit and a behavior contract, not an implementation plan.
 The later build is a separate FULL fiscal PR. Golden huella and `inmutabilidad` checks stay
 UNEDITED; an unexpected protected-check change is a stop for owner review.
 
-## The decision you need to make
+## Owner decision recorded 2026-10-15: the venue's saved time zone
+
+You answered **“A — Venue's time zone”** in the watcher session. The receipt is
+`~/waitron-campaign-e/questions.md`, under **WATCHER 2026-10-15 ~05:12**, “OWNER ANSWER to
+A696 question 1”. Every **new** invoice date and record offset, ordinary receipt and till
+display must use the venue's saved time zone, including daylight saving time, independently
+of the process zone. Old records retain their stored dates, offsets and hashes.
+
+This approves that behavior only. It does not approve the full design, an implementation plan
+or a build. The audit, measurements, provenance and original question below are retained as
+history; their recommendation wording is superseded only for this approved behavior.
+The remaining mechanisms and acceptance proposals still await approval, including strict
+zone validation, which is unbuilt. A444's operation/service-date decision stays separate.
+
+**Next decision, unresolved:** how you repair a genuinely invalid or missing saved zone found
+after a card capture, before an invoice exists. No repair policy, new permission or tested
+repair tool is approved here. The normal settings history locks remain in scope for preservation.
+Settle an owner-usable repair design before seeking full-design, plan or build approval;
+the first answer alone releases none of them. The historical blocker is described under
+[Configuration snapshots, caching and errors](#configuration-snapshots-caching-and-errors).
+
+## Historical first-question rationale, before the owner answer
 
 Your location already has `locations.time_zone`, but the live invoice clock reads the server
 process's offset. A Madrid location can therefore acquire a different invoice date when you move
@@ -320,8 +342,10 @@ That recommendation does not yet supply a usable repair path: the normal setting
 zone edits once an order exists. No administrative repair bypass is authorised here. Before a
 plan or build is approved, the owner must decide the permitted repair route or explicitly accept
 that issuance remains blocked until an administrator restores valid configuration by a separately
-defined procedure. Ask that as the next question after the zone/rendering decision below, with
-a worked captured-payment example. The first answer alone does not release implementation.
+defined procedure. Following the [2026-10-15 answer](#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone),
+this repair question is next, with a worked hypothetical captured-payment example. Strict
+issuance-zone validation is unbuilt; this audit does not reproduce that proposed fault.
+The first answer alone does not release implementation.
 The pre-live reset allowance does not make a reset a remedy for an already-captured payment.
 
 ### Preserve stored facts and the current scope of presentation
@@ -389,10 +413,14 @@ acceptance contract. Fresh-context review checked the inventory, source provenan
 receipts. Its two material findings are reflected here: F2 rendering belongs in the proposed
 build, and post-capture invalid-zone repair remains an explicit owner decision. The review and
 triage are retained as `a696-review-1.md` and `a696-review-delta.md` in the lane receipts.
-There is no implementation plan or approval to build. The captured-payment repair policy above
-is an explicit second decision still required after the first answer.
+There is no implementation plan or approval to build. The captured-payment repair question above
+is an explicit second decision still unresolved after the recorded first answer.
 
-## One owner question
+## Historical first owner question, answered 2026-10-15
+
+The original question and recommendation below are retained as audit history. The
+[dated owner decision above](#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone)
+records the approved answer; the post-capture repair question remains unresolved.
 
 **Should new invoices use the location's configured time zone for filing, receipt printing and
 till display, regardless of the server's time zone?**

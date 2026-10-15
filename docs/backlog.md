@@ -145,9 +145,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A696. Invoice issue dates and record offsets follow the process zone.** The audit measured
   walk-up, bill, card, correction and substitution paths with the venue fixed to Madrid:
   `2026-10-14T23:30Z` stores 14 October under UTC and 15 October under Madrid.
-  The [unapproved design](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
-  recommends the configured location zone for new issuance. Next: owner decision, then a separate
-  FULL fiscal build; preserve stored records and keep A444 separate.
+  [Owner decision, 2026-10-15](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone):
+  every new invoice date and record offset, ordinary receipt and till use the saved venue zone,
+  DST included, independently of the process zone; old records stay unchanged. Still open:
+  malformed-zone repair after card capture. Next: settle that owner-usable repair design, then
+  seek full-design, plan and separate FULL fiscal build approval. None is granted by this answer;
+  keep A444 separate.
   [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
 
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
