@@ -1527,9 +1527,7 @@ describe("Month view", () => {
     expect(box.getRootNode()).toBe(el.shadowRoot);
     const placed = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
     const anchor = button.getBoundingClientRect();
-    if (anchor.bottom + placed.height + 8 <= innerHeight)
-      expect(Math.abs(placed.top - anchor.bottom)).toBeLessThanOrEqual(1);
-    else expect(placed.bottom).toBeLessThanOrEqual(anchor.top + 1);
+    expect(Math.abs(placed.top - anchor.bottom)).toBeLessThanOrEqual(1);
     expect(placed.top).toBeGreaterThanOrEqual(0);
     expect(placed.left).toBeGreaterThanOrEqual(0);
     expect(placed.right).toBeLessThanOrEqual(innerWidth);

@@ -99,12 +99,17 @@ export class CalendarDayBox extends LitElement {
   #anchor: HTMLElement | undefined;
   #focusWasInside = false;
 
-  /** Opens below `anchor`, kept on screen; called again after the content changes, it places the
-   *  box again without moving focus. */
+  /** Opens below `anchor`, or above it when only there it fits, kept on screen; called again after
+   *  the content changes, it places the box again without moving focus. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
     placePopover(this.popup, anchor, false);
+    const below = anchor.getBoundingClientRect();
+    const height = this.popup.getBoundingClientRect().height;
+    // It never covers the day it explains while it fits above it.
+    if (below.bottom + height > innerHeight - 8 && below.top - height >= 8)
+      this.popup.style.top = `${below.top - height}px`;
     if (opening) this.headingEl.focus();
   }
 

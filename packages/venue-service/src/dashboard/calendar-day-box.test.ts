@@ -166,17 +166,28 @@ describe("calendar-day-box", () => {
     expect(rect.left).toBeGreaterThanOrEqual(8);
   });
 
+  it("opens above its anchor when there is no room below but room above, covering nothing of it", async () => {
+    anchor.style.cssText = `position: fixed; left: 100px; top: ${innerHeight - 20 - 24}px; height: 24px;`;
+    box.rows = [{ name: "Front Bar", text: "Open" }];
+    await box.updateComplete;
+    box.show(anchor);
+    const placed = popup().getBoundingClientRect();
+    const date = anchor.getBoundingClientRect();
+    expect(Math.abs(placed.bottom - date.top)).toBeLessThanOrEqual(1);
+    expect(placed.bottom <= date.top + 1 || placed.top >= date.bottom - 1).toBe(true);
+    insideViewport(placed);
+  });
+
   it("stays on screen near the bottom, and when it grows", async () => {
     anchor.style.cssText = `position: fixed; left: 100px; top: ${innerHeight - 20 - 24}px; height: 24px;`;
     box.rows = [{ name: "Front Bar", text: "Open" }];
     await box.updateComplete;
     box.show(anchor);
     insideViewport(popup().getBoundingClientRect());
-    // Too tall to fit below the anchor, so it is lifted to sit 8 px above the viewport's bottom.
-    expect(popup().getBoundingClientRect().top).toBeLessThan(anchor.getBoundingClientRect().bottom);
-    expect(
-      Math.abs(popup().getBoundingClientRect().bottom - (innerHeight - 8)),
-    ).toBeLessThanOrEqual(1);
+    // Too tall to fit below the anchor, so it sits above it.
+    expect(popup().getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      anchor.getBoundingClientRect().top + 1,
+    );
     box.rows = Array.from({ length: 12 }, (_, i) => ({
       name: `Zone ${i}`,
       text: "Open 17:00–02:00",

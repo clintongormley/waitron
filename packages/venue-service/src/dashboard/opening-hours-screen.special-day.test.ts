@@ -244,19 +244,8 @@ describe("the special-day painter's address", () => {
     await expect
       .poll(() => el.shadowRoot!.querySelector("opening-hours-month")?.model?.month)
       .toBe("2026-12");
-    el.shadowRoot!.querySelector("opening-hours-month")!.dispatchEvent(
-      new CustomEvent("special-day-action", {
-        detail: {
-          kind: "open",
-          date: "2026-12-14",
-          specialDay: { id: "sd1", name: "Christmas dinners" },
-          holidays: [],
-          returnTo: () => null,
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    history.pushState(null, "", "/manage/opening-hours/view/special-day/special-day/sd1");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Christmas dinners");
     history.replaceState(null, "", "/manage/opening-hours/view/special-day/date/2026-12-08");

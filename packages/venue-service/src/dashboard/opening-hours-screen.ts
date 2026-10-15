@@ -893,13 +893,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private openNamedDay(event: CustomEvent<SpecialDayAction>) {
     event.stopPropagation();
-    if (
-      ![
-        this.shadowRoot?.querySelector("opening-hours-year"),
-        this.shadowRoot?.querySelector("opening-hours-month"),
-      ].some((component) => component === event.currentTarget)
-    )
-      return;
+    if (event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-year")) return;
     const action = event.detail;
     if (action.kind === "delete") {
       void this.askDeleteSpecial(action);
@@ -1206,7 +1200,6 @@ export class OpeningHoursScreen extends LitElement {
         .departmentId=${this.departmentId}
         .departments=${this.model!.departments}
         .readOnly=${this.readOnly}
-        @special-day-action=${this.openNamedDay}
         @calendar-day-open=${this.openDayBox}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
