@@ -5,8 +5,10 @@ import {
   copyDay,
   deleteBlock,
   laneLayout,
+  MAX_BLOCK_MINUTES,
   resizeBlock,
 } from "./block-model.js";
+import { parseBlocks } from "./paint-rules.js";
 import type { StaffingBlock } from "./slots.js";
 
 const block = (
@@ -78,6 +80,15 @@ describe("laneLayout", () => {
     ]);
   });
 
+  it("puts the longer of two blocks that start together in the first lane", () => {
+    expect(
+      laneLayout([block("a", "09:00", "10:00"), block("b", "09:00", "17:00")], "06:00"),
+    ).toEqual([
+      { lane: 1, lanes: 2 },
+      { lane: 0, lanes: 2 },
+    ]);
+  });
+
   it("answers nothing for an empty day", () => {
     expect(laneLayout([], "06:00")).toEqual([]);
   });
@@ -130,6 +141,39 @@ describe("resizeBlock", () => {
     expect(resizeBlock(crossing, 0, "start", "03:00", "06:00")).toEqual([
       block("night", "03:00", "06:00"),
     ]);
+  });
+
+  const ROLE = "7d4c1a52-0b8e-4f4e-9a57-3c2f1e6b9d10";
+  const accepted = (day: StaffingBlock[], cutover: string) =>
+    expect(parseBlocks(day, "blocks", cutover)).toEqual(day);
+
+  it("never lets a block span the whole business day, which the server refuses", () => {
+    expect(MAX_BLOCK_MINUTES).toBe(1425);
+    const morning = [block(ROLE, "06:00", "12:00")];
+    const toEnd = resizeBlock(morning, 0, "end", "06:00", "06:00");
+    expect(toEnd).toEqual([block(ROLE, "06:00", "05:45")]);
+    accepted(toEnd, "06:00");
+    const evening = [block(ROLE, "18:00", "06:00")];
+    const toStart = resizeBlock(evening, 0, "start", "06:00", "06:00");
+    expect(toStart).toEqual([block(ROLE, "06:15", "06:00")]);
+    accepted(toStart, "06:00");
+  });
+
+  it("stays on the clock quarter hours when the changeover is not on one", () => {
+    // A 05:10 changeover: the day's first quarter hour is 05:15 and its last 05:00.
+    const crossing = [block(ROLE, "04:00", "08:00")];
+    const moved = resizeBlock(crossing, 0, "start", "03:00", "05:10");
+    expect(moved).toEqual([block(ROLE, "03:00", "05:00")]);
+    accepted(moved, "05:10");
+    const pinned = resizeBlock(crossing, 0, "start", "05:00", "05:10");
+    expect(pinned).toEqual([block(ROLE, "04:45", "05:00")]);
+    accepted(pinned, "05:10");
+    const longest = resizeBlock([block(ROLE, "05:15", "12:00")], 0, "end", "05:00", "05:10");
+    expect(longest).toEqual([block(ROLE, "05:15", "05:00")]);
+    accepted(longest, "05:10");
+    const atChangeover = resizeBlock([block(ROLE, "12:00", "14:00")], 0, "end", "05:10", "05:10");
+    expect(atChangeover).toEqual([block(ROLE, "12:00", "05:00")]);
+    accepted(atChangeover, "05:10");
   });
 
   it("leaves the day unchanged for an index it does not hold, and never edits its input", () => {

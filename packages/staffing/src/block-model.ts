@@ -3,6 +3,9 @@ import { blockSpan, minuteOfServiceDay, type StaffingBlock } from "./slots.js";
 
 const STEP_MINUTES = 15;
 const DAY_MINUTES = 1440;
+/** The server refuses a block whose start and end are the same clock time, so one never spans
+ *  the whole business day. */
+export const MAX_BLOCK_MINUTES = DAY_MINUTES - STEP_MINUTES;
 
 const copyBlocks = (day: readonly StaffingBlock[]) => day.map((b) => ({ ...b }));
 
@@ -12,19 +15,27 @@ function clockAt(minute: number, cutover: string): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-/** A block saved before a changeover change can cross the new changeover; it ends there, as
- *  `slotsForDay` reads it. */
+/** The day's last clock quarter hour, in minutes from the changeover, by `stepMinuteAt`'s rule:
+ *  the day's end on a quarter-hour changeover. */
+function lastStep(cutover: string): number {
+  const first = (STEP_MINUTES - (Number(cutover.slice(3, 5)) % STEP_MINUTES)) % STEP_MINUTES;
+  return first + Math.floor((DAY_MINUTES - first) / STEP_MINUTES) * STEP_MINUTES;
+}
+
+/** A block saved before a changeover change can cross the new changeover; it ends at the day's
+ *  last quarter hour. */
 function span(block: StaffingBlock, cutover: string): { start: number; end: number } {
   const s = blockSpan(block, cutover);
-  return s.end > s.start ? s : { start: s.start, end: DAY_MINUTES };
+  return s.end > s.start ? s : { start: s.start, end: lastStep(cutover) };
 }
 
 export function addBlock(day: readonly StaffingBlock[], block: StaffingBlock): StaffingBlock[] {
   return [...copyBlocks(day), { ...block }];
 }
 
-/** Moves one edge to `time`, held inside the business day and at least one quarter hour from the
- *  other edge. An end at the changeover is the day's end. */
+/** Moves one edge to `time`, held inside the business day, at least one quarter hour from the
+ *  other edge and at most `MAX_BLOCK_MINUTES` from it. An end at the changeover is the day's last
+ *  quarter hour. */
 export function resizeBlock(
   day: readonly StaffingBlock[],
   index: number,
@@ -37,10 +48,18 @@ export function resizeBlock(
   if (target === undefined) return blocks;
   const { start, end } = span(target, cutover);
   const minute = minuteOfServiceDay(time, cutover);
+  const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
   const [from, to] =
     edge === "start"
-      ? [Math.min(minute, end - STEP_MINUTES), end]
-      : [start, Math.max(minute || DAY_MINUTES, start + STEP_MINUTES)];
+      ? [clamp(minute, end - MAX_BLOCK_MINUTES, end - STEP_MINUTES), end]
+      : [
+          start,
+          clamp(
+            minute || DAY_MINUTES,
+            start + STEP_MINUTES,
+            Math.min(start + MAX_BLOCK_MINUTES, lastStep(cutover)),
+          ),
+        ];
   target.startsAt = clockAt(from, cutover);
   target.endsAt = clockAt(to, cutover);
   return blocks;
