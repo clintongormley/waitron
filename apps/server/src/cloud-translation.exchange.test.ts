@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -614,6 +615,7 @@ it("a revocation met by a translation call leaves what a refresh's revoked answe
       await f.close();
     }
   }
+  expect(lifecycles[0]?.revoked).toBe(true);
   expect(lifecycles[0]).toEqual(lifecycles[1]);
 });
 
@@ -667,4 +669,27 @@ it("a refusal met after the connection's saved state was removed writes nothing 
     await expect(readFile(join(f.stateDir, "cloud-connection.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  }));
+
+it("a revocation met after the connection was paired again as another installation leaves the new one unrevoked", () =>
+  withFake(async (f) => {
+    const job = await f.client.translation.submit(op(), body(1));
+    const held = f.stall("translation-status");
+    const status = f.client.translation.status(job.jobId);
+    await held.reached;
+    f.revoke();
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const before = await saved(f);
+    const replaced = {
+      ...before,
+      lifecycle: { ...before.lifecycle!, lease: undefined },
+      privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
+      publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+    };
+    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(replaced), {
+      mode: 0o600,
+    });
+    held.release();
+    await expect(status).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(await saved(f)).toEqual(JSON.parse(JSON.stringify(replaced)));
   }));

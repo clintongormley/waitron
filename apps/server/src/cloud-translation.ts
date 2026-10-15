@@ -82,9 +82,14 @@ const REASONS: Partial<Record<CloudJobState, readonly CloudReason[]>> = {
 export const COLLECT_REPLY_BYTES = 1000 * ((128 + 20 * 500 + 10 * 2 * 500) * 6 + 1024) + 1024;
 /**
  * Told before the call rejects, so the connection can record what the refusal means for it.
- * `lease` is the saved lease the call was signed with, as JSON.
+ * `lease` is the saved lease the call was signed with, as JSON, and `publicKey` the installation
+ * key it was signed by.
  */
-export type OnRefusal = (refusal: "revoked" | "invalid_proof", lease: string) => Promise<void>;
+export type OnRefusal = (
+  refusal: "revoked" | "invalid_proof",
+  lease: string,
+  publicKey: string,
+) => Promise<void>;
 const LIMITS: Record<TranslationAction, { reply: number; ms: number }> = {
   "translation-submit": { reply: 65536, ms: 60000 },
   "translation-status": { reply: 65536, ms: 8000 },
@@ -165,9 +170,10 @@ async function exchange(
     }
     if (!response.ok) {
       const code = object(value) ? value.error : undefined;
-      if (response.status === 403 && code === "revoked") await onRefusal?.("revoked", used);
+      if (response.status === 403 && code === "revoked")
+        await onRefusal?.("revoked", used, state.publicKey);
       if (response.status === 401 && code === "invalid_proof")
-        await onRefusal?.("invalid_proof", used);
+        await onRefusal?.("invalid_proof", used, state.publicKey);
       throw refusalOf(response.status, value);
     }
     if (!object(value) || value.version !== 1) unavailable();

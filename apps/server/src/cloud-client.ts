@@ -377,11 +377,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   // A refresh can renew the lease while a call waits on Cloud; dropping that fresh lease on the
-  // old one's invalid_proof would only force another renewal.
-  const recordRefusal: OnRefusal = (refusal, used) =>
+  // old one's invalid_proof would only force another renewal. The connection can also be paired
+  // again meanwhile, and the old installation's refusal says nothing about the new one.
+  const recordRefusal: OnRefusal = (refusal, used, publicKey) =>
     run(async () => {
       const state = await read();
-      if (!state?.lifecycle) return;
+      if (!state?.lifecycle || state.publicKey !== publicKey) return;
       const c = state.lifecycle;
       if (refusal === "revoked") markRevoked(c);
       else if (JSON.stringify(c.lease) === used) delete c.lease;
