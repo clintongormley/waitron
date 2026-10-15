@@ -1098,6 +1098,68 @@ reads each line on its own, so a `timeout` at the end of a `\`-continued line is
 unbounded. The Dockerfile case sees only `apt-get` named in a `RUN`, does not check that `bounded()`
 retries, and neither runs the shell nor judges the numbers.
 
+### Every pnpm setup is bounded
+
+Every workflow step that sets pnpm up runs `bash scripts/ci-setup-pnpm.sh` under
+`timeout-minutes: 5`, never `pnpm/action-setup`. The script reads the version from `package.json`'s
+`packageManager`, installs it with `npm install --global --prefix "$RUNNER_TEMP/pnpm-setup"`, checks
+that the installed `pnpm --version` prints that version, and puts the prefix's `bin` on
+`GITHUB_PATH`. Each npm attempt runs under `timeout` (60 s, `PNPM_SETUP_ATTEMPT_SECONDS`) with a
+forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its own 10 s limit
+(`PNPM_SETUP_VERSION_SECONDS`) with a 2 s kill, and a check that fails or is stopped fails the
+attempt even when it printed the right version. Three attempts, then the step fails. Worst case
+3 × (60 + 10) + 3 × (10 + 2) = 246 s, under the step's 300 s. In the jobs whose own limit is also
+5 minutes (`changes`, `typecheck`, the five `-merge` jobs and `stripe-sandbox`), that job limit
+covers every other step too, so there a setup that needs its third attempt can still end with the
+job cancelled.
+
+The stall: main run `38799624567`, job `test-dashboard (2)`. `pnpm/action-setup@v6` printed
+"Running self-installer..." and then nothing for 260 s; the next main run did the same shard in
+3 min 39 s.
+
+What the action does (source at tag v6, `f520eceda224fe1a4aed5a2a27a194379a409996`,
+`src/install-pnpm/run.ts`): `npm ci` of a bootstrap pnpm from a lockfile committed in the action,
+into `~/setup-pnpm`, then `pnpm self-update <version>` — two network fetches, neither under any time
+limit. A `uses:` step can take `timeout-minutes`, so the action could be bounded in place; but a
+retry would need a second copy of the step (`continue-on-error` and a conditional repeat) at every
+site, and the two fetches inside the action cannot be bounded separately. So it was replaced.
+
+Measured 2026-10-15: the `Run pnpm/action-setup@v6` step over the last 8 finished `ci.yml` runs on
+`main`, from `gh api repos/{owner}/{repo}/actions/runs/<id>/jobs`, each step's
+`completed_at - started_at` in whole seconds — 376 step records. Half took 1 s or less, 90% 7 s or
+less, 95% 13 s or less; 15 took over 20 s (22, 31, 42, 60, 69, 75, 86, 98, 103, 115, 122, 132, 159,
+226, 264), 11 of them over 60 s. The 60 s per attempt was chosen from these timings of the ACTION,
+whose two fetches are not the script's one `npm install`; whether the slow ones were stalled or just
+slow was not checked.
+
+The control, `scripts/ci-setup-pnpm.test.mjs`, runs the real script under a stubbed `npm` that
+sleeps 300 s, with a 1 s limit and a 1 s kill grace: it prints three
+`attempt N of 3 failed or stalled` lines and exits 1 in under 15 s. With the `timeout` prefix taken
+off the npm call, that case failed (2026-10-15). A second case uses a stub that ignores the polite
+stop (`trap '' TERM`); with only `-k` taken off, it failed and the plain hang case still passed.
+
+The cache moved. The action exported `PNPM_HOME=~/setup-pnpm/node_modules/.bin`, and pnpm 9.15.0
+puts its store under `$PNPM_HOME/store/v3` when that is set (`PNPM_HOME=/tmp/fakehome pnpm store
+path` printed `/tmp/fakehome/store/v3`, run 2026-10-15 on macOS). The script exports no `PNPM_HOME`,
+so the store is at pnpm's default path, and `actions/setup-node`'s `cache: pnpm` entries saved under
+the old path will most likely miss once per job until `main` has saved new ones; that was not
+measured. The old entries are left for the cache's least-recently-used eviction.
+
+Out of scope: `deploy/Dockerfile` installs pnpm with `npm install --global pnpm@9.15.0` while
+building an image, not in a workflow setup step, and is not bounded by this; backlog A745.
+
+Guards: "the workflows' pnpm setups" in `scripts/ci-workflow.test.mjs`, weaker than its name — it
+reads every workflow as TEXT and does not run it: no non-comment `uses: pnpm/action-setup`, a
+`timeout-minutes` on every step running the script, and the setup before each job's first step that
+runs `pnpm`. A setup in a composite action or a reusable workflow is invisible to it, and a `pnpm`
+run by a script the step calls is not seen, and the step's `timeout-minutes` is not compared with
+the script's worst case. `scripts/setup-node-pnpm.test.mjs` finds the setup only by a one-line
+`run: bash scripts/ci-setup-pnpm.sh`. The script's behaviour — the bound, the kill
+grace, the retries, the version check, refusing an empty `RUNNER_TEMP` or `GITHUB_PATH`, a
+PATH with neither `gtimeout` nor `timeout`, and a `packageManager` that is not an exact version — is
+run under a stubbed npm by `scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted
+by it.
+
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
 A new `cache-to: type=gha,mode=max` exporter does not merely cost its own bytes — it competes for
