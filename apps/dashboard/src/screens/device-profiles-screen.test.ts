@@ -2571,7 +2571,6 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
         active,
-        invoicePrinter: false,
         agentId: "ag1",
         agentName: "Box",
       };

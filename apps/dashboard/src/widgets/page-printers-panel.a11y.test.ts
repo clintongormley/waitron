@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { PagePrinterRow } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -24,23 +23,19 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   media: "iso_a4_210x297mm",
   resolutionDpi: 300,
   active: true,
-  invoicePrinter: true,
   agentId: "a1",
   agentName: "Cocina agent",
   ...over,
 });
 const ROWS = [
   row(),
-  row({ id: "pp2", name: "Back office", host: "10.0.0.57", invoicePrinter: false }),
-  row({ id: "pp3", name: "Old laser", active: false, invoicePrinter: false, agentName: null }),
+  row({ id: "pp2", name: "Back office", host: "10.0.0.57" }),
+  row({ id: "pp3", name: "Old laser", active: false, agentName: null }),
 ];
 
 const states = [
   "populated",
   "without printer.manage",
-  "choice staged",
-  "choice refused",
-  "disabled the chosen printer",
   "re-read failed",
   "rename open",
   "rename refused blank",
@@ -77,10 +72,6 @@ describe.each(["light", "dark"] as const)("page printers panel (%s)", (theme) =>
         state === "rename refused by the server"
           ? vi.fn().mockRejectedValue({ code: "page_printer.not_found" })
           : vi.fn().mockResolvedValue(undefined),
-      setInvoicePrinter:
-        state === "choice refused"
-          ? vi.fn().mockRejectedValue({ code: "page_printer.not_found" })
-          : vi.fn().mockResolvedValue(undefined),
       printPagePrinterTestPage: vi.fn().mockResolvedValue({ id: "tp1", status: "waiting" }),
       background: {
         readPagePrinterTestPage: vi.fn().mockResolvedValue(
@@ -110,29 +101,12 @@ describe.each(["light", "dark"] as const)("page printers panel (%s)", (theme) =>
     );
     await settle(el);
     const q = (selector: string) => deepQuery(el.shadowRoot!, selector)!;
-    if (state.startsWith("choice") || state === "re-read failed") {
-      await chooseOption(q("[data-test=invoice-printer-choice]"), "pp2");
-      await settle(el);
-    }
-    if (state === "choice refused" || state === "re-read failed") {
-      q("[data-test=save-invoice-printer]").click();
+    if (state === "re-read failed") {
+      q("[data-test=disable-page-printer-pp2]").click();
       await vi.waitFor(() =>
-        expect(
-          deepQuery(
-            el.shadowRoot!,
-            state === "re-read failed"
-              ? "[data-test=page-printers-read-error]"
-              : "[data-test=invoice-printer-actions]",
-          ),
-        ).not.toBeNull(),
+        expect(deepQuery(el.shadowRoot!, "[data-test=page-printers-read-error]")).not.toBeNull(),
       );
       await settle(el);
-    }
-    if (state === "disabled the chosen printer") {
-      q("[data-test=disable-page-printer-pp1]").click();
-      await vi.waitFor(() =>
-        expect(deepQuery(el.shadowRoot!, "[data-test=invoice-printer-cleared]")).not.toBeNull(),
-      );
     }
     if (state.startsWith("rename")) {
       q("[data-test=rename-page-printer-pp2]").click();

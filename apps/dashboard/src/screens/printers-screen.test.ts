@@ -10703,7 +10703,6 @@ describe("office printers in discovery", () => {
     media: "iso_a4_210x297mm",
     resolutionDpi: 600,
     active: true,
-    invoicePrinter: false,
     agentId: "a1",
     agentName: "Cocina agent",
   };
@@ -11286,7 +11285,6 @@ describe("the invoice printers panel", () => {
     media: "iso_a4_210x297mm",
     resolutionDpi: 600,
     active: true,
-    invoicePrinter: true,
     agentId: "a1",
     agentName: "Cocina agent",
   };

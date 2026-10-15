@@ -531,7 +531,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
-      invoicePrinter: false,
       agentId: "a1",
       agentName: "Cocina agent",
       ...overrides,

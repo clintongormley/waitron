@@ -10,7 +10,6 @@ import {
   readJsonBody,
   requireBodyUuid,
   requireManagementSession,
-  requireNullableBodyUuid,
   requireString,
   requireUuidParam,
 } from "@waitron/server-kit";
@@ -20,7 +19,6 @@ import {
   listPagePrinters,
   registerPagePrinter,
   renamePagePrinter,
-  setInvoicePrinter,
   type DiscoveryWindow,
   type PagePrinterDiscovery,
 } from "./page-printers.js";
@@ -97,7 +95,6 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
           media: row.media,
           resolutionDpi: row.resolutionDpi,
           active: row.active,
-          invoicePrinter: row.invoiceDefault,
           agentId: row.agentId,
           agentName: row.agentName,
         })),
@@ -128,21 +125,6 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         );
       });
       return c.json(result, result.outcome === "created" ? 201 : 200);
-    }),
-  );
-
-  app.put("/management-api/page-printers/invoice-printer", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ pagePrinterId?: unknown }>(c);
-      await gated(sessionId, (tx) =>
-        setInvoicePrinter(
-          tx,
-          deps.locationId,
-          requireNullableBodyUuid(body.pagePrinterId, "pagePrinterId"),
-        ),
-      );
-      return c.body(null, 204);
     }),
   );
 

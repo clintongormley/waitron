@@ -2782,7 +2782,6 @@ describe("the Edit dialog", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
         active: true,
-        invoicePrinter: false,
         agentId: "ag1",
         agentName: "Box",
       };

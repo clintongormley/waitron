@@ -1477,7 +1477,7 @@ it("makes only explicitly passive draft previews passive, including on the backg
   ]);
 });
 
-it("reads, registers, changes and chooses office printers on the page-printer routes", async () => {
+it("reads, registers and changes office printers on the page-printer routes, and chooses none", async () => {
   const row = {
     id: "pp1",
     name: "Office",
@@ -1489,7 +1489,6 @@ it("reads, registers, changes and chooses office printers on the page-printer ro
     media: "iso_a4_210x297mm",
     resolutionDpi: 600,
     active: true,
-    invoicePrinter: false,
     agentId: "a1",
     agentName: "Office agent",
   };
@@ -1498,10 +1497,9 @@ it("reads, registers, changes and chooses office printers on the page-printer ro
     .mockResolvedValueOnce(jsonResponse([row]))
     .mockResolvedValueOnce(jsonResponse({ id: "pp1", outcome: "repointed" }))
     .mockResolvedValueOnce(emptyResponse())
-    .mockResolvedValueOnce(emptyResponse())
-    .mockResolvedValueOnce(emptyResponse())
-    .mockResolvedValueOnce(refusal("page_printer.not_found", 404));
+    .mockResolvedValueOnce(emptyResponse());
   const api = new DashboardApi("", fetchImpl);
+  expect("setInvoicePrinter" in api).toBe(false);
   expect(await api.listPagePrinters()).toEqual([row]);
   const entry = { agentId: "a2", host: "10.0.0.56", port: 631, path: "/ipp/print" };
   expect(await api.registerPagePrinter({ ...entry, name: "Office" })).toEqual({
@@ -1510,17 +1508,11 @@ it("reads, registers, changes and chooses office printers on the page-printer ro
   });
   await api.updatePagePrinter("pp1", { name: "Back office" });
   await api.updatePagePrinter("pp1", { active: false });
-  await api.setInvoicePrinter(null);
-  await expect(api.setInvoicePrinter("pp1")).rejects.toMatchObject({
-    code: "page_printer.not_found",
-  });
   expect(callsOf(fetchImpl)).toEqual([
     ["/management-api/page-printers", "GET", undefined],
     ["/management-api/page-printers", "POST", { ...entry, name: "Office" }],
     ["/management-api/page-printers/pp1", "PATCH", { name: "Back office" }],
     ["/management-api/page-printers/pp1", "PATCH", { active: false }],
-    ["/management-api/page-printers/invoice-printer", "PUT", { pagePrinterId: null }],
-    ["/management-api/page-printers/invoice-printer", "PUT", { pagePrinterId: "pp1" }],
   ]);
 });
 

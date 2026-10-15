@@ -629,7 +629,6 @@ const office = {
   media: "iso_a4_210x297mm" as const,
   resolutionDpi: 300,
   active: true,
-  invoicePrinter: false,
   agentId: "ag1",
   agentName: "Box",
 };

@@ -134,7 +134,7 @@ export async function disablePagePrinter(
 ): Promise<void> {
   const disabled = await tx
     .update(pagePrinters)
-    .set({ active: false, invoiceDefault: false })
+    .set({ active: false })
     .where(inLocation(locationId, id))
     .returning({ id: pagePrinters.id });
   if (disabled.length === 0) throw new AppError("page_printer.not_found", {});
@@ -147,29 +147,4 @@ export async function disablePagePrinter(
     .update(invoiceDeliveries)
     .set({ status: "unknown", failureCode: "printer_disabled", expiredAt: now.toISOString() })
     .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "sending")));
-}
-
-/** `null` clears it. The old default is cleared first: the unique index allows one per location. */
-export async function setInvoicePrinter(
-  tx: Transaction,
-  locationId: string,
-  pagePrinterId: string | null,
-): Promise<void> {
-  if (pagePrinterId !== null) {
-    const [target] = await tx
-      .select({ id: pagePrinters.id })
-      .from(pagePrinters)
-      .where(and(inLocation(locationId, pagePrinterId), eq(pagePrinters.active, true)));
-    if (target === undefined) throw new AppError("page_printer.not_found", {});
-  }
-  await tx
-    .update(pagePrinters)
-    .set({ invoiceDefault: false })
-    .where(and(eq(pagePrinters.locationId, locationId), eq(pagePrinters.invoiceDefault, true)));
-  if (pagePrinterId !== null) {
-    await tx
-      .update(pagePrinters)
-      .set({ invoiceDefault: true })
-      .where(eq(pagePrinters.id, pagePrinterId));
-  }
 }

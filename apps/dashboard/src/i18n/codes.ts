@@ -812,8 +812,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo.",
   },
   "invoice_delivery.printer_invalid": {
-    en: "The invoice printer is unavailable. Choose another in Printers",
-    es: "La impresora de facturas no está disponible. Elige otra en Impresoras",
+    en: "That printer is unavailable. Choose another printer",
+    es: "Esa impresora no está disponible. Elige otra impresora",
   },
   "invoice_delivery.email_unavailable": {
     en: "Invoice email is unavailable. Check the mail server and the Email field under Edit receipt in Departments and zones",

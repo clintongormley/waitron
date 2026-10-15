@@ -1280,7 +1280,6 @@ export interface PagePrinterRow {
   media: "iso_a4_210x297mm" | "na_letter_8.5x11in";
   resolutionDpi: number;
   active: boolean;
-  invoicePrinter: boolean;
   /** The agent that prints to it, or null once that agent's record is gone. */
   agentId: string | null;
   agentName: string | null;
@@ -3549,12 +3548,6 @@ export class DashboardApi {
       `/management-api/page-printers/${id}/test-page`,
       "GET",
     );
-  }
-
-  setInvoicePrinter(pagePrinterId: string | null): Promise<void> {
-    return this.#request<void>("/management-api/page-printers/invoice-printer", "PUT", {
-      pagePrinterId,
-    });
   }
 
   pairBluetooth(
