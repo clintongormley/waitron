@@ -88,6 +88,27 @@ describe("format-neutral invoice content", () => {
     );
     expect(captions.some((c) => c.includes(".00%") || c.includes("17.5"))).toBe(false);
   });
+
+  it("keeps a full invoice's base and VAT lines when it has only one rate", () => {
+    const rows = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        vatBreakdown: [{ rate: "10.00", base: "17.90", tax: "1.79" }],
+      },
+    }).elements.flatMap((e): unknown[] =>
+      e.kind === "amount" ? [[e.caption, e.amount]] : e.kind === "rule" ? ["rule"] : [],
+    );
+    const totalAt = rows.findIndex((row) => Array.isArray(row) && row[0] === "TOTAL");
+    expect(rows.slice(totalAt - 4, totalAt + 1)).toEqual([
+      "rule",
+      ["Base 10%", "17,90 €"],
+      ["IVA 10%", "1,79 €"],
+      "rule",
+      ["TOTAL", "19,69 €"],
+    ]);
+    expect(rows).not.toContainEqual(["IVA 10% incluido", "1,79 €"]);
+  });
 });
 
 it.each(["thermal", "a4"] as const)(

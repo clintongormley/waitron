@@ -63,7 +63,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         if (style.double) {
           const half = Math.floor(columns / 2);
           const indent = indentation(element.indent, half);
-          const double = labelAmountLines(caption, amount, half, indent);
+          const double = labelAmountLines(caption, amount, half, indent, element.gap);
           if (double.length === 1) {
             b.line(double[0], style);
             break;
@@ -80,6 +80,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
           amount,
           columns,
           indentation(element.indent, columns),
+          element.gap,
         )) {
           b.line(line, { bold: style.bold });
         }

@@ -2395,6 +2395,7 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
         order: "Mesa 6 · Comanda 41",
+        day: "17 d’ag. 2026",
         invoice: "Factura simplificada A/1",
         date: "Data ",
         comp: "Invitació -12,00",
@@ -2425,6 +2426,7 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
         order: "Mesa 6 · Pedido 41",
+        day: "17 de ago. de 2026",
         invoice: "Factura simplificada A/1",
         date: "Data ",
         comp: "Invitación -12,00",
@@ -2455,6 +2457,7 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "IFZ: B12345678",
         order: "Mesa 6 · Eskaera 41",
+        day: "2026(e)ko abu. 17(a)",
         invoice: "Faktura erraztua A/1",
         date: "Data ",
         comp: "Gonbidapena -12,00",
@@ -2481,11 +2484,13 @@ describe("the receipt's fixed words follow its language", () => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
     const cash = printed(FILED_SALE, locale);
-    const { charged, date, order, practice, ...rows } = words;
+    const { charged, date, day, order, practice, ...rows } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
     // The issue date shares the order line on a simplified receipt; only a full invoice captions it.
-    expect(sale.some((line) => line.startsWith(order))).toBe(true);
+    const orderAt = sale.findIndex((line) => line.startsWith(order));
+    expect(orderAt).toBeGreaterThanOrEqual(0);
+    expect(sale.slice(orderAt, orderAt + 2).join(" ")).toContain(day);
     const full = printed({ ...LABELLED_SALE, invoiceType: "F1" }, locale);
     expect(full.some((line) => line.startsWith(date))).toBe(true);
     expect(card).toContain(charged);
@@ -2493,8 +2498,12 @@ describe("the receipt's fixed words follow its language", () => {
     expect(card).toContain(single.reference);
     expect(cash).toContain(single.cash);
     expect(cash).toContain(single.change);
+    const spanishSale = printed(LABELLED_SALE, "es-ES").join("\n");
+    for (const spanish of ["Descuento", "Tarjeta", "PRUEBA"]) {
+      expect(spanishSale).toContain(spanish);
+    }
     for (const [name, ticket] of Object.entries({ sale, card, cash })) {
-      for (const spanish of ["Fecha", "Tarjeta", "PRUEBA"]) {
+      for (const spanish of ["Descuento", "Tarjeta", "PRUEBA"]) {
         expect(ticket.join("\n"), `${name}: ${spanish}`).not.toContain(spanish);
       }
     }
@@ -2595,7 +2604,6 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    // A simplified receipt captions no date, so its one-rate VAT line stands in for "Data".
     expect(text).toContain("IVA 10% inclòs 0,36 €");
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/2 ud Pan con tomate 3,50$/mu);
@@ -2612,7 +2620,7 @@ describe("a receipt's goods names can be looked up in another language than its 
     ]) {
       expect(text).not.toContain(other);
     }
-    expect(text).not.toContain("Fecha");
+    expect(text).not.toContain("IVA 10% incluido");
   });
 
   it("looks the names up in the fixed words' language when no names' language is given", () => {
@@ -3254,6 +3262,37 @@ describe("the simplified receipt's own layout (A663)", () => {
       expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
     },
   );
+
+  const headingRow = (orderNumber: number): [string, string | undefined] => {
+    const lines = printedLines(
+      formatReceipt({
+        result: { ...ONE_RATE, orderLabel: null, orderNumber },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const at = lines.findIndex((line) => line.startsWith(`Pedido ${orderNumber}`));
+    return [lines[at]!, lines[at + 1]];
+  };
+
+  it("puts the date on its own right-aligned line when two spaces would not separate it from the order (58mm)", () => {
+    const [heading, next] = headingRow(1234);
+    const together = /^Pedido 1234 {2,}13 oct 2026, \d{1,2}:53$/u.test(heading);
+    const apart =
+      heading === "Pedido 1234" &&
+      next !== undefined &&
+      next.length === 30 &&
+      /^ +13 oct 2026, \d{1,2}:53$/u.test(next);
+    expect(together || apart, JSON.stringify([heading, next])).toBe(true);
+  });
+
+  it("keeps the order and the date on one line when two spaces fit between them (58mm)", () => {
+    const [heading] = headingRow(123);
+    expect(heading).toMatch(/^Pedido 123 {2,}13 oct 2026, \d{1,2}:53$/u);
+    expect(heading).toHaveLength(30);
+  });
 
   it("draws TOTAL double size and rules off the items before it", () => {
     const commands = printedCommands(

@@ -52,6 +52,8 @@ export type ReceiptElement =
       amount: string;
       indent: ReceiptIndent;
       style?: ReceiptStyle;
+      /** The fewest spaces between caption and amount on one line; fewer, and the amount drops. */
+      gap?: number;
     }
   | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
@@ -112,7 +114,6 @@ export function buildReceiptDocument({
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
   const simplified = result.invoiceType !== "F1";
-  // A simplified receipt's item amounts drop the €: the TOTAL and the payment rows carry it.
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
@@ -135,7 +136,7 @@ export function buildReceiptDocument({
     elements.push({ kind: "align", alignment });
   };
   const netFacts = (line: TillSaleLine, unit: string, indent: number): void => {
-    if (result.invoiceType !== "F1" || line.net === undefined) return;
+    if (simplified || line.net === undefined) return;
     row(
       label.netUnitPrice,
       `${formatMoney(line.net.unitPrice, locale)} / ${trimQuantityForDisplay(line.net.priceQuantity)}${unit}`,
@@ -155,7 +156,7 @@ export function buildReceiptDocument({
     }
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
-    const included = result.invoiceType === "F1" ? ` (${label.vatIncluded})` : "";
+    const included = simplified ? "" : ` (${label.vatIncluded})`;
     const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
     row(name, `-${itemAmount(adjustment.amount)}`, indent);
   };
@@ -173,7 +174,7 @@ export function buildReceiptDocument({
     align("left");
   }
 
-  if (result.invoiceType === "F1") text(label.fullInvoice);
+  if (!simplified) text(label.fullInvoice);
 
   align("center");
   elements.push({ kind: "logo" });
@@ -191,7 +192,7 @@ export function buildReceiptDocument({
   }
   if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
   if (receipt.email) text(receipt.email);
-  if (result.invoiceType === "F1" && issuer.domicile) text(issuer.domicile);
+  if (!simplified && issuer.domicile) text(issuer.domicile);
   if (duplicate) text(label.duplicate);
   rule();
   align("left");
@@ -200,14 +201,21 @@ export function buildReceiptDocument({
     .filter(Boolean)
     .join(" · ");
   if (simplified) {
-    row(orderText, issueDate(result.issuedAt, locale));
+    // Two spaces at least, or an order number running into the date reads as one figure.
+    elements.push({
+      kind: "amount",
+      caption: orderText,
+      amount: issueDate(result.issuedAt, locale),
+      indent: 0,
+      gap: 2,
+    });
     row(label.simplifiedInvoice, result.invoiceNumber);
   } else {
     text(orderText);
     row(label.invoice, result.invoiceNumber);
     row(label.date, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes));
   }
-  if (result.invoiceType === "F1" && result.operationDate !== undefined) {
+  if (!simplified && result.operationDate !== undefined) {
     row(
       label.operationDate,
       new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
@@ -216,7 +224,7 @@ export function buildReceiptDocument({
     );
   }
   rule();
-  if (result.invoiceType === "F1" && result.recipient) {
+  if (!simplified && result.recipient) {
     text(result.recipient.legalName);
     text(`${label.nif}: ${result.recipient.taxId}`);
     text(result.recipient.address);
@@ -229,7 +237,7 @@ export function buildReceiptDocument({
         : ` ${resolveSnapshotText(dish.unitName, namesLocale, namesLocale)}`;
     const quantity = `${dish.quantity}${unit}  `;
     const nameIndent: ReceiptIndent = { after: quantity };
-    if (result.invoiceType === "F1" && dish.net !== undefined) {
+    if (!simplified && dish.net !== undefined) {
       text(`${quantity}${lineName(dish.descriptions, namesLocale)}`, nameIndent);
       netFacts(dish, unit, 2);
     } else {
@@ -245,7 +253,7 @@ export function buildReceiptDocument({
     for (const option of options) {
       const name = lineName(option.descriptions, namesLocale);
       let caption: string;
-      if (result.invoiceType === "F1") {
+      if (!simplified) {
         const unit =
           option.unitName == null
             ? ""
@@ -257,7 +265,7 @@ export function buildReceiptDocument({
       } else {
         caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
-      if (result.invoiceType === "F1" && option.net !== undefined) {
+      if (!simplified && option.net !== undefined) {
         text(caption, 2);
         netFacts(
           option,

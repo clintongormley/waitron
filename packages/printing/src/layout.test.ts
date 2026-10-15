@@ -164,6 +164,11 @@ describe("labelAmountLines", () => {
   it("drops the amount to its own line when label and amount fill the row exactly", () => {
     expect(labelAmountLines("12345", "12345", 10)).toEqual(["12345", "     12345"]);
   });
+
+  it("keeps at least the asked-for gap before the amount, else drops it to its own line", () => {
+    expect(labelAmountLines("1234", "1234", 10, 0, 2)).toEqual(["1234  1234"]);
+    expect(labelAmountLines("12345", "1234", 10, 0, 2)).toEqual(["12345", "      1234"]);
+  });
 });
 
 const mm = (squares: number, dots: number, dpi: number): number => (squares * dots * 25.4) / dpi;

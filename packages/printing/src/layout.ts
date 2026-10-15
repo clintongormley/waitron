@@ -128,7 +128,7 @@ function splitPoint(word: string, room: number): number {
 /**
  * A label with an amount at the right-hand edge. The label wraps as {@link wrapText} does, with
  * continuation lines indented by `indent`. The amount goes at the end of the label's last line when at
- * least one space is left between them; otherwise it takes lines of its own, right-aligned, wrapped
+ * least `gap` spaces are left between them; otherwise it takes lines of its own, right-aligned, wrapped
  * like any other text when it is wider than the paper. No line is longer than `columns`.
  */
 export function labelAmountLines(
@@ -136,10 +136,11 @@ export function labelAmountLines(
   amount: string,
   columns: number,
   indent = 0,
+  gap = 1,
 ): string[] {
   const lines = wrapText(label, columns, indent);
   const last = lines[lines.length - 1]!;
-  if (last.length + 1 + amount.length <= columns) {
+  if (last.length + gap + amount.length <= columns) {
     lines[lines.length - 1] = last + " ".repeat(columns - last.length - amount.length) + amount;
     return lines;
   }
