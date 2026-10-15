@@ -273,6 +273,9 @@ normal week or one real week. It is worked out on the server from the day resolv
 Lane C's A507 is rebuilding the same page (it moves the row menu to its own column on the right and
 the timings into the station dialog), so the slice that adds Times builds on A507 as landed.
 
+**2026-10-14 (A688):** a station more than one department feeds draws one track per department on
+each date, in department order, under a Rows key; see the A688 decision in docs/backlog/kitchen.md.
+
 ## 10. Dashboard
 
 The Venue operations menu holds Departments (and zones), Opening hours, Periods and Prep stations.

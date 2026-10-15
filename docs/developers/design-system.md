@@ -3509,14 +3509,15 @@ Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, rea
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
 `opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
-+ Special day. Each date draws one bar of the times the station gets orders, worked out from
-routed products and the zones that can order them, and reads "No orders" on a date it gets none.
-When more than one department sends the station orders in the weeks shown, each date draws one
-track per department in department order, a Rows key names them, a department with nothing that
-date draws an empty track, and hovering a range names its department ("Lunch (Restaurant)"). Dates show their special day's and public holiday's
-names, as in Opening hours, and the season chips are only a key to the tints, not buttons
-(`keyOnly` on `season-chips.ts`). These are planned times; today's station closures and service
-extensions do not change them. A default station shows "Always open: this is the default
++ Special day. A station one department or none feeds draws one bar per date of the times it
+gets orders, worked out from routed products and the zones that can order them, and a date it gets
+none reads "No orders". When more than one department sends the station orders in the weeks
+shown, each date draws one track per department in department order, a Rows key names them, a
+department with nothing that date draws an empty track, a date none of them sends on reads "No
+orders" once, and hovering a range names its department ("Lunch (Restaurant)"). Dates show their
+special day's and public holiday's names, as in Opening hours, and the season chips are only a
+key to the tints, not buttons (`keyOnly` on `season-chips.ts`). These are planned times; today's
+station closures and service extensions do not change them. A default station shows "Always open: this is the default
 station" and no month. A failed read shows "This station's times could not be loaded. It will be
 tried again." above the month until that read succeeds again. The month is not kept in the
 address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
