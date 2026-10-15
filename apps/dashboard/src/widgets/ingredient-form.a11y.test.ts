@@ -12,7 +12,7 @@ import type { Ingredient } from "../api/client.js";
 const INGREDIENT: Ingredient = {
   id: "ing-1",
   name: "Leche entera",
-  allergens: { milk: { presence: "contains", source: "vaca" } },
+  allergens: { milk: {} },
   dietaryOrigin: "dairy",
   active: false,
 };

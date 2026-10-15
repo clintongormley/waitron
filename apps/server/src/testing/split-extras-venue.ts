@@ -165,7 +165,7 @@ export async function setupSplitExtrasVenue() {
       customer: string,
       kitchen: string,
       categoryId: string,
-      allergens?: { gluten: { presence: "contains"; source: string } },
+      allergens?: { gluten: { kinds: ["wheat"] } },
     ) =>
       (
         await createProduct(tx, {
@@ -183,7 +183,7 @@ export async function setupSplitExtrasVenue() {
     const products = {
       burger: await product("Burger", "Hamburguesa clásica", "BURG", burgers.id),
       chips: await product("Chips", "Patatas fritas", "CHIPS", sides.id, {
-        gluten: { presence: "contains", source: "wheat" },
+        gluten: { kinds: ["wheat" as const] },
       }),
       cheese: await product("Cheese", "Queso extra", "QUESO", toppings.id),
       sauce: await product("Sauce", "Salsa brava", "SALSA", sauces.id),

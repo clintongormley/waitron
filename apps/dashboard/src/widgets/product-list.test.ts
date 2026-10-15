@@ -1552,7 +1552,7 @@ describe("product-list", () => {
 
   it("renders a 'declared' allergen pill when allergens has entries", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ allergens: { gluten: { presence: "contains", source: "trigo" } } })],
+      products: [product({ allergens: { gluten: { kinds: ["wheat" as const] } } })],
     });
     const pill = (await tableRoot(el)).querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("declared");
@@ -1563,7 +1563,7 @@ describe("product-list", () => {
       products: [
         product({ id: "p", allergens: null }),
         product({ id: "n", allergens: {} }),
-        product({ id: "d", allergens: { milk: { presence: "contains" } } }),
+        product({ id: "d", allergens: { milk: {} } }),
       ],
     });
     const pills = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=allergen-state]");
@@ -1577,7 +1577,7 @@ describe("product-list", () => {
       products: [
         product({ id: "p", allergens: null }),
         product({ id: "n", allergens: {} }),
-        product({ id: "d", allergens: { milk: { presence: "contains" } } }),
+        product({ id: "d", allergens: { milk: {} } }),
       ],
     });
     const states = Array.from(
@@ -6129,7 +6129,11 @@ describe("product-list filters (A463)", () => {
       products: [
         product({ id: "a-pending", name: "A", allergens: null }),
         product({ id: "b-none", name: "B", allergens: {} }),
-        product({ id: "c-declared", name: "C", allergens: { gluten: { presence: "contains" } } }),
+        product({
+          id: "c-declared",
+          name: "C",
+          allergens: { gluten: { kinds: ["wheat" as const] } },
+        }),
       ],
     });
     const root = await tableRoot(el);

@@ -926,7 +926,7 @@ describe("each fact reaches the till at its own moment (Review Focus 1, server h
   it("serves the PUBLISHED allergens of a dish and its extra until the menu is republished", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
-    const sulphites = { sulphites: { presence: "contains" as const } };
+    const sulphites = { sulphites: {} };
     await suite.db
       .update(products)
       .set({ allergens: sulphites })

@@ -399,7 +399,7 @@ describe("till-basket", () => {
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
-      allergens: { gluten: { presence: "contains" } }, // base REVIEWED, declares gluten
+      allergens: { gluten: { kinds: ["wheat" as const] } }, // base REVIEWED, declares gluten
       offeredModifiers: [offeredExtras("list-bun", "Pan", [bun])],
     };
     const store = new WorkingOrderStore();
@@ -417,7 +417,7 @@ describe("till-basket", () => {
 
   it("shows each pick's own allergens and diet, distinct from the dish's own", async () => {
     const bacon = offeredItem("p-bacon", "Bacon", "1.00", {
-      addAllergens: { milk: { presence: "contains" } }, // the PICK's own allergen
+      addAllergens: { milk: {} }, // the PICK's own allergen
       suitableFor: ["halal"], // the PICK's own positive diet claim
     });
     const burger: TillProduct = {
@@ -425,7 +425,7 @@ describe("till-basket", () => {
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
-      allergens: { gluten: { presence: "contains" } }, // the DISH's own allergen (not milk)
+      allergens: { gluten: { kinds: ["wheat" as const] } }, // the DISH's own allergen (not milk)
       offeredModifiers: [offeredExtras("list-extras", "Extras", [bacon])],
     };
     const store = new WorkingOrderStore();
@@ -459,7 +459,7 @@ describe("till-basket", () => {
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
       offeredModifiers: [offeredExtras("list-bun", "Pan", [bun])],
     };
     const store = new WorkingOrderStore();
@@ -473,11 +473,11 @@ describe("till-basket", () => {
     // Two lists offer two products; the basket must read the declarations of the one actually picked,
     // and find it in the second list rather than stopping at the first.
     const cheese = offeredItem("p-cheese", "Queso", "1.00", {
-      addAllergens: { gluten: { presence: "contains" } },
+      addAllergens: { gluten: { kinds: ["wheat" as const] } },
       suitableFor: ["vegetarian"],
     });
     const bacon = offeredItem("p-bacon", "Bacon", "1.00", {
-      addAllergens: { milk: { presence: "contains" } },
+      addAllergens: { milk: {} },
       suitableFor: ["kosher"],
     });
     const burger: TillProduct = {
@@ -504,7 +504,7 @@ describe("till-basket", () => {
 
   it("marks the row 'not fully reviewed' for an unreviewed dish, ignoring an add-milk pick (Cautious)", async () => {
     const cheese = offeredItem("p-cheese", "Extra queso", "0.50", {
-      addAllergens: { milk: { presence: "contains" } },
+      addAllergens: { milk: {} },
     });
     const burger: TillProduct = {
       ...cafe,
@@ -533,7 +533,7 @@ describe("till-basket", () => {
       id: "tostada",
       name: "Tostada",
       customerName: { es: "Tostada para el cliente" },
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
     };
     const store = new WorkingOrderStore();
     store.addProduct(tostada, "1");
@@ -556,14 +556,14 @@ describe("till-basket", () => {
   // the row either: the dish shows its OWN reviewed gluten and the pick simply gets no chrome.
   it("shows the dish's own allergens beside a pick it no longer offers, no fold", async () => {
     const cheese = offeredItem("p-real-cheese", "Extra queso", "0.50", {
-      addAllergens: { milk: { presence: "contains" } },
+      addAllergens: { milk: {} },
     });
     const tostada: TillProduct = {
       ...cafe,
       id: "tostada-stale",
       name: "Tostada",
       customerName: { es: "Tostada para el cliente" },
-      allergens: { gluten: { presence: "contains" } }, // base REVIEWED → the row renders
+      allergens: { gluten: { kinds: ["wheat" as const] } }, // base REVIEWED → the row renders
       offeredModifiers: [offeredExtras("list-extras", "Extras", [cheese])],
     };
     const store = new WorkingOrderStore();

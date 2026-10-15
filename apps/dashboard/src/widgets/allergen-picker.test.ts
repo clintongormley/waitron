@@ -48,7 +48,7 @@ async function shownPresence(el: AllergenPicker, code: string): Promise<string |
 describe("allergen-picker", () => {
   it("picks each allergen's presence from a shared dropdown named by the allergen", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { milk: { presence: "may_contain" } },
+      declaration: { milk: {} },
     });
     const box = presenceBox(el, "milk");
     expect(box).not.toBeNull();
@@ -66,12 +66,12 @@ describe("allergen-picker", () => {
       changes.push((event as CustomEvent).detail.value),
     );
     await chooseOption(box, "contains");
-    expect(changes).toEqual([{ milk: { presence: "contains" } }]);
+    expect(changes).toEqual([{ milk: {} }]);
   });
 
   it("draws every row's dropdown the same width, whichever choice it shows, without cutting the longer one", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { gluten: { presence: "contains" }, milk: { presence: "may_contain" } },
+      declaration: { gluten: { kinds: ["wheat" as const] }, milk: {} },
     });
     const gluten = presenceBox(el, "gluten");
     const milk = presenceBox(el, "milk");
@@ -116,7 +116,7 @@ describe("allergen-picker", () => {
     await setReviewed(el, true);
     await addAllergen(el, "gluten");
     await setPresence(el, "gluten", "contains");
-    expect(el.value).toEqual({ gluten: { presence: "contains" } });
+    expect(el.value).toEqual({ gluten: { kinds: ["wheat" as const] } });
   });
 
   it("omits an empty source", async () => {
@@ -124,7 +124,7 @@ describe("allergen-picker", () => {
     await setReviewed(el, true);
     await addAllergen(el, "milk");
     await setPresence(el, "milk", "may_contain");
-    expect(el.value).toEqual({ milk: { presence: "may_contain" } });
+    expect(el.value).toEqual({ milk: {} });
   });
 
   it("returns to null when Revisado is switched back off", async () => {
@@ -182,8 +182,8 @@ describe("allergen-picker", () => {
   it("seeds reviewed-on with per-code entries from a populated declaration", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
       declaration: {
-        gluten: { presence: "contains", source: "trigo" },
-        milk: { presence: "may_contain" },
+        gluten: { kinds: ["wheat" as const] },
+        milk: {},
       },
     });
     const sw = el.shadowRoot!.querySelector<HTMLInputElement & { checked: boolean }>(
@@ -195,14 +195,14 @@ describe("allergen-picker", () => {
     expect(await shownPresence(el, "gluten")).toBe(t("allergen.contains", "es-ES"));
     expect(el.shadowRoot!.querySelector("[data-test=source-gluten]")).toBeNull();
     expect(el.value).toEqual({
-      gluten: { presence: "contains" },
-      milk: { presence: "may_contain" },
+      gluten: { kinds: ["wheat" as const] },
+      milk: {},
     });
   });
 
   it("keeps the per-code controls editable after seeding", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { gluten: { presence: "contains", source: "trigo" } },
+      declaration: { gluten: { kinds: ["wheat" as const] } },
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-gluten]")!.click();
     await el.updateComplete;
@@ -277,7 +277,7 @@ async function openPicker(el: AllergenPicker): Promise<void> {
 describe("allergen-picker guards", () => {
   it("ignores presence changes and removals while Revisado is off, and keeps the entry", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { milk: { presence: "contains" } },
+      declaration: { milk: {} },
     });
     await setReviewed(el, false);
     const changes = trackChanges(el);
@@ -286,17 +286,17 @@ describe("allergen-picker guards", () => {
     await el.updateComplete;
     expect(changes).toEqual([]);
     await setReviewed(el, true);
-    expect(el.value).toEqual({ milk: { presence: "contains" } });
+    expect(el.value).toEqual({ milk: {} });
   });
 
   it("shows the stored presence again after a change refused while Revisado is off", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { milk: { presence: "contains" } },
+      declaration: { milk: {} },
     });
     await setReviewed(el, false);
     await setPresence(el, "milk", "may_contain");
     await setReviewed(el, true);
-    expect(el.value).toEqual({ milk: { presence: "contains" } });
+    expect(el.value).toEqual({ milk: {} });
     expect(presenceBox(el, "milk").value).toBe("contains");
     expect(await shownPresence(el, "milk")).toBe(t("allergen.contains", "es-ES"));
   });
@@ -320,7 +320,7 @@ describe("allergen-picker guards", () => {
     milk.click();
     milk.click();
     await el.updateComplete;
-    expect(changes).toEqual([{ milk: { presence: "contains" } }]);
+    expect(changes).toEqual([{ milk: {} }]);
   });
 
   it("ignores a choice made after Revisado was switched off with the picker open", async () => {

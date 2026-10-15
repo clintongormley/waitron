@@ -71,10 +71,8 @@ declare module "@waitron/shared" {
     "content.language_required": { language: string };
     /** A key in a product's allergen declaration is not one of the EU-14 codes. */
     "allergen.invalid_code": { code: string };
-    /** An allergen's presence is not "contains" | "may_contain". */
-    "allergen.invalid_presence": { code: string; presence: string };
-    /** An allergen's optional `source` is present but is not a string. */
-    "allergen.invalid_source": { code: string };
+    "allergen.kinds_required": { code: string };
+    "allergen.invalid_kind": { code: string };
     /** A direct dietary declaration is not one of the supported suitability labels. */
     "diet.declaration_invalid": Record<string, never>;
     /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */

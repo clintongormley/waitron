@@ -183,7 +183,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       vatClass: "general" as const,
       maxQuantity: 3,
       preselected: false,
-      addAllergens: { milk: { presence: "contains" as const } },
+      addAllergens: { milk: {} },
       suitableFor: ["halal" as const],
     };
     const burger: TillProduct = {
@@ -192,7 +192,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa carta" },
       unitPrice: "10.00",
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
       offeredModifiers: [
         {
           kind: "extras",

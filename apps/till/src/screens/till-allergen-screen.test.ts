@@ -29,8 +29,8 @@ const sandwich: TillProduct = {
   vatClass: "reduced",
   category: null,
   allergens: {
-    gluten: { presence: "contains", source: "wheat" },
-    milk: { presence: "may_contain" },
+    gluten: { kinds: ["wheat" as const] },
+    milk: {},
   },
 };
 
@@ -138,8 +138,8 @@ describe("till-allergen-screen", () => {
       vatClass: "reduced",
       category: null,
       allergens: {
-        milk: { presence: "contains" },
-        gluten: { presence: "may_contain", source: "barley" },
+        milk: {},
+        gluten: { kinds: ["barley" as const] },
       },
     };
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {

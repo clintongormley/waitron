@@ -4350,9 +4350,7 @@ export interface HeldOrder {
       unitPrice: string;
       vatClass: "general" | "reduced" | "super_reduced" | "zero";
       category: string | null;
-      allergens: Readonly<
-        Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
-      > | null;
+      allergens: Readonly<ProductAllergens> | null;
       courseId: string | null;
       catalogueId: string;
       catalogueName: string;

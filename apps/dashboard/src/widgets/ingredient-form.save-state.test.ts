@@ -13,7 +13,7 @@ afterEach(cleanupWidgets);
 const MILK: Ingredient = {
   id: "ing-1",
   name: "Leche entera",
-  allergens: { milk: { presence: "contains", source: "vaca" } },
+  allergens: { milk: {} },
   dietaryOrigin: "dairy",
   active: false,
 };
@@ -124,7 +124,7 @@ it("an allergen or dietary-origin edit is a change, and putting it back makes Sa
   const el = await mount(MILK);
   await emitAllergens(el, {});
   expect(await saveState(el)).toEqual(ready);
-  await emitAllergens(el, { milk: { presence: "contains", source: "vaca" } });
+  await emitAllergens(el, { milk: {} });
   expect(await saveState(el)).toEqual(quiet);
   await emitOrigin(el, null);
   expect(await saveState(el)).toEqual(ready);
@@ -154,7 +154,7 @@ it("a changed ingredient's press sends the whole patch", async () => {
     patch: {
       name: "Leche entera",
       active: false,
-      allergens: { milk: { presence: "contains", source: "vaca" } },
+      allergens: { milk: {} },
       dietaryOrigin: "plant",
     },
   });

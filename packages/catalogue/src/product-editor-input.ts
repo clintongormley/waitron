@@ -182,7 +182,7 @@ export function parseProductEditorInput(
       : Object.fromEntries(
           Object.entries(validateAllergens(body.allergens)).map(([code, entry]) => [
             code,
-            { presence: entry.presence },
+            entry.kinds === undefined ? {} : { kinds: [...entry.kinds] },
           ]),
         );
   return {

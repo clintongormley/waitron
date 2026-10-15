@@ -1,3 +1,4 @@
+import type { AllergenMap } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menuItems, menuVersions } from "@waitron/catalogue";
@@ -260,8 +261,7 @@ export const workingLineContexts = table(
     soldInEach: flag("sold_in_each").notNull().default(false),
     hardwareUnit: label("hardware_unit"),
     vatClass: label("vat_class").notNull(),
-    allergens:
-      json<Record<string, { presence: "contains" | "may_contain"; source?: string }>>("allergens"),
+    allergens: json<AllergenMap>("allergens"),
     diet: json<unknown>("diet"),
     dietDerivation: json<unknown>("diet_derivation"),
     dietOverride: json<unknown>("diet_override"),

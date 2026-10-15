@@ -2421,7 +2421,7 @@ describe("zone offers from the published menus", () => {
     await scoped(async (tx) => {
       await updateMenuItem(tx, venue.dinner, venue.lemonadeOffer, { grossPrice: "2.50" });
       await updateProduct(tx, venue.lemonade, {
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
       });
 
       const served = await listZoneOffers(tx, cfg, venue.diningZone);
@@ -2437,7 +2437,7 @@ describe("zone offers from the published menus", () => {
       expect(after.menus[1]).toMatchObject({ id: venue.dinner, versionId: republished });
       expect(after.offers.find((offer) => offer.id === venue.lemonadeOffer)).toMatchObject({
         unitPrice: "2.50",
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
       });
     });
   });

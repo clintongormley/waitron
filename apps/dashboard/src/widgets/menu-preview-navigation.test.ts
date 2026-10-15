@@ -42,7 +42,7 @@ function fixture() {
     unitPrice: "3.50",
     grossPrice: "99.00",
     image: "lemon slice.jpg",
-    allergens: { milk: { presence: "may_contain", source: "cream" } },
+    allergens: { milk: {} },
   });
   return doc;
 }

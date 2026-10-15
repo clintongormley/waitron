@@ -199,7 +199,7 @@ const suite = useVenueDb({
           vatClass: "general",
           // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
           // `allergens` map to carry back — the field this route carries through unchanged.
-          allergens: { sulphites: { presence: "may_contain" } },
+          allergens: { sulphites: {} },
         });
         await assignCatalogueToLocation(tx, loc!.id, cat.id);
 
@@ -2015,7 +2015,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           unitPrice: "1.50",
           vatClass: "general",
           category: "Bebidas",
-          allergens: { sulphites: { presence: "may_contain" } },
+          allergens: { sulphites: {} },
           // No override and no recipe: vegan/vegetarian "unknown" — an unreviewed plate asserts no
           // positive diet claim.
           diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },

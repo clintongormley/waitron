@@ -137,7 +137,7 @@ async function send(
 }
 
 function ingredientBody(name: string): unknown {
-  return { name, allergens: { gluten: { presence: "contains" } } };
+  return { name, allergens: { gluten: { kinds: ["wheat" as const] } } };
 }
 
 async function createIngredient(app: Hono, cookie: string, name: string): Promise<string> {

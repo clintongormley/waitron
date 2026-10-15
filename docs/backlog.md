@@ -759,7 +759,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   one wording per state, a variant's inherited values in italic, implied diets shown, the Products
   list reading a variant's allergens; unreviewed dishes warned about (never blocked) when a menu is
   published now or scheduled, each linking to its product. On the till the Allergens screen is
-  deleted; product buttons carry an "i" with a long-press info window, the order list shows allergen
+  deleted; product buttons carry an `allergies` mark with a long-press info window, the order list shows allergen
   icons after the name, and the kitchen's "not reviewed" warning goes. Erudus icons. Fixes a defect
   read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. Uses
   the product editor's existing sections. [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)

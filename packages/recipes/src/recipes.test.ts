@@ -31,7 +31,7 @@ describe("recipe composition and allergen derivation", () => {
     const egg = await withTransaction(fx.db, async (tx) => {
       const egg = await createIngredient(tx, {
         name: "egg",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
         dietaryOrigin: "egg",
       });
       await setProductRecipe(tx, productId, [egg.id]);
@@ -57,11 +57,11 @@ describe("recipe composition and allergen derivation", () => {
     const published = await withTransaction(fx.db, async (tx) => {
       const alioli = await createIngredient(tx, {
         name: "alioli",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       const bread = await createIngredient(tx, {
         name: "bread",
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       await setProductRecipe(tx, productId, [alioli.id, bread.id]);
       const [row] = await tx
@@ -70,7 +70,7 @@ describe("recipe composition and allergen derivation", () => {
         .where(eq(products.id, productId));
       return row!.a;
     });
-    expect(published).toEqual({ eggs: { presence: "contains" }, gluten: { presence: "contains" } });
+    expect(published).toEqual({ eggs: {}, gluten: { kinds: ["wheat" as const] } });
   });
 
   it("keeps a product PENDING (null) when an ingredient is unreviewed", async () => {
@@ -90,12 +90,12 @@ describe("recipe composition and allergen derivation", () => {
         .from(products)
         .where(eq(products.id, productId));
       // tag alioli AFTER it is already in the recipe:
-      await updateIngredient(tx, alioli.id, { allergens: { eggs: { presence: "contains" } } });
+      await updateIngredient(tx, alioli.id, { allergens: { eggs: {} } });
       return r!.a;
     });
     expect(before).toBeNull(); // was PENDING before the ingredient was tagged
     expect(await publishedAllergens(productId)).toEqual({
-      eggs: { presence: "contains" },
+      eggs: {},
     });
   });
 
@@ -103,7 +103,7 @@ describe("recipe composition and allergen derivation", () => {
     await withTransaction(fx.db, async (tx) => {
       const egg = await createIngredient(tx, {
         name: "egg",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       await setProductRecipe(tx, productId, [egg.id]);
       await setProductRecipe(tx, productId, []); // clear
@@ -247,7 +247,7 @@ describe("recipe composition and allergen derivation", () => {
 
   it("refuses a recipe for a variant, whose allergens and diet are its parent's", async () => {
     const egg = await withTransaction(fx.db, (tx) =>
-      createIngredient(tx, { name: "egg", allergens: { eggs: { presence: "contains" } } }),
+      createIngredient(tx, { name: "egg", allergens: { eggs: {} } }),
     );
     const variantId = await withTransaction(fx.db, async (tx) => {
       const [variant] = await setProductVariants(
@@ -273,7 +273,7 @@ describe("recipe composition and allergen derivation", () => {
     expect(await withTransaction(fx.db, (tx) => getProductRecipe(tx, variantId))).toEqual([]);
     expect(await publishedAllergens(variantId)).toBeNull();
     await withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [egg.id]));
-    expect(await publishedAllergens(productId)).toEqual({ eggs: { presence: "contains" } });
+    expect(await publishedAllergens(productId)).toEqual({ eggs: {} });
   });
 
   it("getProductRecipe returns the ingredient list", async () => {

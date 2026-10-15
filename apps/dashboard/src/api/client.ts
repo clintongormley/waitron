@@ -1,3 +1,5 @@
+import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
+export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
 import type { PlanPlacement } from "@waitron/ui";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
@@ -405,13 +407,6 @@ export interface PasskeyVerification {
 export type PricingUnit = "each" | "weight";
 
 export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
-
-export type AllergenPresence = "contains" | "may_contain";
-
-export interface AllergenEntry {
-  presence: AllergenPresence;
-  source?: string;
-}
 
 /** `null` = not yet reviewed, which is not the same as allergen-free; `{}` = reviewed, none
  * present. */

@@ -60,7 +60,7 @@ const products = {
     kitchenName: "BCN",
     unitPrice: "3.00",
     vatClass: "reduced" as const,
-    allergens: { mustard: { presence: "contains" as const } },
+    allergens: { mustard: {} },
     dietaryDeclarations: ["halal" as const],
   },
   cheese: {
@@ -69,7 +69,7 @@ const products = {
     kitchenName: "CHS",
     unitPrice: "2.00",
     vatClass: "general" as const,
-    allergens: { milk: { presence: "contains" as const } },
+    allergens: { milk: {} },
     dietaryDeclarations: ["vegetarian" as const],
   },
   olives: {
@@ -283,7 +283,7 @@ describe("what a product offers", () => {
           vatClass: "reduced",
           maxQuantity: 2,
           preselected: true,
-          addAllergens: { mustard: { presence: "contains" } },
+          addAllergens: { mustard: {} },
           suitableFor: ["halal"],
         },
         {
@@ -297,7 +297,7 @@ describe("what a product offers", () => {
           vatClass: "general",
           maxQuantity: 1,
           preselected: false,
-          addAllergens: { milk: { presence: "contains" } },
+          addAllergens: { milk: {} },
           // The dish's own line expands its declarations the same way (`readQueueSubItems`,
           // apps/server/src/working-order.ts), so vegetarian implies no meat and no fish.
           suitableFor: ["vegetarian", "no_meat", "no_fish"],

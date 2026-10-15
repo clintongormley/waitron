@@ -251,23 +251,26 @@ it("refuses a colour on a variant, which always has its parent's, and takes a nu
   );
   expect(parseVariant({ ...inheriting, color: null })).toEqual({ ...inheriting, color: null });
 });
-it("normalizes optional text and prices without mutating caller or copied allergen text", () => {
+it("normalizes optional text and prices without mutating caller or copied allergen kinds", () => {
   const original = {
     ...input,
     description: { en: " " },
     kitchenName: " BAR ",
     unitPrice: "2.5",
-    allergens: { milk: { presence: "contains", source: "Recorded supplier text" } },
+    allergens: { gluten: { kinds: ["wheat"] } },
   };
-  expect(parse(original)).toEqual({
+  const parsed = parse(original);
+  expect(parsed).toEqual({
     ...input,
     description: null,
     kitchenName: "BAR",
     unitPrice: "2.50",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { gluten: { kinds: ["wheat"] } },
   });
-  expect(original.allergens.milk.source).toBe("Recorded supplier text");
+  parsed.allergens!.gluten!.kinds!.push("barley");
+  expect(original.allergens.gluten.kinds).toEqual(["wheat"]);
 });
+
 it.each([
   [null, "variants.0"],
   [{ id: "bad", name: "Small", unitPrice: "2.00", available: true, active: true }, "variants.0.id"],

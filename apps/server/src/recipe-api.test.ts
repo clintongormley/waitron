@@ -101,7 +101,7 @@ describe("mountRecipeApi", () => {
   it("creates and lists an ingredient under a manager session", async () => {
     const app = mountApp();
     const created = await send(app, "POST", "/management-api/ingredients", {
-      body: { name: "alioli", allergens: { eggs: { presence: "contains" } } },
+      body: { name: "alioli", allergens: { eggs: {} } },
       cookie: managerCookie,
     });
     expect(created.status).toBe(201);
@@ -114,7 +114,7 @@ describe("mountRecipeApi", () => {
     const app = mountApp();
     const ing = (await (
       await send(app, "POST", "/management-api/ingredients", {
-        body: { name: "bread", allergens: { gluten: { presence: "contains" } } },
+        body: { name: "bread", allergens: { gluten: { kinds: ["wheat" as const] } } },
         cookie: managerCookie,
       })
     ).json()) as { id: string };
@@ -221,7 +221,7 @@ describe("mountRecipeApi", () => {
     const app = mountApp();
     const id = await createIngredient(app, "leche");
     const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
-      body: { active: false, allergens: { milk: { presence: "contains" } } },
+      body: { active: false, allergens: { milk: {} } },
       cookie: managerCookie,
     });
     expect(patched.status).toBe(204);
@@ -230,7 +230,7 @@ describe("mountRecipeApi", () => {
     ).json()) as { id: string; active: boolean; allergens: unknown }[];
     const row = list.find((i) => i.id === id);
     expect(row?.active).toBe(false);
-    expect(row?.allergens).toEqual({ milk: { presence: "contains" } });
+    expect(row?.allergens).toEqual({ milk: {} });
   });
 
   it("creates an ingredient with a dietary origin and reads it back", async () => {

@@ -93,14 +93,14 @@ describe("ingredient-form", () => {
   it("emits create-ingredient with the name and the reviewed allergen map", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Harina de trigo");
-    await emitAllergens(el, { gluten: { presence: "contains", source: "trigo" } });
+    await emitAllergens(el, { gluten: { kinds: ["wheat" as const] } });
 
     const created = nextEvent<{ [k: string]: unknown }>(el, "create-ingredient");
     confirm(el);
     const body = (await created).detail;
     expect(body).toEqual({
       name: "Harina de trigo",
-      allergens: { gluten: { presence: "contains", source: "trigo" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
     });
   });
 
@@ -256,7 +256,7 @@ describe("ingredient-form", () => {
   const EDIT_INGREDIENT: Ingredient = {
     id: "ing-1",
     name: "Leche entera",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryOrigin: "dairy",
     active: false,
   };
@@ -308,7 +308,7 @@ describe("ingredient-form", () => {
     expect(detail.patch).toEqual({
       name: "Leche desnatada",
       active: false,
-      allergens: { milk: { presence: "contains" } },
+      allergens: { milk: {} },
       dietaryOrigin: "dairy",
     });
   });

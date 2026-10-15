@@ -31,7 +31,7 @@ const value: ProductEditorValue = {
   ordering: "public",
   primaryCategoryId: "drinks",
   color: null,
-  allergens: { milk: { presence: "may_contain" } },
+  allergens: { milk: {} },
   dietaryDeclarations: [],
   courseId: null,
   modifiers: [

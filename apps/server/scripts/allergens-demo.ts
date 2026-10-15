@@ -56,13 +56,12 @@ function reviewState(p: AvailableProduct): "pending" | "none" | "declared" {
   return Object.keys(p.allergens).length === 0 ? "none" : "declared";
 }
 
-/** `?` (unreviewed) and `-` (confirmed absent) are deliberately different glyphs. `*` flags a source. */
+/** `?` is unreviewed; `-` is reviewed and absent. `*` refers to the specific kinds in the lookup. */
 function cell(p: AvailableProduct, code: string): string {
   if (p.allergens === null) return "?";
-  const decl = p.allergens[code] as { presence: string; source?: string } | undefined;
+  const decl = p.allergens[code];
   if (decl === undefined) return "-";
-  if (decl.presence === "contains") return decl.source === undefined ? "YES" : "YES*";
-  return "may";
+  return decl.kinds === undefined ? "YES" : "YES*";
 }
 
 function pad(s: string, width: number): string {
@@ -98,10 +97,8 @@ function printMatrix(products: AvailableProduct[]): void {
   }
 
   console.log("");
-  console.log("Legend:  YES = contains   YES* = contains (specific source; see lookup)");
-  console.log(
-    "         may = may contain   -  = reviewed, allergen absent   ?  = NOT yet reviewed",
-  );
+  console.log("Legend:  YES = contains   YES* = contains (specific kinds; see lookup)");
+  console.log("         - = reviewed, allergen absent   ? = NOT yet reviewed");
   console.log("A `?` row is PENDING review — never treat it as allergen-free.");
 }
 
@@ -123,19 +120,11 @@ function printOperatorLookup(p: AvailableProduct): void {
   }
 
   console.log("  Review status: reviewed.");
-  const contains = entries.filter(([, d]) => d.presence === "contains");
-  const mayContain = entries.filter(([, d]) => d.presence === "may_contain");
-
   console.log("  Contains:");
-  if (contains.length === 0) console.log("    (none)");
-  for (const [code, d] of contains) {
-    console.log(`    - ${code}${d.source === undefined ? "" : ` (from ${d.source})`}`);
-  }
-
-  console.log("  May contain:");
-  if (mayContain.length === 0) console.log("    (none)");
-  for (const [code] of mayContain) {
-    console.log(`    - ${code}`);
+  for (const [code, declaration] of entries) {
+    console.log(
+      `    - ${code}${declaration.kinds === undefined ? "" : ` (${declaration.kinds.join(", ")})`}`,
+    );
   }
 }
 
@@ -161,8 +150,8 @@ async function main(): Promise<void> {
         unitPrice: "3.50",
         vatClass: "reduced",
         allergens: {
-          gluten: { presence: "contains", source: "wheat" },
-          eggs: { presence: "contains" },
+          gluten: { kinds: ["wheat"] },
+          eggs: {},
         },
       });
 
@@ -174,8 +163,8 @@ async function main(): Promise<void> {
         unitPrice: "4.20",
         vatClass: "reduced",
         allergens: {
-          milk: { presence: "contains" },
-          nuts: { presence: "may_contain" },
+          milk: {},
+          nuts: { kinds: ["almonds"] },
         },
       });
 
@@ -215,7 +204,7 @@ async function main(): Promise<void> {
     console.log("");
     console.log("(b) Operator lookup for a single dish");
     console.log("");
-    // The product whose `contains` carries a source, which the lookup spells out.
+    // The lookup spells out cereal kinds that the matrix marks with an asterisk.
     const lookup = products.find((p) => label(p) === "Empanada de trigo") ?? products[0];
     if (lookup !== undefined) printOperatorLookup(lookup);
   } finally {

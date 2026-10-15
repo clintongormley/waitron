@@ -613,8 +613,8 @@ describe("TillApi", () => {
           vatClass: "general",
           category: null,
           allergens: {
-            milk: { presence: "contains" },
-            nuts: { presence: "may_contain", source: "almendra" },
+            milk: {},
+            nuts: { kinds: ["almonds" as const] },
           },
           catalogueId: "cat-drinks",
           catalogueName: "Bebidas",
@@ -646,8 +646,8 @@ describe("TillApi", () => {
     expect(r.menus).toEqual(payload.menus);
     // The allergen map survives the round-trip typed — read a declaration off the returned product.
     expect(r.products[0]!.allergens).toEqual({
-      milk: { presence: "contains" },
-      nuts: { presence: "may_contain", source: "almendra" },
+      milk: {},
+      nuts: { kinds: ["almonds" as const] },
     });
     expect(r.products[1]!.allergens).toBeNull();
   });
@@ -4538,7 +4538,7 @@ describe("menuOfferToTillProduct", () => {
           pricingUnit: "weight",
           vatClass: "reduced",
           category: "Jarras",
-          allergens: { sulphites: { presence: "contains" } },
+          allergens: { sulphites: {} },
           diet: { vegan: "yes", vegetarian: "yes", contains: [] },
           dietDerivation: { origins: ["plant"], pending: false },
           dietOverride: { vegan: "yes" },
@@ -4561,7 +4561,7 @@ describe("menuOfferToTillProduct", () => {
         pricingUnit: "weight",
         vatClass: "reduced",
         category: "Jarras",
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
         dietDerivation: { origins: ["plant"], pending: false },
         dietOverride: { vegan: "yes" },

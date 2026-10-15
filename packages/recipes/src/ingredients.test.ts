@@ -19,7 +19,7 @@ describe("ingredient operations", () => {
     const result = await withTransaction(fx.db, async (tx) => {
       const created = await createIngredient(tx, {
         name: "alioli",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       return {
         created,
@@ -28,7 +28,7 @@ describe("ingredient operations", () => {
       };
     });
     expect(result.created.name).toBe("alioli");
-    expect(result.created.allergens).toEqual({ eggs: { presence: "contains" } });
+    expect(result.created.allergens).toEqual({ eggs: {} });
     expect(result.list).toHaveLength(1);
     expect(result.fetched?.id).toBe(result.created.id);
   });
@@ -54,17 +54,17 @@ describe("ingredient operations", () => {
   it("updates name and allergens", async () => {
     const after = await withTransaction(fx.db, async (tx) => {
       const c = await createIngredient(tx, { name: "alioli" });
-      await updateIngredient(tx, c.id, { allergens: { eggs: { presence: "contains" } } });
+      await updateIngredient(tx, c.id, { allergens: { eggs: {} } });
       return getIngredient(tx, c.id);
     });
-    expect(after?.allergens).toEqual({ eggs: { presence: "contains" } });
+    expect(after?.allergens).toEqual({ eggs: {} });
   });
 
   it("updates name and deactivates without touching allergens", async () => {
     const after = await withTransaction(fx.db, async (tx) => {
       const c = await createIngredient(tx, {
         name: "alioli",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       await updateIngredient(tx, c.id, { name: "salsa", active: false });
       return getIngredient(tx, c.id);
@@ -72,7 +72,7 @@ describe("ingredient operations", () => {
     expect(after?.name).toBe("salsa");
     expect(after?.active).toBe(false);
     // allergens omitted from the patch — left unchanged.
-    expect(after?.allergens).toEqual({ eggs: { presence: "contains" } });
+    expect(after?.allergens).toEqual({ eggs: {} });
   });
 
   it("creates an ingredient with a dietary origin and reads it back", async () => {
@@ -135,7 +135,7 @@ describe("ingredient operations", () => {
 
   it.each([
     ["a rename", { name: "renamed" }],
-    ["an allergens change", { allergens: { eggs: { presence: "contains" as const } } }],
+    ["an allergens change", { allergens: { eggs: {} } }],
   ])("refuses %s of an unknown ingredient", async (_label, patch) => {
     const ingredientId = "00000000-0000-0000-0000-000000000003";
     await expect(

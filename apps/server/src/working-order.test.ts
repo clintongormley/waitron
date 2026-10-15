@@ -1698,7 +1698,7 @@ describe("getHeldOrder", () => {
       set name = 'Renamed café',
           customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })},
           pricing_unit = 'weight', vat_class = 'reduced',
-          allergens = ${JSON.stringify({ milk: { presence: "contains" } })}
+          allergens = ${JSON.stringify({ milk: {} })}
       where id = ${cafeId}`);
     await withTransaction(db, async (tx) => {
       const menuId = (
@@ -1749,7 +1749,7 @@ describe("getHeldOrder", () => {
     // Spec §11.1: a saved order keeps its facts; only a new line reads the live product.
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     await db.execute(sql`
-      update products set allergens = ${JSON.stringify({ gluten: { presence: "contains" } })}
+      update products set allergens = ${JSON.stringify({ gluten: { kinds: ["wheat" as const] } })}
       where id = ${cafeId}`);
     await withTransaction(db, republishMenus);
     const id = randomUUID();
@@ -1761,15 +1761,15 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products
       set allergens = ${JSON.stringify({
-        milk: { presence: "contains" },
-        sulphites: { presence: "may_contain" },
+        milk: {},
+        sulphites: {},
       })}
       where id = ${cafeId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
 
     expect(order.lines.map((line) => line.product?.allergens)).toEqual([
-      { gluten: { presence: "contains" } },
+      { gluten: { kinds: ["wheat" as const] } },
     ]);
   });
 
@@ -4637,7 +4637,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       const gfBun = await addExtra(tx, catalogueId, burger.id, "Pan sin gluten");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -4663,11 +4663,11 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const item = queue
         .flatMap((g) => g.items)
         .find((i) => i.workingOrderLineId === parentLineId)!;
-      expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
+      expect(item.asServed.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       expect(item.asServed.pending).toBe(false);
 
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
-      expect(expoItem.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
+      expect(expoItem.asServed.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       expect(expoItem.asServed.pending).toBe(false);
     });
   });
@@ -4727,10 +4727,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         pricingUnit: "each",
         unitPrice: "7.00",
         vatClass: "general",
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       const nuts = await addExtra(tx, catalogueId, dish.id, "Con nueces", {
-        add: { nuts: { presence: "contains" } },
+        add: { nuts: { kinds: ["almonds" as const] } },
       });
       await placeOrderWith(tx, cfg, [
         {
@@ -4740,7 +4740,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         },
       ]);
       const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
-      expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
+      expect(item.asServed.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       expect(item.asServed.pending).toBe(false);
     });
   });
@@ -4809,7 +4809,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         dietaryDeclarations: ["vegan"],
       });
       const bacon = await addExtra(tx, catalogueId, dish.id, "Con bacon", {
-        add: { milk: { presence: "contains" } },
+        add: { milk: {} },
         suitableFor: ["halal"],
       });
       await placeOrderWith(tx, cfg, [
@@ -4829,7 +4829,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // The dish is NOT folded, but the extra carries its OWN allergens/suitability on the KDS wire so the
       // station display shows the extra's own list beside the dish's own.
       expect(stationItem.modifiers[0]).toMatchObject({
-        addAllergens: { milk: { presence: "contains" } },
+        addAllergens: { milk: {} },
         suitableFor: ["halal"],
       });
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
@@ -4839,7 +4839,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         contains: [],
       });
       expect(expoItem.modifiers[0]).toMatchObject({
-        addAllergens: { milk: { presence: "contains" } },
+        addAllergens: { milk: {} },
         suitableFor: ["halal"],
       });
     });
@@ -7199,7 +7199,7 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
-      allergens: { milk: { presence: "contains" } },
+      allergens: { milk: {} },
       dietaryDeclarations: ["vegan"],
     });
     const milk = await addOptionList(tx, product.id, "Milk", ["Oat"]);
@@ -7221,7 +7221,7 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
         labelKitchenName: "Oat kitchen",
       },
     ];
-    const own = { allergens: { milk: { presence: "contains" } }, pending: false };
+    const own = { allergens: { milk: {} }, pending: false };
     const ownDiet = { vegan: "yes", vegetarian: "yes", contains: [] };
     const queue = await listStationQueue(tx, station.id);
     expect(queue[0]!.items[0]!.asServed).toEqual(own);
@@ -8733,7 +8733,7 @@ async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: 
     pricingUnit: "each",
     unitPrice: "4.00",
     vatClass: "reduced",
-    allergens: { sulphites: { presence: "contains" } },
+    allergens: { sulphites: {} },
     dietaryDeclarations: ["vegan"],
   });
   await setProductCourse(tx, cfg, parent.id, primero.id);
@@ -8771,7 +8771,7 @@ async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: 
       vatClass: "general",
       categoryId: copas.id,
       courseId: segundo.id,
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
       dietaryDeclarations: ["halal"],
     })
     .where(eq(products.id, wine175!.id));
@@ -9178,12 +9178,12 @@ describe("a variant is sold as the product it is", () => {
     const itemFor = (productId: string) =>
       items.find((i) => i.workingOrderLineId === lines.find((l) => l.productId === productId)!.id)!;
     expect(itemFor(wine.wine125).asServed).toEqual({
-      allergens: { sulphites: { presence: "contains" } },
+      allergens: { sulphites: {} },
       pending: false,
     });
     expect(itemFor(wine.wine125).asServedDiet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
     expect(itemFor(wine.wine175).asServed).toEqual({
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
       pending: false,
     });
     expect(itemFor(wine.wine175).asServedDiet).toMatchObject({
@@ -9248,11 +9248,11 @@ describe("a variant is sold as the product it is", () => {
       modifiers.map(({ addAllergens, suitableFor }) => ({ addAllergens, suitableFor })),
     ).toEqual([
       {
-        addAllergens: { sulphites: { presence: "contains" } },
+        addAllergens: { sulphites: {} },
         suitableFor: catalogue.expandDietaryDeclarations(["vegan"]),
       },
       {
-        addAllergens: { gluten: { presence: "contains" } },
+        addAllergens: { gluten: { kinds: ["wheat" as const] } },
         suitableFor: catalogue.expandDietaryDeclarations(["halal"]),
       },
     ]);

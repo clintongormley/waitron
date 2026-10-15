@@ -7,11 +7,11 @@ afterEach(cleanupWidgets);
 
 it("shows only selected allergens without source authoring", async () => {
   const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-    declaration: { milk: { presence: "may_contain", source: "old recorded text" } },
+    declaration: { milk: {} },
   });
   expect(el.shadowRoot!.querySelectorAll("[data-test^=presence-]")).toHaveLength(1);
   expect(el.shadowRoot!.querySelector("[data-test^=source-]")).toBeNull();
-  expect(el.value).toEqual({ milk: { presence: "may_contain" } });
+  expect(el.value).toEqual({ milk: {} });
 });
 
 it("searches unselected allergens, adds once, and removes back to reviewed none", async () => {
@@ -32,7 +32,7 @@ it("searches unselected allergens, adds once, and removes back to reviewed none"
   expect(el.shadowRoot!.querySelectorAll("[data-test^=choose-]")).toHaveLength(1);
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-milk]")!.click();
   await el.updateComplete;
-  expect(el.value).toEqual({ milk: { presence: "contains" } });
+  expect(el.value).toEqual({ milk: {} });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=choose-milk]")).toBeNull();

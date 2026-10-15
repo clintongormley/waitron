@@ -16,10 +16,10 @@ describe("validateAllergens", () => {
     expect(validateAllergens({})).toEqual({});
   });
 
-  it("accepts a full valid declaration with an optional source", () => {
+  it("accepts a declaration with cereal and nut kinds", () => {
     const a = {
-      gluten: { presence: "contains", source: "wheat" },
-      nuts: { presence: "may_contain" },
+      gluten: { kinds: ["wheat"] },
+      nuts: { kinds: ["almonds"] },
     };
     expect(validateAllergens(a)).toEqual(a);
   });
@@ -33,12 +33,12 @@ describe("validateAllergens", () => {
     }
   });
 
-  it("rejects a bad presence value", () => {
+  it("rejects an unknown kind", () => {
     try {
-      validateAllergens({ gluten: { presence: "maybe" } });
+      validateAllergens({ gluten: { kinds: ["unknown"] } });
       throw new Error("should have thrown");
     } catch (e) {
-      expect((e as AppError).code).toBe("allergen.invalid_presence");
+      expect((e as AppError).code).toBe("allergen.invalid_kind");
     }
   });
 
@@ -46,22 +46,22 @@ describe("validateAllergens", () => {
     expect(() => validateAllergens("gluten")).toThrow(AppError);
   });
 
-  it("rejects a non-string source", () => {
+  it("rejects a non-string kind", () => {
     try {
-      validateAllergens({ gluten: { presence: "contains", source: 42 } });
+      validateAllergens({ gluten: { kinds: [42] } });
       throw new Error("should have thrown");
     } catch (e) {
-      expect((e as AppError).code).toBe("allergen.invalid_source");
+      expect((e as AppError).code).toBe("allergen.invalid_kind");
     }
   });
 
-  it("accepts a string source unchanged", () => {
-    const a = { gluten: { presence: "contains", source: "wheat" } };
+  it("accepts a kind list unchanged", () => {
+    const a = { gluten: { kinds: ["wheat"] } };
     expect(validateAllergens(a)).toEqual(a);
   });
 
-  it("accepts an entry with no source", () => {
-    const a = { gluten: { presence: "contains" } };
+  it("accepts an ordinary allergen without kinds", () => {
+    const a = { milk: {} };
     expect(validateAllergens(a)).toEqual(a);
   });
 });

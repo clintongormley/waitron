@@ -11,7 +11,7 @@ const INGREDIENTS: Ingredient[] = [
   {
     id: "i1",
     name: "Harina de trigo",
-    allergens: { gluten: { presence: "contains" } },
+    allergens: { gluten: { kinds: ["wheat" as const] } },
     dietaryOrigin: null,
     active: true,
   },
@@ -19,7 +19,7 @@ const INGREDIENTS: Ingredient[] = [
   {
     id: "i3",
     name: "Leche entera",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryOrigin: "dairy",
     active: true,
   },

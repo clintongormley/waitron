@@ -17,7 +17,7 @@ import type {
   DeleteImpactItem,
 } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
-import type { Database, SQL, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
@@ -184,9 +184,7 @@ export interface ZoneMenuOffer {
   /** The VAT class the live version froze. */
   readonly vatClass: string;
   readonly category: string | null;
-  readonly allergens: Readonly<
-    Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
-  > | null;
+  readonly allergens: Readonly<AllergenMap> | null;
   readonly diet: unknown;
   readonly dietDerivation: unknown;
   readonly dietOverride: unknown;

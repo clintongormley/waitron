@@ -53,7 +53,7 @@ const full: ProductEditorDraft = {
     { kind: "extras", id: "sauces" },
     { kind: "options", id: "cooked" },
   ],
-  allergens: { milk: { presence: "may_contain" } },
+  allergens: { milk: {} },
   dietaryDeclarations: ["vegan", "halal"],
   courseId: "starters",
 };
@@ -70,7 +70,7 @@ const variantPage: ProductEditorDraft = {
     unitId: "each",
     primaryCategoryId: "drinks",
     courseId: "starters",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryDeclarations: ["vegan"],
   },
   name: "Glass",

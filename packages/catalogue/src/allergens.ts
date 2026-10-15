@@ -19,11 +19,20 @@ export const ALLERGEN_CODES = [
 ] as const;
 
 export type AllergenCode = (typeof ALLERGEN_CODES)[number];
-export type AllergenPresence = "contains" | "may_contain";
+export const CEREAL_KINDS = ["wheat", "rye", "barley", "oats", "spelt", "kamut"] as const;
+export const NUT_KINDS = [
+  "almonds",
+  "hazelnuts",
+  "walnuts",
+  "cashews",
+  "pecans",
+  "brazil_nuts",
+  "pistachios",
+  "macadamia",
+] as const;
+export type Kind = (typeof CEREAL_KINDS)[number] | (typeof NUT_KINDS)[number];
 export interface AllergenDeclaration {
-  presence: AllergenPresence;
-  /** Optional free-text specific substance ("wheat", "almonds"), for Annex II specificity. */
-  source?: string;
+  kinds?: Kind[];
 }
 // A plain string-keyed record, NOT `Partial<Record<AllergenCode, …>>`: it must be byte-identical to
 // the db column's `$type` and `TillProduct.allergens` so allergens flow db↔catalogue↔till with no
@@ -33,7 +42,12 @@ export interface AllergenDeclaration {
 export type ProductAllergens = Record<string, AllergenDeclaration>;
 
 const CODES = new Set<string>(ALLERGEN_CODES);
-const PRESENCES = new Set<AllergenPresence>(["contains", "may_contain"]);
+
+export function allergenKinds(code: string): readonly string[] {
+  if (code === "gluten") return CEREAL_KINDS;
+  if (code === "nuts") return NUT_KINDS;
+  return [];
+}
 
 /** Validate a caller/JSON-supplied allergen map. Returns it narrowed; throws AppError on any fault. */
 export function validateAllergens(value: unknown): ProductAllergens {
@@ -42,13 +56,29 @@ export function validateAllergens(value: unknown): ProductAllergens {
   }
   for (const [code, decl] of Object.entries(value as Record<string, unknown>)) {
     if (!CODES.has(code)) throw new AppError("allergen.invalid_code", { code });
-    const presence = (decl as { presence?: unknown })?.presence;
-    if (typeof presence !== "string" || !PRESENCES.has(presence as AllergenPresence)) {
-      throw new AppError("allergen.invalid_presence", { code, presence: String(presence) });
+    if (typeof decl !== "object" || decl === null || Array.isArray(decl)) {
+      throw new AppError("allergen.invalid_kind", { code });
     }
-    const source = (decl as { source?: unknown })?.source;
-    if (source !== undefined && typeof source !== "string") {
-      throw new AppError("allergen.invalid_source", { code });
+    if (Object.keys(decl).some((key) => key !== "kinds")) {
+      throw new AppError("allergen.invalid_kind", { code });
+    }
+    const kinds = (decl as { kinds?: unknown }).kinds;
+    const allowed = allergenKinds(code);
+    if (
+      allowed.length > 0 &&
+      (kinds === undefined || (Array.isArray(kinds) && kinds.length === 0))
+    ) {
+      throw new AppError("allergen.kinds_required", { code });
+    }
+    if (
+      Object.hasOwn(decl, "kinds") &&
+      (!Array.isArray(kinds) ||
+        allowed.length === 0 ||
+        Array.from(kinds).some(
+          (kind: unknown) => typeof kind !== "string" || !allowed.includes(kind),
+        ))
+    ) {
+      throw new AppError("allergen.invalid_kind", { code });
     }
   }
   return value as ProductAllergens;
