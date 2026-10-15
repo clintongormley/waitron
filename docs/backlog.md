@@ -3522,7 +3522,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
   Part 2).** A caption too long to share its line with the amount prints, then the amount moves to
-  the next page when the page is full (`apps/server/src/invoice-page.ts:250-253`).
+  the next page when the page is full (`apps/server/src/invoice-page.ts:250-254`).
   [Detail](backlog/printers.md#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages)
 
 - **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
