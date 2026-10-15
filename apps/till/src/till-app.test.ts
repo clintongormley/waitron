@@ -15472,8 +15472,9 @@ describe("a failed list refresh after a successful write", () => {
 });
 
 describe("a counter pay, place or hold refused for a reason the operator can act on", () => {
-  // Each of these refusals names what to do (wait for the card, remove the sold-out item or the one
-  // sold only as an extra); the generic "try again" would send the operator round the same refusal.
+  // Each of these refusals names what to do (wait for the card, remove the sold-out item, the one
+  // sold only as an extra, or the extras on a dish not sold by the unit); the generic "try again"
+  // would send the operator round the same refusal.
   const actions = [
     ["confirm-payment", { method: "cash", amount: "5" }, "recordSale", undefined, "sale.error"],
     ["collect-card", {}, "pay", undefined, "sale.error"],
@@ -15484,6 +15485,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
     "order.payment_in_flight",
     "product.unavailable",
     "product.not_sold_separately",
+    "extras.unsupported_product",
   ]) {
     // A refused reader card says a card payment is in progress instead; its own case follows.
     const shown = actions.filter(

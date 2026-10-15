@@ -635,6 +635,7 @@ function partyChangeMessage(change: PartyChange): string {
 const LINE_REFUSALS = new Set([
   "product.unavailable",
   "product.not_sold_separately",
+  "extras.unsupported_product",
   "ticket.already_started",
   "ticket.already_fired",
   "ticket.not_sent",
@@ -670,6 +671,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",
+  "extras.unsupported_product",
   "sale.total_exceeds_simplified_limit",
   "department.operation_description_required",
   "sale.department_missing",
