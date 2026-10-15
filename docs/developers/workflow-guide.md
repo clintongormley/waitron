@@ -331,6 +331,12 @@ accepts today has one: the route takes its country from `getVenueSetupCountryPac
 fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). The setup wizard
 has no text of its own for this refusal yet.
 
+**2026-10-15 A679 candidate:** the refusal below describes an unclaimed request. The claimed
+wizard runs its separate preproduction readiness check before collecting email settings or a
+production allocation. Activation still requires both. Follow the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for that path; `apps/server/src/first-fiscal-setup.e2e.test.ts` checks readiness before email and
+refusal of production activation without email.
+
 **Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
 a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`
 (HTTP 409) before its fiscal test, and past the test at `sif.allocation_invalid` with `reason:

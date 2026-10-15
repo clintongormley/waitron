@@ -330,6 +330,11 @@ Keep the custodian's private signing key outside the venue; these settings name 
 The event file's statements remain your confirmation of the outside master, not independent proof
 that an old snapshot is current. Use the formats in the configured-source section above.
 
+**2026-10-15 A679 candidate:** use the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for browser setup. Its host freezes the identities and reconstructs `initialOperations`; the
+browser imports public files and supplies no replacement IDs or host paths. The request shape
+below describes the command and unclaimed-request path.
+
 For a setup with a supplied allocation, which Live needs on a box that is not a development box,
 add `initialOperations` to your setup request. Without it, Demo, Preparation and a development
 box's Live make a throwaway preproduction allocation
