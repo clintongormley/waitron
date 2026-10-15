@@ -1589,7 +1589,7 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
   invoice and the 58 mm invoice with a weighed line use the two-line rows, the A4 amounts sit on one
   right edge, «Domicilio fiscal:» appears only when the addresses differ.
 - [ ] **Step 3: Fiscal gate**, unedited, PASS.
-- [ ] **Step 4: Backlog.** In `docs/backlog/printers.md`, mark points 2, 3 and 4 done (point 4 by
+- [ ] **Step 4: Backlog.** In `docs/backlog/printers.md`, delete points 2, 3 and 4 (point 4 by
   the table; see Q4 for an extras portion's price). If no point is left open, delete the A663 entry from
   `docs/backlog/printers.md` and its line from `docs/backlog.md`. Add a short entry under the fiscal area
   (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
@@ -1726,7 +1726,7 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 - [ ] Extend `receipt-look.ts` with `guests: 4` on the one-rate sample and the full invoice; run;
   open the pictures; the line sits after the payment, before the footer, in its own ruled section.
 - [ ] Fiscal gate, unedited, PASS.
-- [ ] Backlog: point 6 done; A663 entry deleted from `docs/backlog/printers.md` and its line removed
+- [ ] Backlog: point 6 deleted; A663 entry deleted from `docs/backlog/printers.md` and its line removed
   from `docs/backlog.md` if no point is left open; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
   bills print no guests line — owner to confirm".
 - [ ] Commit, then `/finish-branch`.
