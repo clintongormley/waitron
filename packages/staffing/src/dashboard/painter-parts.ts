@@ -1,5 +1,6 @@
 import { css, html, nothing } from "lit";
 import { codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import { conjunctionList } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { MAX_HEADCOUNT } from "../block-model.js";
@@ -60,9 +61,7 @@ export const painterStyles = css`
 `;
 
 const listOf = (names: readonly string[]) =>
-  new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    type: "conjunction",
-  }).format(names);
+  conjunctionList(names, currentLocale().startsWith("es") ? "es-ES" : "en-GB");
 
 /** What a painter says beside Save when a re-read dropped edits: the areas, then the dates, that
  *  are gone. Empty when it dropped none. */
