@@ -579,6 +579,9 @@ export const en = {
   "translations.previous": "Previous",
   "translations.next": "Next",
   "translations.page": "Page {page} of {pages}",
+  "suggestions.suggested": "Suggested",
+  "suggestions.discard": "Discard suggestion",
+  "suggestions.discard_named": "Discard the suggestion for {name}",
   "suggestions.translate_all": "Translate all",
   "suggestions.about":
     "Waitron Cloud can suggest every missing customer-facing name, in every language. Nothing reaches diners until you save it.",
@@ -3542,6 +3545,9 @@ export const es: Record<StringKey, string> = {
   "translations.previous": "Anterior",
   "translations.next": "Siguiente",
   "translations.page": "Página {page} de {pages}",
+  "suggestions.suggested": "Sugerido",
+  "suggestions.discard": "Descartar sugerencia",
+  "suggestions.discard_named": "Descartar la sugerencia de {name}",
   "suggestions.translate_all": "Traducir todo",
   "suggestions.about":
     "Waitron Cloud puede sugerir todos los nombres para clientes que faltan, en todos los idiomas. Nada llega a los clientes hasta que lo guardas.",

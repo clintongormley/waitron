@@ -2254,6 +2254,9 @@ These open already savable:
   untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
   in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
   option, or by Edit on an option with no refusal, it opens quiet;
+- the translations dialog while Translate all suggestions are filled in: they are drafts nobody
+  typed, so Save opens ready, and closing asks nothing because the draft scope compares only a
+  person's own edits (`personalSubmission`, `apps/dashboard/src/widgets/content-translations-dialog.ts`);
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 

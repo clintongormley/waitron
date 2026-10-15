@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import type { DashboardApi, TranslationPage } from "../api/client.js";
+import type { ContentSuggestionView, DashboardApi, TranslationPage } from "../api/client.js";
 import { t, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -259,4 +259,94 @@ it("a product editor link asks about the draft before emitting navigation", asyn
   warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await vi.waitFor(() => expect(opened).toHaveBeenCalledOnce());
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+const soup = (id: string, itemId: string, text: string): ContentSuggestionView => ({
+  id,
+  kind: "product",
+  itemId,
+  language: "es",
+  text,
+  placeholder: false,
+  fix: null,
+  stale: false,
+});
+function suggestionApi(page: TranslationPage, suggestions: ContentSuggestionView[]) {
+  return {
+    getContentTranslationTargets: vi.fn(async (_language: string, query: { after?: string }) => {
+      const start = query.after === undefined ? 0 : Number(query.after);
+      return {
+        ...page,
+        rows: page.rows.slice(start, start + 50),
+        next: start + 50 < page.rows.length ? String(start + 50) : null,
+        total: page.rows.length,
+      };
+    }),
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions,
+      next: null,
+      service: "on" as const,
+      cloudOrigin: null,
+    })),
+    saveContentTranslations: vi.fn().mockResolvedValue({ saved: [] }),
+    discardContentSuggestion: vi.fn(),
+    startContentSuggestions: vi.fn(async () => ({ run: null })),
+  } as unknown as DashboardApi;
+}
+async function mountWith(api: DashboardApi) {
+  const { el: app } = await mountWidget<TranslationLeaveApp>("translation-leave-test-app", { api });
+  const form = app.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  return { app, form };
+}
+async function closeUnasked(
+  app: TranslationLeaveApp,
+  form: HTMLElementTagNameMap["dashboard-content-translations-dialog"],
+) {
+  const closed = dialogClosed(form.shadowRoot!.querySelector("wt-modal")!);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=close]")!.click();
+  await closed;
+  await vi.waitFor(() => expect(app.closed).toBe(1));
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+}
+it("closes with only untouched suggestions without asking or warning on unload", async () => {
+  const { app, form } = await mountWith(
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+  );
+  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+  await closeUnasked(app, form);
+});
+it("a person's edit of a suggested name still asks, and discarding the edit brings the suggestion back", async () => {
+  const { app, form } = await mountWith(
+    suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]),
+  );
+  await edit(form, "Sopa de la casa");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  const proceed = vi.fn();
+  const discarded = app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed });
+  const warning = await question(app);
+  warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  expect(await discarded).toBe("proceeded");
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  expect(field(form).value).toBe("CLIENT-es Sopa del día");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("saving untouched suggestions leaves nothing unsaved when the saved event arrives", async () => {
+  const api = suggestionApi(result, [soup("s1", "dish", "CLIENT-es Sopa del día")]);
+  const { app, form } = await mountWith(api);
+  const outcomes: boolean[] = [];
+  form.addEventListener("translations-saved", () => outcomes.push(app.leave.coordinator.isDirty()));
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await vi.waitFor(() => expect(outcomes).toEqual([false]));
+  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+    edits: [{ kind: "product", id: "dish", expected: "baseline", text: "CLIENT-es Sopa del día" }],
+  });
 });

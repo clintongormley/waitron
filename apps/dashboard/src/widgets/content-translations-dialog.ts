@@ -21,6 +21,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   ContentSuggestionRead,
+  ContentSuggestionView,
   DashboardApi,
   SuggestionRunView,
   TranslationBatch,
@@ -34,6 +35,7 @@ import { leftToBrowser } from "../navigation.js";
 import { sameValue } from "./product-editor-model.js";
 import {
   TranslationDrafts,
+  indexSuggestions,
   translationKey,
   type FieldFault,
   type ReviewChoice,
@@ -155,6 +157,7 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private refused: FieldFault[] = [];
   @state() private reviewing = false;
   @state() private reviewRows: TranslationTarget[] = [];
+  @state() private discarding: ReadonlySet<string> = new Set();
   @state() private suggestionRun: SuggestionRunView | null = null;
   @state() private service: SuggestionService | null = null;
   @state() private cloudOrigin: string | null = null;
@@ -166,6 +169,9 @@ export class ContentTranslationsDialog extends LitElement {
   /** Reads numbered at or below this began before the last press was answered. */
   #runReplacedAt = 0;
   #choices = new Map<string, ReviewChoice>();
+  /** The last suggestion list a scan read; a scan whose suggestion read fails keeps it, so a refused
+   * read (told in the bar) never stops the translations loading. */
+  #suggestions: ContentSuggestionView[] = [];
   #snapshotRevision = 0;
   #generation = 0;
   readonly #queries = new QueryController(
@@ -216,6 +222,8 @@ export class ContentTranslationsDialog extends LitElement {
       this.nothingMissing = false;
       this.reviewing = false;
       this.reviewRows = [];
+      this.discarding = new Set();
+      this.#suggestions = [];
       this.#choices.clear();
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -236,7 +244,7 @@ export class ContentTranslationsDialog extends LitElement {
     if (this.open && this.model && this.isConnected && !this.#scope) {
       const { coordinator, scope } = draftScopeFor<TranslationBatch>(this, {
         id: this,
-        current: () => this.model!.submission(),
+        current: () => this.model!.personalSubmission(),
         snapshot: (value) => structuredClone(value),
         equal: sameValue,
         restore: () => {
@@ -304,7 +312,32 @@ export class ContentTranslationsDialog extends LitElement {
       check(value);
       retained.push(...value.rows);
     }
-    return { generation, revision, rows, retained, config: first!.config };
+    const suggestions = await this.#readSuggestions(client, language);
+    return { generation, revision, rows, retained, suggestions, config: first!.config };
+  }
+  async #readSuggestions(
+    client: Pick<DashboardApi, "getContentSuggestions">,
+    language: string,
+  ): Promise<ContentSuggestionView[]> {
+    const suggestions: ContentSuggestionView[] = [];
+    let after: string | null = null;
+    const pages = new Set<string>();
+    try {
+      do {
+        const value: ContentSuggestionRead = await client.getContentSuggestions(
+          language,
+          after ?? undefined,
+        );
+        if (value.language !== language) throw new Error("suggestion scan changed");
+        suggestions.push(...value.suggestions);
+        after = value.next;
+        if (after !== null && pages.has(after)) throw new Error("suggestion scan repeated");
+        if (after !== null) pages.add(after);
+      } while (after !== null);
+    } catch {
+      return this.#suggestions;
+    }
+    return suggestions;
   }
   /** The first suggestion page only: the bar needs its run, service and Cloud origin. A failed read
    * is told in the bar, because the controller's error callback would put it over the translations. */
@@ -348,7 +381,10 @@ export class ContentTranslationsDialog extends LitElement {
         "translations",
         {
           key: JSON.stringify(["translation-scan", this.language, generation]),
-          dependencies: QUERY_DEPENDENCIES.getContentTranslationTargets.map((type) => ({ type })),
+          dependencies: [
+            ...QUERY_DEPENDENCIES.getContentTranslationTargets,
+            "content_suggestions",
+          ].map((type) => ({ type })),
           refreshMs: 60_000,
           read: () => this.#scan(generation),
         },
@@ -368,6 +404,7 @@ export class ContentTranslationsDialog extends LitElement {
               value.config.defaultLanguage,
               value.rows,
             );
+          this.#fill(value.suggestions);
           this.page = Math.min(this.page, Math.max(0, Math.ceil(this.#visible().length / 50) - 1));
           this.readError = "";
           this.loading = false;
@@ -402,6 +439,7 @@ export class ContentTranslationsDialog extends LitElement {
       if (!value || generation !== this.#generation || value.revision !== this.#snapshotRevision)
         return;
       this.model.snapshot(value.rows, value.retained, value.config.defaultLanguage);
+      this.#fill(value.suggestions);
       this.reviewRows = [
         ...value.rows,
         ...value.retained.filter(
@@ -443,7 +481,7 @@ export class ContentTranslationsDialog extends LitElement {
   readonly #folded = foldCache<TranslationTarget>();
   #visible(): TranslationTarget[] {
     const rows = this.model?.rows ?? [];
-    if (this.editedOnly) return rows.filter((row) => this.model!.isEdited(row));
+    if (this.editedOnly) return rows.filter((row) => this.#staged(row));
     return searchFor(this.search)(
       rows
         .filter(
@@ -453,6 +491,40 @@ export class ContentTranslationsDialog extends LitElement {
         )
         .map((row) => [row, this.#folded(row, label(row))] as const),
     );
+  }
+  #fill(suggestions: ContentSuggestionView[]): void {
+    this.#suggestions = suggestions;
+    this.model!.suggest(indexSuggestions(suggestions, this.language, this.model!.defaultLanguage));
+  }
+  #staged(row: TranslationTarget): boolean {
+    return this.model!.isEdited(row) || this.model!.isSuggested(row);
+  }
+  #saveState() {
+    return saveActionState(this.#scope, { savableAtOpen: (this.model?.suggestedCount ?? 0) > 0 });
+  }
+  async #discard(row: TranslationTarget): Promise<void> {
+    const found = this.model?.suggestionFor(row);
+    const key = translationKey(row);
+    if (!found || this.busy || this.discarding.has(key)) return;
+    const generation = this.#generation;
+    this.discarding = new Set([...this.discarding, key]);
+    this.actionError = "";
+    try {
+      for (const id of found.ids) {
+        try {
+          await this.api.discardContentSuggestion(id);
+        } catch (error) {
+          if (codeOf(error) !== "content.suggestion_not_found") throw error;
+        }
+      }
+      if (generation !== this.#generation) return;
+      this.model!.unsuggest(row);
+    } catch (error) {
+      if (generation === this.#generation) this.actionError = codeMessage(codeOf(error));
+    } finally {
+      if (generation === this.#generation)
+        this.discarding = new Set([...this.discarding].filter((held) => held !== key));
+    }
   }
   #showEdited(): void {
     this.editedOnly = !this.editedOnly;
@@ -493,13 +565,7 @@ export class ContentTranslationsDialog extends LitElement {
     input?.focus();
   }
   async #save(): Promise<void> {
-    if (
-      this.busy ||
-      this.loading ||
-      this.reviewing ||
-      !this.model ||
-      saveActionState(this.#scope).unchanged
-    )
+    if (this.busy || this.loading || this.reviewing || !this.model || this.#saveState().unchanged)
       return;
     this.attempted = true;
     this.refused = [];
@@ -510,6 +576,7 @@ export class ContentTranslationsDialog extends LitElement {
       return;
     }
     const submitted = this.model.submission();
+    const personal = this.model.personalSubmission();
     const generation = this.#generation;
     this.busy = true;
     try {
@@ -517,7 +584,7 @@ export class ContentTranslationsDialog extends LitElement {
       if (generation !== this.#generation || !this.open) return;
       this.#queries.release("translations");
       this.#queries.release("suggestion-run");
-      this.#scope?.commit(submitted);
+      this.#scope?.commit(personal);
       this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
       this.open = false;
       this.dispatchEvent(
@@ -527,6 +594,8 @@ export class ContentTranslationsDialog extends LitElement {
       if (generation !== this.#generation || !this.open) return;
       const params = (error as { params?: Record<string, unknown> }).params ?? {};
       const row = this.model.rows.find((row) => row.kind === params.kind && row.id === params.id);
+      if (codeOf(error) === "content.translation_stale" && row && this.model.isSuggested(row))
+        this.model.markStale(row);
       const field = params.field;
       const expectedLanguage = field === "defaultText" ? this.model.defaultLanguage : this.language;
       const message = codeMessage(
@@ -611,6 +680,7 @@ export class ContentTranslationsDialog extends LitElement {
               <span part="translation-meta"
                 >${t(row.kind === "included_menu" ? "translations.scope_include" : row.kind === "menu" || row.kind === "section" ? "translations.scope_menu" : "translations.scope_shared")}</span
               >
+              ${this.model!.isSuggested(row) ? html`<span part="translation-meta" data-test=${`suggested-${row.kind}-${row.id}`}>${t("suggestions.suggested")}</span>` : nothing}
               ${this.model!.changed(row) ? html`<span part="translation-meta" data-test=${`changed-${row.kind}-${row.id}`}>${t("translations.changed")}</span>` : nothing}
               ${row.eligible && this.model!.current(row)?.eligible !== false ? nothing : html`<span part="translation-meta" data-test=${`unavailable-${row.kind}-${row.id}`}>${t("translations.unavailable")}</span>`}
             </div>
@@ -618,6 +688,7 @@ export class ContentTranslationsDialog extends LitElement {
               ${this.#input(row, "text")}
               ${this.reviewRows.length && this.model!.changed(row) ? this.#reviewCell(row) : nothing}
               ${this.model!.needsDefault(row) && (this.model!.value(row, "text").trim() || this.model!.value(row, "defaultText").trim()) ? html`<span part="translation-meta">${fill("translations.default_needed", { language: this.#name(this.model!.defaultLanguage) })}</span>${this.#input(row, "defaultText")}` : nothing}
+              ${this.model!.isSuggested(row) ? html`<wt-button data-test=${`discard-${row.kind}-${row.id}`} variant="secondary" aria-label=${fill("suggestions.discard_named", { name: label(row) })} ?disabled=${this.busy || this.discarding.has(translationKey(row))} @click=${() => void this.#discard(row)}>${t("suggestions.discard")}</wt-button>` : nothing}
             </div>
           </div>`,
       },
@@ -679,7 +750,7 @@ export class ContentTranslationsDialog extends LitElement {
       placeholder=${row.name}
       .value=${this.model!.value(row, field)}
       .error=${message}
-      ?disabled=${this.busy || !row.eligible || (this.model!.count >= 100 && !this.model!.isEdited(row))}
+      ?disabled=${this.busy || !row.eligible || (this.model!.count >= 100 && !this.#staged(row))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(row, field, event)}
     ></wt-input>`;
   }
@@ -688,9 +759,8 @@ export class ContentTranslationsDialog extends LitElement {
     const shown = visible.slice(this.page * 50, (this.page + 1) * 50);
     const count = this.model?.count ?? 0;
     const hidden =
-      this.model?.rows.filter((row) => this.model!.isEdited(row) && !shown.includes(row)).length ??
-      0;
-    const action = saveActionState(this.#scope);
+      this.model?.rows.filter((row) => this.#staged(row) && !shown.includes(row)).length ?? 0;
+    const action = this.#saveState();
     const faults = this.#faults();
     return html`<wt-modal
       data-test="translations-dialog"
