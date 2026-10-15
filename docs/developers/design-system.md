@@ -2341,7 +2341,9 @@ inside the field only while it contains an action.
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
 it stays on the bottom left. The floor plan editor's header is the owner's exception: Undo, Redo,
-then Cancel beside Save (A502). A secondary action that belongs beside the primary action goes in the
+then Cancel beside Save (A502). The Routes cell editor is the owner's other exception (A726,
+2026-10-15): Clear setting keeps its danger look and sits in the `cancel` slot after Cancel, the two
+in one wrapping flex group, so Save stands alone on the right. A secondary action that belongs beside the primary action goes in the
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, no wider than the form width)
@@ -3678,7 +3680,10 @@ own name, indented under its parent category. The parent path is not drawn, but 
 name and a refusal at the bottom of the grid still read it ("Drinks › Cocktails › Mojito, Terrace:
 Terrace bar, inherited"). A closed category lists only the children that hold a setting of their own
 or have one further down, so outside a search a row with its own setting always shows, with every category above it
-as a row; opening a category lists all its children (`visibleRoutingRows`, `routing-grid-model.ts`).
+as a row; opening a category lists all its children, and closing one closes the arrows of every
+category inside it, so a product that only inherits is hidden at every depth below it
+(`visibleRoutingRows` and `collapseCategory`, `routing-grid-model.ts`). A refresh that moves an open
+category under a closed one closes it the same way (`pruneExpanded`).
 Below 40rem the row-label column is at most 96 px and table cells pad by `--wt-space-1`, so a 390 px
 window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
 cases in `routing-grid.test.ts`).
@@ -3721,9 +3726,8 @@ flags are drawn, while refusals are, and so is a disabled station's warning, for
 with one addition: a cell those rules leave blank is named, muted and in italics, when its station
 for the period differs from its row's Every zone's saved station for the period.
 
-Search ("Search categories and products") fills the space beside one Expand/Collapse button,
-which reads Collapse all while every category is open and Expand all otherwise. Period stays
-after Search; on a narrow screen it occupies the next row so Search and the button fit together.
+Search ("Search categories and products") fills the toolbar's row; there is no Expand/Collapse
+button (A726). Period follows Search, and on a narrow screen takes its own row below it.
 The search lists All categories, each
 category or product whose own name matches, and every category above a match. Matching ignores case
 and accents and follows `textSearch` (`packages/shared/src/text-search.ts`): every word must match,
@@ -3731,9 +3735,10 @@ as a whole word except the one still being typed, which may be part of one. Each
 marked with `--wt-color-highlight`. All categories, and each row shown only because a match is below
 it, have a muted label, except the No category heading, where muted text on its sunken fill measures 4.34:1 in the light
 theme. Every category above a match starts open, and a matched category with no match under it
-starts closed; an open category above a match lists only the way to its matches. After Collapse all a count reads "1 match",
+starts closed; an open category above a match lists only the way to its matches. Under the toolbar a count reads "1 match",
 "{count} matches" or "No matches", counting matches inside closed categories too. While searching,
-opening and closing categories, Expand all and Collapse all change only the search's rows; each new
+opening and closing categories change only the search's rows, and closing one closes the arrows
+inside it; each new
 query starts again from its own opening, and clearing the field brings back the tree as it was open
 (the "search" cases in `routing-grid.test.ts`).
 
@@ -3751,7 +3756,8 @@ to Bar (Lunch: Kitchen)."), then one sentence per zone, periods, from and to wit
 ("Food, Terrace: 14 products move from Kitchen to Bar during Lunch.") — a variant counted under its
 product, an extra once per sentence — and the full list under a closed "Show products", where a
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
-moves nothing, saves at once. Edit, in a
+moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
+Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
 late-flag minutes (Warm after, Overdue after and Forgotten after), "Show the rest of the order" and MOVED
 slips — As the venue (naming the venue's current choice), Print or Don't print; choosing As the venue
