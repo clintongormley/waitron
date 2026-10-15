@@ -1,3 +1,5 @@
+// The registry of `printer.not_found`, which this file throws.
+import "@waitron/printing";
 import "./errors.js";
 import { deviceProfilePrinters, pagePrinters, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";

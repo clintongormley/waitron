@@ -43,8 +43,9 @@ export const devices = table(
       onDelete: "restrict",
     }),
     /* v8 ignore stop */
-    // The invoice choice names a receipt printer or a page printer; its one writer sets one column
-    // and clears the other, with no CHECK because a CHECK would make drizzle-kit rebuild `devices`.
+    // The invoice choice names a receipt printer or a page printer. `selectDevicePrinter`, the one
+    // path that stores a choice, sets one column and clears the other; there is no CHECK because a
+    // CHECK would make drizzle-kit rebuild `devices`.
     /* v8 ignore start */
     invoicePrinterId: id("invoice_printer_id").references(() => printers.id, {
       onDelete: "restrict",

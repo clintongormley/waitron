@@ -448,7 +448,7 @@ describe("the Demo printer", () => {
     expect((await profileLists(otherId)).invoicePrinterDefaultId).toBe(demo!.printerId);
   });
 
-  it("leaves the invoice list and its default in Live mode, keeping a page printer listed there", async () => {
+  it("takes itself off the invoice list and default in Live mode, keeping a page printer listed", async () => {
     const { locationId, profileId } = await venue();
     const office = await pagePrinter(locationId, "Office");
     await withTransaction(suite.db, (tx) =>

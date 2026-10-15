@@ -121,8 +121,8 @@ async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<vo
 
 /**
  * Lists the printer last on every live profile's receipt, payment slip and invoice lists and makes
- * it the default of each that has none; while the printer has a cash drawer it does the same on the cash
- * drawer list, so devices on Use default print and open the drawer on it. Gives it to every
+ * it the default of each that has none; while the printer has a cash drawer it does the same on the
+ * cash drawer list, so devices on Use default print and open the drawer on it. Gives it to every
  * preparation station there. A device's own choice, a profile's own default and a listing the
  * profile already has stay. Safe to repeat.
  */

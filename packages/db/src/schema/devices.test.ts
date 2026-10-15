@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { restrictRefused } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
@@ -195,6 +196,21 @@ describe("devices schema (columns, FKs, unique)", () => {
       expect(row!.invoicePagePrinterId).toBe(PAGE_PRINTER);
       const e = await captureError(() => setChoice(id, { invoicePagePrinterId: RECEIPT_PRINTER }));
       expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    });
+
+    it("refuses deleting a printer either invoice column names, as a restrict", async () => {
+      const receiptChoice = await seedDevice("Till 1");
+      const pageChoice = await seedDevice("Till 2");
+      await setChoice(receiptChoice, { invoicePrinterId: RECEIPT_PRINTER });
+      await setChoice(pageChoice, { invoicePagePrinterId: PAGE_PRINTER });
+      const receipt = await captureError(() =>
+        inTx((tx) => tx.delete(printers).where(eq(printers.id, RECEIPT_PRINTER))),
+      );
+      expect(restrictRefused(receipt)).toBe(true);
+      const page = await captureError(() =>
+        inTx((tx) => tx.delete(pagePrinters).where(eq(pagePrinters.id, PAGE_PRINTER))),
+      );
+      expect(restrictRefused(page)).toBe(true);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { restrictRefused } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal, isUniqueViolation } from "../unique-violation.js";
@@ -153,6 +154,23 @@ describe("device_profile_printers defaults", () => {
       ),
     );
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("refuses deleting a page printer an invoice row names, as a restrict", async () => {
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: profile,
+        pagePrinterId: pagePrinter,
+        role: "invoice",
+        position: 0,
+      }),
+    );
+    const e = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx.delete(pagePrinters).where(eq(pagePrinters.id, pagePrinter)),
+      ),
+    );
+    expect(restrictRefused(e)).toBe(true);
   });
 
   const targetRefusal = async (row: {
