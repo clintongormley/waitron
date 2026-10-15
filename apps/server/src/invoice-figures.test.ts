@@ -171,6 +171,35 @@ describe("groupDiscounts", () => {
     ]);
   });
 
+  it("reads rates 10 and 10.00 as one rate", () => {
+    const dish = filed({ gross: "9.00", listGross: "10.00", net: net("8.18", "8.18", "10") });
+    const extra = filed({
+      parentLineNo: 1,
+      gross: "1.35",
+      listGross: "1.50",
+      net: net("1.23", "1.23", "10.00"),
+    });
+    expect(
+      groupDiscounts({ dish, options: [extra] }, [], false).map((d) => [d.rate, d.amount]),
+    ).toEqual([["10", "1.04"]]);
+  });
+
+  it("does not call a row an invitation when a discounted extra beside the comped dish is still charged", () => {
+    const wine = filed({
+      gross: "0.00",
+      listGross: "30.00",
+      net: net("0.00", "0.00", "21.00"),
+      adjustments: [{ kind: "comp", amount: "30.00" }],
+    });
+    expect(
+      groupDiscounts({ dish: wine, options: [olives] }, [], true).map((d) => [
+        d.rate,
+        d.amount,
+        d.comp,
+      ]),
+    ).toEqual([["21.00", "24.91", false]]);
+  });
+
   it("gives each rate in a group its own row, and none to a group nothing lowered", () => {
     const reducedExtra = {
       ...olives,

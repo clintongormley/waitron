@@ -25,8 +25,8 @@ describe("tableLines", () => {
   });
 
   it("prints no header line when the table has none", () => {
-    const { header: _, ...headless } = table(false);
-    expect(tableLines(headless, 42).map((l) => l.header)).toEqual([false, false]);
+    const { rows, withRate } = table(false);
+    expect(tableLines({ rows, withRate }, 42).map((l) => l.header)).toEqual([false, false]);
   });
 
   it("adds a rate column with several rates", () => {
@@ -90,6 +90,53 @@ describe("tableLines", () => {
     expect(narrow).toContain("0.35 kg Jamón ibérico");
     expect(narrow.some((line) => line.endsWith("109,09   38,18"))).toBe(true);
     for (const line of narrow) expect(line.length).toBeLessThanOrEqual(30);
+  });
+
+  describe("the cut-off between one and two lines a row", () => {
+    // Units 3 ("Uds"), price 6 ("Precio"), amount 7 ("Importe"): the item column is columns − 19.
+    const short: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [{ units: "1", item: "Caña", price: "13,64", amount: "13,64" }],
+    };
+
+    it("keeps one line a row when the item column is exactly 10", () => {
+      expect(tableLines(short, 29).map((l) => l.text)).toEqual([
+        "Uds Concepto   Precio Importe",
+        "  1 Caña        13,64   13,64",
+      ]);
+    });
+
+    it("takes two lines a row when the item column would be 9", () => {
+      expect(tableLines(short, 28).map((l) => l.text)).toEqual([
+        "Uds Concepto",
+        "              Precio Importe",
+        "  1 Caña",
+        "               13,64   13,64",
+      ]);
+    });
+  });
+
+  it("keeps an indented row's indent on its wrapped lines", () => {
+    const captioned: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [
+        {
+          units: "",
+          item: "Descuento por cliente habitual",
+          itemIndent: 2,
+          price: "",
+          amount: "-1,36",
+        },
+      ],
+    };
+    // The item column starts at 4 and is 11 wide on 30 columns.
+    expect(
+      tableLines(captioned, 30)
+        .map((l) => l.text)
+        .slice(1),
+    ).toEqual(["      Descuento          -1,36", "      por", "      cliente", "      habitual"]);
   });
 
   it("falls back to two lines a row when the item column would be under 10 on 58 mm", () => {

@@ -11,7 +11,7 @@ export interface ReceiptTableRow {
 }
 
 export interface ReceiptTable {
-  /** Absent on a table continuing after a line printed outside it (Task 2.3b). */
+  /** Absent on a table continuing after a line printed outside it. */
   header?: ReceiptTableRow;
   rows: readonly ReceiptTableRow[];
   withRate: boolean;
