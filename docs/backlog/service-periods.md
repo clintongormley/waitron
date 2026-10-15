@@ -252,15 +252,6 @@ Lands after A720, whose toolbar holds the button.
 `opening-hours-year.ts`, `opening-hours-month.ts`, `season-chips.ts`; for point 7,
 `packages/staffing/src/dashboard/staffing-month.ts`.
 
-1. **One toolbar row, no tab row.** ‹ year (or month) › and a Year / Month / Week switch replace the
-   tab bar that holds a single "Year" tab (Week is A722). The Month view's "‹ 2026" row goes: Year
-   in the switch goes back. Month names in the Year view look like links ("October ›") — today a
-   month opens only by clicking a name drawn as a plain heading.
-2. **Less on top.** Remove the colour key; the "2026: official national and regional holidays are
-   included." and "Town holidays…" lines (keep "Public holidays for {year} are not available
-   yet"); every hint line; "+ Special day"; and, in the Month view, the "Rows:" line and the seasons
-   row. The Year view keeps its season chips — they open a season's week, with no ✎ — and gains a
-   "Seasons…" button (A721). In the Month view, "Show" sits beside the switch.
 3. **A day box instead of the panel that makes the page jump.** Today clicking a day in the Year
    view adds a panel under that month, which grows it and pushes the next row of months down by a
    different amount per month. Instead, clicking a day in the Year or Month view opens a floating

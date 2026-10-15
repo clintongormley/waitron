@@ -3782,14 +3782,16 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`, with a Year tab; the month
-(`/view/month`) shows under the Year tab. The page opens on Year when its address names no view and
+Department opening hours belong to `/manage/opening-hours`. A Year / Month switch after the
+Year's and the Month's ‹ › picks between the two (`opening-hours-screen.ts`): Month opens the
+month holding the venue's today when the shown year holds it, else that year's January, and Year
+opens the shown month's year. The page opens on Year when its address names no view and
 no department, zone, season or `?station=`, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
 year; `/department/<id>` selects the department.
 The page is titled Calendar (Calendario). When another module adds a view the person may read
 (`calendarViews`, conventions-ui.md), a switch beside the title offers Opening hours, then each
-view in `order`; with none, no switch is drawn. A chosen view replaces the Year tab at
+view in `order`; with none, no switch is drawn. A chosen view replaces the Year or the Month at
 `/view/<id>`, followed by that view's own `<key>/<value>` pairs, and choosing a view from Opening
 hours' month carries that month into its address. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
@@ -3843,7 +3845,7 @@ the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00,
 Opening hours' Year.
 
 - **Year.** Pick a date: a plain date offers Make this a special day…, and a special-day date
-  Edit and Delete; + Special day opens the special-day painter on an empty new day. ‹ › step years, a month's name opens that
+  Edit and Delete. ‹ › step years, a month's name, drawn as a link ending in ›, opens that
   month (below), and the season chips rename, move, add and delete seasons
   (`season-chips.ts`), and a chip's name opens the season painter. Make opens the special-day painter (Forms above,
   hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is
@@ -3859,15 +3861,15 @@ Opening hours' Year.
   and its public holiday's name, the holiday's in red and given once when the two are the same,
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone with the zone's closed time drawn as a gap. A row with no hours
-  that day says "<name> closed". A date closed all day adds Closed to its first name, or reads Closed with none, draws its names in the closed date's colour, and at phone width shows its names alone. ‹ and the year go back to the Year, ‹ › step months, and the month has the
-  department picker, + Special day, the season chips and a Rows legend. Arrow keys move between
+  that day says "<name> closed". A date closed all day adds Closed to its first name, or reads Closed with none, draws its names in the closed date's colour, and at phone width shows its names alone. One row above the dates holds ‹, the month's name, ›, the
+  Year / Month switch and the Show department picker; ‹ › step months. Arrow keys move between
   dates, with one Tab stop. A special-day date opens the special-day painter on its day, and a
   public holiday with no special day opens it on a new day pre-filled with the holiday. An ordinary date opens the ordinary-date dialog (`ordinary-date-dialog.ts`): it
   says which season's week the date follows and offers Edit the <season> week (the season
   painter on that season), Make this a special day… (the special-day painter on a new day holding
   the date) and a special-day picker with Add, which opens the painter on the chosen day with the
-  date added as an unsaved change. A venue viewer gets the month read-only: its dates are not buttons
-  and + Special day is not offered.
+  date added as an unsaved change. A venue viewer gets the month read-only: its dates are not
+  buttons.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
   order, each written as its name and first and last day. A chip's name opens the season
   painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
@@ -3883,9 +3885,10 @@ Opening hours' Year.
   last for the first season), and names the departments whose hours in the season are lost. The
   page re-reads its hours after every season change.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
-  town's holidays as special days. There is no separate Local holidays editor. The Year reports
-  the shown year's official coverage and, when the year has a coverage entry, says Town holidays
-  are not in the official lists — add them as special days. Choose a holiday area here when the
+  town's holidays as special days. There is no separate Local holidays editor. Above its months
+  the Year says only what is wrong with the shown year's official holidays: not available yet,
+  the province not recognised, none for the country, a holiday area still to choose, or coverage
+  that could not be read. A complete list adds no sentence. Choose a holiday area here when the
   official list needs it. `opening-hours-year.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads the country calendar.
 
