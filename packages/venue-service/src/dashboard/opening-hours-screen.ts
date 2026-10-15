@@ -599,19 +599,17 @@ export class OpeningHoursScreen extends LitElement {
     this.boxMonth = undefined;
     this.boxMonthError = "";
     if (!month) return;
-    const current = () => this.watchedBoxMonth === month;
     this.boxMonthDetach = this.api.watchMonth(
       month,
       (model) => {
-        if (!current()) return;
         this.boxMonth = model;
         this.boxMonthError = "";
       },
       () => {
-        if (current()) this.boxMonthError = t("opening.load_error");
+        this.boxMonthError = t("opening.load_error");
       },
       () => {
-        if (current()) this.boxMonthError = "";
+        this.boxMonthError = "";
       },
     );
   }
@@ -930,12 +928,6 @@ export class OpeningHoursScreen extends LitElement {
   }
   private openDayBox(event: CustomEvent<CalendarDayOpen>) {
     event.stopPropagation();
-    if (
-      !this.isConnected ||
-      event.currentTarget !==
-        this.shadowRoot?.querySelector("opening-hours-month, opening-hours-year")
-    )
-      return;
     this.afterDayBox = undefined;
     this.dayBox = event.detail;
     this.lastDay = event.detail.date;
@@ -978,7 +970,6 @@ export class OpeningHoursScreen extends LitElement {
     const year = this.view === "year" ? this.yearModel : undefined;
     const read = year ? this.boxMonth : this.monthModel;
     const day = read?.days.find((row) => row.date === date);
-    const yearHolidays = year?.days.flatMap((row) => row.holidays) ?? [];
     if (day && read) {
       const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
         ? this.departmentId
@@ -990,12 +981,7 @@ export class OpeningHoursScreen extends LitElement {
         message: "",
         specialDayId: shown.specialDayId,
         season: read.seasons.find(({ id }) => id === shown.seasonId),
-        holidays: year
-          ? [
-              ...yearHolidays.filter((holiday) => !holiday.date.startsWith(read.month)),
-              ...monthHolidays,
-            ]
-          : monthHolidays,
+        holidays: monthHolidays,
       };
     }
     if (!year || year.year !== Number(date.slice(0, 4))) return undefined;
@@ -1005,7 +991,7 @@ export class OpeningHoursScreen extends LitElement {
       message: this.boxMonthError || t("day.loading"),
       specialDayId: yearDay?.specialDay?.id ?? null,
       season: year.seasons.find(({ id }) => id === yearDay?.seasonId),
-      holidays: yearHolidays,
+      holidays: year.days.flatMap((row) => row.holidays),
     };
   }
   private dayBoxTemplate() {
@@ -1014,7 +1000,6 @@ export class OpeningHoursScreen extends LitElement {
     if (!open || !content) return nothing;
     const { shown, specialDayId, season, holidays } = content;
     const act = (run: () => unknown) => () => {
-      if (this.dayBox !== open) return;
       this.afterDayBox = run;
       this.shadowRoot?.querySelector("calendar-day-box")?.hide();
     };

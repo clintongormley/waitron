@@ -114,7 +114,7 @@ export class CalendarDayBox extends LitElement {
   }
 
   get shown(): boolean {
-    return this.popup?.matches(":popover-open") ?? false;
+    return this.popup.matches(":popover-open");
   }
 
   hide(): void {
