@@ -94,6 +94,10 @@ const en = {
   "staffing.painter.loading": "Loading the staffing…",
   "staffing.painter.load_error": "Could not load the staffing: {reason}",
   "staffing.painter.refused_on": "{area}, {day}: {message}",
+  "staffing.painter.refresh_error": "Saved; could not refresh: {reason}",
+  "staffing.painter.removed_one": "{names} was removed; its changes were dropped.",
+  "staffing.painter.removed_many": "{names} were removed; their changes were dropped.",
+  "staffing.painter.no_areas": "This venue has no departments or prep stations yet.",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -181,6 +185,11 @@ const es: Record<keyof typeof en, string> = {
   "staffing.painter.loading": "Cargando el personal…",
   "staffing.painter.load_error": "No se pudo cargar el personal: {reason}",
   "staffing.painter.refused_on": "{area}, {day}: {message}",
+  "staffing.painter.refresh_error": "Guardado; no se pudo actualizar: {reason}",
+  "staffing.painter.removed_one": "{names} se eliminó; sus cambios se descartaron.",
+  "staffing.painter.removed_many": "{names} se eliminaron; sus cambios se descartaron.",
+  "staffing.painter.no_areas":
+    "Este local aún no tiene departamentos ni estaciones de preparación.",
 };
 
 export const STAFFING_STRINGS = { en, es };

@@ -427,7 +427,7 @@ it("keeps its draft when taken off the page and put back, reading only the staff
   expect(saveButton(painter).disabled).toBe(false);
 });
 
-it("keeps the saved draft quietly when the read after a save fails", async () => {
+it("keeps the saved draft when the read after a save fails", async () => {
   let reads = 0;
   const { painter } = await mount({
     read: (seasonId) =>
@@ -502,15 +502,6 @@ it("a cleared day is an empty day", async () => {
   expect(grid(painter).days.get("2")).toEqual([]);
 });
 
-it("draws an empty week for a venue with no departments or prep stations", async () => {
-  const { painter } = await mount({
-    read: async () => ({ ...seasonStaffing(), areas: [], guides: {} }),
-  });
-  expect(picker(painter).options).toEqual([]);
-  expect(grid(painter).days.size).toBe(0);
-  expect([...grid(painter).guides.values()].flat()).toEqual([]);
-});
-
 it("a saved staff role the chips already show is chosen, not added again", async () => {
   const { painter } = await mount();
   byTest(painter, "new-staff-role")!.click();
@@ -536,4 +527,190 @@ it("speaks Spanish", async () => {
   expect(grid(painter).columns[0]!.label).toBe("lunes");
   expect(byTest(painter, "new-staff-role")!.textContent!.trim()).toBe("+ Nuevo rol de personal");
   expect(picker(painter).options[2]!.group).toBe("Estaciones de preparación");
+});
+
+it("keeps its draft dirty when put back on the page in a later task", async () => {
+  const { painter, request } = await mount();
+  await paint(painter, "3", [dinner]);
+  const parent = painter.parentNode!;
+  painter.remove();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  parent.append(painter);
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([dinner]);
+  expect(frame(painter).dirty).toBe(true);
+  expect(saveButton(painter).disabled).toBe(false);
+  expect(request.mock.calls.filter(([path]) => path.endsWith("/staff-roles"))).toHaveLength(2);
+});
+
+it("takes only the latest re-read after two saves, whatever order they answer in", async () => {
+  const answers: ((read: SeasonStaffing) => void)[] = [];
+  let reads = 0;
+  const { painter } = await mount({
+    read: (seasonId) =>
+      ++reads === 1
+        ? Promise.resolve(seasonStaffing(seasonId))
+        : new Promise((resolve) => answers.push(resolve)),
+  });
+  await paint(painter, "3", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  await paint(painter, "3", [sous]);
+  saveButton(painter).click();
+  await settle(painter);
+  expect(answers).toHaveLength(2);
+  const older = seasonStaffing();
+  older.areas[0]!.weekdays = { 2: [headChef], 3: [dinner] };
+  answers[0]!(older);
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([sous]);
+  const newer = seasonStaffing();
+  newer.areas[0]!.weekdays = { 2: [headChef], 3: [sous] };
+  answers[1]!(newer);
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([sous]);
+  expect(saveButton(painter).disabled).toBe(true);
+});
+
+it("says the save went through but the staffing could not be read again, until a read succeeds", async () => {
+  let reads = 0;
+  const { painter } = await mount({
+    read: (seasonId) =>
+      ++reads === 2
+        ? Promise.reject({ code: "connection.failed" })
+        : Promise.resolve(seasonStaffing(seasonId)),
+  });
+  await paint(painter, "3", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  expect(frame(painter).refusal).toMatch(/^Saved; could not refresh: /);
+  await paint(painter, "4", [dinner]);
+  expect(frame(painter).refusal).toMatch(/^Saved; could not refresh: /);
+  saveButton(painter).click();
+  await settle(painter);
+  expect(reads).toBe(3);
+  expect(frame(painter).refusal).toBe("");
+});
+
+it.each(["fails", "succeeds"])(
+  "a re-read that %s after a later save was refused leaves the refusal shown",
+  async (outcome) => {
+    let answer: (read: SeasonStaffing) => void = () => undefined;
+    let fail: (error: unknown) => void = () => undefined;
+    let reads = 0;
+    let saves = 0;
+    const { painter } = await mount({
+      read: (seasonId) =>
+        ++reads === 1
+          ? Promise.resolve(seasonStaffing(seasonId))
+          : new Promise((resolve, reject) => {
+              answer = resolve;
+              fail = reject;
+            }),
+      save: () =>
+        ++saves === 1 ? Promise.resolve() : Promise.reject({ code: "season.not_found" }),
+    });
+    await paint(painter, "3", [dinner]);
+    saveButton(painter).click();
+    await settle(painter);
+    await paint(painter, "4", [dinner]);
+    saveButton(painter).click();
+    await settle(painter);
+    const refusal = frame(painter).refusal;
+    expect(refusal).not.toBe("");
+    if (outcome === "fails") fail({ code: "connection.failed" });
+    else answer(seasonStaffing());
+    await settle(painter);
+    expect(frame(painter).refusal).toBe(refusal);
+  },
+);
+
+it("says the venue has no departments or prep stations, and draws no grid to paint", async () => {
+  const { painter } = await mount({
+    read: async () => ({ ...seasonStaffing(), areas: [], guides: {} }),
+  });
+  expect(byTest(painter, "no-areas")!.textContent).toContain("no departments or prep stations");
+  expect(grid(painter)).toBeNull();
+  expect(picker(painter)).toBeNull();
+  expect(byTest(painter, "paint-row")).toBeNull();
+  expect(byTest(painter, "season")).not.toBeNull();
+});
+
+it("puts How many back to the number it paints when it is given one it cannot use, a blank once it is left", async () => {
+  const { painter } = await mount();
+  const howMany = root(painter).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+    "wt-number-stepper[name=headcount]",
+  )!;
+  const type = async (value: string) => {
+    howMany.value = value;
+    howMany.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await settle(painter);
+  };
+  await type("3");
+  expect(howMany.value).toBe("3");
+  for (const [typed, shown] of [
+    ["2.5", "3"],
+    ["0", "1"],
+    ["60", "50"],
+  ] as const) {
+    await type(typed);
+    expect(howMany.value).toBe(shown);
+    expect(grid(painter).headcount).toBe(Number(shown));
+  }
+  await type("");
+  expect(howMany.value).toBe("");
+  expect(grid(painter).headcount).toBe(50);
+  howMany.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+  await settle(painter);
+  expect(howMany.value).toBe("50");
+});
+
+it("drops the edits of an area a re-read no longer has, and says so beside Save", async () => {
+  let answer: (read: SeasonStaffing) => void = () => undefined;
+  let reads = 0;
+  const { painter } = await mount({
+    read: (seasonId) =>
+      ++reads === 1
+        ? Promise.resolve(seasonStaffing(seasonId))
+        : new Promise((resolve) => (answer = resolve)),
+  });
+  await paint(painter, "3", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  await pick(painter, "department:dep-bar");
+  await paint(painter, "4", [dinner]);
+  await pick(painter, "station:st-kitchen");
+  await paint(painter, "1", [dinner]);
+  const fresh = seasonStaffing();
+  fresh.areas = fresh.areas.filter(({ name }) => name === "Restaurant");
+  answer(fresh);
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Bar and Kitchen were removed; their changes were dropped.");
+  expect(picker(painter).value).toBe("department:dep-restaurant");
+  expect(saveButton(painter).disabled).toBe(true);
+  await paint(painter, "5", [dinner]);
+  expect(frame(painter).refusal).toBe("");
+});
+
+it("names only the removed areas that held edits, one in the singular", async () => {
+  let answer: (read: SeasonStaffing) => void = () => undefined;
+  let reads = 0;
+  const { painter } = await mount({
+    read: (seasonId) =>
+      ++reads === 1
+        ? Promise.resolve(seasonStaffing(seasonId))
+        : new Promise((resolve) => (answer = resolve)),
+  });
+  await paint(painter, "3", [dinner]);
+  saveButton(painter).click();
+  await settle(painter);
+  await pick(painter, "department:dep-bar");
+  await paint(painter, "4", [dinner]);
+  const fresh = seasonStaffing();
+  fresh.areas = fresh.areas.filter(({ name }) => name === "Restaurant");
+  answer(fresh);
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
 });

@@ -138,3 +138,14 @@ it("an edit kept while the painter is taken off the page and put back still asks
   expect(await request).toBe("kept");
   expect(grid(painter).days.get("3")).toEqual([dinner]);
 });
+
+it("an edit kept while the painter is put back in a later task still asks before leaving", async () => {
+  const painter = await mount();
+  await paint(painter, "3", [dinner]);
+  const parent = painter.parentNode!;
+  painter.remove();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  parent.insertBefore(painter, parent.firstChild);
+  await settle(painter);
+  expect(unload()).toBe(true);
+});

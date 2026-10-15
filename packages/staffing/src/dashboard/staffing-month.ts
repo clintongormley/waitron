@@ -454,13 +454,9 @@ export class StaffingMonthView extends LitElement {
           ${month.seasons.map(
             (season) =>
               html`<li class="chip" data-test="season" data-tint=${tints.get(season.id)!}>
-                ${
-                  this.canWrite
-                    ? html`<button type="button" @click=${() => this.#openSeason(season.id)}>
-                        ${this.#seasonLabel(season)}
-                      </button>`
-                    : this.#seasonLabel(season)
-                }
+                <button type="button" @click=${() => this.#openSeason(season.id)}>
+                  ${this.#seasonLabel(season)}
+                </button>
               </li>`,
           )}
         </ul>

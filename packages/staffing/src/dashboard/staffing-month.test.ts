@@ -104,15 +104,20 @@ describe("the Staffing view's month", () => {
     expect(cell(el, "2026-12-23").querySelector("[data-test=special]")).toBeNull();
   });
 
-  it("shows the month's seasons as chips, in display only", async () => {
-    const { el } = await mount();
+  it("shows the month's seasons as chips, each opening its season's week even for a person who may only look", async () => {
+    const { el, open } = await mount();
     const chips = [...root(el).querySelectorAll<HTMLElement>("[data-test=season]")];
     expect(chips.map((chip) => chip.textContent!.replace(/\s+/g, " ").trim())).toEqual([
       "Autumn · 1 Sept – 30 Nov",
       "Winter · 1 Dec – 28 Feb",
     ]);
     expect(chips.map((chip) => chip.dataset.tint)).toEqual(["1", "2"]);
-    expect(root(el).querySelector("[data-test=seasons] button")).toBeNull();
+    chips[1]!.querySelector("button")!.click();
+    expect(open).toHaveBeenCalledWith("staffing", {
+      month: "2026-12",
+      painter: "season",
+      season: "winter",
+    });
     expect(cell(el, "2026-11-30").dataset.tint).toBe("1");
     expect(cell(el, "2026-12-01").dataset.tint).toBe("2");
     expect(root(el).querySelector("td button")).toBeNull();
@@ -315,12 +320,35 @@ describe("the Staffing view's month", () => {
     liveData.clear();
   });
 
-  it("reads the same whether or not the person may write", async () => {
+  it("reads the same whether or not the person may write, each day only becoming a button", async () => {
     const { el } = await mount();
-    const before = root(el).querySelector("table")!.textContent;
+    const markup = (node: Element, part: "outerHTML" | "innerHTML") =>
+      node[part].replace(/<!--[^]*?-->/g, "");
+    const drawn = () => {
+      const table = root(el).querySelector("table")!;
+      return {
+        head: markup(table.querySelector("thead")!, "outerHTML"),
+        cells: [...table.querySelectorAll("tbody td")].map((td) => {
+          const day = td.querySelector<HTMLElement>(".day")!;
+          return {
+            attributes: [...td.attributes].map(({ name, value }) => `${name}=${value}`),
+            label: day.getAttribute("aria-label"),
+            current: day.getAttribute("aria-current"),
+            body: markup(day, "innerHTML"),
+            bars: [...day.querySelectorAll<HTMLElement>("[data-test=bar]")].map((bar) => [
+              bar.style.getPropertyValue("--share"),
+              bar.hasAttribute("data-none"),
+            ]),
+          };
+        }),
+      };
+    };
+    const before = drawn();
+    expect(before.cells.some(({ current }) => current === "date")).toBe(true);
     el.canWrite = true;
     await settled(el);
-    expect(root(el).querySelector("table")!.textContent).toBe(before);
+    expect(root(el).querySelector("td button.day")).not.toBeNull();
+    expect(drawn()).toEqual(before);
   });
 
   it("speaks Spanish", async () => {
