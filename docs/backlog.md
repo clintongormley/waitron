@@ -100,11 +100,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    layouts as fixed built-in screens, and redesign the screens afterwards; no new feature is built
    as a canvas card.
 
-3. **Finish the working-time record** (A10, under _Working time and staff_). Till clocking, breaks
-   and end-of-day checks, sign-in answers, corrections and own/manager hours screens are built.
-   PDF/CSV and representatives’ export surfaces remain in part 6.
-
-4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
+3. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
    - installing or renewing the AEAT certificate after setup — today only the setup wizard can
      set it, and nothing watches when it expires;
@@ -113,7 +109,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    - the bootable USB installer (B3), the last piece of "install without a terminal";
    - the degraded-but-trading recovery spec.
 
-5. **The displays and the printers walked at the real box** (_The till, devices and table
+4. **The displays and the printers walked at the real box** (_The till, devices and table
    service_; _Printers, the print agent and receipts_) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. Since C107 (#974) every printout
@@ -121,7 +117,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    ticket) has been photographed or recorded as printed. A real sale's slip, the duplicates, the
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
-6. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
+5. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
    enrolled (_The till, devices and table service_); Logging Slice 2, the one-touch bug report
    (_Alerts, logging and diagnostics_); the first real Bluetooth pairing at the box through the
    dashboard (_Printers, the print agent and receipts_; the print agent's side, P2b, and the
@@ -4627,15 +4623,22 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
   numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 
-- **A10. Export the working-time record (part 6).** Follow the
-  [reviewed export plan](superpowers/plans/2026-10-15-a10-6-record-export-plan.md): PDF/CSV for a date range,
-  everyone or one person, plus the representatives’ version. Till My hours, My Schedule’s
-  Hours tab and manager Hours are built, alongside clocking, end-of-day checks and corrections.
-  [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
+- **Inspector remote access to working-time records.** Add authenticated read-only access when
+  Cloud can reach the box. Until then, download the record on request.
+  [Detail](backlog/workforce.md#inspector-access-to-working-time-records).
+
+- **Have the labour advisor check working-time exports before go-live.** Confirm required fields,
+  the final applicable text and the representatives' minimisation policy.
+  [Detail](backlog/workforce.md#advisor-review-of-the-working-time-export).
+
+- **Payroll export waits for the gestoría's import format.** Shift templates and availability also
+  still need features over their existing tables.
+  [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
 - **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
   January closes makes 1 February resolve to 26 January–2 February, which closure refuses
-  for overlap. Decide the transition before exposing cadence editing.
+  for overlap. A future editor refuses changes after the first closed period until the owner
+  approves a transition rule (owner, 2026-10-15); leave it in the backlog until then.
   [Receipt and next step](backlog/workforce.md#pay-period-changes-after-closure).
 
 - **Manager Hours needs a live-removal draft check.** Deleting the guard that keeps the
@@ -6522,7 +6525,7 @@ while it holds decisions still open.
 | Spec                                                                                                                                                                                              | State                                                                                                                                                                      | Open work lives in                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [POS architecture](superpowers/specs/2026-07-18-pos-architecture-design.md)                                                                                                                       | the strategy; §2's sub-projects                                                                                                                                            | _What's built_                                                            |
-| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; till clocking, breaks and end-of-day checks built; A10 part 6 export/access open                                                                                                                                               | A10 and _Wages / labour cost (SP16)_ (_Working time and staff_)                 |
+| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | clocking, corrections, Hours and working-time exports built; inspector access, advisor checks and payroll remain                                                                                                                                               | _Working time and staff_: inspector access, advisor checks, payroll and wages                 |
 | [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | _Payments and card readers_                                               |
 | [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan                                                                                                      | not started; parked; the plan predates SQLite and Vitest 4                                                                                                                 | _Later and parked_ (recipes depth)                                        |
 | [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | superseded by A366 slice 5 Part A (a device's pass screen and pass monitor)                                                                                                  | —                                                                         |

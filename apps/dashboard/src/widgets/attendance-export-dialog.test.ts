@@ -320,3 +320,26 @@ it("revokes a created URL even when the browser rejects the download", async () 
     false,
   );
 });
+it("a reopened identical scope downloads B once and ignores a late A with the same binding", async () => {
+  const a = deferred<Blob>();
+  const b = new Blob(["current B"]);
+  let attempts = 0;
+  const { el, created, clicked } = await fixture({}, () =>
+    attempts++ === 0 ? a.promise : Promise.resolve(b),
+  );
+  await send(el);
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await expect
+    .poll(() => el.shadowRoot!.querySelector<WtButton>("[data-test=export-download]")!.disabled)
+    .toBe(false);
+  await send(el);
+  await expect.poll(() => clicked).toHaveLength(1);
+  a.resolve(new Blob(["stale A"]));
+  await new Promise(requestAnimationFrame);
+  await el.updateComplete;
+  expect(created).toEqual([b]);
+  expect(clicked).toHaveLength(1);
+});
