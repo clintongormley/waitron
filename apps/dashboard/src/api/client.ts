@@ -2016,13 +2016,23 @@ export interface OrderDeliveryAttempt {
   lateSuccess: boolean;
 }
 
+/** A printer the Orders screen may print a full invoice on. */
+export interface OfferedPrinter {
+  id: string;
+  name: string;
+  kind: "a4" | "receipt";
+}
+
 export interface OrderDeliveries {
   current: OrderDeliveryAttempt | null;
   originalCompleted: boolean;
+  /** The printer the original went to; null when it went by email or there is none. */
+  originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: OrderDeliveryAttempt["medium"] } | null;
-    printOnA4: {
-      printer: { id: string; name: string };
+    /** Every active printer at the sale's location: receipt printers first, then A4 printers. */
+    print: {
+      printers: OfferedPrinter[];
       designation: OrderDeliveryAttempt["designation"];
     } | null;
     receiptInstead: { deliveryId: string } | null;
@@ -3919,11 +3929,15 @@ export class DashboardApi {
     });
   }
 
-  requestOrderA4Delivery(id: string, requestKey: string): Promise<OrderDeliveryAttempt> {
+  requestOrderPrintDelivery(
+    id: string,
+    printerId: string,
+    requestKey: string,
+  ): Promise<OrderDeliveryAttempt> {
     return this.#request(
       `/management-api/orders/${encodeURIComponent(id)}/invoice-deliveries`,
       "POST",
-      { medium: "a4", requestKey },
+      { medium: "print", printerId, requestKey },
     );
   }
 

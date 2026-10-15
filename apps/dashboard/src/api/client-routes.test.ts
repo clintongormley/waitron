@@ -1212,17 +1212,17 @@ describe("DashboardApi routes", () => {
   });
 });
 
-it("asks for a bill's full invoice on A4 under the given request key", async () => {
+it("asks for a bill's full invoice on the chosen printer under the given request key", async () => {
   const attempt = { id: "delivery-1", medium: "a4", status: "queued" };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(attempt));
   const api = new DashboardApi("", fetchImpl);
 
-  expect(await api.requestOrderA4Delivery("bill/1", "key-1")).toEqual(attempt);
+  expect(await api.requestOrderPrintDelivery("bill/1", "printer-1", "key-1")).toEqual(attempt);
   expect(callsOf(fetchImpl)).toEqual([
     [
       "/management-api/orders/bill%2F1/invoice-deliveries",
       "POST",
-      { medium: "a4", requestKey: "key-1" },
+      { medium: "print", printerId: "printer-1", requestKey: "key-1" },
     ],
   ]);
 });

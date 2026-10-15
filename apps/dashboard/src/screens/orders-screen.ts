@@ -94,6 +94,8 @@ export class OrdersScreen extends LitElement {
   @state() private loadingMore = false;
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
+  /** `invoice` when `reprintRow` is a full invoice being printed again on any printer. */
+  @state() private reprintMode: "receipt" | "invoice" = "receipt";
   #textTimer?: ReturnType<typeof setTimeout>;
 
   readonly #queries = new DashboardQueries(
@@ -181,8 +183,14 @@ export class OrdersScreen extends LitElement {
     else this.#textTimer = setTimeout(apply, 400);
   }
 
+  /** A full invoice is printed again through its own print action instead. */
   #mayReprint(row: OrderRowDto): boolean {
-    return row.kind === "bill" && row.invoiceNumber !== null;
+    return row.kind === "bill" && row.invoiceNumber !== null && row.invoiceType !== "F1";
+  }
+
+  #openPrint(row: OrderRowDto | null, mode: "receipt" | "invoice"): void {
+    this.reprintMode = mode;
+    this.reprintRow = row;
   }
 
   #columns(): DataTableColumn<OrderRowDto>[] {
@@ -261,7 +269,7 @@ export class OrdersScreen extends LitElement {
                     variant="secondary"
                     @click=${(event: Event) => {
                       event.stopPropagation();
-                      this.reprintRow = row;
+                      this.#openPrint(row, "receipt");
                     }}
                     >${t("orders.reprint")}</wt-button
                   >`
@@ -397,7 +405,10 @@ export class OrdersScreen extends LitElement {
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ id: string }>) => {
-          this.reprintRow = rows.find((row) => row.id === event.detail.id) ?? null;
+          this.#openPrint(rows.find((row) => row.id === event.detail.id) ?? null, "receipt");
+        }}
+        @order-invoice-print=${(event: CustomEvent<{ id: string }>) => {
+          this.#openPrint(rows.find((row) => row.id === event.detail.id) ?? null, "invoice");
         }}
         @wt-close=${() => {
           this.openId = null;
@@ -406,6 +417,7 @@ export class OrdersScreen extends LitElement {
       <dashboard-order-reprint-dialog
         .api=${this.api}
         .row=${this.reprintRow}
+        .mode=${this.reprintMode}
         @wt-close=${() => {
           this.reprintRow = null;
         }}

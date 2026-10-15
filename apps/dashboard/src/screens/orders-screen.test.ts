@@ -321,6 +321,89 @@ describe("dashboard Orders", () => {
   });
 
   it.each([
+    ["a simplified invoice", "F2", ["View details", "Reprint receipt"]],
+    ["a full invoice", "F1", ["View details"]],
+  ] as const)("offers the row menu's Reprint receipt only for %s", async (_name, type, labels) => {
+    const row = { ...ROW, invoiceType: type };
+    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+    expect(
+      [...actions.querySelectorAll("wt-button")].map((button) => button.textContent?.trim()),
+    ).toEqual(labels);
+  });
+
+  it("opens a full invoice's printer list from its detail, in invoice mode, with no Reprint receipt", async () => {
+    const full = { ...ROW, invoiceType: "F1" as const };
+    const detail = {
+      row: full,
+      lines: [],
+      invoices: [],
+      tenders: [],
+      payments: [],
+      party: null,
+      departure: null,
+      reprints: [],
+      invoicePdfDownloads: [],
+      deliveries: {
+        current: null,
+        originalCompleted: true,
+        originalPrinterId: "page-1",
+        actions: {
+          retryOriginal: null,
+          print: {
+            printers: [
+              { id: "printer-1", name: "Barra", kind: "receipt" },
+              { id: "page-1", name: "Oficina", kind: "a4" },
+            ],
+            designation: "duplicate",
+          },
+          receiptInstead: null,
+          email: null,
+        },
+        history: [],
+      },
+    };
+    const api = stubApi({
+      listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+      getOrder: vi.fn().mockResolvedValue(detail),
+    });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+    const opened = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
+    await vi.waitFor(() =>
+      expect(opened.shadowRoot!.querySelector("[data-test=print-invoice]")).not.toBeNull(),
+    );
+    expect(
+      [...opened.shadowRoot!.querySelectorAll("wt-form-actions wt-button")].map((button) =>
+        button.textContent?.trim(),
+      ),
+    ).toEqual(["Print a copy"]);
+    opened.shadowRoot!.querySelector<HTMLElement>("[data-test=print-invoice]")!.click();
+    const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+    await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
+    expect(picker.mode).toBe("invoice");
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+    );
+    expect(api.getOrderPrinters).not.toHaveBeenCalled();
+  });
+
+  it("opens a simplified invoice's reprint in receipt mode", async () => {
+    const { el } = await loaded();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector("wt-row-actions")!.querySelectorAll("wt-button")[1]!.click();
+    const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+    await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
+    expect(picker.mode).toBe("receipt");
+  });
+
+  it.each([
     ["an invoice without a bill", { ...ROW, kind: "sale" as const }],
     ["a bill without an invoice", { ...ROW, invoiceNumber: null, invoiceType: null }],
   ])("does not offer reprint for %s", async (_name, row) => {
