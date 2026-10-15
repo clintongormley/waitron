@@ -2219,7 +2219,8 @@ and nothing guards it across screens:
   schedule, which are batch 2a's, and the Home page tab's shortcut window, whose Add follows the rule
   since A336, and the Structure tab's Move to section… dialog, whose Move follows the rule since A337; the list is in
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
-- batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
+- batch 5, the till: the party name dialog; the order screen's Guests window
+  (`apps/till/src/widgets/party-guests-dialog.ts`); the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
   floor's seats dialog, opened by Change seats, or empty by a merge (`apps/till/src/widgets/today-seats-dialog.ts`);

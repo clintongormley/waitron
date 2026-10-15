@@ -2697,7 +2697,7 @@ both. Prepare and Live refuse it absent, null, empty or blank, pinned by
 and replacing `asNullableString` with `asString` for `taxpayerDomicile` failed the null case of the
 second, each with the rest of its filtered run green.
 
-These four are examples, not a complete list. An extras item's `price`, where null prices the extra
+These are examples, not a complete list. An extras item's `price`, where null prices the extra
 from the product's unit price times its portion (`extraPrice` and `priceForExtraPortion`,
 `packages/catalogue/src/extra-contract.ts`), is another.
 

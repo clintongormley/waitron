@@ -239,7 +239,6 @@ export interface MoveBillDetail {
   bills: BillChoiceDetail["bills"];
 }
 
-/** Split a table's choice: the table leaving, the bill it takes or null, and each side's guests. */
 export interface SplitTableDetail {
   tableId: string;
   billId: string | null;

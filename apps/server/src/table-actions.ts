@@ -204,7 +204,6 @@ async function combineAt(
   });
 }
 
-/** Both counts added, or none when either is unknown or the sum is more than a count can be. */
 function combinedGuests(from: number | null, into: number | null): number | null {
   if (from === null || into === null) return null;
   const sum = from + into;
