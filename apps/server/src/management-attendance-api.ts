@@ -27,12 +27,15 @@ import {
   parseAttendanceLocationQuery,
 } from "./attendance-request.js";
 import type { Logger } from "./logger.js";
+import type { ModuleTimeRecordExport } from "@waitron/module";
+import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { parseHoursQuery, parseOwnAttendanceCommand } from "./hours-request.js";
 import { assertOwnAttendanceLocation } from "./attendance-own-scope.js";
 export interface ManagementAttendanceApiDeps {
   db: Database;
   cfg: { nodeId: string; locationId: string };
   now: () => Date;
+  exporter?: ModuleTimeRecordExport;
 }
 const run = createErrorBoundary(
   {
@@ -66,6 +69,7 @@ export function mountManagementAttendanceApi(
   deps: ManagementAttendanceApiDeps,
   log: Logger,
 ): void {
+  mountAttendanceExportApi(app, deps, log);
   app.get("/management-api/me/attendance/inbox", (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);

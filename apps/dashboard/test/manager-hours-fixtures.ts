@@ -71,10 +71,12 @@ export async function mountManagerHours(
     theme?: "light" | "dark";
     fail?: boolean;
     held?: Promise<ManagerHours>;
+    exportOptions?: { available: boolean; canExportAll: boolean };
   } = {},
 ) {
   const data = {
     hours: managerHours(),
+    exportOptions: options.exportOptions ?? { available: false, canExportAll: false },
     lookups: {
       viewer: { personId: "manager", canSelfApprove: false },
       locations: [
@@ -111,6 +113,8 @@ export async function mountManagerHours(
         if (receiptFailure) throw new Error("receipt offline");
         return Response.json(receipt);
       }
+      if (path.includes("export-options")) return Response.json(data.exportOptions);
+      if (path.includes("/export?")) return new Response("record");
       if (path.endsWith("/lookups")) return Response.json(data.lookups);
       if (fail) throw new Error("offline");
       if (path.includes("/hours?")) {

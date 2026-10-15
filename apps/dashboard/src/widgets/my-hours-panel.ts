@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, type DashboardRequest, type LiveData } from "@waitron/dashboard-kit";
 import type {
+  AttendanceExportOptions,
   AttendanceChange,
   AttendanceDayView,
   AttendanceInbox,
@@ -11,6 +12,8 @@ import type {
   PersonHours,
 } from "@waitron/dashboard-modules";
 import { baseStyles } from "@waitron/ui";
+import { AttendanceExportApi } from "../api/attendance-export.js";
+import "./attendance-export-dialog.js";
 import { HoursApi } from "../api/hours.js";
 import { OwnAttendanceApi } from "../api/own-attendance.js";
 import { t } from "../i18n/t.js";
@@ -96,6 +99,10 @@ export class MyHoursPanel extends LitElement {
   @state() private editorOpen = false;
   @state() private editorChanges: AttendanceChange[] = [];
   @state() private reasonOnly = false;
+  @state() private exportOptions: AttendanceExportOptions | null = null;
+  @state() private exportOpen = false;
+  @state() private exportError = "";
+  #exportRead = 0;
   #hours?: HoursApi;
   #own?: OwnAttendanceApi;
   #generation = 0;
@@ -163,9 +170,38 @@ export class MyHoursPanel extends LitElement {
         void this.#refresh();
       }
     }
+    if (changed.has("locationId")) void this.#loadExportOptions();
+  }
+  async #loadExportOptions() {
+    const read = ++this.#exportRead;
+    const generation = this.#generation,
+      location = this.locationId,
+      request = this.request;
+    this.exportOpen = false;
+    this.exportOptions = null;
+    this.exportError = "";
+    if (!this.active || !location || !request) return;
+    try {
+      const options = await new AttendanceExportApi(request).options(location);
+      if (
+        this.isConnected &&
+        read === this.#exportRead &&
+        generation === this.#generation &&
+        location === this.locationId &&
+        request === this.request
+      )
+        this.exportOptions = options;
+    } catch (error) {
+      if (this.isConnected && read === this.#exportRead && generation === this.#generation)
+        this.exportError = codeMessage(codeOf(error));
+    }
   }
   #clear() {
     this.#generation++;
+    this.#exportRead++;
+    this.exportOptions = null;
+    this.exportOpen = false;
+    this.exportError = "";
     this.#wait?.abort();
     for (const slot of ["inbox", "hours", "day"] as const) this.#release(slot);
     this.inbox = null;
@@ -495,7 +531,10 @@ export class MyHoursPanel extends LitElement {
     this.busy = true;
     try {
       if (this.#pending) await this.#recover(this.#pending);
-      else await this.#refresh();
+      else {
+        await this.#refresh();
+        if (this.exportError) await this.#loadExportOptions();
+      }
     } finally {
       if (generation === this.#generation) this.busy = false;
     }
@@ -564,6 +603,26 @@ export class MyHoursPanel extends LitElement {
         >
       </div>
       <div class="actions">
+        ${
+          this.exportOptions?.available
+            ? html`<wt-button
+                data-export
+                variant=${this.view && !disabled ? "primary" : "secondary"}
+                .disabled=${disabled || !this.view}
+                @click=${() => {
+                  if (
+                    this.view &&
+                    !disabled &&
+                    this.active &&
+                    this.isConnected &&
+                    this.exportOptions?.available
+                  )
+                    this.exportOpen = true;
+                }}
+                >${t("attendance_export.heading")}</wt-button
+              >`
+            : nothing
+        }
         <wt-button
           data-previous
           variant="secondary"
@@ -642,6 +701,17 @@ export class MyHoursPanel extends LitElement {
               >`
           : nothing
       }
+      ${this.exportError ? html`<p class="error" role="alert" data-export-error>${this.exportError}</p>` : nothing}
+      <dashboard-attendance-export-dialog
+        .open=${this.exportOpen}
+        .request=${this.request}
+        .scopeKey=${`${this.personId}:${this.#generation}`}
+        .locationId=${this.locationId}
+        .period=${this.view?.period ?? { start: "", end: "" }}
+        @export-close=${() => {
+          this.exportOpen = false;
+        }}
+      ></dashboard-attendance-export-dialog>
       <dashboard-attendance-proposal-dialog
         purpose="request"
         .view=${this.day}

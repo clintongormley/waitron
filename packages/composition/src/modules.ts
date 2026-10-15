@@ -79,6 +79,7 @@ import {
 import {
   WORKFORCE_ES_CLASSIFICATION,
   WORKFORCE_ES_CONFIGURATION_TRANSFER,
+  WORKFORCE_ES_RECORD_EXPORT,
   WORKFORCE_ES_VOCABULARY,
 } from "@waitron/workforce-es";
 
@@ -188,6 +189,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     vocabulary: WORKFORCE_ES_VOCABULARY,
     classification: WORKFORCE_ES_CLASSIFICATION,
     configurationTransfer: WORKFORCE_ES_CONFIGURATION_TRANSFER,
+    timeRecordExport: WORKFORCE_ES_RECORD_EXPORT,
   },
   {
     name: "payments",

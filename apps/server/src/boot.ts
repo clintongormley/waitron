@@ -62,7 +62,13 @@ import { recordIncidentOnce } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
-import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
+import {
+  enabledModules,
+  fiscalSlot,
+  orderedMigrationSets,
+  reconcile,
+  selectTimeRecordExport,
+} from "@waitron/module";
 import type { AlertSource, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
 import { AppError } from "@waitron/shared";
@@ -1818,7 +1824,12 @@ async function bootServer(
   if (workforceEnabled && isSingletonPrimary)
     mountManagementAttendanceApi(
       app,
-      { db, cfg: { nodeId: till.nodeId, locationId: till.locationId }, now },
+      {
+        db,
+        cfg: { nodeId: till.nodeId, locationId: till.locationId },
+        now,
+        exporter: selectTimeRecordExport(setsToMigrate),
+      },
       log,
     );
   mountScheduleApi(app, { db }, log);

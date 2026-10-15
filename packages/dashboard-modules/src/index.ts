@@ -39,4 +39,7 @@ export type {
   HoursClosure,
   PersonHours,
   ManagerHours,
+  AttendanceExportSelection,
+  ManagerAttendanceExportSelection,
+  AttendanceExportOptions,
 } from "@waitron/workforce/attendance-contract";

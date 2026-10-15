@@ -91,6 +91,8 @@ export type { ModuleOperationPreparation } from "./operation-preparation.js";
 export { withPreparedModuleOperations } from "./operation-preparation.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
+export { selectTimeRecordExport } from "./record-export.js";
+export type { ModuleTimeRecordExport } from "./record-export.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "./module.js";

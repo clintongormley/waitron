@@ -19,6 +19,11 @@ Update 2026-10-15, part 6 planning: the reviewed
 [export implementation plan](../plans/2026-10-15-a10-6-record-export-plan.md) covers PDF/CSV,
 own and manager downloads, and the representatives’ version. Implementation remains open.
 
+Update 2026-10-15, part 6 implementation: own and manager Hours now offer PDF/CSV downloads,
+including the representatives' version, through the [part 6 plan](../plans/2026-10-15-a10-6-record-export-plan.md).
+All six parts are built. Inspector remote access, advisor policy checks and payroll export remain
+in [the workforce backlog](../../backlog/workforce.md).
+
 ## Why
 
 Spanish law requires a daily record of each worker's start and end times, kept four years, from the
