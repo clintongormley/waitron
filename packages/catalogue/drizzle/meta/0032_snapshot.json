@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cc926c3f-26ff-4fe1-842b-d02d844f3f8b",
+  "id": "5a6d1efc-6ca5-4374-98de-465144573db9",
   "prevId": "6922bcbb-2741-4292-a268-28bcb14ba8e9",
   "tables": {
     "content_languages": {
@@ -1920,6 +1920,15 @@
         }
       },
       "indexes": {
+        "content_suggestions_item_row_key": {
+          "name": "content_suggestions_item_row_key",
+          "columns": [
+            "kind",
+            "item_id"
+          ],
+          "isUnique": true,
+          "where": "\"content_suggestions\".\"language\" is null"
+        },
         "content_suggestions_language_idx": {
           "name": "content_suggestions_language_idx",
           "columns": [

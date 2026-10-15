@@ -41,6 +41,20 @@ it("refuses a second suggestion for the same item and language", async () => {
   await expect(insert()).rejects.toThrow(/UNIQUE constraint failed: content_suggestions/);
 });
 
+it("refuses a second row of the item's own, and keeps another item's", async () => {
+  const insert = (itemId: string) =>
+    withTransaction(suite.db, (tx) =>
+      tx
+        .insert(contentSuggestions)
+        .values({ kind: "unit", itemId, language: null, placeholder: true }),
+    );
+  await insert("u7");
+  await expect(insert("u7")).rejects.toThrow(/UNIQUE constraint failed: content_suggestions/);
+  await insert("u8");
+  const rows = await withTransaction(suite.db, (tx) => tx.select().from(contentSuggestions));
+  expect(rows.map((row) => row.itemId).sort()).toEqual(["u7", "u8"]);
+});
+
 it("refuses a named suggestion without the token it was made from", async () => {
   await expect(
     withTransaction(suite.db, (tx) =>

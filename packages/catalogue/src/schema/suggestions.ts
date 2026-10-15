@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -101,6 +101,10 @@ export const contentSuggestions = table(
       name: "content_suggestions_job_fk",
     }).onDelete("set null"),
     unique("content_suggestions_item_language_key").on(t.kind, t.itemId, t.language),
+    // The key above treats each null language as distinct, so it cannot keep the item's own row single.
+    uniqueIndex("content_suggestions_item_row_key")
+      .on(t.kind, t.itemId)
+      .where(sql`${t.language} is null`),
     index("content_suggestions_language_idx").on(t.language),
     index("content_suggestions_job_idx").on(t.jobId),
     check("content_suggestions_kind_ck", enumCheck(t.kind)),

@@ -45,6 +45,7 @@ CREATE TABLE `content_suggestions` (
 	CONSTRAINT "content_suggestions_text_language_ck" CHECK("content_suggestions"."text" is null or "content_suggestions"."language" is not null)
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `content_suggestions_item_row_key` ON `content_suggestions` (`kind`,`item_id`) WHERE "content_suggestions"."language" is null;--> statement-breakpoint
 CREATE INDEX `content_suggestions_language_idx` ON `content_suggestions` (`language`);--> statement-breakpoint
 CREATE INDEX `content_suggestions_job_idx` ON `content_suggestions` (`job_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `content_suggestions_item_language_key` ON `content_suggestions` (`kind`,`item_id`,`language`);
