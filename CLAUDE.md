@@ -192,8 +192,8 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes**, which a
-  fresh database migrated in one go never has. `applyMigrations` removes the change feed first for
+- **A migration can fail on a box that already has a trigger naming what it changes.**
+  `applyMigrations` removes the change feed first for
   that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
   another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
@@ -438,9 +438,8 @@ called weaker than its name, the topic file lists what it does not see.
   `checkOwnPassword`), and a new route that forgets the early check, or forgets to take turns
   (`inTurn`, `apps/server/src/attempt-turns.ts`), derives under the lock or once per attempt in a
   burst, unnoticed. **Splitting one logical change across transactions is a commented decision,
-  never a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — this
-  engine is synchronous, so two statements issued together run one after the other in an order
-  nothing states. No guard enforces it.
+  never a default.** **Queries on one transaction are awaited in turn, never `Promise.all`.** No
+  guard enforces it.
 - **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
   store routes by ASYNCHRONOUS CONTEXT and per-body identity, so a read written inside the body
   still sees that body's own rows (`packages/store/src/connections.ts`); three shapes are outside
@@ -789,7 +788,7 @@ browser test** — most of these rules exist because a test passed while proving
   [conventions-data.md](docs/developers/conventions-data.md).
 - **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
-  lock** (measured up to 831 ms on a slowed disk). A copy fifteen minutes behind raises
+  lock**. A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
   (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
   file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
