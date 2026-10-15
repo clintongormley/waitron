@@ -28,8 +28,10 @@ import type { StringKey } from "./i18n/strings.js";
 // Modules are mounted generically from the browser-safe registry, never named here. `tKit` is the
 // kit's untyped resolver: a module's label keys are not in the app's `StringKey` union.
 import {
+  CALENDAR_OWN_VIEW_IDS,
   registerCatalogue,
   t as tKit,
+  type DashboardCalendarView,
   type DashboardFurtherScreen,
   type DashboardRequest,
   type DashboardScreenHandle,
@@ -1208,6 +1210,7 @@ export class DashboardApp extends LitElement {
     this.#activeScreens.clear();
     this.#navGroups.clear();
     this.#activePanels = [];
+    const calendarViews = this.#calendarViews(enabled);
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = [c, ...(c.moreScreens ?? [])];
@@ -1241,6 +1244,7 @@ export class DashboardApp extends LitElement {
                 .canManagePolicy=${this.#sessionPermissions.includes("venue_service.manage")}
               ></dashboard-department-receipt-dialog>`
             : null,
+        calendarViews,
       };
       for (const contributed of screens) {
         const { screen } = contributed;
@@ -1263,6 +1267,27 @@ export class DashboardApp extends LitElement {
     }
     for (const list of this.#navGroups.values())
       list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
+
+  /** Gathered before any module's screens are created, because each module gets its own `ctx`. */
+  #calendarViews(enabled: readonly string[]): { view: DashboardCalendarView; canWrite: boolean }[] {
+    const ids = new Set<string>(CALENDAR_OWN_VIEW_IDS);
+    const views: DashboardCalendarView[] = [];
+    for (const c of DASHBOARD_MODULES) {
+      if (!enabled.includes(c.module)) continue;
+      for (const view of c.calendarViews ?? []) {
+        if (ids.has(view.id))
+          throw new Error(`dashboard module "${c.module}" repeats calendar view id "${view.id}"`);
+        ids.add(view.id);
+        views.push(view);
+      }
+    }
+    const holds = (permission: string | undefined) =>
+      permission !== undefined && this.#sessionPermissions.includes(permission);
+    return views
+      .filter((view) => holds(view.requiresPermission) || holds(view.readPermission))
+      .sort((a, b) => a.order - b.order)
+      .map((view) => ({ view, canWrite: holds(view.requiresPermission) }));
   }
 
   /**

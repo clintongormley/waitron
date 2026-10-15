@@ -1,8 +1,18 @@
 import { LitElement, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  t as tKit,
+  type CalendarViewHost,
+  type DashboardCalendarView,
+  type DashboardModuleContext,
+  type DashboardScreenHandle,
+} from "@waitron/dashboard-kit";
+import {
   baseStyles,
+  decodePathSegment,
+  encodePathSegment,
   leaveCoordinatorFor,
   UrlStateController,
   navigationGuardFor,
@@ -43,6 +53,14 @@ type PainterAddress = { seasonId: string; departmentId: string; zoneId: string }
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
 type SpecialAddress = { specialDayId: string | null; date: LocalDate | null };
 const painterEntryKey = "openingHoursPainter";
+const screenPath = "/manage/opening-hours";
+/** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
+export type CalendarViews = {
+  ctx: DashboardModuleContext;
+  views: readonly { view: DashboardCalendarView; canWrite: boolean }[];
+};
+/** The module view an address names: its id and the `<key>/<value>` pairs after it. */
+type ModuleAddress = { id: string; params: Readonly<Record<string, string>> };
 
 @customElement("dashboard-opening-hours-screen")
 export class OpeningHoursScreen extends LitElement {
@@ -69,6 +87,49 @@ export class OpeningHoursScreen extends LitElement {
         min-height: var(--wt-tap-min);
         text-transform: capitalize;
       }
+      .title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-4);
+        margin-block-end: var(--wt-space-4);
+      }
+      .title h1 {
+        margin: 0;
+      }
+      .segmented {
+        display: inline-flex;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        overflow: hidden;
+      }
+      .segmented label {
+        position: relative;
+        display: inline-flex;
+      }
+      .segmented input {
+        position: absolute;
+        opacity: 0;
+        inset: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .segmented span {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: var(--wt-tap-min);
+        padding: 0 var(--wt-space-4);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+      }
+      .segmented input:checked + span {
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      .segmented input:focus-visible + span {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
       .month-back:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
@@ -77,6 +138,11 @@ export class OpeningHoursScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ type: Boolean }) readOnly = false;
+  @property({ attribute: false }) calendar?: CalendarViews;
+  /** Set while the address names one of `calendar`'s views. */
+  @state() private moduleView?: ModuleAddress;
+  /** Each view's handle, created the first time it is shown and kept for this screen's life. */
+  private readonly viewHandles = new Map<string, DashboardScreenHandle>();
   @state() private model?: OpeningHoursModel;
   @state() private departmentId = "";
   @state() private view: View = "year";
@@ -136,6 +202,13 @@ export class OpeningHoursScreen extends LitElement {
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
+    if (this.calendarView(view)) {
+      this.painter = undefined;
+      this.special = undefined;
+      this.moduleView = { id: view!, params: this.moduleParams() };
+      return;
+    }
+    this.moduleView = undefined;
     const named = {
       seasonId: this.url.read("season") ?? "",
       departmentId: this.url.read("department") ?? "",
@@ -191,6 +264,113 @@ export class OpeningHoursScreen extends LitElement {
     this.departmentId = named.departmentId;
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
+  }
+  private calendarView(id: string | null) {
+    return this.calendar?.views.find(({ view }) => view.id === id);
+  }
+  /** Every `<key>/<value>` pair of the address but `view`, read from the path itself because the
+   *  URL controller reads only the keys it is configured with. */
+  private moduleParams() {
+    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
+    const parts = path.slice(screenPath.length + 1).split("/");
+    const params: Record<string, string> = {};
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      if (parts[i] === "view") continue;
+      try {
+        params[decodePathSegment(parts[i]!)] = decodePathSegment(parts[i + 1]!);
+      } catch {
+        // A malformed escape leaves that pair out, as the URL controller does with the address.
+      }
+    }
+    return params;
+  }
+  /** Read only by a view's host, which exists only once the model has loaded. */
+  private moduleMonth() {
+    return (
+      parseCalendarMonth(this.moduleView?.params["month"]) ??
+      (businessDateToday(this.model!) || browserToday()).slice(0, 7)
+    );
+  }
+  /** Moves the Calendar to a module view, or with `"hours"` back to Opening hours (its month when
+   *  `params.month` names one, else its year). A view it was not given is ignored. */
+  private openCalendarView(view: string, params: Record<string, string>) {
+    if (!this.isConnected) return;
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    url.searchParams.delete("station");
+    if (view === "hours") {
+      const month = parseCalendarMonth(params["month"]);
+      url.pathname = `${screenPath}/view/${month ? `month/month/${month}` : "year"}`;
+    } else if (this.calendarView(view)) {
+      url.pathname = [screenPath, "view", view, ...Object.entries(params).flat()]
+        .map((part, i) => (i === 0 ? part : encodePathSegment(part)))
+        .join("/");
+    } else return;
+    void this.writeAddress(url);
+  }
+  /** The switch carries the month the page shows, when it shows one. */
+  private chooseCalendarView(id: string) {
+    const month = this.moduleView
+      ? this.moduleView.params["month"]
+      : this.view === "month"
+        ? this.shownMonth()
+        : "";
+    this.openCalendarView(id, month ? { month } : {});
+  }
+  private viewHandle(entry: { view: DashboardCalendarView }) {
+    const { view } = entry;
+    let handle = this.viewHandles.get(view.id);
+    if (!handle) {
+      const month = () => this.moduleMonth();
+      const params = () => (this.moduleView?.id === view.id ? this.moduleView.params : {});
+      const canWrite = () => this.calendarView(view.id)?.canWrite ?? false;
+      const host: CalendarViewHost = {
+        get month() {
+          return month();
+        },
+        get params() {
+          return params();
+        },
+        get canWrite() {
+          return canWrite();
+        },
+        open: (target, next) => this.openCalendarView(target, next),
+      };
+      handle = view.create(this.calendar!.ctx, host);
+      this.viewHandles.set(view.id, handle);
+    }
+    return handle;
+  }
+  private calendarHeading() {
+    const views = this.calendar?.views ?? [];
+    const heading = html`<h1>${t("nav.opening_hours")}</h1>`;
+    if (views.length === 0) return heading;
+    const chosen = this.moduleView?.id ?? "hours";
+    const option = (value: string, label: string) =>
+      html`<label
+        ><input
+          type="radio"
+          name="calendarView"
+          value=${value}
+          .checked=${live(chosen === value)}
+          @change=${() => this.chooseCalendarView(value)}
+        /><span>${label}</span></label
+      >`;
+    return html`<div class="title">
+      ${heading}
+      <div
+        class="segmented"
+        role="radiogroup"
+        aria-label=${t("nav.opening_hours")}
+        data-test="calendar-switch"
+      >
+        ${option("hours", t("opening.title"))}
+        ${views.map(({ view }) => option(view.id, tKit(view.labelKey)))}
+      </div>
+    </div>`;
+  }
+  private moduleContent(address: ModuleAddress) {
+    const entry = this.calendarView(address.id)!;
+    return this.viewHandle(entry).render(!entry.canWrite);
   }
   /** Whether an address with no view names a department, zone, season or an old `?station=`, which
    *  opens the season painter rather than the Year (ruling R3). */
@@ -831,10 +1011,12 @@ export class OpeningHoursScreen extends LitElement {
       ></opening-hours-month>`;
   }
   override render() {
-    return html`<h1>${t("opening.title")}</h1>
-      ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
-        !this.model
-          ? nothing
+    return html`${this.calendarHeading()}
+    ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
+      !this.model
+        ? nothing
+        : this.moduleView
+          ? this.moduleContent(this.moduleView)
           : html` <wt-tabs
               label=${t("opening.title")}
               .value=${this.view === "month" ? "year" : this.view}
@@ -889,10 +1071,9 @@ export class OpeningHoursScreen extends LitElement {
                 }
               </div>
             </wt-tabs>`
-      }
-      ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-      ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()}
-      ${this.specialPainter()}`;
+    }
+    ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
+    ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}`;
   }
 }
 declare global {

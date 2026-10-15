@@ -16,13 +16,13 @@ export interface UrlPathConfig {
   leave?: NavigationLeave;
 }
 
-function encode(value: string): string {
+export function encodePathSegment(value: string): string {
   // Empty selections and dot-only identifiers must survive URL path normalization.
   if (value === "" || value === "." || value === "..") return `~${value}`;
   return encodeURIComponent(value).replaceAll("~", "%7E");
 }
 
-function decode(value: string): string {
+export function decodePathSegment(value: string): string {
   if (value === "~" || value === "~." || value === "~..") return value.slice(1);
   return decodeURIComponent(value);
 }
@@ -62,12 +62,12 @@ export class UrlStateController implements ReactiveController {
     const parts = url.pathname.slice(prefix.length).split("/");
     if (!parts[0]) return {};
     try {
-      const primary = decode(parts[0]);
+      const primary = decodePathSegment(parts[0]);
       const values: Record<string, string | null> = { [this.config.primary]: primary };
       const fields = this.#children(primary);
       for (let i = 1; i + 1 < parts.length; i += 2) {
         const key = Object.keys(fields).find((key) => fields[key] === parts[i]);
-        if (key !== undefined) values[key] = decode(parts[i + 1]!);
+        if (key !== undefined) values[key] = decodePathSegment(parts[i + 1]!);
       }
       return values;
     } catch {
@@ -89,10 +89,10 @@ export class UrlStateController implements ReactiveController {
     const primary = values[this.config.primary];
     const parts: string[] = [];
     if (primary != null) {
-      parts.push(encode(primary));
+      parts.push(encodePathSegment(primary));
       for (const [key, segment] of Object.entries(this.#children(primary))) {
         const value = values[key];
-        if (value != null) parts.push(segment, encode(value));
+        if (value != null) parts.push(segment, encodePathSegment(value));
       }
     }
     const guard = navigationGuardFor(window);

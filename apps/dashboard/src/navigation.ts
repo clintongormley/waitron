@@ -16,6 +16,9 @@ export const dashboardPath: UrlPathConfig = {
       date: "date",
       year: "year",
       month: "month",
+      // A Calendar module view's own keys: a key the shell does not list here is dropped from the
+      // address when the shell rewrites it.
+      week: "week",
     },
     "venue-operations": { department: "department", view: "view", zone: "zone" },
     menus: { menu: "menu", view: "view", "price-filter": "filter" },

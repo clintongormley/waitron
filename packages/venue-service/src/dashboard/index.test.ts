@@ -258,8 +258,8 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       requiresPermission: "venue_service.manage",
       readPermission: "venue.view",
     });
-    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.opening_hours"]).toBe("Opening hours");
-    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.opening_hours"]).toBe("Horario de apertura");
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.opening_hours"]).toBe("Calendar");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.opening_hours"]).toBe("Calendario");
     const handle = timetable.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
       liveData,

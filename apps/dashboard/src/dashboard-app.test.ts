@@ -2622,6 +2622,107 @@ describe("dashboard-app", () => {
     }
   });
 
+  describe("calendar views a module contributes", () => {
+    const view = (id: string, order: number, extra: Record<string, unknown> = {}) => ({
+      id,
+      labelKey: `x.${id}`,
+      order,
+      requiresPermission: `${id}.write`,
+      create: () => ({ render: () => html`` }),
+      ...extra,
+    });
+    const hostModule = (seen: unknown[]) => ({
+      module: "bookings",
+      screen: {
+        id: "calendar-host",
+        navLabelKey: "nav.bookings",
+        group: "operations",
+        requiresPermission: "x",
+      },
+      strings: { en: {}, es: {} },
+      create: (ctx: { calendarViews?: unknown }) => {
+        seen.push(ctx.calendarViews);
+        return { render: () => html`` };
+      },
+    });
+    const viewModule = (views: unknown[]) => ({
+      module: "staffing",
+      screen: {
+        id: "calendar-views-owner",
+        navLabelKey: "nav.bookings",
+        group: "operations",
+        requiresPermission: "x",
+      },
+      strings: { en: {}, es: {} },
+      create: () => ({ render: () => html`` }),
+      calendarViews: views,
+    });
+    async function mountWith(modules: unknown[], permissions: string[]): Promise<DashboardApp> {
+      const list = DASHBOARD_MODULES as unknown as unknown[];
+      const original = [...list];
+      list.length = 0;
+      list.push(...modules);
+      try {
+        const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+          api: stubApi({
+            getMe: vi.fn().mockResolvedValue({
+              ...meResponse,
+              permissions,
+              modules: ["bookings", "staffing"],
+            }),
+            listStaff: vi.fn().mockResolvedValue([]),
+          }),
+          request: stubRequest,
+        });
+        await flush(el);
+        return el;
+      } finally {
+        list.length = 0;
+        list.push(...original);
+      }
+    }
+
+    it("hands every module, including one activated before the view's own, the views the person may read, in order", async () => {
+      const seen: unknown[] = [];
+      const rota = view("rota", 20, { readPermission: "rota.read" });
+      const staffing = view("staffing", 10, { readPermission: "staffing.read" });
+      const hidden = view("hidden", 5, { readPermission: "hidden.read" });
+      await mountWith(
+        [hostModule(seen), viewModule([rota, hidden, staffing])],
+        ["staffing.write", "rota.read"],
+      );
+      expect(seen).toEqual([
+        [
+          { view: staffing, canWrite: true },
+          { view: rota, canWrite: false },
+        ],
+      ]);
+    });
+
+    it("refuses to mount when two views share an id", async () => {
+      const el = await mountWith(
+        [viewModule([view("staffing", 1), view("staffing", 2)])],
+        ["staffing.write"],
+      );
+      expect(login(el)).toBeTruthy();
+      expect(overview(el)).toBeNull();
+    });
+
+    it.each(["year", "month", "season", "special-day", "date", "calendar", "hours"])(
+      "refuses to mount when a view takes the Calendar's own view word %s",
+      async (id) => {
+        const el = await mountWith([viewModule([view(id, 1)])], [`${id}.write`]);
+        expect(login(el)).toBeTruthy();
+        expect(overview(el)).toBeNull();
+      },
+    );
+
+    it("mounts with a view whose id is not taken", async () => {
+      const el = await mountWith([viewModule([view("staffing", 1)])], ["staffing.write"]);
+      expect(login(el)).toBeNull();
+    });
+  });
+
   it("offers a manager Venue settings in Venue operations, opening on its first permitted tab", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

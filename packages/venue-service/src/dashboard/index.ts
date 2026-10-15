@@ -82,11 +82,13 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
       },
       create(ctx) {
         const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+        const calendar = { ctx, views: ctx.calendarViews ?? [] };
         return {
           render: (readOnly = false) =>
             html`<dashboard-opening-hours-screen
               .api=${api}
               .readOnly=${readOnly}
+              .calendar=${calendar}
             ></dashboard-opening-hours-screen>`,
         };
       },

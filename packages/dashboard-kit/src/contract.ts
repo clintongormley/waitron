@@ -15,6 +15,9 @@ export interface DashboardModuleContext {
   request: DashboardRequest;
   liveData?: LiveData;
   renderPanel?: DashboardPanelRenderer;
+  /** The enabled modules' Calendar views the person may read, ordered by `order`, each with whether
+   * the person holds its `requiresPermission`. */
+  calendarViews?: readonly { view: DashboardCalendarView; canWrite: boolean }[];
 }
 
 export type DashboardPanelRenderer = (
@@ -43,6 +46,41 @@ export interface DashboardFurtherScreen {
   create(ctx: DashboardModuleContext): DashboardScreenHandle;
 }
 
+/** What the Calendar hands a module's view. */
+export interface CalendarViewHost {
+  /** The month the Calendar is showing, YYYY-MM. */
+  month: string;
+  /** The address's `<key>/<value>` pairs after `view/<id>`; a key survives the shell's rewrite only
+   * when the dashboard's `navigation.ts` lists it. */
+  params: Readonly<Record<string, string>>;
+  canWrite: boolean;
+  /** Moves the Calendar to `view/<view>/<key>/<value>…`; `"hours"` returns to Opening hours. */
+  open(view: string, params: Record<string, string>): void;
+}
+
+/** The Calendar's own address view words, which no module view may take; `hours` is how a view
+ * asks to return to Opening hours. */
+export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
+  "year",
+  "month",
+  "season",
+  "special-day",
+  "date",
+  "calendar",
+  "hours",
+];
+
+/** A view a module adds to the Calendar (the Opening hours screen) beside Opening hours. */
+export interface DashboardCalendarView {
+  /** The address's view name; unique, and none of the Calendar's own view words. */
+  id: string;
+  labelKey: string;
+  order: number;
+  requiresPermission: string;
+  readPermission?: string;
+  create(ctx: DashboardModuleContext, host: CalendarViewHost): DashboardScreenHandle;
+}
+
 /** A Venue settings tab key; the app validates each contributed panel's tab against its own list. */
 export type SettingsTabId = string;
 
@@ -66,4 +104,5 @@ export interface DashboardContribution extends DashboardFurtherScreen {
   /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
   moreScreens?: readonly DashboardFurtherScreen[];
   settingsPanels?: readonly DashboardSettingsPanel[];
+  calendarViews?: readonly DashboardCalendarView[];
 }

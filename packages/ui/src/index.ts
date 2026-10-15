@@ -102,7 +102,12 @@ export {
   subscribeContentLanguages,
 } from "./content-languages.js";
 
-export { UrlStateController, type UrlPathConfig } from "./url-state.js";
+export {
+  UrlStateController,
+  encodePathSegment,
+  decodePathSegment,
+  type UrlPathConfig,
+} from "./url-state.js";
 export { NavigationGuard, navigationGuardFor, type NavigationLeave } from "./navigation-guard.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
