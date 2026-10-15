@@ -17,6 +17,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "01:00" };
+  ALL_DAY = { periodId: "allday", startsAt: "10:00", endsAt: "02:00" };
   vi.useRealTimers();
   hosts.splice(0).forEach((host) => host.remove());
   setLocale("en");
@@ -72,16 +73,19 @@ function meta(month: string): OpeningHoursMonth {
 
 const sunday = (date: LocalDate) => new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
 let DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "01:00" };
-const ALL_DAY = { periodId: "allday", startsAt: "10:00", endsAt: "02:00" };
+let ALL_DAY = { periodId: "allday", startsAt: "10:00", endsAt: "02:00" };
 /** The Grill makes the Restaurant's dinners, never on a Sunday; the Pass gets the Restaurant's
- *  dinners and the Bar's all-day orders. Neither gets anything on 25 December. */
+ *  dinners, never on a Sunday, and the Bar's all-day orders, and nothing on 15 December. Neither
+ *  gets anything on 25 December. The Pass's read lists the Bar first, so only the month read's
+ *  department order puts the Restaurant's track first. */
 function stationDay(stationId: string, date: LocalDate) {
   if (date === "2026-12-25") return [];
   if (stationId === "grill")
     return sunday(date) ? [] : [{ departmentId: "rest", ranges: [DINNER] }];
+  if (date === "2026-12-15") return [];
   return [
-    { departmentId: "rest", ranges: [DINNER] },
     { departmentId: "bar", ranges: [ALL_DAY] },
+    ...(sunday(date) ? [] : [{ departmentId: "rest", ranges: [DINNER] }]),
   ];
 }
 
@@ -144,6 +148,8 @@ const picker = (el: PrepStationTimes) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox");
 const readsOf = (calls: { path: string }[], kind: "month?" | "service-times?") =>
   calls.filter(({ path }) => path.includes(kind)).map(({ path }) => path);
+const segmentsOf = (track: Element) => [...track.querySelectorAll<HTMLElement>(".segment")];
+const percent = (value: string) => Number.parseFloat(value);
 const drawn = (el: PrepStationTimes, date: LocalDate, row: string) =>
   expect.poll(() => cell(el, date)?.querySelector(`.track[data-row="${row}"]`) ?? null);
 
@@ -203,21 +209,81 @@ describe("Prep station times", () => {
     );
   });
 
-  it("names each period's department on a station more than one department feeds", async () => {
+  it("draws one track per department that feeds the station, in the month read's order, under a Rows key", async () => {
     for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       const { el } = await mount({ stationId: "pass" });
-      await drawn(el, "2026-12-01", "pass").not.toBeNull();
-      expect(cell(el, "2026-12-01")!.querySelectorAll(".track")).toHaveLength(1);
-      expect(titles(el, "2026-12-01")).toEqual([
-        "All day (Bar) 10:00–02:00",
+      await drawn(el, "2026-12-01", "rest").not.toBeNull();
+      const tracks = [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")];
+      expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+      expect(segmentsOf(tracks[0]!).map((s) => s.title)).toEqual([
         "Dinner (Restaurant) 19:00–01:00",
       ]);
-      expect(cell(el, "2026-12-01")!.querySelector(".day")!.getAttribute("aria-label")).toContain(
-        "Pass: All day (Bar) 10:00–02:00, Dinner (Restaurant) 19:00–01:00",
+      expect(segmentsOf(tracks[1]!).map((s) => s.title)).toEqual(["All day (Bar) 10:00–02:00"]);
+      expect(text(monthRoot(el)!.querySelector('[data-test="rows"]'))).toBe(
+        locale === "en" ? "Rows: Restaurant · Bar" : "Filas: Restaurant · Bar",
       );
+      const label = cell(el, "2026-12-01")!.querySelector(".day")!.getAttribute("aria-label")!;
+      expect(label).toContain("Restaurant: Dinner 19:00–01:00, Bar: All day 10:00–02:00");
+      expect(label).not.toContain("Pass");
+      expect(label).not.toContain("(");
       el.remove();
     }
+  });
+
+  it("draws two departments' ranges on their own tracks when they match, and each its own when they overlap", async () => {
+    DINNER = { periodId: "dinner", startsAt: "10:00", endsAt: "02:00" };
+    const same = await mount({ stationId: "pass" });
+    await drawn(same.el, "2026-12-01", "rest").not.toBeNull();
+    const matching = [...cell(same.el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")];
+    expect(matching.map((track) => segmentsOf(track).map((s) => s.title))).toEqual([
+      ["Dinner (Restaurant) 10:00–02:00"],
+      ["All day (Bar) 10:00–02:00"],
+    ]);
+    same.el.remove();
+
+    DINNER = { periodId: "dinner", startsAt: "19:00", endsAt: "02:00" };
+    ALL_DAY = { periodId: "allday", startsAt: "10:00", endsAt: "00:00" };
+    const { el } = await mount({ stationId: "pass" });
+    await drawn(el, "2026-12-01", "rest").not.toBeNull();
+    const [dinner, allDay] = [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")]
+      .map(segmentsOf)
+      .map((segments) => {
+        expect(segments).toHaveLength(1);
+        return segments[0]!;
+      });
+    expect(dinner!.title).toBe("Dinner (Restaurant) 19:00–02:00");
+    expect(allDay!.title).toBe("All day (Bar) 10:00–00:00");
+    // From the 06:00 changeover: 19:00 is 13 hours in and runs 7; 10:00 is 4 hours in and runs 14.
+    expect(percent(dinner!.style.left)).toBeCloseTo((13 / 24) * 100, 3);
+    expect(percent(dinner!.style.width)).toBeCloseTo((7 / 24) * 100, 3);
+    expect(percent(allDay!.style.left)).toBeCloseTo((4 / 24) * 100, 3);
+    expect(percent(allDay!.style.width)).toBeCloseTo((14 / 24) * 100, 3);
+  });
+
+  it("keeps an empty track for a department that sends nothing that date, and reads No orders once when none sends", async () => {
+    const { el } = await mount({ stationId: "pass" });
+    await drawn(el, "2026-12-06", "bar").not.toBeNull();
+    const sunday = cell(el, "2026-12-06")!;
+    const tracks = [...sunday.querySelectorAll<HTMLElement>(".track")];
+    expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+    expect(segmentsOf(tracks[0]!)).toHaveLength(0);
+    expect(segmentsOf(tracks[1]!).map((s) => s.title)).toEqual(["All day (Bar) 10:00–02:00"]);
+    expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
+    expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(
+      "Restaurant: No orders, Bar: All day 10:00–02:00",
+    );
+    for (const date of ["2026-12-15", "2026-12-25"] as const) {
+      const none = cell(el, date)!;
+      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([
+        "No orders",
+      ]);
+      expect(none.querySelectorAll(".track")).toHaveLength(0);
+    }
+    const label = cell(el, "2026-12-15")!.querySelector(".day")!.getAttribute("aria-label")!;
+    expect(label.split("No orders")).toHaveLength(2);
+    expect(label).not.toContain("Restaurant");
+    expect(label).not.toContain("Bar");
   });
 
   it("steps to the next month and reads that month's whole weeks for the station", async () => {
@@ -277,9 +343,9 @@ describe("Prep station times", () => {
     expect(monthRoot(el)!.querySelectorAll(".track")).toHaveLength(0);
     expect(picker(el)!.value).toBe("pass");
     release();
-    await drawn(el, "2026-12-01", "pass").not.toBeNull();
+    await drawn(el, "2026-12-01", "rest").not.toBeNull();
     expect(monthRoot(el)!.querySelector('.track[data-row="grill"]')).toBeNull();
-    expect(monthRoot(el)!.querySelector('[data-test="rows"]')).toBeNull();
+    expect(text(monthRoot(el)!.querySelector('[data-test="rows"]'))).toBe("Rows: Restaurant · Bar");
   });
 
   it("asks for a chosen station with station-change and draws the first station for an unknown one", async () => {
