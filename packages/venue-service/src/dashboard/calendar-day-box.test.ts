@@ -185,9 +185,9 @@ describe("calendar-day-box", () => {
     box.show(anchor);
     insideViewport(popup().getBoundingClientRect());
     // Too tall to fit below the anchor, so it sits above it.
-    expect(popup().getBoundingClientRect().bottom).toBeLessThanOrEqual(
-      anchor.getBoundingClientRect().top + 1,
-    );
+    expect(
+      Math.abs(popup().getBoundingClientRect().bottom - anchor.getBoundingClientRect().top),
+    ).toBeLessThanOrEqual(1);
     box.rows = Array.from({ length: 12 }, (_, i) => ({
       name: `Zone ${i}`,
       text: "Open 17:00–02:00",
