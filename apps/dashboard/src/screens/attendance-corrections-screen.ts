@@ -75,6 +75,12 @@ export class AttendanceCorrectionsScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .screen,
+      section,
+      article,
+      ul {
+        grid-template-columns: minmax(0, 1fr);
+      }
       .selectors {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-form-max-width)), 1fr));
       }

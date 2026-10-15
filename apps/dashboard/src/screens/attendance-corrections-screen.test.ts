@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { createRequest, LiveData } from "@waitron/dashboard-kit";
 import type {
   AttendanceCommand,
@@ -129,6 +129,7 @@ async function mount(
     empty?: boolean;
     live?: boolean;
     lookupFailure?: boolean;
+    workerName?: string;
   } = {},
 ) {
   const data = {
@@ -136,6 +137,7 @@ async function mount(
     day: structuredClone(day),
     items: options.empty ? [] : structuredClone([item]),
   };
+  if (options.workerName) data.lookups.people[0]!.displayName = options.workerName;
   if (options.empty)
     data.day = { ...data.day, items: [], record: { ...data.day.record, entries: [] } };
   if (options.own) data.lookups.viewer.personId = "worker";
@@ -286,6 +288,34 @@ async function details(root: ParentNode) {
 }
 
 describe("dashboard attendance corrections", () => {
+  it.each(["light", "dark"] as const)(
+    "keeps day selectors and actions inside the phone content width in %s",
+    async (theme) => {
+      const previous = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(390, 950);
+      try {
+        const m = await mount({
+          workerName: "Diego Molina de los Olivos y Fernández — Turno de terraza",
+        });
+        m.host.setAttribute("data-theme", theme);
+        m.host.style.width = "310px";
+        await details(m.root);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(m.el.scrollWidth).toBeLessThanOrEqual(m.el.clientWidth);
+        const boundary = m.el.getBoundingClientRect();
+        for (const element of m.root.querySelectorAll<HTMLElement>(
+          ".selectors, section, article, ul, wt-button, wt-combobox, wt-input",
+        )) {
+          const rect = element.getBoundingClientRect();
+          if (rect.width === 0) continue;
+          expect(rect.right, element.outerHTML).toBeLessThanOrEqual(boundary.right + 1);
+          expect(rect.left, element.outerHTML).toBeGreaterThanOrEqual(boundary.left - 1);
+        }
+      } finally {
+        await page.viewport(previous.width, previous.height);
+      }
+    },
+  );
   it("shows manager, worker and disputed groups with named workers and passively read history", async () => {
     const m = await mount();
     expect(m.root.textContent).toContain("Waiting for a manager");

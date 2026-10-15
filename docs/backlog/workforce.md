@@ -12,12 +12,11 @@ Built: the append-only, hash-chained time entries (per node since #268), contrac
 projection of worked time, correction requests and approvals, the Spanish export
 (`packages/workforce-es`), and the rota, absences, swaps, planned-versus-actual view and staff portal.
 The trading server connects the till adapter to `clockIn`, `clockOut` and the break events in
-`packages/workforce/src/clocking.ts`. Correction routes and screens remain open.
+`packages/workforce/src/clocking.ts`. You can request and answer corrections on the till, and
+review or propose them in the dashboard.
 
 Left, as the legal minimum:
 
-- answering automatic-finish and missing-time questions at sign-in;
-- correction requests and their approval, as routes and screens;
 - read access for the worker, their representatives and the labour inspectorate, with four years'
   retention, and a route that produces the export.
 
@@ -32,7 +31,7 @@ written, so its chain and correction paths take the owner's sign-off at land.
 
 Part 1 added missing-entry corrections, worker and manager decisions, immediate confirmed automatic
 hours with a separate worker acknowledgment, stored admin-only self-approval (owner, 2026-10-14),
-pay-period closure, scoped frozen records and the Spanish history export. The correction and export libraries still have no staff-facing route or screen. Reset/reseed old workforce venue folders before installing the nullable-recorder
+pay-period closure, scoped frozen records and the Spanish history export. Export routes and screens remain open. Reset/reseed old workforce venue folders before installing the nullable-recorder
 constraint migration (owner decision, 2026-10-13). The populated old-record migration test checks
 the refused rebuild and unchanged rows/head after rollback; the empty old-schema test upgrades.
 
@@ -52,7 +51,7 @@ Part 3 connects the [end-of-day checks](../superpowers/plans/2026-10-14-a10-3-en
 A forgotten clock-out closes at your last later sign-in, order, accepted payment or break activity
 in that business day. Without later activity, the shift stays open and a question records the missing
 time. A published rota shift without a clock-in, or till work without a clock-in, also creates a
-question. Automatic ends count immediately; their questions wait for the response screens in part 4.
+question. Automatic ends count immediately; you answer their questions at a later sign-in.
 Your clock state and clock actions reconcile an overdue open day before returning the current state.
 
 Missing-time reminders use the venue's email setup and your saved address. Without an address,
@@ -68,11 +67,21 @@ Order and draft snapshots retain the admitted worker, original location and comm
 Payment callbacks qualify the original request instead of creating later human activity. Party
 names, bill-request flags and group reminder timing do not count as order or payment activity.
 
-Part 4 has an [answering and corrections plan](../superpowers/plans/2026-10-15-a10-4-answers-and-corrections-plan.md).
-It plans the sign-in questions, Fix my hours, till PIN decisions and dashboard correction queue;
-those routes and screens remain to be implemented. My hours stays with part 5; no placeholder is
-offered. Parts 4–6 remain open: answering questions, corrections, hours and the export/access
-screens. The period-read cost and correction waiting-list follow-ups remain open.
+Part 4 connects [answers and corrections](../superpowers/plans/2026-10-15-a10-4-answers-and-corrections-plan.md).
+At sign-in, you answer pending questions before Clock in. Cancel lets you work without answering;
+the unanswered questions return at a later sign-in. In your name menu or handheld More, Fix my hours
+opens a day and location so you can request a changed time or supply missing times. A selected
+supervisor or manager can approve or decline the request with their PIN.
+
+In the dashboard, Team → Time corrections shows requests waiting for a manager, proposals waiting
+for the worker and disagreements. A manager can propose a change; you accept it or give a reason
+for disagreeing. Original entries and responses remain in the history. Automatic finishes count
+before acknowledgment, and administrator self-approval is shown explicitly. If a reply is lost,
+Retry read checks the saved response before another attendance write is offered.
+
+Parts 5–6 remain open: My hours, manager hours screens and export/access screens. My hours has no
+placeholder; Fix my hours remains the correction entry until part 5 supplies the hours screen.
+The period-read cost remains open.
 
 
 ## A10 period read cost

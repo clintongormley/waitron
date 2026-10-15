@@ -1163,3 +1163,17 @@ src/till-app.clock.test.ts -t 'a clock refusal for one person' --reporter=verbos
 because the next admitted person's Clock in page was missing. Resetting the refusal flag during
 sign-in made that case pass; it also checks the next person's successful clock entry.
 The separate module/profile-disabled cases retain their no-request assertions.
+
+## Check a phone screen's content width after opening its detail
+
+A document can keep the viewport's width while a scrolling panel clips wider content. Check the
+visible fields and actions against their containing panel, with a long selected name. The attendance
+screen's phone cases in `apps/dashboard/src/screens/attendance-corrections-screen.test.ts` cover this
+shape. Its single-column grids use `minmax(0, 1fr)` so the selected worker's name cannot impose an
+intrinsic minimum on the whole column.
+
+Measured during A10-4 visual qualification on 2026-10-15: a 390-pixel viewport kept a 390-pixel
+document, while the day screen's 310-pixel container held a 426-pixel column. The long-name cases
+failed in both themes, then passed after changing the grid tracks. A short-name fixture passed
+before the fix and did not reproduce this case. The command was `pnpm --filter @waitron/dashboard
+exec vitest run src/screens/attendance-corrections-screen.test.ts -t 'phone content width'`.
