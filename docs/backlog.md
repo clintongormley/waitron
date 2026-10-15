@@ -2142,13 +2142,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A669 — an allergy at the table (owner, 2026-10-14; spec written, awaiting the owner's
-  review).** At a table's first Send the waiter answers "Any allergies at this table?"; for
+- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** At a table's first Send the waiter answers "Any allergies at this table?"; for
   Allergies, who (free text), what they avoid and a note, then ticks the dishes that guest eats. A
   clash turns red and can still be sent. Kitchen paper prints an allergy block under the guest's
   dish and a heading on the ticket; the screens match. The answer belongs to the party, shows as a
   banner with Change, and is in Actions → Allergies; a change to a dish the kitchen has sends a
-  notice; the floor plan marks the table. Every table send path runs it; the counter does not.
+  notice; the floor plan marks the table. Every table send path runs it; the counter does not. A
+  table leaving the party copies the allergic guests to both parties, and a guest can be deleted.
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 

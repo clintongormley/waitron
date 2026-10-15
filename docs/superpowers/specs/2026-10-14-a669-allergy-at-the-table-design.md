@@ -1,6 +1,6 @@
 # A669 — An allergy at the table: asked at Send, marked on the guest's dishes, told to the kitchen
 
-Date: 2026-10-14. Status: design agreed with the owner in chat; awaiting review of this written spec.
+Date: 2026-10-14. Status: approved by the owner, 2026-10-15.
 Companion spec: [A668 — allergen information in the editor, at publishing and on the till](2026-10-14-a668-allergen-info-editor-and-till-design.md),
 which this builds on (the allergen shape with kinds, the icons, the info window).
 
