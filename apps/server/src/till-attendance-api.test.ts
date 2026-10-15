@@ -159,6 +159,57 @@ it("serves own history to clock-only staff without service zones and keeps reads
   ).toBe(lastSeenAt);
 });
 
+it("offers the configured workplace for a first correction before any clock history", async () => {
+  const [worker] = await suite.db
+    .insert(persons)
+    .values({ displayName: "New worker", role: "staff", pinHash: hashPin("5678") })
+    .returning({ id: persons.id });
+  const session = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { personId: worker!.id, deviceId: venue.deviceId, pin: "5678" }),
+  );
+  const cookie = `${SESSION_COOKIE}=${session.token}; ${venue.cookie.split("; ")[1]!}`;
+  const response = await request("inbox", undefined, cookie);
+  expect(response.status).toBe(200);
+  const inbox = (await response.json()) as AttendanceInbox;
+  expect(inbox.personId).toBe(worker!.id);
+  expect(inbox.items).toEqual([]);
+  expect(inbox.prompts).toEqual([]);
+  expect(inbox.locations).toEqual([
+    { id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" },
+  ]);
+  const day = await request(
+    `day?date=2026-01-04&locationId=${venue.cfg.locationId}`,
+    undefined,
+    cookie,
+  );
+  expect(day.status).toBe(200);
+  expect(await day.json()).toMatchObject({ personId: worker!.id, record: { entries: [] } });
+  const submitted = await request(
+    "commands",
+    {
+      commandId: randomUUID(),
+      expectedRevision: inbox.revision,
+      action: "request",
+      questionId: null,
+      locationId: venue.cfg.locationId,
+      changes: [
+        { target: { missingKind: "in" }, at: "2026-01-04T09:00:00Z", offsetMinutes: 60 },
+        { target: { missingKind: "out" }, at: "2026-01-04T17:00:00Z", offsetMinutes: 60 },
+      ],
+      reason: "Forgot both clock entries",
+    },
+    cookie,
+  );
+  expect(submitted.status).toBe(200);
+  const result = (await submitted.json()) as AttendanceCommandResult;
+  expect(result.entryIds).toHaveLength(2);
+  const refreshed = (await (await request("inbox", undefined, cookie)).json()) as AttendanceInbox;
+  expect(refreshed.locations).toEqual(inbox.locations);
+  expect(refreshed.items).toMatchObject([
+    { personId: worker!.id, status: "waiting-manager", requestEntryIds: result.entryIds },
+  ]);
+});
+
 it.each(routes)("requires a current session on %s before parsing", async (path, body) => {
   const response = await request(pathOf(path), body, "");
   expect(response.status).toBe(401);

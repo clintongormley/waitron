@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
+  locations,
   withTransaction,
   type Database,
   type Transaction,
@@ -170,7 +171,15 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
             deps.now(),
           );
           await reconcileAttendanceResponses(tx, session.personId);
-          return readAttendanceInbox(tx, session.personId);
+          const inbox = await readAttendanceInbox(tx, session.personId);
+          if (!inbox.locations.some((location) => location.id === deps.cfg.locationId)) {
+            const current = await tx
+              .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
+              .from(locations)
+              .where(eq(locations.id, deps.cfg.locationId));
+            inbox.locations.push(...current);
+          }
+          return inbox;
         }),
       );
     }),
