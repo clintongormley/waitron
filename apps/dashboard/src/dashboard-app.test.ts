@@ -783,20 +783,25 @@ describe("dashboard-app", () => {
     }
   });
 
-  it("starts the banner's logo at the identity row's leading edge, with nothing laid out before it", async () => {
+  it("starts the banner's identity row with the navigation toggle, then the logo, with nothing else laid out before it", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
 
     const identity = brandBanner(el)!.querySelector<HTMLElement>(".brand-identity")!;
     const logo = identity.querySelector<HTMLImageElement>(".brand-logo")!;
+    const toggle = identity.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
       await page.viewport(1280, 800);
       expect(window.innerWidth).toBe(1280);
       expect(identity.querySelector("source")!.getClientRects()).toHaveLength(0);
-      expect(logo.getBoundingClientRect().left).toBeCloseTo(
+      expect(toggle.getBoundingClientRect().left).toBeCloseTo(
         identity.getBoundingClientRect().left,
+        0,
+      );
+      expect(logo.getBoundingClientRect().left).toBeCloseTo(
+        toggle.getBoundingClientRect().right + parseFloat(getComputedStyle(identity).columnGap),
         0,
       );
     } finally {
@@ -3403,6 +3408,8 @@ describe("dashboard-app", () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1000, 600);
+    // A window this wide opens folded unless a choice is stored; this case is about the full sidebar.
+    localStorage.setItem("waitron-dashboard-sidebar-folded", "false");
     try {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({

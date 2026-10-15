@@ -6,7 +6,14 @@ import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
+import {
+  baseStyles,
+  iconButtonStyles,
+  trackIconTooltip,
+  UrlStateController,
+  type WtInput,
+  type WtToast,
+} from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import { navMatches } from "./nav-search.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -143,6 +150,27 @@ type ScreenId = CoreScreen | (string & {});
 /** Also written as a literal in the CSS `@media` block below: a media query cannot read a custom
  * property. */
 const DRAWER_BREAKPOINT = "(max-width: 48rem)";
+
+/** A tablet-width window, whose sidebar opens folded while no choice is stored. */
+const FOLDED_BY_DEFAULT = "(48rem < width <= 64rem)";
+const SIDEBAR_FOLDED_KEY = "waitron-dashboard-sidebar-folded";
+
+function readStoredFold(): boolean | undefined {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_FOLDED_KEY);
+    return stored === "true" ? true : stored === "false" ? false : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeFold(folded: boolean): void {
+  try {
+    window.localStorage.setItem(SIDEBAR_FOLDED_KEY, String(folded));
+  } catch {
+    // Remembering the choice is a convenience; the sidebar works without it.
+  }
+}
 
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
@@ -324,6 +352,7 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
 export class DashboardApp extends LitElement {
   static override styles = [
     baseStyles,
+    iconButtonStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -361,6 +390,52 @@ export class DashboardApp extends LitElement {
         padding: var(--wt-space-3);
         border-right: 1px solid var(--wt-color-border);
         box-shadow: var(--wt-shadow-1);
+      }
+
+      .sidebar.folded {
+        flex-basis: calc(var(--wt-tap-min) + 2 * var(--wt-space-2) + 1px);
+        /* The tooltips lie outside the strip, beside its buttons. */
+        overflow: visible;
+        padding: var(--wt-space-2);
+      }
+
+      .strip {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
+      /* Section icons are never coloured, even while a button is pressed or open. */
+      .icon-button.strip-button,
+      .icon-button.strip-button:is([aria-pressed="true"], [aria-expanded="true"]) {
+        border: none;
+        border-inline-start: 3px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        color: var(--wt-color-text);
+      }
+
+      .icon-button.strip-button:hover {
+        background: var(--wt-color-surface);
+      }
+
+      .icon-button.strip-button[aria-current="true"] {
+        border-inline-start-color: var(--wt-color-primary);
+        background: var(--wt-color-surface-lifted);
+      }
+
+      .strip-button > .icon-tooltip {
+        inset-block-start: 50%;
+        inset-inline-start: calc(100% + var(--wt-space-1));
+        transform: translateY(-50%);
+      }
+
+      .strip-button > .icon-tooltip::before {
+        inset-block: 0;
+        inset-inline: auto 100%;
+        block-size: auto;
+        inline-size: var(--wt-space-1);
       }
 
       .nav {
@@ -588,12 +663,6 @@ export class DashboardApp extends LitElement {
         max-width: calc(100% - 2 * var(--wt-space-3));
       }
 
-      /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
-         in-flow there); the narrow-screen media query below reveals it at the banner's leading edge. */
-      .nav-toggle {
-        display: none;
-      }
-
       /* The veil behind the open drawer: it covers the content row below the banner and closes the
          drawer on a tap. It sits under the sliding sidebar but over the main content. */
       .scrim {
@@ -636,7 +705,6 @@ export class DashboardApp extends LitElement {
           display: contents;
         }
         .nav-toggle {
-          display: inline-block;
           grid-area: toggle;
           margin-inline-end: var(--wt-space-3);
         }
@@ -765,12 +833,25 @@ export class DashboardApp extends LitElement {
    * and the accessibility tree while off-screen. */
   @state() private narrow = false;
 
+  /** Ignored on a phone, whose drawer always holds the full sidebar. */
+  @state() private sidebarFolded = false;
+
+  #setFolded(folded: boolean): void {
+    this.sidebarFolded = folded;
+    storeFold(folded);
+  }
+
+  #onNavToggle(): void {
+    if (this.narrow) this.drawerOpen = !this.drawerOpen;
+    else this.#setFolded(!this.sidebarFolded);
+  }
+
   #breakpoint?: MediaQueryList;
 
   readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
     this.narrow = e.matches;
-    // At desktop there is no hamburger to reopen the drawer, so one left open would leave its scrim
-    // over the whole layout.
+    // Wider than a phone the toggle folds the sidebar instead, so a drawer left open would leave its
+    // scrim over the whole layout with nothing to close it.
     if (!e.matches) this.drawerOpen = false;
   };
 
@@ -878,6 +959,7 @@ export class DashboardApp extends LitElement {
     // matchMedia fires `change` only on a transition, so read the initial match first.
     this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
     this.narrow = this.#breakpoint.matches;
+    this.sidebarFolded = readStoredFold() ?? window.matchMedia(FOLDED_BY_DEFAULT).matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
     this.addEventListener("click", this.#onAppLink, true);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
@@ -1435,7 +1517,12 @@ export class DashboardApp extends LitElement {
                off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nav buttons
                leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
                control; it is interactive at desktop width and whenever the drawer is open. -->
-          <aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>${this.#nav()}</aside>
+          <aside
+            class=${classMap({ sidebar: true, folded: this.#folded() })}
+            ?inert=${this.narrow && !this.drawerOpen}
+          >
+            ${this.#folded() ? this.#strip() : this.#nav()}
+          </aside>
           <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open;
                the drawer is force-closed on the transition
                to desktop (#onBreakpointChange), so this never renders at desktop width.
@@ -1560,7 +1647,8 @@ export class DashboardApp extends LitElement {
                 variant="ghost"
                 data-test="nav-toggle"
                 aria-label=${t("nav.toggle")}
-                @click=${() => (this.drawerOpen = !this.drawerOpen)}
+                aria-expanded=${String(this.narrow ? this.drawerOpen : !this.sidebarFolded)}
+                @click=${() => this.#onNavToggle()}
                 ><wt-icon name="hamburger"></wt-icon
               ></wt-button>`
             : nothing
@@ -1841,8 +1929,8 @@ export class DashboardApp extends LitElement {
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
-   * language; `pages` is undefined when no page is permitted or no page matches the search. */
-  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
+   * language. */
+  #permittedNav(): { group: NavGroup; pages: NavPage[] }[] {
     if (this.sessionRole === "staff")
       return [
         {
@@ -1861,15 +1949,99 @@ export class DashboardApp extends LitElement {
       const among = [...(this.#navGroups.get(group.id) ?? [])]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((screen) => ({ screen: screen.id, label: tKit(screen.navLabelKey) }));
-      const permitted: NavPage[] = [
-        ...shown(group.items),
-        ...among,
-        ...shown(group.itemsAfterModules),
-      ];
-      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
-      const pages = navMatches(this.navSearch, permitted, heading);
-      return { group, pages: pages.length > 0 ? pages : undefined };
+      return {
+        group,
+        pages: [...shown(group.items), ...among, ...shown(group.itemsAfterModules)],
+      };
     });
+  }
+
+  /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
+  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
+    const permitted = this.#permittedNav();
+    if (this.sessionRole === "staff") return permitted;
+    return permitted.map(({ group, pages }) => {
+      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
+      const matched = navMatches(this.navSearch, pages, heading);
+      return { group, pages: matched.length > 0 ? matched : undefined };
+    });
+  }
+
+  #folded(): boolean {
+    return !this.narrow && this.sidebarFolded;
+  }
+
+  async #searchFromStrip(): Promise<void> {
+    this.#setFolded(false);
+    await this.updateComplete;
+    const search = this.renderRoot.querySelector<WtInput>("wt-input[data-test=nav-search]");
+    await search?.updateComplete;
+    search?.focus();
+  }
+
+  /** Until a section's own panel exists, a section of several pages unfolds the sidebar with it
+   * open; that is not stored, so the next visit opens folded again. */
+  #openSectionFromStrip(group: NavGroup, pages: NavPage[]): void {
+    if (pages.length === 1) {
+      this.#openFromNav(pages[0]!.screen);
+      return;
+    }
+    this.collapsedGroups = new Set(
+      NAV_GROUPS.filter((entry) => entry.headerKey && entry.id !== group.id).map(
+        (entry) => entry.id,
+      ),
+    );
+    this.sidebarFolded = false;
+  }
+
+  #stripButton(
+    test: string,
+    label: string,
+    icon: string,
+    onClick: () => void,
+    current = false,
+  ): TemplateResult {
+    return html`<button
+      type="button"
+      class="icon-button strip-button"
+      data-test="strip-${test}"
+      aria-label=${label}
+      aria-current=${current ? "true" : nothing}
+      @click=${onClick}
+      @pointerenter=${trackIconTooltip}
+      @pointerleave=${trackIconTooltip}
+      @focus=${trackIconTooltip}
+      @blur=${trackIconTooltip}
+    >
+      <wt-icon name=${icon}></wt-icon><span class="icon-tooltip" aria-hidden="true">${label}</span>
+    </button>`;
+  }
+
+  /** The folded sidebar: one icon per section with a page this person may open. The search does
+   * not narrow it. */
+  #strip(): TemplateResult {
+    const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
+    return html`<nav class="strip" aria-label=${t("nav.sections")}>
+      ${
+        this.sessionRole === "staff"
+          ? nothing
+          : this.#stripButton(
+              "search",
+              t("nav.search"),
+              "search",
+              () => void this.#searchFromStrip(),
+            )
+      }
+      ${sections.map(({ group, pages }) =>
+        this.#stripButton(
+          group.id,
+          group.headerKey === undefined ? t("nav.overview") : t(group.headerKey),
+          group.icon,
+          () => this.#openSectionFromStrip(group, pages),
+          pages.some((page) => page.screen === this.screen),
+        ),
+      )}
+    </nav>`;
   }
 
   #openFromNav(screen: ScreenId): void {
