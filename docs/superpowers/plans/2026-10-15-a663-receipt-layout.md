@@ -4,8 +4,8 @@
 
 **Goal:** Print the simplified receipt and the full invoice in the two layouts the owner approved on
 2026-10-14 — ruled-off sections, a large TOTAL, one row per item on a full invoice, the registered
-address once or labelled, VAT rates written "10%" and "17,5%", guests and the amount per person, and
-an optional drink/food subtotal — on 58 mm and 80 mm paper and on the A4 page.
+address once or labelled, VAT rates written "10%" and "17,5%", and guests and the amount per person —
+on 58 mm and 80 mm paper and on the A4 page.
 
 **Architecture:** Everything printed comes from one list of elements built by
 `buildReceiptDocument` (`apps/server/src/receipt-document.ts:95`). Two renderers draw that list: the
@@ -31,8 +31,8 @@ mockups are "drawn, not rendered": where this plan departs from a drawing, it sa
 
 ## How the work is cut
 
-Five pull requests: Part 1 is split in two (1a and 1b) so that the half that touches no file of
-lane A's open A661 branch can start now. Each leaves `main` green and correct on its own; none needs
+Four pull requests (a fifth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+two (1a and 1b) so that the half that touches no file of lane A's open A661 branch can start now. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
 request holds.
 
@@ -41,7 +41,7 @@ request holds.
 | 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
 | 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
 | 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed (A661 landed 2026-10-15, #1745) |
-| 3 | Guests and the amount per person | 3 | After A661 lands (it edits `receipt-print.ts`) (A661 landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
+| 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
 Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
@@ -1131,8 +1131,8 @@ and that split is accepted, as for the date.)
 
 # Part 2 — the full invoice
 
-Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661 landed 2026-10-15, #1745) (A661
-changes `bill-payments.test.ts` and adds "Factura completa" assertions this part must update; see
+Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661 landed 2026-10-15, #1745; it
+changed `bill-payments.test.ts` and added "Factura completa" assertions this part must update; see
 "A661 overlap"). Target layout (`2-full-invoice.png`):
 
 ```
@@ -1717,7 +1717,8 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 - [ ] Extend `receipt-look.ts` with `guests: 4` on the one-rate sample and the full invoice; run;
   open the pictures; the line sits after the payment, before the footer, in its own ruled section.
 - [ ] Fiscal gate, unedited, PASS.
-- [ ] Backlog: point 6 done; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
+- [ ] Backlog: point 6 done; A663 entry deleted from `docs/backlog/printers.md` and its line removed
+  from `docs/backlog.md` if no point is left open; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
   bills print no guests line — owner to confirm".
 - [ ] Commit, then `/finish-branch`.
 
@@ -1875,10 +1876,10 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 ## Owner questions
 
 Answer by quoting the question number. Parts 1a, 1b and 2 need no answer (Part 2 builds Q4's,
-Q5's and Q8's defaults unless told otherwise); Part 3 can be built on Q2's default; Part 4 waits for
-Q1, Q3 and Q6.
+Q5's and Q8's defaults unless told otherwise); Part 3 can be built on Q2's default; Q1, Q3 and Q6 were for Part 4, which the owner withdrew on
+2026-10-15.
 
-**Q1 — How does the till know a product is a drink?** (Blocks Part 4.)
+**Q1 — How does the till know a product is a drink?** (Part 4 withdrawn 2026-10-15; no answer needed.)
 Recommended: **mark categories.** In Products, a category's menu gets a "Drinks" switch; every
 product in that category or any category under it counts as drink. Example: you switch it on for
 "Bebidas"; "Vinos", "Cervezas" and "Refrescos" under it are drinks, and a new wine added to "Vinos"
@@ -1899,7 +1900,7 @@ entered only when a table is seated, so the till has no count for the joined par
 the joined tables' counts together («5 comensales · por persona 30,00 €») — right when each table's
 count was entered, wrong when one was left blank.
 
-**Q3 — Where the drink/food switch lives.** (Blocks Part 4.)
+**Q3 — Where the drink/food switch lives.** (Part 4 withdrawn 2026-10-15; no answer needed.)
 The spec says "a venue setting" (point 7, and the mockup's legend: «a venue setting, off by
 default»); this plan's default departs from that, so it needs your yes.
 Default: **in each department's receipt settings, beside "Print address"**, which is where a
@@ -1938,7 +1939,7 @@ under its item (art. 6.1.f only asks that it be shown). Example: «1 Menú del d
 that 10,00 − 1,00 = 9,00 adds up on the line; that is a new figure the receipt works out rather than
 one it was given.
 
-**Q6 — Drink/food subtotals on a bill with a whole-bill discount.** (Blocks Part 4.)
+**Q6 — Drink/food subtotals on a bill with a whole-bill discount.** (Part 4 withdrawn 2026-10-15; no answer needed.)
 Default: **share the discount in proportion**, so Bebida + Comida always equals TOTAL. Example:
 drinks 63,00, food 344,00, 10% off the whole bill (total 366,30) → Bebida 56,70, Comida 309,60.
 Alternative: print the subtotals before the discount, which then do not add up to TOTAL.

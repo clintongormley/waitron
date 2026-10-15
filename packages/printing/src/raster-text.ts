@@ -2,7 +2,10 @@ import { GLYPH_HEIGHT, GLYPH_WIDTH, GLYPHS } from "./glyphs.js";
 import { gridForWidth, type TextGrid } from "./layout.js";
 import { glyphRows, prepareText } from "./text.js";
 
-/** One line of text is one image this many dots tall. */
+/**
+ * A regular or bold line of text is one image this many dots tall; a double-size one is twice it
+ * ({@link textBandHeight}).
+ */
 export const TEXT_BAND_HEIGHT = GLYPH_HEIGHT;
 
 export type Alignment = "left" | "center" | "right";

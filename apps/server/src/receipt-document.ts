@@ -41,7 +41,7 @@ export interface ReceiptDocumentInput {
   duplicate?: boolean;
 }
 
-// The roll renderer resolves an indent after this prefix against its own column count.
+// The roll renderer resolves an indent after this prefix against the columns the line is drawn in.
 export type ReceiptIndent = number | { after: string };
 export const PART_SEPARATOR = " · ";
 export type ReceiptStyle = { bold?: true; double?: true };

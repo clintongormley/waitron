@@ -3493,14 +3493,19 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply
   that rule. Decide whether a manager's resend should.
 
-- **The till's on-screen receipt is a second copy of the layout (A663 follow-up, 2026-10-15;
-  open).** It prints its own unit-price line
-  and rates as «21.00%», so A663's changes do not reach it; bring it into line with the printed receipt.
+- **The till's on-screen receipt is a second copy of the layout (left open by A663 Part 1a).** It
+  prints its own unit-price line and rates as «21.00%», so A663's changes do not reach it; bring it
+  into line with the printed receipt.
   [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
 
-- **Quantities print with "." whatever the receipt language (A663 follow-up, 2026-10-15; open)**
+- **Quantities print with "." whatever the receipt language (left open by A663 Part 1a)**
   («0.35 kg» on a Spanish receipt).
   [Detail](backlog/printers.md#quantities-print-with--whatever-the-receipt-language)
+
+- **Equipment labels draw their double-size heading by hand (left open by A663 Part 1a).**
+  `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
+  now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check its
+  layout, which uses a different grid.
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.

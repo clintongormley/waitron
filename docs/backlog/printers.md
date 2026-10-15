@@ -372,7 +372,8 @@ just a green typecheck.
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
   receipt, rendered from the code on 2026-10-14.
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md)
-  — Part 1a landed; Parts 1b, 2 and 3 buildable now (A661 landed, #1745).
+  — Part 1a landed; Part 1b buildable now (A661 landed, #1745); Part 2 after Part 1b; Part 3 after
+  Parts 1a and 1b.
   1. **The simplified receipt.**
      - The QR code, «QR tributario:» and VERI\*FACTU stay first. AEAT's QR specification v0.5.0, §3,
        requires the QR at the start of the invoice (quoted in
@@ -413,6 +414,7 @@ just a green typecheck.
      address always prints (2026-10-10, A366 slice 7, the note atop
      [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
+  5. **VAT rates with significant digits only** — done in Part 1a's pull request.
   6. **Guests and the amount per person** when the table's guests were entered.
 
 ## The till's on-screen receipt is a second copy of the layout

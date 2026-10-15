@@ -107,7 +107,7 @@ describe("readRasterText", () => {
     expect(read("abc", 400)).toBe("abc");
   });
 
-  it("does not read a band that is not 28 dots tall", () => {
+  it("does not read a band that is neither 28 nor 56 dots tall", () => {
     expect(readRasterText(360, 27, new Uint8Array(45 * 27))).toBeUndefined();
   });
 

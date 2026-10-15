@@ -1010,6 +1010,11 @@ ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a prin
 > **Pointer, 2026-10-02 (C123).** The caption and the legend are supplied by the Veri\*Factu fiscal
 > backend (`packages/fiscal-verifactu/src/backend.ts`); a receipt with no QR prints neither.
 >
+> **Pointer, 2026-10-15 (A663 Part 1a).** The printed receipt now draws TOTAL double size where it
+> fits in half the roll's width, and the A4 page draws it at twice the body size; every other line,
+> the caption and the VERI\*FACTU line among them, keeps the ordinary size. Why no asesor question is
+> needed: `docs/backlog/printers.md` → A663, point 1.
+>
 > **The C115 entry, moved here unedited from `docs/backlog.md` on 2026-10-08 (A430):**
 >
 > - **«QR tributario:» above the QR (C115, owner 2026-09-30) — DONE (#999).** Follow-ups:
