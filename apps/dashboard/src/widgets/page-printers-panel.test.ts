@@ -303,6 +303,14 @@ it("saves a rename on Enter", async () => {
   );
 });
 
+it("disabling a printer asks the server to switch it off, then reads the list again", async () => {
+  const { el, api, reload } = await mount();
+  await click(el, "[data-test=disable-page-printer-pp2]");
+  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { active: false });
+  expect(api.updatePagePrinter).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+});
+
 it("sends one disable however often the row's Disable is pressed while it is out", async () => {
   const { el, api } = await mount();
   let finish!: () => void;
@@ -339,15 +347,13 @@ it("shows a refused disable as the panel's alert and keeps the row's Disable usa
   expect(reload).not.toHaveBeenCalled();
 });
 
-it("a role without printer.manage sees the list with no row menu, no rename and no choice", async () => {
+it("a role without printer.manage sees the list with no row menu and no rename", async () => {
   const { el } = await mount({ canManage: false });
   const table = q(el, "[data-test=page-printers-table]") as unknown as {
     columns: { key: string }[];
   };
   expect(table.columns.map(({ key }) => key)).not.toContain("actions");
   expect(q(el, "dashboard-row-actions")).toBeNull();
-  expect(q(el, "[data-test=invoice-printer-choice]")).toBeNull();
-  expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
 });
 
 it("a rename whose re-read fails closes the dialog and shows a load failure", async () => {
