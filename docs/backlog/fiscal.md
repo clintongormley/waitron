@@ -24,10 +24,24 @@ A693 changes no production code. Deployment's runtime ENV and compose app settin
 set `TZ` or mount a local-time file; a local `node:26.11.1-slim` process reported `UTC`.
 That probe does not measure an operator's configured appliance.
 
-Next: decide which zone dates an invoice, trace every issuing path and the record's
-explicit offset, then qualify the change with the protected fiscal checks before going
-live. The fake AEAT's UTC-midnight comparison caused A693's test refusal; these probes
-do not establish the real AEAT's issue-date rule. Do not alter recorded fiscal rows.
+**A696 audit/design, 2026-10-15:** the
+[unapproved design](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
+traces every discovered issuing, replay, resend, import and seed path. Driver probes extend the
+process-zone observation to held orders, unpaid invoices, table payments, reader capture/recovery,
+public unpaid departure and cancellation credits, core F1/F3 and R5, and emergency series.
+An annulment retains the original invoice date. Next-day Tokyo outbox sends retain the stored
+fiscal payloads and rows; real AEAT acceptance, lost-response/restart and restore are not measured.
+The 28-case disposable audit and 20 protected checks passed; the proposed venue-date expectation
+separately failed all eight UTC cases while eight Madrid controls passed. No product fix is built.
+
+Next: the owner decides whether new issue dates and generation offsets use the configured
+location zone. Then write the plan and build a separate FULL fiscal PR, preserving stored dates,
+offsets and hashes. A444's operation/service-date decision stays separate. The audit also found a
+source-only F2 presentation gap: `readReceiptIssuer` supplies the stored offset only for a named
+recipient, leaving ordinary receipt views to their runtime zone. The revised recommendation includes the saved offset in F2 printing and till display. The owner
+must also settle the repair path for an invalid zone discovered after card capture before a plan
+or build is approved; existing settings history locks do not provide that repair route.
+No stored fiscal row is to be rewritten.
 
 ## No sale over €3,010 can be made at all
 

@@ -147,10 +147,13 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **Walk-up invoice dates follow the server process time zone.** With the venue fixed to
-  Madrid at `2026-10-14T23:30Z`, A693's probe stored 14 October under `TZ=UTC` and
-  15 October under `TZ=Europe/Madrid`. Decide the intended zone, audit the issuing paths
-  and qualify a fiscal fix before going live. [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
+- **A696. Invoice issue dates and record offsets follow the process zone.** The audit measured
+  walk-up, bill, card, correction and substitution paths with the venue fixed to Madrid:
+  `2026-10-14T23:30Z` stores 14 October under UTC and 15 October under Madrid.
+  The [unapproved design](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
+  recommends the configured location zone for new issuance. Next: owner decision, then a separate
+  FULL fiscal build; preserve stored records and keep A444 separate.
+  [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
 
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
   the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
