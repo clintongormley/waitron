@@ -122,6 +122,10 @@ export class WtDisclosure extends LitElement {
       :host([ruled]) .summary {
         line-height: calc(var(--wt-font-size-sm) + var(--wt-space-2));
       }
+      :host([ruled]) .body > slot {
+        display: block;
+        padding-block-start: var(--wt-space-3);
+      }
 
       .summary-row {
         display: -webkit-box;

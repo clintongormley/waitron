@@ -18,6 +18,15 @@ summarises what is inside it, so you can see at a glance which sections you have
 by clicking its heading. If a section contains something you need to fix, it opens itself and stays
 open until you have fixed it.
 
+## Set how a product is sold
+
+Open **Selling** to change Available or **Ordered on its own by**: Anyone, Staff only or Nobody.
+The explanation below the selected choice tells you what it allows. A variant has only Available
+here. Selling starts closed, with the current settings on its summary line.
+
+Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
+a colour change before you save. Close the panel with Escape to return to the thumbnail.
+
 ## Give a product up to three names
 
 The name you just typed is the **staff** name. It is plain text, in no particular language, and it
@@ -87,7 +96,10 @@ field's label starts **Base price**, because a variant you leave without a price
 it. That variant's empty price shows the base price greyed out as a hint, in its window and in its
 row of the table. The **Pricing** section then folds to one line, such as **Base price:** €38.00
 per kg · **VAT:** Reduced (10%); choose the line to open it. It opens by itself when the base price
-or the VAT needs fixing, and on a product that has never been saved.
+or the VAT needs fixing. When you open a product without Active variants, Pricing starts open;
+with Active variants, Pricing starts closed and Variants starts open. You can close either section
+without losing the draft. The unit link in the variants' Price heading opens the same unit dialog
+as the price field's unit button. Each comes first, followed by units sorted in your dashboard language.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu

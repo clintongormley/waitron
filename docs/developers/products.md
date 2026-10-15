@@ -407,10 +407,10 @@ has no colour of its own and no coloured category nearer to it, and the default 
 product with no colour of its own and no coloured category above it, a product in no category
 included.
 
-You set a product's own colour in the product editor, which has a colour chooser after Name;
+You set a product's own colour through the pencil-marked thumbnail beside Name. Its panel holds
+Choose image, then the colour controls;
 its first choice, "Use category colour", shows the colour the product would take from its category
-(following a category you change in the editor before saving), or says "Its category has no
-colour." When no category above the product has a colour and the venue has a default, that choice
+(following a category you change in the editor before saving). When no category above the product has a colour and the venue has a default, that choice
 reads "Use default colour" and shows the default (`renderColor`,
 `apps/dashboard/src/widgets/product-editor.ts`). Choosing it saves no colour of the product's own.
 A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
@@ -612,9 +612,9 @@ Each product placed in a menu's published structure gets a button in the till's 
 and wherever the menu's Device Home Page places it. Where the device's service zone serves more than one
 menu, the search results also list each other served menu's matching products in a group of their
 own, each at that menu's price; [design-system.md](design-system.md), _The till's menu search_. The exception is a product whose
-standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
+standalone ordering the menu published as `not_sold_separately` (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
-extras list still offers it. Staff only gets a button like Public, because there is no guest
+extras list still offers it. Staff only gets a button like Anyone, because there is no guest
 ordering yet. A draft line, or a counter basket line not yet saved, that holds a dish now sold only
 as an extra is marked "Only sold as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`):
 a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
@@ -706,8 +706,9 @@ froze (`TabLine.unitPrecision`), since a variant is not one of the till's produc
 
 ### In the product editor
 
-Under Available, **Standalone ordering** offers three choices: Public, Staff only and Not sold
-separately (`products.ordering`). A variant's own page does not offer it, because the till and the
+The **Selling** section holds Available and **Ordered on its own by**, with three visible choices:
+Anyone, Staff only and Nobody. Their wire values remain `public`, `staff_only` and
+`not_sold_separately` (`products.ordering`). The chosen explanation appears below the choices. A variant's own page does not offer it, because the till and the
 server read the dish's setting and a variant is only ever ordered under its dish. The products list
 shows the same setting as a column with a filter (`apps/dashboard/src/widgets/product-list.ts`).
 
@@ -724,8 +725,9 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows
   the base price as its hint, in its window and in its table row, and the Pricing section is a fold
   whose closed line names the base price and the VAT (`pricingSummary`). The fold opens on a VAT,
-  unit or price error (`SECTION_FIELDS`) and starts open on a product never saved. The table and Add
-  variant are a separate Variants section under it, always open.
+  unit or price error (`SECTION_FIELDS`). Pricing starts open without Active variants, and closed
+  with them. The separate Variants section starts open with Active variants and otherwise closed;
+  its empty summary reads None. Opening an empty section shows Add variant.
 - An active saved row's menu offers **Open**, **Edit** and **Archive**; an unsaved row uses
   **Remove**. **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to

@@ -763,15 +763,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A647 — tidy the product editor (owner, 2026-10-14; open).** One style for every section, a
-  Selling section for Available and standalone ordering, the swatches moved behind the thumbnail,
-  and a header link for the variants' unit. Which sections start open: Kitchen and Pricing; Modifiers
-  when the product has any; with variants, Variants open and Pricing closed; Selling always closed,
-  its summary showing "Unavailable" in the warning colour. Needs a new shared three-way toggle.
-  Added 2026-10-15: the Pricing unit dialog names units in the dashboard's language, sorted (point 7).
-  [Detail](backlog/catalogue.md#a647--tidy-the-product-editor),
-  [mockups](backlog/mockups/a647-product-editor/)
-
 - **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
   spec approved 2026-10-15).** A "Contains none of the 14" choice, so a dish stops
   reading "not reviewed" for ever; "may contain" dropped; Gluten and Nuts say which cereals and nuts;
@@ -780,8 +771,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   published now or scheduled, each linking to its product. On the till the Allergens screen is
   deleted; product buttons carry an "i" with a long-press info window, the order list shows allergen
   icons after the name, and the kitchen's "not reviewed" warning goes. Erudus icons. Fixes a defect
-  read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. After
-  A647 (same file). [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)
+  read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. Uses
+  the product editor's existing sections. [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)
 
 - **A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
   A printed menu carries each dish's allergen icons after its name and a key on the page naming

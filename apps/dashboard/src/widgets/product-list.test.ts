@@ -965,7 +965,7 @@ describe("product-list", () => {
       const root = await tableRoot(el);
       expect(
         [...root.querySelectorAll("[data-test=ordering-badge]")].map((b) => b.textContent!.trim()),
-      ).toEqual(["Public", "Staff only", "Not sold separately"]);
+      ).toEqual(["Anyone", "Staff only", "Nobody"]);
       cleanupWidgets();
       setLocale("es-ES");
       const { el: spanish } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -976,7 +976,7 @@ describe("product-list", () => {
         [...spanishRoot.querySelectorAll("[data-test=ordering-badge]")].map((b) =>
           b.textContent!.trim(),
         ),
-      ).toEqual(["Público", "Solo personal", "No se vende por separado"]);
+      ).toEqual(["Cualquiera", "Solo el personal", "Nadie"]);
       expect(
         [...spanishRoot.querySelectorAll("thead th")].some((cell) =>
           cell.textContent!.trim().startsWith("Pedido por separado"),
@@ -987,7 +987,6 @@ describe("product-list", () => {
     }
   });
 
-  // Sorted by the words, either language would put Not sold separately (No se vende) first.
   it("sorts by ordering from the widest to the narrowest, not by the words", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [

@@ -2727,11 +2727,12 @@ save would be refused, because the default language's name is blank while anothe
 A form that shows everything an entity can carry becomes one long stack of cards, and the fields
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
-The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
-Name, Category, the colour chooser, Available, Standalone ordering, Variants and Modifiers stay on
-screen; Kitchen, Descriptors and Nutritional info fold; Pricing stays on screen until the product
-has an Active variant, and then folds too, with the base price and VAT on its closed line as named
-values (`summaryFields`).
+The product editor (`apps/dashboard/src/widgets/product-editor.ts`) keeps Category and Name on
+screen, with one pencil-marked thumbnail beside Name opening the image and colour controls.
+Selling, Kitchen, Descriptors, Nutritional info, Pricing, Variants and Modifiers each use a ruled
+disclosure. Selling holds Available and the three joined choices for who can order the product on
+its own, with the chosen explanation below. Its closed line paints Unavailable with the warning
+token. A variant's Selling section holds only Available.
 
 Three rules make the fold safe rather than merely tidy.
 
@@ -2771,15 +2772,16 @@ header click does nothing and the chevron stops presenting itself as a live cont
 an invalid submission can point at a field nobody can see. Clearing `has-error` does not re-collapse
 the section — the person is left looking at the field they just corrected.
 
-**Sections start collapsed, and open/closed state is not remembered.** A remembered fold is a second
-piece of per-person state to get wrong, and it makes two people describing the same screen disagree
-about what is on it. In the product editor, the Pricing fold starts open on a product never saved,
-whose price and VAT are still being set (owner, 2026-10-02, A219).
+**Open/closed state is not remembered across openings.** In the product editor Kitchen starts
+open. Pricing starts open without Active variants; with Active variants it starts closed and
+Variants starts open. Modifiers starts open when lists are attached. Selling, Descriptors and
+Nutritional info start closed. Without variants, the closed Variants line reads None; opening it
+shows Add variant. Closing a section does not discard its draft.
 
-A disclosure draws no border and no lines in either state; spacing above and below sets the section
-apart (owner, 2026-10-01, A169). The heading and chevron stay exactly where they are when it opens,
-the chevron directly after the heading. Closed, the summary sits under the
-heading; open, the body shows in its place and the summary is not drawn.
+An ordinary disclosure draws no line; a `ruled` disclosure draws a light line across the heading's
+full width, before its summary or body. The product editor uses this option for every section,
+with equal section spacing and normal summary line spacing. The heading and adjacent chevron stay
+in place when the section opens. The summary is shown only while closed.
 
 The body takes roughly a second to open or close, moving the following content with it. Its
 closed summary gives way to the body when opening starts. Closing makes the body inert while it
@@ -2815,10 +2817,12 @@ Two notes on the primitives this pattern uses, both in the table above:
   cancelled form returns focus to Add unit; a saved one chooses the new unit and shuts the
   chooser. On a variant's page the editor sets `fixed-unit` and shows the product's unit as text,
   because a variant's unit is always its product's (A222), and draws no chooser. A product with
-  variants also has a unit button (`pricing-unit`) in the variants table's price heading, with a
-  `--wt-space-2` gap between it and the word Price, naming the unit and opening the same chooser. A
+  variants also has a unit link (`pricing-unit`) in the variants table's Price heading,
+  reading “Price · Each ▾” or the selected unit and opening the same chooser. Each stays first in
+  the chooser; other units use the dashboard language, falling back to the content default, and
+  sort alphabetically by that displayed name. A
   table 30rem wide or less hides its price column and that button with it, so on a phone the price
-  field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`: a
+  field's button, reached by opening Pricing, is the way to the unit. The extras list form's price cells set `fixed-unit`: a
   row shows its product's unit, which is chosen on the product, so a unit button there would be a
   control that does nothing. Where that form is 30rem wide or less, the unit moves under the amount
   as text that breaks inside a word where it must, so a long unit does not widen the table:

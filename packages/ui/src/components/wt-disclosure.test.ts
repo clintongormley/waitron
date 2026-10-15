@@ -44,6 +44,16 @@ test("a custom closed summary is visible below the ruled heading and hides on op
   expect(el.shadowRoot!.querySelector('slot[name="summary"]')).toBeNull();
 });
 
+test("an open ruled section leaves token spacing between its heading line and its first field", async () => {
+  const el = await mount(
+    '<wt-disclosure ruled open heading="Kitchen"><div>Kitchen name</div></wt-disclosure>',
+  );
+  const title = el.shadowRoot!.querySelector(".title")!.getBoundingClientRect();
+  const content = el.firstElementChild!.getBoundingClientRect();
+  const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3"));
+  expect(content.top - title.bottom).toBe(gap);
+});
+
 function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise<Animation> {
   return new Promise((resolve, reject) => {
     let frames = 0;

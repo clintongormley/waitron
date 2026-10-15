@@ -83,6 +83,16 @@ it.each(cases)(
         },
         theme,
       );
+      const variantsSection = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        'wt-disclosure[data-section="variants"]',
+      )!;
+      variantsSection.open = true;
+      await variantsSection.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await Promise.all(
+        variantsSection.shadowRoot!.getAnimations().map((animation) => animation.finished),
+      );
       const modal = el.shadowRoot!.querySelector("wt-modal")!;
       await modal.updateComplete;
       const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
