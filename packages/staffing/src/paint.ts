@@ -149,24 +149,22 @@ async function assertSeasonHere(tx: Transaction, cfg: Cfg, seasonId: string): Pr
   if (row === undefined) throw new AppError("season.not_found", { seasonId });
 }
 
-/** The special day's name and its dates in date order; refused unless the special day is at the
- *  location. */
-async function specialDayHere(
+/** The special day's dates in date order; refused unless the special day is at the location. */
+async function specialDayDatesHere(
   tx: Transaction,
   cfg: Cfg,
   specialDayId: string,
-): Promise<{ name: string; dates: { dateId: string; date: string }[] }> {
+): Promise<{ dateId: string; date: string }[]> {
   const [row] = await tx
-    .select({ name: specialDays.name })
+    .select({ id: specialDays.id })
     .from(specialDays)
     .where(and(eq(specialDays.id, specialDayId), eq(specialDays.locationId, cfg.locationId)));
   if (row === undefined) throw new AppError("special_day.not_found", { specialDayId });
-  const dates = await tx
+  return tx
     .select({ dateId: specialDayDates.id, date: specialDayDates.date })
     .from(specialDayDates)
     .where(eq(specialDayDates.specialDayId, specialDayId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  return { name: row.name, dates };
 }
 
 /** Refuses an area that is not an active department or station at the location, and a staff
@@ -352,7 +350,7 @@ export async function saveSpecialDayStaffing(
   specialDayId: string,
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
-  const dateIds = new Set((await specialDayHere(tx, cfg, specialDayId)).dates.map((d) => d.dateId));
+  const dateIds = new Set((await specialDayDatesHere(tx, cfg, specialDayId)).map((d) => d.dateId));
   const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
   if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
   await assertEditTargets(tx, cfg, edits);
