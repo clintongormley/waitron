@@ -14,7 +14,12 @@ import {
 } from "../../test/find-bill-fixtures.js";
 import type { TillApi } from "../api/client.js";
 const modules = import.meta.glob("./till-find-bill-screen.ts");
-type Screen = HTMLElement & { api: TillApi; active: boolean; updateComplete: Promise<unknown> };
+type Screen = HTMLElement & {
+  api: TillApi;
+  active: boolean;
+  updateComplete: Promise<unknown>;
+  requestUpdate(): void;
+};
 const locale = currentLocale();
 afterEach(() => {
   cleanupWidgets();
@@ -194,8 +199,19 @@ it("aborts superseded reads and ignores answers delivered backwards", async () =
   expect(pending[0]!.signal!.aborted).toBe(true);
   pending[1]!.resolve(json(listPage([billRow({ label: "Newest answer" })])));
   await ready(el);
-  pending[0]!.resolve(json(listPage([billRow({ label: "Obsolete answer" })])));
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  const obsolete = json(listPage([billRow({ label: "Obsolete answer" })]));
+  let consumed = false;
+  const read = obsolete.text.bind(obsolete);
+  vi.spyOn(obsolete, "text").mockImplementation(async () => {
+    const result = await read();
+    consumed = true;
+    return result;
+  });
+  pending[0]!.resolve(obsolete);
+  await vi.waitFor(() => expect(consumed).toBe(true));
+  el.requestUpdate();
+  await el.updateComplete;
+  await table(el).updateComplete;
   expect(table(el).shadowRoot!.textContent).toContain("Newest answer");
   expect(table(el).shadowRoot!.textContent).not.toContain("Obsolete answer");
 });
