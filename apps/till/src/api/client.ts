@@ -1732,7 +1732,6 @@ export interface MyShift {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
   description: string | null;
   rosterVersionId: string | null;
 }

@@ -1,5 +1,9 @@
 # A462 Table Toolbars Implementation Plan
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task, inline in this registered worktree. Native execution is authorised. Read superpowers:test-driven-development before writing implementation or test code. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put Customise last on every table, align native selection boxes, and give Products and Menu Structure predictable branch closure and one selection/drag mode.

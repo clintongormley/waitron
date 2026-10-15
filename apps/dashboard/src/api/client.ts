@@ -964,7 +964,6 @@ export interface Shift {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
   rosterVersionId: string | null;
 }
 
@@ -980,7 +979,6 @@ export interface ShiftInput {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
 }
 
 export interface ShiftPatch {
@@ -989,7 +987,6 @@ export interface ShiftPatch {
   startsOffsetMinutes?: number;
   endsAt?: string;
   endsOffsetMinutes?: number;
-  role?: string | null;
 }
 
 export type RosterBreachKind =
@@ -1055,7 +1052,6 @@ export interface MyShift {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
   description: string | null;
   rosterVersionId: string | null;
 }

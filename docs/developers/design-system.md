@@ -2108,7 +2108,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
-  edit and new person forms, the variant, purchase and shift forms, the bookings form, the
+  edit and new person forms, the variant and purchase forms, the bookings form, the
   product editor and the department dialogs, Settings and zone settings
   do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
@@ -2121,7 +2121,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   and follows it once put back (`#storedChanged`). A form that forgets on disconnect which record it opened re-seeds
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
-  The staff edit and new person, variant, purchase, shift and bookings forms, the product
+  The staff edit and new person, variant, purchase and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
   dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, Guests, Split a table, invoice recipient,
@@ -2193,7 +2193,7 @@ and nothing guards it across screens:
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
-  form; the shift dialog;
+  form;
 - batch 3b: the print agent's Edit dialog; a printer page's name and connection editors; the
   calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
   editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the
@@ -3821,8 +3821,11 @@ staff-role column stays pinned while you scroll sideways.
 Choose an unfilled slot to open its picker. Staff-role holders come first, with leave or overlapping
 work and their week hours; Show everyone includes the other active people. A choice writes at once,
 and a refusal stays in the picker for retry. The picker closes after a successful write before the
-rota refreshes. Published weeks offer no slot actions. Editing existing shifts, warnings, Publish
-and Change this week remain part 7; the old Rota page remains available meanwhile. The Staffing
+rota refreshes. Published weeks offer no slot actions. Use By person to see each person's shifts across all areas.
+A draft's shifts open the staffing shift editor; Save waits for a changed draft, and Delete asks
+first. Labour warnings appear while you plan, and Publish lets you review them before publishing
+anyway. Change this week copies a published week into a draft. The old Team Rota page is retired;
+you reach both planning views through Calendar → Rota. The Staffing
 month shows unfilled counts for weeks with a roster version, and offers Rota for this week when
 you may read that view.
 

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, id, label, locations, newId, nowIso, table, tsString } from "@waitron/db";
+import { count, id, locations, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -19,7 +19,6 @@ export const shifts = table(
     startsOffsetMinutes: count("starts_offset_minutes").notNull(),
     endsAt: tsString("ends_at").notNull(),
     endsOffsetMinutes: count("ends_offset_minutes").notNull(),
-    role: label("role"),
     /** Null for a shift on no version (deleting its version sets it null); `publishRoster` attaches
      * such shifts at its location and in its period. */
     rosterVersionId: id("roster_version_id"),

@@ -1336,7 +1336,6 @@ describe("workforce facts after venue corrections", () => {
         startsOffsetMinutes: 120,
         endsAt: "2026-10-06T00:30:00Z",
         endsOffsetMinutes: 120,
-        role: "Waiter",
       });
       await backend.publishRoster(tx, { versionId, publishedByPersonId: personId });
       const event = {

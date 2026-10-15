@@ -22,7 +22,6 @@ export interface PersonShiftRow {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
   description: string | null;
   rosterVersionId: string | null;
 }
@@ -63,11 +62,10 @@ export async function listShiftsForPerson(
     starts_offset_minutes: number;
     ends_at: string;
     ends_offset_minutes: number;
-    role: string | null;
     roster_version_id: string | null;
   }>(sql`
     select shifts.id, shifts.location_id, starts_at, starts_offset_minutes, ends_at,
-      ends_offset_minutes, role, roster_version_id
+      ends_offset_minutes, roster_version_id
     from shifts
     join roster_versions rv on rv.id = shifts.roster_version_id and rv.status = 'published'
     where person_id = ${input.personId}
@@ -81,7 +79,6 @@ export async function listShiftsForPerson(
     startsOffsetMinutes: r.starts_offset_minutes,
     endsAt: r.ends_at,
     endsOffsetMinutes: r.ends_offset_minutes,
-    role: r.role,
     description: null,
     rosterVersionId: r.roster_version_id,
   }));

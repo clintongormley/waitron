@@ -119,7 +119,6 @@ export interface ShiftRow {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
   rosterVersionId: string | null;
 }
 
@@ -139,7 +138,6 @@ export interface AddShiftInput {
   startsOffsetMinutes: number;
   endsAt: string;
   endsOffsetMinutes: number;
-  role: string | null;
 }
 
 /** Only the supplied fields change. */
@@ -150,7 +148,6 @@ export interface UpdateShiftInput {
   startsOffsetMinutes?: number;
   endsAt?: string;
   endsOffsetMinutes?: number;
-  role?: string | null;
 }
 
 type ShiftState = "out" | "working" | "on_break";
@@ -352,9 +349,9 @@ export class WorkforceBackend {
     for (const shift of originalShifts) {
       const copyId = newId();
       await tx.execute(sql`insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
-        ends_at, ends_offset_minutes, role, roster_version_id, created_at)
+        ends_at, ends_offset_minutes, roster_version_id, created_at)
         select ${copyId}, person_id, location_id, starts_at, starts_offset_minutes,
-          ends_at, ends_offset_minutes, role, ${versionId}, created_at from shifts where id=${shift.id}`);
+          ends_at, ends_offset_minutes, ${versionId}, created_at from shifts where id=${shift.id}`);
       shiftIds.set(shift.id, copyId);
     }
     const openSwaps: { swapId: string; fromShiftId: string }[] = [];
@@ -423,7 +420,7 @@ export class WorkforceBackend {
   private async shiftsForVersion(tx: Transaction, versionId: string): Promise<ShiftRow[]> {
     const { rows } = await tx.execute<ShiftDbRow>(sql`
       select id, person_id, location_id, starts_at, starts_offset_minutes, ends_at,
-        ends_offset_minutes, role, roster_version_id
+        ends_offset_minutes, roster_version_id
       from shifts
       where roster_version_id = ${versionId}
       order by starts_at`);
@@ -448,10 +445,10 @@ export class WorkforceBackend {
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
       insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
-        ends_at, ends_offset_minutes, role, roster_version_id, created_at)
+        ends_at, ends_offset_minutes, roster_version_id, created_at)
       values (${newId()}, ${input.personId}, ${input.locationId},
         ${startsAt}, ${input.startsOffsetMinutes}, ${endsAt}, ${input.endsOffsetMinutes},
-        ${input.role}, ${input.versionId}, ${nowIso()})
+        ${input.versionId}, ${nowIso()})
       returning id`);
     return rows[0]!.id;
   }
@@ -472,8 +469,7 @@ export class WorkforceBackend {
         starts_at = ${startsAt},
         starts_offset_minutes = ${input.startsOffsetMinutes ?? shift.startsOffsetMinutes},
         ends_at = ${endsAt},
-        ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes},
-        role = ${input.role === undefined ? shift.role : input.role}
+        ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes}
       where id = ${input.shiftId}`);
   }
 
@@ -487,7 +483,7 @@ export class WorkforceBackend {
   private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
     const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
       select s.id, s.person_id, s.location_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
-        s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
+        s.ends_offset_minutes, s.roster_version_id, rv.status as version_status
       from shifts s
       left join roster_versions rv on rv.id = s.roster_version_id
       where s.id = ${shiftId}
@@ -722,7 +718,6 @@ type ShiftDbRow = {
   starts_offset_minutes: number;
   ends_at: string;
   ends_offset_minutes: number;
-  role: string | null;
   roster_version_id: string | null;
 };
 
@@ -747,7 +742,6 @@ function mapShift(r: ShiftDbRow): ShiftRow {
     startsOffsetMinutes: r.starts_offset_minutes,
     endsAt: r.ends_at,
     endsOffsetMinutes: r.ends_offset_minutes,
-    role: r.role,
     rosterVersionId: r.roster_version_id,
   };
 }

@@ -125,8 +125,7 @@ match.
 
 When your module owns a shift's area or staff role, contribute `describeShifts(tx, shiftIds)` on
 `WaitronModule`. Return a map only for the ids you can label. The host calls the enabled modules
-inside the own-shift read's transaction. Both own-shift routes return `description`, falling back to the
-shift's free-text `role` when no contribution labels it. The till and My schedule render that
+inside the own-shift read's transaction. Both own-shift routes return `description`, or null when no contribution labels the shift. The till and My schedule render that
 field. See `apps/server/src/boot.shift-descriptions.test.ts` for enabled and disabled boot cases.
 
 The dashboard's `listMyShifts` subscription watches `shifts` and `roster_versions`. An area or staff-role rename alone
@@ -1114,6 +1113,10 @@ The dialog now resolves each saved endpoint in the selected location's time zone
 `localTimeOccurrences` (`packages/venue-service/src/hours-occurrences.ts`), using the next civil
 day when the end is at or before the start. The overnight storage case in
 `apps/server/src/workforce-api.test.ts` reads back distinct offsets across the spring clock change.
+
+**Update, 2026-10-15 (A585 part 8).** The core roster screen and its shift dialog are retired.
+The references above describe those historical screens; Calendar → Rota and staffing's shift
+editor replace them. The storage convention and overnight route case remain.
 
 **The siblings, swept 2026-10-03 at `575aff691`.** Every `ts`, `tsString` and `timeOfDay` column
 was listed with `grep -rn --include='*.ts' -E '\b(ts|tsString|timeOfDay)\("' packages apps`, then

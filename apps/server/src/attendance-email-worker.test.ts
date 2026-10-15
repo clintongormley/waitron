@@ -120,7 +120,6 @@ async function seedRota() {
       locationId,
       personId,
       versionId,
-      role: null,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
       startsOffsetMinutes: 60,

@@ -1660,22 +1660,22 @@ Branch `feat/a585-8-retire-roster-screen`. Waits for A585-7.
   `schedule-api.test.ts:96`, `me-api.test.ts:167`, the till and dashboard schedule tests);
   `docs/backlog/dashboard.md` and `docs/backlog.md` lines that name the Rota screen.
 
-- [ ] **Step 1:** Grep first: `rg -n "roster-screen|shift-dialog|nav\.roster|shift_role|\.role\b" apps packages --glob '!**/node_modules/**'`
+- [x] **Step 1:** Grep first: `rg -n "roster-screen|shift-dialog|nav\.roster|shift_role|\.role\b" apps packages --glob '!**/node_modules/**'`
   and list every hit in the PR description.
-- [ ] **Step 2:** Remove the screen, the dialog, their tests, the nav entry and the role field
+- [x] **Step 2:** Remove the screen, the dialog, their tests, the nav entry and the role field
   through every layer. The Team menu now reaches the rota through Calendar → Rota; add a dashboard
   test that the Team group no longer lists "Rota".
-- [ ] **Step 3: Generate the workforce migration** (`pnpm --filter @waitron/workforce db:generate`)
+- [x] **Step 3: Generate the workforce migration** (`pnpm --filter @waitron/workforce db:generate`)
   and READ it. If drizzle-kit rebuilds `shifts` (a `__new_shifts` table and a `DROP TABLE shifts`),
   stop: with foreign keys on, that `DROP TABLE` deletes every `shift_assignments` row (cascade) and
   fails on `shift_swaps` (CLAUDE.md §3). In that case hand-check whether this engine accepts
   `ALTER TABLE shifts DROP COLUMN role` and write a custom migration
   (`db:generate:custom`) with exactly that statement, then prove it with a database test that a
   shift with an assignment and a swap keeps both after migrating.
-- [ ] **Step 4: Run** `pnpm --filter @waitron/workforce test:coverage`, the server, dashboard and
+- [x] **Step 4: Run** `pnpm --filter @waitron/workforce test:coverage`, the server, dashboard and
   till suites touched, `pnpm vitest run scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/migration-upgrade.test.ts`;
   PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "A585-8: the old Rota screen and the free-text role go (venue reset)"`.
+- [x] **Step 5: Commit** `git commit -s -m "A585-8: the old Rota screen and the free-text role go (venue reset)"`.
 
 ---
 

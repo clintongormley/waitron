@@ -16,7 +16,6 @@ const shifts: MyShift[] = [
     startsOffsetMinutes: 0,
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
-    role: "bar",
     description: "bar",
     rosterVersionId: null,
   },
@@ -128,11 +127,11 @@ describe("till-schedule-screen", () => {
     expect(root(el).textContent).toContain("bar");
   });
 
-  it("renders a shift with no role without a trailing role separator", async () => {
+  it("renders a shift with no description without a trailing separator", async () => {
     const api = stubApi({
       listMyShifts: vi
         .fn()
-        .mockResolvedValue([{ ...shifts[0], id: "s-norole", role: null, description: null }]),
+        .mockResolvedValue([{ ...shifts[0], id: "s-norole", description: null }]),
     });
     const { el } = await mount(api);
     expect(root(el).textContent).toContain("2026-05-04 09:00–17:00");
@@ -822,7 +821,7 @@ describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => 
   });
 });
 
-it("shows the module description instead of the legacy free-text role", async () => {
+it("shows the module description in the shift label", async () => {
   const { el } = await mount(
     stubApi({
       listMyShifts: vi

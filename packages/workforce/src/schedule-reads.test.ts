@@ -77,7 +77,6 @@ describe("listShiftsForPerson", () => {
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
-      role: "bar",
     });
     const early = await insertDraftShift(suite.db, {
       personId: me,
@@ -85,7 +84,6 @@ describe("listShiftsForPerson", () => {
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
-      role: "kitchen",
     });
     await insertDraftShift(suite.db, {
       personId: other,
@@ -106,7 +104,6 @@ describe("listShiftsForPerson", () => {
       startsOffsetMinutes: 0,
       endsAt: "2026-01-05T17:00:00Z",
       endsOffsetMinutes: 0,
-      role: "kitchen",
       description: null,
     });
   });

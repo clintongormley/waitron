@@ -153,7 +153,7 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   beside those controls — moving a screen's own controls into the table's toolbar would fix it;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
-  roster (`apps/dashboard/src/screens/roster-screen.ts`), the four report tables on the sales screen
+  four report tables on the sales screen
   (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
   (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
   those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (6) the printers screen's
@@ -503,7 +503,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 rebuilt it as the Receipts page
    (2026-10-01), which #1592 replaced with the department Edit receipt dialog,
    `department-receipt-dialog.ts`.
-7. **Workforce** — `roster-screen.ts`, `my-schedule-screen.ts`, `planned-actual-screen.ts`,
+7. **Workforce** — `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and
    `packages/bookings/src/dashboard/`. #333 touched only the venue-operations row menu.
@@ -696,9 +696,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   - a password manager filling the profile's current-password field: the owner tried Chrome's
     password manager on 2026-10-08 and reported that it works well; other password managers are
     untried;
-  - other purchases-screen, staff-screen and roster-screen tests still send made-up create and
-    update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`,
-    `update-shift`) instead of pressing the form's button; they pass, but never prove the button
+  - other purchases-screen and staff-screen tests still send made-up create and
+    update events (`create-purchase`, `update-purchase`, `create-person`, `save-person`) instead of pressing the form's button; they pass, but never prove the button
     works.
 - **Batch 3b — LANDED in #1415.** Printers, devices, device profiles, payments,
   canvases: the print agent's Edit dialog, a printer page's name and connection editors, the
@@ -822,7 +821,7 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   fix; the purchase and shift forms and the bookings form also replaced an edit made before
   removal with the stored values. DONE for the seventh in A397 part 2 (#1439): the product editor failed
   both cases before its fix (`product-editor.unsaved.test.ts`) and passes after. The same branch
-  closed the unit form's edit-first point under batch 2a. Also seen in the purchase and shift forms' tests, not changed and not
+  closed the unit form's edit-first point under batch 2a. Also seen in the purchase form's tests, not changed and not
   tried by hand: once put back with an edit, keyboard focus is outside the dialog, and Escape
   neither asks nor closes until focus is back on a field inside the dialog (the tests put it there
   with `focus()`; a click was not tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`,

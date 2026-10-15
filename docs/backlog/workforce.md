@@ -164,7 +164,23 @@ the source guard. Extend the guard to runtime re-exports and test that negative 
 entry was separately bundled for a browser and executed in Chromium; this follow-up concerns what
 the text guard would fail to catch in a later edit.
 
+## Staffing paint in calendar delete confirmations
+
+The A585 design leaves the count of staffing paint out of season and special-day date deletion
+confirmations (open point 7). Decide whether to add a shared deletion-impact seam, so venue-service
+can ask contributing modules for that count, or deliberately keep the confirmation without it.
+The completed rota retirement does not depend on that choice.
+
 ## Decisions and deliberate limits
+
+### A585. Staff roles and rota planning
+
+The [agreed design](../superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) keeps the
+owner's staffing and rota decisions. Plan shifts in Calendar → Rota, by area or by person. Each
+assignment names an area and a staff role; own schedules show module descriptions, or no label
+when no module describes a shift. The old Team Rota screen and free-text shift/template role are
+retired in part 8. Reset pre-live venues for that contract change.
+
 
 ### A10. Clocking in and out — the working-time record
 

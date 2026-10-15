@@ -65,6 +65,61 @@ async function attachedVersion(shiftId: string): Promise<string | null> {
 }
 
 describe("publishRoster", () => {
+  it("keeps shift planning and published own reads free of the retired free-text role", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, {
+        locationId,
+        period: "2035-02-05",
+      }),
+    );
+    const shiftId = await run((tx) =>
+      backend.addShift(tx, {
+        versionId,
+        personId,
+        locationId,
+        startsAt: "2035-02-05T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2035-02-05T17:00:00Z",
+        endsOffsetMinutes: 0,
+      }),
+    );
+    const draft = await run((tx) => backend.getRoster(tx, { locationId, period: "2035-02-05" }));
+    expect(draft.shifts[0]!.id).toBe(shiftId);
+    expect(draft.shifts[0]).not.toHaveProperty("role");
+    await run((tx) => backend.updateShift(tx, { shiftId, endsAt: "2035-02-05T16:00:00Z" }));
+    await run((tx) => backend.publishRoster(tx, { versionId }));
+    const own = await run((tx) =>
+      listShiftsForPerson(tx, {
+        personId,
+        from: "2035-02-05",
+        to: "2035-02-12",
+      }),
+    );
+    expect(own).toEqual([
+      {
+        id: shiftId,
+        locationId,
+        startsAt: "2035-02-05T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2035-02-05T16:00:00Z",
+        endsOffsetMinutes: 0,
+        description: null,
+        rosterVersionId: versionId,
+      },
+    ]);
+  });
+
+  it.each(["shifts", "shift_templates"])(
+    "retires the free-text role column from %s",
+    async (tableName) => {
+      const columns =
+        tableName === "shifts"
+          ? await suite.db.execute<{ name: string }>(sql`pragma table_info(shifts)`)
+          : await suite.db.execute<{ name: string }>(sql`pragma table_info(shift_templates)`);
+      expect(columns.rows.map((column) => column.name)).not.toContain("role");
+    },
+  );
+
   it("flips a draft version to published, stamps published_at and published_by, and attaches its in-period shift", async () => {
     const versionId = await insertRosterVersion(suite.db, { locationId });
     const shiftId = await insertDraftShift(suite.db, { personId, locationId });
@@ -397,7 +452,6 @@ describe("addShift", () => {
       startsOffsetMinutes: 0,
       endsAt: "2026-08-03T17:00:00Z",
       endsOffsetMinutes: 0,
-      role: null,
       ...overrides,
     };
   }
@@ -406,12 +460,12 @@ describe("addShift", () => {
     const versionId = await run((tx) =>
       backend.createRosterVersion(tx, { locationId, period: "2026-08-03" }),
     );
-    const shiftId = await run((tx) => backend.addShift(tx, shiftInput(versionId, { role: "bar" })));
-    const row = await suite.db.execute<{ roster_version_id: string; role: string | null }>(
-      sql`select roster_version_id, role from shifts where id = ${shiftId}`,
+    const shiftId = await run((tx) => backend.addShift(tx, shiftInput(versionId)));
+    const row = await suite.db.execute<{ roster_version_id: string; person_id: string }>(
+      sql`select roster_version_id, person_id from shifts where id = ${shiftId}`,
     );
     expect(row.rows[0]!.roster_version_id).toBe(versionId);
-    expect(row.rows[0]!.role).toBe("bar");
+    expect(row.rows[0]!.person_id).toBe(personId);
   });
 
   it("rejects a version that does not exist — roster.not_found", async () => {
@@ -525,26 +579,24 @@ describe("updateShift / removeShift", () => {
         startsOffsetMinutes: 0,
         endsAt: `${period}T17:00:00Z`,
         endsOffsetMinutes: 0,
-        role: null,
       }),
     );
     return { versionId, shiftId };
   }
 
-  it("edits a shift's times and role", async () => {
+  it("edits a shift's end time and retains its start", async () => {
     const { shiftId } = await draftShift("2026-09-07");
     await run((tx) =>
       backend.updateShift(tx, {
         shiftId,
         endsAt: "2026-09-07T15:00:00Z",
-        role: "kitchen",
       }),
     );
-    const row = await suite.db.execute<{ ends_at: string; role: string | null }>(sql`
-      select ends_at, role
+    const row = await suite.db.execute<{ ends_at: string; starts_at: string }>(sql`
+      select ends_at, starts_at
       from shifts where id = ${shiftId}`);
     expect(row.rows[0]!.ends_at).toBe("2026-09-07T15:00:00Z");
-    expect(row.rows[0]!.role).toBe("kitchen");
+    expect(row.rows[0]!.starts_at).toBe("2026-09-07T09:00:00Z");
   });
 
   it("rejects an UNPARSEABLE startsAt/endsAt patch — shift.invalid (whichever field is present)", async () => {
@@ -573,7 +625,7 @@ describe("updateShift / removeShift", () => {
     const missing = "00000000-0000-0000-0000-000000000000";
     expect(
       await codeOfRejection(() =>
-        run((tx) => backend.updateShift(tx, { shiftId: missing, role: "x" })),
+        run((tx) => backend.updateShift(tx, { shiftId: missing, endsOffsetMinutes: 120 })),
       ),
     ).toBe("shift.not_found");
     expect(
@@ -623,7 +675,9 @@ describe("updateShift / removeShift", () => {
     });
     await run((tx) => backend.publishRoster(tx, { versionId }));
     expect(
-      await codeOfRejection(() => run((tx) => backend.updateShift(tx, { shiftId, role: "x" }))),
+      await codeOfRejection(() =>
+        run((tx) => backend.updateShift(tx, { shiftId, endsOffsetMinutes: 120 })),
+      ),
     ).toBe("roster.not_draft");
     expect(await codeOfRejection(() => run((tx) => backend.removeShift(tx, { shiftId })))).toBe(
       "roster.not_draft",
@@ -643,7 +697,6 @@ describe("a shift's times are stored in one spelling", () => {
         startsOffsetMinutes: 0,
         endsAt,
         endsOffsetMinutes: 0,
-        role: null,
       }),
     );
     return { versionId, shiftId };
@@ -695,7 +748,6 @@ describe("a shift's times are stored in one spelling", () => {
           startsOffsetMinutes: 0,
           endsAt: "2027-01-18T09:00:00.500Z",
           endsOffsetMinutes: 0,
-          role: null,
         }),
       ),
     );
@@ -719,7 +771,6 @@ describe("a shift's times are stored in one spelling", () => {
           startsOffsetMinutes: 0,
           endsAt: "+010000-01-01T00:00:00Z",
           endsOffsetMinutes: 0,
-          role: null,
         }),
       ),
     );
@@ -740,7 +791,6 @@ describe("a shift's times are stored in one spelling", () => {
         startsOffsetMinutes: 0,
         endsAt: "2027-02-01T09:30:00Z",
         endsOffsetMinutes: 0,
-        role: null,
       }),
     );
     const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2027-02-01" }));
@@ -937,7 +987,6 @@ describe("copyPublishedToDraft", () => {
       startsOffsetMinutes: 60,
       endsAt: "2026-01-06T03:30:00Z",
       endsOffsetMinutes: 120,
-      role: "Kitchen",
     });
     await run((tx) => backend.publishRoster(tx, { versionId, publishedByPersonId: personId }));
     return { locationId, versionId, shiftId };

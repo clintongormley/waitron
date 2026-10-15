@@ -26,7 +26,6 @@ export const shiftTemplates = table(
     weekday: smallCount("weekday").notNull(),
     startsMinute: count("starts_minute").notNull(),
     endsMinute: count("ends_minute").notNull(),
-    role: label("role"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

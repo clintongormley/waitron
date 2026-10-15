@@ -1,5 +1,9 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > **2026-10-11 (A519).** `stripe-add-reader.ts` no longer reads `reader.not_found`; an unknown
 > Stripe reader id on `POST /management-api/payments/readers` now answers `reader.reference_unknown`
 > with 400, by the rule.

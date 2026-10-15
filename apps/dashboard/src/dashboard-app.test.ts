@@ -319,7 +319,6 @@ const NAV_SCREENS = [
   "menus",
   "bookings",
   "staff",
-  "roster",
   "approvals",
   "planned-actual",
   "purchases",
@@ -355,7 +354,6 @@ const SCREEN_TAGS = [
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
   "dashboard-venue-settings-screen",
-  "dashboard-roster-screen",
   "dashboard-approvals-screen",
   "dashboard-planned-actual-screen",
   "dashboard-purchases-screen",
@@ -1630,16 +1628,52 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  it("navigates to the roster (shifts) screen", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  it("reaches rota planning through Calendar without a second Rota entry in Team", async () => {
+    const request: DashboardRequest = async (path) =>
+      path === "/management-api/venue-service/opening-hours"
+        ? ({
+            businessDayClock: {
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00",
+              cutoverChanges: [],
+            },
+            clockRevision: 0,
+            currentBusinessDay: "2026-10-12",
+            pending: null,
+            timeZone: "Europe/Madrid",
+            clockReadable: true,
+            dayCutover: "06:00",
+            menus: [],
+            seasons: [],
+            currentSeasonId: null,
+            departments: [],
+          } as never)
+        : new Promise<never>(() => {});
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["venue-service", "staffing"],
+        permissions: ["venue.view", "schedule.manage"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(navRoster(el)).toBeTruthy();
-    navRoster(el)!.click();
+    expect(navItem(el, "opening-hours")).not.toBeNull();
+    expect(navRoster(el)).toBeNull();
+    navItem(el, "opening-hours")!.click();
     await flush(el);
-    expect(roster(el)).toBeTruthy();
-    expect(mountedScreens(el)).toEqual(["dashboard-roster-screen"]);
-    expect(countH1(el)).toBe(1);
+    expect(el.shadowRoot!.querySelector("dashboard-opening-hours-screen")).not.toBeNull();
+    expect(roster(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual([]);
+    expect(allH1(el.shadowRoot!)).toHaveLength(1);
+    const calendar = el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const rotaChoice = calendar.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="calendarView"][value="rota"]',
+    );
+    expect(rotaChoice).not.toBeNull();
+    await userEvent.click(rotaChoice!);
+    await expect.poll(() => calendar.shadowRoot!.querySelector("staffing-rota")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/opening-hours/view/rota");
   });
 
   it("navigates to the approvals screen", async () => {
@@ -6718,12 +6752,7 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "team");
     expect(shownHeaders(el)).toEqual(["nav-group-team"]);
-    expect(shownItems(el)).toEqual([
-      "nav-staff",
-      "nav-roster",
-      "nav-approvals",
-      "nav-planned-actual",
-    ]);
+    expect(shownItems(el)).toEqual(["nav-staff", "nav-approvals", "nav-planned-actual"]);
   });
 
   it("finds a page by every word typed, in any order, and by words split between it and its group", async () => {

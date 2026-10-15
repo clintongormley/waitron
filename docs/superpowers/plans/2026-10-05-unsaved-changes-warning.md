@@ -1,5 +1,9 @@
 # W69 implementation plan
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > 2026-10-06: Hours (A261 step 5) deleted `station-hours-form` and added the Hours page's own editors (`packages/venue-service/src/dashboard/hours-screen.ts`), which this document does not list.
 
 > **For agentic workers:** Use `superpowers:executing-plans` for inline execution, as the runner directs. Read the TDD skill before implementation or test code.

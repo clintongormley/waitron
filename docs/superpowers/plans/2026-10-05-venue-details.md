@@ -1,5 +1,9 @@
 # Venue details implementation plan (A261 step 7)
 
+> **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
+> the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
+> editor. References below describe the code when this document was written.
+
 > **2026-10-11, A495:** the [dated business-day design](../specs/2026-10-11-a495-business-day-history-design.md) replaces the
 > scalar start edit and its history lock. The time-zone lock remains. Reports and actual-date
 > service views resolve each date through the retained timeline; pending changes pause hours
