@@ -551,7 +551,7 @@ describe("the order detail's delivery status", () => {
   });
 
   it("offers every active printer at the sale's location, receipt printers first, by name, with the original's printer", async () => {
-    const { billId } = await fullInvoice();
+    const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(
         (await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), upstairs))).status,
@@ -561,7 +561,10 @@ describe("the order detail's delivery status", () => {
       };
       expect(detail.deliveries.originalPrinterId).toBe(upstairs);
       await inTx(venue, (tx) =>
-        tx.update(invoiceDeliveries).set({ status: "failed", failureCode: "printer_refused" }),
+        tx
+          .update(invoiceDeliveries)
+          .set({ status: "failed", failureCode: "printer_refused" })
+          .where(eq(invoiceDeliveries.saleId, saleId)),
       );
       expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
         deliveries: {

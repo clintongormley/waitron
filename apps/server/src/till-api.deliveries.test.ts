@@ -371,7 +371,7 @@ const printOnA4 = (
     cookie,
   );
 
-/** Another active A4 printer at the venue, listed on every till profile and chosen by every till. */
+/** Another active A4 printer at the venue's location, listed and chosen by its tills. */
 async function upstairsOffice(v: Venue): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [upstairs] = await tx
@@ -391,10 +391,14 @@ async function upstairsOffice(v: Venue): Promise<string> {
       .returning({ id: pagePrinters.id });
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
-      .from(devices)) {
+      .from(devices)
+      .where(eq(devices.locationId, v.cfg.locationId))) {
       await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
     }
-    await tx.update(devices).set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id });
+    await tx
+      .update(devices)
+      .set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id })
+      .where(eq(devices.locationId, v.cfg.locationId));
     return upstairs!.id;
   });
 }
@@ -845,10 +849,14 @@ async function invoiceReceiptPrinter(v: Venue): Promise<string> {
     );
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
-      .from(devices)) {
+      .from(devices)
+      .where(eq(devices.locationId, v.cfg.locationId))) {
       await listInvoicePrinter(tx, { profileId, printerId: printer.id, isDefault: false });
     }
-    await tx.update(devices).set({ invoicePrinterId: printer.id, invoicePagePrinterId: null });
+    await tx
+      .update(devices)
+      .set({ invoicePrinterId: printer.id, invoicePagePrinterId: null })
+      .where(eq(devices.locationId, v.cfg.locationId));
     return printer.id;
   });
 }
