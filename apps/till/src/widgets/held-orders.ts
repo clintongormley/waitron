@@ -13,12 +13,12 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
-import { outOfServiceJoined, shownName } from "../state/floor-today.js";
+import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
-import type { HeldOrderSummary, TableState } from "../api/client.js";
+import type { FloorZone, HeldOrderSummary, TableState } from "../api/client.js";
 
 export interface MoveHeldOrderDetail {
   orderId: string;
@@ -28,13 +28,6 @@ export interface MoveHeldOrderDetail {
   bills: BillChoiceDetail["bills"];
 }
 
-/**
- * Lists every open order in the venue, so an order parked on one register is retrieved on another.
- * A counter order can be moved to a table: a picker lists the floor's `tables`, and a table another
- * party holds first asks what happens to the bills. A pure view: the app owns the list and the floor,
- * and turns the `retrieve-order`, `discard-order`, `move-held-order-open` and `move-held-order`
- * events into API calls.
- */
 @customElement("till-held-orders")
 export class TillHeldOrders extends LitElement {
   static override styles = [
@@ -122,6 +115,7 @@ export class TillHeldOrders extends LitElement {
   @property({ attribute: false }) orders: HeldOrderSummary[] = [];
   /** The floor, which the app reads again when a picker opens. */
   @property({ attribute: false }) tables: TableState[] = [];
+  @property({ attribute: false }) zones: FloorZone[] = [];
 
   @state() private moving: HeldOrderSummary | null = null;
   /** A table another party holds, waiting for the bill choice. */
@@ -237,7 +231,11 @@ export class TillHeldOrders extends LitElement {
   }
 
   #picker(order: HeldOrderSummary): TemplateResult {
-    const tables = this.tables.filter((table) => !outOfServiceJoined(table));
+    const tables = this.tables.filter(
+      (table) =>
+        !outOfServiceJoined(table) &&
+        (table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))),
+    );
     return html`<wt-dialog
       ${trackDialog()}
       data-table-picker

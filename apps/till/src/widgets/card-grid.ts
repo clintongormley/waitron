@@ -456,6 +456,7 @@ export class TillCardGrid extends LitElement {
         return html`<till-held-orders
             .orders=${this.heldOrders}
             .tables=${this.tables}
+            .zones=${this.zones}
           ></till-held-orders
           ><till-counter-waiting
             .orders=${this.counterWaiting}

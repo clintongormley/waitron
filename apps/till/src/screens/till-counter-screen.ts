@@ -18,6 +18,7 @@ import "../widgets/diet-filter.js";
 import "./till-allergen-screen.js";
 import type {
   CounterWaitingOrder,
+  FloorZone,
   HeldOrderSummary,
   OrderFlow,
   ServiceZoneSummary,
@@ -169,6 +170,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** The floor, which a held order's Move to table lists. */
   @property({ attribute: false }) tables: TableState[] = [];
+  @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   /** Absent when the venue has no default station configured. */
   @property({ attribute: false }) defaultStationId?: string;
@@ -343,6 +345,7 @@ export class TillCounterScreen extends LitElement {
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
+        .zones=${this.zones}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}
         .busy=${this.busy}
