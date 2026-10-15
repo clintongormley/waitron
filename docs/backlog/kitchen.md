@@ -189,11 +189,13 @@ list does not exist.
 - **Routes has no Expand/Collapse control, and closing a category closes everything inside it
   (A726, owner 2026-10-15, replacing A656's one Expand/Collapse button).** A closed category shows
   only the rows with a route of their own below it, at any depth, with their path; opening a
-  category under a closed parent still lists all its products. Search fills the toolbar's row. On a
-  phone, Period follows on its own row so Search keeps room. The editor calls its fallback Station
-  (Estación) until it holds a period route, then Any other time (El resto del tiempo).
-  Its two route fields share the row evenly, and both station fields end together. Clear setting
-  stays red and sits at the left of the editor's bottom row, after Cancel; Save is alone on the right.
+  category under a closed parent still lists all its products. Search fills the toolbar's row,
+  sharing it with Period where there are periods; on a phone, Period takes its own row below
+  Search. The editor calls its fallback Station (Estación) until it holds a period route, then Any
+  other time (El resto del tiempo). Its two route fields share the row evenly, and both station
+  fields end together. Clear setting stays red and sits at the left of the editor's bottom row,
+  after Cancel; Save is alone on the right — the owner's exception to the `cancel` slot holding
+  only Cancel or Back ([design-system.md](../developers/design-system.md)).
 
 - **A counter order moved to a table sends its unsent dishes to the kitchen at the move (A660,
   owner 2026-10-15: (C), keep the rule).** A bill entering table service from another service mode

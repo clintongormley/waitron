@@ -17,6 +17,10 @@
 > disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
 > and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
 
+> 2026-10-15: A726 removes the Routes toolbar's Expand/Collapse control; closing a category closes
+> every category inside it. See _Decisions and deliberate limits_ in
+> [kitchen.md](../../backlog/kitchen.md). The Expand all / Collapse all steps below are a dated record.
+
 > **For the future implementer:** Execute these test-first tasks inline, in order, using `superpowers:executing-plans`. Before writing code, load `superpowers:test-driven-development`; observe each new behavior fail for the expected reason, implement it, then observe it pass. This document is a draft, not authorization to build.
 
 **Goal:** Let you see and edit preparation routing in one category/product-by-zone table, with the tester explaining the same row-first rule that sends dishes and extras.

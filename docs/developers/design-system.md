@@ -3726,8 +3726,9 @@ flags are drawn, while refusals are, and so is a disabled station's warning, for
 with one addition: a cell those rules leave blank is named, muted and in italics, when its station
 for the period differs from its row's Every zone's saved station for the period.
 
-Search ("Search categories and products") fills the toolbar's row; there is no Expand/Collapse
-button (A726). Period follows Search, and on a narrow screen takes its own row below it.
+Search ("Search categories and products") comes first in the toolbar and fills its row; there is
+no Expand/Collapse button (A726). Where there are periods, Period follows Search on the same row,
+and on a narrow screen takes its own row below it.
 The search lists All categories, each
 category or product whose own name matches, and every category above a match. Matching ignores case
 and accents and follows `textSearch` (`packages/shared/src/text-search.ts`): every word must match,

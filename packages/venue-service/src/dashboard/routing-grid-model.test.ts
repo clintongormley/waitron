@@ -254,7 +254,7 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("expand one, expand all, collapse all change the rows exactly", () => {
+  it("expand one, collapse one and expand all change the rows exactly", () => {
     const venue = model([folder("root"), folder("a", "root")], [item("p", "root"), item("q", "a")]);
     expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:root"]);
     const one = expandCategory(none, "root");
@@ -275,7 +275,6 @@ describe("visibleRoutingRows", () => {
       "      P:q <root/a>",
       "    P:p <root>",
     ]);
-    expect(outline(visibleRoutingRows(venue, new Set()))).toEqual(["[All]", "  C:root"]);
   });
 
   describe("collapsing a category closes every arrow inside it", () => {
