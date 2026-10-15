@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
 import type { TranslationBatch } from "./content-translation-types.js";
 import { saveContentTranslations } from "./content-translations.js";
+import { BATCH_SIZE } from "./batches.js";
+import { pruneSuggestions } from "./content-suggestion-collect.js";
 import { recordSuggestionJobReleased, startSuggestionRun } from "./content-suggestion-jobs.js";
 import {
   discardContentSuggestion,
@@ -257,6 +259,31 @@ it("starting a run prunes suggestions for names that were filled elsewhere", asy
       { itemId: venue.wine, language: "en", text: "CLIENT-EN Wine", placeholder: false, fix: null },
     ]),
   );
+});
+
+it("pruning deletes every suggestion that is no longer needed, past one statement's batch", async () => {
+  const venue = await storedVenue();
+  await app(async (tx) => {
+    const filled = await addPlainProducts(tx, venue.menuId, BATCH_SIZE + 1);
+    await tx.insert(contentSuggestions).values(
+      filled.map((itemId) => ({
+        kind: "product" as const,
+        itemId,
+        language: "en",
+        text: "CLIENT-EN Tapa",
+        expected: "{}",
+      })),
+    );
+    await tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT-CA Tapa", es: "CLIENT-ES Tapa", en: "CLIENT-EN Tapa" } })
+      .where(inArray(products.id, filled));
+  });
+  const before = (await app(suggestionRows)).filter((row) =>
+    [venue.bread, venue.wine, venue.cheese].includes(row.itemId),
+  );
+  await app((tx) => pruneSuggestions(tx, context));
+  expect(await app(suggestionRows)).toEqual(before);
 });
 
 it("discarding a suggestion deletes it, and discarding it again is content.suggestion_not_found", async () => {

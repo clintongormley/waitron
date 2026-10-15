@@ -425,8 +425,6 @@ export async function pruneSuggestions(
       );
     })
     .map((row) => row.id);
-  for (let start = 0; start < gone.length; start += 500)
-    await tx
-      .delete(contentSuggestions)
-      .where(inArray(contentSuggestions.id, gone.slice(start, start + 500)));
+  for (const batch of batches(gone))
+    await tx.delete(contentSuggestions).where(inArray(contentSuggestions.id, batch));
 }
