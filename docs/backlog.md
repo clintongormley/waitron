@@ -4586,8 +4586,35 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, `workforce` changes planned with A10.
   Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
   (#1681); part 2 (staffing paint storage and routes, the slot and matching library) landed
-  (#1686); parts 3–8 are open, in the order of the
+  (#1686); part 3 (the Calendar with module views, the staffing month read and the Staffing view's
+  month) landed; parts 4–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
+- **A699. The Staffing month keeps its own copy of month stepping and date formatting.**
+  `stepMonth` and the first and last month in `packages/staffing/src/dashboard/staffing-month.ts`
+  are a third copy beside `add-dates-calendar.ts` and `opening-hours-month.ts` in
+  `packages/venue-service/src/dashboard/`, and its date formatting copies `hours-view.ts`'s (A585-3's
+  review; the season tints are already shared through `@waitron/venue-service/season-tint`). Next:
+  move `stepMonth` and the limits into a browser-safe venue-service file and export it.
+- **A700. A failed Opening hours read also hides the Calendar's other views.** The module views and
+  the switch draw only once the page's own model loads
+  (`packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
+  Staffing view sees the Opening hours error instead (A585-3). Next: decide whether the switch and a
+  module view draw without that model.
+- **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
+  `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
+  and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
+  (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
+  second read.
+- **A702. Opening hours' season chips may widen the page on a long season name.** The Staffing
+  month's chips grew a 390 px view to 1098 px on an 80-character unbroken name until A585-3 gave
+  them `max-width: 100%; overflow-wrap: anywhere`; `packages/venue-service/src/dashboard/season-chips.ts`
+  has no width rule either, untried at phone width. Next: try it at 390 px and wrap the same way.
+- **A703. Keeping a Calendar view's address words is a special case named in the app.**
+  `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
+  (`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself
+  (`moduleParams`, `calendarViewPath`). A585-3's review offered two general forms: keep unknown pairs
+  for every destination while it stays the same, or let a screen's own address config declare a
+  destination open-ended and hand back its unknown pairs. Next: owner to choose, or keep as is.
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
   hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no

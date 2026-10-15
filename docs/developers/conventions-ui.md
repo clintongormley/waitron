@@ -385,7 +385,10 @@ venue-service importing it. The app hands the page only the views the person may
 own view words (`CALENDAR_OWN_VIEW_IDS`). The view gets a `CalendarViewHost`: the shown `month`, the
 `<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`. Those
 pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
-`opening-hours` in `keepUnlisted`; a view never adds its address words to that file.
+`opening-hours` in `keepUnlisted`; a view never adds its address words to that file. A view whose
+read builds on venue-service's `readCalendarMonthPlan` spreads `CALENDAR_MONTH_PLAN_READS`
+(`packages/venue-service/src/dashboard/live-queries.ts`) into its live dependencies rather than
+copying the tables.
 
 ## The dashboard banner is persistent identity chrome
 

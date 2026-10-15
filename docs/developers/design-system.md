@@ -3695,6 +3695,16 @@ Department opening hours belong to `/manage/opening-hours`, with a Year tab; the
 no department, zone, season or `?station=`, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
 year; `/department/<id>` selects the department.
+The page is titled Calendar (Calendario). When another module adds a view the person may read
+(`calendarViews`, conventions-ui.md), a switch beside the title offers Opening hours, then each
+view in `order`; with none, no switch is drawn. A chosen view replaces the Year tab at
+`/view/<id>`, followed by that view's own `<key>/<value>` pairs, and choosing a view from Opening
+hours' month carries that month into its address. The Staffing view
+(`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
+covering a month; each day lists the areas with a bar whose width is the area's share of the
+month's largest number, and the number. ‹ › step months, a Show picker offers All areas or one area
+(kept in the address as `area`), the season chips are a key only, and a day closed all day reads
+Closed. Below 560 px of width each bar sits above its label.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season

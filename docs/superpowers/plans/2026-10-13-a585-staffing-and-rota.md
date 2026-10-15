@@ -904,10 +904,11 @@ Tasks 3.1–3.3 below, these win.
   `order`. `#activate` (`apps/dashboard/src/dashboard-app.ts`) collects them from every enabled
   module BEFORE it creates any module's screens, because it builds and hands out `ctx` module by
   module. The duplicate-id check names the screen's own view words: `year`, `month`, `season`,
-  `special-day`, `date`, `calendar`.
+  `special-day`, `date`, `calendar`, `week` (an old address that opens the season painter), and
+  `hours` (a view's way back to Opening hours).
 - The Opening hours screen has ONE own tab today, "Year" (`opening.tab.year`), holding the year and
   the month; the department picker is inside the month (`opening-hours-month.ts`), not on the page.
-  So Step 5 becomes: the `h1` reads `nav.opening_hours`, which becomes "Calendar"/"Calendario"; the
+  So Step 5 becomes: the `h1` reads the nav label (key renamed `nav.calendar` at review), which becomes "Calendar"/"Calendario"; the
   switch's first item reads `opening.title` ("Opening hours"/"Horario de apertura", unchanged); the
   "Year" tab keeps its label. With no module view the person may read, no switch is drawn and the
   page is exactly today's.
@@ -916,11 +917,11 @@ Tasks 3.1–3.3 below, these win.
 - `UrlStateController` (`packages/ui/src/url-state.ts`) reads only the keys it is configured with,
   so the screen reads a module view's `<key>/<value>` pairs after `view/<id>` from the path itself.
   `host.month` is the address's `month` value when it is a valid `YYYY-MM`, else the month holding
-  the venue's business date today. Choosing a module view from Opening hours' month carries the
+  the venue's business date today, or the browser's today when the venue's clock cannot be read. Choosing a module view from Opening hours' month carries the
   shown month into its address (`view/staffing/month/2026-12`); a view steps months with
   `host.open(<its id>, { ...params, month })`.
 - `StaffingMonth` also carries what the season chips and the day clicks of A585-4 need, read through
-  venue-service's `readOpeningHoursMonth` (exported from `@waitron/venue-service` in this part)
+  venue-service's `readOpeningHoursMonth` (superseded below: `readCalendarMonthPlan` is what this part exports)
   rather than worked out twice: `today`, `seasons` (as `OpeningHoursMonth.seasons`), and on each
   day `seasonId`, `specialDay` (`{ id, name } | null`) and `closedAllDay`.
 - (2026-10-15, after Task 3.2's review.) The staffing month reads those through

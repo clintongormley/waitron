@@ -292,6 +292,10 @@ called weaker than its name, the topic file lists what it does not see.
   the whole tab's stream, so a misspelled name breaks other screens too. Guard:
   `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or
   disabled-module combinations.
+- **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
+  venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**,
+  whose `keepUnlisted` already keeps them. Nothing guards the second half. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
   legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
   Account settings and Log out) sits at the trailing edge only when a session exists.
