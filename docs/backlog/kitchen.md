@@ -152,6 +152,59 @@ list does not exist.
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
 
+## A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
+
+**A725 (owner, 2026-10-15).** Mockup: [prep stations](mockups/a718-a727-calendar-and-stations/14-prep-stations.png). Files:
+`packages/venue-service/src/dashboard/prep-stations-screen.ts`, `station-table.ts`,
+`station-editor.ts`, `station-colour-picker.ts`, the Times tab, the sidebar order,
+`apps/server/src/kitchen.ts`, `packages/db/src/schema/kitchen-stations.ts`.
+
+1. **Prep stations sits just after Departments and zones** in the sidebar.
+2. **The Times tab and each station's "When it gets orders" link go** (`station-table.ts:79`). What
+   the tab showed moves to the Calendar's Show picker (A722 point 6). Landing deletes the open notes
+   "The Times tab opens on the browser's current month" and "Supervisors have no dashboard path to a
+   prep station's times"; the second's question becomes who may open the Calendar's station view.
+3. **No drag handles, and stations listed by name everywhere**, the default one among them (it keeps
+   its "Default" label). The stored order (`displayOrder`, `reorderStations` in `kitchen.ts`) is
+   also read by kitchen timing and the stations-down list: move them to name order and remove the
+   reorder route and the column, unless one turns out to need a hand-set order.
+4. **A new station's colour is the first one no station uses.** The dashboard's Add station does
+   this; the server does not, so a station created without a colour — the default Kitchen, or one a
+   script or import made — gets the column's default, red (`kitchen-stations.ts:29`). In the Santet
+   venue Kitchen and Bar are both red, which makes the Routes grid hard to read.
+5. **Each row of the Stations tab shows its colour square.**
+6. **The station editor:** the three late-flag minute fields (`TIMING_FIELDS`, `station-editor.ts`)
+   share one row of short fields under one heading, with "Leave a field blank to use the venue
+   setting" once beneath; "Show the rest of the order" becomes "Also list the order's dishes from
+   other stations", with "On this station's tickets and kitchen screen" under it; "MOVED slips"
+   becomes "Print a slip when sent dishes move table", its options "Venue setting: Print" (or
+   "Venue setting: Don't print"), "Print" and "Don't print" — owner: not "As the venue". Spanish to
+   match.
+7. **The colour is chosen in a popup:** one square showing the colour opens a small panel of
+   colours, which still marks those other stations use. One shared component, also used by periods
+   (A719) and seasons (A721); category colours keep their dialog.
+
+## A726. Routes: collapsing hides inherited rows at any depth, no Expand/Collapse button, Clear setting on the left
+
+**A726 (owner, 2026-10-15).** Files: `packages/venue-service/src/dashboard/routing-grid-model.ts`,
+`routing-grid.ts`, `routing-cell-editor.ts`.
+
+1. **Collapsing a category hides every inherited row inside it, at any depth; a row with its own
+   route stays.** Owner: "when Agave is collapsed, only Clandestina and Corralejo Blue remain
+   visible". Today a category's products show whenever its own arrow is open, even under a collapsed
+   parent (`visibleRoutingRows`, `routing-grid-model.ts:101`): with Santet Deli Co collapsed,
+   AGAVE's inherited products still show.
+2. **Collapsing reaches everything inside:** it closes the arrows of the categories under it, so an
+   open arrow always means its inherited rows show. Opening a category under a collapsed parent
+   still shows its inherited rows.
+3. **The Expand/Collapse button goes** (A656 made the two one button). Search still opens what
+   matches.
+4. **In the cell editor, "Clear setting" stays red and moves to the left of the bottom row, beside
+   Cancel**, away from Save (owner: on the left, not quiet).
+
+The editor's height is the full-height dialog entry under _Users, sign-in and the dashboard shell_,
+decided the same day.
+
 ## Decisions and deliberate limits
 
 - **Routes keeps one Expand/Collapse control beside Search (A656, owner 2026-10-14).**

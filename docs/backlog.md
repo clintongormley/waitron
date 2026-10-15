@@ -1517,6 +1517,35 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
+- **A718. Departments and zones: a column for the receipt and floor plan, a trimmed zone editor
+  (owner, 2026-10-15).** No column picker; a column links to a department's receipt and a zone's
+  floor plan; the zone editor loses its season sentence, Opening hours link and floor-plan link and
+  preview, and its Save lines up with the fields. [Detail](backlog/service-periods.md#a718-departments-and-zones-a-column-for-the-receipt-and-floor-plan-a-trimmed-zone-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
+  and sidebar entry go; the window lists periods by department and opens the period dialog, whose
+  Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
+  column and field go until A504. After A720. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
+  (owner, 2026-10-15).** A Year/Month/Week switch replaces the tab row and most of the text above the
+  months goes; clicking a day opens a floating box with its hours instead of a panel that makes the
+  page jump; drag or shift-click picks days and double-click opens the special-day editor; closed
+  rows are grey tracks; a zone's bar shows its own hours. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
+  (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
+  ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
+  and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
+  After A720. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
+  closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
+  what it edits; Save closes; a zone's Closed paint is clipped to its department's hours; a visible
+  Edit on period chips; no Range button. [Detail](backlog/service-periods.md#a723-the-season-painter-and-the-special-day-editor-say-what-they-are-close-on-save-keep-a-zones-closures-inside-opening-hours), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
@@ -1787,6 +1816,14 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 ### The kitchen and preparation
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
+
+- **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
+  station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
+  station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
+  colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **A726. Routes: collapsing hides inherited rows at any depth, no Expand/Collapse button, Clear
+  setting on the left (owner, 2026-10-15).** Rows with their own route stay visible. [Detail](backlog/kitchen.md#a726-routes-collapsing-hides-inherited-rows-at-any-depth-no-expandcollapse-button-clear-setting-on-the-left)
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
   moved to Prep stations' Times tab, and Prep stations is offered only to someone with
@@ -3862,6 +3899,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A727. Page search finds tabs, windows and views inside pages (owner, 2026-10-15).** "Periods —
+  in Calendar" opens the Calendar with its Periods window showing. [Detail](backlog/dashboard.md#a727-page-search-finds-tabs-windows-and-views-inside-pages)
+
 - **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
   screen follows the device's own light or dark setting: the token layer honours a `data-theme`
   attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in
@@ -3924,8 +3964,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   full-height dialog those are not the same place. Options: push the message to the bottom of the
   body, or into the footer.
 
-- **A short notice in a full-height dialog leaves most of it empty** (found by A507's look, owner
-  decision needed). The Prep stations route-change notice (`size="wide"`, `#previewDialog` in
+- **A short notice in a full-height dialog leaves most of it empty** (found by A507's look; decided
+  by the owner 2026-10-15, below). The Prep stations route-change notice (`size="wide"`, `#previewDialog` in
   `packages/venue-service/src/dashboard/prep-stations-screen.ts`) now holds its sentences with its
   product list closed, but `wt-modal` gives every dialog except a compact one the full
   screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
@@ -3934,6 +3974,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   screen of white, its buttons at the bottom
   ([screenshot](backlog/mockups/a656-routes-tab/1-editor-no-period-route.png)). The entry above,
   about a form's message sitting far above its buttons, has the same cause; settle them together.
+  **Decided (owner, 2026-10-15):** not shrink-to-fit, since a dialog that followed its content would
+  change size as rows are added or removed. `wt-modal` gains a fixed medium height beside today's
+  full height and compact's fit-to-content, chosen separately from width; the middle scrolls when
+  content outgrows it. The Routes cell editor is medium (A726 moves its Clear setting); the
+  implementer proposes which other dialogs should be, for the owner to approve, and settles the
+  medium height once in design-system.md.
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
@@ -4629,6 +4675,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
+
+- **A724. Staffing: named opening hours behind the grid, a prep station's hours, special days
+  reached from the day box (owner, 2026-10-15).** No more unexplained dotted lines; a station's grid
+  shaded from the periods whose menus send it dishes. [Detail](backlog/workforce.md#a724-staffing-named-opening-hours-behind-the-grid-a-prep-stations-hours-special-days-reached-from-the-day-box), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted

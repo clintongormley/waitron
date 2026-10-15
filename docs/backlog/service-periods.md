@@ -194,6 +194,165 @@ reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unrea
 which start at year 100; changing `isLocalDate` would change which dates the server accepts from
 outside (menu publication dates, imports), so it needs a decision.
 
+## A718. Departments and zones: a column for the receipt and floor plan, a trimmed zone editor
+
+**A718 (owner, 2026-10-15).** Mockup: [departments and zones](mockups/a718-a727-calendar-and-stations/12-departments-and-zones.png).
+Files: `packages/venue-service/src/dashboard/departments-list.ts`, `zone-edit-dialog.ts`.
+
+1. **The zone editor's Save sits too far right.** The fields stop short of the dialog's right edge
+   but the button row runs to it; the row ends where the fields end.
+2. **The zone editor drops three things:** the season sentence ("Autumn: open whenever the
+   department is"), the "Opening hours (normal week)" link, and the floor-plan link ("Add a floor
+   plan" / "Edit floor plan") with its preview (`zone-edit-dialog.ts:256-260`). The floor plan is
+   reached from the new column (point 4); opening hours from the Calendar.
+3. **No column picker** above the Departments table.
+4. **A column for each row's other editor** ("Also edit" in the mockup; the heading is the
+   implementer's call): "Receipt" on a department row where a receipt can be edited
+   (`receiptAvailable`, `departments-list.ts`), "Add floor plan" or "Floor plan" on a zone row.
+   Edit receipt leaves the department's ⋮ menu.
+
+Landing this deletes the open notes it makes moot: "The zone editor's closed-times sentences without
+a season name", "Closing a painter opened from the zone dialog's 'Opening hours (normal week)' link
+lands on the Opening hours Year", and "The zone editor's 'Edit floor plan' link is not hidden without
+`venue.configure`" — re-file that last one against the new column if it is still true there.
+
+## A719. Periods become a window opened from the Calendar
+
+**A719 (owner, 2026-10-15).** Mockups: [the Periods window](mockups/a718-a727-calendar-and-stations/13-periods-window.png),
+[list rows and the period dialog](mockups/a718-a727-calendar-and-stations/11-periods-page-and-dialog.png) (drawn before the window; its
+rows and dialog still apply). Files: `packages/venue-service/src/dashboard/periods-screen.ts`,
+`period-dialog.ts`, `period-editing.ts`, and the `periods` page in `index.ts`.
+
+1. **The Periods page and its sidebar entry go; a Periods window replaces them.** It lists the
+   periods grouped by department — colour, name, customer menu, staff-only menus, "Painted in" and a
+   bin — with "+ Add period". A row opens the existing period dialog on top: a period has too many
+   fields to edit inside its row, unlike a season (A721).
+2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar's Year view; the
+   painters' "Periods" link (`periodsLink`, `period-editing.ts`), which today navigates away and now
+   opens the window on top of the painter so unsaved paint stays; and the Departments warning "Set up
+   periods" (`departments-list.ts:219`), which opens the Calendar with the window open. The window
+   needs an address so links and page search (A727) can open it.
+3. **An unused period shows its colour.** Today a period painted nowhere gets an empty dashed square
+   and a greyed name (`swatch-unpainted`, `periods-screen.ts`); "Not painted anywhere" already says
+   so. Fill the square and drop the grey.
+4. **No Floor plan column or field until A504.** Remove the disabled field from the period dialog
+   and the column from the list, and change A504's entry — which says they are kept for it — to say
+   A504 adds them back.
+5. **Delete… moves into the dialog's bottom row**, left of Cancel and Save; today it sits alone in
+   the body.
+6. **The colour is chosen in a popup**, the shared chooser A725 point 7 describes, not a row of
+   squares. Whichever of A719, A721 and A725 lands first builds it.
+
+Lands after A720, whose toolbar holds the button.
+
+## A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
+
+**A720 (owner, 2026-10-15).** Mockups: [Year](mockups/a718-a727-calendar-and-stations/01-year-view.png),
+[Month](mockups/a718-a727-calendar-and-stations/03-month-view.png). Files: `packages/venue-service/src/dashboard/opening-hours-screen.ts`,
+`opening-hours-year.ts`, `opening-hours-month.ts`, `season-chips.ts`; for point 7,
+`packages/staffing/src/dashboard/staffing-month.ts`.
+
+1. **One toolbar row, no tab row.** ‹ year (or month) › and a Year / Month / Week switch replace the
+   tab bar that holds a single "Year" tab (Week is A722). The Month view's "‹ 2026" row goes: Year
+   in the switch goes back. Month names in the Year view look like links ("October ›") — today a
+   month opens only by clicking a name drawn as a plain heading.
+2. **Less on top.** Remove the colour key; the "2026: official national and regional holidays are
+   included." and "Town holidays…" lines (keep "Public holidays for {year} are not available
+   yet"); every hint line; "+ Special day"; and, in the Month view, the "Rows:" line and the seasons
+   row. The Year view keeps its season chips — they open a season's week, with no ✎ — and gains a
+   "Seasons…" button (A721). In the Month view, "Show" sits beside the switch.
+3. **A day box instead of the panel that makes the page jump.** Today clicking a day in the Year
+   view adds a panel under that month, which grows it and pushes the next row of months down by a
+   different amount per month. Instead, clicking a day in the Year or Month view opens a floating
+   box: the date, the holiday or special day's name, which season's standard hours apply (or which
+   a special day replaces), and each department and zone with its periods and times. Its buttons:
+   "Make a special day" or "Edit special day", "Edit {season}'s standard week", and "Open this
+   week" (A722). Pointing at a holiday or special day shows its name. Escape or a click elsewhere
+   closes the box; nothing on the page moves.
+4. **Days are picked on the grid.** A click picks one day; a drag, or a click then a shift-click,
+   picks a run; a double-click (a long press on a phone) opens the special-day editor with those
+   dates, or the special day already there. No hint line (owner: discoverable enough). Keyboard: the
+   arrows move, Shift with an arrow extends, Enter opens. The special-day editor's date picker uses
+   the same code (A723 point 7).
+5. **A closed department or zone is an empty grey track**, not a line of text ("Santet Deli Co
+   closed", "Front Bar closed"…), so every day is the same height.
+6. **A zone's track shows its own hours.** Today a zone row is its department's blocks with the
+   zone's closures laid over them, and each block's label — and the spoken description — gives the
+   department's times: Terrace's evening reads "Open 18:15–02:00" although Terrace closes at 23:00
+   (`opening-hours-month.ts:414-505`). Work out the zone's own blocks (the department's less its
+   closures) before drawing and labelling them, and show a closure only inside the department's
+   hours.
+7. **The Staffing view's month follows**: no seasons or special-days row, and the same day box,
+   offering "Edit {special day} staffing" or "Edit {season}'s standard week" (A724).
+
+Season colours come from A721; until it lands the views keep today's tints.
+
+## A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
+
+**A721 (owner, 2026-10-15).** Mockup: [the Seasons window](mockups/a718-a727-calendar-and-stations/02-seasons-window.png). Files:
+`packages/venue-service/src/dashboard/season-chips.ts`, the season dialog, `season-tint.ts`, and
+the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
+
+1. **A "Seasons…" window**, opened from the Calendar (A720), lists every season in the order it
+   starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
+   place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
+   "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
+   window; Cancel discards. The separate season editor and the chips' ✎ go.
+2. **Each season stores its colour.** Today `seasonTints` colours a season by its place in the list
+   it is handed, so February's Month view, handed only Winter and Spring, paints Winter yellow while
+   the Year paints it blue. A stored colour is the same on every view. Landing deletes the open note
+   "Season colours differ between Opening hours' Year and its month (and the Times tab)".
+
+## A722. A Week view in the Calendar
+
+**A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
+[on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png). Depends on A720.
+
+1. **One real week** — holidays, special days and closed days included, unlike a painter's standard
+   week — for the department chosen in Show and its zones, or one row per department for All
+   departments. Time runs left to right from the day's changeover to the next morning, one row per
+   department or zone; the department's blocks carry their period and times, and a zone row is drawn
+   faded where it only follows the department and labelled where it differs. A zone's own hours as
+   A720 point 6.
+2. **A block too short for its label shows the whole label** — department or zone, period, times —
+   when it is pointed at or tapped (Lunch 16:00–17:00 is a sliver).
+3. **Which week the Week button opens:** the week of the day last clicked; otherwise this week, when
+   the year or month on screen holds today; otherwise the first week of the month (or year) on
+   screen. ‹ › step a week.
+4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
+   for the next day.
+5. **No painting here.** Clicking a day's name opens A720's day box.
+6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
+   department that sends it dishes, from each period's start to its last orders — what A725 retires
+   with the Times tab. The same reading as A724 point 2.
+
+## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
+
+**A723 (owner, 2026-10-15).** Mockups: [season painter](mockups/a718-a727-calendar-and-stations/06-season-painter.png),
+[special-day editor](mockups/a718-a727-calendar-and-stations/07-special-day-editor.png). Files:
+`packages/venue-service/src/dashboard/season-painter.ts`, `special-day-painter.ts`, `paint-row.ts`,
+`painter-frame.ts`, `add-dates-calendar.ts`, `strings.ts`, and the server's season-week and
+special-day write routes.
+
+1. **"Standard", not "normal"**, wherever a season's week is named: the painter's title becomes
+   "Autumn: standard week", and strings such as "Follow the normal week" (`opening.follow_week`)
+   follow.
+2. **A line under the top bar says what is being edited:** "Every week from 5 Sept to 30 Nov opens
+   these hours, except on special days."
+3. **The "… follow Santet Deli Co" note leaves the top bar** (`painter.zone_follows`,
+   `painter.zones_follow`).
+4. **Save closes.** One Save sends every department and zone changed, then closes the painter; a
+   refused save keeps it open with its message beside Save. The same in the special-day editor. The
+   design notes' sentence that "the painter stays open and the answer becomes the saved state"
+   (design-system.md, the special-day painter) changes with it. Owner: you can paint a zone without
+   saving first, so one Save at the end is enough.
+5. **A zone's Closed paint covers only times its department is open.** Dragging Terrace's Closed
+   from 23:30 to 03:00 keeps 23:30–02:00, when Santet Deli Co closes; the server refuses a zone
+   closure outside its department's hours from any route.
+6. **A period chip's edit control is a visible "✎ Edit" button** (`paint-row.ts:165`), not a bare ✎.
+7. **The special-day editor's Range button goes.** A click adds or removes a date; a drag or a
+   shift-click adds a run; one hint line says so. The same picking code as A720 point 4.
+
 ## Decisions and deliberate limits
 
 - Once two special days share a date, a save of either day that keeps that date is refused with
