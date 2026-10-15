@@ -11,7 +11,14 @@ import {
   type ReceiptLogoRaster,
   type ReceiptPresentation,
 } from "@waitron/shared";
-import { beforeVatFigures, groupDiscounts, quantityText } from "./receipt-figures.js";
+import {
+  beforeVatFigures,
+  groupDiscounts,
+  isFiled,
+  quantityText,
+  type FiguredLine,
+  type FiledLine,
+} from "./receipt-figures.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -63,8 +70,6 @@ export type ReceiptElement =
   | { kind: "logo" }
   | { kind: "qr"; text: string }
   | { kind: "table"; table: ReceiptTable };
-
-type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
 
 export interface ReceiptDocument {
   elements: readonly ReceiptElement[];
@@ -230,10 +235,9 @@ export function buildReceiptDocument({
     text(result.recipient.address);
     rule();
   }
-  const filed = (line: TillSaleLine): line is FiledLine => line.net !== undefined;
   const filedRates: string[] = [];
   for (const line of result.lines) {
-    if (!filed(line)) continue;
+    if (!isFiled(line)) continue;
     const rate = line.net.rate;
     if (!filedRates.some((seen) => compareDecimal(decimal(seen), decimal(rate)) === 0)) {
       filedRates.push(rate);
@@ -271,25 +275,28 @@ export function buildReceiptDocument({
   const rateCell = (rate: string): { rate: string } => ({ rate: formatVatRate(rate, locale) });
   const answers = (dish: TillSaleLine): string[] =>
     customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale);
-  const filedRow = (line: FiledLine, indent: number): ReceiptTableRow => {
-    const { price, amount } = beforeVatFigures(line);
-    return {
-      units: quantityText(line, namesLocale),
-      item: lineName(line.descriptions, namesLocale),
-      ...(indent > 0 ? { itemIndent: indent } : {}),
-      price: formatAmount(price, locale),
-      amount: formatAmount(amount, locale),
-      ...rateCell(line.net.rate),
-    };
-  };
-  const tableGroup = (group: LineGroup): void => {
-    const [dish, ...options] = [group.dish, ...group.options].filter(filed);
-    tableRows.push(filedRow(dish!, 0));
-    for (const answer of answers(group.dish)) {
+  const figured = (line: FiledLine): FiguredLine => ({ line, figures: beforeVatFigures(line) });
+  const filedRow = (
+    { line, figures: { price, amount } }: FiguredLine,
+    indent: number,
+  ): ReceiptTableRow => ({
+    units: quantityText(line, namesLocale),
+    item: lineName(line.descriptions, namesLocale),
+    ...(indent > 0 ? { itemIndent: indent } : {}),
+    price: formatAmount(price, locale),
+    amount: formatAmount(amount, locale),
+    ...rateCell(line.net.rate),
+  });
+  const tableGroup = (dish: FiledLine, options: readonly FiledLine[]): void => {
+    const dishFigured = figured(dish);
+    const optionsFigured = options.map(figured);
+    tableRows.push(filedRow(dishFigured, 0));
+    for (const answer of answers(dish)) {
       tableRows.push({ units: "", item: answer, itemIndent: 2, price: "", amount: "" });
     }
-    for (const option of options) tableRows.push(filedRow(option, 2));
-    for (const discount of groupDiscounts(group, billAdjustments, invoiceHasLineAdjustments)) {
+    for (const option of optionsFigured) tableRows.push(filedRow(option, 2));
+    const lines = [dishFigured, ...optionsFigured];
+    for (const discount of groupDiscounts(lines, billAdjustments, invoiceHasLineAdjustments)) {
       const item = discount.comp
         ? label.comp
         : discount.named !== null
@@ -338,8 +345,9 @@ export function buildReceiptDocument({
     }
   };
   for (const group of groupByParent(result.lines)) {
-    if (!simplified && [group.dish, ...group.options].every(filed)) {
-      tableGroup(group);
+    const { dish, options } = group;
+    if (!simplified && isFiled(dish) && options.every(isFiled)) {
+      tableGroup(dish, options);
     } else {
       endTable();
       withVatGroup(group);

@@ -11,21 +11,31 @@ import {
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
-import type { LineGroup } from "./receipt-lines.js";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
 
-type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
+export type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
+
+export function isFiled(line: TillSaleLine): line is FiledLine {
+  return line.net !== undefined;
+}
 
 const ZERO = decimal("0.00");
 const ONE = decimal("1");
 
 /** A line's price, amount and discount before VAT; `discount` is "0.00" when nothing is taken off
  *  before VAT. Each line comes to its filed base exactly: amount − discount = `net.base`. */
-export function beforeVatFigures(line: FiledLine): {
+export interface BeforeVatFigures {
   price: Decimal;
   amount: Decimal;
   discount: Decimal;
-} {
+}
+
+export interface FiguredLine {
+  line: FiledLine;
+  figures: BeforeVatFigures;
+}
+
+export function beforeVatFigures(line: FiledLine): BeforeVatFigures {
   const net = line.net;
   const filed = { price: decimal(net.unitPrice), amount: decimal(net.base), discount: ZERO };
   if (line.listGross === undefined) return filed;
@@ -57,15 +67,13 @@ export interface GroupDiscount {
   named: ReceiptAdjustment | null;
 }
 
-/** One entry per rate the group's lines carry, in the order the rates first appear. Every line of
- *  `group` must have `net`. */
+/** One entry per rate a group's lines carry, in the order the rates first appear. */
 export function groupDiscounts(
-  group: LineGroup,
+  lines: readonly FiguredLine[],
   billAdjustments: readonly ReceiptAdjustment[],
   invoiceHasLineAdjustments: boolean,
 ): GroupDiscount[] {
-  const lines = [group.dish, ...group.options] as FiledLine[];
-  const own = lines.flatMap((line) => line.adjustments ?? []);
+  const own = lines.flatMap(({ line }) => line.adjustments ?? []);
   const named =
     own.length === 1 && billAdjustments.length === 0
       ? own[0]!
@@ -73,8 +81,10 @@ export function groupDiscounts(
         ? billAdjustments[0]!
         : null;
   const byRate: { rate: string; amount: Decimal; comp: boolean }[] = [];
-  for (const line of lines) {
-    const { discount } = beforeVatFigures(line);
+  for (const {
+    line,
+    figures: { discount },
+  } of lines) {
     const zeroBase = isZeroDecimal(decimal(line.net.base));
     const entry = byRate.find(
       (candidate) => compareDecimal(decimal(candidate.rate), decimal(line.net.rate)) === 0,

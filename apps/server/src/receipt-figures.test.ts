@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { beforeVatFigures, groupDiscounts, quantityText } from "./receipt-figures.js";
+import {
+  beforeVatFigures,
+  groupDiscounts,
+  quantityText,
+  type FiguredLine,
+  type FiledLine,
+} from "./receipt-figures.js";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
 
 type Net = NonNullable<TillSaleLine["net"]>;
-const filed = (over: Partial<TillSaleLine> & { net: Net }): TillSaleLine & { net: Net } => ({
+const filed = (over: Partial<TillSaleLine> & { net: Net }): FiledLine => ({
   descriptions: { "es-ES": "Plato" },
   quantity: "1",
   gross: "0.00",
@@ -15,6 +21,8 @@ const net = (unitPrice: string, base: string, rate: string, priceQuantity = "1.0
   base,
   rate,
 });
+const figured = (...lines: FiledLine[]): FiguredLine[] =>
+  lines.map((line) => ({ line, figures: beforeVatFigures(line) }));
 const TEN: ReceiptAdjustment = { kind: "discount", percentBp: 1000, amount: "1.00" };
 
 describe("beforeVatFigures", () => {
@@ -113,7 +121,7 @@ describe("groupDiscounts", () => {
   });
 
   it("adds a dish's and its extras' discounts into one row named by the dish's one adjustment", () => {
-    expect(groupDiscounts({ dish: pizza, options: [olives] }, [], true)).toEqual([
+    expect(groupDiscounts(figured(pizza, olives), [], true)).toEqual([
       {
         rate: "21.00",
         amount: "0.87",
@@ -130,7 +138,7 @@ describe("groupDiscounts", () => {
       net: net("0.00", "0.00", "21.00"),
       adjustments: [{ kind: "comp", amount: "30.00" }],
     });
-    expect(groupDiscounts({ dish: wine, options: [] }, [], true)).toEqual([
+    expect(groupDiscounts(figured(wine), [], true)).toEqual([
       { rate: "21.00", amount: "24.79", comp: true, named: { kind: "comp", amount: "30.00" } },
     ]);
   });
@@ -142,18 +150,18 @@ describe("groupDiscounts", () => {
       net: net("8.48", "8.48", "21.00"),
       adjustments: [TEN, { kind: "discount", percentBp: 500, amount: "0.54" }],
     });
-    expect(groupDiscounts({ dish: burger, options: [] }, [], true)).toEqual([
+    expect(groupDiscounts(figured(burger), [], true)).toEqual([
       { rate: "21.00", amount: "1.44", comp: false, named: null },
     ]);
   });
 
   it("names a whole-bill discount under a dish only when no dish has one of its own", () => {
     const wine = filed({ gross: "27.00", listGross: "30.00", net: net("22.31", "22.31", "21.00") });
-    expect(groupDiscounts({ dish: wine, options: [] }, [TEN], false)[0]).toMatchObject({
+    expect(groupDiscounts(figured(wine), [TEN], false)[0]).toMatchObject({
       amount: "2.48",
       named: TEN,
     });
-    expect(groupDiscounts({ dish: wine, options: [] }, [TEN], true)[0]).toMatchObject({
+    expect(groupDiscounts(figured(wine), [TEN], true)[0]).toMatchObject({
       amount: "2.48",
       named: null,
     });
@@ -166,7 +174,7 @@ describe("groupDiscounts", () => {
       net: net("8.03", "8.03", "21.00"),
       adjustments: [TEN],
     });
-    expect(groupDiscounts({ dish: burger, options: [] }, [TEN], true)).toEqual([
+    expect(groupDiscounts(figured(burger), [TEN], true)).toEqual([
       { rate: "21.00", amount: "1.89", comp: false, named: null },
     ]);
   });
@@ -179,9 +187,9 @@ describe("groupDiscounts", () => {
       listGross: "1.50",
       net: net("1.23", "1.23", "10.00"),
     });
-    expect(
-      groupDiscounts({ dish, options: [extra] }, [], false).map((d) => [d.rate, d.amount]),
-    ).toEqual([["10", "1.04"]]);
+    expect(groupDiscounts(figured(dish, extra), [], false).map((d) => [d.rate, d.amount])).toEqual([
+      ["10", "1.04"],
+    ]);
   });
 
   it("does not call a row an invitation when a discounted extra beside the comped dish is still charged", () => {
@@ -192,11 +200,7 @@ describe("groupDiscounts", () => {
       adjustments: [{ kind: "comp", amount: "30.00" }],
     });
     expect(
-      groupDiscounts({ dish: wine, options: [olives] }, [], true).map((d) => [
-        d.rate,
-        d.amount,
-        d.comp,
-      ]),
+      groupDiscounts(figured(wine, olives), [], true).map((d) => [d.rate, d.amount, d.comp]),
     ).toEqual([["21.00", "24.91", false]]);
   });
 
@@ -208,17 +212,14 @@ describe("groupDiscounts", () => {
       gross: "1.50",
     };
     expect(
-      groupDiscounts({ dish: pizza, options: [reducedExtra] }, [], true).map((d) => [
-        d.rate,
-        d.amount,
-      ]),
+      groupDiscounts(figured(pizza, reducedExtra), [], true).map((d) => [d.rate, d.amount]),
     ).toEqual([
       ["21.00", "0.75"],
       ["10.00", "0.14"],
     ]);
-    expect(
-      groupDiscounts({ dish: filed({ net: net("4.00", "8.00", "10") }), options: [] }, [], false),
-    ).toEqual([]);
+    expect(groupDiscounts(figured(filed({ net: net("4.00", "8.00", "10") })), [], false)).toEqual(
+      [],
+    );
   });
 });
 
