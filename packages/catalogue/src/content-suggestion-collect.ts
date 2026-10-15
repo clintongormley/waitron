@@ -132,7 +132,7 @@ async function readCategoryNames(
   return names;
 }
 
-/** Turns live items into job items, leaving out what Cloud's bounds would refuse (rule 8). */
+/** Turns live items into job items, leaving out what Cloud's bounds would refuse. */
 async function describeItems(
   tx: Transaction,
   config: ContentLanguages,
@@ -360,7 +360,7 @@ export async function buildSuggestionJob(
   };
   // The job holds no item only past Cloud's 20 languages (the box saves up to 200), where an item
   // and its head can pass 1 MiB; Cloud refuses such a job with 400 ("languages.enabled holds 1 to
-  // 20"), shown as cloud.request_invalid. The plan leaves that venue unhandled.
+  // 20"), shown as cloud.request_invalid.
   let bytes = Buffer.byteLength(JSON.stringify(job));
   const sent: Record<string, string[]> = {};
   const inJob = new Set<string>();

@@ -313,7 +313,6 @@ it("an expired job is released and its run shows content.suggestion_expired", as
   expect(await app(readActiveSuggestionJob)).toBeUndefined();
 });
 
-// Task 9's storeSuggestionResults writes these states; a direct update stands in for it here.
 it.each([
   ["limit", "content.suggestion_limit_reached", 0],
   [null, null, null],

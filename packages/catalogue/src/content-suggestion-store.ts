@@ -296,7 +296,7 @@ export async function listContentSuggestions(
           ? null
           : { field: row.fixField, wrong: row.fixWrong!, right: row.fixRight! },
       // A row with text has `expected` (content_suggestions_name_ck), and an item live in the
-      // default language is live in every language, as above.
+      // default language is live in every language (see the note in `storeSuggestionResults`).
       stale:
         row.text !== null && suggestionStale(row.expected!, tokens.get(`${row.language} ${key}`)!),
     });
