@@ -57,7 +57,8 @@ async function mount(missing = false) {
         },
       };
     if (path.includes("/roster/breaches?")) {
-      if (missing) throw { code: "convenio.not_found" };
+      if (missing)
+        throw { code: "configuration.not_found", status: 409, params: { locationId: "location" } };
       return { breaches, ruleset };
     }
     if (path.endsWith("/change-week")) {
@@ -319,7 +320,7 @@ describe("planning request failures", () => {
       if (path.includes("/roster/breaches?") && refuse) throw { code: "connection.failed" };
       return original(path, method);
     });
-    live.invalidate([{ type: "convenio_config" }]);
+    live.invalidate([{ type: "work_time_rules" }]);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("Could not load labour warnings"),
     );
@@ -332,7 +333,7 @@ describe("planning request failures", () => {
       ).disabled,
     ).toBe(true);
     refuse = false;
-    live.invalidate([{ type: "convenio_config" }]);
+    live.invalidate([{ type: "work_time_rules" }]);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).not.toContain("Could not load labour warnings"),
     );

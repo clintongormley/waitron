@@ -1,4 +1,3 @@
-import { codeOf } from "@waitron/dashboard-kit";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
@@ -160,7 +159,9 @@ export class StaffingApi {
               { passive: true },
             );
           } catch (error) {
-            if (codeOf(error) === "convenio.not_found") return { breaches: [], ruleset: null };
+            // On this read, 409 means that rules are not configured; the host owns its country code.
+            if ((error as { status?: number } | null)?.status === 409)
+              return { breaches: [], ruleset: null };
             throw error;
           }
         },

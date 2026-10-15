@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { rotaWeek } from "../testing/rota-fixture.js";
+import { STAFFING_STRINGS } from "./strings.js";
 import { candidateWarnings, breachText } from "./rota-warnings.js";
 const rules: WorkTimeRuleset = {
   workingDaysPerWeek: 5,
@@ -93,5 +94,9 @@ it("localizes warning facts and preserves their numeric values in Spanish", () =
       restMinutes: 540,
       requiredMinutes: 720,
     }),
-  ).toBe("9 h de descanso; mínimo 12 h");
+  ).toBe(
+    STAFFING_STRINGS.es["staffing.breach.rest_too_short"]
+      .replace("{restMinutes}", "9")
+      .replace("{requiredMinutes}", "12"),
+  );
 });

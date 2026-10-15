@@ -38,7 +38,7 @@ it("announces inserted, changed and removed labour rules through the module's re
     });
     expect(resources, operation).toEqual(
       Array.from({ length: operation === "update" ? 2 : 1 }, () => [
-        { type: "convenio_config", id },
+        { type: "work_time_rules", id },
       ]),
     );
   }

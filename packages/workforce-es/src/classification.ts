@@ -7,6 +7,6 @@ export const WORKFORCE_ES_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("convenio_config", "state", STATE),
 ];
 
-export const WORKFORCE_ES_CHANGE_SOURCES: readonly ChangeSource[] = WORKFORCE_ES_CLASSIFICATION.map(
-  ({ table }) => ({ table, type: table }),
-);
+export const WORKFORCE_ES_CHANGE_SOURCES: readonly ChangeSource[] = [
+  { table: "convenio_config", type: "work_time_rules" },
+];
