@@ -31,6 +31,7 @@ positive_seconds() {
 }
 bound="$(positive_seconds PNPM_SETUP_ATTEMPT_SECONDS 60)"
 kill_grace="$(positive_seconds PNPM_SETUP_KILL_SECONDS 10)"
+version_bound="$(positive_seconds PNPM_SETUP_VERSION_SECONDS 10)"
 
 TIMEOUT="$(command -v gtimeout || command -v timeout || true)"
 if [[ -z "$TIMEOUT" ]]; then
@@ -43,7 +44,8 @@ for attempt in 1 2 3; do
   rm -rf "$prefix"
   if "$TIMEOUT" -k "$kill_grace" "$bound" \
     npm install --global --prefix "$prefix" --no-audit --no-fund "pnpm@$version" &&
-    [[ "$("$TIMEOUT" -k 2 10 "$prefix/bin/pnpm" --version)" == "$version" ]]; then
+    actual="$("$TIMEOUT" -k 2 "$version_bound" "$prefix/bin/pnpm" --version)" &&
+    [[ "$actual" == "$version" ]]; then
     echo "$prefix/bin" >>"$GITHUB_PATH"
     echo "pnpm $version installed on attempt $attempt of 3"
     exit 0

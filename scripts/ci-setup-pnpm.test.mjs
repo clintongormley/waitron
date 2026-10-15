@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,18 +62,23 @@ for arg in "$@"; do
   esac
 done
 printed="$spec"
+after=""
 case "$STUB_NPM_MODE" in
   hang) exec sleep 300 ;;
   ignore-term) trap '' TERM; sleep 300; exit 0 ;;
   fail-then-ok) if [ "$attempt" -eq 1 ]; then exit 1; fi ;;
   wrong-version) printed="0.0.1" ;;
+  version-then-fails) after="exit 1" ;;
+  version-then-hangs) after="exec sleep 300" ;;
 esac
 mkdir -p "$prefix/bin"
-printf '#!/usr/bin/env sh\\necho %s\\n' "$printed" > "$prefix/bin/pnpm"
+printf '#!/usr/bin/env sh\\necho %s\\n%s\\n' "$printed" "$after" > "$prefix/bin/pnpm"
 chmod +x "$prefix/bin/pnpm"
 `,
 );
 chmodSync(join(STUB_BIN, "npm"), 0o755);
+
+const BASH = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
 
 /** Runs the script with a fresh state directory; `env` overrides the defaults. */
 function run(mode, env = {}, scriptPath = script) {
@@ -82,7 +88,7 @@ function run(mode, env = {}, scriptPath = script) {
   const runnerTemp = join(state, "runner-temp");
   mkdirSync(runnerTemp);
   const started = Date.now();
-  const result = spawnSync("bash", [scriptPath], {
+  const result = spawnSync(BASH, [scriptPath], {
     encoding: "utf8",
     timeout: SPAWN_TIMEOUT_MS,
     env: {
@@ -94,6 +100,7 @@ function run(mode, env = {}, scriptPath = script) {
       GITHUB_PATH: githubPath,
       PNPM_SETUP_ATTEMPT_SECONDS: "20",
       PNPM_SETUP_KILL_SECONDS: "1",
+      PNPM_SETUP_VERSION_SECONDS: "1",
       ...env,
     },
   });
@@ -167,6 +174,24 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.githubPath).toBe("");
   });
 
+  it("treats an installed pnpm that prints the version and then exits non-zero as a failure", () => {
+    // Failing case: exit 0 on attempt 1 with the bin directory on GITHUB_PATH.
+    const result = run("version-then-fails");
+    expect(result.status).toBe(1);
+    expect(failureLines(result.stderr)).toHaveLength(3);
+    expect(result.githubPath).toBe("");
+  });
+
+  it("treats an installed pnpm that prints the version and then stalls as a failure", () => {
+    // Failing case: exit 0 on attempt 1 with the bin directory on GITHUB_PATH.
+    const result = run("version-then-hangs");
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(failureLines(result.stderr)).toHaveLength(3);
+    expect(result.githubPath).toBe("");
+    expect(result.elapsedMs).toBeLessThan(15_000);
+  });
+
   it.each(["GITHUB_PATH", "RUNNER_TEMP"])("refuses an empty %s before calling npm", (name) => {
     const result = run("ok", { [name]: "" });
     expect(result.status).toBe(1);
@@ -174,7 +199,7 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.npmArgs).toBe("");
   });
 
-  it.each(["PNPM_SETUP_ATTEMPT_SECONDS", "PNPM_SETUP_KILL_SECONDS"])(
+  it.each(["PNPM_SETUP_ATTEMPT_SECONDS", "PNPM_SETUP_KILL_SECONDS", "PNPM_SETUP_VERSION_SECONDS"])(
     "takes an empty %s as its default",
     (name) => {
       const result = run("ok", { [name]: "" });
@@ -186,11 +211,32 @@ describe("ci-setup-pnpm.sh", () => {
     ["PNPM_SETUP_ATTEMPT_SECONDS", "0"],
     ["PNPM_SETUP_ATTEMPT_SECONDS", "1.5"],
     ["PNPM_SETUP_KILL_SECONDS", "abc"],
+    ["PNPM_SETUP_VERSION_SECONDS", "0"],
   ])("refuses %s=%s before calling npm", (name, value) => {
     const result = run("ok", { [name]: value });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(name);
     expect(result.npmArgs).toBe("");
+  });
+
+  it("stops before calling npm when neither gtimeout nor timeout is on PATH", () => {
+    // Only what the script runs before its timeout lookup, so neither timeout command is reachable.
+    const tools = temporaryDirectory("ci-setup-pnpm-tools-");
+    symlinkSync(process.execPath, join(tools, "node"));
+    const dirname = spawnSync("sh", ["-c", "command -v dirname"], { encoding: "utf8" });
+    symlinkSync(dirname.stdout.trim(), join(tools, "dirname"));
+    const path = `${STUB_BIN}:${tools}`;
+    const probe = spawnSync(BASH, ["-c", "command -v gtimeout || command -v timeout"], {
+      env: { PATH: path },
+    });
+    expect(probe.status, "the PATH must really hide both timeout commands").not.toBe(0);
+    const node = spawnSync(BASH, ["-c", "node -p 1"], { encoding: "utf8", env: { PATH: path } });
+    expect(node.stdout, "node must still run, or the script stops before the lookup").toBe("1\n");
+    const result = run("ok", { PATH: path });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("neither gtimeout nor timeout is on PATH");
+    expect(result.npmArgs).toBe("");
+    expect(result.githubPath).toBe("");
   });
 
   it("refuses a packageManager that is not an exact pnpm version", () => {
