@@ -193,12 +193,10 @@ export class StaffingMonthView extends LitElement {
         color: inherit;
       }
       .unfilled {
-        flex-basis: 100%;
         font-size: var(--wt-font-size-xs);
         overflow-wrap: anywhere;
       }
       .line {
-        flex-wrap: wrap;
         display: flex;
         align-items: center;
         gap: var(--wt-space-1);
@@ -581,19 +579,18 @@ export class StaffingMonthView extends LitElement {
       ${shown.map(
         ({ name, needed, unfilled }) =>
           html`<span class="line" data-test="area-line">
-            <span
-              class="bar"
-              aria-hidden="true"
-              data-test="bar"
-              ?data-none=${needed === 0}
-              style=${styleMap({ "--share": String(needed / largest) })}
-            ></span>
-            <span class="label"
-              ><span class="name" data-test="area-name" title=${name}>${name}</span
-              ><span class="count" data-test="area-count">${` ${needed}`}</span></span
-            >
-            ${unfilled !== null ? html`<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}
-          </span>`,
+              <span
+                class="bar"
+                aria-hidden="true"
+                data-test="bar"
+                ?data-none=${needed === 0}
+                style=${styleMap({ "--share": String(needed / largest) })}
+              ></span>
+              <span class="label"
+                ><span class="name" data-test="area-name" title=${name}>${name}</span
+                ><span class="count" data-test="area-count">${` ${needed}`}</span></span
+              > </span
+            >${unfilled !== null ? html`<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}`,
       )}
     `;
   }
