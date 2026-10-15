@@ -357,17 +357,22 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   async function leaseState(signal?: AbortSignal): Promise<SavedCloudState> {
     const current = await read();
     if (current && hasLiveLease(current)) return current;
-    return run(
-      async () => {
-        const state = await read();
-        if (!state?.view?.registration || state.lifecycle?.revoked)
-          throw new AppError("cloud.not_configured", {});
-        await installationClient(state, save).ensureLease(signal);
-        return state;
-      },
-      true,
-      signal,
-    );
+    try {
+      return await run(
+        async () => {
+          const state = await read();
+          if (!state?.view?.registration || state.lifecycle?.revoked)
+            throw new AppError("cloud.not_configured", {});
+          await installationClient(state, save).ensureLease(signal);
+          return state;
+        },
+        true,
+        signal,
+      );
+    } catch (error) {
+      if (error instanceof AppError || !signal?.aborted) throw error;
+      throw new AppError("cloud.unavailable", {});
+    }
   }
   return {
     translation: {

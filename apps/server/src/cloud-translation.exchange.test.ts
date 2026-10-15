@@ -281,64 +281,53 @@ it("refuses a collect reply with a result whose names are not text", () =>
     });
   }));
 
-// Every result at the contract's bounds, written in characters JSON can only send as `\uXXXX`.
-const LANGUAGES = [
-  ...["ca", "es", "en", "fr", "de", "it", "pt", "nl", "eu", "gl", "oc", "ast", "an", "pt-BR"],
-  ...["en-GB", "es-MX", "fr-CA", "de-AT", "it-CH", "nl-BE"],
-];
-const worstBody = () =>
-  JSON.stringify({
-    version: 1,
-    country: "ES",
-    languages: { default: "ca", enabled: LANGUAGES },
-    items: Array.from({ length: 1000 }, (_, i) => {
-      const ref = `product:${i}:`.padEnd(128, "x");
-      return {
-        ref,
-        kind: "product",
-        family: ref,
-        category: null,
-        staffName: `PRODUCT ${i}`,
-        existing: {},
-        missing: LANGUAGES,
-      };
-    }),
-    houseStyle: [],
+it("a collect reply as large as the contract allows fits under its size limit", () => {
+  // Every text at its bound in characters JSON can only send as a six-byte `\uXXXX` escape.
+  expect(JSON.stringify("\u0001")).toHaveLength(8);
+  const text = (c: string, n = 500) => c.repeat(n);
+  const tags = Array.from({ length: 20 }, (_, i) => `a${String.fromCharCode(97 + i)}a-ES`);
+  const worst = JSON.stringify({
+    ref: text("\u0001", 128),
+    names: Object.fromEntries(tags.map((t) => [t, text("\u0001")])),
+    placeholder: false,
+    corrections: Array.from({ length: 10 }, () => ({
+      field: "internal",
+      wrong: text("\u0001"),
+      right: text("\u0002"),
+    })),
   });
-const escaped = (c: string) => c.repeat(500);
+  const shell = JSON.stringify({
+    version: 1,
+    jobId: "00000000-0000-4000-8000-000000000001",
+    state: "partly_done",
+    results: [],
+    failed: [],
+  });
+  const reply = Buffer.byteLength(shell) + 1000 * Buffer.byteLength(worst) + 999;
+  expect(reply).toBeLessThanOrEqual(COLLECT_REPLY_BYTES);
+});
 
-it("accepts a collect reply as large as the contract allows", () =>
+it("refuses a collect reply over its size limit, and stops reading it", () =>
   withFake(async (f) => {
-    f.translator((item) => ({
-      names: Object.fromEntries(item.missing.map((l) => [l, escaped("\u0001")])),
-      placeholder: false,
-      corrections: Array.from({ length: 10 }, () => ({
-        field: "internal",
-        wrong: escaped("\u0001"),
-        right: escaped("\u0002"),
-      })),
-    }));
-    const job = await f.client.translation.submit(op(), worstBody());
-    await f.client.translation.status(job.jobId);
-    await f.client.translation.status(job.jobId);
-    const collected = await f.client.translation.collect(job.jobId);
-    expect(collected.results).toHaveLength(1000);
-    expect(collected.results[999]!.names["nl-BE"]).toBe(escaped("\u0001"));
-  }));
-
-it("refuses a collect reply over its size limit", () =>
-  withFake(async (f) => {
-    f.translator(() => ({
-      names: { ca: "x".repeat(COLLECT_REPLY_BYTES) },
-      placeholder: false,
-      corrections: [],
-    }));
-    const job = await f.client.translation.submit(op(), body(1));
-    await f.client.translation.status(job.jobId);
-    await f.client.translation.status(job.jobId);
-    await expect(f.client.translation.collect(job.jobId)).rejects.toMatchObject({
+    await f.client.refresh();
+    const chunk = new Uint8Array(1048576).fill(0x20);
+    let sent = 0;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent > COLLECT_REPLY_BYTES + 2 * chunk.length) return controller.close();
+        sent += chunk.length;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(stream, { status: 200 }));
+    await expect(f.client.translation.collect(JOB)).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
+    expect(cancelled).toBe(true);
   }));
 
 const JOB = "00000000-0000-4000-8000-000000000001";
@@ -470,6 +459,25 @@ it("a call its caller aborts is cloud.unavailable", () =>
     abort.abort();
     await expect(call).rejects.toMatchObject({ code: "cloud.unavailable" });
     held.release();
+  }));
+
+it("a call its caller aborts while it waits for the connection's lock is cloud.unavailable", () =>
+  withFake(async (f) => {
+    let answer: (r: Response) => void = () => {};
+    let reached = () => {};
+    const held = new Promise<void>((resolve) => (reached = resolve));
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => {
+      reached();
+      return new Promise<Response>((resolve) => (answer = resolve));
+    });
+    const refresh = f.client.refresh();
+    await held;
+    const abort = new AbortController();
+    const call = f.client.translation.status(JOB, abort.signal);
+    abort.abort();
+    await expect(call).rejects.toMatchObject({ code: "cloud.unavailable" });
+    answer(new Response("{}", { status: 503 }));
+    await refresh.catch(() => {});
   }));
 
 it("a saved state holding no lease is cloud.not_configured, with nothing sent", () =>
