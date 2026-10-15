@@ -7,7 +7,8 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
 /**
  * A module's `./dashboard` sub-path is bundled into the admin dashboard, so it must never reach
  * server-only code: a runtime import of `@waitron/db`, `hono`, `pg`, `drizzle-orm` or a `node:`
- * builtin would drag Node into the browser bundle. For each listed sub-path this scans every file
+ * builtin would drag Node into the browser bundle. For each listed sub-path (a directory, or a single
+ * `.ts` file when only that entry is browser-safe) this scans every file
  * REACHABLE from it by RELATIVE imports, including ones that leave `src/dashboard`, and forbids
  * reaching the package's own server barrel/entry (`../index.js`, `../bookings.js`).
  *
@@ -25,9 +26,11 @@ const SUBPATHS: Array<[string, string]> = [
   ["@waitron/bookings", "packages/bookings/src/dashboard"],
   ["@waitron/adjustments", "packages/adjustments/src/dashboard"],
   ["@waitron/staffing", "packages/staffing/src/dashboard"],
+  ["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"],
 ];
 
 function tsFiles(dir: string): string[] {
+  if (dir.endsWith(".ts")) return [dir];
   const out: string[] = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -134,6 +137,11 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       };
       expect(Object.keys(m.dependencies ?? {}).filter((d) => FORBIDDEN.includes(d))).toEqual([]);
     }
+  });
+
+  it("an entry naming a .ts file scans that file alone", () => {
+    const file = join(REPO, "packages/venue-service/src/dashboard/painter.ts");
+    expect(tsFiles(file)).toEqual([file]);
   });
 
   it("detects a planted server import (positive control)", () => {
