@@ -44,6 +44,7 @@ export interface FirstSetupFrozen {
   sourceId: string;
   environment: DeploymentEnvironment;
   request: VenueRequest;
+  configurationImport?: { digest: string; newTaxpayer: boolean };
   modules: { module: string; version: string; eventId: string; request: unknown }[];
 }
 export type FirstSetupStatus =
@@ -166,15 +167,20 @@ function publicValue(value: unknown, depth = 0): void {
 }
 function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
   if (
-    !keys(value, [
-      "attemptId",
-      "nodeId",
-      "administratorId",
-      "sourceId",
-      "environment",
-      "request",
-      "modules",
-    ]) ||
+    !keys(
+      value,
+      [
+        "configurationImport",
+        "attemptId",
+        "nodeId",
+        "administratorId",
+        "sourceId",
+        "environment",
+        "request",
+        "modules",
+      ],
+      ["attemptId", "nodeId", "administratorId", "sourceId", "environment", "request", "modules"],
+    ) ||
     ![value.attemptId, value.nodeId, value.administratorId].every(
       (id) => typeof id === "string" && isUuid(id),
     ) ||
@@ -182,6 +188,14 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
     !["production", "preproduction"].includes(String(value.environment)) ||
     !Array.isArray(value.modules) ||
     value.modules.length > 100
+  )
+    invalid();
+  if (
+    value.configurationImport !== undefined &&
+    (!keys(value.configurationImport, ["digest", "newTaxpayer"]) ||
+      typeof value.configurationImport.digest !== "string" ||
+      !HASH.test(value.configurationImport.digest) ||
+      typeof value.configurationImport.newTaxpayer !== "boolean")
   )
     invalid();
   const request = value.request;

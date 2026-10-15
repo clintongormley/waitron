@@ -1015,9 +1015,13 @@ export class SetupApp extends LitElement {
       const session = await this.#openFirstSession();
       if (!current()) return;
       const venue = assembleBody(submitted).venue;
-      if (this.#firstReplacing) await session.replaceAbandoned(venue, currentLocale());
+      const intent =
+        submitted.configurationImport === true
+          ? { configurationImport: true, newTaxpayer: submitted.newTaxpayer === true }
+          : undefined;
+      if (this.#firstReplacing) await session.replaceAbandoned(venue, currentLocale(), intent);
       else if (!session.state && !session.recoveryRequired)
-        await session.claim(venue, currentLocale());
+        await session.claim(venue, currentLocale(), intent);
       else return;
       if (!current()) return;
       this.#acceptFirstIdentity();

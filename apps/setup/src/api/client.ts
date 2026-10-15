@@ -433,11 +433,12 @@ export class SetupApi {
     clientClaimNonce: string,
     venue: ProvisionBody["venue"],
     locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
   ): Promise<FirstSetupOwnership> {
     return this.#request(
       "/setup-api/first-setup/claim",
       "POST",
-      { clientClaimNonce, venue },
+      { clientClaimNonce, venue, ...intent },
       locale === undefined ? {} : { "accept-language": locale },
     );
   }

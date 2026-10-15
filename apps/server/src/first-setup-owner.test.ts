@@ -245,3 +245,45 @@ it("permits a claim after an unrelated operation is durably complete", async () 
   });
   await expect(f.claim()).resolves.toMatchObject({ ownerGeneration: 1 });
 });
+
+it("freezes the selected staged file only after earlier setup work releases the common coordinator", async () => {
+  const f = await fixture();
+  const path = join(f.dir, "staged-digest");
+  await writeFile(path, "a".repeat(64));
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let stagingActive = true,
+    frozeDuringStaging = false;
+  const staging = f.options.coordinator.run(async () => {
+    entered();
+    await pending;
+    await writeFile(path, "b".repeat(64));
+    stagingActive = false;
+  });
+  await started;
+  const owner = createFirstSetupOwner({
+    ...f.options,
+    freeze: async (...args) => {
+      frozeDuringStaging = stagingActive;
+      return {
+        ...(await f.options.freeze(args[0], args[1], args[2])),
+        configurationImport: { digest: await readFile(path, "utf8"), newTaxpayer: false },
+      };
+    },
+  });
+  const claiming = owner.claimFirstSetup(payload, f.nonce);
+  release();
+  await staging;
+  await claiming;
+  expect(frozeDuringStaging).toBe(false);
+  expect((await f.store.read())?.frozen.configurationImport).toEqual({
+    digest: "b".repeat(64),
+    newTaxpayer: false,
+  });
+});

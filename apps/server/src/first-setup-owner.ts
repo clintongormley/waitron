@@ -24,6 +24,8 @@ import "@waitron/provisioning";
 
 export interface FirstSetupClaimPayload {
   environment: "production" | "preproduction";
+  configurationImport?: boolean;
+  newTaxpayer?: boolean;
   request: Omit<VenueRequest, "admin"> & {
     admin: Omit<VenueRequest["admin"], "pinHash" | "passwordHash"> & {
       password: string;
@@ -62,6 +64,7 @@ interface OwnerOptions {
     request: VenueRequest,
     environment: FirstSetupFrozen["environment"],
     ids: Pick<FirstSetupFrozen, "attemptId" | "nodeId" | "administratorId">,
+    intent?: Pick<FirstSetupClaimPayload, "configurationImport" | "newTaxpayer">,
   ): Promise<FirstSetupFrozen>;
   assertClaimAllowed?(hold: FirstSetupHold): Promise<void>;
 }
@@ -191,18 +194,18 @@ export function createFirstSetupOwner(options: OwnerOptions) {
         },
       };
       const ids = { attemptId: randomUUID(), nodeId: randomUUID(), administratorId: randomUUID() };
-      const frozen = await options.freeze(request, payload.environment, ids);
-      if (
-        frozen.attemptId !== ids.attemptId ||
-        frozen.nodeId !== ids.nodeId ||
-        frozen.administratorId !== ids.administratorId ||
-        frozen.environment !== payload.environment
-      )
-        throw new AppError("setup.attempt_invalid", {});
       const capability = token();
       const state = await coordinator.run(async (hold) => {
         await assertNoOtherSetupInProgress(options.stateDir);
         await options.assertClaimAllowed?.(hold);
+        const frozen = await options.freeze(request, payload.environment, ids, payload);
+        if (
+          frozen.attemptId !== ids.attemptId ||
+          frozen.nodeId !== ids.nodeId ||
+          frozen.administratorId !== ids.administratorId ||
+          frozen.environment !== payload.environment
+        )
+          throw new AppError("setup.attempt_invalid", {});
         return store.claim(
           frozen,
           request.admin.passwordHash,

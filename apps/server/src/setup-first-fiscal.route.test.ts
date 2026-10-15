@@ -499,3 +499,26 @@ it("refuses non-JSON owner POSTs and accepts the same-origin JSON control", asyn
   });
   expect(allowed.status).toBe(200);
 });
+
+it.each([
+  { configurationImport: null },
+  { configurationImport: "true" },
+  { newTaxpayer: null },
+  { newTaxpayer: 1 },
+  { newTaxpayer: true },
+  { configurationImport: false, newTaxpayer: true },
+])(
+  "refuses malformed claim import selection %j before changing the claimed event",
+  async (intent) => {
+    const f = await fixture();
+    const before = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
+    const response = await f.post("/setup-api/first-setup/claim", {
+      clientClaimNonce: f.nonce,
+      venue: request,
+      ...intent,
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe("setup.request_invalid");
+    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(before);
+  },
+);

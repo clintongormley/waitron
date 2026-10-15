@@ -16,6 +16,12 @@ restore inputs and generated-record handover, follow
 [Recover a filing box](offline-fiscal-restore.md). Its optional host-managed emergency collector
 is described in [Emergency recovery](emergency-recovery.md).
 
+**2026-10-15 A679 candidate:** the feature branch adds a downloadable offline tool and first-Live
+wizard path. Use the candidate [first Live procedure](../operations/first-live-fiscal-setup.md)
+for its separate-computer, file/paper checks, current-original, handover and loss steps. Joint
+wizard/tool and actual-paper acceptance remain open. The command route below remains separate;
+its dated development status is historical.
+
 ## Create the custodian's key
 
 Build the standalone command from the repository:

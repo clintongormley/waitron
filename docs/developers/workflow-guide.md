@@ -159,6 +159,14 @@ normal hook run the §2 local checks once; let CI run mandatory package tests an
 add a whole-workspace local run solely because the branch is being finished. Verify the current-head
 CI scope and results; the unfiltered `main` merge checks the combined tree when code is in scope.
 
+### First Live setup qualification
+
+For A679's candidate first-Live journey, follow the [operator procedure](../operations/first-live-fiscal-setup.md).
+Use the production-shaped isolated test host for Live ownership and activation when the managed
+development stack sets dev mode. Keep the physical-paper receipt separate from browser automation:
+a saved file, synthetic transcription or print preview does not establish the actual-paper check.
+The candidate's joint wizard/tool and physical acceptance remain outstanding as of 2026-10-15.
+
 ## Documentation rules
 
 **`docs/backlog.md` answers "what should I work on?"** — what is in flight, what is next, and why

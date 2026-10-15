@@ -269,23 +269,41 @@ export class FirstSetupSession {
     this.#proofRequired = false;
     this.#needsRefresh = false;
   }
-  async #claim(venue: ProvisionBody["venue"], current: () => void, locale?: string): Promise<void> {
+  async #claim(
+    venue: ProvisionBody["venue"],
+    current: () => void,
+    locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+  ): Promise<void> {
     this.#saved!.claimPending = true;
     this.#save();
-    const result = await this.#api.claimFirstSetup(this.#saved!.clientClaimNonce, venue, locale);
+    const result = await this.#api.claimFirstSetup(
+      this.#saved!.clientClaimNonce,
+      venue,
+      locale,
+      intent,
+    );
     current();
     if (!publicState(result.state)) failure("setup.attempt_conflict");
     await this.#holdAttempt(result.state.attemptId);
     current();
     this.#acceptOwnership(result);
   }
-  claim(venue: ProvisionBody["venue"], locale?: string): Promise<void> {
+  claim(
+    venue: ProvisionBody["venue"],
+    locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+  ): Promise<void> {
     return this.#run(async (current) => {
       if (this.#saved!.owner || this.recoveryRequired) failure("setup.owner_required");
-      await this.#claim(venue, current, locale);
+      await this.#claim(venue, current, locale, intent);
     });
   }
-  replaceAbandoned(venue: ProvisionBody["venue"], locale?: string): Promise<void> {
+  replaceAbandoned(
+    venue: ProvisionBody["venue"],
+    locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+  ): Promise<void> {
     return this.#run(async (current) => {
       if (this.#state?.consumptionIntent) failure("setup.attempt_uncertain");
       if (this.#state?.status !== "abandoned") failure("setup.attempt_conflict");
@@ -299,7 +317,7 @@ export class FirstSetupSession {
       this.#needsRefresh = false;
       this.#save();
       this.#attemptLock = undefined;
-      await this.#claim(venue, current, locale);
+      await this.#claim(venue, current, locale, intent);
     });
   }
   resume(password: string): Promise<void> {

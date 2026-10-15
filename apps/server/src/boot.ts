@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { assertOtherSetupAllowed, readTenantIdentities } from "@waitron/provisioning";
@@ -765,12 +766,26 @@ async function bootServer(
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   const moduleConfig = await readModuleConfig(config.stateDir);
+  let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
     environment: env,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
     moduleConfig,
+    freezeConfiguration: async (request, newTaxpayer) => {
+      if (setupKeyRing === undefined) throw new AppError("setup.not_ready", {});
+      const staged = await readStagedConfigurationImport(config.stateDir, setupKeyRing);
+      if (
+        staged === null ||
+        staged.bundle.venue.country !== request.country ||
+        (!newTaxpayer && staged.bundle.venue.taxId !== request.taxId)
+      )
+        throw new AppError("setup.request_invalid", { field: "configurationImport" });
+      if (newTaxpayer && staged.bundle.venue.taxId === request.taxId)
+        throw new AppError("setup.request_invalid", { field: "taxId" });
+      return { digest: createHash("sha256").update(staged.artifact).digest("hex"), newTaxpayer };
+    },
     assertClaimAllowed: async () => {
       if (
         (await readTenantIdentities(db)).length > 0 ||
@@ -948,6 +963,7 @@ async function bootServer(
     const ring = loadKeyRing(
       parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
     );
+    setupKeyRing = ring;
     const accountKey = resolveAccountKey({}, ring);
     const persistTrading = async (cfg: TradingConfig): Promise<void> => {
       await writeTradingEnv(config.stateDir, {
@@ -1156,6 +1172,13 @@ async function bootServer(
           if (staged !== null && req.newTaxpayer && staged.bundle.venue.taxId === req.venue.taxId) {
             throw new AppError("setup.request_invalid", { field: "taxId" });
           }
+          if (
+            req.configurationDigest !== undefined &&
+            (staged === null ||
+              createHash("sha256").update(staged.artifact).digest("hex") !==
+                req.configurationDigest)
+          )
+            throw new AppError("setup.attempt_conflict", {});
           const versions = staged === null ? undefined : await schemaVersionsByModule(db, modules);
           const result = await provisionVenue(
             {

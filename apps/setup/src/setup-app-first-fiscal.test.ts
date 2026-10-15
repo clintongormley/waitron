@@ -593,3 +593,23 @@ it("labels the frozen series inputs as bases on the owner-bound review", async (
   expect(review.shadowRoot!.textContent).toContain("Corrections series base");
   expect(review.shadowRoot!.querySelector("[data-test=summary-seriesCode]")!.textContent).toBe("A");
 });
+
+it.each([false, true])(
+  "binds the selected staged configuration at claim, new taxpayer %s",
+  async (newTaxpayer) => {
+    const { app, requests } = await mount();
+    await screen(app, "mode");
+    emit(app, "setup-patch", {
+      patch: { mode: "live", venue, configurationImport: true, newTaxpayer },
+    });
+    emit(app, "setup-goto", { screen: "venue" });
+    await screen(app, "venue");
+    emit(app, "setup-advance");
+    await screen(app, "cert");
+    expect(requests.find((r) => r.path.endsWith("/claim"))?.body).toMatchObject({
+      configurationImport: true,
+      newTaxpayer,
+    });
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("configurationImport");
+  },
+);
