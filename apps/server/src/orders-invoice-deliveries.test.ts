@@ -257,6 +257,39 @@ describe("dashboard print on A4", () => {
     expect(await deliveriesOf(saleId)).toHaveLength(1);
   });
 
+  it("refuses a request key reused for another printer, A4 or receipt, writing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    await withExtraOffices(async ({ upstairs }) => {
+      const key = randomUUID();
+      expect((await printOnA4(venue.adminDashboard, billId, a4(key))).status).toBe(200);
+      const before = await deliveriesOf(saleId);
+      for (const printerId of [upstairs, venue.printerId]) {
+        expect(await printOnA4(venue.adminDashboard, billId, a4(key, printerId))).toMatchObject({
+          status: 409,
+          json: { code: "submission.id_reused", params: { submissionId: key } },
+        });
+      }
+      expect(await deliveriesOf(saleId)).toEqual(before);
+      expect(before).toEqual([expect.objectContaining({ medium: "a4", pagePrinterId: officeId })]);
+    });
+  });
+
+  it("refuses a receipt printer's request key reused for an A4 printer, writing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const key = randomUUID();
+    expect((await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId))).status).toBe(
+      200,
+    );
+    const rows = await deliveriesOf(saleId);
+    const jobs = await jobsOfSale(saleId);
+    expect(await printOnA4(venue.adminDashboard, billId, a4(key))).toMatchObject({
+      status: 409,
+      json: { code: "submission.id_reused", params: { submissionId: key } },
+    });
+    expect(await deliveriesOf(saleId)).toEqual(rows);
+    expect(await jobsOfSale(saleId)).toEqual(jobs);
+  });
+
   it("refuses a second attempt while one is active, writing nothing", async () => {
     const { billId, saleId } = await fullInvoice();
     expect((await printOnA4(venue.adminDashboard, billId, a4())).status).toBe(200);

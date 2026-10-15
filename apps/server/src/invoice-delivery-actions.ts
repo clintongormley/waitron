@@ -67,7 +67,7 @@ export async function requestPrintDelivery(
   const { printerId, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, async (row) => {
-    if (row.medium === "a4") return true;
+    if (row.medium === "a4") return row.pagePrinterId === printerId;
     if (row.medium !== "receipt") return false;
     const [job] = await tx
       .select({ printerId: printJobs.printerId })

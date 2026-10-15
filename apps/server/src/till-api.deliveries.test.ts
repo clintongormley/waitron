@@ -394,7 +394,7 @@ async function upstairsOffice(v: Venue): Promise<string> {
       .from(devices)) {
       await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
     }
-    await tx.update(devices).set({ invoicePagePrinterId: upstairs!.id });
+    await tx.update(devices).set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id });
     return upstairs!.id;
   });
 }
@@ -661,6 +661,21 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     expect(await deliveryRows(saleId)).toHaveLength(1);
   });
 
+  it("refuses a request key reused once the till's invoice printer changed, writing nothing", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const key = randomUUID();
+    expect((await printOnA4(v, orderId, key)).status).toBe(200);
+    const rows = await deliveryRows(saleId);
+    const upstairs = await upstairsOffice(v);
+    expect(await printOnA4(v, orderId, key, undefined, upstairs)).toEqual({
+      status: 409,
+      body: { error: { code: "submission.id_reused", params: { submissionId: key } } },
+    });
+    expect(await deliveryRows(saleId)).toEqual(rows);
+    expect(rows).toEqual([expect.objectContaining({ medium: "a4", pagePrinterId: v.officeId })]);
+  });
+
   it("refuses an A4 request whose key already switched to paper, changing nothing", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
@@ -907,6 +922,23 @@ describe("a receipt printer as the till's invoice printer", () => {
     expect(await printOnA4(v, orderId, key, undefined, counter)).toEqual(first);
     expect(await jobsOf(saleId)).toHaveLength(1);
     expect(await deliveryRows(saleId)).toHaveLength(1);
+  });
+
+  it("refuses a request key reused once the till's invoice printer changed to A4, queueing nothing", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter(v);
+    const key = randomUUID();
+    expect((await printOnA4(v, orderId, key, undefined, counter)).status).toBe(200);
+    const rows = await deliveryRows(saleId);
+    const jobs = await jobsOf(saleId);
+    const upstairs = await upstairsOffice(v);
+    expect(await printOnA4(v, orderId, key, undefined, upstairs)).toEqual({
+      status: 409,
+      body: { error: { code: "submission.id_reused", params: { submissionId: key } } },
+    });
+    expect(await deliveryRows(saleId)).toEqual(rows);
+    expect(await jobsOf(saleId)).toEqual(jobs);
   });
 
   it("refuses the till's receipt printer, which is not its invoice printer", async () => {
