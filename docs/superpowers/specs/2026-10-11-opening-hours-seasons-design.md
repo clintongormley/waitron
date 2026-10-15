@@ -309,6 +309,11 @@ Nothing on them shows live state.
 - Clicking a date opens: the special-day painter on its special day; for a public holiday not yet
   in a special day, the painter pre-filled as section 5 says; for an ordinary date, mockup 5's dialog.
 
+**2026-10-15 (A720 Part 1):** a Year / Month switch after ‹ › replaces the tab row and the month's
+"‹ year"; the Year's legend, "+ Special day", its "included" coverage sentence and the town-holiday
+sentence are gone, and the month no longer draws "+ Special day", and draws season chips and a Rows
+line only on a prep station's Times tab.
+
 ### 10.3 The painter (both editors; mockups 3, 4, 9)
 
 All of the owner's painter text in backlog A506 applies as written; in short:

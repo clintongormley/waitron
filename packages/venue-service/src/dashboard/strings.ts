@@ -52,7 +52,6 @@ const en = {
     "These profiles would have no allowed zones: {names}.",
   "venue.delete_refusal_department_profile_in_use":
     "Move these profiles to another department first: {names}.",
-  "calendar.public": "Public holiday",
   "calendar.special_day": "Special day",
   "calendar.area_required":
     "{year}: only official holidays for the whole province are shown until you choose the holiday area here.",
@@ -116,17 +115,14 @@ const en = {
   "season.delete_loses": "The hours of {departments} in it are lost.",
   "season.delete_loses_none": "No department has hours in it.",
   "season.back": "Back",
-  "year.add_special": "+ Special day",
   "ordinary.title": "{weekday} {date}",
   "ordinary.follows": "This date follows the {season} week.",
   "ordinary.edit_week": "Edit the {season} week",
   "ordinary.add_to_existing": "Or add it to an existing special day:",
   "ordinary.close": "Close",
   "year.holidays_unavailable": "Public holidays for {year} are not available yet",
-  "year.town_holidays": "Town holidays are not in the official lists — add them as special days.",
   "month.previous": "Previous month",
   "month.next": "Next month",
-  "month.year_back": "Back to {year}",
   "month.rows": "Rows:",
   "month.department_closed": "{name} closed",
   "month.no_orders": "No orders",
@@ -164,7 +160,9 @@ const en = {
   "opening.load_error": "Opening hours could not be loaded. It will be tried again.",
   "opening.delete_confirm": "Delete {name}?",
   "opening.routing_use": "{row} · {zone}",
-  "opening.tab.year": "Year",
+  "opening.view": "View",
+  "opening.view.year": "Year",
+  "opening.view.month": "Month",
   "opening.staff_menus": "Staff-only menus",
   "opening.active_menus_required": "Choose active menus.",
   "paint.grid": "Painted hours",
@@ -650,14 +648,10 @@ const en = {
   "hours.calendar.scope.regional": "Regional holiday",
   "hours.calendar.scope.local": "Local holiday",
   "hours.calendar.source": "Source:",
-  "hours.calendar.coverage.complete":
-    "{year}: official national and regional holidays are included.",
   "hours.calendar.coverage.missing_year":
     "{year}: official holidays are not available yet, so none are shown.",
   "hours.calendar.coverage.unknown_region":
     "{year}: the venue's province is not recognised, so official holidays are not shown.",
-  "hours.calendar.coverage.area_required":
-    "{year}: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
   "hours.calendar.coverage.unsupported_country":
     "{year}: official holidays are not available for this country.",
   "hours.calendar.coverage.unknown": "{year}: which official holidays apply could not be read.",
@@ -904,7 +898,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.delete_counter_empty":
     "Se borra la zona predeterminada de Mostrador; ninguna zona restante la sustituye.",
   "venue.delete_default_empty": "Se borra el departamento predeterminado.",
-  "calendar.public": "Festivo oficial",
   "calendar.special_day": "Día especial",
   "calendar.area_required":
     "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que elijas aquí la zona de festivos.",
@@ -968,18 +961,14 @@ const es: Record<keyof typeof en, string> = {
   "season.delete_loses": "Se pierden los horarios de {departments} en ella.",
   "season.delete_loses_none": "Ningún departamento tiene horarios en ella.",
   "season.back": "Volver",
-  "year.add_special": "+ Día especial",
   "ordinary.title": "{weekday}, {date}",
   "ordinary.follows": "Esta fecha sigue la semana de {season}.",
   "ordinary.edit_week": "Editar la semana de {season}",
   "ordinary.add_to_existing": "O añádela a un día especial existente:",
   "ordinary.close": "Cerrar",
   "year.holidays_unavailable": "Los festivos oficiales de {year} aún no están disponibles",
-  "year.town_holidays":
-    "Las fiestas locales no están en las listas oficiales: añádelas como días especiales.",
   "month.previous": "Mes anterior",
   "month.next": "Mes siguiente",
-  "month.year_back": "Volver a {year}",
   "month.rows": "Filas:",
   "month.department_closed": "{name}: cerrado",
   "month.no_orders": "Sin pedidos",
@@ -1017,7 +1006,9 @@ const es: Record<keyof typeof en, string> = {
   "opening.load_error": "No se ha podido cargar el horario de apertura. Se volverá a intentar.",
   "opening.delete_confirm": "¿Eliminar {name}?",
   "opening.routing_use": "{row} · {zone}",
-  "opening.tab.year": "Año",
+  "opening.view": "Vista",
+  "opening.view.year": "Año",
+  "opening.view.month": "Mes",
   "opening.staff_menus": "Cartas solo para el personal",
   "opening.active_menus_required": "Elige cartas activas.",
   "paint.grid": "Horas pintadas",
@@ -1516,14 +1507,10 @@ const es: Record<keyof typeof en, string> = {
   "hours.calendar.scope.regional": "Festivo autonómico",
   "hours.calendar.scope.local": "Festivo local",
   "hours.calendar.source": "Fuente:",
-  "hours.calendar.coverage.complete":
-    "{year}: se incluyen los festivos oficiales nacionales y autonómicos.",
   "hours.calendar.coverage.missing_year":
     "{year}: los festivos oficiales aún no están disponibles, así que no se muestra ninguno.",
   "hours.calendar.coverage.unknown_region":
     "{year}: no se reconoce la provincia del local, así que no se muestran los festivos oficiales.",
-  "hours.calendar.coverage.area_required":
-    "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que se elija la zona de festivos en Fechas especiales.",
   "hours.calendar.coverage.unsupported_country":
     "{year}: no hay festivos oficiales disponibles para este país.",
   "hours.calendar.coverage.unknown": "{year}: no se pudo leer qué festivos oficiales se aplican.",

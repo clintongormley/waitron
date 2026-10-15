@@ -227,7 +227,8 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
    periods grouped by department — colour, name, customer menu, staff-only menus, "Painted in" and a
    bin — with "+ Add period". A row opens the existing period dialog on top: a period has too many
    fields to edit inside its row, unlike a season (A721).
-2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar's Year view; the
+2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar Year's season row (A721
+   adds "Seasons…"; if A719 lands first it adds "Periods…" alone); the
    painters' "Periods" link (`periodsLink`, `period-editing.ts`), which today navigates away and now
    opens the window on top of the painter so unsaved paint stays; and the Departments warning "Set up
    periods" (`departments-list.ts:219`), which opens the Calendar with the window open. The window
@@ -243,24 +244,15 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
 6. **The colour is chosen in a popup**, the shared chooser A725 point 7 describes, not a row of
    squares. Whichever of A719, A721 and A725 lands first builds it.
 
-Lands after A720, whose toolbar holds the button.
+Its button goes on the Year view's season row.
 
 ## A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
 
 **A720 (owner, 2026-10-15).** Mockups: [Year](mockups/a718-a727-calendar-and-stations/01-year-view.png),
 [Month](mockups/a718-a727-calendar-and-stations/03-month-view.png). Files: `packages/venue-service/src/dashboard/opening-hours-screen.ts`,
-`opening-hours-year.ts`, `opening-hours-month.ts`, `season-chips.ts`; for point 7,
+`opening-hours-year.ts`, `opening-hours-month.ts`; for point 7,
 `packages/staffing/src/dashboard/staffing-month.ts`.
 
-1. **One toolbar row, no tab row.** ‹ year (or month) › and a Year / Month / Week switch replace the
-   tab bar that holds a single "Year" tab (Week is A722). The Month view's "‹ 2026" row goes: Year
-   in the switch goes back. Month names in the Year view look like links ("October ›") — today a
-   month opens only by clicking a name drawn as a plain heading.
-2. **Less on top.** Remove the colour key; the "2026: official national and regional holidays are
-   included." and "Town holidays…" lines (keep "Public holidays for {year} are not available
-   yet"); every hint line; "+ Special day"; and, in the Month view, the "Rows:" line and the seasons
-   row. The Year view keeps its season chips — they open a season's week, with no ✎ — and gains a
-   "Seasons…" button (A721). In the Month view, "Show" sits beside the switch.
 3. **A day box instead of the panel that makes the page jump.** Today clicking a day in the Year
    view adds a panel under that month, which grows it and pushes the next row of months down by a
    different amount per month. Instead, clicking a day in the Year or Month view opens a floating
@@ -279,7 +271,7 @@ Lands after A720, whose toolbar holds the button.
 6. **A zone's track shows its own hours.** Today a zone row is its department's blocks with the
    zone's closures laid over them, and each block's label — and the spoken description — gives the
    department's times: Terrace's evening reads "Open 18:15–02:00" although Terrace closes at 23:00
-   (`opening-hours-month.ts:414-505`). Work out the zone's own blocks (the department's less its
+   (`#title`, `#describe` and `#cell` in `opening-hours-month.ts`). Work out the zone's own blocks (the department's less its
    closures) before drawing and labelling them, and show a closure only inside the department's
    hours.
 7. **The Staffing view's month follows**: no seasons or special-days row, and the same day box,
@@ -293,7 +285,8 @@ Season colours come from A721; until it lands the views keep today's tints.
 `packages/venue-service/src/dashboard/season-chips.ts`, the season dialog, `season-tint.ts`, and
 the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
 
-1. **A "Seasons…" window**, opened from the Calendar (A720), lists every season in the order it
+1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row
+   (A720 left it to A721), lists every season in the order it
    starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the

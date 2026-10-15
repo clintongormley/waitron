@@ -234,7 +234,6 @@ describe("Opening hours month", () => {
     expect(bar.title).toBe("All day 10:00–02:00");
     expect(percent(bar.style.left)).toBeCloseTo((4 / 24) * 100, 3);
     expect(percent(bar.style.width)).toBeCloseTo((16 / 24) * 100, 3);
-    expect(text(testId(el, "rows"))).toBe("Rows: Restaurant · Bar");
   });
 
   it("places each date's ranges from that date's own changeover, a longer day running past 24 hours", async () => {
@@ -276,7 +275,6 @@ describe("Opening hours month", () => {
     expect(percent(gaps[0]!.style.width)).toBeCloseTo((2 / 24) * 100, 3);
     expect(tracks[1]!.querySelectorAll(".segment")).toHaveLength(3);
     expect(cell(el, "2026-12-02").querySelectorAll('[data-test="gap"]')).toHaveLength(0);
-    expect(text(testId(el, "rows"))).toBe("Rows: Restaurant · Terrace");
   });
 
   it("offers All departments and each department, and sends the choice", async () => {
@@ -299,17 +297,45 @@ describe("Opening hours month", () => {
     expect(picker.value).toBe("rest");
   });
 
-  it("steps a month either way from the requested month, and goes back to the year", async () => {
+  it("draws only ‹ month ›, the switch's slot and Show above the dates", async () => {
+    const el = await mount();
+    for (const id of ["year-back", "add-special-day", "rows"])
+      expect(testId(el, id), id).toBeNull();
+    expect(root(el).querySelector("season-chips")).toBeNull();
+    const parts = [
+      '[data-test="previous-month"]',
+      '[data-test="month"]',
+      '[data-test="next-month"]',
+      'slot[name="switch"]',
+      'wt-combobox[name="departmentId"]',
+    ];
+    const head = root(el).querySelector(".head")!;
+    expect([...head.children].map((child) => parts.find((part) => child.matches(part)))).toEqual(
+      parts,
+    );
+  });
+
+  it("keeps station mode as it was", async () => {
+    const el = await mount(monthModel(), {
+      readOnly: true,
+      stationMode: true,
+      departments: DEPARTMENTS.map(({ id, name, periods }) => ({
+        id,
+        name,
+        zones: [],
+        periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
+      })),
+    });
+    expect(root(el).querySelector("season-chips")!.keyOnly).toBe(true);
+    expect(text(testId(el, "rows"))).toBe("Rows: Restaurant · Bar");
+  });
+
+  it("steps a month either way from the requested month", async () => {
     const el = await mount(monthModel(), { month: "2027-01" });
     const months = events<{ month: string }>(el, "month-change");
     testId(el, "previous-month")!.click();
     testId(el, "next-month")!.click();
     expect(months).toEqual([{ month: "2026-12" }, { month: "2027-02" }]);
-    const years = events<{ year: number }>(el, "month-year-open");
-    // The requested month's year, ahead of the model's while its read is pending.
-    expect(text(testId(el, "year-back"))).toBe("‹ 2027");
-    testId(el, "year-back")!.click();
-    expect(years).toEqual([{ year: 2027 }]);
   });
 
   it("draws no dates under a requested month whose read is pending, keeping ‹ › and focus", async () => {
@@ -334,7 +360,6 @@ describe("Opening hours month", () => {
     el.model = undefined;
     await el.updateComplete;
     expect(text(testId(el, "month"))).toBe("January 2027");
-    expect(text(testId(el, "year-back"))).toBe("‹ 2027");
     expect(root(el).querySelector("table, wt-combobox, season-chips")).toBeNull();
   });
 
@@ -408,19 +433,9 @@ describe("Opening hours month", () => {
     expect(sent[0]!.returnTo()).toBe(dayButton(el, "2026-12-09"));
   });
 
-  it('sends "+ Special day" as the year view does', async () => {
-    const el = await mount();
-    const sent = events<SpecialDayAction>(el, "special-day-action");
-    testId(el, "add-special-day")!.click();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ kind: "open", date: "", specialDay: null, holidays: [] });
-    expect(sent[0]!.returnTo()).toBe(testId(el, "add-special-day"));
-  });
-
   it("read-only, hides the write actions and opens nothing from a date", async () => {
     const el = await mount(monthModel(), { readOnly: true });
-    expect(testId(el, "add-special-day")).toBeNull();
-    expect(root(el).querySelector("season-chips")!.readOnly).toBe(true);
+    expect(root(el).querySelector("season-chips")).toBeNull();
     expect(root(el).querySelectorAll("button.day")).toHaveLength(0);
     expect(text(cell(el, "2026-12-14").querySelector('[data-test="name"]'))).toBe(
       "Company dinners",
@@ -537,7 +552,10 @@ describe("Opening hours month", () => {
   });
 
   it("passes the seasons the month touches to the chips", async () => {
-    const el = await mount(monthModel({ clockRevision: 4 }));
+    const el = await mount(
+      { ...stationModel(), clockRevision: 4 },
+      { readOnly: true, stationMode: true, departments: STATION },
+    );
     const chips = root(el).querySelector("season-chips")!;
     expect(chips.seasons.map((season) => season.id)).toEqual(["autumn", "winter"]);
     expect(chips.clockRevision).toBe(4);

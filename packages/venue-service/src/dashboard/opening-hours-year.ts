@@ -4,7 +4,6 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
-import type { HolidayCoverage } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
@@ -26,15 +25,6 @@ import { t } from "./strings.js";
 
 type Key = Parameters<typeof t>[0];
 
-/** Whether a year's official list leaves local holidays out; no `local` state says it carries them. */
-function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
-  switch (local) {
-    case "address_unresolved":
-    case "unsupported_country":
-    case "none_entered":
-      return true;
-  }
-}
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
 /** The year as it begins a date: four digits, so year 100 is `0100`. */
@@ -67,41 +57,8 @@ export class OpeningHoursYearView extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
-      .head .add {
-        margin-inline-start: auto;
-      }
       season-chips {
         margin-block-end: var(--wt-space-2);
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1) var(--wt-space-3);
-        margin: 0 0 var(--wt-space-2);
-        padding: 0;
-        list-style: none;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      .legend li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-      .swatch {
-        display: inline-block;
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        border-radius: var(--wt-radius-full);
-      }
-      .swatch[data-mark="public_holiday"] {
-        background: var(--wt-color-palette-red);
-      }
-      .swatch[data-mark="special_day"] {
-        background: var(--wt-color-palette-purple);
-      }
-      .swatch[data-mark="closed"] {
-        background: var(--wt-color-day-closed);
       }
       .note {
         margin: 0 0 var(--wt-space-2);
@@ -135,13 +92,16 @@ export class OpeningHoursYearView extends LitElement {
         padding: 0;
         border: 0;
         background: transparent;
-        color: var(--wt-color-text);
+        color: var(--wt-color-primary-text);
         font: inherit;
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
       }
       .month-name::first-letter {
         text-transform: uppercase;
+      }
+      .month-name::after {
+        content: " ›" / "";
       }
       .month-name:focus-visible,
       .day:focus-visible {
@@ -237,7 +197,8 @@ export class OpeningHoursYearView extends LitElement {
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
   /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
-   *  presses during the wait add up. 0 steps from `model`. */
+   *  presses during the wait add up, and with no `model` only the heading naming it, ‹ › and the
+   *  switch's slot are drawn. 0 steps from `model`. */
   @property({ type: Number }) year = 0;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
@@ -319,7 +280,7 @@ export class OpeningHoursYearView extends LitElement {
       specialDay: day?.specialDay ? { ...day.specialDay } : null,
       holidays: structuredClone(day?.holidays ?? []),
       visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
-      returnTo: () => (trigger.isConnected ? trigger : date === "" ? null : this.#dayButton(date)),
+      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
     });
   }
 
@@ -505,19 +466,15 @@ export class OpeningHoursYearView extends LitElement {
 
   #notes(model: OpeningHoursYear) {
     const year = String(model.year);
-    const coverage = model.holidayCoverage.find((item) => item.year === model.year);
-    const national = !model.publicHolidaysAvailable
-      ? null
-      : coverage?.nationalRegional === "area_required"
+    const state =
+      model.holidayCoverage.find((item) => item.year === model.year)?.nationalRegional ?? "unknown";
+    if (!model.publicHolidaysAvailable || state === "complete") return nothing;
+    const national =
+      state === "area_required"
         ? format("calendar.area_required", { year })
-        : nationalCoverage(model.year, coverage);
+        : nationalCoverage(model.year, state);
     return html`<ul class="note notes">
-      ${national ? html`<li data-test="coverage">${national}</li>` : nothing}
-      ${
-        coverage && listLacksLocalHolidays(coverage.local)
-          ? html`<li data-test="town-holidays">${t("year.town_holidays")}</li>`
-          : nothing
-      }
+      <li data-test="coverage">${national}</li>
     </ul>`;
   }
 
@@ -538,7 +495,26 @@ export class OpeningHoursYearView extends LitElement {
 
   override render() {
     const model = this.model;
-    if (!model) return nothing;
+    const shown = model?.year ?? this.year;
+    if (!shown) return nothing;
+    const step = (by: number, test: string, label: Key, glyph: string) =>
+      html`<wt-button
+        variant="secondary"
+        data-test=${test}
+        aria-label=${t(label)}
+        @click=${() => this.#emit("year-change", { year: (this.year || shown) + by })}
+        >${glyph}</wt-button
+      >`;
+    const head = html`<div class="head">
+      ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
+      <h2 data-test="year" aria-live="polite">${shown}</h2>
+      ${step(1, "next-year", "hours.calendar.next_year", "›")}
+      <slot name="switch"></slot>
+    </div>`;
+    return html`${head}${model ? this.#body(model) : nothing}`;
+  }
+
+  #body(model: OpeningHoursYear) {
     const days = new Map(model.days.map((day) => [day.date, day]));
     const tints = seasonTints(model.seasons);
     const header = html`<tr>
@@ -554,50 +530,13 @@ export class OpeningHoursYearView extends LitElement {
       [this.focusDate, this.selected, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
-    const step = (by: number, test: string, label: Key, glyph: string) =>
-      html`<wt-button
-        variant="secondary"
-        data-test=${test}
-        aria-label=${t(label)}
-        @click=${() => this.#emit("year-change", { year: (this.year || model.year) + by })}
-        >${glyph}</wt-button
-      >`;
-    return html`<div class="head">
-        ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
-        <h2 data-test="year" aria-live="polite">${model.year}</h2>
-        ${step(1, "next-year", "hours.calendar.next_year", "›")}
-        ${
-          this.readOnly
-            ? nothing
-            : html`<wt-button
-                class="add"
-                variant="secondary"
-                data-test="add-special-day"
-                @click=${(event: Event) =>
-                  this.#action("open", "", undefined, event.currentTarget as HTMLElement)}
-                >${t("year.add_special")}</wt-button
-              >`
-        }
-      </div>
-      <season-chips
+    return html`<season-chips
         .seasons=${model.seasons}
         .clockRevision=${model.clockRevision}
         .api=${this.api}
         .specialDays=${this.specialDays}
         .readOnly=${this.readOnly}
       ></season-chips>
-      <ul class="legend">
-        ${(
-          [
-            ["public_holiday", "calendar.public"],
-            ["special_day", "calendar.special_day"],
-            ["closed", "hours.closed"],
-          ] as const
-        ).map(
-          ([mark, label]) =>
-            html`<li><span class="swatch" data-mark=${mark}></span>${t(label)}</li>`,
-        )}
-      </ul>
       ${
         model.publicHolidaysAvailable
           ? nothing

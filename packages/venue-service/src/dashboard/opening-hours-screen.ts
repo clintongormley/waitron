@@ -16,7 +16,6 @@ import {
   UrlStateController,
   navigationGuardFor,
 } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -49,6 +48,8 @@ import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 
 type View = "year" | "month";
+const SHOWN_VIEWS: readonly View[] = ["year", "month"];
+const VIEW_LABELS = { year: "opening.view.year", month: "opening.view.month" } as const;
 /** The Year panel's Delete of a special day, asked in the screen's own confirmation. */
 type OpenSpecialDay = Omit<SpecialDayAction, "specialDay"> & {
   clockRevision: number;
@@ -281,7 +282,7 @@ export class OpeningHoursScreen extends LitElement {
   private hoursUrl(params: Readonly<Record<string, string>>) {
     return this.calendarUrl(hoursPath(parseCalendarMonth(params["month"])));
   }
-  /** The switch carries the month the page shows, when it shows one. */
+  /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
     const month = this.moduleView
       ? this.moduleView.params["month"]
@@ -532,14 +533,19 @@ export class OpeningHoursScreen extends LitElement {
     saveHolidayArea: (areaKey: string) => this.api.specialDays.saveHolidayArea(areaKey),
     rereadWatches: () => this.api.rereadWithSpecialDays(),
   };
-  private openMonth(event: CustomEvent<{ date: string }>) {
-    event.stopPropagation();
-    void Promise.resolve(
+  private openMonth(month: string) {
+    return Promise.resolve(
+      this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
+    ).then(() => this.followUrl());
+  }
+  private openYear(year: string) {
+    return Promise.resolve(
       this.url.write({
         dashboard: "opening-hours",
-        view: "month",
-        month: event.detail.date.slice(0, 7),
-        year: null,
+        view: "year",
+        year: year.padStart(4, "0"),
+        month: null,
+        date: null,
       }),
     ).then(() => this.followUrl());
   }
@@ -949,6 +955,51 @@ export class OpeningHoursScreen extends LitElement {
       ></ordinary-date-dialog>`,
     );
   }
+  private viewSwitch() {
+    const option = (value: View) =>
+      html`<label
+        ><input
+          type="radio"
+          name="calendarSpan"
+          value=${value}
+          .checked=${live(this.view === value)}
+          @change=${(event: Event) => this.chooseSpan(value, event.currentTarget as HTMLElement)}
+        /><span>${t(VIEW_LABELS[value])}</span></label
+      >`;
+    return html`<div
+      slot="switch"
+      class="segmented"
+      role="radiogroup"
+      aria-label=${t("opening.view")}
+      data-test="view-switch"
+    >
+      ${SHOWN_VIEWS.map(option)}
+    </div>`;
+  }
+  /** A change made from a focused radio puts focus back on the switch the next view draws, since
+   *  the radio that held it goes with the view it sat in. */
+  private chooseSpan(view: View, radio: HTMLElement) {
+    const opened =
+      view === "year"
+        ? this.openYear(this.shownMonth().slice(0, 4))
+        : this.openMonth(this.monthOfShownYear());
+    if (this.shadowRoot?.activeElement !== radio) return;
+    void opened.then(async () => {
+      await this.updateComplete;
+      await this.shadowRoot?.querySelector<LitElement>("opening-hours-year, opening-hours-month")
+        ?.updateComplete;
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (!this.isConnected || radio.isConnected || !lost) return;
+      this.shadowRoot
+        ?.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")
+        ?.focus();
+    });
+  }
+  private monthOfShownYear() {
+    const year = String(this.shownYear()).padStart(4, "0");
+    const today = (businessDateToday(this.model!) || browserToday()).slice(0, 7);
+    return today.startsWith(`${year}-`) ? today : `${year}-01`;
+  }
   private month() {
     const write = (changes: Record<string, string | null>) =>
       void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
@@ -960,35 +1011,19 @@ export class OpeningHoursScreen extends LitElement {
         .month=${this.shownMonth()}
         .departmentId=${this.departmentId}
         .departments=${this.model!.departments}
-        .api=${this.api}
-        .specialDays=${this.knownSpecialDays}
         .readOnly=${this.readOnly}
         @special-day-action=${this.openNamedDay}
         @ordinary-date-open=${this.openOrdinary}
-        @season-dialog-open=${() => this.readKnownSpecialDays()}
-        @season-week-open=${this.openSeasonWeek}
-        @season-changed=${(event: Event) => {
-          event.stopPropagation();
-          this.api.rereadWithSpecialDays();
-        }}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
           write({ view: "month", month: event.detail.month, date: null });
-        }}
-        @month-year-open=${(event: CustomEvent<{ year: number }>) => {
-          event.stopPropagation();
-          write({
-            view: "year",
-            year: String(event.detail.year).padStart(4, "0"),
-            month: null,
-            date: null,
-          });
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
           write({ department: event.detail.departmentId || null, zone: null });
         }}
-      ></opening-hours-month>`;
+        >${this.viewSwitch()}</opening-hours-month
+      >`;
   }
   override render() {
     return html`${this.calendarHeading()}
@@ -997,60 +1032,41 @@ export class OpeningHoursScreen extends LitElement {
         ? nothing
         : this.moduleView
           ? this.moduleContent(this.moduleView)
-          : html` <wt-tabs
-              label=${t("opening.title")}
-              .value=${this.view === "month" ? "year" : this.view}
-              .items=${[{ key: "year", label: t("opening.tab.year") }]}
-              @wt-tab-change=${(event: CustomEvent<{ value: View }>) => {
-                if (event.target !== event.currentTarget) return;
-                (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value =
-                  this.view === "month" ? "year" : this.view;
-                void this.url.write({
-                  dashboard: "opening-hours",
-                  view: event.detail.value,
-                  year: null,
-                  month: null,
-                  date: null,
-                });
-                this.followUrl();
-              }}
-            >
-              <div slot="year">
-                ${
-                  this.view === "year"
-                    ? html`${this.yearReadError ? html`<p role="alert" data-test="year-read-error">${this.yearReadError}</p>` : nothing}
-                        <opening-hours-year
-                          .model=${this.yearModel}
-                          .year=${this.shownYear()}
-                          .api=${this.api}
-                          .areaApi=${this.areaWrites}
-                          .specialDays=${this.knownSpecialDays}
-                          .readOnly=${this.readOnly}
-                          @special-day-action=${this.openNamedDay}
-                          @season-dialog-open=${() => this.readKnownSpecialDays()}
-                          @season-week-open=${this.openSeasonWeek}
-                          @season-changed=${(event: Event) => {
-                            event.stopPropagation();
-                            this.api.rereadWithSpecialDays();
-                          }}
-                          @year-change=${(event: CustomEvent<{ year: number }>) => {
-                            event.stopPropagation();
-                            void Promise.resolve(
-                              this.url.write({
-                                dashboard: "opening-hours",
-                                view: "year",
-                                year: String(event.detail.year).padStart(4, "0"),
-                              }),
-                            ).then(() => this.followUrl());
-                          }}
-                          @year-month-open=${this.openMonth}
-                        ></opening-hours-year>`
-                    : this.shownMonth()
-                      ? this.month()
-                      : nothing
-                }
-              </div>
-            </wt-tabs>`
+          : this.view === "year"
+            ? html`${this.yearReadError ? html`<p role="alert" data-test="year-read-error">${this.yearReadError}</p>` : nothing}
+                <opening-hours-year
+                  .model=${this.yearModel}
+                  .year=${this.shownYear()}
+                  .api=${this.api}
+                  .areaApi=${this.areaWrites}
+                  .specialDays=${this.knownSpecialDays}
+                  .readOnly=${this.readOnly}
+                  @special-day-action=${this.openNamedDay}
+                  @season-dialog-open=${() => this.readKnownSpecialDays()}
+                  @season-week-open=${this.openSeasonWeek}
+                  @season-changed=${(event: Event) => {
+                    event.stopPropagation();
+                    this.api.rereadWithSpecialDays();
+                  }}
+                  @year-change=${(event: CustomEvent<{ year: number }>) => {
+                    event.stopPropagation();
+                    void Promise.resolve(
+                      this.url.write({
+                        dashboard: "opening-hours",
+                        view: "year",
+                        year: String(event.detail.year).padStart(4, "0"),
+                      }),
+                    ).then(() => this.followUrl());
+                  }}
+                  @year-month-open=${(event: CustomEvent<{ date: string }>) => {
+                    event.stopPropagation();
+                    void this.openMonth(event.detail.date.slice(0, 7));
+                  }}
+                  >${this.viewSwitch()}</opening-hours-year
+                >`
+            : this.shownMonth()
+              ? this.month()
+              : nothing
     }
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
     ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}`;

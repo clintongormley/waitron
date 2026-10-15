@@ -244,7 +244,7 @@ describe("Opening hours year", () => {
     );
   });
 
-  it("marks public holidays, special days and closed days, with a legend of the three", async () => {
+  it("marks public holidays, special days and closed days", async () => {
     const el = await mount();
     expect(cell(el, "2027-01-06").dataset.tone).toBe("public_holiday");
     expect(cell(el, "2027-05-12").dataset.tone).toBe("special_day");
@@ -263,11 +263,6 @@ describe("Opening hours year", () => {
     expect(dayButton(el, "2027-12-26").getAttribute("aria-label")).toBe(
       "Sunday, 26 December 2027, Closed",
     );
-    expect([...root(el).querySelectorAll(".legend li")].map(text)).toEqual([
-      "Public holiday",
-      "Special day",
-      "Closed",
-    ]);
     expect(root(el).querySelector('[aria-current="date"]')?.closest("td")?.dataset.date).toBe(
       "2027-03-10",
     );
@@ -285,6 +280,53 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector('[data-test="previous-year"]')!.getAttribute("aria-label")).toBe(
       "Previous year",
     );
+  });
+
+  it("draws only the year asked for, ‹ › and the switch's slot before any read, and steps from it", async () => {
+    const el = document.createElement("opening-hours-year");
+    el.year = 2028;
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    const years: number[] = [];
+    el.addEventListener("year-change", (event) =>
+      years.push((event as CustomEvent<{ year: number }>).detail.year),
+    );
+    expect(text(root(el).querySelector('[data-test="year"]'))).toBe("2028");
+    expect(root(el).querySelector("slot[name=switch]")).not.toBeNull();
+    expect(root(el).querySelector("table, season-chips, .note")).toBeNull();
+    root(el).querySelector<HTMLElement>('[data-test="previous-year"]')!.click();
+    root(el).querySelector<HTMLElement>('[data-test="next-year"]')!.click();
+    expect(years).toEqual([2027, 2029]);
+
+    el.year = 0;
+    await el.updateComplete;
+    expect(root(el).children).toHaveLength(0);
+  });
+
+  it("keeps the pressed › and its focus when the year's read arrives and when it is cleared", async () => {
+    const el = document.createElement("opening-hours-year");
+    el.year = 2027;
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    const next = root(el).querySelector<HTMLElement>('[data-test="next-year"]')!;
+    next.focus();
+    expect(root(el).activeElement).toBe(next);
+
+    el.model = yearModel();
+    await el.updateComplete;
+    expect(root(el).querySelector("table")).not.toBeNull();
+    expect(next.isConnected).toBe(true);
+    expect(root(el).querySelector('[data-test="next-year"]')).toBe(next);
+    expect(root(el).activeElement).toBe(next);
+
+    el.model = undefined;
+    await el.updateComplete;
+    expect(root(el).querySelector("table")).toBeNull();
+    expect(next.isConnected).toBe(true);
+    expect(root(el).querySelector('[data-test="next-year"]')).toBe(next);
+    expect(root(el).activeElement).toBe(next);
   });
 
   it("asks for a month's first day when its name is chosen", async () => {
@@ -318,18 +360,6 @@ describe("Opening hours year", () => {
     chips.dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
     document.body.removeEventListener("season-changed", changed);
     expect(changed).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens an empty special day from + Special day", async () => {
-    const el = await mount();
-    const sent = actions(el);
-    const add = root(el).querySelector<HTMLElement>('[data-test="add-special-day"]')!;
-    expect(text(add)).toBe("+ Special day");
-    add.click();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ kind: "open", date: "", specialDay: null, holidays: [] });
-    expect(sent[0]!.visibleHolidays).toEqual(everyHoliday);
-    expect(sent[0]!.returnTo()).toBe(add);
   });
 
   it("offers Edit and Delete on a special day's date, each sending the special day", async () => {
@@ -415,7 +445,6 @@ describe("Opening hours year", () => {
   it("sends nothing and offers no actions when read-only", async () => {
     const el = await mount(yearModel(), { readOnly: true });
     const sent = actions(el);
-    expect(root(el).querySelector('[data-test="add-special-day"]')).toBeNull();
     expect(root(el).querySelector("season-chips")!.readOnly).toBe(true);
     dayButton(el, "2027-05-12").click();
     await el.updateComplete;
@@ -442,40 +471,77 @@ describe("Opening hours year", () => {
     expect(dayButton(el, "2027-12-31").tabIndex).toBe(0);
   });
 
-  it("states what the official lists cover, and that town holidays are not in them", async () => {
+  it("draws no colour key, no + Special day and no sentence for a complete official list", async () => {
     const el = await mount();
-    expect(text(root(el).querySelector('[data-test="coverage"]'))).toBe(
-      "2027: official national and regional holidays are included.",
-    );
-    expect(text(root(el).querySelector('[data-test="town-holidays"]'))).toBe(
-      "Town holidays are not in the official lists — add them as special days.",
-    );
+    expect(root(el).querySelector(".legend")).toBeNull();
+    expect(root(el).querySelector('[data-test="add-special-day"]')).toBeNull();
+    expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
+    expect(root(el).querySelector('[data-test="town-holidays"]')).toBeNull();
     expect(root(el).querySelector('[data-test="holidays-unavailable"]')).toBeNull();
     expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
   });
 
-  it("says town holidays are not in the official lists for each way the list lacks them", async () => {
-    for (const local of ["none_entered", "address_unresolved", "unsupported_country"] as const) {
+  it("still warns when the official list is not complete", async () => {
+    const cases = [
+      ["missing_year", "2027: official holidays are not available yet, so none are shown."],
+      [
+        "unknown_region",
+        "2027: the venue's province is not recognised, so official holidays are not shown.",
+      ],
+      ["unsupported_country", "2027: official holidays are not available for this country."],
+      [
+        "area_required",
+        "2027: only official holidays for the whole province are shown until you choose the holiday area here.",
+      ],
+    ] as const;
+    for (const [nationalRegional, sentence] of cases) {
       const model = yearModel();
-      model.holidayCoverage = [{ ...model.holidayCoverage[0]!, local }];
+      model.holidayCoverage = [{ ...model.holidayCoverage[0]!, nationalRegional }];
       const el = await mount(model);
-      expect(root(el).querySelector('[data-test="town-holidays"]'), local).not.toBeNull();
+      expect(text(root(el).querySelector('[data-test="coverage"]')), nationalRegional).toBe(
+        sentence,
+      );
     }
-    const other = await mount(
-      yearModel({
-        holidayCoverage: [{ ...yearModel().holidayCoverage[0]!, year: 2028 }],
-      }),
+    const unread = await mount(yearModel({ holidayCoverage: [] }));
+    expect(text(root(unread).querySelector('[data-test="coverage"]'))).toBe(
+      "2027: which official holidays apply could not be read.",
     );
-    expect(root(other).querySelector('[data-test="town-holidays"]')).toBeNull();
+    const otherYear = yearModel();
+    otherYear.holidayCoverage = [
+      { ...otherYear.holidayCoverage[0]!, year: 2028, nationalRegional: "complete" },
+    ];
+    const elsewhere = await mount(otherYear);
+    expect(text(root(elsewhere).querySelector('[data-test="coverage"]'))).toBe(
+      "2027: which official holidays apply could not be read.",
+    );
   });
 
-  it("says when the year's public holidays are not available yet, under the legend", async () => {
+  it("draws each month's name as a link", async () => {
+    const el = await mount();
+    applyTokens(el);
+    await el.updateComplete;
+    const token = (name: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${name})`;
+      root(el).append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+    expect(token("--wt-color-primary-text")).not.toBe(token("--wt-color-text"));
+    const name = root(el).querySelector<HTMLElement>('[data-test="month-name"]')!;
+    expect(getComputedStyle(name).color).toBe(token("--wt-color-primary-text"));
+    expect(getComputedStyle(name, "::after").content).toBe('" ›" / ""');
+    expect(text(name)).toBe("January");
+  });
+
+  it("says when the year's public holidays are not available yet, as the first line under the season chips", async () => {
     const model = yearModel({ publicHolidaysAvailable: false });
     model.holidayCoverage = [{ ...model.holidayCoverage[0]!, nationalRegional: "missing_year" }];
     const el = await mount(model);
     const line = root(el).querySelector('[data-test="holidays-unavailable"]')!;
     expect(text(line)).toBe("Public holidays for 2027 are not available yet");
-    expect(line.previousElementSibling?.classList.contains("legend")).toBe(true);
+    expect(line.previousElementSibling?.localName).toBe("season-chips");
     const warned = await mount(
       yearModel({
         publicHolidaysAvailable: false,
@@ -485,7 +551,7 @@ describe("Opening hours year", () => {
       }),
     );
     const under = root(warned).querySelector('[data-test="holidays-unavailable"]')!;
-    expect(under.previousElementSibling?.classList.contains("legend")).toBe(true);
+    expect(under.previousElementSibling?.localName).toBe("season-chips");
     expect(under.nextElementSibling?.querySelector('[data-test="missing-holiday"]')).not.toBeNull();
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
   });
@@ -511,15 +577,12 @@ describe("Opening hours year", () => {
       "Viernes Santo (Every year) has no public holiday of that name in 2027.",
       "Carnaval (Every year) has no public holiday of that name in 2027.",
     ]);
-    // Directly under the legend, before the holiday-area chooser and the coverage lines.
-    expect(lines[0]!.parentElement!.previousElementSibling?.classList.contains("legend")).toBe(
-      true,
-    );
-    for (const after of ["[name=holidayArea]", '[data-test="coverage"]'])
-      expect(
-        lines[1]!.compareDocumentPosition(root(el).querySelector(after)!) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+    // Directly under the season chips, before the holiday-area chooser.
+    expect(lines[0]!.parentElement!.previousElementSibling?.localName).toBe("season-chips");
+    expect(
+      lines[1]!.compareDocumentPosition(root(el).querySelector("[name=holidayArea]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("asks for the holiday area when the province needs one", async () => {
@@ -620,21 +683,12 @@ describe("Opening hours year", () => {
       }),
     );
     expect(text(root(el).querySelector('[data-test="month-name"]'))).toBe("enero");
-    expect(text(root(el).querySelector('[data-test="add-special-day"]'))).toBe("+ Día especial");
     expect(text(root(el).querySelector('[data-test="holidays-unavailable"]'))).toBe(
       "Los festivos oficiales de 2027 aún no están disponibles",
     );
     expect(text(root(el).querySelector('[data-test="missing-holiday"]'))).toBe(
       "Viernes Santo (cada año): en 2027 no hay ningún festivo con ese nombre.",
     );
-    expect(text(root(el).querySelector('[data-test="town-holidays"]'))).toBe(
-      "Las fiestas locales no están en las listas oficiales: añádelas como días especiales.",
-    );
-    expect([...root(el).querySelectorAll(".legend li")].map(text)).toEqual([
-      "Festivo oficial",
-      "Día especial",
-      "Cerrado",
-    ]);
   });
 });
 

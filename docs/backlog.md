@@ -1528,10 +1528,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   column and field go until A504. After A720. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
-  (owner, 2026-10-15).** A Year/Month/Week switch replaces the tab row and most of the text above the
-  months goes; clicking a day opens a floating box with its hours instead of a panel that makes the
-  page jump; drag or shift-click picks days and double-click opens the special-day editor; closed
-  rows are grey tracks; a zone's bar shows its own hours. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
+  makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
+  closed rows are grey tracks; a zone's bar shows its own hours; the Staffing month follows. Points
+  1–2 landed in #1765; the Week button is A722's, "Seasons…" and the chips' ✎ A721's; 3–7
+  remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
@@ -1708,12 +1709,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **At 390 px a long name in a month cell breaks mid-word ("Christ|mas")**: the dashboard page
   declares no language, so the browser cannot hyphenate — left open by A506-7, #1623. Seen again in
   A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
-  (`overflow-wrap: anywhere` and the four-line clamp on `.name`, `opening-hours-month.ts:206-208`).
+  (`overflow-wrap: anywhere` and the four-line clamp on `.name` in `opening-hours-month.ts`).
 
 - **Season colours differ between Opening hours' Year and its month (and the Times tab)**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
-  list it is given, and the month gives `season-chips` only the seasons it touches
-  (`opening-hours-month.ts:645`).
+  list it is given, and the month colours its dates' top borders from only the seasons it touches
+  (`seasonTints(model.seasons)` in `#grid`, `opening-hours-month.ts`).
 
 - **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
   twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
@@ -4521,9 +4522,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   create heading is now "Add invoice". Left open by A450 (#1484).
 
 - **Opening hours' create texts say "New …" and "+ …"** — `season.new` ("New season"),
-  `special.new` ("New special day"), `season.add` ("+ Season") and `year.add_special`
-  ("+ Special day") in `packages/venue-service/src/dashboard/strings.ts`, against
-  design-system.md → Wording's "Add …". The two "+" labels come from the A506 seasons spec.
+  `special.new` ("New special day") and `season.add` ("+ Season") in
+  `packages/venue-service/src/dashboard/strings.ts`, against design-system.md → Wording's
+  "Add …". The "+" label comes from the A506 seasons spec.
   Seen by A546's review; not changed there.
 
 - **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
