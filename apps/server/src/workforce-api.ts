@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { withTransaction, locations, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
@@ -13,6 +13,9 @@ import {
   setAbsenceStatus,
   listPendingAbsences,
   rosterVersions,
+  shifts,
+  validateRoster,
+  type PlannedShift,
 } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -129,6 +132,77 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         backend.getRoster(tx, { locationId, period }),
       );
       return c.json(snapshot);
+    }),
+  );
+
+  app.get("/management-api/roster/breaches", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
+      const period = requirePeriod(c.req.query("period"), "period");
+      const result = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
+        const ruleset = await resolveWorkTimeRuleset(tx, { locationId });
+        const date = new Date(`${period}T00:00:00Z`);
+        date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+        const dayAt = (days: number) =>
+          new Date(date.getTime() + days * 86_400_000).toISOString().slice(0, 10);
+        const start = dayAt(0),
+          end = dayAt(7);
+        const all: PlannedShift[] = [];
+        const localShiftDate = sql<string>`date(${shifts.startsAt}, ${shifts.startsOffsetMinutes} || ' minutes')`;
+        for (const offset of [-7, 0, 7]) {
+          const week = dayAt(offset);
+          const roster = await backend.getRoster(tx, { locationId, period: week });
+          const unattached = await tx
+            .select()
+            .from(shifts)
+            .where(
+              and(
+                eq(shifts.locationId, locationId),
+                isNull(shifts.rosterVersionId),
+                gte(localShiftDate, week),
+                lt(localShiftDate, dayAt(offset + 7)),
+              ),
+            );
+          for (const shift of [...roster.shifts, ...unattached])
+            all.push({
+              shiftId: shift.id,
+              personId: shift.personId,
+              startsAt: shift.startsAt,
+              endsAt: shift.endsAt,
+              startsOffsetMinutes: shift.startsOffsetMinutes,
+              endsOffsetMinutes: shift.endsOffsetMinutes,
+            });
+        }
+        const inWeek = new Set(
+          all
+            .filter((shift) => {
+              const day = new Date(Date.parse(shift.startsAt) + shift.startsOffsetMinutes * 60_000)
+                .toISOString()
+                .slice(0, 10);
+              return day >= start && day < end;
+            })
+            .map((shift) => shift.shiftId),
+        );
+        const breaches = validateRoster(all, ruleset).filter((breach) => {
+          switch (breach.kind) {
+            case "rest_too_short":
+              return inWeek.has(breach.shiftId) || inWeek.has(breach.previousShiftId);
+            case "break_owed":
+            case "night_work":
+              return inWeek.has(breach.shiftId);
+            case "exceeds_daily_max":
+              return breach.workDate >= start && breach.workDate < end;
+            case "exceeds_weekly_max":
+            case "weekly_rest_insufficient":
+              return breach.weekStart === start;
+            case "overtime_cap_exceeded":
+              return false;
+          }
+        });
+        return { breaches, ruleset };
+      });
+      return c.json(result);
     }),
   );
 
