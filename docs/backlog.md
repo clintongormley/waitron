@@ -3960,7 +3960,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
   this stays open.
 
-- **Which other dialogs take the medium height (owner to approve)** — left open by A734. OPEN,
+- **Which other dialogs take the medium height (owner to approve)** — left open by A734 (#1762). OPEN,
   waiting for the owner. `wt-modal`'s `height="medium"` is used only by the Routes tab's cell
   editor; the other candidates are listed in the detail.
   [Detail](backlog/dashboard.md#which-other-dialogs-take-the-medium-height-owner-to-approve)

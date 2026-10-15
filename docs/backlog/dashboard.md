@@ -1149,7 +1149,7 @@ strip button set the primary colour around their icons today, and
 
 ## Which other dialogs take the medium height (owner to approve)
 
-Left open by A734; open, waiting for the owner. `wt-modal`'s `height="medium"` (design-system.md →
+Left open by A734 (#1762); open, waiting for the owner. `wt-modal`'s `height="medium"` (design-system.md →
 "Use `wt-modal` for an add or edit form") is used only by the Routes tab's cell editor (before:
 [screenshot](mockups/a656-routes-tab/1-editor-no-period-route.png)). Candidates, each a non-compact
 modal with short content:
