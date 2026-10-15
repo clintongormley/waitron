@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { Agent } from "undici";
 import { expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, createFirstSetupStore } from "@waitron/provisioning";
-import { firstFiscalFixture } from "../test/first-fiscal.js";
+import { verifyPassword } from "@waitron/identity";
+import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -67,6 +68,9 @@ it.each(["claim", "abandon", "completed-abandon"] as const)(
         status: phase === "claim" ? "claimed" : "abandoned",
         consumptionIntent: false,
       });
+      const retained = JSON.parse(stateBefore.toString());
+      expect(await verifyPassword(PASSWORD, retained.ownerVerifier)).toBe(true);
+      expect(await verifyPassword(`${PASSWORD}-wrong`, retained.ownerVerifier)).toBe(false);
       expect(JSON.parse(markerBefore.toString()).status).toBe(
         phase === "claim" ? "claiming" : phase === "abandon" ? "active" : "abandoned",
       );
