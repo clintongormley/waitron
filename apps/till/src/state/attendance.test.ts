@@ -71,7 +71,7 @@ beforeEach(() =>
   }),
 );
 afterEach(() => {
-  for (const controller of controllers.splice(0)) controller.stop();
+  for (const controller of controllers.splice(0)) controller?.stop();
   vi.useRealTimers();
 });
 
