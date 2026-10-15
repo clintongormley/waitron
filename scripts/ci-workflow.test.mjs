@@ -28,11 +28,11 @@ import {
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
 // case reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit
-// case, two apt cases and a `--with-deps` case reading every .yml file in .github/workflows/. A
-// transcription tests this file's copy of a workflow rather than the workflow. Each extraction
-// carries a guard that it found something, because a silently-empty extraction makes every
-// assertion below pass against nothing. Nor are the SELECTIONS modelled: each shard's filters are
-// handed to the real `pnpm ls` and the answer is read back.
+// case, two apt cases, a `--with-deps` case and the pnpm-setup cases reading every .yml file in
+// .github/workflows/. A transcription tests this file's copy of a workflow rather than the
+// workflow. Each extraction carries a guard that it found something, because a silently-empty
+// extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
+// each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
 // Line matching rather than a YAML parser, because there is no YAML library in this workspace.
 // Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
@@ -2424,4 +2424,154 @@ describe("CI image provenance", () => {
       }
     },
   );
+});
+
+const SETUP_PNPM_RUN = /^\s*(?:-\s+)?run:\s*bash scripts\/ci-setup-pnpm\.sh\b/;
+
+/**
+ * One workflow's pnpm setups: every non-comment `uses: pnpm/action-setup` line, every step that
+ * runs `scripts/ci-setup-pnpm.sh` and whether it carries a positive `timeout-minutes`, and the jobs
+ * whose first step running `pnpm` comes before (or without) that setup step. Jobs are two-space keys
+ * under `jobs:` and steps the dash lines at the indent of the first one under `steps:`.
+ */
+function pnpmSetups(text) {
+  const workflowLines = text.split("\n");
+  const actionSetup = workflowLines
+    .map((line, index) => ({ line: index + 1, text: line }))
+    .filter(({ text: line }) => /^\s*(?:-\s+)?uses:\s*["']?pnpm\/action-setup\b/.test(line))
+    .map(({ line }) => line);
+  const jobsKey = workflowLines.indexOf("jobs:");
+  const jobBlocks = [];
+  if (jobsKey !== -1) {
+    for (const line of workflowLines.slice(jobsKey + 1)) {
+      if (/^\S/.test(line) && !/^#/.test(line)) break;
+      const id = /^ {2}([^\s#][^:]*):/.exec(line)?.[1];
+      if (id !== undefined) jobBlocks.push({ id, lines: [] });
+      jobBlocks.at(-1)?.lines.push(line);
+    }
+  }
+  const setups = [];
+  const lateJobs = [];
+  for (const { id, lines } of jobBlocks) {
+    const stepsAt = lines.findIndex((line) => /^\s*steps:\s*(#.*)?$/.test(line));
+    if (stepsAt === -1) continue;
+    const isContent = (line) => line.trim() !== "" && !/^\s*#/.test(line);
+    const first = lines.slice(stepsAt + 1).find(isContent);
+    if (first === undefined || !/^\s*- /.test(first)) continue;
+    const dash = first.search(/\S/);
+    const stepBlocks = [];
+    for (const line of lines.slice(stepsAt + 1)) {
+      if (isContent(line) && line.search(/\S/) < dash) break;
+      if (isContent(line) && line.search(/\S/) === dash && /^\s*- /.test(line)) stepBlocks.push([]);
+      stepBlocks.at(-1)?.push(line);
+    }
+    for (const step of stepBlocks) {
+      if (!step.some((line) => SETUP_PNPM_RUN.test(line))) continue;
+      setups.push({
+        job: id,
+        bounded: step.some((line) =>
+          /^\s*(?:-\s+)?timeout-minutes:\s*[1-9]\d*\s*(#.*)?$/.test(line),
+        ),
+      });
+    }
+    const commands = workflowSteps(lines.join("\n")).map(({ command }) => command);
+    const setupAt = commands.findIndex((command) =>
+      /\bbash scripts\/ci-setup-pnpm\.sh\b/.test(command),
+    );
+    const pnpmAt = commands.findIndex((command) => /(?:^|[\s;&|(!])pnpm\s/m.test(command));
+    if (pnpmAt !== -1 && (setupAt === -1 || setupAt > pnpmAt)) lateJobs.push(id);
+  }
+  return { actionSetup, setups, lateJobs };
+}
+
+/**
+ * Every pnpm setup runs `scripts/ci-setup-pnpm.sh` under a step `timeout-minutes`, never
+ * `pnpm/action-setup`, whose self-installer has no time limit of its own (receipt:
+ * docs/developers/ci-and-gates.md, "Every pnpm setup is bounded"). Weaker than its name: it reads
+ * each workflow as TEXT and does not run it, so a setup inside a composite action or a reusable
+ * workflow is invisible, and a `pnpm` reached through a script a step runs is not seen.
+ */
+describe("every pnpm setup is bounded", () => {
+  const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
+  const setup =
+    "      - name: Set up pnpm\n        timeout-minutes: 5\n        run: bash scripts/ci-setup-pnpm.sh\n";
+
+  it("passes a bounded setup before the job's first pnpm command", () => {
+    const text = workflow(
+      `${setup}      - name: install\n        run: pnpm install --frozen-lockfile\n`,
+    );
+    expect(pnpmSetups(text)).toEqual({
+      actionSetup: [],
+      setups: [{ job: "a", bounded: true }],
+      lateJobs: [],
+    });
+  });
+
+  it("refuses a pnpm/action-setup step", () => {
+    const text = workflow(
+      "      - uses: pnpm/action-setup@v6\n        with:\n          version: 9.15.0\n",
+    );
+    expect(pnpmSetups(text).actionSetup).toEqual([6]);
+  });
+
+  it("passes a commented mention of pnpm/action-setup", () => {
+    const text = workflow(`      # - uses: pnpm/action-setup@v6\n${setup}`);
+    expect(pnpmSetups(text).actionSetup).toEqual([]);
+  });
+
+  it("refuses a setup step with no time limit", () => {
+    const text = workflow(
+      "      - name: Set up pnpm\n        run: bash scripts/ci-setup-pnpm.sh\n",
+    );
+    expect(pnpmSetups(text).setups).toEqual([{ job: "a", bounded: false }]);
+  });
+
+  it("does not count a job's time limit as the step's", () => {
+    const text =
+      "on: push\njobs:\n  a:\n    runs-on: x\n    timeout-minutes: 10\n    steps:\n" +
+      "      - name: Set up pnpm\n        run: bash scripts/ci-setup-pnpm.sh\n";
+    expect(pnpmSetups(text).setups).toEqual([{ job: "a", bounded: false }]);
+  });
+
+  it.each([
+    ["no setup at all", "      - name: install\n        run: pnpm install\n"],
+    ["the setup after it", `      - name: install\n        run: pnpm install\n${setup}`],
+  ])("refuses a job that runs pnpm with %s before it", (_shape, steps) => {
+    expect(pnpmSetups(workflow(steps)).lateJobs).toEqual(["a"]);
+  });
+
+  it("does not count pnpm named in a shell comment or a step name", () => {
+    const text = workflow("      - name: pnpm install\n        run: echo ok # pnpm install\n");
+    expect(pnpmSetups(text).lateJobs).toEqual([]);
+  });
+
+  const found = workflowFiles.map((name) => ({
+    name,
+    ...pnpmSetups(readFileSync(join(workflowsDir, name), "utf8")),
+  }));
+
+  it("finds setup steps to check", () => {
+    expect(found.flatMap(({ setups }) => setups).length).toBeGreaterThan(0);
+  });
+
+  it("uses no pnpm/action-setup in any workflow", () => {
+    expect(
+      found.flatMap(({ name, actionSetup }) => actionSetup.map((line) => `${name}:${line}`)),
+      "set pnpm up with `run: bash scripts/ci-setup-pnpm.sh` under a step `timeout-minutes`",
+    ).toEqual([]);
+  });
+
+  it("gives every setup step its own time limit", () => {
+    expect(
+      found.flatMap(({ name, setups }) =>
+        setups.filter((step) => !step.bounded).map((step) => `${name}: job ${step.job}`),
+      ),
+    ).toEqual([]);
+  });
+
+  it("sets pnpm up before each job's first pnpm command", () => {
+    expect(found.flatMap(({ name, lateJobs }) => lateJobs.map((job) => `${name}: ${job}`))).toEqual(
+      [],
+    );
+  });
 });

@@ -1,15 +1,15 @@
 // A setup-node step that caches the package manager needs pnpm on the runner AND a populated pnpm
 // store, or pnpm caching breaks the job at one of two ends:
 //
-//   - RESTORE, at the start: a job that never ran `pnpm/action-setup` dies with `Unable to locate
-//     executable file: pnpm` before any of its own steps run.
+//   - RESTORE, at the start: a job that never ran `scripts/ci-setup-pnpm.sh` dies with
+//     `Unable to locate executable file: pnpm` before any of its own steps run.
 //   - SAVE, in the post-job step: a job that HAS pnpm but never runs `pnpm install` has no store
 //     to save, and the post step fails with `Path Validation Error` — only sometimes, which is worse.
 //
 // So a setup-node step is safe in exactly two shapes: the cache is turned off, or the job runs
-// `pnpm/action-setup` BEFORE that step and runs `pnpm install` somewhere in the job. The order
-// matters for the first failure and not the second: the restore happens while the step runs, so
-// pnpm has to be on PATH by then, while the save happens after every step, so the install may
+// `scripts/ci-setup-pnpm.sh` BEFORE that step and runs `pnpm install` somewhere in the job. The
+// order matters for the first failure and not the second: the restore happens while the step runs,
+// so pnpm has to be on PATH by then, while the save happens after every step, so the install may
 // come later. Whether setup-node caches pnpm on its own varies by version, so this check holds
 // regardless of the version pinned.
 //
@@ -52,7 +52,9 @@ function jobsIn(text) {
 function setupNodeSteps(text) {
   const found = [];
   for (const [job, lines] of jobsIn(text)) {
-    const pnpmAt = lines.findIndex((line) => /^\s*-?\s*uses:\s*pnpm\/action-setup/.test(line));
+    const pnpmAt = lines.findIndex((line) =>
+      /^\s*-?\s*run:\s*bash scripts\/ci-setup-pnpm\.sh\b/.test(line),
+    );
     const hasInstall = lines.some((line) => /^\s*-?\s*run:\s.*pnpm install/.test(line));
     for (let at = 0; at < lines.length; at += 1) {
       // A `uses:` line, never a comment that merely names the action.
