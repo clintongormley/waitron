@@ -1,5 +1,7 @@
 # A679: first Live fiscal setup
 
+**Current direction, owner 2026-10-15 at 18:55:** the earlier `N` proposal is withdrawn. The [two-route redesign](2026-10-15-a679-two-route-redesign.md) keeps the approved allocation history and S/P/C/E spaces while replacing the tool and custody ceremony with one setup-page PDF. Product build remains paused. Earlier dated decisions below are historical where superseded; the old paper procedure remains cancelled.
+
 **Superseded design direction, 2026-10-15 at about 18:10–18:15:** the owner replaced the
 separate custody tool, custodian/computer and offline ceremony with one PDF created by the box’s
 setup page, to download, print over the normal network, or both. Further A679 implementation is

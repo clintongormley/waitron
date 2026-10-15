@@ -1,5 +1,7 @@
 # A679: one setup page, one recovery PDF
 
+**WITHDRAWN, owner 2026-10-15 at 18:55.** The `N` namespace and removal of paper allocation history were rejected. The [two-route redesign](2026-10-15-a679-two-route-redesign.md) restores the existing S/P paper, C Cloud and E emergency requirements. The text below is the withdrawn proposal, retained as history, and is not awaiting approval.
+
 **Proposed replacement design.** The owner’s 18:10–18:15 decisions settle the experience: the box produces one PDF to download, print, or both. The allocation policy and PDF contents recommended below still need approval. Product implementation stays paused; reusable work remains intact.
 
 ## What you see, click and keep

@@ -234,6 +234,16 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## A venue without Cloud needs a usable paper-custodian route
 
+**Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
+[two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
+history, the existing C Cloud contract and emergency E, with one setup-page PDF. Currentness is
+an owner declaration from the current record, never a fact proved by a stale PDF signature.
+Repair-v2 core and A731–A733 retain their approved authority. Product work remains paused at this
+design checkpoint; keep reusable work in draft #1752. The old 44-step check and FOLLOW-UP remain
+cancelled. The design records the missing Waitron Cloud setup integration and separately owned
+Cloud enablement work; no Cloud service is enabled by this publication. Earlier dated directions
+below are historical where superseded, including the now-withdrawn short N proposal.
+
 **Owner redesign, 2026-10-15 at about 18:10–18:15:** replace the downloaded tool and separate
 custodian/computer with one PDF made by the setup page. You may download it, print it over the
 ordinary network, or both, and keep it in the restaurant’s office. Offline operation, paper/file

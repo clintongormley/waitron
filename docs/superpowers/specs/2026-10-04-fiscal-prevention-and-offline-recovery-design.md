@@ -1,5 +1,7 @@
 # Preventing fiscal conflicts and recovering offline (W41s)
 
+**A679 presentation update, 2026-10-15:** the owner’s [two-route redesign requirements](2026-10-15-a679-two-route-redesign.md) keep this design’s paper S/P, Cloud C, emergency E and outside-history/isolation conditions. They replace the separate custody tool, computer and ink/manual-entry ceremony with one PDF made by setup. The redesign is documentation, not a new product or recovery qualification; earlier decisions below retain their dated scope.
+
 Status: **design approved by the owner, 2026-10-04 ("lgtm").** The recommendations in §6 are
 accepted; detailed allocation formats and verification conditions still need resolution before
 their dependent implementation tasks. The owner chose queue execution. The

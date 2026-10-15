@@ -315,12 +315,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
-- **A679. First Live setup: one page and one recovery PDF.** The owner’s 2026-10-15
-  18:10–18:15 direction replaces the downloaded custody tool and separate-custodian model.
-  Approve the [short revised design](superpowers/specs/2026-10-15-a679-simple-pdf-design.md)
-  before more implementation or a replacement plan. Keep the existing branch work for reuse;
-  the old 44-step paper check and FOLLOW-UP are cancelled. The replacement check will open the
-  built PDF and check recovery from its downloaded or printed copy if the approved design uses it.
+- **A679. First Live setup: one page and one recovery PDF.** Implement the
+  [two-route redesign](superpowers/specs/2026-10-15-a679-two-route-redesign.md) after its design checkpoint:
+  one setup-page PDF, current paper S/P history or the built Cloud C protocol, and the approved
+  emergency E route and repair-v2 rules. The earlier N proposal is withdrawn. Product build is
+  paused; preserve the existing branch work. The old 44-step paper check/FOLLOW-UP remain
+  cancelled; qualification opens the built PDF and checks recovery from its saved or printed copy.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,

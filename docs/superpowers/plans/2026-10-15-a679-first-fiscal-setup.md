@@ -1,5 +1,7 @@
 # A679 First Live Fiscal Setup Implementation Plan
 
+**Redesign checkpoint, owner 2026-10-15 at 18:55:** the [two-route redesign](../specs/2026-10-15-a679-two-route-redesign.md) supersedes the withdrawn `N` proposal and preserves S/P paper, C Cloud, E emergency and approved repair-v2 authority. Do not resume this historical tool-based plan. Preserve reusable work; the revised design and its fresh requirements review precede a replacement plan.
+
 **BUILD PAUSED, owner 2026-10-15 at about 18:15:** do not execute further tasks in this plan.
 The owner requires one PDF from the setup page and approval of the
 [short replacement design](../specs/2026-10-15-a679-simple-pdf-design.md). Preserve reusable work;
