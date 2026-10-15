@@ -193,12 +193,13 @@ hook, or how tests are scheduled:
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
 - **A migration can fail on a box that already has a trigger naming what it changes.**
-  `applyMigrations` removes the change feed first for that reason (`installChangeFeed` in
-  `apps/server/src/boot.ts` reinstalls it); a rebuild of a table another set's trigger BODY reads
-  still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker than its name — its rows are
-  synthetic and counted, not compared, and it installs today's change-feed list, and today's
-  append-only list less the tables the previous step lacked, at every step. Cost: an earlier bricked
-  box that was wiped, and a box that failed three starts on 2026-09-26.
+  `applyMigrations` removes the change feed first for
+  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
+  another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
+  than its name — its rows are synthetic and counted, not compared, and it installs today's
+  change-feed list, and today's append-only list less the tables the previous step lacked, at every
+  step. Cost: an earlier bricked box that was wiped, and a box that failed three
+  starts on 2026-09-26.
 - **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
   which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed
   out in CI five times. Nothing guards it. Receipt:
@@ -483,8 +484,9 @@ called weaker than its name, the topic file lists what it does not see.
   `packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.
 - **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
   money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`). A blanket "every numeric
-  becomes cents" does not EMPTY a quantity, it misreads one. A rate's CHECK constraint is written
-  against 10000. Guard: the shared
+  becomes cents" does not EMPTY a quantity, it misreads one. The converters hold the bound, because
+  an integer column does not; the raw quantity reader reads totals, so like the money one it bounds
+  only at what a number counts exactly. A rate's CHECK constraint is written against 10000. Guard: the shared
   schema-conformance suite, `packages/db/src/testing/schema-conformance.ts`, which a migration set
   opts into — a set with none is unguarded.
 - **The database never rounds a quantity — `decimalToThousandths` owns the third place.** A test
@@ -498,7 +500,7 @@ called weaker than its name, the topic file lists what it does not see.
   list, and a table that must never be corrected is declared with `appendOnly()` instead of
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair,
   but only from a `migrationOptionsFor(...)` result; a plain options array gets none of those
-  triggers, silently. **The CLASS is not the trigger set.**
+  triggers, silently. **The CLASS is not the trigger set.** A trigger cannot refuse `DROP TABLE`.
   A release that marks an EXISTING table `appendOnly()` says so in its PR description: a box's
   first start on it can raise `append_only.triggers_restored`.
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` and
@@ -634,7 +636,7 @@ browser test** — most of these rules exist because a test passed while proving
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these.
+  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
   one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
   the same package end in `ENOENT`.
@@ -786,7 +788,12 @@ browser test** — most of these rules exist because a test passed while proving
   [conventions-data.md](docs/developers/conventions-data.md).
 - **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
-  lock**. Guards, narrower than the rule:
+  lock**. A copy fifteen minutes behind raises
+  `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
+  (`apps/server/src/alert-sources.ts`). While Litestream runs, its own checkpoints restart the side
+  file; when that does not hold it under a size limit, stopping Litestream (`backup.stream_paused`)
+  and folding the file back in the write queue (`checkpointTruncate`, `packages/store/src/index.ts`)
+  bounds it. Guards, narrower than the rule:
   `apps/server/src/stream-pause.e2e.test.ts`, `apps/server/src/stream-loop.e2e.test.ts` (both
   skipped locally without their binaries) and the bucket-copy cases in
   `apps/server/src/health.test.ts`. Receipt:
@@ -795,9 +802,10 @@ browser test** — most of these rules exist because a test passed while proving
   (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
   wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
-  `DROP TABLE` is refused by nothing at all. A start and a 10 s check while trading refuse to
-  trade on a missing or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its
-  name: stored text only, and only the tables the start migrated.
+  `DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a dropped
+  trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
+  or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
+  only, and only the tables the start migrated.
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
