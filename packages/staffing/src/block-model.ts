@@ -53,7 +53,7 @@ function lastStep(cutover: string): number {
 
 /** A block's span as a resize reads it. A block saved before a changeover change can cross the
  *  new changeover; it ends at the day's last quarter hour. */
-export function span(block: StaffingBlock, cutover: string): { start: number; end: number } {
+export function resizeSpan(block: StaffingBlock, cutover: string): { start: number; end: number } {
   const s = blockSpan(block, cutover);
   return s.end > s.start ? s : { start: s.start, end: lastStep(cutover) };
 }
@@ -76,7 +76,7 @@ export function resizeBlock(
   const blocks = copyBlocks(day);
   const target = blocks[index];
   if (target === undefined) return blocks;
-  const { start, end } = span(target, cutover);
+  const { start, end } = resizeSpan(target, cutover);
   const minute = minuteOfServiceDay(time, cutover);
   const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
   const [from, to] =
@@ -126,7 +126,7 @@ export function laneLayout(
   cutover: string,
 ): { lane: number; lanes: number }[] {
   const order = day
-    .map((block, index) => ({ index, ...span(block, cutover) }))
+    .map((block, index) => ({ index, ...resizeSpan(block, cutover) }))
     .sort((a, b) => a.start - b.start || b.end - a.end || a.index - b.index);
   const layout: { lane: number; lanes: number }[] = day.map(() => ({ lane: 0, lanes: 1 }));
   let group: { index: number; lane: number }[] = [];

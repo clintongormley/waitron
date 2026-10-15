@@ -27,9 +27,9 @@ import {
   deleteBlock,
   laneLayout,
   resizeBlock,
+  resizeSpan,
   sameBlock,
   sameBlocks,
-  span,
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
@@ -48,7 +48,7 @@ export interface StaffingChange {
 
 const DAY = 1440;
 
-/** Not `span`: a range crossing the changeover is drawn to it, as `slotsForDay` counts it, so a
+/** Not `resizeSpan`: a range crossing the changeover is drawn to it, as `slotsForDay` counts it, so a
  *  block kept on the day's last quarter hour still shows. */
 function drawnSpan(
   range: Pick<StaffingBlock, "startsAt" | "endsAt">,
@@ -351,7 +351,7 @@ export class StaffingGrid extends LitElement {
       return;
     }
     const side = edge.dataset.edge === "start" ? "start" : "end";
-    const { start, end } = span(block, this.cutover);
+    const { start, end } = resizeSpan(block, this.cutover);
     const [anchor, held] = side === "start" ? [end, start] : [start, end];
     if (this.#stroke.start(event, key, anchor, held))
       this.#resizing = { key, index: Number(edge.dataset.index), block, edge: side, anchor };
