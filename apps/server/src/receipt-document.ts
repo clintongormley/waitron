@@ -3,6 +3,7 @@ import type { ReceiptLabels } from "@waitron/country";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   addDecimal,
+  compareDecimal,
   decimal,
   perDishOptionQuantity,
   resolveSnapshotText,
@@ -10,8 +11,10 @@ import {
   type ReceiptLogoRaster,
   type ReceiptPresentation,
 } from "@waitron/shared";
-import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
+import { beforeVatFigures, groupDiscounts, quantityText } from "./invoice-figures.js";
+import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
+import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -58,7 +61,10 @@ export type ReceiptElement =
   | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
   | { kind: "logo" }
-  | { kind: "qr"; text: string };
+  | { kind: "qr"; text: string }
+  | { kind: "table"; table: ReceiptTable };
+
+type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
 
 export interface ReceiptDocument {
   elements: readonly ReceiptElement[];
@@ -143,26 +149,6 @@ export function buildReceiptDocument({
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
   };
-  const netFacts = (line: TillSaleLine, unit: string, indent: number): void => {
-    if (simplified || line.net === undefined) return;
-    row(
-      label.netUnitPrice,
-      `${formatMoney(line.net.unitPrice, locale)} / ${trimQuantityForDisplay(line.net.priceQuantity)}${unit}`,
-      indent,
-    );
-    row(
-      `${label.base} ${formatVatRate(line.net.rate, locale)}`,
-      formatMoney(line.net.base, locale),
-      indent,
-    );
-    if (line.net.tax !== undefined) {
-      row(
-        `${label.vat} ${formatVatRate(line.net.rate, locale)}`,
-        formatMoney(line.net.tax, locale),
-        indent,
-      );
-    }
-  };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
@@ -181,8 +167,6 @@ export function buildReceiptDocument({
     rule();
     align("left");
   }
-
-  if (!simplified) text(label.fullInvoice);
 
   align("center");
   elements.push({ kind: "logo" });
@@ -213,9 +197,8 @@ export function buildReceiptDocument({
     row(orderText, issueDate(result.issuedAt, locale), 0, undefined, 2);
     row(label.simplifiedInvoice, result.invoiceNumber);
   } else {
-    text(orderText);
-    row(label.invoice, result.invoiceNumber);
-    row(label.date, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes));
+    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
+    row(orderText, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes));
   }
   if (!simplified && result.operationDate !== undefined) {
     row(
@@ -227,31 +210,100 @@ export function buildReceiptDocument({
   }
   rule();
   if (!simplified && result.recipient) {
+    text(label.customer);
     text(result.recipient.legalName);
     text(`${label.nif}: ${result.recipient.taxId}`);
     text(result.recipient.address);
     rule();
   }
-  for (const { dish, options } of groupByParent(result.lines)) {
+  const filed = (line: TillSaleLine): line is FiledLine => line.net !== undefined;
+  const filedRates: string[] = [];
+  for (const line of result.lines) {
+    if (!filed(line)) continue;
+    const rate = line.net.rate;
+    if (!filedRates.some((seen) => compareDecimal(decimal(seen), decimal(rate)) === 0)) {
+      filedRates.push(rate);
+    }
+  }
+  const withRate = filedRates.length > 1;
+  const anyFiled = !simplified && filedRates.length > 0;
+  const billAdjustments = result.billAdjustments ?? [];
+  const invoiceHasLineAdjustments = result.lines.some(
+    (line) => (line.adjustments ?? []).length > 0,
+  );
+  let tableRows: ReceiptTableRow[] = [];
+  let tablesPrinted = 0;
+  const endTable = (): void => {
+    if (tableRows.length === 0) return;
+    const table: ReceiptTable = {
+      ...(tablesPrinted === 0
+        ? {
+            header: {
+              units: label.unitsColumn,
+              item: label.itemColumn,
+              price: label.priceColumn,
+              amount: label.amountColumn,
+              ...(withRate ? { rate: label.rateColumn } : {}),
+            },
+          }
+        : {}),
+      rows: tableRows,
+      withRate,
+    };
+    elements.push({ kind: "table", table });
+    tablesPrinted++;
+    tableRows = [];
+  };
+  const rateCell = (rate: string): { rate: string } => ({ rate: formatVatRate(rate, locale) });
+  const answers = (dish: TillSaleLine): string[] =>
+    customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale);
+  const filedRow = (line: FiledLine, indent: number): ReceiptTableRow => {
+    const { price, amount } = beforeVatFigures(line);
+    return {
+      units: quantityText(line, namesLocale),
+      item: lineName(line.descriptions, namesLocale),
+      ...(indent > 0 ? { itemIndent: indent } : {}),
+      price: formatAmount(price, locale),
+      amount: formatAmount(amount, locale),
+      ...rateCell(line.net.rate),
+    };
+  };
+  const tableGroup = (group: LineGroup): void => {
+    const [dish, ...options] = [group.dish, ...group.options].filter(filed);
+    tableRows.push(filedRow(dish!, 0));
+    for (const answer of answers(group.dish)) {
+      tableRows.push({ units: "", item: answer, itemIndent: 2, price: "", amount: "" });
+    }
+    for (const option of options) tableRows.push(filedRow(option, 2));
+    for (const discount of groupDiscounts(group, billAdjustments, invoiceHasLineAdjustments)) {
+      const item = discount.comp
+        ? label.comp
+        : discount.named !== null
+          ? adjustmentLabel(discount.named, locale, label)
+          : label.discount;
+      tableRows.push({
+        units: "",
+        item,
+        itemIndent: 2,
+        price: "",
+        amount: `-${formatAmount(discount.amount, locale)}`,
+        ...rateCell(discount.rate),
+      });
+    }
+  };
+  const withVatGroup = ({ dish, options }: LineGroup): void => {
     const unit =
       dish.unitName == null
         ? ""
         : ` ${resolveSnapshotText(dish.unitName, namesLocale, namesLocale)}`;
     const quantity = `${dish.quantity}${unit}  `;
-    const nameIndent: ReceiptIndent = { after: quantity };
-    if (!simplified && dish.net !== undefined) {
-      text(`${quantity}${lineName(dish.descriptions, namesLocale)}`, nameIndent);
-      netFacts(dish, unit, 2);
-    } else {
-      row(
-        `${quantity}${lineName(dish.descriptions, namesLocale)}`,
-        itemAmount(dish.listGross ?? dish.gross),
-        nameIndent,
-      );
-    }
-    for (const answer of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale)) {
-      text(`  ${answer}`, 2);
-    }
+    const included = simplified ? "" : ` (${label.vatIncluded})`;
+    row(
+      `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,
+      itemAmount(dish.listGross ?? dish.gross),
+      { after: quantity },
+    );
+    for (const answer of answers(dish)) text(`  ${answer}`, 2);
     for (const option of options) {
       const name = lineName(option.descriptions, namesLocale);
       let caption: string;
@@ -267,24 +319,23 @@ export function buildReceiptDocument({
       } else {
         caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
-      if (!simplified && option.net !== undefined) {
-        text(caption, 2);
-        netFacts(
-          option,
-          option.unitName == null
-            ? ""
-            : ` ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`,
-          2,
-        );
-      } else {
-        row(caption, itemAmount(option.listGross ?? option.gross), 2);
-      }
+      row(caption, itemAmount(option.listGross ?? option.gross), 2);
     }
     for (const line of [dish, ...options]) {
       for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);
     }
+  };
+  for (const group of groupByParent(result.lines)) {
+    if (!simplified && [group.dish, ...group.options].every(filed)) {
+      tableGroup(group);
+    } else {
+      endTable();
+      withVatGroup(group);
+    }
   }
-  for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
+  endTable();
+  if (tablesPrinted > 0) text(label.pricesExcludeVat, 4);
+  if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
   rule();
   const vatRows = (): void => {
     const [only] = result.vatBreakdown;
@@ -296,8 +347,9 @@ export function buildReceiptDocument({
       );
       return;
     }
+    const baseLabel = simplified ? label.base : label.taxableBase;
     for (const v of result.vatBreakdown) {
-      row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
+      row(`${baseLabel} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
       row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
     }
   };

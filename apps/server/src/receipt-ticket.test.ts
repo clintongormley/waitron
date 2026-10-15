@@ -24,6 +24,7 @@ import {
   printedLines,
 } from "./testing/decode-ticket.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
 type TillSaleResult = ReceiptDocumentInput["result"];
 
 // `formatReceipt` is pure, so these are unit tests. `printedLines` and `decodeTicket` read the text
@@ -3391,5 +3392,13 @@ describe("the simplified receipt's own layout (A663)", () => {
       PRINTER_58,
     );
     expect(lines).toContain("0.35 kg Jamón ibérico 8,40");
+  });
+});
+
+describe("the full invoice's item table on roll paper (A663)", () => {
+  it("prints the 80 mm table's header and its first row", () => {
+    const lines = printedLines(formatReceipt(FULL_INVOICE_FIXTURE));
+    expect(lines).toContain("Uds Concepto            Precio Importe IVA");
+    expect(lines).toContain("  1 Menú del día con un  10,00   10,00 21%");
   });
 });

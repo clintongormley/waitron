@@ -13,6 +13,7 @@ import {
   type TextStyle,
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
+import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
 import {
   buildReceiptDocument,
   type ReceiptDocumentInput,
@@ -24,6 +25,25 @@ export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
 export interface FormatReceiptInput extends ReceiptDocumentInput {
   printer: EscSetting;
   logo?: MonoRaster | null;
+}
+
+function preparedRow(row: ReceiptTableRow): ReceiptTableRow {
+  return {
+    ...row,
+    units: prepareText(row.units),
+    item: prepareText(row.item),
+    price: prepareText(row.price),
+    amount: prepareText(row.amount),
+    ...(row.rate === undefined ? {} : { rate: prepareText(row.rate) }),
+  };
+}
+
+function preparedTable(table: ReceiptTable): ReceiptTable {
+  return {
+    ...table,
+    ...(table.header ? { header: preparedRow(table.header) } : {}),
+    rows: table.rows.map(preparedRow),
+  };
 }
 
 function toTextStyle(style: ReceiptStyle | undefined): TextStyle {
@@ -98,6 +118,11 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
         }
         break;
       }
+      case "table":
+        for (const line of tableLines(preparedTable(element.table), columns)) {
+          b.line(line.text, { bold: line.header, double: false });
+        }
+        break;
       case "rule":
         rules.push(b.pictures);
         b.line("-".repeat(columns));

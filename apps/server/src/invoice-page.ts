@@ -2,6 +2,7 @@ import type { ReceiptLogoRaster } from "@waitron/shared";
 import { invoiceFont } from "./invoice-font.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { qrModules } from "./qr-matrix.js";
+import { tableLines } from "./receipt-table.js";
 
 export const INVOICE_PAGE_WIDTH = 595.28;
 export const INVOICE_PAGE_HEIGHT = 841.89;
@@ -160,6 +161,15 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         y += QR_SIZE + 2 * quietZone + LINE_HEIGHT / 2;
         break;
       }
+      case "table":
+        for (const line of tableLines(element.table, 90)) {
+          text(line.text, MARGIN, INVOICE_PAGE_WIDTH - 2 * MARGIN, {
+            size: BODY_SIZE,
+            bold: line.header,
+            centered: false,
+          });
+        }
+        break;
       case "text":
       case "amount": {
         const indent = typeof element.indent === "number" ? element.indent * 5 : 0;
