@@ -454,9 +454,13 @@ export class StaffingGrid extends LitElement {
     const { start, end } = drawnSpan(block, this.cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
     const colour = this.#role(block.staffRoleId)?.colour;
+    const label = `${column.label}, ${this.#describe(block)}`;
     if (this.readOnly)
       return html`<div
         class="block"
+        role="img"
+        aria-label=${label}
+        title=${label}
         data-index=${index}
         data-colour=${colour ?? nothing}
         style=${style}
@@ -469,7 +473,7 @@ export class StaffingGrid extends LitElement {
       class="block"
       data-index=${index}
       data-colour=${colour ?? nothing}
-      aria-label=${`${column.label}, ${this.#describe(block)}`}
+      aria-label=${label}
       aria-haspopup="dialog"
       aria-controls="block-menu"
       aria-expanded=${expanded ? "true" : "false"}

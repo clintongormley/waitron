@@ -953,3 +953,10 @@ test("a resize released after the host replaced its block, before the grid redre
   await el.updateComplete;
   expect(seen).toEqual([]);
 });
+
+test("a read-only block is named in full, by its day, staff role, headcount and range", async () => {
+  const el = await grid({ mon: [], tue: [headChef] }, { readOnly: true });
+  const name = "Tuesday, Head chef, 1 person, 09:00–16:30";
+  await expect.element(page.elementLocator(el).getByRole("img", { name })).toBeInTheDocument();
+  expect(el.shadowRoot!.querySelector<HTMLElement>(".block")!.title).toBe(name);
+});
