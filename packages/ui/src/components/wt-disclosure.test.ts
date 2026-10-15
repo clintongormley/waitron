@@ -5,6 +5,45 @@ import "./wt-disclosure.js";
 
 afterEach(cleanup);
 
+test("a ruled section paints its full heading line and spaces summary rows at normal line height", async () => {
+  const el = (await mount(
+    '<wt-disclosure ruled heading="Descriptors"><p>body</p></wt-disclosure>',
+  )) as HTMLElementTagNameMap["wt-disclosure"];
+  el.summaryRows = [
+    { label: "Name", value: "None", lines: 1 },
+    { label: "Description", value: "None", lines: 2 },
+  ];
+  await el.updateComplete;
+  host.style.setProperty("--wt-color-border", "rgb(8, 9, 10)");
+  const heading = el.shadowRoot!.querySelector<HTMLElement>(".heading")!;
+  const header = el.shadowRoot!.querySelector<HTMLElement>(".header")!;
+  const title = el.shadowRoot!.querySelector<HTMLElement>(".title");
+  expect(title).not.toBeNull();
+  const line = getComputedStyle(title!);
+  expect(line.borderBottomWidth).toBe("1px");
+  expect(line.borderBottomColor).toBe("rgb(8, 9, 10)");
+  expect(title!.getBoundingClientRect().width).toBe(header.getBoundingClientRect().width);
+  const summary = el.shadowRoot!.querySelector<HTMLElement>(".summary")!;
+  expect(summary.getBoundingClientRect().top).toBeGreaterThan(
+    heading.getBoundingClientRect().bottom,
+  );
+  expect(parseFloat(getComputedStyle(summary).lineHeight)).toBeGreaterThan(
+    parseFloat(getComputedStyle(summary).fontSize),
+  );
+});
+
+test("a custom closed summary is visible below the ruled heading and hides on open", async () => {
+  const el = (await mount(
+    '<wt-disclosure ruled heading="Selling"><span slot="summary">Unavailable</span><p>body</p></wt-disclosure>',
+  )) as HTMLElementTagNameMap["wt-disclosure"];
+  const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="summary"]');
+  expect(slot).not.toBeNull();
+  expect(slot!.assignedElements().map((node) => node.textContent)).toEqual(["Unavailable"]);
+  el.open = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('slot[name="summary"]')).toBeNull();
+});
+
 function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise<Animation> {
   return new Promise((resolve, reject) => {
     let frames = 0;

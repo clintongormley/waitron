@@ -7,6 +7,13 @@ import "./wt-disclosure.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (theme) => {
+  test.each(["", "open", "has-error"])("ruled section %s", async (state) => {
+    await mountThemed(
+      `<wt-disclosure ruled heading="Selling" ${state}><span slot="summary">Available</span><p>Anyone can order</p></wt-disclosure>`,
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
   test("collapsed", async () => {
     await mountThemed(
       '<wt-disclosure heading="Cocina" summary="2 opciones"><p>cuerpo</p></wt-disclosure>',

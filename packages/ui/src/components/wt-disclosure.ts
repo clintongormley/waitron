@@ -97,6 +97,32 @@ export class WtDisclosure extends LitElement {
         flex-direction: column;
       }
 
+      .title {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        min-height: var(--wt-tap-min);
+        border-bottom: 1px solid var(--wt-color-border);
+        padding-block-end: var(--wt-space-2);
+      }
+      .title .heading {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .title .chevron {
+        flex: none;
+      }
+      .summary-slot {
+        grid-column: 1 / -1;
+      }
+      :host([ruled]) .summary-slot {
+        margin-block-start: var(--wt-space-2);
+      }
+      :host([ruled]) .summary {
+        line-height: calc(var(--wt-font-size-sm) + var(--wt-space-2));
+      }
+
       .summary-row {
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -123,6 +149,7 @@ export class WtDisclosure extends LitElement {
   ];
 
   @property() heading = "";
+  @property({ type: Boolean, reflect: true }) ruled = false;
   @property() summary = "";
   /** The closed line as named values, each after its bold name; used instead of `summary` when it
    * holds any. */
@@ -245,17 +272,17 @@ export class WtDisclosure extends LitElement {
 
   override render() {
     return html`
-      <div class="section">
+      <div class="section" part="section">
         <button
           type="button"
           class="header"
+          part="header"
           aria-expanded=${this.open ? "true" : "false"}
           aria-controls=${this.bodyId}
           @click=${this.onToggle}
         >
-          <span class="heading">${this.heading}</span>
-          ${this.open ? nothing : this.renderSummary()}
-          <wt-icon class="chevron" name="chevron-down"></wt-icon>
+          ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
+          ${this.open ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
         </button>
         <div
           id=${this.bodyId}
