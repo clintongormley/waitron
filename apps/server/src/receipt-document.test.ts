@@ -653,4 +653,28 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     const tables = document.elements.flatMap((e) => (e.kind === "table" ? [e.table] : []));
     expect(tables.flatMap((t) => t.rows.map((r) => r.item))).toEqual(["Agua mineral"]);
   });
+
+  it("prints a with-VAT dish priced per pack by its quantity and unit, not its count of packs", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Jamón ibérico" },
+        unitName: { es: "kg" },
+        quantity: "0.300",
+        gross: "9.00",
+        net: { unitPrice: "2.73", priceQuantity: "0.100", base: "8.18", tax: "0.82", rate: "10" },
+      },
+      {
+        descriptions: { "es-ES": "Pan" },
+        parentLineNo: 1,
+        unitName: { es: "ud" },
+        quantity: "1",
+        gross: "1.00",
+      },
+    ];
+    expect(amountRows(buildReceiptDocument(input))).toContainEqual([
+      "0.300 kg  Jamón ibérico (IVA incluido)",
+      "9,00 €",
+    ]);
+  });
 });
