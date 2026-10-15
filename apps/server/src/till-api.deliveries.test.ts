@@ -740,6 +740,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     const { orderId, saleId } = await invoice(v);
     const upstairs = await upstairsOffice(v);
     await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, upstairs));
+    expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
     for (const printerId of [upstairs, v.officeId]) {
       expect(await printOnA4(v, orderId, randomUUID(), undefined, printerId)).toEqual(
         refusal(409, "invoice_delivery.printer_invalid"),
