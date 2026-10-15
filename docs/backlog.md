@@ -3468,7 +3468,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Ruled
-  sections, a large TOTAL, one row per item on a full invoice, the registered
+  sections, TOTAL straight after the items, one row per item on a full invoice, the registered
   address once or labelled, "× 2" for quantities, and guests and per person. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 

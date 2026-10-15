@@ -18,9 +18,8 @@ printer draws every line of text as a picture from our own glyph table
 `packages/printing`, not printer commands. Nothing filed, hashed or sent to AEAT changes: the work
 reads the same filed figures and lays them out differently.
 
-**Tech Stack:** TypeScript, Vitest (unit tests, plus `useVenueDb` for the readers in Parts 3–4), the
-`@waitron/printing` raster builder, PDFKit and sharp for A4, Lit for the two dashboard switches in
-Part 4.
+**Tech Stack:** TypeScript, Vitest (unit tests, plus `useVenueDb` for the reader in Part 3), the
+`@waitron/printing` raster builder, and PDFKit and sharp for A4.
 
 **Spec:** `docs/backlog/printers.md`, section "A663 — receipts and full invoices that are easier to
 read", with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
@@ -32,7 +31,8 @@ mockups are "drawn, not rendered": where this plan departs from a drawing, it sa
 ## How the work is cut
 
 Four pull requests (a fifth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
-two (1a and 1b) so that the half that touches no file of lane A's open A661 branch can start now. Each leaves `main` green and correct on its own; none needs
+two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
+#1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
 request holds.
 
@@ -65,7 +65,7 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
-  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`, `feat/a663-4-drink-food-subtotals`.
+  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -133,17 +133,13 @@ counted 125 files (run 2026-10-15, after a `git fetch`). The ones this plan coul
   receipt, which prints its own «Precio sin IVA … / 1 ud» line and two-decimal rates ("21.00%",
   `till-ticket-view.ts:91-92, 97, 104, 807, 811`). It is outside A663, and A661 changes it; Task
   1.8 adds a backlog entry for it.
-- `apps/dashboard/src/api/client.ts` and `apps/dashboard/src/i18n/strings.ts` (both in A661's
-  list): Part 4's Task 4.2 edits them.
 - `apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`,
   `apps/server/src/management-api.ts`, `apps/server/src/orders-api.ts`,
   `apps/server/src/errors.ts`, `apps/server/src/invoice-delivery-*.ts`,
   `apps/server/src/invoice-choice-delivery.ts`: no task here edits them.
 - `docs/backlog.md` and `docs/backlog/printers.md`: each part's backlog edit is small; rebase over
   A661 if it lands first.
-- A661 adds core migrations `0155`–`0157` in `packages/db/drizzle/`. Part 4's migration (if Q1 keeps
-  its default) is in the catalogue set (`packages/catalogue/drizzle/`, last entry today
-  `0032_content_suggestions.sql`), so the numbers cannot collide.
+- A661 adds core migrations `0155`–`0157` in `packages/db/drizzle/`.
 
 **So:** Part 1a (Tasks 1.1, 1.3, 1.4, 1.8) starts now. None of its files —
 `packages/printing/src/{raster-text,escpos,index}.ts`,
@@ -154,7 +150,7 @@ their tests, the two `.bin` files and `apps/server/scripts/receipt-look.ts` — 
 `apps/till/src/screens/till-ticket-view.test.ts` (`git grep -n -E "[0-9]\.[0-9]{2}%"` over
 `apps/server/src/*.test.ts` and `apps/till/src`), the till screen this item does not change. If a
 Part 1a run of the receipt suites still fails in a file A661 changes, stop: move that change to
-Part 1b rather than editing the file. Part 1b, Part 2, Part 3 and Part 4 start only after A661 has
+Part 1b rather than editing the file. Part 1b, Part 2 and Part 3 start only after A661 has
 merged (A661 landed 2026-10-15, #1745).
 
 **Whichever of A661 and A663 lands second** re-runs the receipt suites (Global Constraints) on top
@@ -959,7 +955,8 @@ three bold lines that `printedLines` reads back as the name's words, and none is
 - [ ] **Step 2:** Run the files — FAIL (header still joined; `break` elements present).
 - [ ] **Step 3: Implement** the block and the rules in `buildReceiptDocument`. Replace each
   section-ending `line()` with a `rule` element. On A4, `invoice-page.ts` already draws `rule` as a
-  thin line across the content width (`invoice-page.ts:117-127`); keep that. The thermal renderer's
+  thin line across the content width (the `rule` helper in `layoutInvoicePages`, which also carries a
+  rule left last on a page over to the next); keep that. The thermal renderer's
   logo spacing reads "was the previous element a blank line" (`receipt-ticket.ts:58-64, 90-96`):
   treat a `rule` as that boundary too, so a logo after the rule gets no extra blank line above it.
 - [ ] **Step 4:** Run the files — PASS. Run the receipt suites and update expectations that named
@@ -1533,7 +1530,7 @@ it("prints the registered address unlabelled when it is the only one", () => {
 ### Task 2.5: The A4 page — columns and right-aligned amounts
 
 Today the A4 page draws an amount row as caption and amount joined by one space
-(`invoice-page.ts:148-150`), so nothing lines up. After this task: an `amount` element draws its
+(the `text`/`amount` case of `layoutInvoicePages`), so nothing lines up. After this task: an `amount` element draws its
 caption at the left and its amount right-aligned to `INVOICE_PAGE_WIDTH - MARGIN`; a `table`
 element draws columns — units right-aligned in a column as wide as its widest cell, the item column
 from there, and price, amount and rate right-aligned at fixed right edges measured with the font
@@ -1593,7 +1590,8 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
   right edge, «Domicilio fiscal:» appears only when the addresses differ.
 - [ ] **Step 3: Fiscal gate**, unedited, PASS.
 - [ ] **Step 4: Backlog.** In `docs/backlog/printers.md`, mark points 2, 3 and 4 done (point 4 by
-  the table; see Q4 for an extras portion's price). Add a short entry under the fiscal area
+  the table; see Q4 for an extras portion's price). If no point is left open, delete the A663 entry from
+  `docs/backlog/printers.md` and its line from `docs/backlog.md`. Add a short entry under the fiscal area
   (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
   different from its issue date; art. 7.1.c then requires it on the receipt, and the document
   builder prints one only on a full invoice (`receipt-document.ts`)".
@@ -1863,7 +1861,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 - Spec coverage: point 1 → Tasks 1.4 (Part 1a), 1.5 and 1.6 (Part 1b); point 2 → 2.3, 2.5, 2.6
   (operation date pinned); point 3 → 2.4; point 4 → 2.3 (the line it applies to is replaced; Q4);
   point 5 → 1.3 (on paper and A4; the till's on-screen copy is a follow-up, Task 1.8); point 6 →
-  Part 3; point 7 → Part 4 (Q3 on where its switch lives). The BOE re-check is done above; Task 2.6 records the one open legal question.
+  Part 3; point 7 (drink/food subtotals) → withdrawn by the owner on 2026-10-15. The BOE re-check is done above; Task 2.6 records the one open legal question.
 - The "VERI\*FACTU line may be printed in bold for margin" option in the spec is not taken: the
   roll font is already a bold face, and Orden HAC/1177/2024 art. 20.1.b asks only that the phrase be
   as visible as the rest; the caption keeps the other lines' size and weight.
