@@ -23,7 +23,11 @@ import {
   resolveTranslationRow,
   type TranslationContext,
 } from "./content-translation-targets.js";
-import type { TranslationEdit, TranslationRef } from "./content-translation-types.js";
+import {
+  TRANSLATION_NAME_BYTES,
+  type TranslationEdit,
+  type TranslationRef,
+} from "./content-translation-types.js";
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
@@ -35,9 +39,6 @@ interface PlannedRow {
   placeholder: boolean;
   fix: Fix | null;
 }
-
-// The save route's own bound (`checkedBatch`, content-translations.ts), so a suggestion can be saved.
-const NAME_BYTES = 4096;
 
 /** The stored rows whose (kind, item, language) is one of `keys`; a null language matches nothing. */
 function storedIn(keys: readonly (readonly [string, string, string | null])[]): SQL {
@@ -117,7 +118,7 @@ export async function storeSuggestionResults(
       if (
         !missing.includes(language) ||
         !trimmed ||
-        Buffer.byteLength(trimmed, "utf8") > NAME_BYTES
+        Buffer.byteLength(trimmed, "utf8") > TRANSLATION_NAME_BYTES
       ) {
         dropped += 1;
         continue;

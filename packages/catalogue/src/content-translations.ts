@@ -7,11 +7,12 @@ import {
   type TranslationStructure,
 } from "./content-translation-targets.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
-import type {
-  TranslationBatch,
-  TranslationEdit,
-  TranslationOwners,
-  TranslationTarget,
+import {
+  TRANSLATION_NAME_BYTES,
+  type TranslationBatch,
+  type TranslationEdit,
+  type TranslationOwners,
+  type TranslationTarget,
 } from "./content-translation-types.js";
 import {
   validateTranslationNames,
@@ -176,11 +177,11 @@ function checkedBatch(batch: TranslationBatch): TranslationEdit[] {
       typeof value.expected !== "string" ||
       typeof value.text !== "string" ||
       !value.text.trim() ||
-      Buffer.byteLength(value.text, "utf8") > 4096 ||
+      Buffer.byteLength(value.text, "utf8") > TRANSLATION_NAME_BYTES ||
       (Object.hasOwn(value, "defaultText") &&
         (typeof value.defaultText !== "string" ||
           !value.defaultText.trim() ||
-          Buffer.byteLength(value.defaultText, "utf8") > 4096))
+          Buffer.byteLength(value.defaultText, "utf8") > TRANSLATION_NAME_BYTES))
     )
       invalid();
     const key = `${value.kind}:${value.id}`;

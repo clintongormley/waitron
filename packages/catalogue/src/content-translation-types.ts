@@ -4,6 +4,9 @@ import type {
   TranslationGapReason,
 } from "./content-translation-report-types.js";
 
+/** The most UTF-8 bytes the save route takes in one name. */
+export const TRANSLATION_NAME_BYTES = 4096;
+
 export interface TranslationRef {
   kind: TranslationGapKind;
   id: string;
