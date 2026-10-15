@@ -171,37 +171,31 @@ export async function clockApp(
     listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
-    getAttendanceInbox: vi
-      .fn()
-      .mockImplementation(async () => ({
-        personId: state.personId,
-        revision: "revision",
-        prompts: [],
-        items: [],
-        locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
-      })),
-    getAttendanceDay: vi
-      .fn()
-      .mockImplementation(async (date: string, locationId: string) => ({
-        personId: state.personId,
-        locationId,
-        date,
-        revision: "revision",
-        timeZone: "Europe/Madrid",
-        record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
-        items: [],
-      })),
+    getAttendanceInbox: vi.fn().mockImplementation(async () => ({
+      personId: state.personId,
+      revision: "revision",
+      prompts: [],
+      items: [],
+      locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    })),
+    getAttendanceDay: vi.fn().mockImplementation(async (date: string, locationId: string) => ({
+      personId: state.personId,
+      locationId,
+      date,
+      revision: "revision",
+      timeZone: "Europe/Madrid",
+      record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
+      items: [],
+    })),
     getAttendanceCommand: vi.fn().mockResolvedValue(null),
     listAttendanceApprovers: vi
       .fn()
       .mockResolvedValue([{ personId: "manager", displayName: "Marta" }]),
-    sendAttendanceCommand: vi
-      .fn()
-      .mockImplementation(async (command) => ({
-        commandId: command.commandId,
-        entryIds: ["answer"],
-        replayed: false,
-      })),
+    sendAttendanceCommand: vi.fn().mockImplementation(async (command) => ({
+      commandId: command.commandId,
+      entryIds: ["answer"],
+      replayed: false,
+    })),
     getClockState: vi.fn().mockImplementation(async () => state),
     clockIn: vi.fn().mockImplementation(async () => write("working")),
     clockOut: vi.fn().mockImplementation(async () => write("out")),

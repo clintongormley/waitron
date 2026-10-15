@@ -20,19 +20,17 @@ async function mount(modules: string[], permissions: string[], role = "superviso
   await page.viewport(1280, 900);
   history.replaceState(null, "", "/");
   const api = {
-    getMe: vi
-      .fn()
-      .mockResolvedValue({
-        personId: "boss",
-        role,
-        email: "boss@example.com",
-        locale: "en-GB",
-        venueLocale: "es-ES",
-        sessionDefault: "en-GB",
-        venueName: "Deli",
-        permissions,
-        modules,
-      }),
+    getMe: vi.fn().mockResolvedValue({
+      personId: "boss",
+      role,
+      email: "boss@example.com",
+      locale: "en-GB",
+      venueLocale: "es-ES",
+      sessionDefault: "en-GB",
+      venueName: "Deli",
+      permissions,
+      modules,
+    }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     getContentLanguages: vi
       .fn()
