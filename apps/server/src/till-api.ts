@@ -2818,7 +2818,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             } else {
               // A merge can pass guests on after the join, so the kitchen is told once, at the end.
               // Not widened to the target group's members as the floor's merge is: an open owner
-              // question (docs/backlog.md, A<new>).
+              // question (docs/backlog.md, A704).
               const holder = await holderOf(tx, tableId);
               const parties = holder === null ? [partyId] : [partyId, holder];
               const deliveredTo = [merge.moving, merge.target];

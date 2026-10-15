@@ -171,10 +171,7 @@ export async function joinTables(
   });
 }
 
-/**
- * {@link combineParties} as a table action: the kitchen is told when `kitchenToBeTold`
- * (kitchen-print.ts) says so, unless `slipsLater` leaves that to the caller.
- */
+/** {@link combineParties} as a table action. */
 async function combineAt(
   tx: Transaction,
   cfg: TillConfig,
