@@ -12,6 +12,14 @@ export interface NamedNodeKey {
   readonly name: string;
   readonly secret: string;
 }
+export interface RegisterDocument {
+  version: 2;
+  kind: "waitron-register-document";
+  route: "paper" | "cloud";
+  paper: DeclaredRegisterHistory | null;
+  cloudOriginals: readonly PublicOriginal[];
+  nodeKeys: readonly NamedNodeKey[];
+}
 export interface PrintedPositionFields {
   readonly sPosition: string;
   readonly pPosition: string;

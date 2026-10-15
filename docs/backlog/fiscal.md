@@ -270,7 +270,9 @@ position/key codecs and explicit browser-safe exports. Its Node and Chromium che
 four-character groups, check domains, canonical byte encoding and exact original recovery-key
 text. Revised Task 2 adds the unsigned history library: sequential reservations and consumption,
 known-head refusals, permanent typed burn floors, and exact displaced public-history retention.
-These are library checks, not PDF, wizard, recovery or owner acceptance. PDF delivery and the
+Revised Task 3 adds browser PDF rendering and exact attachment reading, including grouped printed
+codes, local font/worker assets, ambiguous-carrier refusals and attachment-preserving form resaves.
+These are library/PDF checks, not wizard, recovery or owner acceptance. PDF delivery and the
 remaining replacement-plan tasks stay open.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The

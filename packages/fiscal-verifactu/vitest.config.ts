@@ -3,7 +3,18 @@ import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 export default defineConfig({
-  optimizeDeps: { include: ["lit", "lit/decorators.js", "lit/directives/live.js", "axe-core"] },
+  optimizeDeps: {
+    include: [
+      "lit",
+      "lit/decorators.js",
+      "lit/directives/live.js",
+      "axe-core",
+      "pdfkit",
+      "pdfjs-dist",
+      "pdf-lib",
+      "fontkit",
+    ],
+  },
   test: {
     // scripts/fiscal-test-budget.test.ts pins this; outer, never inside a project.
     maxWorkers: 4,
