@@ -2196,7 +2196,7 @@ and nothing guards it across screens:
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
-  invoice printer choice and Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
+  Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
   till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
   `*.unsaved.test.ts`;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).

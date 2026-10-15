@@ -252,7 +252,7 @@ just a green typecheck.
      within 45 seconds drops off the list" (C102, #953) may be the cause; not checked.
   7. **The name dialog opens with Name filled in** (owner, 2026-10-14): the name discovery found
      ("HP Color LaserJet MFP M181fw (DE0887)"), or the address when that is all it found
-     ("192.168.10.81"), ready to overwrite. This applies to Add and to Add as invoice printer. With
+     ("192.168.10.81"), ready to overwrite. This applies to Add and to Add as A4 printer. With
      the field filled, Add can be pressed as soon as the dialog opens.
   8. **One line about Bluetooth instead of the paragraph** (owner, 2026-10-14). The two sentences
      under the heading ("To add a Bluetooth printer that is not paired yet, press Pair and add…")
@@ -321,43 +321,17 @@ just a green typecheck.
      (its own printer, or one of the same paper width), so an upgrade never needs conversion code
      and can only narrow the printers offered for older jobs.
   5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
-     the device profiles that list it and for what (receipts, payment slips, cash drawer), the
-     preparation stations that print to it, and the departments those profiles belong to. A printer
-     belongs to a location, not a department (`printers.location_id`); departments share one through
-     `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
+     the device profiles that list it and for what (receipts, payment slips, cash drawer, full
+     invoices), the preparation stations that print to it, and the departments those profiles
+     belong to. A printer belongs to a location, not a department (`printers.location_id`);
+     departments share one through `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
   6. **One table for every printer** (owner, 2026-10-14). The Printers tab draws A4 printers in a
-     second table under "Invoice printers (A4)", with other columns and its own indentation. They
+     second table under "A4 printers", with other columns and its own indentation. They
      are stored apart (`page_printers`, `packages/db/src/schema/page-printers.ts`) and drawn by their
      own panel (`apps/dashboard/src/widgets/page-printers-panel.ts`), but the screen need not follow
      that: one table, told apart by a Paper column ("80 mm roll", "A4"), every row opening the same
      details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
-     The "Printer for A4 invoices" dropdown and its Save button leave the page (A661).
      [Mockup](mockups/a405-printer-details/3-one-printer-table.png)
-
-## A661 — the full-invoice printer is chosen on the device profile
-
-- **A661 — the full-invoice printer is chosen on the device profile (owner, 2026-10-14; open).**
-  Today a location has one A4 invoice printer, picked in the "Printer for A4 invoices" dropdown on
-  the Printers tab. Both places that print a full invoice use it: the till's "Print on A4"
-  (`POST /api/sales/:id/deliveries`, `apps/server/src/till-api.ts`) and the Orders screen's
-  (`POST /management-api/orders/:id/invoice-deliveries`, `apps/server/src/orders-api.ts`), through
-  `requestA4Delivery` (`apps/server/src/invoice-delivery-actions.ts`).
-  1. **The device profile chooses it, as it chooses the receipt printer.** A fourth role beside
-     `receipt`, `payment_slip` and `cash_drawer` (`deviceProfilePrinterRole`,
-     `packages/db/src/schema/device-profile-printers.ts`): the profile lists the printers its
-     devices may print full invoices to and marks a default, and a device may choose its own, as
-     `devices.receipt_printer_id` does for receipts. `device_profile_printers` references
-     `printers`, while A4 printers live in `page_printers`, so the role has to name either kind;
-     settle how.
-  2. **Receipt printers can be chosen too, not only A4 printers.** Tried 2026-10-14: a made-up full
-     invoice with a long customer name and address, run through `formatReceipt` at 58 mm and 80 mm
-     and drawn from the bytes it produced, carried every full-invoice detail and wrapped cleanly.
-     Not printed on paper. The till's "Print on A4" wording follows the printer chosen.
-  3. **No location-wide invoice printer.** The dropdown and its Save button leave the Printers tab
-     (A405 point 6), and nothing falls back to one.
-  4. **On the Orders screen**, printing a full invoice again offers every printer, with the one the
-     original went to chosen by default.
-  5. The PDF download and sending by email stay available for every full invoice.
 
 ## A662 — tidy the Edit receipt dialog, and a default tax-agency description
 
@@ -657,6 +631,13 @@ returns `null`. This checks those readers, not every sale path.
 - **A Valencian venue is not offered Catalan receipts (owner, 2026-10-11).** Content and receipt
   languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
   (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).
+
+- **No database check that a device sets at most one of its two invoice printer columns
+  (2026-10-15, A661).** `devices.invoice_printer_id` names a receipt printer and
+  `devices.invoice_page_printer_id` an A4 printer. A CHECK would make drizzle-kit rebuild `devices`,
+  and that rebuild deletes the rows of every table cascading from it. `selectDevicePrinter`
+  (`packages/layouts/src/device-equipment.ts`), the one path that stores a choice, sets one column
+  and clears the other.
 
 ## Shared office-printer queues
 

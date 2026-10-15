@@ -3456,12 +3456,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
   [mockups](backlog/mockups/a405-printer-details/)
 
-- **A661 — the full-invoice printer is chosen on the device profile (owner, 2026-10-14; open).**
-  A fourth printer role beside receipts, payment slips and the cash drawer, offering A4 and receipt
-  printers alike; the location-wide "Printer for A4 invoices" goes. The Orders screen offers every
-  printer, the original's chosen by default.
-  [Detail](backlog/printers.md#a661--the-full-invoice-printer-is-chosen-on-the-device-profile)
-
 - **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
   open).** A department with no description uses the Veri\*Factu default "Venta en establecimiento",
   so the Departments warning goes and no sale is refused for it. The dialog opens at full width,
@@ -3474,6 +3468,20 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   address once or labelled, "× 2" for quantities, VAT rates like "10%" and "17,5%", guests and per
   person, and an optional drink/food subtotal. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
+
+- **A661's six wording and behaviour choices were built on the recommended defaults (left open by
+  A661, 2026-10-15).** The owner's questions Q1–Q6 of 2026-10-15 are unanswered; change the build
+  if the owner answers any of them otherwise.
+
+- **The payment-time choice could offer a receipt invoice printer (left open by A661).** At payment
+  only an A4 invoice printer is offered, as "A4 on {printer}" (`/api/invoice-delivery-options`,
+  `apps/server/src/till-api.ts`); a receipt one is reached from the sale's print button. Offering
+  it as its own choice needs the payment path changed.
+
+- **The till's payment-time options and a staged A4 choice resolve the device's invoice printer
+  without the sale's location (left open by A661).** Both call `resolveInvoicePrinter` with no `at`
+  (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
+  another location is believed refused when the delivery is reserved; untested.
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
