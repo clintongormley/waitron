@@ -8,7 +8,7 @@ special day belongs to the venue, not to a saved town address, and the country's
 number does not cap special days.
 
 A public holiday is information: reading one does not write a special day or change opening hours.
-On a public date, Make this a special day… opens the special-day painter on a new day with the
+On a public date, the day box's Make a special day opens the special-day painter on a new day with the
 holiday's name and date filled in; you choose its dates, whether it repeats every year, and whether
 each date is Closed all day. When a special day of that name already exists, the painter first
 offers Add to <name>, which opens that day with this date added, unsaved. The Year's and the
