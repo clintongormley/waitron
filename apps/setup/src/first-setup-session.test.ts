@@ -43,6 +43,7 @@ const initial: FirstSetupState = {
   revision: 1,
   ownerGeneration: 1,
   status: "claimed",
+  consumptionIntent: false,
   environment: "production",
   venue: { ...venue, admin: publicAdmin },
   modules: [{ module: "example-module", version: "1" }],
@@ -640,5 +641,68 @@ describe("first setup tab ownership", () => {
     );
     await expect(session.claim(venue)).rejects.toMatchObject({ code: "setup.owner_required" });
     expect(requests).toHaveLength(2);
+  });
+});
+
+describe("explicit replacement after abandonment", () => {
+  it("starts a new event only after the server reports unconsumed abandonment, keeping the same nonce", async () => {
+    let claims = 0;
+    const next = {
+      ...initial,
+      attemptId: "46e8d046-783d-450b-a355-a6343d33f551",
+      nodeId: "8319e8c4-f671-45bf-bdd2-df3d99118c28",
+    };
+    const { session, requests } = create((path) => {
+      if (ends(path, "claim"))
+        return ++claims === 1
+          ? claim()
+          : json({ state: next, capability: "B".repeat(43), ownerGeneration: 1 });
+      if (ends(path, "abandon"))
+        return json({
+          state: { ...initial, revision: 2, status: "abandoned", consumptionIntent: false },
+        });
+      throw new Error("unexpected action");
+    });
+    await session.open();
+    await session.claim(venue);
+    await session.abandon();
+    await session.replaceAbandoned(venue);
+    expect(session.state?.attemptId).toBe(next.attemptId);
+    expect(session.state?.nodeId).toBe(next.nodeId);
+    const bodies = requests
+      .filter((r) => ends(r.path, "claim"))
+      .map((r) => r.body as { clientClaimNonce: string });
+    expect(bodies[0]!.clientClaimNonce).toBe(bodies[1]!.clientClaimNonce);
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.attemptId).toBe(
+      next.attemptId,
+    );
+  });
+  it.each(["claimed", "uncertain", "abandoned"] as const)(
+    "refuses replacement of a consumed %s event before any new claim",
+    async (status) => {
+      const { session, requests } = create(() =>
+        json({
+          state: { ...initial, status, consumptionIntent: true },
+          capability: "A".repeat(43),
+          ownerGeneration: 1,
+        }),
+      );
+      await session.open();
+      await session.claim(venue);
+      await expect(session.replaceAbandoned(venue)).rejects.toMatchObject({
+        code: "setup.attempt_uncertain",
+      });
+      expect(requests).toHaveLength(1);
+      expect(session.state?.attemptId).toBe(initial.attemptId);
+    },
+  );
+  it("does not replace an active unconsumed event", async () => {
+    const { session, requests } = create(claim);
+    await session.open();
+    await session.claim(venue);
+    await expect(session.replaceAbandoned(venue)).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(requests).toHaveLength(1);
   });
 });

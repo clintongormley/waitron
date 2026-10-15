@@ -57,6 +57,7 @@
     "./custodian": "./src/custodian/index.ts",
     "./src/*": "./src/*",
     "./test/*": "./test/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./setup": "./src/setup/first-fiscal-screen.ts"
   }
 }

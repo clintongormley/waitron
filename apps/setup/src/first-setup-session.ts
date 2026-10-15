@@ -29,6 +29,7 @@ function publicState(value: unknown): value is FirstSetupState {
     uuid(value.attemptId) &&
     uuid(value.nodeId) &&
     uuid(value.administratorId) &&
+    typeof value.consumptionIntent === "boolean" &&
     positive(value.revision) &&
     positive(value.ownerGeneration) &&
     [
@@ -58,7 +59,11 @@ function publicState(value: unknown): value is FirstSetupState {
   );
 }
 function failure(
-  code: "setup.owner_required" | "setup.attempt_conflict" | "setup.attempt_invalid",
+  code:
+    | "setup.owner_required"
+    | "setup.attempt_conflict"
+    | "setup.attempt_invalid"
+    | "setup.attempt_uncertain",
 ): never {
   throw { code };
 }
@@ -264,17 +269,37 @@ export class FirstSetupSession {
     this.#proofRequired = false;
     this.#needsRefresh = false;
   }
+  async #claim(venue: ProvisionBody["venue"], current: () => void, locale?: string): Promise<void> {
+    this.#saved!.claimPending = true;
+    this.#save();
+    const result = await this.#api.claimFirstSetup(this.#saved!.clientClaimNonce, venue, locale);
+    current();
+    if (!publicState(result.state)) failure("setup.attempt_conflict");
+    await this.#holdAttempt(result.state.attemptId);
+    current();
+    this.#acceptOwnership(result);
+  }
   claim(venue: ProvisionBody["venue"], locale?: string): Promise<void> {
     return this.#run(async (current) => {
       if (this.#saved!.owner || this.recoveryRequired) failure("setup.owner_required");
-      this.#saved!.claimPending = true;
+      await this.#claim(venue, current, locale);
+    });
+  }
+  replaceAbandoned(venue: ProvisionBody["venue"], locale?: string): Promise<void> {
+    return this.#run(async (current) => {
+      if (this.#state?.consumptionIntent) failure("setup.attempt_uncertain");
+      if (this.#state?.status !== "abandoned") failure("setup.attempt_conflict");
+      this.#saved = {
+        version: 1,
+        clientClaimNonce: this.#saved!.clientClaimNonce,
+        claimPending: false,
+      };
+      this.#state = undefined;
+      this.#proofRequired = false;
+      this.#needsRefresh = false;
       this.#save();
-      const result = await this.#api.claimFirstSetup(this.#saved!.clientClaimNonce, venue, locale);
-      current();
-      if (!publicState(result.state)) failure("setup.attempt_conflict");
-      await this.#holdAttempt(result.state.attemptId);
-      current();
-      this.#acceptOwnership(result);
+      this.#attemptLock = undefined;
+      await this.#claim(venue, current, locale);
     });
   }
   resume(password: string): Promise<void> {

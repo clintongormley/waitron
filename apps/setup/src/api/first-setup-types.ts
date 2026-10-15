@@ -21,6 +21,7 @@ export interface FirstSetupState {
     | "complete"
     | "abandoned"
     | "uncertain";
+  consumptionIntent: boolean;
   environment: "production" | "preproduction";
   venue: Omit<ProvisionBody["venue"], "admin" | "fullSeriesCode" | "taxpayerDomicile"> & {
     fullSeriesCode?: string;

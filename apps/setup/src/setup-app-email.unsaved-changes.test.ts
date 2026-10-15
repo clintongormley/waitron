@@ -22,6 +22,8 @@ const email = {
 type State = { screen: Screen; draft: DeepPartial<ProvisionBody> };
 async function mount(runEmailTest = vi.fn().mockResolvedValue({ accepted: true })) {
   const api = {
+    firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+    firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "production", needs: ["venue"] }),
     getVenueDefaults: vi.fn().mockResolvedValue({}),

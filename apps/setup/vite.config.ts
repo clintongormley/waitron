@@ -1,3 +1,4 @@
+import { setupAssets } from "@waitron/dashboard-modules/setup-assets";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
@@ -5,7 +6,7 @@ import { devPort, devServerProxy } from "../../scripts/dev-server-proxy.js";
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 
 export default defineConfig({
-  plugins: [viteNpmNotices()],
+  plugins: [viteNpmNotices(), setupAssets()],
   // Shared brand assets — see the till config for the full rationale.
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   // Setup mode serves the wizard at the origin root (`mountSpa` with basePath "").
