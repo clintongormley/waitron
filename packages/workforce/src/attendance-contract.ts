@@ -1,4 +1,4 @@
-import type { BusinessDayClock } from "@waitron/shared";
+import type { BusinessDayClock, RecordExportAudience, RecordExportFormat } from "@waitron/shared";
 import type { Period, TimeEntryRecord, WorkSession } from "./projection.js";
 import type { ClockEntryKind, TimeRecord } from "./record-types.js";
 import type { AttendanceDay } from "./attendance-types.js";
@@ -156,4 +156,18 @@ export interface ManagerHours {
   businessDay: string;
   asOf: string;
   people: { personId: string; displayName: string; hours: PersonHours }[];
+}
+
+export interface AttendanceExportSelection {
+  locationId: string;
+  from: string;
+  before: string;
+  format: RecordExportFormat;
+  audience: RecordExportAudience;
+  locale: "en" | "es";
+}
+export type ManagerAttendanceExportSelection = AttendanceExportSelection & { personId?: string };
+export interface AttendanceExportOptions {
+  available: boolean;
+  canExportAll: boolean;
 }
