@@ -39,19 +39,26 @@ interface PlannedRow {
 // The save route's own bound (`checkedBatch`, content-translations.ts), so a suggestion can be saved.
 const NAME_BYTES = 4096;
 
-/** The stored rows `batch` replaces: an item's row in a language, or its own row. */
-function replacedBy(batch: readonly { ref: TranslationRef; row: PlannedRow }[]): SQL {
-  const keys = (own: boolean) =>
-    JSON.stringify(
-      batch
-        .filter(({ row }) => (row.language === null) === own)
-        .map(({ ref, row }) => [ref.kind, ref.id, row.language]),
-    );
+/** The stored rows whose (kind, item, language) is one of `keys`; a null language matches nothing. */
+function storedIn(keys: readonly (readonly [string, string, string | null])[]): SQL {
   const { kind, itemId, language } = contentSuggestions;
   return sql`(${kind}, ${itemId}, ${language}) in (select json_extract(value, '$[0]'),
-      json_extract(value, '$[1]'), json_extract(value, '$[2]') from json_each(${keys(false)}))
+      json_extract(value, '$[1]'), json_extract(value, '$[2]') from json_each(${JSON.stringify(keys)}))`;
+}
+
+/** The stored rows `batch` replaces: an item's row in a language, or its own row. */
+function replacedBy(batch: readonly { ref: TranslationRef; row: PlannedRow }[]): SQL {
+  const own = JSON.stringify(
+    batch.filter(({ row }) => row.language === null).map(({ ref }) => [ref.kind, ref.id]),
+  );
+  const { kind, itemId, language } = contentSuggestions;
+  return sql`${storedIn(
+    batch
+      .filter(({ row }) => row.language !== null)
+      .map(({ ref, row }) => [ref.kind, ref.id, row.language] as const),
+  )}
     or (${language} is null and (${kind}, ${itemId}) in (select json_extract(value, '$[0]'),
-      json_extract(value, '$[1]') from json_each(${keys(true)})))`;
+      json_extract(value, '$[1]') from json_each(${own})))`;
 }
 
 function emptyRow(language: string | null): PlannedRow {
@@ -310,17 +317,15 @@ export async function deleteSavedSuggestions(
   defaultLanguage: string,
   edits: readonly Pick<TranslationEdit, "kind" | "id" | "defaultText">[],
 ): Promise<void> {
-  for (const edit of edits)
-    await tx
-      .delete(contentSuggestions)
-      .where(
-        and(
-          eq(contentSuggestions.kind, edit.kind),
-          eq(contentSuggestions.itemId, edit.id),
-          inArray(
-            contentSuggestions.language,
-            edit.defaultText === undefined ? [language] : [language, defaultLanguage],
+  await tx
+    .delete(contentSuggestions)
+    .where(
+      storedIn(
+        edits.flatMap((edit) =>
+          (edit.defaultText === undefined ? [language] : [language, defaultLanguage]).map(
+            (saved) => [edit.kind, edit.id, saved] as const,
           ),
         ),
-      );
+      ),
+    );
 }

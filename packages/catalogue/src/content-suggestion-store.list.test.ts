@@ -313,6 +313,33 @@ describe("saving a name", () => {
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
+  it("deletes each saved item's suggestions in the saved languages, and nothing else", async () => {
+    const venue = await storedVenue();
+    const request = await app(async (tx) => {
+      const { targets } = await resolveTranslationTargets(
+        tx,
+        "es",
+        [venue.bread, venue.wine, venue.cheese].map((id) => ({ kind: "product" as const, id })),
+        context,
+      );
+      return {
+        edits: targets.map(({ target }) => ({
+          kind: "product" as const,
+          id: target.id,
+          expected: target.expected,
+          text: `CLIENT-ES ${target.name}`,
+          ...(target.id === venue.wine ? { defaultText: "CLIENT-CA Vi de la casa" } : {}),
+        })),
+      };
+    });
+    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    const languages = async (itemId: string) =>
+      (await app(suggestionRows)).filter((row) => row.itemId === itemId).map((row) => row.language);
+    expect(await languages(venue.bread)).toEqual([null, "en"]);
+    expect(await languages(venue.wine)).toEqual(["en"]);
+    expect(await languages(venue.cheese)).toEqual(["ca", "en"]);
+  });
+
   it("deletes a suggestion that arrived before a retried save", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);
