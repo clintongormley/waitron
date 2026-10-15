@@ -109,6 +109,18 @@ until the owner approves a transition rule. Leave this work in the backlog until
 A10-5 and its read-only hours presentation.
 
 
+## Working-time export review follow-ups
+
+The A10-6 run-it review deleted the name collection for people named only in a frozen summary
+(`record-export.ts:161`) and all 12 provider cases still passed. The current closure writer derives
+summary subjects from frozen entries (`pay-period-close.ts:144`); no valid summary-only fixture
+was established in the review. Keep the defensive collection and qualify a supported snapshot
+shape before adding a case for it. This is a test gap, not an observed incorrect exported name.
+
+The PDF currently prints scalar values as `null`, `true` and `false`, including in Spanish. The
+reviewed serializer contract and its tests retain these spellings. Decide readable localized PDF
+wording separately, keeping CSV's scalar spellings stable; no legal-field or writer change is implied.
+
 ## Decisions and deliberate limits
 
 ### A10. Clocking in and out — the working-time record

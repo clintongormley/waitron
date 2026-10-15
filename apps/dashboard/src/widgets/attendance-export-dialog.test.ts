@@ -343,3 +343,27 @@ it("a reopened identical scope downloads B once and ignores a late A with the sa
   expect(created).toEqual([b]);
   expect(clicked).toHaveLength(1);
 });
+it("closing and reopening an identical scope rejects old A before any new download is requested", async () => {
+  const a = deferred<Blob>();
+  const b = new Blob(["new explicit download"]);
+  let attempts = 0;
+  const { el, created, clicked } = await fixture({}, () =>
+    attempts++ === 0 ? a.promise : Promise.resolve(b),
+  );
+  await send(el);
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await expect
+    .poll(() => el.shadowRoot!.querySelector<WtButton>("[data-test=export-download]")!.disabled)
+    .toBe(false);
+  a.resolve(new Blob(["old closed download"]));
+  await new Promise(requestAnimationFrame);
+  await el.updateComplete;
+  expect(created).toEqual([]);
+  expect(clicked).toEqual([]);
+  await send(el);
+  await expect.poll(() => clicked).toHaveLength(1);
+  expect(created).toEqual([b]);
+});

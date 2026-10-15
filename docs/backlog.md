@@ -4635,6 +4635,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   still need features over their existing tables.
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
+- **Working-time export has two remaining review follow-ups.** Check whether a valid closed
+  snapshot can name someone only in a frozen summary before testing that name-collection path.
+  Decide how PDF `null`/`true`/`false` should read in each language while preserving CSV scalars.
+  [Detail](backlog/workforce.md#working-time-export-review-follow-ups).
+
 - **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
   January closes makes 1 February resolve to 26 January–2 February, which closure refuses
   for overlap. A future editor refuses changes after the first closed period until the owner

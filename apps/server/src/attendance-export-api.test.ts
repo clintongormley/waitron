@@ -12,7 +12,13 @@ import {
   withPassiveManagementRead,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  WorkforceBackend,
+  attendanceQuestions,
+  attendanceMail,
+  upsertAttendanceQuestion,
+} from "@waitron/workforce";
 import { WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { jobOrigin } from "@waitron/shared";
 import type { ModuleTimeRecordExport } from "@waitron/module";
@@ -521,3 +527,80 @@ describe("authenticated working-time downloads", () => {
     },
   );
 });
+
+it.each(["staff", "manager"] as const)(
+  "options without a passive header do not renew %s inactivity",
+  async (role) => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    await suite.db.update(managementSessions).set({ lastSeenAt: old });
+    const auth = role === "staff" ? staffCookie : managerCookie;
+    const response = await app.request(`${base("own")}-options?locationId=${fixture.locationId}`, {
+      headers: { cookie: auth },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: true, canExportAll: role === "manager" });
+    expect(
+      (await suite.db.select().from(managementSessions)).every((row) => row.lastSeenAt === old),
+    ).toBe(true);
+    expect((await ask("own", {}, auth)).status).toBe(200);
+    const personId = role === "staff" ? fixture.personId : fixture.managerId;
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.personId, personId))
+      )[0]!.lastSeenAt,
+    ).not.toBe(old);
+  },
+);
+it.each(["retained", "removed"] as const)(
+  "rechecks a %s question-only historical workplace after formatting",
+  async (state) => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Former workplace", invoiceLocales: ["en"], operationDescription: "Sale" })
+      .returning();
+    const questionId = await withTransaction(suite.db, (tx) =>
+      upsertAttendanceQuestion(
+        tx,
+        {
+          personId: fixture.personId,
+          day: {
+            locationId: location!.id,
+            businessDay: "2026-01-05",
+            startAt: "2026-01-05T00:00:00Z",
+            endAt: "2026-01-06T00:00:00Z",
+          },
+          shiftKey: "old-question-only",
+          kind: "missing-times",
+          missingKinds: ["in", "out"],
+          openEntryId: null,
+          automaticEntryId: null,
+          evidenceKeys: ["test:shift"],
+        },
+        new Date("2026-01-06T00:00:00Z"),
+      ),
+    );
+    const held = heldProvider();
+    const delayed = ask("own", { locationId: location!.id }, staffCookie, mount(held.exporter));
+    expect(
+      await Promise.race([held.started.then(() => "formatter"), delayed.then(() => "response")]),
+    ).toBe("formatter");
+    try {
+      if (state === "removed")
+        await withTransaction(suite.db, async (tx) => {
+          await tx.delete(attendanceMail).where(eq(attendanceMail.questionId, questionId));
+          await tx.delete(attendanceQuestions).where(eq(attendanceQuestions.id, questionId));
+        });
+    } finally {
+      held.release();
+    }
+    const response = await delayed;
+    if (state === "removed") await fail(response, 403, "attendance.not_permitted");
+    else {
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("Former workplace");
+    }
+  },
+);
