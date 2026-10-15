@@ -46,6 +46,7 @@ import { createZone } from "./testing/service-zone.js";
 import { mountTillApi } from "./till-api.js";
 import { createOpenOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import "./errors.js";
 
@@ -343,13 +344,17 @@ async function venue() {
     seriesId: series!.id,
     zoneId,
     managerCookie,
-    tillCookie: await tillSession(cfg, app, staffId),
+    ...(await tillSession(cfg, app, staffId)),
     serverClock,
   };
 }
 
 /** A staff member signed in on a till whose profile may print receipts. */
-async function tillSession(cfg: TillConfig, app: Hono, personId: string): Promise<string> {
+async function tillSession(
+  cfg: TillConfig,
+  app: Hono,
+  personId: string,
+): Promise<{ tillCookie: string; tillProfileId: string }> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "Till", formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
@@ -364,7 +369,10 @@ async function tillSession(cfg: TillConfig, app: Hono, personId: string): Promis
     body: JSON.stringify({ personId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return login.headers.get("set-cookie")!.split(";")[0]!;
+  return {
+    tillCookie: login.headers.get("set-cookie")!.split(";")[0]!,
+    tillProfileId: profile!.id,
+  };
 }
 
 function request(v: Venue, method: "POST" | "PATCH", path: string, body: unknown) {
@@ -501,6 +509,14 @@ async function officePrinter(
       invoiceDefault: printer === ipp,
     })
     .returning({ id: pagePrinters.id });
+  if (printer === ipp)
+    await withTransaction(suite.db, (tx) =>
+      listInvoicePrinter(tx, {
+        profileId: v.tillProfileId,
+        pagePrinterId: row!.id,
+        isDefault: true,
+      }),
+    );
   return row!.id;
 }
 

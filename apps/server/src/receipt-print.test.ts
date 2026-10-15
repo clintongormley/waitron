@@ -2,6 +2,7 @@ import { recordSale } from "@waitron/core";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -2678,6 +2679,15 @@ describe("automatic F1 receipt delivery enrollment", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
         invoiceDefault: true,
+      });
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, cfg.origin.deviceId));
+      await listInvoicePrinter(tx, {
+        profileId: device!.profileId,
+        pagePrinterId,
+        isDefault: true,
       });
       await tx
         .update(workingOrders)

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  devices,
   invoiceDeliveries,
   invoiceSeries,
   pagePrinters,
@@ -25,6 +26,7 @@ import {
   setOrderInvoiceChoice,
 } from "./working-order.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 
 let venue: BillVenue;
 const suite = useVenueDb({
@@ -54,8 +56,8 @@ afterEach(() => vi.restoreAllMocks());
 async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") {
   const orderId = await tabWith(venue, "Caña");
   const pagePrinterId = randomUUID();
-  await withTransaction(suite.db, (tx) =>
-    tx.insert(pagePrinters).values({
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(pagePrinters).values({
       id: pagePrinterId,
       locationId: venue.cfg.locationId,
       name: "Office",
@@ -67,8 +69,13 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
       media: "iso_a4_210x297mm",
       resolutionDpi: 300,
       invoiceDefault: true,
-    }),
-  );
+    });
+    const [device] = await tx
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, venue.cfg.origin.deviceId));
+    await listInvoicePrinter(tx, { profileId: device!.profileId, pagePrinterId, isDefault: true });
+  });
   await setOrderInvoiceChoice(
     suite.db,
     venue.backend,

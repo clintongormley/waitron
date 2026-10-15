@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  deviceProfilePrinters,
   devices,
   billPaymentLines,
   billPaymentRefunds,
@@ -78,6 +79,7 @@ import { ALL_MODULES } from "./modules.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { createTable } from "./testing/live-table.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -249,6 +251,32 @@ async function provision(db: typeof suite.db): Promise<Venue> {
 }
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
+
+/** Makes `pagePrinterId` the only invoice printer on the till's profile, mirroring
+ * `invoiceDefault`: its default only at the till's location. */
+async function tillInvoicePrinter(
+  tx: Transaction,
+  pagePrinterId: string,
+  locationId: string,
+): Promise<void> {
+  const [device] = await tx
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, venue.cfg.origin.deviceId));
+  await tx
+    .delete(deviceProfilePrinters)
+    .where(
+      and(
+        eq(deviceProfilePrinters.deviceProfileId, device!.profileId),
+        eq(deviceProfilePrinters.role, "invoice"),
+      ),
+    );
+  await listInvoicePrinter(tx, {
+    profileId: device!.profileId,
+    pagePrinterId,
+    isDefault: locationId === venue.cfg.locationId,
+  });
+}
 const fiscal = () => ({ db: suite.db, backend, clock });
 
 function offer(name: string): string {
@@ -2462,6 +2490,11 @@ describe("the invoice at full payment", () => {
             active: kind !== "disabled",
             invoiceDefault: true,
           });
+          await tillInvoicePrinter(
+            tx,
+            pagePrinterId,
+            kind === "other-location" ? otherLocationId : venue.cfg.locationId,
+          );
         });
       const request = {
         revision: 0,
@@ -2517,6 +2550,7 @@ describe("the invoice at full payment", () => {
         resolutionDpi: 300,
         invoiceDefault: true,
       });
+      await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
     });
     await expect(
       setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
@@ -2578,6 +2612,7 @@ describe("the invoice at full payment", () => {
             media: "iso_a4_210x297mm",
             resolutionDpi: 300,
           });
+          await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
         });
         await setOrderInvoiceChoice(
           suite.db,

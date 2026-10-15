@@ -4,6 +4,7 @@ import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
+  deviceProfilePrinters,
   deviceProfiles,
   kitchenStations,
   pagePrinters,
@@ -46,6 +47,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   OPERATOR,
@@ -248,6 +250,7 @@ let v: PartyVenue;
 let app: Hono;
 let f: Fixtures;
 let restaurantProfile: string;
+let deliProfile: string;
 /** Ana on a till whose profile is the Restaurant's, starting at the bar. */
 let restaurant: string;
 /** Ana on a till whose profile has no department row. */
@@ -425,7 +428,7 @@ beforeAll(async () => {
   );
   restaurant = await signIn(restaurantProfile);
   plain = await signIn(await profile());
-  const deliProfile = await profile();
+  deliProfile = await profile();
   await inTx(v, async (tx) =>
     setProfileServiceAccess(tx, v.cfg, deliProfile, {
       departmentId: await departmentOf(tx, f.deliCounter),
@@ -1428,6 +1431,10 @@ describe("a Restaurant profile in its own zones", () => {
       resolutionDpi: 300,
       invoiceDefault: true,
     });
+    await withTransaction(suite.db, async (tx) => {
+      for (const profileId of [restaurantProfile, deliProfile])
+        await listInvoicePrinter(tx, { profileId, pagePrinterId: id, isDefault: true });
+    });
     try {
       for (const session of [restaurant, deli]) {
         expect(await send(session, "GET", "/api/invoice-delivery-options")).toEqual({
@@ -1436,6 +1443,9 @@ describe("a Restaurant profile in its own zones", () => {
         });
       }
     } finally {
+      await suite.db
+        .delete(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.pagePrinterId, id));
       await suite.db.delete(pagePrinters).where(eq(pagePrinters.id, id));
     }
   });

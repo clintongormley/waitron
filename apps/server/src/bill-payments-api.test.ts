@@ -11,6 +11,7 @@ import {
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
+  deviceProfilePrinters,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -75,6 +76,7 @@ import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { OriginConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
@@ -130,6 +132,8 @@ interface Venue {
   cookie: string;
   /** The till device `cookie` names, which its session is on. */
   deviceId: string;
+  /** The profile of the till `cookie` names. */
+  profileId: string;
   /** `cookie`'s session, with no device cookie beside it. */
   sessionCookie: string;
   /** The operator's session on a handheld whose profile does not allow the drawer. */
@@ -351,6 +355,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     deviceId: device.deviceId,
+    profileId: seeded.profileId,
     handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
     handheldDeviceId: handheld.deviceId,
     noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
@@ -1788,6 +1793,30 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(after).toEqual(before);
   });
 
+  /** Mirrors `invoiceDefault` on the till's profile: the default only at the till's location. */
+  async function listOnTill(pagePrinterId: string, locationId: string): Promise<void> {
+    await inTx((tx) =>
+      listInvoicePrinter(tx, {
+        profileId: venue.profileId,
+        pagePrinterId,
+        isDefault: locationId === venue.cfg.locationId,
+      }),
+    );
+  }
+
+  async function unlistFromTill(): Promise<void> {
+    await inTx((tx) =>
+      tx
+        .delete(deviceProfilePrinters)
+        .where(
+          and(
+            eq(deviceProfilePrinters.deviceProfileId, venue.profileId),
+            eq(deviceProfilePrinters.role, "invoice"),
+          ),
+        ),
+    );
+  }
+
   it.each(["active", "disabled", "other-location", "missing"] as const)(
     "stages only the local active A4 printer over HTTP: %s",
     async (kind) => {
@@ -1817,7 +1846,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           .set({ invoiceDefault: false })
           .where(eq(pagePrinters.locationId, printerLocation)),
       );
-      if (kind !== "missing")
+      await unlistFromTill();
+      if (kind !== "missing") {
         await inTx((tx) =>
           tx.insert(pagePrinters).values({
             id: pagePrinterId,
@@ -1834,6 +1864,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             invoiceDefault: true,
           }),
         );
+        await listOnTill(pagePrinterId, printerLocation);
+      }
       const response = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
         revision: before!.revision,
         invoiceType: "F1",
@@ -1889,6 +1921,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           invoiceDefault: values.invoiceDefault ?? false,
         }),
       );
+      if (values.invoiceDefault) await listOnTill(id, values.locationId ?? venue.cfg.locationId);
       return id;
     }
 
@@ -1908,6 +1941,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     beforeEach(async () => {
       await inTx((tx) => tx.update(pagePrinters).set({ active: false, invoiceDefault: false }));
+      await unlistFromTill();
     });
 
     it("answers no invoice printer when the location has none, only another location's or a disabled one", async () => {

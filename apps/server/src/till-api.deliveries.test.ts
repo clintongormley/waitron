@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  deviceProfilePrinters,
   deviceProfiles,
   devices,
   invoiceDeliveries,
@@ -45,6 +46,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { createOpenOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import {
@@ -246,7 +248,7 @@ let tillCounter = 0;
 /** A signed-in staff session on a new till whose profile lists `capabilities`, printing receipts
  * on `receiptPrinterId` (null: no receipt printer). */
 async function till(
-  v: Pick<Venue, "cfg" | "app" | "staffId" | "receiptPrinterId">,
+  v: Pick<Venue, "cfg" | "app" | "staffId" | "receiptPrinterId" | "officeId">,
   capabilities: readonly string[] = NO_DRAWER,
   receiptPrinterId: string | null = v.receiptPrinterId,
 ): Promise<string> {
@@ -259,6 +261,9 @@ async function till(
     name: `Till ${tillCounter}`,
     profileId: profile!.id,
   });
+  await withTransaction(suite.db, (tx) =>
+    listInvoicePrinter(tx, { profileId: profile!.id, pagePrinterId: v.officeId, isDefault: true }),
+  );
   await suite.db
     .update(devices)
     .set({ receiptPrinterId, paymentSlipPrinterId: receiptPrinterId })
@@ -622,6 +627,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     await suite.db.update(pagePrinters).set({ invoiceDefault: false });
+    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     expect(await printOnA4(v, orderId)).toEqual(refusal(409, "invoice_delivery.printer_invalid"));
     expect(await deliveryRows(saleId)).toEqual([]);
   });
@@ -1596,6 +1602,7 @@ describe("what each delivery route reads", () => {
       reads: 1,
     });
     await suite.db.update(pagePrinters).set({ invoiceDefault: false });
+    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     const none = await invoice(v);
     expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, none.orderId))).toEqual({
       answer: refusal(409, "invoice_delivery.printer_invalid"),
