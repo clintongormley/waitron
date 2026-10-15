@@ -506,8 +506,19 @@ export class StaffingMonthView extends LitElement {
     { opens, stop }: { opens: boolean; stop: boolean },
   ) {
     const isToday = day.date === today;
-    const label = cellLabel.format(utc(day.date));
-    const body = this.#dayBody(day, isToday, chosen, names, largest);
+    const shown = day.areas
+      .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
+      .map(({ area, needed }) => ({ name: names.get(areaKey(area)) ?? "", needed }));
+    const label = [
+      cellLabel.format(utc(day.date)),
+      day.specialDay?.name ?? "",
+      day.closedAllDay ? t("staffing.month.closed") : "",
+      isToday ? t("staffing.month.today") : "",
+      ...shown.map(({ name, needed }) => `${name} ${needed}`),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const body = this.#dayBody(day, isToday, shown, largest);
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
@@ -552,8 +563,7 @@ export class StaffingMonthView extends LitElement {
   #dayBody(
     day: Day,
     isToday: boolean,
-    chosen: string,
-    names: Map<string, string>,
+    shown: readonly { name: string; needed: number }[],
     largest: number,
   ) {
     return html`
@@ -573,24 +583,22 @@ export class StaffingMonthView extends LitElement {
           ? html`<span data-test="closed">${t("staffing.month.closed")}</span>`
           : nothing
       }
-      ${day.areas.map(({ area, needed }) => {
-        const key = areaKey(area);
-        if (chosen !== ALL && key !== chosen) return nothing;
-        const name = names.get(key) ?? "";
-        return html`<span class="line" data-test="area-line">
-          <span
-            class="bar"
-            aria-hidden="true"
-            data-test="bar"
-            ?data-none=${needed === 0}
-            style=${styleMap({ "--share": String(needed / largest) })}
-          ></span>
-          <span class="label"
-            ><span class="name" data-test="area-name" title=${name}>${name}</span
-            ><span class="count" data-test="area-count"> ${needed}</span></span
-          >
-        </span>`;
-      })}
+      ${shown.map(
+        ({ name, needed }) =>
+          html`<span class="line" data-test="area-line">
+            <span
+              class="bar"
+              aria-hidden="true"
+              data-test="bar"
+              ?data-none=${needed === 0}
+              style=${styleMap({ "--share": String(needed / largest) })}
+            ></span>
+            <span class="label"
+              ><span class="name" data-test="area-name" title=${name}>${name}</span
+              ><span class="count" data-test="area-count"> ${needed}</span></span
+            >
+          </span>`,
+      )}
     `;
   }
 }

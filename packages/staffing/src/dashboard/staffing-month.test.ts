@@ -475,7 +475,7 @@ describe("the Staffing view's month", () => {
         params: { month: "2026-12", area: "department:dep-bar", week: "2026-11-30" },
       });
       const day = dayButton(el, "2026-12-04")!;
-      expect(day.getAttribute("aria-label")).toBe("Friday 4 December");
+      expect(day.getAttribute("aria-label")).toBe("Friday 4 December, Bar 2");
       expect(lines(el, "2026-12-04")).toEqual(["Bar 2"]);
       day.click();
       expect(open).toHaveBeenCalledWith("staffing", {
@@ -520,7 +520,7 @@ describe("the Staffing view's month", () => {
         params: { month: "2026-12", area: "department:dep-bar" },
       });
       const day = dayButton(el, "2026-12-24")!;
-      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December");
+      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
       expect(day.querySelector("[data-test=special]")!.textContent).toBe("Christmas Eve");
       day.click();
       expect(open).toHaveBeenCalledWith("staffing", {
@@ -529,6 +529,40 @@ describe("the Staffing view's month", () => {
         painter: "special-day",
         "special-day": "sd-eve",
       });
+    });
+
+    it("names a day button by its date, special day, closing, Today and each shown area's number", async () => {
+      const { el } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      expect(dayButton(el, "2026-12-24")!.getAttribute("aria-label")).toBe(
+        "Thursday 24 December, Christmas Eve, Bar 2",
+      );
+      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
+        "Wednesday 2 December, Today, Bar 2",
+      );
+      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
+        "Monday 7 December, Closed",
+      );
+      const { el: every } = await mount({ canWrite: true });
+      expect(dayButton(every, "2026-12-24")!.getAttribute("aria-label")).toBe(
+        "Thursday 24 December, Christmas Eve, Restaurant 6, Bar 2, Kitchen 4",
+      );
+    });
+
+    it("names a day button in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "station:st-kitchen" },
+      });
+      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
+        "miércoles, 2 de diciembre, Hoy, Kitchen 4",
+      );
+      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
+        "lunes, 7 de diciembre, Cerrado",
+      );
     });
 
     it("opens a special day without an area when the month shows every area", async () => {
