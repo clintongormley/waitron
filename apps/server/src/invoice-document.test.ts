@@ -337,6 +337,9 @@ describe("stored invoice document projection", () => {
         },
       ],
     });
+    expect(document.result.lines[0]).toHaveProperty("soldInEach", true);
+    expect(document.result.lines[1]!.unitName).not.toBeNull();
+    expect(document.result.lines[1]).not.toHaveProperty("soldInEach");
     const [saved] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     expect(document.result.orderLabel).toBe(saved!.label);
     expect(document.receiptHeader).toMatchObject({ tradingName: "Sala", printTradingName: true });

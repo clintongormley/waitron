@@ -230,6 +230,9 @@ describe("quantityText", () => {
     [{ quantity: "2", unitName: { es: "pzas" }, soldInEach: true as const }, "2"],
     [{ quantity: "0.35", unitName: { es: "kg" } }, "0.35 kg"],
     [{ quantity: "4", unitName: { es: "pzas" } }, "4 pzas"],
+    [{ quantity: "2", unitName: { es: "ud", en: "ea" } }, "2"],
+    [{ quantity: "2", unitName: { es: "cajas", en: "ea" } }, "2 cajas"],
+    [{ quantity: "2", unitName: { es: "ud", en: "pcs" } }, "2 ud"],
   ])("prints %j as %s", (line, expected) => {
     expect(quantityText(line, "es-ES")).toBe(expected);
   });

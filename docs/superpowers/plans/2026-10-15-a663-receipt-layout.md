@@ -1615,6 +1615,11 @@ catalogue decides "is this Each" by the unit's identity because a venue can rena
 name>», the harmless direction. If building this turns out to need a new stored fact on a sale
 line, STOP (Global Constraints) and keep «4 ud».
 
+(Changed 2026-10-15 after review: `receiptLines` reads the recorded `sold_in_each` context for
+every line with a unit name, dishes included, and the name test above is only the fallback for a
+line with no context row, now requiring EVERY stored entry to be Each's abbreviation in its
+language.)
+
 All arithmetic uses `@waitron/shared`'s `decimal`, `multiplyDecimal`, `divideDecimal` (at
 `MONEY_SCALE`), `subtractDecimal`, `addDecimal` and `compareDecimal`; no `Number`.
 

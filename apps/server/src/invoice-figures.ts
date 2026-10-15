@@ -107,8 +107,8 @@ export function quantityText(
   }
   const unitName = line.unitName;
   if (unitName == null || line.soldInEach === true) return line.quantity;
-  // A sale line keeps only its unit's printed name, so Each is recognised by that name.
-  const each = Object.entries(unitName).some(
+  // `soldInEach` comes from the line's recorded context; a sale with none leaves only the names.
+  const each = Object.entries(unitName).every(
     ([language, text]) =>
       (EACH_UNIT.abbreviation as Record<string, string>)[language.split("-")[0]!] === text,
   );

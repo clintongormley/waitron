@@ -321,6 +321,22 @@ describe("receiptLines", () => {
     expect(receipt.lines[1]).toMatchObject({ quantity: "1", soldInEach: true });
   });
 
+  it("carries the Each context flag to a dish's line, and not to a dish sold by weight", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.350" }]);
+    const dishId = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitName: { es: "pzas" }, unitPrecision: 0 })
+        .where(eq(workingOrderLines.id, dishId));
+    });
+
+    const receipt = await receiptOf(billId);
+    expect(receipt.lines[0]).toMatchObject({ unitName: { es: "pzas" }, soldInEach: true });
+    expect(receipt.lines[1]!.unitName).not.toBeNull();
+    expect(receipt.lines[1]).not.toHaveProperty("soldInEach");
+  });
+
   it("puts a comp of one of three units under the unit it split off", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, {
@@ -439,15 +455,17 @@ describe("receiptLines", () => {
   it("reads nothing when no line was comped or discounted", async () => {
     const billId = await bill([{ name: "Burger" }]);
     const stored = await inTx(venue, (tx) => readStoredOrder(tx, billId));
+    // A line with a unit name reads whether it was sold in Each; this case is about adjustments.
+    const gross = { lines: stored.gross.lines.map((line) => ({ ...line, unitName: null })) };
     const unreadable = new Proxy({} as Transaction, {
       get: () => {
         throw new Error("the bill's adjustments were read");
       },
     });
 
-    await expect(
-      receiptLines(unreadable, billId, stored.gross, stored.identities),
-    ).resolves.toEqual({ lines: ticketLinesFrom(stored.gross, stored.identities) });
+    await expect(receiptLines(unreadable, billId, gross, stored.identities)).resolves.toEqual({
+      lines: ticketLinesFrom(gross, stored.identities),
+    });
   });
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {

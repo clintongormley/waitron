@@ -112,6 +112,7 @@ const LOCALE = "es-ES";
 const EACH_UNIT_SNAPSHOT = {
   unitName: { es: "ud" },
   unitPrecision: 0,
+  soldInEach: true,
 } as const;
 
 // The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`
