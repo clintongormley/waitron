@@ -1,6 +1,7 @@
 import { t as tKit } from "@waitron/dashboard-kit";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { AlertView, DashboardApi } from "../api/client.js";
+import type { StringKey } from "../i18n/strings.js";
 
 const INCIDENT_PREFIX = "incident:";
 
@@ -49,8 +50,14 @@ export function areaLabel(area: string): string {
   return label === key ? area : label;
 }
 
+const SEVERITY_LABELS = {
+  error: "alerts.severity.error",
+  warning: "alerts.severity.warning",
+  notice: "alerts.severity.notice",
+} as const satisfies Record<AlertView["severity"], StringKey>;
+
 export function severityLabel(severity: AlertView["severity"]): string {
-  return t(severity === "error" ? "alerts.severity.error" : "alerts.severity.warning");
+  return t(SEVERITY_LABELS[severity]);
 }
 
 export function formatAlertTime(iso: string | null): string {
@@ -61,9 +68,17 @@ export function formatAlertTime(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+/** A screen's navigation label, under its own name or with its hyphens as underscores
+ * (`content-languages` is labelled `nav.content_languages`). */
+function navLabel(screen: string): string | null {
+  for (const key of [`nav.${screen}`, `nav.${screen.replaceAll("-", "_")}`]) {
+    const label = tKit(key);
+    if (label !== key) return label;
+  }
+  return null;
+}
+
 /** A screen with no navigation label is named by its screen name, like an unknown area. */
 export function goToLabel(screen: string): string {
-  const key = `nav.${screen}`;
-  const label = tKit(key);
-  return fill("alerts.go_to", { screen: label === key ? screen : label });
+  return fill("alerts.go_to", { screen: navLabel(screen) ?? screen });
 }

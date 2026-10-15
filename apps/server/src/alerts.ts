@@ -2,7 +2,7 @@ import { inArray } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
-import type { Alert, AlertEventClaim, AlertSource } from "@waitron/module";
+import type { Alert, AlertEventClaim, AlertSeverity, AlertSource } from "@waitron/module";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import "./errors.js";
 
@@ -75,7 +75,10 @@ function eventAlert(incident: TenantIncident, claim: AlertEventClaim): Alert {
   };
 }
 
-const SEVERITY_RANK = { error: 0, warning: 1 } as const;
+const SEVERITY_RANK = { error: 0, warning: 1, notice: 2 } as const satisfies Record<
+  AlertSeverity,
+  number
+>;
 
 function compareOpen(a: Alert, b: Alert): number {
   const bySeverity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];

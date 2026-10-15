@@ -1,6 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  contentSuggestionJobs,
+  contentSuggestions,
+} from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
@@ -36,6 +41,7 @@ import {
   backupAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
+  contentSuggestionsAlertSource,
   BATTERY_ERROR,
   BATTERY_WARN,
   appendOnlyRestoredAlertSource,
@@ -1249,5 +1255,139 @@ describe("batteryAlertSource", () => {
     });
     expect(await readBattery(source)).toEqual([]);
     expect(calls.n).toBe(0);
+  });
+});
+
+const FINISHED = "2026-09-15T11:30:00.000Z";
+
+async function seedSuggestionJob(
+  values: Partial<typeof contentSuggestionJobs.$inferInsert> = {},
+): Promise<string> {
+  const id = randomUUID();
+  await suite.db.insert(contentSuggestionJobs).values({
+    id,
+    runId: randomUUID(),
+    position: 1,
+    state: "done",
+    sent: { "product:p0": ["en"], "product:p1": ["en"] },
+    runTotal: 2,
+    total: 2,
+    done: 2,
+    failed: 0,
+    released: true,
+    createdAt: "2026-09-15T11:00:00.000Z",
+    finishedAt: FINISHED,
+    ...values,
+  });
+  return id;
+}
+
+/** `count` suggestions with text, which are what the notice counts, and one placeholder, which is not. */
+async function seedWaiting(jobId: string, count: number): Promise<void> {
+  for (let i = 0; i < count; i++)
+    await suite.db.insert(contentSuggestions).values({
+      jobId,
+      kind: "product",
+      itemId: `p${i}`,
+      language: "en",
+      text: `CLIENT-en ${i}`,
+      expected: `token-${i}`,
+    });
+  await suite.db.insert(contentSuggestions).values({
+    jobId,
+    kind: "product",
+    itemId: "placeholder",
+    language: null,
+    text: null,
+    expected: null,
+    placeholder: true,
+  });
+}
+
+function readNotice() {
+  return withTransaction(suite.db, (tx) => contentSuggestionsAlertSource().read({ tx, now: NOW }));
+}
+
+describe("contentSuggestionsAlertSource", () => {
+  it("belongs to the content area and needs catalogue.manage", () => {
+    const source = contentSuggestionsAlertSource();
+    expect(source.area).toBe("content");
+    expect(source.permission).toBe("catalogue.manage");
+    expect(source.readOutsideTransaction).toBeUndefined();
+  });
+
+  it("raises nothing before any run", async () => {
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises a notice for a finished run nobody has opened, counting only suggestions with text", async () => {
+    await seedWaiting(await seedSuggestionJob(), 2);
+    expect(await readNotice()).toEqual([
+      {
+        key: "content.suggestions_ready",
+        code: "content.suggestions_ready",
+        params: { count: 2, failed: 0 },
+        severity: "notice",
+        since: FINISHED,
+        screen: "content-languages",
+      },
+    ]);
+  });
+
+  it("raises the partly done notice, with what could not be done, for a run with failures", async () => {
+    const jobId = await seedSuggestionJob({
+      state: "partly_done",
+      done: 2,
+      failed: 88,
+      runTotal: 90,
+    });
+    await seedWaiting(jobId, 2);
+    expect(await readNotice()).toEqual([
+      {
+        key: "content.suggestions_ready",
+        code: "content.suggestions_ready_partly",
+        params: { count: 2, failed: 88 },
+        severity: "notice",
+        since: FINISHED,
+        screen: "content-languages",
+      },
+    ]);
+  });
+
+  it("raises nothing while a job runs", async () => {
+    const jobId = await seedSuggestionJob({
+      state: "running",
+      cloudJobId: "cloud-job-1",
+      released: false,
+      finishedAt: null,
+    });
+    await seedWaiting(jobId, 1);
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises nothing for a done job whose Cloud job is not yet released", async () => {
+    const jobId = await seedSuggestionJob({ cloudJobId: "cloud-job-1", released: false });
+    await seedWaiting(jobId, 1);
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises nothing once someone has opened the run", async () => {
+    const jobId = await seedSuggestionJob({ openedAt: "2026-09-15T11:45:00.000Z" });
+    await seedWaiting(jobId, 2);
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises nothing for a finished run with no suggestion waiting", async () => {
+    await seedWaiting(await seedSuggestionJob(), 0);
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it.each([
+    ["failed", { state: "failed" as const, failure: "provider" as const }],
+    ["refused", { state: "refused" as const, refusal: "consent" as const }],
+    ["expired", { state: "expired" as const }],
+  ])("raises nothing for a %s run, even beside waiting suggestions", async (_name, values) => {
+    await seedWaiting(await seedSuggestionJob(values), 1);
+    expect(await readNotice()).toEqual([]);
   });
 });

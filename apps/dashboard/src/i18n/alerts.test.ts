@@ -297,3 +297,18 @@ describe("a backup that stopped before reaching any destination", () => {
     );
   });
 });
+
+it("says how many Translate all suggestions wait, and how many could not be done", () => {
+  expect(alertMessage("content.suggestions_ready", { count: 1050, failed: 0 }, "en")).toBe(
+    "Translations ready: 1050 suggestions are waiting for review.",
+  );
+  expect(alertMessage("content.suggestions_ready", { count: 1050, failed: 0 }, "es")).toBe(
+    "Traducciones listas: 1050 sugerencias pendientes de revisar.",
+  );
+  expect(alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 88 }, "en")).toBe(
+    "Translations ready: 1050 suggestions are waiting for review. 88 couldn't be done this time.",
+  );
+  expect(alertMessage("content.suggestions_ready_partly", { count: 1050, failed: 88 }, "es")).toBe(
+    "Traducciones listas: 1050 sugerencias pendientes de revisar. 88 no se han podido hacer esta vez.",
+  );
+});

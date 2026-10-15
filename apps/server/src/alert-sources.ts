@@ -17,6 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import { readSuggestionRun } from "@waitron/catalogue";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   type A4HoldCode,
@@ -793,6 +794,38 @@ export function batteryAlertSource(deps: {
         });
       }
       return alerts;
+    },
+  };
+}
+
+/** The Translate all notice: open after a run ends done or partly done while any suggestion is
+ * waiting, until someone opens the translations dialog. */
+export function contentSuggestionsAlertSource(): AlertSource {
+  return {
+    area: "content",
+    permission: "catalogue.manage",
+    async read({ tx }): Promise<readonly OngoingAlert[]> {
+      const run = await readSuggestionRun(tx);
+      if (
+        run === null ||
+        run.opened ||
+        run.waiting === 0 ||
+        (run.state !== "done" && run.state !== "partly_done")
+      )
+        return [];
+      const params = { count: run.waiting, failed: run.failed };
+      const shared = {
+        key: "content.suggestions_ready",
+        params,
+        severity: "notice",
+        since: run.finishedAt,
+        screen: "content-languages",
+      } as const;
+      return [
+        run.failed === 0
+          ? { ...shared, code: "content.suggestions_ready" }
+          : { ...shared, code: "content.suggestions_ready_partly" },
+      ];
     },
   };
 }

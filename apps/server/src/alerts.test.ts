@@ -215,6 +215,41 @@ describe("readOpenAlerts", () => {
     expect(alerts.map((a) => a.key)).toEqual(["a:1", "b:1", "a:0"]);
   });
 
+  it("puts notices after warnings and errors, however new", async () => {
+    const source: AlertSource = {
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [
+        {
+          key: "notice",
+          code: "printing.x",
+          params: {},
+          severity: "notice",
+          since: "2026-09-14T11:59:00.000Z",
+        },
+        {
+          key: "warning",
+          code: "printing.x",
+          params: {},
+          severity: "warning",
+          since: "2026-09-14T10:00:00.000Z",
+        },
+        {
+          key: "error",
+          code: "printing.x",
+          params: {},
+          severity: "error",
+          since: "2026-09-14T09:00:00.000Z",
+        },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [source] });
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+    );
+    expect(alerts.map((a) => a.key)).toEqual(["error", "warning", "notice"]);
+  });
+
   it("orders since by instant, not by text", async () => {
     const source: AlertSource = {
       area: "printing",

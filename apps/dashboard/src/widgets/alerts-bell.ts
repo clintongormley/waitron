@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, type WtRowActions } from "@waitron/ui";
+import { baseStyles, type WtCountBadgeTone, type WtRowActions } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
@@ -19,6 +19,12 @@ import {
 } from "./alert-format.js";
 
 export const PANEL_LIMIT = 5;
+
+function badgeTone(alerts: readonly AlertView[]): WtCountBadgeTone {
+  if (alerts.some((alert) => alert.severity === "error")) return "error";
+  if (alerts.some((alert) => alert.severity === "warning")) return "warning";
+  return "notice";
+}
 
 @customElement("dashboard-alerts-bell")
 export class AlertsBell extends LitElement {
@@ -71,6 +77,9 @@ export class AlertsBell extends LitElement {
       }
       li[data-severity="warning"] {
         border-inline-start-color: var(--wt-color-warning);
+      }
+      li[data-severity="notice"] {
+        border-inline-start-color: var(--wt-color-primary);
       }
       .meta {
         color: var(--wt-color-text-muted);
@@ -175,7 +184,7 @@ export class AlertsBell extends LitElement {
         slot="badge"
         data-test="alerts-count"
         .count=${count}
-        tone=${this.alerts.some((a) => a.severity === "error") ? "error" : "warning"}
+        tone=${badgeTone(this.alerts)}
       ></wt-count-badge>
       <h2>${t("alerts.title")}</h2>
       ${this.error === null ? nothing : html`<p class="error" role="alert">${codeMessage(this.error)}</p>`}

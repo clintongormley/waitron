@@ -115,6 +115,7 @@ import {
   invoiceDeliveryAlertSource,
   passScreenAlertSource,
   printingAlertSource,
+  contentSuggestionsAlertSource,
   stationOutputAlertSource,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
@@ -1941,6 +1942,7 @@ async function bootServer(
     awaitingCertAlertSource(awaitingFiscalCert),
     authorityClockAlertSource(authorityClock.read),
     printingAlertSource(),
+    contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
       locationId: till.locationId,

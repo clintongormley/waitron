@@ -1687,7 +1687,7 @@ export interface AlertView {
   kind: "event" | "ongoing";
   code: string;
   params: Record<string, unknown>;
-  severity: "warning" | "error";
+  severity: "warning" | "error" | "notice";
   since: string | null;
   area: string;
   screen?: string;

@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
-export type WtCountBadgeTone = "neutral" | "warning" | "error";
+export type WtCountBadgeTone = "neutral" | "warning" | "error" | "notice";
 
 /** A count pill. Renders nothing at zero and caps its text at "99+". It has no accessible name of
  * its own: the control it decorates must say the count. */
@@ -37,6 +37,11 @@ export class WtCountBadge extends LitElement {
         border-color: transparent;
         background: var(--wt-color-danger);
         color: var(--wt-color-on-danger);
+      }
+      :host([tone="notice"]) span {
+        border-color: transparent;
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
       }
     `,
   ];
