@@ -637,6 +637,40 @@ describe("Split a table's guest counts", () => {
     expect(revisionOf(ana.partyId)).toBe(revision);
     expect(guestsOf(ana.partyId)).toBe(5);
   });
+
+  it("leaves the count as it was when the split is refused after its revision check", async () => {
+    const { ana, second } = await anaOfFive();
+    const luis = await seatedWith(venue, "Caña");
+    const alone = await seatedWith(venue);
+    const counted = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${alone.partyId}/guests`,
+      { guestCount: 5, expectedPartyRevision: alone.revision },
+    );
+    expect(counted.status).toBe(200);
+    const splitOf = (partyId: string, tableId: string, billId: string | null) =>
+      post(`/api/parties/${partyId}/split-table`, {
+        tableId,
+        billId,
+        expectedPartyRevision: revisionOf(partyId),
+        guests: { staying: 1, leaving: 1 },
+      });
+
+    const answers = [
+      [await splitOf(alone.partyId, alone.tableId, null), "table.not_shared"],
+      [await splitOf(ana.partyId, luis.tableId, null), "table.not_joined"],
+      [await splitOf(ana.partyId, second, ana.tabId), "party.main_bill_stays"],
+    ] as const;
+
+    for (const [answer, code] of answers) {
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({ code });
+    }
+    expect(guestsOf(alone.partyId)).toBe(5);
+    expect(guestsOf(ana.partyId)).toBe(5);
+  });
 });
 
 describe("Join tables' guest counts", () => {

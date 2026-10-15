@@ -325,7 +325,13 @@ export async function splitTable(
   options: { expectedPartyRevision: number; operatorId: string; guests?: SplitGuests },
   attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
-  await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
+  await checkAndBumpParty(
+    tx,
+    partyId,
+    options.expectedPartyRevision,
+    "open",
+    options.guests === undefined ? {} : { guestCount: options.guests.staying },
+  );
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
@@ -342,12 +348,6 @@ export async function splitTable(
       .select({ zoneId: diningTables.zoneId })
       .from(diningTables)
       .where(eq(diningTables.id, tableId));
-    if (options.guests !== undefined) {
-      await tx
-        .update(parties)
-        .set({ guestCount: options.guests.staying })
-        .where(eq(parties.id, partyId));
-    }
     const { partyId: newParty } = await openParty(tx, {
       guestCount: options.guests?.leaving ?? null,
       operatorId: options.operatorId,
