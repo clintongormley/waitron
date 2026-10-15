@@ -334,3 +334,21 @@ it("a kit check request cannot carry success flags, secret fields, a replacement
   ).rejects.toMatchObject(refused);
   resume.close();
 });
+
+it("refuses a forged saved-file receipt even when the paper receipt is genuine", async () => {
+  const { resume, fileReceipt, paperReceipt, publicKit } = await reopened();
+  try {
+    const signature =
+      (fileReceipt.signature.startsWith("A") ? "B" : "A") + fileReceipt.signature.slice(1);
+    await expect(
+      resume.verifyChecks({ ...fileReceipt, signature }, paperReceipt),
+    ).rejects.toMatchObject(refused);
+    expect(resume.state).toBe("paper-check-pending");
+    expect(() => resume.attestCustody(attestation, publicKit.public.fingerprint)).toThrow(
+      "Custody material refused",
+    );
+    expect(() => resume.reserve(reservation)).toThrow("Custody material refused");
+  } finally {
+    resume.close();
+  }
+});
