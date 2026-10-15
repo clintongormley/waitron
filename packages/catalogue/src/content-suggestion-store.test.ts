@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -684,3 +684,56 @@ it("a later run replaces a fix to an entered name rather than adding a second on
     fixRight: "Client",
   });
 });
+
+it("a later run replaces more than one batch of an item's rows in one store", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const ids = await app(async (tx) => {
+    const inserted = await tx
+      .insert(products)
+      .values(
+        Array.from({ length: 600 }, (_, n) => ({
+          catalogueId: venue.menuId,
+          name: `STAFF Racio ${n}`,
+          kitchenName: `KITCHEN Racio ${n}`,
+          customerName: { ca: `CLIENT-CA Racio ${n}` },
+          pricingUnit: "each" as const,
+          unitPrice: 300,
+          vatClass: "reduced" as const,
+        })),
+      )
+      .returning({ id: products.id });
+    return inserted.map((row) => row.id);
+  });
+  const answer = (sent: Record<string, string[]>, word: string, names: boolean) =>
+    ids
+      .filter((id) => Object.hasOwn(sent, ref(id)))
+      .map((id) =>
+        result(
+          ref(id),
+          names
+            ? Object.fromEntries(
+                sent[ref(id)]!.map((language) => [language, `${word} ${language}`]),
+              )
+            : {},
+          {
+            placeholder: names,
+            corrections: [
+              { field: "internal", wrong: "STAFF", right: `${word} Staff` },
+              { field: "ca", wrong: "CLIENT", right: `${word} Client` },
+            ],
+          },
+        ),
+      );
+  const one = await runningJob(suite.db);
+  await store(one.id, done(answer(one.sent, "ONE", false)));
+  await app((tx) => recordSuggestionJobReleased(tx, one.id));
+  const two = await runningJob(suite.db);
+  await store(two.id, done(answer(two.sent, "TWO", true)));
+  const rows = await app((tx) =>
+    tx.select().from(contentSuggestions).where(inArray(contentSuggestions.itemId, ids)),
+  );
+  expect(rows).toHaveLength(600 * 4);
+  expect(rows.every((row) => row.jobId === two.id)).toBe(true);
+  expect(rows.filter((row) => row.fixRight?.startsWith("ONE"))).toEqual([]);
+  expect(new Set(rows.map((row) => `${row.itemId} ${row.language}`)).size).toBe(600 * 4);
+}, 120_000);

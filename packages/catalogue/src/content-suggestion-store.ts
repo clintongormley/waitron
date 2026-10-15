@@ -1,6 +1,7 @@
-import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { batches } from "./batches.js";
 import {
   blankName,
   buildSuggestionJob,
@@ -37,6 +38,21 @@ interface PlannedRow {
 
 // The save route's own bound (`checkedBatch`, content-translations.ts), so a suggestion can be saved.
 const NAME_BYTES = 4096;
+
+/** The stored rows `batch` replaces: an item's row in a language, or its own row. */
+function replacedBy(batch: readonly { ref: TranslationRef; row: PlannedRow }[]): SQL {
+  const keys = (own: boolean) =>
+    JSON.stringify(
+      batch
+        .filter(({ row }) => (row.language === null) === own)
+        .map(({ ref, row }) => [ref.kind, ref.id, row.language]),
+    );
+  const { kind, itemId, language } = contentSuggestions;
+  return sql`(${kind}, ${itemId}, ${language}) in (select json_extract(value, '$[0]'),
+      json_extract(value, '$[1]'), json_extract(value, '$[2]') from json_each(${keys(false)}))
+    or (${language} is null and (${kind}, ${itemId}) in (select json_extract(value, '$[0]'),
+      json_extract(value, '$[1]') from json_each(${keys(true)})))`;
+}
 
 function emptyRow(language: string | null): PlannedRow {
   return { language, text: null, expected: null, placeholder: false, fix: null };
@@ -133,20 +149,13 @@ export async function storeSuggestionResults(
     if (usable) planned.set(key, { ref, rows });
     else failed.add(key);
   }
-  for (const { ref, rows } of planned.values())
-    for (const row of rows.values()) {
-      await tx
-        .delete(contentSuggestions)
-        .where(
-          and(
-            eq(contentSuggestions.kind, ref.kind),
-            eq(contentSuggestions.itemId, ref.id),
-            row.language === null
-              ? isNull(contentSuggestions.language)
-              : eq(contentSuggestions.language, row.language),
-          ),
-        );
-      await tx.insert(contentSuggestions).values({
+  const storing = [...planned.values()].flatMap(({ ref, rows }) =>
+    [...rows.values()].map((row) => ({ ref, row })),
+  );
+  for (const batch of batches(storing)) {
+    await tx.delete(contentSuggestions).where(replacedBy(batch));
+    await tx.insert(contentSuggestions).values(
+      batch.map(({ ref, row }) => ({
         jobId,
         kind: ref.kind,
         itemId: ref.id,
@@ -158,8 +167,9 @@ export async function storeSuggestionResults(
         fixWrong: row.fix?.wrong ?? null,
         fixRight: row.fix?.right ?? null,
         createdAt: now.toISOString(),
-      });
-    }
+      })),
+    );
+  }
   for (const key of Object.keys(job.sent)) if (!answered.has(key)) failed.add(key);
   const failedRefs = [...failed].sort();
   const limitReached = results.reason === "limit_reached";
