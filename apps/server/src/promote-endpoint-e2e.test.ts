@@ -361,9 +361,10 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
 
     killSpy.mockClear();
 
-    const mirror = await startServer(
-      mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
-    ).catch(async (err: unknown) => {
+    const mirror = await startServer({
+      ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
+      ...allocationEnv,
+    }).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
@@ -541,9 +542,10 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
     const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
-    const server = await startServer(
-      mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
-    ).catch(async (err: unknown) => {
+    const server = await startServer({
+      ...mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
+      ...allocationEnv,
+    }).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });

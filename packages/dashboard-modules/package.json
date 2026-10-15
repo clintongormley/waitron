@@ -15,7 +15,9 @@
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/media": "workspace:*",
+    "@waitron/module": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",
     "@waitron/staffing": "workspace:*",
@@ -27,6 +29,13 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/composition": "workspace:*",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "vite": "^8.3.1"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./setup": "./src/setup.ts",
+    "./src/*": "./src/*",
+    "./setup-assets": "./src/setup-assets.ts"
   }
 }

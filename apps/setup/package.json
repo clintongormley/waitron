@@ -17,7 +17,9 @@
     "@waitron/country-packs": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
-    "lit": "^3.2.0"
+    "lit": "^3.2.0",
+    "@waitron/dashboard-modules": "workspace:*",
+    "@waitron/module": "workspace:*"
   },
   "devDependencies": {
     "@vitest/browser-playwright": "^4.1.11",

@@ -1,3 +1,4 @@
+import { assertVenueFirstSetupAllowed, FIRST_SETUP_HOST_FILES } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -202,7 +203,13 @@ async function validateEntryMetadata(
   for (const entry of entries) {
     if (entry.name === MANIFEST_NAME) manifestEntry ??= entry;
     else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
-    else if (entry.name.startsWith(SECRETS_PREFIX)) secretEntries.push(entry);
+    else if (
+      entry.name.startsWith(SECRETS_PREFIX) &&
+      !FIRST_SETUP_HOST_FILES.some(
+        (name) => posix.normalize(entry.name) === `${SECRETS_PREFIX}${name}`,
+      )
+    )
+      secretEntries.push(entry);
     else firstUnexpected ??= entry;
   }
 
@@ -319,6 +326,7 @@ export async function writeValidated(
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
   try {
+    await assertVenueFirstSetupAllowed(deps.venueDir);
     // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
     // before anything is placed, so a box that trades after this restore finds it; a restore that
     // throws removes it while the lock is still held.

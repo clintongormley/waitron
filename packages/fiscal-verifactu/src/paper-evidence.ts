@@ -1,4 +1,22 @@
 import {
+  parsePaperBlock as parseBlock,
+  parsePaperConsumption as parseConsumption,
+} from "./paper-protocol.js";
+import {
+  paperBlockBytes,
+  paperConsumptionBytes,
+  type PaperAllocation,
+  type PaperBlock,
+  type PaperConsumption,
+  type SignedPaperValue,
+} from "./paper-protocol.js";
+export type {
+  PaperAllocation,
+  PaperBlock,
+  PaperConsumption,
+  SignedPaperValue,
+} from "./paper-protocol.js";
+import {
   createHash,
   createPrivateKey,
   createPublicKey,
@@ -6,45 +24,9 @@ import {
   verify,
   type KeyObject,
 } from "node:crypto";
-import { isAllocatedSeries, isInstallationIdentity } from "./allocation-identity.js";
+import { isAllocatedSeries } from "./allocation-identity.js";
 import { isDeepStrictEqual } from "node:util";
 import type { OperationOperator } from "@waitron/module";
-import { parseAllocationOperator } from "./allocation-operator.js";
-
-export interface PaperAllocation {
-  readonly version: 1;
-  readonly allocationId: string;
-  readonly taxpayerNif: string;
-  readonly softwareId: string;
-  readonly environment: "preproduction" | "production";
-  readonly installationIdentity: string;
-  readonly series: readonly { readonly code: string; readonly purpose: string }[];
-  readonly source: "initial-paper" | "paper";
-  readonly issuedAt: string;
-}
-
-export interface PaperBlock {
-  readonly version: 1;
-  readonly custodianId: string;
-  readonly generationId: string;
-  readonly blockId: string;
-  readonly packVersion: 1;
-  readonly recipientVenueId: string;
-  readonly allocations: readonly PaperAllocation[];
-}
-
-export interface PaperConsumption {
-  readonly version: 1;
-  readonly custodianId: string;
-  readonly blockDigest: string;
-  readonly allocationId: string;
-  readonly eventId: string;
-  readonly operatorId: OperationOperator;
-  readonly sourceId: string;
-  readonly targetNodeId: string;
-  readonly incidentEvidence: string;
-  readonly consumedAt: string;
-}
 
 export interface PaperReservation {
   readonly version: 1;
@@ -116,11 +98,6 @@ export type PaperVerification =
         | "series_mismatch";
     };
 
-export interface SignedPaperValue<T> {
-  readonly payload: T;
-  readonly signature: string;
-}
-
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -146,216 +123,6 @@ function timestamp(value: unknown): value is string {
     return false;
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
-}
-
-const ALLOCATION_KEYS = [
-  "version",
-  "allocationId",
-  "taxpayerNif",
-  "softwareId",
-  "environment",
-  "installationIdentity",
-  "series",
-  "source",
-  "issuedAt",
-];
-const BLOCK_KEYS = [
-  "version",
-  "custodianId",
-  "generationId",
-  "blockId",
-  "packVersion",
-  "recipientVenueId",
-  "allocations",
-];
-const CONSUMPTION_KEYS = [
-  "version",
-  "custodianId",
-  "blockDigest",
-  "allocationId",
-  "eventId",
-  "operatorId",
-  "sourceId",
-  "targetNodeId",
-  "incidentEvidence",
-  "consumedAt",
-];
-
-function parseAllocation(value: unknown): PaperAllocation | null {
-  if (
-    !record(value) ||
-    !exactKeys(value, ALLOCATION_KEYS) ||
-    value.version !== 1 ||
-    !text(value.allocationId) ||
-    typeof value.taxpayerNif !== "string" ||
-    !/^[A-Z0-9]{9}$/.test(value.taxpayerNif) ||
-    typeof value.softwareId !== "string" ||
-    !/^[A-Z0-9]{2}$/.test(value.softwareId) ||
-    !["preproduction", "production"].includes(value.environment as string) ||
-    !isInstallationIdentity(value.installationIdentity) ||
-    (value.source !== "paper" && value.source !== "initial-paper") ||
-    !value.installationIdentity.startsWith(value.source === "paper" ? "P" : "S") ||
-    !timestamp(value.issuedAt) ||
-    !Array.isArray(value.series) ||
-    value.series.length === 0
-  )
-    return null;
-  const series: { code: string; purpose: string }[] = [];
-  for (const item of value.series) {
-    if (
-      !record(item) ||
-      !exactKeys(item, ["code", "purpose"]) ||
-      typeof item.code !== "string" ||
-      typeof item.purpose !== "string"
-    )
-      return null;
-    series.push(Object.freeze({ code: item.code, purpose: item.purpose }));
-  }
-  const suffixLength = value.installationIdentity.length + 1;
-  const bases = series.map((item) => ({
-    code: item.code.slice(0, -suffixLength),
-    purpose: item.purpose,
-  }));
-  if (!isAllocatedSeries(series, value.installationIdentity, bases)) return null;
-  return Object.freeze({
-    version: 1,
-    allocationId: value.allocationId,
-    taxpayerNif: value.taxpayerNif,
-    softwareId: value.softwareId,
-    environment: value.environment as PaperAllocation["environment"],
-    installationIdentity: value.installationIdentity,
-    series: Object.freeze(series),
-    source: value.source,
-    issuedAt: value.issuedAt,
-  });
-}
-
-function parseBlock(value: unknown): PaperBlock | null {
-  if (
-    !record(value) ||
-    !exactKeys(value, BLOCK_KEYS) ||
-    value.version !== 1 ||
-    value.packVersion !== 1 ||
-    !text(value.custodianId) ||
-    !text(value.generationId) ||
-    !text(value.blockId) ||
-    !text(value.recipientVenueId) ||
-    !Array.isArray(value.allocations) ||
-    value.allocations.length === 0 ||
-    value.allocations.length > 1000
-  )
-    return null;
-  const allocations: PaperAllocation[] = [];
-  const ids = new Set<string>();
-  const identities = new Set<string>();
-  for (const input of value.allocations) {
-    const allocation = parseAllocation(input);
-    if (
-      allocation === null ||
-      ids.has(allocation.allocationId) ||
-      identities.has(allocation.installationIdentity)
-    )
-      return null;
-    const first = allocations[0];
-    if (
-      first !== undefined &&
-      (first.taxpayerNif !== allocation.taxpayerNif ||
-        first.softwareId !== allocation.softwareId ||
-        first.environment !== allocation.environment)
-    )
-      return null;
-    ids.add(allocation.allocationId);
-    identities.add(allocation.installationIdentity);
-    allocations.push(allocation);
-  }
-  return {
-    version: 1,
-    custodianId: value.custodianId,
-    generationId: value.generationId,
-    blockId: value.blockId,
-    packVersion: 1,
-    recipientVenueId: value.recipientVenueId,
-    allocations,
-  };
-}
-
-function parseConsumption(value: unknown): PaperConsumption | null {
-  const operator = record(value) ? parseAllocationOperator(value.operatorId) : null;
-  if (
-    !record(value) ||
-    !exactKeys(value, CONSUMPTION_KEYS) ||
-    value.version !== 1 ||
-    ![
-      "custodianId",
-      "allocationId",
-      "eventId",
-      "sourceId",
-      "targetNodeId",
-      "incidentEvidence",
-    ].every((key) => text(value[key])) ||
-    operator === null ||
-    (typeof operator !== "string" &&
-      (operator.nodeId !== value.targetNodeId || operator.eventId !== value.eventId)) ||
-    typeof value.blockDigest !== "string" ||
-    !/^[a-f0-9]{64}$/.test(value.blockDigest) ||
-    !timestamp(value.consumedAt)
-  )
-    return null;
-  return {
-    version: 1,
-    custodianId: value.custodianId as string,
-    blockDigest: value.blockDigest,
-    allocationId: value.allocationId as string,
-    eventId: value.eventId as string,
-    operatorId: operator,
-    sourceId: value.sourceId as string,
-    targetNodeId: value.targetNodeId as string,
-    incidentEvidence: value.incidentEvidence as string,
-    consumedAt: value.consumedAt,
-  };
-}
-
-function blockBytes(block: PaperBlock): Buffer {
-  return Buffer.from(
-    JSON.stringify([
-      "waitron.paper-block",
-      block.version,
-      block.custodianId,
-      block.generationId,
-      block.blockId,
-      block.packVersion,
-      block.recipientVenueId,
-      block.allocations.map((a) => [
-        a.version,
-        a.allocationId,
-        a.taxpayerNif,
-        a.softwareId,
-        a.environment,
-        a.installationIdentity,
-        a.series.map((s) => [s.code, s.purpose]),
-        a.source,
-        a.issuedAt,
-      ]),
-    ]),
-  );
-}
-
-function consumptionBytes(value: PaperConsumption): Buffer {
-  return Buffer.from(
-    JSON.stringify([
-      "waitron.paper-consumption",
-      value.version,
-      value.custodianId,
-      value.blockDigest,
-      value.allocationId,
-      value.eventId,
-      value.operatorId,
-      value.sourceId,
-      value.targetNodeId,
-      value.incidentEvidence,
-      value.consumedAt,
-    ]),
-  );
 }
 
 function parseReservation(value: unknown): PaperReservation | null {
@@ -420,7 +187,7 @@ function reservationBytes(value: PaperReservation): Buffer {
   );
 }
 
-function digest(bytes: Buffer): string {
+function digest(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
@@ -502,7 +269,7 @@ export function verifyPaperBlockSnapshot(
     !exactKeys(trust, ["custodianId", "publicKey", "fingerprint"]) ||
     key === null ||
     trust.custodianId !== block.custodianId ||
-    !verify(null, blockBytes(block), key, Buffer.from(input.signature, "base64url"))
+    !verify(null, paperBlockBytes(block), key, Buffer.from(input.signature, "base64url"))
   )
     return { ok: false, reason: "untrusted" };
   if (
@@ -549,7 +316,7 @@ export function signPaperBlock(value: unknown, privateKey: string): SignedPaperV
   if (block === null) throw new RangeError("Invalid paper block");
   return {
     payload: block,
-    signature: sign(null, blockBytes(block), signingKey(privateKey)).toString("base64url"),
+    signature: sign(null, paperBlockBytes(block), signingKey(privateKey)).toString("base64url"),
   };
 }
 
@@ -561,7 +328,7 @@ export function signPaperConsumption(
   if (consumption === null) throw new RangeError("Invalid paper consumption");
   return {
     payload: consumption,
-    signature: sign(null, consumptionBytes(consumption), signingKey(privateKey)).toString(
+    signature: sign(null, paperConsumptionBytes(consumption), signingKey(privateKey)).toString(
       "base64url",
     ),
   };
@@ -581,7 +348,7 @@ export function signPaperConsumptionForBlock(
     !signature(input.signature) ||
     !verify(
       null,
-      blockBytes(block),
+      paperBlockBytes(block),
       createPublicKey(key),
       Buffer.from(input.signature, "base64url"),
     ) ||
@@ -606,7 +373,7 @@ export function signPaperConsumptionForBlock(
     {
       version: 1,
       custodianId: block.custodianId,
-      blockDigest: digest(blockBytes(block)),
+      blockDigest: digest(paperBlockBytes(block)),
       allocationId,
       eventId: event.eventId,
       operatorId: event.operatorId,
@@ -641,7 +408,7 @@ export function signPaperReservationForBlock(
     !signature(input.signature) ||
     !verify(
       null,
-      blockBytes(block),
+      paperBlockBytes(block),
       createPublicKey(key),
       Buffer.from(input.signature, "base64url"),
     ) ||
@@ -665,7 +432,7 @@ export function signPaperReservationForBlock(
   const reservation = parseReservation({
     version: 1,
     custodianId: block.custodianId,
-    blockDigest: digest(blockBytes(block)),
+    blockDigest: digest(paperBlockBytes(block)),
     allocationId,
     ...event,
   });
@@ -729,7 +496,7 @@ function verifyReservation(
     !record(trust) ||
     trust.custodianId !== block.custodianId ||
     trust.custodianId !== reservation.custodianId ||
-    !verify(null, blockBytes(block), key, Buffer.from(input.block.signature, "base64url")) ||
+    !verify(null, paperBlockBytes(block), key, Buffer.from(input.block.signature, "base64url")) ||
     !verify(
       null,
       reservationBytes(reservation),
@@ -748,7 +515,7 @@ function verifyReservation(
   if (
     allocation === undefined ||
     allocation.source !== "paper" ||
-    reservation.blockDigest !== digest(blockBytes(block)) ||
+    reservation.blockDigest !== digest(paperBlockBytes(block)) ||
     reservation.allocationId !== allocation.allocationId ||
     reservation.sourceId === reservation.targetNodeId ||
     !["taxpayerNif", "softwareId", "environment"].every(
@@ -803,10 +570,10 @@ export function verifyPaperEvidence(
     !record(trust) ||
     trust.custodianId !== block.custodianId ||
     trust.custodianId !== consumption.custodianId ||
-    !verify(null, blockBytes(block), key, Buffer.from(input.block.signature, "base64url")) ||
+    !verify(null, paperBlockBytes(block), key, Buffer.from(input.block.signature, "base64url")) ||
     !verify(
       null,
-      consumptionBytes(consumption),
+      paperConsumptionBytes(consumption),
       key,
       Buffer.from(input.consumption.signature, "base64url"),
     )
@@ -817,7 +584,7 @@ export function verifyPaperEvidence(
   const allocation = block.allocations.find((a) => a.allocationId === context.allocationId);
   if (
     allocation === undefined ||
-    consumption.blockDigest !== digest(blockBytes(block)) ||
+    consumption.blockDigest !== digest(paperBlockBytes(block)) ||
     consumption.allocationId !== allocation.allocationId ||
     !["taxpayerNif", "softwareId", "environment"].every(
       (key) =>

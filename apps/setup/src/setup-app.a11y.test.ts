@@ -9,6 +9,8 @@ afterEach(cleanupWidgets);
 /** The boot reads the shell makes on connect; a stray rejection would pollute the scan. */
 function stubApi(): SetupApi {
   return {
+    firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+    firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({
       provisioned: false,

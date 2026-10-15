@@ -16,6 +16,13 @@ restore inputs and generated-record handover, follow
 [Recover a filing box](offline-fiscal-restore.md). Its optional host-managed emergency collector
 is described in [Emergency recovery](emergency-recovery.md).
 
+**2026-10-15 A679 candidate:** the feature branch adds a downloadable offline tool and first-Live
+wizard path. Use the candidate [first Live procedure](../operations/first-live-fiscal-setup.md)
+for its separate-computer, file/paper checks, current-original, handover and loss steps. Joint
+wizard/tool checks now cover both launch paths and custody choices with synthetic outside
+responses. Actual-paper acceptance and the final publication gates remain open. The command route below remains separate;
+its dated development status is historical.
+
 ## Create the custodian's key
 
 Build the standalone command from the repository:
@@ -322,6 +329,11 @@ The collector rereads both files for each attempt. Missing or empty settings ref
 Keep the custodian's private signing key outside the venue; these settings name public evidence.
 The event file's statements remain your confirmation of the outside master, not independent proof
 that an old snapshot is current. Use the formats in the configured-source section above.
+
+**2026-10-15 A679 candidate:** use the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for browser setup. Its host freezes the identities and reconstructs `initialOperations`; the
+browser imports public files and supplies no replacement IDs or host paths. The request shape
+below describes the command and unclaimed-request path.
 
 For a setup with a supplied allocation, which Live needs on a box that is not a development box,
 add `initialOperations` to your setup request. Without it, Demo, Preparation and a development

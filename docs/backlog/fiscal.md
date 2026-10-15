@@ -227,9 +227,16 @@ A679 design: **“A — Approve, plan and build”**. This supersedes the histor
 approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
 keeps real candidate validation on the host before public request export, custody secrets in the
 offline tool, and readiness separate from production. It specifies durable claim discovery and
-resume, whole-operation exclusion and restart reconciliation before trading. Both custody routes,
-file and actual-paper recovery, handover/loss checks and real wizard qualification remain to build
-and verify. There is no new approval gate or claim of product completion.
+resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Compiled browser
+checks exercise both launch paths and custody choices, saved-file reopen, synthetic paper recovery,
+wrong-passphrase/fingerprint refusals, resume and handover/dispute stops with synthetic outside
+responses. Both whole-branch reviews are complete; their findings, the power-interruption recovery
+decision, actual-paper acceptance and publication gates remain open. Follow the candidate
+[operator procedure](../operations/first-live-fiscal-setup.md); its physical acceptance remains open. Server ownership, activation and interruption
+checks do not replace physical-paper acceptance. An interruption between setup's state and marker
+writes can prevent the next boot, including during abandonment; the real-boot cases in
+`apps/server/src/first-fiscal-state-write.boot.test.ts` reproduce that limit. The owner must decide
+whether to require a supported recovery path before acceptance. This is not product completion.
 
 You can use fiscal allocations without a Cloud subscription. The current paper route asks your
 custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,

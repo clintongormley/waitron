@@ -1440,8 +1440,12 @@ describe("startServer, against a migrated venue directory", () => {
     const venue = await freshVenue();
     const check = venue.store.venue;
     try {
+      const initialOperations = await initialSetupInput(stateDir, provisionVenueBody("60000009R"));
       await withMockedKill(async (kills) => {
         const server = await startServer({
+          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
+          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
+          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
           WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -1459,7 +1463,7 @@ describe("startServer, against a migrated venue directory", () => {
           const body = {
             mode: "demo",
             venue: provisionVenueBody("60000009R"),
-            initialOperations: await initialSetupInput(stateDir, provisionVenueBody("60000009R")),
+            initialOperations,
           };
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
@@ -1605,8 +1609,16 @@ describe("startServer, against a migrated venue directory", () => {
       .spyOn(fiscal, "drain")
       .mockResolvedValue({ ...emptyDrainResult(), recordsSubmitted: 1, recordsAccepted: 1 });
     try {
+      const initialOperations = await initialSetupInput(
+        stateDir,
+        provisionVenueBody("60000013M"),
+        "preproduction",
+      );
       await withMockedKill(async (kills) => {
         const server = await startServer({
+          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
+          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
+          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
           WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -1620,11 +1632,7 @@ describe("startServer, against a migrated venue directory", () => {
           const body = {
             mode: "live",
             venue: provisionVenueBody("60000013M"),
-            initialOperations: await initialSetupInput(
-              stateDir,
-              provisionVenueBody("60000013M"),
-              "preproduction",
-            ),
+            initialOperations,
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,

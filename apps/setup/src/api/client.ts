@@ -1,3 +1,13 @@
+import { firstSetupHeaders } from "./first-setup-types.js";
+import type {
+  FirstSetupOwner,
+  FirstSetupOwnership,
+  FirstSetupStatus,
+  FirstSetupUpdate,
+  FirstSetupPublicRequest,
+  FirstSetupProvisionBody,
+} from "./first-setup-types.js";
+
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
 // its barrel, and `@waitron/db` through it, into the browser bundle.
 
@@ -71,6 +81,7 @@ export type EmailTestResult =
 
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
+  firstSetup?: { attemptId: string; revision: number };
   configurationImport?: boolean;
   /** Only with `configurationImport`: the venue takes a different tax ID from the export's. */
   newTaxpayer?: boolean;
@@ -403,6 +414,145 @@ export class SetupApi {
     return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
+  firstSetupOfferings(
+    fiscalTerritory: string,
+  ): Promise<{ modules: { module: string; version: string }[] }> {
+    return this.#request("/setup-api/first-setup/offerings", "POST", { fiscalTerritory });
+  }
+
+  firstSetupStatus(owner?: FirstSetupOwner): Promise<FirstSetupStatus> {
+    return this.#request(
+      "/setup-api/first-setup/status",
+      "GET",
+      undefined,
+      owner === undefined ? {} : firstSetupHeaders(owner),
+    );
+  }
+
+  claimFirstSetup(
+    clientClaimNonce: string,
+    venue: ProvisionBody["venue"],
+    locale?: string,
+    intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+  ): Promise<FirstSetupOwnership> {
+    return this.#request(
+      "/setup-api/first-setup/claim",
+      "POST",
+      { clientClaimNonce, venue, ...intent },
+      locale === undefined ? {} : { "accept-language": locale },
+    );
+  }
+
+  resumeFirstSetup(clientClaimNonce: string, password: string): Promise<FirstSetupOwnership> {
+    return this.#request("/setup-api/first-setup/resume", "POST", { clientClaimNonce, password });
+  }
+
+  reconfirmFirstSetup(
+    owner: FirstSetupOwner,
+    password: string,
+    purpose: "block-use" | "activation",
+  ): Promise<{ reconfirmation: string }> {
+    return this.#request(
+      "/setup-api/first-setup/reconfirm",
+      "POST",
+      { password, purpose },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupCandidates(
+    owner: FirstSetupOwner,
+    module: string,
+    proposal: unknown,
+    reconfirmation: string,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/candidates",
+      "POST",
+      { module, proposal, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupRequest(owner: FirstSetupOwner): Promise<FirstSetupPublicRequest> {
+    return this.#request(
+      "/setup-api/first-setup/request",
+      "GET",
+      undefined,
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupImport(
+    owner: FirstSetupOwner,
+    module: string,
+    input: unknown,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/input",
+      "POST",
+      { module, input },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupEnrol(
+    owner: FirstSetupOwner,
+    module: string,
+    publicKey: unknown,
+    comparison: unknown,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/enrol",
+      "POST",
+      { module, publicKey, comparison },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupConfirm(
+    owner: FirstSetupOwner,
+    module: string,
+    statement: unknown,
+    reconfirmation: string,
+  ): Promise<FirstSetupUpdate> {
+    return this.#request(
+      "/setup-api/first-setup/current-master",
+      "POST",
+      { module, statement, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  abandonFirstSetup(owner: FirstSetupOwner): Promise<FirstSetupUpdate> {
+    return this.#request("/setup-api/first-setup/abandon", "POST", {}, firstSetupHeaders(owner));
+  }
+
+  runFirstSetupEmailTest(
+    owner: FirstSetupOwner,
+    email: EmailSettingsDraft,
+  ): Promise<EmailTestResult> {
+    return this.#request("/setup-api/email-test", "POST", { email }, firstSetupHeaders(owner));
+  }
+
+  runFirstSetupFiscalTest(
+    owner: FirstSetupOwner,
+    body: FirstSetupProvisionBody,
+  ): Promise<FiscalReadinessResult> {
+    return this.#request("/setup-api/fiscal-test", "POST", body, firstSetupHeaders(owner));
+  }
+
+  provisionFirstSetup(
+    owner: FirstSetupOwner,
+    body: FirstSetupProvisionBody,
+    locale?: string,
+  ): Promise<ProvisionResult> {
+    return this.#request("/setup-api/provision", "POST", body, {
+      ...firstSetupHeaders(owner),
+      ...(locale === undefined ? {} : { "accept-language": locale }),
+    });
+  }
+
   async #request<T>(
     path: string,
     method: string,
@@ -412,7 +562,11 @@ export class SetupApi {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
-        ? { method, credentials: "include" }
+        ? {
+            method,
+            credentials: "include",
+            ...(Object.keys(headers).length === 0 ? {} : { headers }),
+          }
         : {
             method,
             credentials: "include",

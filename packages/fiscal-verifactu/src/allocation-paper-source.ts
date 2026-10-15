@@ -2,6 +2,7 @@ import "./errors.js";
 import { open, type FileHandle } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
+import type { ModuleOperationHost } from "@waitron/module";
 import type {
   AllocationEvidenceRequest,
   AllocationOperationEvidence,
@@ -105,6 +106,48 @@ function currentConfirmation(value: unknown): value is CurrentConfirmation {
         record(base) && exact(base, ["code", "purpose"]) && text(base.code) && text(base.purpose),
     )
   );
+}
+
+export function createBoundPaperAllocationSource(host: ModuleOperationHost): PaperAllocationSource {
+  return async (supplied) => {
+    const request = structuredClone(supplied);
+    const refuse = (reason: string): never => {
+      throw new AppError("sif.allocation_invalid", { reason });
+    };
+    const evidence = await host.readPublicEvidence(request.binding);
+    if (evidence === undefined) return refuse("outside_confirmation_missing");
+    const key = evidence.trust;
+    if (!record(key) || !exact(key, ["custodianId", "publicKey", "fingerprint"]))
+      return refuse("reservation_untrusted");
+    const trust = enrolPaperCustodian(key.custodianId, key.publicKey, key.fingerprint);
+    if (trust === null) return refuse("reservation_untrusted");
+    const current = evidence.current;
+    if (!currentConfirmation(current)) return refuse("outside_confirmation_missing");
+    if (
+      !isDeepStrictEqual(current.binding, request.binding) ||
+      !isDeepStrictEqual(current.operatorId, request.operatorId)
+    )
+      return refuse("event_mismatch");
+    return {
+      ...request,
+      evidence: {
+        allocationId: current.allocationId,
+        priorActivation: current.priorActivation,
+        incidentEvidence: current.incidentEvidence,
+        requiredBases: current.requiredBases,
+        authority: {
+          kind: "paper",
+          trust,
+          recipientVenueId: current.recipientVenueId,
+          generationId: current.generationId,
+          blockId: current.blockId,
+          currentRegisterConfirmed: current.currentRegisterConfirmed,
+          consumptionConfirmed: current.consumptionConfirmed,
+          currentEntryState: current.currentEntryState,
+        },
+      },
+    };
+  };
 }
 
 export function createPaperAllocationSource(configuration: {

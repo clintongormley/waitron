@@ -47,6 +47,7 @@ export interface ProvisionRequest {
   venue: VenueRequest;
   /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
   configurationImport?: boolean;
+  configurationDigest?: string;
   /** The import goes to a different taxpayer: the request's tax ID must differ from the bundle's. */
   newTaxpayer?: boolean;
   initialOperations?: InitialVenueInput;
@@ -65,6 +66,7 @@ export interface ProvisionDeps {
   /** Echoed by `provisioning.foreign_tenant`, so it must never carry a secret. */
   readonly database: string;
   readonly stateDir: string;
+  readonly beforeTransaction?: () => Promise<void>;
   readonly beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
 }
 
@@ -155,14 +157,15 @@ export async function recoverProvisionedVenue(
 export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
+  availableModules: readonly WaitronModule[] = ALL_MODULES,
 ): Promise<VenueResult> {
-  const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
+  const blocked = disabledProvisionOnly(availableModules, deps.moduleConfig);
   if (blocked.length > 0) {
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
   }
   // The plan and the apply are built from this SAME list, so no seed can be named that the runner
   // does not hold.
-  const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
+  const modules = enabledModules(availableModules, deps.moduleConfig);
   const initial =
     req.initialOperations === undefined ? undefined : parseInitialVenueInput(req.initialOperations);
   if (
@@ -206,10 +209,40 @@ export async function provisionVenue(
 
   await stampDeployment(deps.ownerDb, req.environment);
 
+  let remaining = modules.filter(
+    (module) =>
+      module.operations !== undefined &&
+      initial?.inputs.some((input) => input.module === module.name),
+  ).length;
+  const preparedModules =
+    deps.beforeTransaction === undefined
+      ? modules
+      : modules.map((module) => {
+          if (
+            module.operations === undefined ||
+            !initial?.inputs.some((input) => input.module === module.name)
+          )
+            return module;
+          const operations = module.operations;
+          return {
+            ...module,
+            operations: {
+              prepare: <T>(
+                operation: import("@waitron/module").ModuleOperationInput,
+                run: (prepared: import("@waitron/module").ModuleOperationInput) => Promise<T>,
+              ) =>
+                operations.prepare(operation, async (prepared) => {
+                  if (--remaining === 0) await deps.beforeTransaction!();
+                  return run(prepared);
+                }),
+            },
+          };
+        });
+  if (deps.beforeTransaction !== undefined && remaining === 0) await deps.beforeTransaction();
   const result = await applyVenue(plan, {
     ...(initial === undefined ? {} : initialVenueApplyInput(initial)),
     db: deps.ownerDb,
-    modules,
+    modules: preparedModules,
     ...throwaway,
     beforeCommit: deps.beforeCommit,
   });

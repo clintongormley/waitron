@@ -23,6 +23,8 @@ const artifact = (form: SetupRestoreScreen) => q<HTMLInputElement>(form, "[data-
 const backup = new File(["encrypted"], "waitron.backup");
 async function mount() {
   const api = {
+    firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+    firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
     getVenueDefaults: vi.fn().mockResolvedValue({}),

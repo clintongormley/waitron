@@ -399,9 +399,16 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
+    await initialSetupInput(stateDir, provisionVenueBody("50000000R"));
+    const fiscalEnvironment = {
+      WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
+      WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
+      WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
+    };
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
+          ...fiscalEnvironment,
           WAITRON_VENUE_DIR: directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,

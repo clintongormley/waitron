@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -1004,3 +1007,33 @@ describe("the error codes this CLI raises", () => {
     expect(line).toContain('"territory":"ES-canary"');
   });
 });
+
+it.each([undefined, "/an/unrelated/state/root"])(
+  "does not ignore the fixed venue claim when WAITRON_STATE_DIR is %s",
+  async (stateDir) => {
+    const root = await mkdtemp(join(tmpdir(), "cli-first-claim-"));
+    const venueDir = join(root, "venue");
+    await mkdir(venueDir);
+    await writeFile(
+      join(venueDir, "first-setup-claim.json"),
+      JSON.stringify({
+        version: 1,
+        attemptId: "11111111-1111-4111-8111-111111111111",
+        venueDir,
+        stateDir: join(root, "real-state"),
+        status: "claiming",
+      }),
+    );
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir } });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    try {
+      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+      expect(h.lines).toContain("setup.attempt_invalid {}");
+      expect(h.stampEnvironment).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+      expect(h.closes()).toBe(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

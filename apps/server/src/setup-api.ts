@@ -1,3 +1,5 @@
+import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
+import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -94,7 +96,10 @@ export interface SetupDeps {
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
   devMode?: boolean;
   /** Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
-  provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  provision?: (
+    req: ProvisionRequest,
+    beforeTransaction?: () => Promise<void>,
+  ) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
   readOpeningHours?: (result: VenueResult) => Promise<{ departmentId: string } | undefined>;
@@ -126,6 +131,8 @@ export interface SetupDeps {
   setupAppDir?: string;
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
+  firstFiscal?: FirstFiscalHost;
+  firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart.
    * `oldBoxGone` is the operator's answer to whether the server the backup came from is switched
    * off for good; it is checked while staging and is not part of the staged request. */
@@ -600,6 +607,49 @@ function directError(
  * nothing else claimed.
  */
 export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
+  const holds = new WeakMap<Request, FirstSetupHold>();
+  if (deps.firstFiscal !== undefined)
+    mountSetupFirstFiscalApi(
+      app,
+      deps.firstFiscal,
+      log,
+      parseVenue,
+      deps.devMode === true ? "preproduction" : "production",
+      deps,
+    );
+  if (deps.firstSetup !== undefined) {
+    const firstSetup = deps.firstSetup;
+    const boundary = createErrorBoundary(
+      {
+        "setup.attempt_conflict": 409,
+        "setup.attempt_uncertain": 409,
+        "setup.attempt_invalid": 409,
+      },
+      "setup.provision_failed",
+    );
+    app.use("/setup-api/*", async (c, next) => {
+      if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
+        return next();
+      return boundary(c, log, () =>
+        firstSetup.coordinator.run(async (hold) => {
+          await firstSetup.assertOtherAllowed();
+          holds.set(c.req.raw, hold);
+          try {
+            await next();
+            return c.res;
+          } finally {
+            holds.delete(c.req.raw);
+          }
+        }),
+      );
+    });
+  }
+  const runOperation = <T>(
+    request: Request,
+    kind: Parameters<SetupOperationStore["run"]>[0],
+    hash: string,
+    body: (operation: ActiveSetupOperation) => Promise<T>,
+  ): Promise<T> => deps.operations!.run(kind, hash, body, holds.get(request));
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
@@ -850,7 +900,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const response =
           deps.operations === undefined
             ? await execute()
-            : await deps.operations.run("provision", requestHash, async (operation) => {
+            : await runOperation(c.req.raw, "provision", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { provisioned: true; restarting: true });
                 }
@@ -935,7 +985,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const response =
           deps.operations === undefined
             ? await execute()
-            : await deps.operations.run("adopt", requestHash, async (operation) => {
+            : await runOperation(c.req.raw, "adopt", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { adopted: true; restarting: true });
                 }
@@ -1069,7 +1119,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           .update("\0")
           .update(JSON.stringify(credentials))
           .digest("hex");
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             setTimeout(() => deps.requestRestart!(), 0);
             return c.json({ restoreStaged: true, restarting: true }, 202);
@@ -1268,7 +1318,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         };
         // Awaited, so a refused staging reaches the catch below and releases the latch.
         if (deps.operations === undefined) return await execute();
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             return c.json({ restoreStaged: true, restarting: true }, 202);
           }
@@ -1344,7 +1394,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           return response;
         };
         if (deps.operations === undefined) return await execute();
-        return await deps.operations.run("restore", requestHash, async (operation) => {
+        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             return c.json({ restoreStaged: true, restarting: true }, 202);
           }
@@ -1406,6 +1456,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         !segments.some((segment) => segment.includes("."))
       )
         c.res = c.redirect("/", 302);
+    });
+    app.use("/setup-assets/*", async (c, next) => {
+      await next();
+      if (c.res.status === 200) c.header("Content-Disposition", "attachment");
     });
     mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
   } else {

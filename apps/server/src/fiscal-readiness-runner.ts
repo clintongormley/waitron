@@ -15,6 +15,7 @@ import {
   type InitialVenueInput,
   planVenue,
   readTenantIdentities,
+  throwawayApplyInput,
   type VenueRequest,
   type VenueResult,
 } from "@waitron/provisioning";
@@ -61,10 +62,15 @@ async function testVenue(
 ): Promise<VenueResult> {
   if ((await readTenantIdentities(db)).length === 0) {
     await stampDeployment(db, "preproduction");
-    return applyVenue(planVenue(venue, modules), {
+    const plan = planVenue(venue, modules);
+    const input =
+      initialOperations === undefined
+        ? throwawayApplyInput(plan, modules, ["preproduction"])
+        : initialVenueApplyInput(initialOperations);
+    return applyVenue(plan, {
       db,
-      modules,
-      ...(initialOperations === undefined ? {} : initialVenueApplyInput(initialOperations)),
+      modules: input !== undefined && "modules" in input ? input.modules : modules,
+      ...input,
     });
   }
   return recoverProvisionedVenue(

@@ -1,5 +1,10 @@
+import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
+import { draftScopeFor } from "@waitron/ui";
+import { FirstSetupSession } from "./first-setup-session.js";
+import "./screens/initial-setup-screen.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { LeaveController, type DraftScope } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
@@ -25,6 +30,7 @@ import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import type {
   RecoveryRestoreCredentials,
+  EmailSettingsDraft,
   AdoptBody,
   ApiError,
   ConfigurationPreview,
@@ -51,8 +57,12 @@ import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
 
+const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
+
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
+  | "first-owner"
+  | "first-setup"
   | "connection"
   | "role"
   | "connect"
@@ -169,6 +179,12 @@ const TAXPAYER_FIELDS = [
   "rectificativeSeriesCode",
 ] as const;
 
+const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
+  "setup.owner_required": "shell.first_setup.owner_required",
+  "setup.attempt_conflict": "shell.first_setup.attempt_conflict",
+  "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
+  "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
+};
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -177,6 +193,7 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
@@ -184,6 +201,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "setup.request_invalid": "shell.reset.request_invalid",
   "setup.not_ready": "shell.not_ready",
 };
@@ -296,6 +314,7 @@ function describeThrottle(params: Record<string, unknown> | undefined): Message 
 
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
 const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "backup.stream_kit_invalid": "shell.bucket.kit_invalid",
   "restore.stream_pointer_missing": "shell.bucket.pointer_missing",
   "restore.stream_pointer_unverified": "shell.bucket.pointer_unverified",
@@ -326,6 +345,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
  * neither here.
  */
 const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "restore.schema_too_new": "shell.cloud.newer_software",
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
@@ -525,6 +545,11 @@ export class SetupApp extends LitElement {
 
   override disconnectedCallback(): void {
     ++this.#rootGeneration;
+    ++this.#firstGeneration;
+    void this.#firstSession?.dispose();
+    this.#firstSession = undefined;
+    this.#firstPasswordScope?.dispose();
+    this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
     this.cloudRecoveryBusy = false;
     this.#rootScope?.dispose();
@@ -652,8 +677,14 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
-      // Availability describes the box, not whether this browser has installed its CA.
-      if (this.screen === "connection" && !discovery.caDownloadAvailable) this.screen = "mode";
+      const first = await this.api.firstSetupStatus();
+      if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      if (first.claimed || first.conflict) {
+        await this.#openFirstSession();
+        if (!this.isConnected || generation !== this.#connectionGeneration) return;
+        this.screen = "first-owner";
+      } else if (this.screen === "connection" && !discovery.caDownloadAvailable)
+        this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
     }
@@ -661,7 +692,11 @@ export class SetupApp extends LitElement {
 
   #recordConnectionFailure(error: unknown, generation: number): void {
     if (!this.isConnected || generation !== this.#connectionGeneration) return;
-    this.connectionFailure = describeConnectionFailure(error);
+    const code = (error as { code?: string } | null)?.code;
+    if (code !== undefined && FIRST_SETUP_ERROR_MESSAGES[code] !== undefined) {
+      this.firstOwnerError = this.#describeFirstError(error);
+      this.screen = "first-owner";
+    } else this.connectionFailure = describeConnectionFailure(error);
   }
 
   async #continueConnection(): Promise<void> {
@@ -674,8 +709,14 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
+      const first = await this.api.firstSetupStatus();
+      if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.connectionAnswered = true;
-      this.screen = "mode";
+      if (first.claimed || first.conflict) {
+        await this.#openFirstSession();
+        if (!this.isConnected || generation !== this.#connectionGeneration) return;
+        this.screen = "first-owner";
+      } else this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
     } finally {
@@ -686,6 +727,15 @@ export class SetupApp extends LitElement {
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
     if (!this.isConnected) return;
+    if (
+      this.#firstSession?.state &&
+      !this.#firstReplacing &&
+      (event.detail.patch.venue !== undefined || event.detail.patch.mode !== undefined)
+    ) {
+      this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
+      this.screen = "first-owner";
+      return;
+    }
     this.#registerRoot();
     const mode = event.detail.patch.mode;
     if (
@@ -753,6 +803,7 @@ export class SetupApp extends LitElement {
     const owner = this.shadowRoot?.querySelector("setup-live-source-screen");
     if (!this.isConnected || this.screen !== "live-source" || !owner) return;
     const generation = this.#rootGeneration;
+    const mode = this.draft.mode;
     if (!this.leave.coordinator.isDirty([this, owner])) {
       proceed();
       return;
@@ -774,6 +825,8 @@ export class SetupApp extends LitElement {
           !owner.isConnected
         )
           return;
+        // Discarding the previous venue draft preserves the mode selected for this setup.
+        if (mode !== undefined) this.draft = { ...this.draft, mode };
         proceed();
       });
   }
@@ -810,6 +863,29 @@ export class SetupApp extends LitElement {
   }
 
   #goto(destination: Screen): void {
+    ++this.#firstGeneration;
+    this.firstOwnerBusy = false;
+    const frozen = this.#firstSession?.state;
+    if (
+      frozen &&
+      !this.#firstReplacing &&
+      [
+        "mode",
+        "venue",
+        "admin",
+        "live-source",
+        "role",
+        "connect",
+        "restore",
+        "restore-bucket",
+        "cloud-restore",
+      ].includes(destination)
+    ) {
+      this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
+      destination = "first-owner";
+    }
+    if (this.#firstSession && destination === "review" && !this.firstReady)
+      destination = "first-setup";
     ++this.#cloudRecoveryAttempt;
     this.cloudRecoveryBusy = false;
     this.venueError = undefined;
@@ -851,18 +927,215 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
+    if (this.draft.mode === "live" && !this.developmentMode) void this.#claimFirstSetup();
+    else this.#afterFirstOwner();
+  }
+
+  #afterFirstOwner(): void {
     this.screen =
-      this.draft.mode === "live" &&
-      this.draft.venue?.location?.fiscalTerritory === "ES-common" &&
-      !this.developmentMode
-        ? "cert"
-        : this.draft.mode === "live" && !this.developmentMode
-          ? "email"
-          : "review";
+      this.draft.mode === "live" && !this.developmentMode
+        ? this.draft.venue?.location?.fiscalTerritory === "ES-common"
+          ? "cert"
+          : "email"
+        : "review";
+  }
+
+  @state() private firstOwnerBusy = false;
+  @state() private firstOwnerError?: Message;
+  @state() private firstOwnerPassword = "";
+  @state() private firstPasswordAttempted = false;
+  @state() private firstReady = false;
+  @state() private firstOfferings: { module: string; version: string }[] = [];
+  #firstSession?: FirstSetupSession;
+  #firstGeneration = 0;
+  #firstReplacing = false;
+  #firstPasswordOwner = {};
+  #firstPasswordScope?: DraftScope<string>;
+
+  async #openFirstSession(): Promise<FirstSetupSession> {
+    if (this.#firstSession) return this.#firstSession;
+    const session = new FirstSetupSession(this.api);
+    this.#firstSession = session;
+    try {
+      await session.open();
+    } catch (error) {
+      await session.dispose();
+      if (this.#firstSession === session) this.#firstSession = undefined;
+      throw error;
+    }
+    await session.refresh();
+    return session;
+  }
+  #acceptFirstIdentity(): void {
+    const state = this.#firstSession!.state!;
+    this.draft = {
+      ...this.draft,
+      mode: "live",
+      venue: {
+        ...structuredClone(state.venue),
+        admin: {
+          ...state.venue.admin,
+          firstNames: state.venue.admin.firstNames ?? "",
+          lastNames: state.venue.admin.lastNames ?? "",
+        },
+      },
+    };
+    this.#rootBaseline = structuredClone(this.draft);
+    this.#rootScope?.commit(this.#rootBaseline);
+    this.firstReady = false;
+    this.#firstReplacing = false;
+  }
+  async #claimFirstSetup(): Promise<void> {
+    if (this.firstOwnerBusy) return;
+    const submitted = structuredClone(this.draft);
+    const generation = ++this.#firstGeneration;
+    const current = () => this.isConnected && generation === this.#firstGeneration;
+    this.firstOwnerBusy = true;
+    this.firstOwnerError = undefined;
+    this.screen = "first-owner";
+    try {
+      const result = await this.api.firstSetupOfferings(
+        submitted.venue!.location!.fiscalTerritory!,
+      );
+      if (!current()) return;
+      this.firstOfferings = result.modules;
+      if (!result.modules.length) {
+        const previous = this.#firstSession;
+        if (previous?.state) {
+          if (
+            !this.#firstReplacing ||
+            previous.state.status !== "abandoned" ||
+            previous.state.consumptionIntent
+          )
+            throw { code: "setup.attempt_conflict" };
+          await previous.dispose();
+          if (!current()) return;
+          this.#firstSession = undefined;
+          this.#firstReplacing = false;
+        }
+        this.#afterFirstOwner();
+        return;
+      }
+      const session = await this.#openFirstSession();
+      if (!current()) return;
+      const venue = assembleBody(submitted).venue;
+      const intent =
+        submitted.configurationImport === true
+          ? { configurationImport: true, newTaxpayer: submitted.newTaxpayer === true }
+          : undefined;
+      if (this.#firstReplacing) await session.replaceAbandoned(venue, currentLocale(), intent);
+      else if (!session.state && !session.recoveryRequired)
+        await session.claim(venue, currentLocale(), intent);
+      else return;
+      if (!current()) return;
+      this.#acceptFirstIdentity();
+      this.#afterFirstOwner();
+    } catch (error) {
+      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+    } finally {
+      if (current()) this.firstOwnerBusy = false;
+    }
+  }
+  #describeFirstError(error: unknown): Message {
+    const code = (error as { code?: string } | null)?.code;
+    const key = code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
+    return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
+  }
+  async #resumeFirstSetup(): Promise<void> {
+    this.firstPasswordAttempted = true;
+    if (!this.firstOwnerPassword || this.firstOwnerBusy) return;
+    const password = this.firstOwnerPassword;
+    this.firstPasswordAttempted = false;
+    this.firstOwnerPassword = "";
+    this.#firstPasswordScope?.commit("");
+    this.firstOwnerBusy = true;
+    this.firstOwnerError = undefined;
+    const generation = ++this.#firstGeneration;
+    const current = () => this.isConnected && generation === this.#firstGeneration;
+    try {
+      const session = await this.#openFirstSession();
+      if (!current()) return;
+      await session.resume(password);
+      if (!current()) return;
+      this.#acceptFirstIdentity();
+      this.firstOfferings = (
+        await this.api.firstSetupOfferings(session.state!.venue.location.fiscalTerritory)
+      ).modules;
+      if (!current()) return;
+      this.#afterFirstOwner();
+    } catch (error) {
+      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+    } finally {
+      if (current()) this.firstOwnerBusy = false;
+    }
+  }
+  async #reconnectFirstSetup(): Promise<void> {
+    if (this.firstOwnerBusy) return;
+    this.firstReady = false;
+    this.screen = "first-owner";
+    this.firstOwnerError = undefined;
+    this.firstOwnerBusy = true;
+    const generation = ++this.#firstGeneration;
+    try {
+      await this.#openFirstSession();
+      const session = this.#firstSession!;
+      await session.refresh();
+      if (!this.isConnected || generation !== this.#firstGeneration) return;
+      if (!session.state && !session.recoveryRequired) {
+        await session.dispose();
+        if (!this.isConnected || generation !== this.#firstGeneration) return;
+        this.#firstSession = undefined;
+        this.screen = "venue";
+      }
+    } catch (error) {
+      if (this.isConnected && generation === this.#firstGeneration)
+        this.firstOwnerError = this.#describeFirstError(error);
+    } finally {
+      if (this.isConnected && generation === this.#firstGeneration) this.firstOwnerBusy = false;
+    }
+  }
+  async #abandonFirstSetup(): Promise<void> {
+    if (this.firstOwnerBusy || !this.#firstSession?.state) return;
+    this.firstOwnerBusy = true;
+    const generation = ++this.#firstGeneration;
+    try {
+      await this.#firstSession.abandon();
+    } catch (error) {
+      if (this.isConnected && generation === this.#firstGeneration)
+        this.firstOwnerError = this.#describeFirstError(error);
+    } finally {
+      if (this.isConnected && generation === this.#firstGeneration) {
+        this.firstOwnerBusy = false;
+        this.requestUpdate();
+      }
+    }
+  }
+  #replaceFirstSetup(): void {
+    const state = this.#firstSession?.state;
+    if (state?.status !== "abandoned" || state.consumptionIntent) return;
+    this.#firstReplacing = true;
+    this.firstOwnerError = undefined;
+    this.draft = {
+      mode: "live",
+      venue: {
+        ...structuredClone(state.venue),
+        admin: {
+          ...state.venue.admin,
+          firstNames: state.venue.admin.firstNames ?? "",
+          lastNames: state.venue.admin.lastNames ?? "",
+        },
+      },
+    };
+    this.screen = "admin";
   }
 
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
+    if (this.#firstSession && (!this.firstReady || this.#firstSession.recoveryRequired)) {
+      this.firstReady = false;
+      this.screen = "first-owner";
+      return;
+    }
     this.reviewError = undefined;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
@@ -872,9 +1145,18 @@ export class SetupApp extends LitElement {
     const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
-      const result = await (this.#localeChosen
-        ? this.api.provision(assembleBody(submitted), currentLocale())
-        : this.api.provision(assembleBody(submitted)));
+      const result = await (this.#firstSession
+        ? this.#firstSession.provision(
+            {
+              mode: "live",
+              aeatCert: assembleBody(submitted).aeatCert,
+              email: submitted.email as ProvisionBody["email"],
+            },
+            currentLocale(),
+          )
+        : this.#localeChosen
+          ? this.api.provision(assembleBody(submitted), currentLocale())
+          : this.api.provision(assembleBody(submitted)));
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
@@ -882,8 +1164,21 @@ export class SetupApp extends LitElement {
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
-      this.#mapProvisionError(error as ApiError);
+      if (this.#firstSession) {
+        this.firstReady = false;
+        this.firstOwnerError = this.#describeFirstError(error);
+        this.screen = "first-owner";
+      } else this.#mapProvisionError(error as ApiError);
     }
+  }
+
+  #mapFirstSetupError(code: string): boolean {
+    const key = FIRST_SETUP_ERROR_MESSAGES[code];
+    if (key === undefined) return false;
+    this.provisionMessage = say(key);
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = say("shell.reload");
+    return true;
   }
 
   /**
@@ -894,6 +1189,7 @@ export class SetupApp extends LitElement {
     // A network drop rejects with a bare `TypeError`, which carries no `code`.
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
+    if (this.#mapFirstSetupError(code)) return;
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
       const key = VENUE_ERROR_MESSAGES[code];
       this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
@@ -1287,7 +1583,13 @@ export class SetupApp extends LitElement {
     this.fiscalTestRunning = true;
     this.fiscalTestError = undefined;
     try {
-      const result = await this.api.runFiscalTest(assembleBody(this.draft));
+      const result = await (this.#firstSession
+        ? this.#firstSession.runFiscalTest({
+            mode: "live",
+            aeatCert: assembleBody(this.draft).aeatCert,
+            email: this.draft.email as ProvisionBody["email"],
+          })
+        : this.api.runFiscalTest(assembleBody(this.draft)));
       if (!current()) return;
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
       this.fiscalTestRejections = result.status === "rejected" ? (result.rejections ?? []) : [];
@@ -1311,6 +1613,7 @@ export class SetupApp extends LitElement {
   async #mapAdoptError(error: ApiError, body: AdoptBody): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
+    if (this.#mapFirstSetupError(code)) return;
     switch (code) {
       // Not read against the saved setup: an adopt still running on the server is past "started" too.
       case "setup.already_provisioning":
@@ -1487,8 +1790,92 @@ export class SetupApp extends LitElement {
       </main>`;
   }
 
+  #renderFirstOwner(): TemplateResult {
+    const t = initialOwnerStrings[setupLocale()];
+    const state = this.#firstSession?.state;
+    if (!this.#firstPasswordScope && this.isConnected) {
+      this.#firstPasswordScope = draftScopeFor(this, {
+        id: this.#firstPasswordOwner,
+        current: () => this.firstOwnerPassword,
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: (value) => {
+          this.firstOwnerPassword = value;
+        },
+      }).scope;
+      this.#firstPasswordScope.commit("");
+    }
+    const terminal =
+      state?.status === "complete" ||
+      state?.status === "abandoned" ||
+      state?.status === "uncertain";
+    return html`<section data-test="screen-first-owner">
+      <h1>${t.heading}</h1>
+      ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
+      ${
+        !terminal && !this.firstOwnerBusy
+          ? html`<p>${t.resumeHelp}</p>
+              <wt-input
+                data-test="resume-password"
+                name="setup-resume-password"
+                type="password"
+                autocomplete="current-password"
+                label=${t.password}
+                required
+                .value=${this.firstOwnerPassword}
+                ?invalid=${this.firstPasswordAttempted && !this.firstOwnerPassword}
+                error=${this.firstPasswordAttempted && !this.firstOwnerPassword ? t.required : ""}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.firstOwnerPassword = event.detail.value;
+                  this.#firstPasswordScope?.changed();
+                }}
+              ></wt-input>
+              <wt-form-actions
+                .error=${this.firstPasswordAttempted && !this.firstOwnerPassword ? t.fix : (this.firstOwnerError?.() ?? "")}
+              >
+                <wt-button
+                  data-test="resume"
+                  ?disabled=${this.firstOwnerBusy || (this.firstPasswordAttempted && !this.firstOwnerPassword)}
+                  @click=${() => void this.#resumeFirstSetup()}
+                  >${t.resume}</wt-button
+                >
+              </wt-form-actions>`
+          : nothing
+      }
+      ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
+      ${state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
+      ${state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
+      ${state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
+      ${state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
+      <wt-button
+        data-test="reconnect-first"
+        variant="secondary"
+        ?disabled=${this.firstOwnerBusy}
+        @click=${() => void this.#reconnectFirstSetup()}
+        >${t.reconnect}</wt-button
+      >
+    </section>`;
+  }
+
   #renderScreen(): TemplateResult {
+    const firstSession = this.#firstSession;
     switch (this.screen) {
+      case "first-owner":
+        return this.#renderFirstOwner();
+      case "first-setup":
+        return html`<setup-initial-setup-screen
+          data-test="screen-first-setup"
+          .session=${this.#firstSession}
+          .offerings=${this.firstOfferings}
+          .contributions=${SETUP_MODULES}
+          .locale=${setupLocale()}
+          @initial-reconnect=${() => void this.#reconnectFirstSetup()}
+          @initial-setup-ready=${() => {
+            this.firstReady = true;
+            this.#goto("review");
+          }}
+        ></setup-initial-setup-screen>`;
       case "connection":
         return html`<setup-connection-screen
           data-test="screen-connection"
@@ -1556,7 +1943,7 @@ export class SetupApp extends LitElement {
           data-test="screen-email"
           .email=${this.draft.email}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
-          .api=${this.api}
+          .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
           .backScreen=${this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;
@@ -1599,6 +1986,7 @@ export class SetupApp extends LitElement {
       case "review":
         return html`<setup-review-screen
           data-test="screen-review"
+          .usesAllocation=${this.#firstSession !== undefined}
           .backScreen=${this.draft.mode === "live" && !this.developmentMode ? "email" : "venue"}
           .draft=${this.draft}
           .errorMessage=${this.reviewError?.()}

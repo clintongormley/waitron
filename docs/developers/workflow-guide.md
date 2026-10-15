@@ -159,6 +159,16 @@ normal hook run the §2 local checks once; let CI run mandatory package tests an
 add a whole-workspace local run solely because the branch is being finished. Verify the current-head
 CI scope and results; the unfiltered `main` merge checks the combined tree when code is in scope.
 
+### First Live setup qualification
+
+For A679's candidate first-Live journey, follow the [operator procedure](../operations/first-live-fiscal-setup.md).
+Use the production-shaped isolated test host for Live ownership and activation when the managed
+development stack sets dev mode. Keep the physical-paper receipt separate from browser automation:
+a saved file, synthetic transcription or print preview does not establish the actual-paper check.
+As of 2026-10-15, the candidate's compiled wizard/local host/saved-tool checks cover both launch
+paths and custody choices with synthetic outside responses. Actual-paper acceptance, whole-branch
+reviews and publication gates remain outstanding.
+
 ## Documentation rules
 
 **`docs/backlog.md` answers "what should I work on?"** — what is in flight, what is next, and why
@@ -320,6 +330,12 @@ accepts today has one: the route takes its country from `getVenueSetupCountryPac
 (`packages/country-packs/src/registry.ts`), which offers only Spain, and Spain's only supported
 fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). The setup wizard
 has no text of its own for this refusal yet.
+
+**2026-10-15 A679 candidate:** the refusal below describes an unclaimed request. The claimed
+wizard runs its separate preproduction readiness check before collecting email settings or a
+production allocation. Activation still requires both. Follow the [guided first Live procedure](../operations/first-live-fiscal-setup.md)
+for that path; `apps/server/src/first-fiscal-setup.e2e.test.ts` checks readiness before email and
+refusal of production activation without email.
 
 **Live on a real box needs a supplied allocation** (A679). On a box that is not a development box,
 a Live setup that is otherwise complete but has no allocation stops at `setup.fiscal_test_required`
