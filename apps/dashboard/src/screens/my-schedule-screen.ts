@@ -389,7 +389,7 @@ export class MyScheduleScreen extends LitElement {
     const start = wallClock(shift.startsAt, shift.startsOffsetMinutes);
     const end = wallClock(shift.endsAt, shift.endsOffsetMinutes);
     const time = `${start.date} ${start.time}–${end.time}`;
-    return shift.role ? `${time} · ${shift.role}` : time;
+    return shift.description ? `${time} · ${shift.description}` : time;
   }
 
   override render(): TemplateResult {

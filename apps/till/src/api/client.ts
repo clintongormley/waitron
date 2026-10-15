@@ -1733,6 +1733,7 @@ export interface MyShift {
   endsAt: string;
   endsOffsetMinutes: number;
   role: string | null;
+  description: string | null;
   rosterVersionId: string | null;
 }
 

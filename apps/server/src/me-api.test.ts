@@ -522,6 +522,44 @@ describe("mountMeApi — locales (public)", () => {
 });
 
 describe("mountMeApi — shifts", () => {
+  it("returns a module's description for an owned shift and the free-text fallback for an undescribed one", async () => {
+    const described = await insertShift(me, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
+    const fallback = await insertShift(me, "2026-10-06T09:00:00Z", "2026-10-06T17:00:00Z");
+    await insertShift(colleague, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
+    const app = mountApp({
+      describeShifts: async (tx, ids) => {
+        expect(tx).toBeDefined();
+        expect(ids).toEqual([described, fallback]);
+        return new Map([[described, "Kitchen · Sous chef"]]);
+      },
+    });
+    const res = await send(
+      app,
+      "GET",
+      "/management-api/me/schedule/shifts?from=2026-10-05&to=2026-10-12",
+      { cookie: await cookieFor(me) },
+    );
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { id: string; description: string | null }[]).map((row) => ({
+        id: row.id,
+        description: row.description,
+      })),
+    ).toEqual([
+      { id: described, description: "Kitchen · Sous chef" },
+      { id: fallback, description: "bar" },
+    ]);
+    const noModule = await send(
+      mountApp(),
+      "GET",
+      "/management-api/me/schedule/shifts?from=2026-10-05&to=2026-10-12",
+      { cookie: await cookieFor(me) },
+    );
+    expect(
+      ((await noModule.json()) as { description: string }[]).map((row) => row.description),
+    ).toEqual(["bar", "bar"]);
+  });
+
   it("keeps draft, unattached and superseded shifts out of the person's schedule", async () => {
     const visible = await insertShift(me, "2026-09-07T09:00:00Z", "2026-09-07T17:00:00Z");
     for (const status of ["draft", "superseded", null] as const) {
@@ -539,17 +577,15 @@ describe("mountMeApi — shifts", () => {
           .returning({ id: rosterVersions.id });
         rosterVersionId = version!.id;
       }
-      await suite.db
-        .insert(shifts)
-        .values({
-          personId: me,
-          locationId,
-          rosterVersionId,
-          startsAt: "2026-09-07T10:00:00Z",
-          endsAt: "2026-09-07T18:00:00Z",
-          startsOffsetMinutes: 0,
-          endsOffsetMinutes: 0,
-        });
+      await suite.db.insert(shifts).values({
+        personId: me,
+        locationId,
+        rosterVersionId,
+        startsAt: "2026-09-07T10:00:00Z",
+        endsAt: "2026-09-07T18:00:00Z",
+        startsOffsetMinutes: 0,
+        endsOffsetMinutes: 0,
+      });
     }
     const res = await send(
       mountApp(),

@@ -17,6 +17,7 @@ const shifts: MyShift[] = [
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
     role: "bar",
+    description: "bar",
     rosterVersionId: null,
   },
 ];
@@ -129,7 +130,9 @@ describe("till-schedule-screen", () => {
 
   it("renders a shift with no role without a trailing role separator", async () => {
     const api = stubApi({
-      listMyShifts: vi.fn().mockResolvedValue([{ ...shifts[0], id: "s-norole", role: null }]),
+      listMyShifts: vi
+        .fn()
+        .mockResolvedValue([{ ...shifts[0], id: "s-norole", role: null, description: null }]),
     });
     const { el } = await mount(api);
     expect(root(el).textContent).toContain("2026-05-04 09:00–17:00");
@@ -817,4 +820,19 @@ describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => 
     scheduleWindow(now, 14);
     expect(localIsoDate(now)).toBe("2026-05-04"); // `now` not mutated by the `+ days`
   });
+});
+
+it("shows the module description instead of the legacy free-text role", async () => {
+  const { el } = await mount(
+    stubApi({
+      listMyShifts: vi
+        .fn()
+        .mockResolvedValue([{ ...shifts[0], description: "Kitchen · Sous chef" }]),
+    }),
+  );
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain("2026-05-04 09:00–17:00 · Kitchen · Sous chef");
+  expect(
+    el.shadowRoot!.querySelector(".shift")?.textContent ?? el.shadowRoot!.textContent,
+  ).not.toContain("· bar");
 });

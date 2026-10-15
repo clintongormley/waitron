@@ -23,6 +23,7 @@ export interface PersonShiftRow {
   endsAt: string;
   endsOffsetMinutes: number;
   role: string | null;
+  description: string | null;
   rosterVersionId: string | null;
 }
 
@@ -81,6 +82,7 @@ export async function listShiftsForPerson(
     endsAt: r.ends_at,
     endsOffsetMinutes: r.ends_offset_minutes,
     role: r.role,
+    description: null,
     rosterVersionId: r.roster_version_id,
   }));
 }

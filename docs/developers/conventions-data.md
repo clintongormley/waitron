@@ -121,6 +121,18 @@ mounts modules without naming one, exactly as generic provisioning does not.
 shared reader guesses whether `/` opens a regular expression, and import-like strings can still
 match.
 
+### Modules can describe staff shifts
+
+When your module owns a shift's area or staff role, contribute `describeShifts(tx, shiftIds)` on
+`WaitronModule`. Return a map only for the ids you can label. The host calls the enabled modules
+in their composition order inside the own-shift read's transaction; a later contribution replaces
+an earlier label for the same id. Both own-shift routes return `description`, falling back to the
+shift's free-text `role` when no contribution labels it. The till and My schedule render that
+field. See `apps/server/src/boot.shift-descriptions.test.ts` for enabled and disabled boot cases.
+
+Core live subscriptions watch `shifts` and `roster_versions`. An area or staff-role rename alone
+does not refresh an already open own schedule; the next read picks it up.
+
 ## A test-only dependency closes a workspace dependency loop as surely as a runtime one
 
 pnpm counts `devDependencies` when it looks for a loop, and prints "There are cyclic workspace

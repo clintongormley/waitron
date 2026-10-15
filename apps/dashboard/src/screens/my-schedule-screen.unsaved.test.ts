@@ -37,6 +37,7 @@ const shift: MyShift = {
   startsOffsetMinutes: 0,
   endsOffsetMinutes: 0,
   role: "bar",
+  description: "bar",
   rosterVersionId: null,
 };
 function deferred<T>() {
