@@ -63,15 +63,13 @@ async function venue() {
       .values({ locationId: v.cfg.locationId, name: "Waiter" })
       .returning();
     await t.insert(personStaffRoles).values({ personId: v.ana, staffRoleId: r!.id });
-    await t
-      .insert(employments)
-      .values({
-        personId: v.ana,
-        contractedMinutesPerWeek: 2400,
-        contractType: "permanent",
-        startDate: "2026-01-01",
-        payRate: 0,
-      });
+    await t.insert(employments).values({
+      personId: v.ana,
+      contractedMinutesPerWeek: 2400,
+      contractType: "permanent",
+      startDate: "2026-01-01",
+      payRate: 0,
+    });
     await saveSeasonStaffing(t, v.cfg, v.seasonId, [
       {
         area,
@@ -285,6 +283,9 @@ describe("the rota writes", () => {
       }),
     );
     const r = await read(v);
+    expect(r.version?.status).toBe("draft");
+    const [attached] = await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)));
+    expect(attached!.rosterVersionId).toBe(r.version!.id);
     expect(r.shifts.find((s) => s.shiftId === id)).toMatchObject({
       area: v.area,
       staffRoleId: v.staffRoleId,

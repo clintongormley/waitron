@@ -234,6 +234,18 @@ export async function updateRotaShift(
   patch: RotaShiftPatch,
 ): Promise<void> {
   const row = await writableShift(tx, cfg, shiftId);
+  if (row.rosterVersionId === null) {
+    const localDate = new Date(Date.parse(row.startsAt) + row.startsOffsetMinutes * 60000)
+      .toISOString()
+      .slice(0, 10);
+    const week = mondayOf(localDate);
+    const { version } = await backend.getRoster(tx, { ...cfg, period: week });
+    if (version?.status === "published")
+      throw new AppError("roster.not_draft", { rosterVersionId: version.id });
+    const versionId =
+      version?.id ?? (await backend.createRosterVersion(tx, { ...cfg, period: week }));
+    await tx.update(shifts).set({ rosterVersionId: versionId }).where(eq(shifts.id, shiftId));
+  }
   const [prior] = await tx
     .select()
     .from(shiftAssignments)
