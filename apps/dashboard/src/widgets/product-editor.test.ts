@@ -28,6 +28,49 @@ import { EACH_CHOICE } from "./variant-table.js";
 // cannot catch a defect in it.
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
+
+it.each([
+  { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre", "Zucchini (z)"] },
+  { locale: "es-ES", labels: ["Unidad", "Calabacín (z)", "Litre", "Manzana (a)"] },
+])(
+  "sorts pricing units in the dashboard language $locale in a Catalan venue",
+  async ({ locale, labels }) => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const units = [
+        {
+          id: "random-first",
+          name: { ca: "Albergínia", en: "Zucchini", es: "Calabacín" },
+          abbreviation: { ca: "ca-z", en: "z", es: "z" },
+        },
+        { id: "random-middle", name: { ca: "Litre", en: "  " }, abbreviation: {} },
+        {
+          id: "random-last",
+          name: { ca: "Poma", en: "Apple", es: "Manzana" },
+          abbreviation: { ca: "ca-a", en: "a", es: "a" },
+        },
+      ];
+      const original = structuredClone(units);
+      const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        locales: ["ca", "es", "en"],
+        units,
+      });
+      await openUnits(el);
+      expect(combobox(el, "unit")!.options.map((option) => option.label)).toEqual(labels);
+      expect(combobox(el, "unit")!.options.map((option) => option.value)).toEqual([
+        EACH_CHOICE,
+        ...(locale === "en-GB"
+          ? ["random-last", "random-middle", "random-first"]
+          : ["random-first", "random-middle", "random-last"]),
+      ]);
+      expect(units).toEqual(original);
+    } finally {
+      setLocale(before);
+    }
+  },
+);
 const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
 // Staff name and customer name differ in every fixture on purpose: an assertion cannot tell the two
 // apart when they hold the same text.

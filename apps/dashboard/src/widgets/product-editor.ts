@@ -722,9 +722,12 @@ export class ProductEditor extends LitElement {
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
   }
+  private unitText(value: LocalizedText): string {
+    return resolveContentText(value, currentLocale(), this.language);
+  }
   private unitLabel(unit: UnitChoice) {
-    const name = this.text(unit.name);
-    const abbr = this.text(unit.abbreviation);
+    const name = this.unitText(unit.name);
+    const abbr = this.unitText(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
   }
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
@@ -733,7 +736,7 @@ export class ProductEditor extends LitElement {
     if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
     if (!unit) return t("editor.missing_choice");
-    return this.text(unit.abbreviation) || this.text(unit.name);
+    return this.unitText(unit.abbreviation) || this.unitText(unit.name);
   }
   /** Only while the editor itself is open, and on a product's own page: a variant's unit is its
    * product's. */
@@ -1435,7 +1438,15 @@ export class ProductEditor extends LitElement {
         placeholder=${each}
         .options=${[
           { value: EACH_CHOICE, label: each },
-          ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
+          ...[...this.units]
+            .sort(
+              (a, b) =>
+                new Intl.Collator(currentLocale()).compare(
+                  this.unitText(a.name),
+                  this.unitText(b.name),
+                ) || a.id.localeCompare(b.id),
+            )
+            .map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
         ?disabled=${this.suspended}
         .value=${this.draft.unitId ?? EACH_CHOICE}
