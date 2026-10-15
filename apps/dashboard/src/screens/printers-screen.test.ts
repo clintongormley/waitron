@@ -1054,10 +1054,7 @@ describe("printer configuration tabs", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await selectTab(el, "agents");
-    q(el, '[data-test="agents-table"]')!
-      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!
-      .click();
-    await flush(el);
+    await pressEmptyAction(el, "agents-table");
     const modal = q(el, "[data-test=new-agent-modal]")!;
     expect(modal.getAttribute("size")).toBe("standard");
     expect(modal.getAttribute("height")).toBe("medium");
@@ -6232,6 +6229,7 @@ describe("printers-screen printer editor edges", () => {
     expect(modal.getAttribute("height")).toBe("medium");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
+    expect(q(el, "[data-test=calibration-step-2]")!.checkVisibility()).toBe(true);
     expect(q(el, "[data-test=edit-printer-modal]")!.getAttribute("height")).toBe("medium");
   });
 

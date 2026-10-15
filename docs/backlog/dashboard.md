@@ -925,6 +925,14 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   not change size as rows are added or removed. How it works: `docs/developers/design-system.md` →
   "Use `wt-modal` for an add or edit form".
 
+- **Which dialogs take the medium height (A735, owner 2026-10-15).** These short dialogs open at
+  `wt-modal`'s `height="medium"`: Add department and Add zone (Add to department shares that
+  dialog), the floor plan's Add tables and Add joined table, the Edit dialog of a menu included in
+  another, the Prep stations route-change notice, the printers' Add agent and Calibrate, Pair device
+  (Enable shares that dialog), and only the password step of setting up an authenticator app on the
+  profile. The Units and Modifiers Delete dialogs do not: depending on the data they show a table or
+  nothing, and a fixed height could squeeze the table.
+
 - **The sidebar folds to a strip of icons (A654, owner 2026-10-15).** Every sidebar icon draws in
   the text colour, never the primary colour, and the current section is marked by its highlight
   alone; the folded choice is kept per browser, and with no choice kept, a window wider than 48rem
@@ -1030,14 +1038,6 @@ From W69 (#1325, warn before discarding unsaved changes):
 From A334 (#1416, held reorder drags scroll at the list edge):
 
 - Floor and grid placement editors remain outside this change.
-
-- **Which dialogs take the medium height (A735, owner 2026-10-15).** Seven short dialogs open at
-  `wt-modal`'s `height="medium"`: add department and add zone (Add to department shares that dialog
-  and takes it too), the floor plan's Add tables and Add joined table, Include menu as folder, the
-  Prep stations route-change notice, the printers' Add agent and Calibrate, Pair device, and only
-  the password step of setting up an authenticator app on the profile. The Units and Modifiers
-  Delete dialogs do not: depending on the data they show a table or nothing, and a fixed height
-  could squeeze the table.
 
 ## A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)
 
