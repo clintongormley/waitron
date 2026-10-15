@@ -77,11 +77,6 @@ export function effectiveNames(entry: LiveTarget): Record<string, string> {
   return { ...entry.inheritedNames, ...entry.names };
 }
 
-function liveItem(row: TranslationRow, settings: TranslationSettings): LiveItem | null {
-  const entry = resolveTranslationRow(row, settings.config.defaultLanguage, settings);
-  return isLiveTarget(entry) ? { row, entry } : null;
-}
-
 /** The live items among `refs`, keyed by ref. */
 export async function readLiveItems(
   tx: Transaction,
@@ -90,8 +85,8 @@ export async function readLiveItems(
 ): Promise<Map<string, LiveItem>> {
   const live = new Map<string, LiveItem>();
   for (const [key, row] of await readTranslationRows(tx, refs)) {
-    const item = liveItem(row, settings);
-    if (item) live.set(key, item);
+    const entry = resolveTranslationRow(row, settings.config.defaultLanguage, settings);
+    if (isLiveTarget(entry)) live.set(key, { row, entry });
   }
   return live;
 }
@@ -106,13 +101,14 @@ export async function readSuggestionGaps(
   const settings = read ?? (await readTranslationSettings(tx, context));
   const { config } = settings;
   const gaps = new SuggestionGaps(settings);
+  // Every gap row is live: the listing's liveness filter implies `isLiveTarget`.
   for (const row of await listTranslationGapRows(tx, config)) {
-    const item = liveItem(row, settings);
-    if (!item) continue;
-    const effective = effectiveNames(item.entry);
-    gaps.set(suggestionRef(item.entry.target), {
-      ...item,
-      target: item.entry.target,
+    const entry = resolveTranslationRow(row, config.defaultLanguage, settings);
+    const effective = effectiveNames(entry);
+    gaps.set(suggestionRef(entry.target), {
+      row,
+      entry,
+      target: entry.target,
       missing: new Set(config.languages.filter((language) => blankName(effective[language]))),
     });
   }
@@ -334,16 +330,16 @@ async function readContextHeads(
   const families = [...new Set(items.map((item) => item.family))].filter(
     (family) => !listed.has(family),
   );
-  const unread = families.filter((family) => !gaps.has(family));
+  const known = families.flatMap((family) => {
+    const gap = gaps.get(family);
+    return gap ? [gap.entry] : [];
+  });
   const read = await readLiveItems(
     tx,
-    unread.map((family) => parseSuggestionRef(family)!),
+    families.filter((family) => !gaps.has(family)).map((family) => parseSuggestionRef(family)!),
     gaps.settings,
   );
-  const live = families.flatMap((family) => {
-    const item = gaps.get(family) ?? read.get(family);
-    return item ? [item.entry] : [];
-  });
+  const live = [...known, ...[...read.values()].map((item) => item.entry)];
   const heads = await describeItems(
     tx,
     gaps.settings.config,
