@@ -413,10 +413,7 @@ just a green typecheck.
      address always prints (2026-10-10, A366 slice 7, the note atop
      [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
-  5. Delivered by Part 1a's pull request.
   6. **Guests and the amount per person** when the table's guests were entered.
-  7. **A drink/food subtotal** — dropped by the owner on 2026-10-15, with the questions it raised
-     (Q1, Q3, Q6).
 
 ## The till's on-screen receipt is a second copy of the layout
 
@@ -428,9 +425,13 @@ just a green typecheck.
 
 ## Quantities print with "." whatever the receipt language
 
-- **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt):
-  `trimQuantityForDisplay` (`apps/server/src/receipt-lines.ts`) takes no language. A663 keeps
-  today's form; this entry is to print the language's decimal mark («0,35 kg»).
+- **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt).
+  `buildReceiptDocument` (`apps/server/src/receipt-document.ts`) writes quantities into the
+  receipt as their digits: an item's quantity in its line, an option's quantity in its caption,
+  and the quantity in `netFacts`' unit-price line. Print the language's decimal mark there
+  («0,35 kg»). A663 keeps today's form. The till has the same gap: "Quantity-display follow-ups
+  found while tracing A313" in
+  [backlog.md → Users, sign-in and the dashboard shell](../backlog.md#users-sign-in-and-the-dashboard-shell).
 
 ## A command queued behind a slow pair can run out of time
 
@@ -575,6 +576,9 @@ returns `null`. This checks those readers, not every sale path.
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
 ## Decisions and deliberate limits
+
+- **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
+  A663.
 
 - **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
   from `formatReceipt` retains one sale, tender, header and drawer, then replays without another

@@ -39,12 +39,12 @@ request holds.
 | Part | What it delivers | Tasks | Can start |
 | ---- | ---------------- | ----- | --------- |
 | 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
-| 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed |
-| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed |
-| 3 | Guests and the amount per person | 3 | After A661 lands (it edits `receipt-print.ts`); uses owner question Q2's default unless answered |
-| 4 | The drink/food subtotal setting | 6 | After owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
+| 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
+| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed (A661 landed 2026-10-15, #1745) |
+| 3 | Guests and the amount per person | 3 | After A661 lands (it edits `receipt-print.ts`) (A661 landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
+| 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
-Why 1b and 2 wait for A661: see "A661 overlap" below.
+Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
 
 Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: on paper and on the A4
 page, the only place a unit price is printed beside a quantity is the full invoice's «Precio sin
@@ -155,7 +155,7 @@ their tests, the two `.bin` files and `apps/server/scripts/receipt-look.ts` — 
 `apps/server/src/*.test.ts` and `apps/till/src`), the till screen this item does not change. If a
 Part 1a run of the receipt suites still fails in a file A661 changes, stop: move that change to
 Part 1b rather than editing the file. Part 1b, Part 2, Part 3 and Part 4 start only after A661 has
-merged.
+merged (A661 landed 2026-10-15, #1745).
 
 **Whichever of A661 and A663 lands second** re-runs the receipt suites (Global Constraints) on top
 of the other and updates the layout assertions that fail — in the files above and in any the other
@@ -236,7 +236,7 @@ Two pull requests:
 - **Part 1a**, branch `feat/a663-1-receipt-layout`, starts now: Task 1.1, Task 1.3, Task 1.4, then
   Task 1.8 (its own LOOK, fiscal gate and backlog step, written after Task 1.4 below).
 - **Part 1b**, branch `feat/a663-1b-receipt-layout`, from `main` after Part 1a **and A661** have
-  merged: Task 1.2, Task 1.5, Task 1.6a, Task 1.6b, Task 1.7.
+  merged (A661 landed 2026-10-15, #1745): Task 1.2, Task 1.5, Task 1.6a, Task 1.6b, Task 1.7.
 
 ### Task 1.1: Bold and double-size lines in `@waitron/printing`, readable back as text (Part 1a)
 
@@ -1131,7 +1131,7 @@ and that split is accepted, as for the date.)
 
 # Part 2 — the full invoice
 
-Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661
+Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661 landed 2026-10-15, #1745) (A661
 changes `bill-payments.test.ts` and adds "Factura completa" assertions this part must update; see
 "A661 overlap"). Target layout (`2-full-invoice.png`):
 
@@ -1603,7 +1603,7 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
 
 # Part 3 — guests and the amount per person
 
-Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged**
+Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged** (A661 landed 2026-10-15, #1745)
 (this part edits `receipt-print.ts`). Uses owner question Q2's default unless the owner has answered.
 
 Guests are stored on the party, not the bill: `parties.guest_count`, null or at least 1
@@ -1724,6 +1724,8 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 ---
 
 # Part 4 — the drink/food subtotal setting
+
+Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built.
 
 Branch `feat/a663-4-drink-food-subtotals`. **Waits for owner questions Q1, Q3 and Q6**, and for A661
 to merge (this part edits `receipt-print.ts`, `apps/dashboard/src/api/client.ts` and

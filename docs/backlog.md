@@ -3493,11 +3493,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply
   that rule. Decide whether a manager's resend should.
 
-- **The till's on-screen receipt is a second copy of the layout.** It prints its own unit-price line
+- **The till's on-screen receipt is a second copy of the layout (A663 follow-up, 2026-10-15;
+  open).** It prints its own unit-price line
   and rates as «21.00%», so A663's changes do not reach it; bring it into line with the printed receipt.
   [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
 
-- **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt).
+- **Quantities print with "." whatever the receipt language (A663 follow-up, 2026-10-15; open)**
+  («0.35 kg» on a Spanish receipt).
   [Detail](backlog/printers.md#quantities-print-with--whatever-the-receipt-language)
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only

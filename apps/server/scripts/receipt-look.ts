@@ -51,7 +51,7 @@ const line = (quantity: string, name: string, gross: string, unit = "ud") => ({
   gross,
 });
 
-// The sale in 1-simplified-receipt.png: seven lines, one rate, cash.
+// The sale in docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png: seven lines, one rate, cash.
 const MOCKUP: ReceiptDocumentInput = {
   result: {
     locale: "es-ES",
@@ -81,7 +81,7 @@ const MOCKUP: ReceiptDocumentInput = {
   invoiceLocale: "es-ES",
 };
 
-// A filed full invoice reads its rates in two-decimal form (Task 1.3), so the sample does too.
+// A filed full invoice reads its rates in two-decimal form, so the sample does too.
 const FULL = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
 FULL.result.lines[0]!.net!.rate = "21.00";
 FULL.result.lines[1]!.net!.rate = "10.00";
