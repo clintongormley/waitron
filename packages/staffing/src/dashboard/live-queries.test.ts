@@ -18,6 +18,25 @@ describe("QUERY_DEPENDENCIES", () => {
       "shift_assignments",
       "persons",
     ]);
-    expect(Object.keys(QUERY_DEPENDENCIES)).toEqual(["staff-roles", "staff-role-delete-impact"]);
+  });
+
+  it("reads the month again when its paint, a staff role, an area, a season, a special day or the day's changeover changes", () => {
+    expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
+      "staffing_days",
+      "staffing_blocks",
+      "staff_roles",
+      "departments",
+      "kitchen_stations",
+      "seasons",
+      "special_days",
+      "special_day_dates",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
+    ]);
+    expect(Object.keys(QUERY_DEPENDENCIES)).toEqual([
+      "staff-roles",
+      "staff-role-delete-impact",
+      "staffing-month",
+    ]);
   });
 });
