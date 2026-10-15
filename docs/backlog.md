@@ -3968,9 +3968,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **A727. Page search finds tabs, windows and views inside pages (owner, 2026-10-15).** "Periods —
-  in Calendar" opens the Calendar with its Periods window showing. [Detail](backlog/dashboard.md#a727-page-search-finds-tabs-windows-and-views-inside-pages)
-
 - **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
   screen follows the device's own light or dark setting: the token layer honours a `data-theme`
   attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in

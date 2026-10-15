@@ -257,6 +257,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
     year: "year",
     month: "month",
     "special-day": "special-day",
+    window: "window",
   });
   expect(dashboardPath.keepUnlisted).toEqual(["opening-hours"]);
 });

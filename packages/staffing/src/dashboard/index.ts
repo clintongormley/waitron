@@ -63,6 +63,10 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
     },
     {
       id: "rota",
+      searchDestinations: [
+        { id: "by-area", labelKey: "staffing.rota.by_area", params: { mode: "area" } },
+        { id: "by-person", labelKey: "staffing.rota.by_person", params: { mode: "person" } },
+      ],
       labelKey: "staffing.rota.tab",
       order: 20,
       requiresPermission: "schedule.manage",

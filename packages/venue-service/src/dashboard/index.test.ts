@@ -350,3 +350,45 @@ it("registers Opening hours without a separate Station hours page", () => {
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
 });
+
+it("opens each declared prep-station search destination on its named tab", async () => {
+  const request = (async (path: string) =>
+    path === "/management-api/venue-service/routing"
+      ? {
+          zones: [],
+          periods: [],
+          categories: [],
+          products: [],
+          cells: [],
+          defaultStationId: null,
+          stations: [],
+          canMakeDefault: true,
+        }
+      : []) as import("@waitron/dashboard-kit").DashboardRequest;
+  const contribution = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
+    (x) => x.screen.id === "prep-stations",
+  )!;
+  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations?.filter(
+    (x) => x.screen === "prep-stations",
+  );
+  expect(destinations?.map((x) => x.path)).toEqual([
+    "/manage/prep-stations/view/stations",
+    "/manage/prep-stations/view/routing",
+    "/manage/prep-stations/view/times",
+  ]);
+  for (const destination of destinations!) {
+    history.replaceState(null, "", destination.path);
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    const handle = contribution.create({ request });
+    render(handle.render(), container);
+    const screen = container.querySelector<PrepStationsScreen>("dashboard-prep-stations-screen")!;
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("wt-tabs")?.value).toBe(
+        destination.path.split("/").at(-1),
+      ),
+    );
+    container.remove();
+  }
+});

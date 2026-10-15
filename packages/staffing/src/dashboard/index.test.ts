@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render } from "lit";
+import { render, type LitElement } from "lit";
 import type { CalendarViewHost, DashboardRequest } from "@waitron/dashboard-kit";
 import { STAFFING_DASHBOARD } from "./index.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
@@ -8,6 +8,7 @@ import type { StaffingSeasonPainter } from "./staffing-season-painter.js";
 import type { StaffingSpecialDayPainter } from "./staffing-special-day-painter.js";
 import { staffingMonth } from "../testing/staffing-month-fixture.js";
 import { seasonStaffing } from "../testing/season-staffing-fixture.js";
+import { rotaWeek } from "../testing/rota-fixture.js";
 import { specialDayStaffing } from "../testing/special-day-staffing-fixture.js";
 
 const containers: HTMLElement[] = [];
@@ -302,4 +303,36 @@ describe("the Rota contribution", () => {
       ]),
     );
   });
+});
+
+it("opens the Rota modes declared for search on the real view", async () => {
+  const rota = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "rota")!;
+  expect(rota.searchDestinations?.map((x) => x.params)).toEqual([
+    { mode: "area" },
+    { mode: "person" },
+  ]);
+  for (const destination of rota.searchDestinations!) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    const request = (async (path: string) =>
+      path.includes("/roster/breaches?")
+        ? { breaches: [], ruleset: null }
+        : rotaWeek("2026-09-28")) as DashboardRequest;
+    const handle = rota.create(
+      { request },
+      { month: "2026-10", params: destination.params, canWrite: false, open: () => undefined },
+    );
+    render(handle.render(), container);
+    const view = container.querySelector<LitElement>("staffing-rota")!;
+    await view.updateComplete;
+    await vi.waitFor(() =>
+      expect(
+        view
+          .shadowRoot!.querySelector(`[data-test="by-${destination.params.mode}"]`)
+          ?.getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    container.remove();
+  }
 });

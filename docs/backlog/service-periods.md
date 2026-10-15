@@ -232,7 +232,9 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
    painters' "Periods" link (`periodsLink`, `period-editing.ts`), which today navigates away and now
    opens the window on top of the painter so unsaved paint stays; and the Departments warning "Set up
    periods" (`departments-list.ts:219`), which opens the Calendar with the window open. The window
-   needs an address so links and page search (A727) can open it.
+   uses the Calendar's existing `window/<id>` address pair. Extend its window handler with `periods`,
+   reuse `calendarWindowPath`, and declare the destination in venue-service's `searchDestinations`.
+   Keep the retained painter outside the window's draft ancestry.
 3. **An unused period shows its colour.** Today a period painted nowhere gets an empty dashed square
    and a greyed name (`swatch-unpainted`, `periods-screen.ts`); "Not painted anywhere" already says
    so. Fill the square and drop the grey.
@@ -278,7 +280,7 @@ Season colours come from A721; until it lands the views keep today's tints.
 the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
 
 1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row
-   (A720 left it to A721), lists every season in the order it
+   (A720 left it to A721), replaces the existing addressable chooser at `window/seasons` and lists every season in the order it
    starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
@@ -292,6 +294,9 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
 [on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png). Depends on A720.
+
+Register the new view in venue-service's search destinations when it exists; A727 deliberately
+keeps `/view/week` out of search while it still means the old season painter.
 
 1. **One real week** — holidays, special days and closed days included, unlike a painter's standard
    week — for the department chosen in Show and its zones, or one row per department for All

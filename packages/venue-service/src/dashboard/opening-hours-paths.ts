@@ -49,3 +49,14 @@ export function hoursPath(month?: string | null): string {
     ["month", month],
   ]);
 }
+
+/** Changes only the window pair, retaining the view and its subject underneath. */
+export function calendarWindowPath(basePath: string, windowId: string | null): string {
+  const parts = basePath.split("/");
+  const retained = parts.slice(0, 3);
+  for (let i = 3; i < parts.length; i += 2) {
+    if (parts[i] !== "window") retained.push(...parts.slice(i, i + 2));
+  }
+  if (windowId !== null) retained.push("window", encodePathSegment(windowId));
+  return retained.join("/");
+}

@@ -28,6 +28,8 @@ export type DashboardPanelRenderer = (
 /** A mounted screen instance: the app calls render() to paint it. */
 export interface DashboardScreenHandle {
   render(readOnly?: boolean): TemplateResult;
+  /** Scopes this navigation may release; undefined protects every scope. */
+  navigationScopes?(destination: URL): readonly object[] | undefined;
 }
 
 /** Where a contributed screen sits in the nav, and the permission that opens it. */
@@ -70,8 +72,23 @@ export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
   "week",
 ];
 
+/** A static destination inside a page. Its parent must be readable as well as any child gate. */
+export interface DashboardSearchDestination {
+  id: string;
+  screen: string;
+  labelKey: string;
+  path: string;
+  requiresPermission?: string;
+  readPermission?: string;
+}
+
 /** A view a module adds to the Calendar (the Opening hours screen) beside Opening hours. */
 export interface DashboardCalendarView {
+  searchDestinations?: readonly {
+    id: string;
+    labelKey: string;
+    params: Readonly<Record<string, string>>;
+  }[];
   /** The address's view name; unique, and none of the Calendar's own view words. */
   id: string;
   labelKey: string;
@@ -111,4 +128,5 @@ export interface DashboardContribution extends DashboardFurtherScreen {
   moreScreens?: readonly DashboardFurtherScreen[];
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
+  searchDestinations?: readonly DashboardSearchDestination[];
 }

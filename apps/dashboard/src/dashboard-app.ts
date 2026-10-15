@@ -15,7 +15,8 @@ import {
   type WtToast,
 } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
-import { navMatches } from "./nav-search.js";
+import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
+import { collectSearchDestinations } from "./nav-destinations.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -25,7 +26,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { setContentLanguages } from "@waitron/ui";
 import { DashboardQueries } from "./api/query-controller.js";
@@ -71,7 +72,7 @@ import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/kitchen-screen.js";
-import { VENUE_SETTINGS_TABS } from "./screens/venue-settings-screen.js";
+import { VENUE_SETTINGS_TABS, TAB_LABELS } from "./screens/venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
@@ -562,7 +563,8 @@ export class DashboardApp extends LitElement {
         transform: rotate(180deg);
       }
 
-      .nav-item {
+      .nav-item,
+      .nav-destination {
         display: block;
         width: 100%;
         min-height: var(--wt-tap-min);
@@ -579,13 +581,15 @@ export class DashboardApp extends LitElement {
 
       @media (pointer: fine) {
         .nav-item,
+        .nav-destination,
         .nav-group {
           min-height: var(--wt-space-6);
           padding-block: var(--wt-space-1);
         }
       }
 
-      .nav-item:hover {
+      .nav-item:hover,
+      .nav-destination:hover {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
       }
@@ -1409,6 +1413,7 @@ export class DashboardApp extends LitElement {
     }
     for (const list of this.#navGroups.values())
       list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    this.#searchDestinations();
   }
 
   /** Gathered before any module's screens are created, because each module gets its own `ctx`. */
@@ -1884,6 +1889,12 @@ export class DashboardApp extends LitElement {
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), {
     ...dashboardPath,
+    keepUnlisted: [
+      ...(dashboardPath.keepUnlisted ?? []),
+      ...DASHBOARD_MODULES.flatMap((c) =>
+        [c, ...(c.moreScreens ?? [])].map(({ screen }) => screen.id),
+      ).filter((id) => dashboardPath.children[id] === undefined),
+    ],
     leave: {
       isDirty: () => this.leave.coordinator.isDirty(),
       request: (proceed, signal, destination) => {
@@ -1906,13 +1917,19 @@ export class DashboardApp extends LitElement {
           ) ?? [],
         );
         // A tab change retains schedule forms while guarding the Hours dialogs it releases.
-        const scopes = retainedSchedule
-          ? hoursDrafts
-          : requested === "profile"
-            ? []
-            : this.profileOpen && requested === this.screen && profile
-              ? [profile]
-              : "all";
+        const moduleScopes =
+          !this.profileOpen && requested === this.screen
+            ? this.#activeScreens.get(this.screen)?.handle.navigationScopes?.(new URL(destination))
+            : undefined;
+        const scopes =
+          moduleScopes ??
+          (retainedSchedule
+            ? hoursDrafts
+            : requested === "profile"
+              ? []
+              : this.profileOpen && requested === this.screen && profile
+                ? [profile]
+                : "all");
         return this.leave.coordinator.request({
           scopes,
           reason: "navigation",
@@ -2014,6 +2031,48 @@ export class DashboardApp extends LitElement {
       const matched = navMatches(this.navSearch, pages, heading);
       return { group, pages: matched.length > 0 ? matched : undefined };
     });
+  }
+
+  #searchDestinations(): NavSearchDestination[] {
+    const pages = this.#permittedNav().flatMap(({ group, pages }) =>
+      pages.map((page) => ({ ...page, heading: group.headerKey ? t(group.headerKey) : "" })),
+    );
+    const tabs = new Set(this.#settingsPanels().map((panel) => panel.tab));
+    return collectSearchDestinations({
+      pages,
+      declarations: DASHBOARD_MODULES.filter((c) =>
+        this.#enabledModules.includes(c.module),
+      ).flatMap((c) => c.searchDestinations ?? []),
+      calendarViews: this.#calendarViews(this.#enabledModules),
+      settingsTabs: VENUE_SETTINGS_TABS.filter((tab) => tabs.has(tab)).map((id) => ({
+        id,
+        label: t(TAB_LABELS[id]),
+      })),
+      permissions: this.#sessionPermissions,
+      label: tKit,
+      knownScreens: [
+        ...CORE_SCREENS,
+        ...DASHBOARD_MODULES.flatMap((c) =>
+          [c, ...(c.moreScreens ?? [])].map(({ screen }) => screen.id),
+        ),
+      ],
+    });
+  }
+
+  async #openSearchDestination(destination: NavSearchDestination): Promise<void> {
+    const current = this.#searchDestinations().find(
+      (item) => item.id === destination.id && item.href === destination.href,
+    );
+    if (!current) return;
+    const guard = navigationGuardFor(window);
+    const url = new URL(guard?.href ?? location.href);
+    url.pathname = current.href;
+    const outcome = await guard?.write(url);
+    if (outcome === "proceeded" && this.isConnected && this.screen === current.screen) {
+      this.#openGroupOf(current.screen);
+      this.drawerOpen = false;
+      this.navSearch = "";
+    }
   }
 
   #folded(): boolean {
@@ -2197,6 +2256,10 @@ export class DashboardApp extends LitElement {
     if (e.key === "Enter" && this.navSearch.trim() !== "") {
       const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
       if (first) this.#openFromNav(first.screen);
+      else {
+        const inner = destinationMatches(this.navSearch, this.#searchDestinations())[0];
+        if (inner) void this.#openSearchDestination(inner);
+      }
     } else if (e.key === "Escape" && this.navSearch !== "") {
       e.stopPropagation();
       this.navSearch = "";
@@ -2208,7 +2271,9 @@ export class DashboardApp extends LitElement {
   #nav(): TemplateResult {
     const searching = this.navSearch.trim() !== "";
     const sections = this.#shownNav();
-    const noMatch = searching && sections.every((section) => section.pages === undefined);
+    const inner = searching ? destinationMatches(this.navSearch, this.#searchDestinations()) : [];
+    const noMatch =
+      searching && sections.every((section) => section.pages === undefined) && inner.length === 0;
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
         ${
@@ -2275,6 +2340,19 @@ export class DashboardApp extends LitElement {
             </div>
           `;
         })}
+        ${repeat(
+          inner,
+          (destination) => destination.id,
+          (destination) =>
+            html`<button
+              type="button"
+              class="nav-destination"
+              data-search-destination=${destination.id}
+              @click=${() => void this.#openSearchDestination(destination)}
+            >
+              ${fill("nav.destination", { label: destination.label, page: destination.pageLabel })}
+            </button>`,
+        )}
         ${
           this.sessionRole === "staff"
             ? nothing

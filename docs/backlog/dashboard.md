@@ -919,6 +919,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+**Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
+readable pages, showing their name and containing page. Page matches precede inner results.
+The approved scope is preserved in the [implementation plan](../superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
+Periods moves into the Calendar under A719; the editable Seasons table is A721 and the real Week
+view is A722. Each registers its destination when it exists.
+
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s
   shorter height is a fixed medium one, not one that follows its content, so a dialog given it does
   not change size as rows are added or removed. How it works: `docs/developers/design-system.md` →
@@ -1127,20 +1133,6 @@ still asks, and a full page's own Cancel leaves without asking too.
 - **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
   Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
   that asserts Cancel asks is now asserting the old rule.
-
-## A727. Page search finds tabs, windows and views inside pages
-
-**A727 (owner, 2026-10-15).** Mockup: the right-hand panel of
-[the Periods window board](mockups/a718-a727-calendar-and-stations/13-periods-window.png) (its other results are invented). Files:
-`apps/dashboard/src/nav-search.ts`, and each module's dashboard contribution.
-
-Today page search matches a page's own name and its group heading only (`navMatches`,
-`nav-search.ts`), so "Staffing" does not find the Calendar's Staffing tab. Each module lists the
-tabs, windows and views inside its pages with the address that opens them — Calendar › Staffing,
-Calendar › Week, Calendar › Seasons, Calendar › Periods, Prep stations › Routes and the like. A
-result says where it lives ("Periods — in Calendar") and opens the page with that tab or window
-showing; page names still rank first. Opening a window from an address is the mechanism A719 point 2
-needs too.
 
 ## A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
 
