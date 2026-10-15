@@ -34,7 +34,7 @@ export function zoneOwnHours(
   day: { dayCutover: string; endMinute: number },
 ): ZoneOwnHours {
   const place = placer(day);
-  const closed = closures.map(place).filter((closure) => closure.start < closure.end);
+  const closed = closures.map(place);
   const ranges: ServiceRange[] = [];
   const cut: Piece[] = [];
   for (const range of department) {

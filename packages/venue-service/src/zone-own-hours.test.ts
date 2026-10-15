@@ -86,6 +86,35 @@ describe("zoneOwnHours", () => {
     });
   });
 
+  it("caps times at the end of a 23-hour day", () => {
+    expect(
+      zoneOwnHours([range("open", "22:00", "06:00")], [closure("04:00", "05:30")], {
+        dayCutover: "06:00",
+        endMinute: 1380,
+      }),
+    ).toEqual({
+      ranges: [range("open", "22:00", "04:00")],
+      closed: [closure("04:00", "06:00")],
+    });
+  });
+
+  it("lists closures given out of day order in day order", () => {
+    expect(
+      zoneOwnHours(
+        [range("dinner", "20:00", "23:00")],
+        [closure("22:00", "22:30"), closure("20:30", "21:00")],
+        day,
+      ),
+    ).toEqual({
+      ranges: [
+        range("dinner", "20:00", "20:30"),
+        range("dinner", "21:00", "22:00"),
+        range("dinner", "22:30", "23:00"),
+      ],
+      closed: [closure("20:30", "21:00"), closure("22:00", "22:30")],
+    });
+  });
+
   it("gives a closed department no hours and no closed pieces, whatever the closures", () => {
     expect(zoneOwnHours([], [closure("09:00", "00:00"), closure("03:00", "05:00")], day)).toEqual({
       ranges: [],
