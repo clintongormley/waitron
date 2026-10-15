@@ -24,13 +24,16 @@ reads the same filed figures and lays them out differently.
 **Spec:** `docs/backlog/printers.md`, section "A663 — receipts and full invoices that are easier to
 read", with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
 and `2-full-invoice.png`. Read the section and look at both pictures before starting any task. The
-mockups are "drawn, not rendered": where this plan departs from a drawing, it says so and why.
+mockups are "drawn, not rendered": where this plan departs from a drawing, it says so and why. The
+owner changed one point of `1-simplified-receipt.png` on 2026-10-15 (Q11): a one-rate simplified
+receipt prints «Base imponible» and «IVA» under TOTAL, not «IVA 10% incluido». Part 2b builds it;
+the picture is kept as drawn.
 
 ---
 
 ## How the work is cut
 
-Four pull requests (a fifth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+Six pull requests (a seventh, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
 two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
 #1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
@@ -41,10 +44,19 @@ request holds.
 | 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
 | 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
 | 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item with the item and its discount before VAT, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page; a count in «ud» printed bare on both documents | 2.1, 2.2, 2.3a, 2.3b, 2.3c-1, 2.3c-2, 2.3d, 2.4, 2.5, 2.6 (ten dispatches) | Now: Part 1b (#1756) and A661 (#1745) have landed |
+| 2b | A one-rate simplified receipt prints «Base imponible» and «IVA» under TOTAL instead of «IVA 10% incluido» (owner, Q11) | Written at the start of the part | After Part 2 has landed |
+| 2c | Each sale line stores its price before any discount, so every line prints its own price and discount (owner, Q9); the whole-bill discount prints once per VAT rate at the end of the table (owner, Q10). A database change | Written at the start of the part | After Part 2b has landed |
 | 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
 Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
+
+Parts 2b and 2c were added on 2026-10-15, when the owner answered Q9, Q10 and Q11 with the
+alternatives after Part 2 was built on the defaults. Part 2 lands as built: it is fifteen reviewed
+commits, and a database change deserves its own pull request. Part 2b (Q11) is small and changes no
+database; Part 2c (Q9 and Q10 together, since both change the discount rows) adds a column to
+`sale_lines`. Until Part 2c lands, `main` prints a whole-bill discount under each dish, the default
+the owner did not choose; nothing is live, and Part 2c replaces it. Then Part 3.
 
 Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: on paper and on the A4
 page, the only place a unit price is printed beside a quantity is the full invoice's «Precio sin
@@ -66,7 +78,8 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
-  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`.
+  `feat/a663-2-full-invoice-layout`, `feat/a663-2b-one-rate-vat-lines`,
+  `feat/a663-2c-price-before-discount`, `feat/a663-3-guests`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -75,7 +88,8 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
   (the last three are the record-fingerprint suites in `packages/fiscal-verifactu/src`, listed with
   `ls packages/fiscal-verifactu/src/*.huella*.test.ts` on 2026-10-15). If any needs an edit to pass, STOP: something printed is reaching a filed record or a hash,
   which this item must never do. Nothing in this plan writes to `sales`, `sale_lines`,
-  `registros_facturacion`, the QR text or any input of `computeHuella`.
+  `registros_facturacion`, the QR text or any input of `computeHuella` — except Part 2c, which the
+  owner approved (Q9) to add one column to `sale_lines` that must reach no fiscal record; see Part 2c.
 - **If a point turns out to need a change to what is filed or hashed, STOP that point** and add it
   to "Owner questions" in this plan instead of building it.
 - **Review path: FULL for every part** (CLAUDE.md §5 — a printed invoice is a legal document):
@@ -882,7 +896,9 @@ Both documents. Today the header joins name and NIF, and phone and email, with "
 (`receipt-document.ts:169`, `:173-175`), and sections are separated by blank lines (`line()`). The
 approved layout: a ruled line between every section; in the business block, one fact per line, the
 first line in bold. The first line is the trading name when it prints (today's rule,
-`receipt-document.ts:164-167`); otherwise the legal name is first and bold. Order: trading name (bold)
+`receipt-document.ts:164-167`); otherwise the legal name is bold, and first unless a header subtitle
+prints, which then comes first with the bold legal name beneath it (as built in Part 1b,
+`receipt-document.ts:188-190` on Part 2's branch, 2026-10-15; the owner chose to keep it). Order: trading name (bold)
 · header subtitle · legal name · "NIF: …" · venue address lines · "Tel. …" · email · DUPLICADO when a
 copy. The logo stays at the top of the block. Full-invoice-only lines (the registered address,
 `receipt-document.ts:176`, and "Factura completa", `:160`) keep their place until Part 2.
@@ -1009,7 +1025,8 @@ Cambio                       13,00 €
 ```
 
 With several rates the single «IVA x% incluido» line is replaced by today's pair per rate,
-`Base 10%` / `IVA 10%` (art. 7.1.f). The date keeps `Intl`'s own format ("13 oct 2026, 16:53",
+`Base 10%` / `IVA 10%` (art. 7.1.f). (Owner, 2026-10-15, Q11: a one-rate receipt prints the base and
+the VAT too, replacing the «IVA 10% incluido» line drawn in `1-simplified-receipt.png`; Part 2b.) The date keeps `Intl`'s own format ("13 oct 2026, 16:53",
 measured), not the mockup's comma-less drawing. The quantity keeps today's form, the count and its
 unit name («1 ud», «0.35 kg», `receipt-document.ts:207-211`), not the mockup's bare «1»: see owner
 question Q8. A bill-wide discount
@@ -1246,6 +1263,10 @@ figures.
 
 ### The rule this part builds
 
+> **Owner, 2026-10-15:** Q9 and Q10 were answered with the alternatives after this part was built.
+> Part 2 builds the defaults below as written; Part 2c replaces point 2's line under one priced unit
+> and the whole-bill discount's rows ("A discount on the whole bill" below).
+
 For a dish group whose every line has `net`, each line gets four cells, the figures all before VAT:
 
 1. **Amount** (Importe): `baseFromGross(listGross, rate)` when the line has a `listGross`, except a
@@ -1315,7 +1336,8 @@ invoice whose lines have `net`; they only choose the label.
 **A discount on the whole bill** prints no row of its own: each dish's share is already in that
 dish's filed base, so it prints in that dish's discount row (owner question Q10 has the
 alternative). S5 above prints «Descuento 10% -2,48» under the wine and «Descuento 10% -0,22» under
-the bread.
+the bread. (The owner chose the alternative on 2026-10-15; Part 2c moves these rows to the end of
+the table, one per rate.)
 
 **A dish group with a line that has no `net`** (Review Focus 4) prints as today's simplified
 receipt does — quantity and name with ` (IVA incluido)` added, `formatMoney(listGross ?? gross)`,
@@ -1525,6 +1547,9 @@ it ripples into and the saved `.bin` files; **2.3c-2** the database and API suit
 is green again only after 2.3c-2.
 
 #### Task 2.3a: Before-VAT figures and the bare count (pure functions)
+
+> The case named "owner question Q9" below builds Q9's default; Part 2c replaces it with the
+> owner's 2026-10-15 answer.
 
 **Files:**
 - Modify: `packages/catalogue/src/pricing.ts:80-84` (export `baseFromGross`; nothing else changes
@@ -1743,6 +1768,10 @@ alone is 7,44 − 6,69 = 0,75. Re-run any figure you doubt the same way before t
 - [ ] **Step 4:** Run it again — PASS; then `pnpm --filter @waitron/catalogue exec vitest run src/pricing.test.ts && pnpm --filter @waitron/catalogue exec tsc --noEmit && pnpm --filter @waitron/server exec tsc --noEmit && pnpm exec eslint apps/server/scripts/demo-seed/seed-sales.ts apps/server/src/invoice-figures.ts` — PASS. **Commit.**
 
 #### Task 2.3b: The full invoice's heading, customer block, table and totals
+
+> The case named "owner question Q10" below builds Q10's default; Part 2c replaces it with the
+> owner's 2026-10-15 answer. The «IVA 10% incluido» row this task leaves alone is replaced by Part
+> 2b (Q11).
 
 Replace, for `invoiceType === "F1"`, today's lines: "Factura completa" above the header
 (`receipt-document.ts:185`), the `Factura`/`Fecha` rows (`:215-219`), the item rows with their
@@ -2165,7 +2194,8 @@ existing A4 check: the QR first and 35 mm, the logo, pagination without clipping
   province added («Avinguda d'Icària 215, Bajos, 08005 Barcelona (Barcelona)»), a two-rate full
   invoice with a whole-bill discount (S5's figures), the owner's menu del día (one 10,00 € menu at
   10% less 10%), a comped weighed line of under one kilo (owner question Q9's gap: it prints «0,00
-  0,00» and no «Invitación»), an extra priced per portion (units «2», price «1,24»), one holding a
+  0,00» and no «Invitación» — expected until Part 2c, which prints its value and an «Invitación»
+  row), an extra priced per portion (units «2», price «1,24»), one holding a
   weighed line («0.35 kg», `unitName: { es: "kg" }`) beside counted
   lines (`unitName: { es: "ud" }`), and a simplified receipt with the same counted and weighed
   lines; run it; open every 58 mm, 80 mm and A4 picture and the PDF. Check the table columns line
@@ -2178,13 +2208,164 @@ existing A4 check: the QR first and 35 mm, the logo, pagination without clipping
   entry (point 4 by the table, «Precio» per priced unit with nothing after it, owner Q4). Add to the
   entry "The till's on-screen receipt is a second copy of the layout" that the till also still
   prints «4 ud» where paper now prints «4» (owner, Q8), and its discounts with VAT on a full
-  invoice. If owner questions Q9 or Q10 are still open, each becomes its own short entry in the
-  printers area. If no point of A663 is left open, delete the A663 entry from
-  `docs/backlog/printers.md` and its line from `docs/backlog.md`. Add a short entry under the fiscal
+  invoice. Owner questions Q9, Q10 and Q11 are answered (2026-10-15), so none becomes an entry of
+  its own: the A663 entry stays open and names what is left — Part 2b (base and VAT on a one-rate
+  simplified receipt), Part 2c (each line's price before any discount; the whole-bill discount once
+  per rate) and Part 3 (guests). Add a short entry under the fiscal
   area (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
   different from its issue date; art. 7.1.c then requires it on the receipt, and the document
   builder prints one only on a full invoice (`receipt-document.ts`)".
 - [ ] **Step 5: Commit, then `/finish-branch`.**
+
+---
+
+# Part 2b — base and VAT on a one-rate simplified receipt (owner Q11)
+
+Branch `feat/a663-2b-one-rate-vat-lines`, from `main` after Part 2 has landed. Its own pull
+request. **Review path: FULL** (Global Constraints: what a receipt prints is a legal document), with
+the Codex run-it seat twice. **Migration: none.**
+
+This section states the scope only. The part's test-first tasks are written at its start, before
+anything is built, and reviewed by a fresh-context reader against this section and the owner's Q11
+answer. Line numbers are from Part 2's branch on 2026-10-15; re-check them on `main` first.
+
+- `vatRows` (`apps/server/src/receipt-document.ts:350-365`) loses its one-rate branch (`:353-359`,
+  the «IVA x% incluido» row). Every simplified receipt then prints a base row and a VAT row per
+  rate, under TOTAL (the order at `:369-371` stays), from `result.vatBreakdown`: the record's own
+  figures, never a sum of the lines. The owner's example: «Base imponible 10% 8,18 €» and «IVA 10%
+  0,82 €».
+- **Open for the driver before the tasks are written: the base's label.** The owner's words are
+  «Base imponible», "as a full invoice does". A two-rate simplified receipt prints «Base 10%» today
+  (`label.base`, `:360`). Either the two-rate receipt changes to «Base imponible» too, so a
+  simplified receipt never names the base two ways (this plan's recommendation), or the one-rate
+  receipt alone uses it.
+- The `vatIncludedAtRate` label key (`packages/country/src/country.ts:82`, and its four languages in
+  `packages/country-es/src/receipt-labels.ts`) loses its only reader: `git grep vatIncludedAtRate` on
+  2026-10-15 found `receipt-document.ts:355` and `packages/country-es/src/spain.test.ts:289, 295`,
+  and nothing in `apps/till`. The tasks remove it with its test lines.
+- Tests: `git grep -n 'incluido' -- apps packages` on 2026-10-15 lists the suites that name the
+  row — `receipt-document.test.ts`, `receipt-ticket.test.ts`, `receipt-language.test.ts`,
+  `receipt-preview-api.test.ts`, `adjustments-bill-payments.test.ts`, `bill-payments-api.test.ts`
+  and `bill-refunds.card.test.ts` under `apps/server/src`. Some assert the row is printed, some that
+  it is not; each is read before it is edited. One that asserts the row changes to the base and VAT
+  rows, keeping the fact it checks (that VAT prints, and where).
+- The two `.bin` files hold a full invoice's bytes (Global Constraints), which this part does not
+  change: regenerate them and check they come out byte for byte the same. If they differ, the part
+  has reached the full invoice; stop.
+- LOOK: the one-rate simplified receipt in `apps/server/scripts/receipt-look.ts` (the mockup's sale)
+  shows the two rows under TOTAL on 58 mm, 80 mm and A4.
+- The till's on-screen copy (`apps/till/src/screens/till-ticket-view.ts`) stays outside A663: add
+  this difference to the backlog entry "The till's on-screen receipt is a second copy of the layout".
+- Fiscal: this part reads the filed `vatBreakdown` and writes nothing. Fiscal gate (Global
+  Constraints), unedited, PASS.
+- Backlog: take Part 2b out of the A663 entry's list of what is left.
+
+---
+
+# Part 2c — each line's price before any discount, and the whole-bill discount once per rate (owner Q9, Q10)
+
+Branch `feat/a663-2c-price-before-discount`, from `main` after Part 2b has landed. Its own pull
+request. **Review path: FULL** — a migration on `sale_lines`, an append-only fiscal ledger table
+(`appendOnly("sale_lines", …)`, `packages/db/src/classification.ts:18`) — with the Codex run-it
+seat twice. **Migration: one** (a new column).
+
+This section states the scope only. The part's test-first tasks are written at its start, before
+anything is built, and reviewed by a fresh-context reader against this section and the owner's Q9
+and Q10 answers. Step 1 below is answered, and written into this section, before any task that
+builds Q10's rows is written. Line numbers are from Part 2's branch on 2026-10-15; re-check them on
+`main` first.
+
+## Step 1 — can a dish's own discount be told apart from its share of a whole-bill discount?
+
+**Open: what reading the code shows, not yet measured.**
+
+- The answer does not come from the new column. Every comp and discount on a bill is a row in
+  `adjustments`: one on a dish names its line, one on the whole bill names none, and each holds what
+  it took off, with VAT (`reduction`; `readBillAdjustments`,
+  `packages/adjustments/src/record.ts:187-212`). A whole-bill discount is not recorded per line: it
+  lowers each line's price (`spreadBillDiscount`, `packages/adjustments/src/spread.ts:308`).
+- The receipt reads those rows when it prints and puts each one on its row or on the bill
+  (`apps/server/src/receipt-adjustments.ts:83-116`), but only when every row finds its line and the
+  list totals less everything taken off equal what was charged (`:117-124`). Otherwise each dish
+  gets one entry for everything it lost (`perDish`, `:147`).
+- So, when every row is placed, a line's share of the whole-bill discount with VAT is its list
+  total less its charged total less its own reductions; before VAT, its own discount is the base of
+  its list total less the base of (list total − own reductions), and the bill's share is the rest
+  down to the filed base. When the rows are not placed, the two cannot be told apart.
+
+Step 1 measures this with a throwaway database test, as Part 2's "What a filed line holds" did: S1,
+a dish discounted after a whole-bill discount, and a line split by one. It writes the result here.
+
+Worked example, S1's burger: 12,00 € at 21%, 10% off the burger, then 10% off the whole bill; its
+filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, rounding half up,
+2026-10-15, assuming the burger's own discount took 1,20 (12,00 → 10,80); not run through the code:
+
+- If they can be told apart: «1 Hamburguesa 9,92 9,92 21%», then under it «Descuento 10% -0,99
+  21%» (9,92 − 8,93, since 10,80 ÷ 1,21 = 8,93); the remaining 0,90 (8,93 − 8,03) is part of the
+  «Descuento 10% … 21%» row at the end of the table.
+- If not: the burger's row holds both, «Descuento -1,89 21%» (plain «Descuento», Part 2's rule for
+  two discounts on one dish), and the 21% row at the end holds only the other dishes' shares.
+
+## Scope — Q9: each line's price before any discount
+
+- A new nullable money column on `sale_lines`: the line's unit price with VAT before any comp or
+  discount, in whole cents, converted at the row (CLAUDE.md §3; its name is chosen in the tasks).
+  The value already exists on the order line: `working_order_lines.list_unit_price_gross`
+  (`packages/db/src/schema/orders.ts:216-218`: "the unit price the line had when an adjustment first
+  touched it … null on a line no adjustment has touched"), read as `OrderLineIdentity.listUnitGross`
+  (`apps/server/src/working-order.ts:967-968`, `:1003-1004`). Today it reaches the sale only as a
+  line total, `listGross` (`listGrossOf`, `apps/server/src/receipt-lines.ts:74-88`).
+- **Where it is written.** Every till path hands its lines to filing through
+  `withReceiptListPrices` (`receipt-lines.ts:66-71`; called at `till-sale.ts:919`, `:1522`, `:1684`,
+  `bill-payments.ts:706`, `working-order.ts:6115`). `RecordSaleLine` gains the field beside
+  `listGross` (`packages/core/src/sale-line.ts:51-52`), and `saleLineRows` writes it beside
+  `listGross` (`packages/core/src/sale-line-rows.ts:46`), the one insert that `recordSale`
+  (`record-sale.ts:351`), `recordSubstitution` (`record-substitution.ts:229`) and
+  `recordCorrection` (`record-correction.ts:204`, `:308`) use. What a corrective line stores is
+  decided in the tasks (a credit negates `listGross` today, `apps/server/src/cancel-credit.ts:106`).
+- **Where it is read.** The full invoice's reader of filed lines
+  (`receipt-adjustments.ts:46-80`, beside `listGross` at `:55` and `:68`), which paper and A4 share
+  (A4 reaches it through `receiptLines`, `apps/server/src/invoice-document.ts:62-82`). Then
+  `beforeVatFigures` (`apps/server/src/invoice-figures.ts:24-47`) takes the stored price instead of
+  dividing the list total back, and loses the early return for less than one priced unit (`:35`).
+- The owner's example: «0.123 kg Jamón ibérico 21,82 2,68 10%» and «Descuento 10% -0,26 10%»
+  (24,00 ÷ 1,10 = 21,82; 2,95 ÷ 1,10 = 2,68; 2,68 − 2,42 = 0,26; Python `Decimal`, half up,
+  2026-10-15). A comped weighed line prints its value and an «Invitación» row.
+- A line filed before Part 2c has the column null and prints as Part 2 prints it. No backfill
+  (pre-live, CLAUDE.md §3).
+
+## Scope — Q10: the whole-bill discount once per rate
+
+- `groupDiscounts` (`invoice-figures.ts:62-92`) and the table builder that calls it
+  (`receipt-document.ts:285-307`) stop putting a whole-bill share under each dish. A dish's row
+  carries its own discount only. After the last item, one row per VAT rate the whole-bill discount
+  reached: «Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%» (S5, the owner's example; the label
+  rule is Part 2's). Each is the sum of that rate's lines' shares before VAT, so the table still
+  comes to the record's base, rate by rate.
+- «Base imponible» and «IVA» stay the record's own figures.
+- How a dish with both discounts prints follows Step 1's measured answer.
+
+## Migration
+
+- One drizzle generation, for the column alone. It is expected to be an `ALTER TABLE … ADD`, not a
+  rebuild. If drizzle-kit writes a rebuild, stop: list every foreign key that points at `sale_lines`
+  first (CLAUDE.md §3). The column comes from `packages/db/src/schema/columns.ts` (`money()`).
+- Run the checks CLAUDE.md §3 lists after a regeneration (`scripts/schema-constraints.test.ts`,
+  `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts`,
+  `scripts/migrations-match-schema.test.ts`, `packages/fiscal-verifactu/src/inmutabilidad.test.ts`)
+  and the upgrade test from §2 (`scripts/migration-upgrade.test.ts`).
+
+## The fiscal constraint
+
+- No hashed field, no change to the alta writer, to invoice numbering, to `registros_facturacion`
+  or to the QR text, and no golden or `inmutabilidad` test edited. The fiscal gate (Global
+  Constraints) and the whole `@waitron/fiscal-verifactu` and `@waitron/core` suites run unedited
+  and PASS.
+- `git grep sale_lines` over `packages/fiscal-verifactu/src` outside tests, on 2026-10-15, finds
+  only `privileges.expected.ts:96`. That grep is not the proof: the tasks follow the alta writer's
+  call chain and say which inputs it reads. The comment at `sale-line-rows.ts:8-9` ("the fiscal
+  breakdown is never built from these rows") is checked the same way.
+- Backlog: take Part 2c out of the A663 entry's list of what is left.
 
 ---
 
@@ -2476,8 +2657,10 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 ## Owner questions
 
 Answer by quoting the question number. Q4, Q5, Q7 and Q8 were answered on 2026-10-15 and Part 2
-builds the answers; Part 2 builds Q9's, Q10's and Q11's defaults unless told otherwise; Part 3 can be
-built on Q2's default; Q1, Q3 and Q6 were for Part 4, which the owner withdrew on 2026-10-15.
+builds the answers; Q9, Q10 and Q11 were answered on 2026-10-15 with the alternatives, after Part 2
+had built the defaults, and Parts 2b and 2c build the answers; Part 3 can be built on Q2's default;
+Q1, Q3 and Q6 were for Part 4, which the owner withdrew on 2026-10-15. The Part 1b header order is
+answered at the end.
 
 **Q1 — How does the till know a product is a drink?** (Part 4 withdrawn 2026-10-15; no answer needed.)
 Recommended: **mark categories.** In Products, a category's menu gets a "Drinks" switch; every
@@ -2561,7 +2744,7 @@ simplified receipt already prints the item and the discount with VAT (`receipt-d
 and discount on the bill, adding up" prints «Rioja crianza 30,00» then «Descuento 20% -6,00»,
 passing 2026-10-15), and its one-rate «IVA 10% incluido» row from Part 1b stays (RD 1619/2012 art.
 7.1.f; the approved mockup), so it does not print the base on a one-rate receipt — which differs
-from your simplified example; see Q11. Your example
+from your simplified example; see Q11 (answered 2026-10-15: Part 2b prints the base). Your example
 works out exactly: the till files the 10,00 € menu less 10% as base 8,18 and VAT 0,82, and the
 full invoice prints «1 Menú del día 9,09 9,09», «Descuento 10% -0,91», «Base imponible 10% 8,18 €»,
 «IVA 10% 0,82 €» (measured, Part 2 "The table's figures").
@@ -2607,8 +2790,18 @@ that every row of that invoice prints on two lines (name, then figures); with on
 row fits on one line. The simplified receipt (Part 1b) keeps «4 ud» as today; say so if you want it
 bare there too, and it joins Part 2. Alternative: keep «4 ud» in the table as well.
 
-**Q9 — The price of a weighed item that was discounted, when less than a kilo was sold.** (Part 2
-builds the default unless told otherwise.)
+**Q9 — The price of a weighed item that was discounted, when less than a kilo was sold.**
+ANSWERED 2026-10-15: «The owner chose the alternative: when an invoice is issued, store each sale
+line's price before any discount, so every line (including a weighed line under a kilo) prints its
+real price and its own discount row («0.123 kg Jamón ibérico 21,82 2,68 10%» / «Descuento 10% -0,26
+10%»), and a comped weighed line shows its value and an «Invitación» row. This is a database change
+on sale lines: pre-live, no data migration (CLAUDE.md §3 "no backwards-compatibility code until
+production"). Follow the drizzle rules (one generation per change; list foreign keys before any
+table rebuild; a money column holds whole cents, converted at the row). It must not change any
+fiscal record's hashed content, the alta writer, numbering or a golden/inmutabilidad test — say in
+the plan where the new value is written and prove the fiscal suites unchanged. FULL review path.
+Revise the plan's Part 2 (or a part of its own if cleaner — say which) before building.» Built by
+**Part 2c**, a part of its own; Part 2 lands with the default below. The question as asked:
 The till does not store a discounted line's price before the discount, only its total before the
 discount. Dividing that total back gives the price exactly whenever at least one whole priced unit
 was sold (every counted dish and extra, any weighed line of a kilo or more), but not below that.
@@ -2624,8 +2817,16 @@ The same default has one visible gap: such a weighed line that was **comped** (g
 recoverable from the stored total, which the default does not use below one kilo. It is in Task
 2.6's LOOK so you can see it; storing the price before any discount would close it too.
 
-**Q10 — A discount on the whole bill, on a full invoice.** (Part 2 builds the default unless told
-otherwise.)
+**Q10 — A discount on the whole bill, on a full invoice.** ANSWERED 2026-10-15: «The owner chose
+the alternative: the whole-bill discount prints once per VAT rate at the end of the table
+(«Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%»), before VAT, not under each dish. A dish's
+OWN discount still prints under that dish. Your question said the two cannot be told apart in what
+the till stores; with Q9's answer (each line now stores its price before any discount) check
+whether they now can — if they can, keep them apart; if not, say exactly what a dish with both
+discounts prints, with a worked example, in this file before building that case. The base
+imponible and IVA lines stay the record's own figures.» Built by **Part 2c**, with Q9; whether the
+two can be told apart is its Step 1, with a worked example for each outcome. Part 2 lands with the
+default below. The question as asked:
 The till files a whole-bill discount by lowering every dish's price, so each dish's filed base
 already holds its share. Default: **each dish gets its own discount row with its share, before VAT,
 at its rate.** Example, measured: a 30,00 € Rioja (21%) and a 2,50 € bread (10%), 10% off the bill:
@@ -2636,8 +2837,14 @@ the table («Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%»), as the rec
 discount once today. That reads more like the till, but when a dish also has its own discount the
 two cannot be told apart in what the till stores, so that dish's row would then hold both.
 
-**Q11 — The VAT lines on a one-rate simplified receipt.** (Part 2 builds the default unless told
-otherwise; nothing in Part 2 changes these lines.)
+**Q11 — The VAT lines on a one-rate simplified receipt.** ANSWERED 2026-10-15: «The owner chose
+the alternative: a one-rate simplified receipt prints «Base imponible 10% 8,18 €» and «IVA 10% 0,82
+€» under TOTAL, as a full invoice does — not the single «IVA 10% incluido» line. This changes what
+Part 1b built (#1756): do it as a small change in Part 2 or its own PR (say which), with the receipt
+tests and the .bin fixtures regenerated, and update the approved mockup `1-simplified-receipt.png`'s
+note in the plan (record the owner's 2026-10-15 decision; the mockup itself is history). Base and
+IVA are the record's own figures.» Built by **Part 2b**, its own pull request; nothing in Part 2
+changes these lines. The question as asked:
 Your Q5 answer wrote the simplified receipt as «menu 10 / discount 10% 1.00 / base imponible: 8,18
 / iva: 0.82». The receipt you approved on 2026-10-14 (`1-simplified-receipt.png`), built in Part
 1b, prints one line instead when every item has the same VAT rate. Both are legal: RD 1619/2012
@@ -2658,3 +2865,9 @@ Base imponible 10%            8,18 €
 IVA 10%                       0,82 €
 ```
 A receipt with two rates already prints the base and the VAT for each rate either way.
+
+**Part 1b — the business block's order with a receipt subtitle but no trading name.** Asked after
+Part 1b landed (#1756): with a subtitle but no trading name, the plain subtitle prints first and the
+legal name, in bold, under it, as the order list in Task 1.5 says, while another sentence there said
+"legal name first and bold". ANSWERED 2026-10-15: «KEEP IT AS BUILT — subtitle first, bold legal
+name under it. No change.» Nothing is built; Task 1.5's sentence now matches the order list.
