@@ -72,6 +72,7 @@ export {
   setProfilePrinterLists,
 } from "./device-printers.js";
 export {
+  chosenPrinterOf,
   clearUnlistedPrinterChoices,
   readPrinterRoles,
   readPrinterEquipment,

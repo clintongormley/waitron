@@ -46,6 +46,7 @@ import { createZone } from "./testing/service-zone.js";
 import { mountTillApi } from "./till-api.js";
 import { createOpenOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import "./errors.js";
 
@@ -343,13 +344,17 @@ async function venue() {
     seriesId: series!.id,
     zoneId,
     managerCookie,
-    tillCookie: await tillSession(cfg, app, staffId),
+    ...(await tillSession(cfg, app, staffId)),
     serverClock,
   };
 }
 
 /** A staff member signed in on a till whose profile may print receipts. */
-async function tillSession(cfg: TillConfig, app: Hono, personId: string): Promise<string> {
+async function tillSession(
+  cfg: TillConfig,
+  app: Hono,
+  personId: string,
+): Promise<{ tillCookie: string; tillProfileId: string }> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "Till", formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
@@ -364,7 +369,10 @@ async function tillSession(cfg: TillConfig, app: Hono, personId: string): Promis
     body: JSON.stringify({ personId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return login.headers.get("set-cookie")!.split(";")[0]!;
+  return {
+    tillCookie: login.headers.get("set-cookie")!.split(";")[0]!,
+    tillProfileId: profile!.id,
+  };
 }
 
 function request(v: Venue, method: "POST" | "PATCH", path: string, body: unknown) {
@@ -498,9 +506,16 @@ async function officePrinter(
       media: "iso_a4_210x297mm",
       resolutionDpi: 300,
       agentId,
-      invoiceDefault: printer === ipp,
     })
     .returning({ id: pagePrinters.id });
+  if (printer === ipp)
+    await withTransaction(suite.db, (tx) =>
+      listInvoicePrinter(tx, {
+        profileId: v.tillProfileId,
+        pagePrinterId: row!.id,
+        isDefault: true,
+      }),
+    );
   return row!.id;
 }
 
@@ -555,12 +570,14 @@ async function printOnA4(saleId: string, pagePrinterId: string) {
   );
 }
 
-/** Staff ask the till to print the invoice on A4 again. */
+/** Staff ask the till to print the invoice again on the printer it offers. */
 async function retryOnA4(v: Venue, orderId: string) {
+  const offered = (await tillStatus(v, orderId)).actions.print!.printers;
+  expect(offered).toHaveLength(1);
   const answer = await v.app.request(`/api/sales/${orderId}/deliveries`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.tillCookie },
-    body: JSON.stringify({ medium: "a4", requestKey: randomUUID() }),
+    body: JSON.stringify({ medium: "print", printerId: offered[0]!.id, requestKey: randomUUID() }),
   });
   expect(answer.status).toBe(200);
   return row(((await answer.json()) as { id: string }).id);
@@ -574,6 +591,7 @@ async function tillStatus(v: Venue, orderId: string) {
   expect(answer.status).toBe(200);
   return (await answer.json()) as {
     current: { id: string; status: string; printerHold: string | null } | null;
+    actions: { print: { printers: { id: string }[] } | null };
   };
 }
 
@@ -764,7 +782,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       } else {
         await suite.db
           .update(pagePrinters)
-          .set({ active: false, invoiceDefault: false })
+          .set({ active: false })
           .where(eq(pagePrinters.id, office));
         expect(await row(delivery.id)).toMatchObject({ status: "queued" });
       }
@@ -857,7 +875,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       expect(await tillStatus(v, orderId)).toMatchObject({
         current: { id: held.id, status: "sending", printerHold: "paper_out" },
         originalCompleted: false,
-        actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+        actions: { retryOriginal: null, print: null, receiptInstead: null },
       });
 
       const other = await printOnA4(await fullInvoice(v), kitchenOffice);

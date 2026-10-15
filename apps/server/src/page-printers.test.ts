@@ -30,7 +30,6 @@ import {
   listPagePrinters,
   registerPagePrinter,
   renamePagePrinter,
-  setInvoicePrinter,
   type PagePrinterDiscovery,
 } from "./page-printers.js";
 
@@ -205,7 +204,6 @@ describe("registering a page printer from discovery", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 600,
         active: true,
-        invoiceDefault: false,
         agentId: v.agentOne,
       },
     ]);
@@ -271,7 +269,6 @@ describe("registering a page printer from discovery", () => {
         id,
         name: "Back office",
         active: true,
-        invoiceDefault: false,
         documentFormat: "image/urf",
         supportedFormats: ["image/urf"],
         media: "na_letter_8.5x11in",
@@ -281,10 +278,9 @@ describe("registering a page printer from discovery", () => {
     ]);
   });
 
-  it("re-points an active printer to a new agent's fresh report, keeping its id, name and default", async () => {
+  it("re-points an active printer to a new agent's fresh report, keeping its id and name", async () => {
     const v = await venue();
     const { id } = await register(v.locationId, entry(v.agentOne));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, id));
     const result = await withTransaction(suite.db, (tx) =>
       registerPagePrinter(
         tx,
@@ -299,7 +295,6 @@ describe("registering a page printer from discovery", () => {
         id,
         name: "Back office",
         active: true,
-        invoiceDefault: true,
         documentFormat: "image/urf",
         media: "na_letter_8.5x11in",
         resolutionDpi: 300,
@@ -417,7 +412,6 @@ describe("listing and renaming page printers", () => {
         id: office.id,
         name: "Back office",
         active: true,
-        invoiceDefault: false,
         agentId: v.agentOne,
         agentName: "Back office agent",
       }),
@@ -448,11 +442,10 @@ describe("listing and renaming page printers", () => {
 });
 
 describe("disabling a page printer", () => {
-  it("clears the default, fails its waiting A4 deliveries and leaves a sending one uncertain", async () => {
+  it("fails its waiting A4 deliveries and leaves a sending one uncertain", async () => {
     const v = await venue();
     const office = await register(v.locationId, entry(v.agentOne));
     const other = await register(v.locationId, entry(v.agentOne, { host: "192.0.2.41" }));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, office.id));
     const queued = await reserveA4(await fullInvoice(v.nodeId), office.id);
     const sending = await reserveA4(await fullInvoice(v.nodeId), office.id);
     const claim = await withTransaction(suite.db, (tx) =>
@@ -477,7 +470,6 @@ describe("disabling a page printer", () => {
 
     expect((await printerRows()).find((row) => row.id === office.id)).toMatchObject({
       active: false,
-      invoiceDefault: false,
     });
     const after = new Map((await deliveryRows()).map((row) => [row.id, row]));
     expect(after.get(queued.id)).toEqual({
@@ -541,54 +533,6 @@ describe("disabling a page printer", () => {
     await expect(
       withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, randomUUID())),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
-    expect(await printerRows()).toEqual(before);
-  });
-});
-
-describe("the location's invoice printer", () => {
-  it("replaces the current default in one call, and clears it", async () => {
-    const v = await venue();
-    const office = await register(v.locationId, entry(v.agentOne));
-    const upstairs = await register(v.locationId, entry(v.agentOne, { host: "192.0.2.41" }));
-    const defaults = async () =>
-      (await printerRows()).filter((row) => row.invoiceDefault).map((row) => row.id);
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, office.id));
-    expect(await defaults()).toEqual([office.id]);
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, upstairs.id));
-    expect(await defaults()).toEqual([upstairs.id]);
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, upstairs.id));
-    expect(await defaults()).toEqual([upstairs.id]);
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, null));
-    expect(await defaults()).toEqual([]);
-  });
-
-  it("leaves another location's invoice printer alone", async () => {
-    const v = await venue();
-    const terrace = await otherLocation();
-    const here = await register(v.locationId, entry(v.agentOne));
-    const there = await register(terrace.id, entry(terrace.agentId));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, terrace.id, there.id));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, here.id));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, null));
-    expect((await printerRows()).filter((row) => row.invoiceDefault).map((row) => row.id)).toEqual([
-      there.id,
-    ]);
-  });
-
-  it("refuses a disabled printer, another location's printer or an unknown id, keeping the default", async () => {
-    const v = await venue();
-    const terrace = await otherLocation();
-    const office = await register(v.locationId, entry(v.agentOne));
-    const disabled = await register(v.locationId, entry(v.agentOne, { host: "192.0.2.41" }));
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, disabled.id));
-    const there = await register(terrace.id, entry(terrace.agentId));
-    await withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, office.id));
-    const before = await printerRows();
-    for (const id of [disabled.id, there.id, randomUUID()]) {
-      await expect(
-        withTransaction(suite.db, (tx) => setInvoicePrinter(tx, v.locationId, id)),
-      ).rejects.toMatchObject({ code: "page_printer.not_found" });
-    }
     expect(await printerRows()).toEqual(before);
   });
 });

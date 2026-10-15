@@ -10703,7 +10703,6 @@ describe("office printers in discovery", () => {
     media: "iso_a4_210x297mm",
     resolutionDpi: 600,
     active: true,
-    invoicePrinter: false,
     agentId: "a1",
     agentName: "Cocina agent",
   };
@@ -10904,7 +10903,7 @@ describe("office printers in discovery", () => {
     },
   );
 
-  it("offers Add as invoice printer for a printable office printer, the reason for one that is not, and keeps a receipt printer's Add", async () => {
+  it("offers Add as A4 printer for a printable office printer, the reason for one that is not, and keeps a receipt printer's Add", async () => {
     const { el } = await mountWith([
       ...discoveredNetwork,
       office(),
@@ -10977,7 +10976,7 @@ describe("office printers in discovery", () => {
     );
   });
 
-  it("names a new invoice printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
+  it("names a new A4 printer in a dialog whose Add waits for a name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
     const { el, api } = await mountWith([office()], { listPagePrinters });
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
@@ -11246,7 +11245,7 @@ describe("office printers in discovery", () => {
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBeNull();
   });
 
-  it("offers Enable on a disabled invoice printer found again, and enables the same row", async () => {
+  it("offers Enable on a disabled A4 printer found again, and enables the same row", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([{ ...added, active: false }]);
     const { el, api } = await mountWith([office()], {
       listPagePrinters,
@@ -11270,7 +11269,7 @@ describe("office printers in discovery", () => {
   });
 });
 
-describe("the invoice printers panel", () => {
+describe("the A4 printers panel", () => {
   beforeEach(() => {
     history.replaceState(null, "", "/");
   });
@@ -11286,7 +11285,6 @@ describe("the invoice printers panel", () => {
     media: "iso_a4_210x297mm",
     resolutionDpi: 600,
     active: true,
-    invoicePrinter: true,
     agentId: "a1",
     agentName: "Cocina agent",
   };

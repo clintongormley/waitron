@@ -1,8 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { indexViolated, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS, locations } from "../index.js";
-import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
 import { isRefusal } from "../unique-violation.js";
 import { pagePrinters } from "./page-printers.js";
@@ -48,7 +47,7 @@ it("stores a page destination and its advertised formats outside the receipt-pri
   expect((await suite.db.execute(sql`select id from printers`)).rows).toEqual([]);
 });
 
-describe("the location's invoice printer and the agent that reaches a page printer", () => {
+describe("the agent that reaches a page printer", () => {
   async function seedLocation(name: string): Promise<string> {
     const [location] = await suite.db
       .insert(locations)
@@ -60,7 +59,7 @@ describe("the location's invoice printer and the agent that reaches a page print
   async function insertPrinter(
     locationId: string,
     host: string,
-    extra: { invoiceDefault?: boolean; agentId?: string | null } = {},
+    extra: { agentId?: string | null } = {},
   ) {
     const [row] = await suite.db
       .insert(pagePrinters)
@@ -80,36 +79,11 @@ describe("the location's invoice printer and the agent that reaches a page print
     return row!;
   }
 
-  it("starts a page printer as no location's invoice printer, reached by no recorded agent", async () => {
+  it("starts a page printer reached by no recorded agent", async () => {
     await seedTenant(suite.db);
     const location = await seedLocation("Bar");
     const row = await insertPrinter(location, "192.0.2.30");
-    expect(row).toMatchObject({ invoiceDefault: false, agentId: null });
-  });
-
-  it("refuses a second invoice printer in one location, and allows one in each of two locations", async () => {
-    await seedTenant(suite.db);
-    const bar = await seedLocation("Bar");
-    const terrace = await seedLocation("Terrace");
-    await insertPrinter(bar, "192.0.2.31", { invoiceDefault: true });
-    // Beside the default: a non-default sibling in the same location, and a default elsewhere.
-    await insertPrinter(bar, "192.0.2.32");
-    await insertPrinter(terrace, "192.0.2.33", { invoiceDefault: true });
-
-    const error = await captureError(() =>
-      insertPrinter(bar, "192.0.2.34", { invoiceDefault: true }),
-    );
-    // A partial index on a plain column reports its table and column, never its name.
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "page_printers", columns: ["location_id"] }),
-    ).toBe(true);
-    expect(indexViolated(error, "page_printers_invoice_default_uq")).toBe(false);
-    const defaults = await suite.db
-      .select({ host: pagePrinters.host })
-      .from(pagePrinters)
-      .where(eq(pagePrinters.invoiceDefault, true))
-      .orderBy(pagePrinters.host);
-    expect(defaults).toEqual([{ host: "192.0.2.31" }, { host: "192.0.2.33" }]);
+    expect(row).toMatchObject({ agentId: null });
   });
 
   it("records an existing agent, and refuses an agent id that names no agent", async () => {

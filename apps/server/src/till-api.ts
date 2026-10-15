@@ -95,6 +95,8 @@ import {
   confirmReceiptHandover,
   readOriginalReceiptPrint,
   resolveDrawerPrinter,
+  resolveInvoicePrinter,
+  type OriginalReceiptPrint,
 } from "./receipt-print.js";
 import { listServiceStatuses, listTables, listZones, setTableStatus } from "./tables.js";
 import {
@@ -221,10 +223,13 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
-import { readInvoicePrinter } from "./page-printers.js";
-import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import {
-  requestA4Delivery,
+  readInvoiceDeliveries,
+  readInvoiceDeliveryState,
+  type OfferedPrinter,
+} from "./invoice-delivery-status.js";
+import {
+  requestPrintDelivery,
   requestEmailDelivery,
   retryEmailDelivery,
   switchToReceipt,
@@ -1998,10 +2003,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
-      const invoicePrinter = await withTransaction(deps.db, (tx) =>
-        readInvoicePrinter(tx, deps.cfg.locationId),
+      const session = await requireSession(deps, c);
+      const printer = await withTransaction(deps.db, (tx) =>
+        resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin),
       );
+      // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
+      const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
       return c.json({ invoicePrinter, emailAvailable: await readEmailTransport() });
     }),
   );
@@ -2271,12 +2278,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const status = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
-          .select({ id: sales.id })
+          .select({ id: sales.id, recipient: sales.counterpartyTaxId })
           .from(sales)
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
-        return readOriginalReceiptPrint(tx, sale.id);
+        const { receipt, withdrawn } = await tillReceiptOriginal(tx, session, sale);
+        // Named only where it is the reason the retry route refuses.
+        return withdrawn && receipt.status !== "not_queued" && receipt.canRetry
+          ? { ...receipt, printerWithdrawn: true }
+          : receipt;
       });
       return c.json(status);
     }),
@@ -2308,21 +2319,41 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
-          .select({ id: sales.id })
+          .select({ id: sales.id, recipient: sales.counterpartyTaxId })
           .from(sales)
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
         await expireInvoiceDeliveryClaims(tx);
-        const original = await readOriginalReceiptPrint(tx, sale.id);
+        const { receipt: original, withdrawn } = await tillReceiptOriginal(tx, session, sale);
         if (original.status === "not_queued") throw new AppError("print_job.not_found", { id });
         if (!original.canRetry)
           throw new AppError("print_job.not_resendable", { id: original.jobId });
+        if (withdrawn) throw new AppError("invoice_delivery.printer_invalid", {});
         return resendInvoicePrintJob(tx, original.jobId, session.personId);
       });
       return c.json(result);
     }),
   );
+
+  /**
+   * The sale's receipt original, read once; for a full invoice, also whether a print request sent
+   * it to a printer that is not this till's invoice printer (`receiptPrinterWithdrawn`).
+   */
+  async function tillReceiptOriginal(
+    tx: Transaction,
+    session: { deviceId: string },
+    sale: { id: string; recipient: string | null },
+  ): Promise<{ receipt: OriginalReceiptPrint; withdrawn: boolean }> {
+    if (sale.recipient === null) {
+      return { receipt: await readOriginalReceiptPrint(tx, sale.id), withdrawn: false };
+    }
+    const state = (await readInvoiceDeliveryState(tx, sale.id, {
+      emailAvailable: false,
+      printers: (located) => tillInvoicePrinters(tx, session, located),
+    }))!;
+    return { receipt: state.receipt, withdrawn: state.receiptPrinterWithdrawn };
+  }
 
   /** The sale filed for working order `id`, once its zone is checked. */
   async function zonedSale(
@@ -2339,6 +2370,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     return sale.id;
   }
 
+  /**
+   * The one printer the till may print a full invoice on: its own invoice printer, when it is at the
+   * sale's location.
+   */
+  async function tillInvoicePrinters(
+    tx: Transaction,
+    session: { deviceId: string },
+    sale: { locationId: string },
+  ): Promise<OfferedPrinter[]> {
+    const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin, sale);
+    return printer === undefined ? [] : [printer];
+  }
+
   app.get("/api/sales/:id/deliveries", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -2349,6 +2393,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await expireInvoiceDeliveryClaims(tx);
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) => canEmailInvoice(tx, sale, transport),
+          printers: (sale) => tillInvoicePrinters(tx, session, sale),
         });
       });
       return c.json(status);
@@ -2363,15 +2408,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         medium?: unknown;
         requestKey?: unknown;
+        printerId?: unknown;
         recipient?: unknown;
       }>(c);
-      if (body.medium !== "a4" && body.medium !== "email")
+      if (body.medium !== "print" && body.medium !== "email")
         throw new AppError("management.request_invalid", { field: "medium" });
       const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       const request = { requestKey, personId: session.personId };
-      if (body.medium === "a4") {
+      if (body.medium === "print") {
+        const printerId = requireBodyUuid(body.printerId, "printerId");
         const attempt = await withTransaction(deps.db, async (tx) =>
-          requestA4Delivery(tx, await zonedSale(tx, session, id), request),
+          requestPrintDelivery(
+            tx,
+            { backend: deps.backend, cfg: requestCfg(deps.cfg, session) },
+            { id: await zonedSale(tx, session, id), workingOrderId: id },
+            (sale) => tillInvoicePrinters(tx, session, sale),
+            { ...request, printerId },
+          ),
         );
         return c.json(attempt);
       }
@@ -2409,6 +2462,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           tx,
           { backend: deps.backend, cfg },
           { id: saleId, workingOrderId: id },
+          (sale) => tillInvoicePrinters(tx, session, sale),
           deliveryId,
           { requestKey, personId: session.personId },
         );

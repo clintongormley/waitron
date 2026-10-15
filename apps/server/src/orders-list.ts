@@ -19,6 +19,7 @@ import {
   printJobs,
   printers,
   invoicePdfDownloads,
+  pagePrinters,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -38,6 +39,7 @@ import {
   readInvoiceDeliveries,
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
+  type PrinterOffer,
 } from "./invoice-delivery-status.js";
 import "./errors.js";
 
@@ -678,6 +680,7 @@ async function readDeliveries(
 ): Promise<OrderDeliveries | null> {
   const status = await readInvoiceDeliveries(tx, saleId, {
     emailAvailable: (sale) => canEmailInvoice(tx, sale, emailTransport),
+    printers: orderInvoicePrinters(tx),
   });
   if (status === null) return null;
   const ids = [...new Set(status.history.flatMap((attempt) => attempt.personId ?? []))];
@@ -696,6 +699,29 @@ async function readDeliveries(
     ...status,
     current: status.current === null ? null : named(status.current),
     history: status.history.map(named),
+  };
+}
+
+/**
+ * Orders may print a full invoice on any active printer at the sale's location: receipt printers,
+ * then A4 printers, each by name.
+ */
+export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
+  return async (sale) => {
+    const receipt = await tx
+      .select({ id: printers.id, name: printers.name })
+      .from(printers)
+      .where(and(eq(printers.locationId, sale.locationId), eq(printers.active, true)))
+      .orderBy(asc(printers.name), asc(printers.id));
+    const a4 = await tx
+      .select({ id: pagePrinters.id, name: pagePrinters.name })
+      .from(pagePrinters)
+      .where(and(eq(pagePrinters.locationId, sale.locationId), eq(pagePrinters.active, true)))
+      .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
+    return [
+      ...receipt.map((printer) => ({ ...printer, kind: "receipt" as const })),
+      ...a4.map((printer) => ({ ...printer, kind: "a4" as const })),
+    ];
   };
 }
 

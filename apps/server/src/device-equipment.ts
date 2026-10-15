@@ -34,12 +34,14 @@ export type Holder = { deviceId: string; deviceName: string; personName: string 
 export type EquipmentItem = {
   id: string;
   name: string;
+  /** A printer's kind, `a4` for a page printer; a reader has none. */
+  kind?: "receipt" | "a4";
   portable: boolean;
   /** Switched on; a reader also not unpaired. */
   available: boolean;
   /** A reader another device has a payment in progress on; a printer never is. */
   busy: boolean;
-  /** Another device holding it, never this one; a cash drawer is never held. */
+  /** Another device holding it, never this one; never shown for a cash drawer or an invoice. */
   heldBy: Holder | null;
   /** A reader's card provider; a printer has none. */
   provider?: string;
@@ -107,12 +109,20 @@ export async function releaseDevice(tx: Transaction, deviceId: string): Promise<
   await releaseDeviceReader(tx, deviceId);
 }
 
-type Info = { id: string; name: string; portable: boolean; available: boolean; provider?: string };
+type Info = {
+  id: string;
+  name: string;
+  kind?: "receipt" | "a4";
+  portable: boolean;
+  available: boolean;
+  provider?: string;
+};
 
 const FIELD: Record<EquipmentRole, EquipmentField> = {
   receipt: "receiptPrinterId",
   payment_slip: "paymentSlipPrinterId",
   cash_drawer: "cashDrawerPrinterId",
+  invoice: "invoicePrinterId",
   card_terminal: "cardReaderId",
 };
 
@@ -144,7 +154,13 @@ function printerInfoOf(equipment: PrinterEquipment): Map<string, Info> {
   return new Map(
     [...equipment.printers.values()].map((row) => [
       row.id,
-      { id: row.id, name: row.name, portable: row.portable, available: row.active },
+      {
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        portable: row.portable,
+        available: row.active,
+      },
     ]),
   );
 }
@@ -254,7 +270,7 @@ export async function readDeviceEquipment(
           state.role,
           state,
           printerInfo,
-          state.role === "cash_drawer" ? null : printerHolder,
+          state.role === "cash_drawer" || state.role === "invoice" ? null : printerHolder,
           printerEquipment.listed
             .filter(
               (p) =>

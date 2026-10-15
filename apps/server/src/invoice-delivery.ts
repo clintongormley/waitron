@@ -35,6 +35,8 @@ export type ReceiptDeliveryRequest = {
   personId: string | null;
   medium: "receipt";
   printJobId: string;
+  /** A print request chose the job's printer, rather than the device's receipt role. */
+  printerChosen?: boolean;
 };
 
 export async function reserveInvoiceDelivery(
@@ -160,7 +162,7 @@ export async function reserveInvoiceDelivery(
         ? { recipient: input.recipient, madeByRetry: input.madeByRetry }
         : input.medium === "a4"
           ? { pagePrinterId: input.pagePrinterId }
-          : { printJobId: input.printJobId }),
+          : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
     })
     .returning();
   return delivery!;

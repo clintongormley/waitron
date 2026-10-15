@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { invoiceDeliveries, pagePrinters, printAgents, type Transaction } from "@waitron/db";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError } from "@waitron/shared";
@@ -33,32 +33,6 @@ export async function listPagePrinters(
     .where(eq(pagePrinters.locationId, locationId))
     .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
   return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
-}
-
-export async function readInvoicePrinter(
-  tx: Transaction,
-  locationId: string,
-): Promise<{ id: string; name: string } | null> {
-  return (await readInvoicePrinters(tx, [locationId])).get(locationId) ?? null;
-}
-
-/** {@link readInvoicePrinter} for several locations in one query; a location with none has no entry. */
-export async function readInvoicePrinters(
-  tx: Transaction,
-  locationIds: readonly string[],
-): Promise<Map<string, { id: string; name: string }>> {
-  const rows = await tx
-    .select({ locationId: pagePrinters.locationId, id: pagePrinters.id, name: pagePrinters.name })
-    .from(pagePrinters)
-    .where(
-      and(
-        inArray(pagePrinters.locationId, [...locationIds]),
-        eq(pagePrinters.invoiceDefault, true),
-        eq(pagePrinters.active, true),
-      ),
-    );
-  // `page_printers_invoice_default_uq` allows one invoice default per location.
-  return new Map(rows.map((row) => [row.locationId, { id: row.id, name: row.name }]));
 }
 
 /**
@@ -160,7 +134,7 @@ export async function disablePagePrinter(
 ): Promise<void> {
   const disabled = await tx
     .update(pagePrinters)
-    .set({ active: false, invoiceDefault: false })
+    .set({ active: false })
     .where(inLocation(locationId, id))
     .returning({ id: pagePrinters.id });
   if (disabled.length === 0) throw new AppError("page_printer.not_found", {});
@@ -173,29 +147,4 @@ export async function disablePagePrinter(
     .update(invoiceDeliveries)
     .set({ status: "unknown", failureCode: "printer_disabled", expiredAt: now.toISOString() })
     .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "sending")));
-}
-
-/** `null` clears it. The old default is cleared first: the unique index allows one per location. */
-export async function setInvoicePrinter(
-  tx: Transaction,
-  locationId: string,
-  pagePrinterId: string | null,
-): Promise<void> {
-  if (pagePrinterId !== null) {
-    const [target] = await tx
-      .select({ id: pagePrinters.id })
-      .from(pagePrinters)
-      .where(and(inLocation(locationId, pagePrinterId), eq(pagePrinters.active, true)));
-    if (target === undefined) throw new AppError("page_printer.not_found", {});
-  }
-  await tx
-    .update(pagePrinters)
-    .set({ invoiceDefault: false })
-    .where(and(eq(pagePrinters.locationId, locationId), eq(pagePrinters.invoiceDefault, true)));
-  if (pagePrinterId !== null) {
-    await tx
-      .update(pagePrinters)
-      .set({ invoiceDefault: true })
-      .where(eq(pagePrinters.id, pagePrinterId));
-  }
 }

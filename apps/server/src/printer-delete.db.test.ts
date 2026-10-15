@@ -148,6 +148,7 @@ function afterDelete(
           row.payment_slip_printer_id === printerId ? null : row.payment_slip_printer_id,
         cash_drawer_printer_id:
           row.cash_drawer_printer_id === printerId ? null : row.cash_drawer_printer_id,
+        invoice_printer_id: row.invoice_printer_id === printerId ? null : row.invoice_printer_id,
       })),
     ),
     device_profile_printers: withoutPrinter(before.device_profile_printers!),
@@ -257,6 +258,7 @@ async function seedVenue() {
     { deviceProfileId: bar, printerId: Q, role: "payment_slip", position: 0, isDefault: true },
     { deviceProfileId: bar, printerId: P, role: "payment_slip", position: 1, isDefault: false },
     { deviceProfileId: bar, printerId: Q, role: "cash_drawer", position: 0, isDefault: true },
+    { deviceProfileId: bar, printerId: P, role: "invoice", position: 0, isDefault: true },
   ]);
 
   const device = async (values: {
@@ -267,6 +269,7 @@ async function seedVenue() {
     receipt?: string;
     slip?: string;
     drawer?: string;
+    invoice?: string;
   }) =>
     (
       await suite.db
@@ -280,6 +283,7 @@ async function seedVenue() {
           receiptPrinterId: values.receipt ?? null,
           paymentSlipPrinterId: values.slip ?? null,
           cashDrawerPrinterId: values.drawer ?? null,
+          invoicePrinterId: values.invoice ?? null,
         })
         .returning({ id: devices.id })
     )[0]!.id;
@@ -299,6 +303,7 @@ async function seedVenue() {
   });
   const barTill = await device({ label: "Bar till", profileId: waiters });
   const barTill2 = await device({ label: "Bar till 2", profileId: bar, slip: P });
+  const barTill3 = await device({ label: "Bar till 3", profileId: bar, invoice: P });
   const terraceTill = await device({
     label: "Terrace till",
     profileId: waiters,
@@ -418,6 +423,7 @@ async function seedVenue() {
     oldHandheld,
     barTill,
     barTill2,
+    barTill3,
     terraceTill,
     grill: grill!.id,
     jobs: {
@@ -463,6 +469,7 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
         ],
       },
       { key: "device_cash_drawer", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "device_invoice", count: 1, targets: [{ id: v.barTill3, name: "Bar till 3" }] },
       { key: "profile_receipt", count: 1, targets: [{ id: v.waiters, name: "Waiters" }] },
       {
         key: "profile_payment_slip",
@@ -473,6 +480,7 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
         ],
       },
       { key: "profile_cash_drawer", count: 1, targets: [{ id: v.waiters, name: "Waiters" }] },
+      { key: "profile_invoice", count: 1, targets: [{ id: v.bar, name: "Bar" }] },
       { key: "profile_receipt_default", count: 1, targets: [{ id: v.waiters, name: "Waiters" }] },
       {
         key: "profile_payment_slip_default",
@@ -484,12 +492,18 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
         count: 1,
         targets: [{ id: v.waiters, name: "Waiters" }],
       },
+      { key: "profile_invoice_default", count: 1, targets: [{ id: v.bar, name: "Bar" }] },
       // Bar till and Old handheld inherit P for receipts and slips too, but P is portable and Ana
       // holds it, so it serves neither of them there; a drawer is never held.
       {
         key: "device_cash_drawer_default",
         count: 1,
         targets: [{ id: v.barTill, name: "Bar till" }],
+      },
+      {
+        key: "device_invoice_default",
+        count: 1,
+        targets: [{ id: v.barTill2, name: "Bar till 2" }],
       },
       { key: "station_printers", count: 1, targets: [{ id: v.grill, name: "Grill" }] },
     ],
@@ -523,6 +537,7 @@ describe("the printer delete impact", () => {
       { key: "device_receipt", count: 1, targets: [{ id: v.oldHandheld, name: "Old handheld" }] },
       { key: "device_payment_slip", count: 1, targets: [{ id: v.barTill2, name: "Bar till 2" }] },
       { key: "device_cash_drawer", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "device_invoice", count: 1, targets: [{ id: v.barTill3, name: "Bar till 3" }] },
       { key: "device_receipt_default", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
       {
         key: "device_payment_slip_default",
@@ -533,6 +548,11 @@ describe("the printer delete impact", () => {
         key: "device_cash_drawer_default",
         count: 1,
         targets: [{ id: v.barTill, name: "Bar till" }],
+      },
+      {
+        key: "device_invoice_default",
+        count: 1,
+        targets: [{ id: v.barTill2, name: "Bar till 2" }],
       },
     ]);
   });

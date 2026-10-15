@@ -22,8 +22,8 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 /**
- * Names an office printer found by discovery and adds it as an invoice printer. Open while `entry`
- * is set. Sends `page-printer-added` (`detail: { name }`) once the server has added it, and
+ * Names an office printer found by discovery and adds it. Open while `entry` is set. Sends
+ * `page-printer-added` (`detail: { name }`) once the server has added it, and
  * `page-printer-add-closed` when the dialog has closed, either way.
  */
 @customElement("dashboard-page-printer-add")

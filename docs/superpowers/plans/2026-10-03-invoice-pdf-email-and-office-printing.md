@@ -1,5 +1,11 @@
 # A231d implementation plan: full invoices by email as a PDF, and on an office printer
 
+> **2026-10-15, A661:** a location no longer has one invoice printer. The
+> `page_printers.invoice_default` flag, the Printers tab's choice and
+> `PUT /management-api/page-printers/invoice-printer` are gone. Each device profile lists its
+> invoice printers, receipt or A4, and may name one as its default; a device may choose its own
+> from that list. The location-wide invoice printer described below is historical.
+
 > **2026-10-12, A493:** consent validation uses the selected order or sale's department
 > contact, including the existing local default-department fallback, rather than the venue
 > receipt row. See [A493](../specs/2026-10-12-a493-departments-zones-design.md). The consent payload,

@@ -10,6 +10,7 @@ import type {
   DeviceProfile,
   DeviceRow,
   JoinRequestRow,
+  PagePrinterRow,
   Printer,
   ReaderRow,
   Station,
@@ -74,6 +75,8 @@ const profile = (id: string, name: string, extra: Partial<DeviceProfile> = {}): 
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
   startingScreen: null,
   departmentId: null,
   allowedZoneIds: null,
@@ -86,6 +89,21 @@ const tillLists = {
   receiptPrinterIds: ["pr3", "pr1", "pr2"],
   paymentSlipPrinterIds: ["pr2", "pr1"],
   cashDrawerPrinterIds: ["pr4"],
+  invoicePrinterIds: ["pr1", "pr2", "pg1"],
+};
+const office: PagePrinterRow = {
+  id: "pg1",
+  name: "Oficina",
+  host: "10.0.0.20",
+  port: 631,
+  resourcePath: "/ipp/print",
+  documentFormat: "application/pdf",
+  supportedFormats: ["application/pdf"],
+  media: "iso_a4_210x297mm",
+  resolutionDpi: 300,
+  active: true,
+  agentId: "ag1",
+  agentName: "Box",
 };
 const profiles = [
   profile("pa", "Counter till", tillLists),
@@ -133,7 +151,15 @@ const base: DeviceRow = {
   madeHereStationIds: ["s2", "s-off"],
   // The device's own profile is among its stored approvals, as the server keeps it.
   approvedProfileIds: ["pa", "pc"],
-  equipment: [],
+  // The invoice choice travels only in `equipment`.
+  equipment: [
+    {
+      role: "invoice",
+      selection: "item",
+      chosenId: "pr2",
+      resolved: { id: "pr2", name: "Terraza", available: true },
+    },
+  ],
   batteryLevel: null,
   batteryCharging: null,
   batteryReportedAt: null,
@@ -236,6 +262,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       })),
     ),
     listPrinters: vi.fn().mockResolvedValue(printers),
+    listPagePrinters: vi.fn().mockResolvedValue([office]),
     pairingMode: vi.fn().mockResolvedValue({
       open: false,
       openUntil: null,
@@ -373,6 +400,7 @@ describe("the Edit dialog's Save", () => {
     expect(value(el, "edit-receipt-printer")).toBe("pr3");
     expect(value(el, "edit-slip-printer")).toBe("pr2");
     expect(value(el, "edit-cash-drawer")).toBe("pr4");
+    expect(value(el, "edit-invoice-printer")).toBe("pr2");
     expect(checked(el, "edit-made-here")).toEqual([
       ["s1", false],
       ["s2", true],
@@ -421,6 +449,8 @@ describe("the Edit dialog's Save", () => {
     ["the receipt printer", "edit-receipt-printer", "pr1", "pr3"],
     ["the slip printer", "edit-slip-printer", "", "pr2"],
     ["the cash drawer", "edit-cash-drawer", "", "pr4"],
+    ["the invoice printer", "edit-invoice-printer", "", "pr2"],
+    ["the invoice printer, on an A4 printer", "edit-invoice-printer", "pg1", "pr2"],
     ["the card reader", "edit-reader", "r1", "r2"],
   ])("%s wakes Save, and choosing it back quiets it", async (_, test, other, original) => {
     const { el } = await openEdit();

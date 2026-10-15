@@ -512,7 +512,7 @@ export class PrintersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** The session holds `printer.manage`: the invoice printers panel offers its actions. */
+  /** The session holds `printer.manage`: the A4 printers panel offers its actions. */
   @property({ type: Boolean }) canManage = false;
   readonly #queries = new DashboardQueries(
     this,

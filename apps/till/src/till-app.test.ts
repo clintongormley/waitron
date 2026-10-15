@@ -3277,7 +3277,7 @@ describe("till-app", () => {
     );
   });
 
-  it("offers A4 on the location's invoice printer at the counter and stages the chosen A4 before placing", async () => {
+  it("offers A4 on the device's invoice printer at the counter and stages the chosen A4 before placing", async () => {
     const placeOrder = vi.fn().mockResolvedValue(placedResult);
     const officePrinter = { id: "pp-office", name: "Office HP" };
     const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
@@ -4357,6 +4357,29 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
   });
 
+  it("sends no F1 retry for an original whose printer is not this till's invoice printer", async () => {
+    const retryReceipt = vi.fn().mockResolvedValue({ jobId: "retry" });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({
+        status: "failed",
+        jobId: "original",
+        canRetry: true,
+        printerWithdrawn: true,
+      }),
+      retryReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")).toBeNull();
+    emit(ticket(el)!, "retry-receipt");
+    await flush(el);
+    expect(retryReceipt).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("keeps a refused F1 retry visible when a later status read recovers", async () => {
     const getReceiptPrintStatus = vi
       .fn()
@@ -4694,8 +4717,11 @@ describe("till-app", () => {
   });
 
   describe("a full invoice's delivery on the sale view (A231q B5)", () => {
-    const none = { retryOriginal: null, printOnA4: null, receiptInstead: null, email: null };
-    const a4Offer = { printer: { id: "p1", name: "Office" }, designation: "original" as const };
+    const none = { retryOriginal: null, print: null, receiptInstead: null, email: null };
+    const a4Offer = {
+      printers: [{ id: "p1", name: "Office", kind: "a4" as const }],
+      designation: "original" as const,
+    };
     const attempt = (over: Partial<InvoiceDeliveryAttempt> = {}): InvoiceDeliveryAttempt => ({
       id: "d1",
       medium: "a4",
@@ -4715,6 +4741,7 @@ describe("till-app", () => {
     ): InvoiceDeliveryStatus => ({
       current,
       originalCompleted: current?.status === "sent",
+      originalPrinterId: null,
       actions: { ...none, ...actions },
       history: current === null ? [] : [current],
     });
@@ -4829,7 +4856,7 @@ describe("till-app", () => {
     it("prints on A4 once per press under a new request key, holding the actions until the status is read again", async () => {
       let release!: () => void;
       let requested = 0;
-      const requestA4Delivery = vi.fn(async () => {
+      const requestPrintDelivery = vi.fn(async () => {
         await new Promise<void>((resolve) => {
           release = resolve;
         });
@@ -4838,37 +4865,58 @@ describe("till-app", () => {
       });
       const getInvoiceDeliveries = vi.fn(async () =>
         requested === 0
-          ? statusOf(null, { printOnA4: a4Offer })
+          ? statusOf(null, { print: a4Offer })
           : statusOf(attempt({ status: "failed" }), {
               retryOriginal: { medium: "a4" },
-              printOnA4: a4Offer,
+              print: a4Offer,
             }),
       );
-      const { el, id } = await soldF1({ getInvoiceDeliveries, requestA4Delivery });
+      const { el, id } = await soldF1({ getInvoiceDeliveries, requestPrintDelivery });
       await flush(el);
-      emit(ticket(el)!, "print-a4");
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
-      expect(requestA4Delivery).toHaveBeenCalledOnce();
-      expect(part(el, "print-a4")!.hasAttribute("disabled")).toBe(true);
+      expect(requestPrintDelivery).toHaveBeenCalledOnce();
+      expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
       release();
       await flush(el);
-      expect(part(el, "print-a4")!.hasAttribute("disabled")).toBe(false);
+      expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
       expect(deliveryLine(el)).toBe("No entregada.");
-      expect(part(el, "print-a4")!.textContent!.trim()).toBe(
+      expect(part(el, "print-invoice")!.textContent!.trim()).toBe(
         "Volver a enviar a la impresora de oficina",
       );
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
       release();
       await flush(el);
-      const [first, second] = requestA4Delivery.mock.calls as unknown as [string, string][];
-      expect(first![0]).toBe(id);
-      expect(first![1]).toMatch(uuid);
-      expect(second![0]).toBe(id);
-      expect(second![1]).toMatch(uuid);
-      expect(second![1]).not.toBe(first![1]);
+      const [first, second] = requestPrintDelivery.mock.calls as unknown as [
+        string,
+        string,
+        string,
+      ][];
+      expect(first!.slice(0, 2)).toEqual([id, "p1"]);
+      expect(first![2]).toMatch(uuid);
+      expect(second!.slice(0, 2)).toEqual([id, "p1"]);
+      expect(second![2]).toMatch(uuid);
+      expect(second![2]).not.toBe(first![2]);
       expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    });
+
+    it("prints on the receipt printer the status offers, naming it on the button", async () => {
+      const receiptOffer = {
+        printers: [{ id: "r1", name: "Bar printer", kind: "receipt" as const }],
+        designation: "original" as const,
+      };
+      const requestPrintDelivery = vi.fn().mockResolvedValue(attempt({ medium: "receipt" }));
+      const { el, id } = await soldF1({
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: receiptOffer })),
+        requestPrintDelivery,
+      });
+      await flush(el);
+      expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en Bar printer");
+      emit(ticket(el)!, "print-invoice");
+      await flush(el);
+      expect(requestPrintDelivery).toHaveBeenCalledExactlyOnceWith(id, "r1", expect.any(String));
     });
 
     it("keeps the view after a refused action, saying why, and no later status read clears or replaces that", async () => {
@@ -4900,33 +4948,33 @@ describe("till-app", () => {
     });
 
     it("clears a refused action's message once a later action succeeds", async () => {
-      const requestA4Delivery = vi
+      const requestPrintDelivery = vi
         .fn()
         .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" })
         .mockResolvedValue(attempt());
       const { el } = await soldF1({
-        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
-        requestA4Delivery,
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer })),
+        requestPrintDelivery,
       });
       await flush(el);
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
       expect(part(el, "delivery-refused")?.textContent?.trim()).toBe(
         codeMessage("invoice_delivery.printer_invalid"),
       );
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
-      expect(requestA4Delivery).toHaveBeenCalledTimes(2);
+      expect(requestPrintDelivery).toHaveBeenCalledTimes(2);
       expect(part(el, "delivery-refused")).toBeNull();
     });
 
     it("says a request that got no answer could not send the invoice", async () => {
       const { el } = await soldF1({
-        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
-        requestA4Delivery: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer })),
+        requestPrintDelivery: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       });
       await flush(el);
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
       expect(part(el, "delivery-refused")?.textContent?.trim()).toBe(
         "No se pudo enviar la factura, inténtalo de nuevo",
@@ -4968,32 +5016,30 @@ describe("till-app", () => {
     it("reads the status again once the receipt original is sent to print", async () => {
       const getInvoiceDeliveries = vi
         .fn()
-        .mockResolvedValueOnce(statusOf(null, { printOnA4: a4Offer }))
+        .mockResolvedValueOnce(statusOf(null, { print: a4Offer }))
         .mockResolvedValue(statusOf(attempt({ medium: "receipt", status: "queued" })));
       const { el, id } = await soldF1({ getInvoiceDeliveries });
       await flush(el);
-      expect(part(el, "print-a4")).not.toBeNull();
+      expect(part(el, "print-invoice")).not.toBeNull();
       emit(ticket(el)!, "print-receipt");
       await flush(el);
       expect(currentApi.printReceipt).toHaveBeenCalledExactlyOnceWith(id);
       expect(getInvoiceDeliveries.mock.calls).toEqual([[id], [id]]);
-      expect(part(el, "print-a4")).toBeNull();
+      expect(part(el, "print-invoice")).toBeNull();
     });
 
     it("drops a refusal that arrives after the sale view closed, reading nothing more", async () => {
       let refuse!: (error: unknown) => void;
-      const getInvoiceDeliveries = vi
-        .fn()
-        .mockResolvedValue(statusOf(null, { printOnA4: a4Offer }));
-      const requestA4Delivery = vi.fn(
+      const getInvoiceDeliveries = vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer }));
+      const requestPrintDelivery = vi.fn(
         () =>
           new Promise((_resolve, reject) => {
             refuse = reject;
           }),
       );
-      const { el } = await soldF1({ getInvoiceDeliveries, requestA4Delivery });
+      const { el } = await soldF1({ getInvoiceDeliveries, requestPrintDelivery });
       await flush(el);
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
       emit(ticket(el)!, "new-sale");
       await flush(el);
@@ -5063,7 +5109,7 @@ describe("till-app", () => {
 
     it("holds the receipt's own actions while a delivery request is out", async () => {
       let release!: () => void;
-      const requestA4Delivery = vi.fn(
+      const requestPrintDelivery = vi.fn(
         () =>
           new Promise((resolve) => {
             release = () => resolve(attempt());
@@ -5071,13 +5117,13 @@ describe("till-app", () => {
       );
       const printReceipt = vi.fn().mockResolvedValue(undefined);
       const { el } = await soldF1({
-        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { printOnA4: a4Offer })),
-        requestA4Delivery,
+        getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer })),
+        requestPrintDelivery,
         printReceipt,
       });
       await flush(el);
       expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(false);
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       await flush(el);
       expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
       expect(part(el, "refresh-receipt")!.hasAttribute("disabled")).toBe(true);
@@ -5090,18 +5136,18 @@ describe("till-app", () => {
     });
 
     it("asks for nothing the status does not offer", async () => {
-      const requestA4Delivery = vi.fn();
+      const requestPrintDelivery = vi.fn();
       const switchA4ToReceipt = vi.fn();
       const { el } = await soldF1({
         getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(attempt({ status: "sending" }))),
-        requestA4Delivery,
+        requestPrintDelivery,
         switchA4ToReceipt,
       });
       await flush(el);
-      emit(ticket(el)!, "print-a4");
+      emit(ticket(el)!, "print-invoice");
       emit(ticket(el)!, "receipt-instead", { deliveryId: "d1" });
       await flush(el);
-      expect(requestA4Delivery).not.toHaveBeenCalled();
+      expect(requestPrintDelivery).not.toHaveBeenCalled();
       expect(switchA4ToReceipt).not.toHaveBeenCalled();
     });
 
@@ -16933,8 +16979,8 @@ describe("the device's equipment, chosen from the header", () => {
   const S2 = item("S2", "Portable slip printer");
   const KNOWN = new Map([P1, P2, P3, POFF, S1, S2].map((each) => [each.id, each]));
 
-  /** The four roles as the server answers them for these explicit receipt and slip choices: the
-   * receipt chosen from P1 and P2, the slip from S1 and S2, no drawer or reader. */
+  /** The five roles as the server answers them for these explicit receipt and slip choices: the
+   * receipt chosen from P1 and P2, the slip from S1 and S2, no drawer, invoice printer or reader. */
   function equipmentOf(chosen: { receipt: string | null; payment_slip: string | null }) {
     const role = (name: "receipt" | "payment_slip", choices: EquipmentItem[]): RoleEquipment => {
       const picked = chosen[name] === null ? null : KNOWN.get(chosen[name])!;
@@ -16951,7 +16997,7 @@ describe("the device's equipment, chosen from the header", () => {
         choices,
       };
     };
-    const none = (name: "cash_drawer" | "card_terminal"): RoleEquipment => ({
+    const none = (name: "cash_drawer" | "invoice" | "card_terminal"): RoleEquipment => ({
       role: name,
       selection: "default",
       chosenId: null,
@@ -16965,6 +17011,7 @@ describe("the device's equipment, chosen from the header", () => {
         role("receipt", [P1, P2]),
         role("payment_slip", [S1, S2]),
         none("cash_drawer"),
+        none("invoice"),
         none("card_terminal"),
       ],
     } satisfies DeviceEquipment;
@@ -17223,7 +17270,7 @@ describe("the device's equipment, chosen from the header", () => {
   function refusedPick(code: "device.equipment_held" | "reader.payment_in_progress") {
     const R1 = item("R1", "Bar reader");
     const before = structuredClone(initial);
-    before.roles[3]!.choices = [R1];
+    before.roles[4]!.choices = [R1];
     const after = structuredClone(before);
     if (code === "device.equipment_held") {
       after.roles[0]!.choices[1] = {
@@ -17238,7 +17285,7 @@ describe("the device's equipment, chosen from the header", () => {
         shown: { code, field: "receiptPrinterId" },
       };
     }
-    after.roles[3]!.choices = [{ ...R1, busy: true }];
+    after.roles[4]!.choices = [{ ...R1, busy: true }];
     return {
       before,
       after,
@@ -17300,7 +17347,7 @@ describe("the device's equipment, chosen from the header", () => {
   it("after a reader.not_found refusal the list is read again, so a deleted reader drops out", async () => {
     const R1 = item("R1", "Bar reader");
     const before = structuredClone(initial);
-    before.roles[3]!.choices = [R1];
+    before.roles[4]!.choices = [R1];
     const after = structuredClone(initial);
     const getDeviceEquipment = vi.fn().mockResolvedValue(before);
     const el = await openEquipment({
@@ -18055,6 +18102,43 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(toast(el).message).toBe(
       t("equipment.taken").replace("{item}", PP.name).replace("{device}", "Bar till"),
     );
+  });
+
+  it("shows no notice when only the invoice printer changed, though another device carries it", async () => {
+    // The invoice role ignores who carries a portable printer (A661 Q4-A): the server sends its
+    // items with no holder, even while another device holds the same printer for its receipts.
+    const invoice = (resolved: boolean): RoleEquipment => ({
+      role: "invoice",
+      selection: "default",
+      chosenId: null,
+      resolved: resolved ? { ...PP, available: true } : null,
+      chosen: null,
+      default: resolved ? item(PP) : null,
+      choices: [item(PP)],
+    });
+    const withInvoice = (resolved: boolean, slipHolder: boolean): DeviceEquipment => {
+      const equipment = equipmentOn("held", R1);
+      equipment.roles[0] = { ...none("payment_slip"), role: "receipt" };
+      equipment.roles[1] = {
+        ...none("payment_slip"),
+        choices: [item(PP, slipHolder ? { heldBy: BAR_TILL } : {})],
+      };
+      equipment.roles.splice(3, 0, invoice(resolved));
+      return equipment;
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment: vi
+        .fn()
+        .mockResolvedValueOnce(withInvoice(true, false))
+        .mockResolvedValue(withInvoice(false, true)),
+    });
+    await toCounter(el);
+    await flush(el);
+
+    await poll(el);
+
+    expect(toast(el).open).toBe(false);
   });
 
   it("shows no notice when a choice changed but no other device carries what it was on", async () => {

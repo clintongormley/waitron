@@ -13,7 +13,6 @@ import {
   type WtModal,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -41,9 +40,8 @@ const isOut = (page: PageTestPage | null | undefined): boolean =>
   page?.status === "waiting" || page?.status === "printing";
 
 /**
- * The location's office printers (A4 invoice printers), with rename, disable and a test page, and
- * the choice of which one prints the A4 invoices. `reload` reads the list again after a write and rejects when
- * that read fails; the rows come back through `rows`.
+ * The location's office printers (A4 printers), with rename, disable and a test page. `reload` reads
+ * the list again after a write and rejects when that read fails; the rows come back through `rows`.
  */
 @customElement("dashboard-page-printers-panel")
 export class PagePrintersPanel extends LitElement {
@@ -67,23 +65,14 @@ export class PagePrintersPanel extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
-      wt-data-table::part(page-printer-chosen),
       wt-data-table::part(page-printer-hint) {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .choice {
-        display: grid;
-        gap: var(--wt-space-3);
-        max-width: var(--wt-form-max-width);
-      }
       .error {
         margin: 0;
         color: var(--wt-color-danger);
-      }
-      .note {
-        margin: 0;
       }
       wt-data-table::part(page-printer-test-page) {
         display: block;
@@ -96,7 +85,7 @@ export class PagePrintersPanel extends LitElement {
 
   @property({ attribute: false }) api?: Pick<
     DashboardApi,
-    "updatePagePrinter" | "setInvoicePrinter" | "printPagePrinterTestPage"
+    "updatePagePrinter" | "printPagePrinterTestPage"
   > & { background: Pick<DashboardApi, "readPagePrinterTestPage"> };
   @property({ attribute: false }) rows: PagePrinterRow[] = [];
   @property({ type: Boolean }) canManage = false;
@@ -104,17 +93,12 @@ export class PagePrintersPanel extends LitElement {
   /** How long to wait between reads of a test page that is still out. */
   @property({ attribute: false }) testPagePollMs = 2_000;
 
-  @state() private chosen = "";
-  @state() private choiceSending = false;
-  @state() private choiceRefused: string | null = null;
   @state() private disabling = new Set<string>();
   @state() private testPageSending = new Set<string>();
   /** Each printer's last test page, by printer id. */
   @state() private testPages = new Map<string, PageTestPage>();
   @state() private actionError: string | null = null;
   @state() private readError: string | null = null;
-  /** The name of the printer whose disabling also cleared the choice. */
-  @state() private cleared: string | null = null;
   @state() private renaming: PagePrinterRow | null = null;
   @state() private renameName = "";
   @state() private renameAttempted = false;
@@ -125,10 +109,6 @@ export class PagePrintersPanel extends LitElement {
   /** The printer whose failed test-page read last set `readError`; another printer's successful read leaves it. */
   #readErrorFrom: string | null = null;
   readonly #testPagePolls = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
-  readonly #choiceId = {};
-  #choiceScope?: DraftScope<string>;
-  /** Kept through a disconnect, so a choice staged before it still counts once put back. */
-  #choiceBaseline = "";
   readonly #renameId = {};
   #renameScope?: DraftScope<string>;
   #renameLeave?: LeaveCoordinator;
@@ -148,8 +128,6 @@ export class PagePrintersPanel extends LitElement {
   override disconnectedCallback(): void {
     for (const { timer } of this.#testPagePolls.values()) clearTimeout(timer);
     this.#testPagePolls.clear();
-    this.#choiceScope?.dispose();
-    this.#choiceScope = undefined;
     this.#renameScope?.dispose();
     this.#renameScope = undefined;
     this.#renameLeave = undefined;
@@ -157,29 +135,8 @@ export class PagePrintersPanel extends LitElement {
   }
 
   protected override willUpdate(changes: PropertyValues<this>): void {
-    if (changes.has("canManage") && !this.canManage) this.#dropDrafts();
-    if (changes.has("rows")) {
-      this.readError = null;
-      const stored = this.#stored();
-      if (stored !== "") this.cleared = null;
-      const offered = this.chosen === "" || this.#active().some(({ id }) => id === this.chosen);
-      if (!this.#choiceScope?.isDirty() || !offered) this.chosen = stored;
-      this.#choiceBaseline = stored;
-      this.#choiceScope?.commit(stored);
-    }
-    if (this.canManage && this.isConnected && !this.#choiceScope) {
-      const { scope } = draftScopeFor<string>(this, {
-        id: this.#choiceId,
-        current: () => this.chosen,
-        snapshot: (value) => value,
-        equal: (a, b) => a === b,
-        restore: (value) => {
-          this.chosen = value;
-        },
-      });
-      this.#choiceScope = scope;
-      scope.commit(this.#choiceBaseline);
-    }
+    if (changes.has("canManage") && !this.canManage) this.#closedRename();
+    if (changes.has("rows")) this.readError = null;
     if (this.renaming !== null && this.isConnected && !this.#renameScope) {
       const { coordinator, scope } = draftScopeFor<string>(this, {
         id: this.#renameId,
@@ -196,22 +153,6 @@ export class PagePrintersPanel extends LitElement {
     }
   }
 
-  /** Without the permission the choice and the rename are not drawn, so their drafts must not ask. */
-  #dropDrafts(): void {
-    this.#choiceScope?.dispose();
-    this.#choiceScope = undefined;
-    this.chosen = this.#choiceBaseline;
-    this.#closedRename();
-  }
-
-  #active(): PagePrinterRow[] {
-    return this.rows.filter(({ active }) => active);
-  }
-
-  #stored(): string {
-    return this.#active().find(({ invoicePrinter }) => invoicePrinter)?.id ?? "";
-  }
-
   async #reread(): Promise<void> {
     try {
       await this.reload();
@@ -225,7 +166,6 @@ export class PagePrintersPanel extends LitElement {
   async #disable(row: PagePrinterRow): Promise<void> {
     if (!row.active || this.disabling.has(row.id)) return;
     this.actionError = null;
-    this.cleared = null;
     this.disabling = new Set([...this.disabling, row.id]);
     try {
       await this.api!.updatePagePrinter(row.id, { active: false });
@@ -235,7 +175,6 @@ export class PagePrintersPanel extends LitElement {
     } finally {
       this.disabling = new Set([...this.disabling].filter((id) => id !== row.id));
     }
-    if (row.invoicePrinter) this.cleared = row.name;
     await this.#reread();
   }
 
@@ -322,26 +261,6 @@ export class PagePrintersPanel extends LitElement {
     >`;
   }
 
-  async #saveChoice(): Promise<void> {
-    if (this.choiceSending || saveActionState(this.#choiceScope).unchanged) return;
-    const submitted = this.chosen;
-    this.choiceRefused = null;
-    this.actionError = null;
-    this.choiceSending = true;
-    try {
-      await this.api!.setInvoicePrinter(submitted === "" ? null : submitted);
-    } catch (error) {
-      this.choiceRefused = codeOf(error);
-      return;
-    } finally {
-      this.choiceSending = false;
-    }
-    this.cleared = null;
-    this.#choiceBaseline = submitted;
-    this.#choiceScope?.commit(submitted);
-    await this.#reread();
-  }
-
   #openRename(row: PagePrinterRow): void {
     this.#renameScope?.dispose();
     this.#renameScope = undefined;
@@ -403,13 +322,8 @@ export class PagePrintersPanel extends LitElement {
         key: "name",
         label: t("printers.name"),
         cell: (row) =>
-          html`<span data-test=${`page-printer-name-${row.id}`}>${row.name}</span>${
-              row.invoicePrinter
-                ? html`<span part="page-printer-chosen" data-test=${`page-printer-chosen-${row.id}`}
-                    >${t("printers.invoice_printer_chosen")}</span
-                  >`
-                : nothing
-            }${this.#testPageNote(row)}`,
+          html`<span data-test=${`page-printer-name-${row.id}`}>${row.name}</span
+            >${this.#testPageNote(row)}`,
       },
       {
         key: "agent",
@@ -491,46 +405,6 @@ export class PagePrintersPanel extends LitElement {
         >${t("printers.print_test_page")}</wt-button
       >
     </dashboard-row-actions>`;
-  }
-
-  #renderChoice(): TemplateResult | typeof nothing {
-    if (!this.canManage) return nothing;
-    const action = saveActionState(this.#choiceScope);
-    return html`<div class="choice">
-      <wt-combobox
-        data-test="invoice-printer-choice"
-        name="invoicePrinterId"
-        show-empty-option
-        search="auto"
-        label=${t("printers.invoice_printer_choice")}
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        ?disabled=${this.choiceSending}
-        .options=${[
-          { value: "", label: t("printers.invoice_printer_none") },
-          ...this.#active().map(({ id, name }) => ({ value: id, label: name })),
-        ]}
-        .value=${this.chosen}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.chosen = event.detail.value;
-          this.#choiceScope?.changed();
-        }}
-      ></wt-combobox>
-      <wt-form-actions
-        data-test="invoice-printer-actions"
-        .error=${bottomMessage(refusal(this.choiceRefused))}
-      >
-        <wt-button
-          data-test="save-invoice-printer"
-          variant=${action.variant}
-          ?loading=${this.choiceSending}
-          ?disabled=${action.unchanged}
-          @click=${() => void this.#saveChoice()}
-          >${t("action.save")}</wt-button
-        >
-      </wt-form-actions>
-    </div>`;
   }
 
   #renderRename(): TemplateResult | typeof nothing {
@@ -615,13 +489,6 @@ export class PagePrintersPanel extends LitElement {
           .rowKey=${(row: PagePrinterRow) => row.id}
         ></wt-data-table>
         ${
-          this.cleared === null
-            ? nothing
-            : html`<p class="note" role="status" data-test="invoice-printer-cleared">
-                ${fill("printers.invoice_printer_cleared", { name: this.cleared })}
-              </p>`
-        }
-        ${
           this.actionError === null
             ? nothing
             : html`<p class="error" role="alert" data-test="page-printers-action-error">
@@ -635,7 +502,6 @@ export class PagePrintersPanel extends LitElement {
                 ${t("printers.refresh_failed")} ${codeMessage(this.readError)}
               </p>`
         }
-        ${this.#renderChoice()}
       </section>
       ${this.#renderRename()}`;
   }

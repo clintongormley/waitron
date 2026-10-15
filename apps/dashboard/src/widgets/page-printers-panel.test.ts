@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { WtFormActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
+import { en, es, type StringKey } from "../i18n/strings.js";
 import type { PagePrinterRow, PageTestPage } from "../api/client.js";
 import type { PagePrintersPanel } from "./page-printers-panel.js";
 import "./page-printers-panel.js";
@@ -15,7 +16,7 @@ it("A576 saved queues on one host display their own paths and retain independent
   const { el, api } = await mount({
     rows: [
       row({ resourcePath: "/printers/kitchen" }),
-      row({ id: "pp2", resourcePath: "/printers/reception", invoicePrinter: false }),
+      row({ id: "pp2", resourcePath: "/printers/reception" }),
     ],
   });
   expect(text(el, "[data-test=page-printer-address-pp1]")).toBe("10.0.0.56:631/printers/kitchen");
@@ -35,20 +36,18 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   media: "iso_a4_210x297mm",
   resolutionDpi: 300,
   active: true,
-  invoicePrinter: true,
   agentId: "a1",
   agentName: "Cocina agent",
   ...over,
 });
 const ROWS = [
   row(),
-  row({ id: "pp2", name: "Back office", host: "10.0.0.57", invoicePrinter: false }),
+  row({ id: "pp2", name: "Back office", host: "10.0.0.57" }),
   row({
     id: "pp3",
     name: "Old laser",
     host: "10.0.0.58",
     active: false,
-    invoicePrinter: false,
     agentId: null,
     agentName: null,
     media: "na_letter_8.5x11in",
@@ -61,7 +60,6 @@ function stubApi() {
   };
   return {
     updatePagePrinter: vi.fn().mockResolvedValue(undefined),
-    setInvoicePrinter: vi.fn().mockResolvedValue(undefined),
     printPagePrinterTestPage: vi
       .fn<(id: string) => Promise<PageTestPage>>()
       .mockResolvedValue({ id: "tp1", status: "waiting" }),
@@ -114,8 +112,6 @@ const text = (el: PagePrintersPanel, sel: string) =>
   q(el, sel)?.textContent?.replace(/\s+/g, " ").trim();
 const button = (el: PagePrintersPanel, sel: string) =>
   q(el, sel) as unknown as HTMLElementTagNameMap["wt-button"];
-const choice = (el: PagePrintersPanel) =>
-  q(el, "[data-test=invoice-printer-choice]") as unknown as HTMLElementTagNameMap["wt-combobox"];
 async function click(el: PagePrintersPanel, sel: string) {
   q(el, sel)!.click();
   await flush(el);
@@ -128,12 +124,8 @@ async function typeName(el: PagePrintersPanel, value: string) {
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await flush(el);
 }
-const choiceMessage = async (el: PagePrintersPanel) =>
-  (
-    await formMessageOf(q(el, "[data-test=invoice-printer-actions]") as unknown as WtFormActions)
-  )?.textContent?.trim() ?? "";
 
-it("lists each office printer under the invoice printers heading, with its agent, address and paper", async () => {
+it("lists each office printer under the A4 printers heading, with its agent, address and paper", async () => {
   const { el } = await mount();
   expect(text(el, "h2")).toBe(t("printers.invoice_printers_title"));
   // The heading names the kind; no row repeats it.
@@ -142,10 +134,6 @@ it("lists each office printer under the invoice printers heading, with its agent
     expect(cells).not.toContain(marker);
   expect(q(el, "[data-test^=page-printer-kind-]")).toBeNull();
   expect(text(el, "[data-test=page-printer-name-pp1]")).toContain("Office");
-  expect(text(el, "[data-test=page-printer-chosen-pp1]")).toBe(
-    t("printers.invoice_printer_chosen"),
-  );
-  expect(q(el, "[data-test=page-printer-chosen-pp2]")).toBeNull();
   expect(text(el, "[data-test=page-printer-agent-pp1]")).toBe("Cocina agent");
   expect(text(el, "[data-test=page-printer-agent-pp3]")).toBe(
     t("printers.invoice_printer_agent_gone"),
@@ -153,6 +141,36 @@ it("lists each office printer under the invoice printers heading, with its agent
   expect(text(el, "[data-test=page-printer-address-pp2]")).toBe("10.0.0.57:631/ipp/print");
   expect(text(el, "[data-test=page-printer-paper-pp1]")).toBe(t("printers.invoice_printer_a4"));
   expect(text(el, "[data-test=page-printer-paper-pp3]")).toBe(t("printers.invoice_printer_letter"));
+});
+
+it("calls them A4 printers, in English and Spanish", async () => {
+  const { el } = await mount();
+  const title = t("printers.invoice_printers_title");
+  expect([en["printers.invoice_printers_title"], es["printers.invoice_printers_title"]]).toContain(
+    title,
+  );
+  expect(text(el, "h2")).toBe(title);
+  expect(q(el, "[data-test=page-printers-table]")!.getAttribute("aria-label")).toBe(title);
+  const renamed = {
+    "printers.invoice_printers_title": ["A4 printers", "Impresoras A4"],
+    "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
+    "printers.page_printer_added": ["Added as A4 printer", "Añadida como impresora A4"],
+    "printers.page_printer_enable_hint": ["Disabled A4 printer", "Impresora A4 deshabilitada"],
+  } as const;
+  for (const [key, [english, spanish]] of Object.entries(renamed)) {
+    expect(en[key as StringKey], key).toBe(english);
+    expect(es[key as StringKey], key).toBe(spanish);
+  }
+});
+
+it("offers a manager no choice of a printer for A4 invoices, and marks no row as it", async () => {
+  const { el } = await mount();
+  expect(q(el, "wt-combobox")).toBeNull();
+  expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
+  expect(q(el, "[data-test^=page-printer-chosen-]")).toBeNull();
+  const panel = q(el, "[data-test=page-printers-panel]")!;
+  expect(panel.textContent).not.toContain("Printer for A4 invoices");
+  expect(panel.textContent).not.toContain("Prints the A4 invoices");
 });
 
 it("says a disabled printer is enabled by finding it again, and offers no Enable", async () => {
@@ -285,6 +303,14 @@ it("saves a rename on Enter", async () => {
   );
 });
 
+it("disabling a printer asks the server to switch it off, then reads the list again", async () => {
+  const { el, api, reload } = await mount();
+  await click(el, "[data-test=disable-page-printer-pp2]");
+  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { active: false });
+  expect(api.updatePagePrinter).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+});
+
 it("sends one disable however often the row's Disable is pressed while it is out", async () => {
   const { el, api } = await mount();
   let finish!: () => void;
@@ -298,18 +324,7 @@ it("sends one disable however often the row's Disable is pressed while it is out
   expect(button(el, "[data-test=disable-page-printer-pp2]").loading).toBe(false);
 });
 
-it("disables the chosen printer, says no invoice printer is set now, and reads the list again", async () => {
-  const { el, api, reload } = await mount();
-  await click(el, "[data-test=disable-page-printer-pp1]");
-  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp1", { active: false });
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-  await flush(el);
-  expect(text(el, "[data-test=invoice-printer-cleared]")).toBe(
-    t("printers.invoice_printer_cleared").replace("{name}", "Office"),
-  );
-});
-
-it("puts a printer name holding a replacement pattern into its menu, rename heading and disabled note as written", async () => {
+it("puts a printer name holding a replacement pattern into its menu and rename heading as written", async () => {
   const name = "Office $& 2";
   const { el } = await mount({ rows: [row({ name })] });
   const menu = q(el, "[data-test=rename-page-printer-pp1]")!.closest("dashboard-row-actions") as
@@ -319,20 +334,6 @@ it("puts a printer name holding a replacement pattern into its menu, rename head
   expect(q(el, "[data-test=rename-page-printer-modal]")!.getAttribute("heading")).toBe(
     t("printers.invoice_printer_rename_heading").split("{name}").join(name),
   );
-  await click(el, "[data-test=cancel-rename-page-printer]");
-  await click(el, "[data-test=disable-page-printer-pp1]");
-  await vi.waitFor(() => expect(q(el, "[data-test=invoice-printer-cleared]")).not.toBeNull());
-  expect(text(el, "[data-test=invoice-printer-cleared]")).toBe(
-    t("printers.invoice_printer_cleared").split("{name}").join(name),
-  );
-});
-
-it("disabling a printer that was not chosen says nothing about the choice", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=disable-page-printer-pp2]");
-  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { active: false });
-  await flush(el);
-  expect(q(el, "[data-test=invoice-printer-cleared]")).toBeNull();
 });
 
 it("shows a refused disable as the panel's alert and keeps the row's Disable usable", async () => {
@@ -342,95 +343,17 @@ it("shows a refused disable as the panel's alert and keeps the row's Disable usa
   await flush(el);
   expect(text(el, "[data-test=page-printers-action-error]")).toBe(codeMessage("connection.failed"));
   expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
-  expect(q(el, "[data-test=invoice-printer-cleared]")).toBeNull();
   expect(button(el, "[data-test=disable-page-printer-pp2]").disabled).toBe(false);
   expect(reload).not.toHaveBeenCalled();
 });
 
-it("a role without printer.manage sees the list with no row menu, no rename and no choice", async () => {
+it("a role without printer.manage sees the list with no row menu and no rename", async () => {
   const { el } = await mount({ canManage: false });
-  expect(text(el, "[data-test=page-printer-chosen-pp1]")).toBe(
-    t("printers.invoice_printer_chosen"),
-  );
   const table = q(el, "[data-test=page-printers-table]") as unknown as {
     columns: { key: string }[];
   };
   expect(table.columns.map(({ key }) => key)).not.toContain("actions");
   expect(q(el, "dashboard-row-actions")).toBeNull();
-  expect(q(el, "[data-test=invoice-printer-choice]")).toBeNull();
-  expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
-});
-
-it("offers the active printers and None, starting on the location's choice with Save quiet", async () => {
-  const { el } = await mount();
-  const box = choice(el);
-  expect(box.getAttribute("name")).toBe("invoicePrinterId");
-  expect(box.value).toBe("pp1");
-  expect(box.options.map(({ value, label }) => [value, label])).toEqual([
-    ["", t("printers.invoice_printer_none")],
-    ["pp1", "Office"],
-    ["pp2", "Back office"],
-  ]);
-  const save = button(el, "[data-test=save-invoice-printer]");
-  expect(save.disabled).toBe(true);
-  expect(save.variant).toBe("secondary");
-});
-
-it("saves another choice, then None, each time reading the list again", async () => {
-  const { el, api, reload } = await mount();
-  await chooseOption(choice(el), "pp2");
-  await flush(el);
-  const save = button(el, "[data-test=save-invoice-printer]");
-  expect(save.disabled).toBe(false);
-  expect(save.variant).toBe("primary");
-  await click(el, "[data-test=save-invoice-printer]");
-  expect(api.setInvoicePrinter).toHaveBeenCalledWith("pp2");
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-  await flush(el);
-  expect(save.disabled).toBe(true);
-  await chooseOption(choice(el), "");
-  await flush(el);
-  await click(el, "[data-test=save-invoice-printer]");
-  expect(api.setInvoicePrinter).toHaveBeenLastCalledWith(null);
-});
-
-it("a press that reaches an unchanged Save's handler sends nothing", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=save-invoice-printer]");
-  expect(api.setInvoicePrinter).not.toHaveBeenCalled();
-});
-
-it("a refused save keeps the staged choice, says why at the bottom, and leaves Save usable", async () => {
-  const { el, api, reload } = await mount();
-  api.setInvoicePrinter.mockRejectedValueOnce({ code: "page_printer.not_found" });
-  await chooseOption(choice(el), "pp2");
-  await flush(el);
-  await click(el, "[data-test=save-invoice-printer]");
-  await flush(el);
-  expect(choice(el).value).toBe("pp2");
-  expect(await choiceMessage(el)).toBe(codeMessage("page_printer.not_found"));
-  expect(button(el, "[data-test=save-invoice-printer]").disabled).toBe(false);
-  expect(reload).not.toHaveBeenCalled();
-  expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
-});
-
-it("a saved choice whose re-read fails shows a load failure, not a failed save", async () => {
-  const { el, reload } = await mount();
-  reload.mockRejectedValueOnce({ code: "connection.failed" });
-  await chooseOption(choice(el), "pp2");
-  await flush(el);
-  await click(el, "[data-test=save-invoice-printer]");
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-  await flush(el);
-  expect(text(el, "[data-test=page-printers-read-error]")).toBe(
-    `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
-  );
-  expect(await choiceMessage(el)).toBe("");
-  expect(q(el, "[data-test=page-printers-action-error]")).toBeNull();
-  const save = button(el, "[data-test=save-invoice-printer]");
-  expect(save.disabled).toBe(true);
-  expect(save.variant).toBe("secondary");
-  expect(choice(el).value).toBe("pp2");
 });
 
 it("a rename whose re-read fails closes the dialog and shows a load failure", async () => {
@@ -461,68 +384,15 @@ it("a later list clears the load failure", async () => {
   expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
 });
 
-it("follows a new list while the choice is untouched, and keeps a staged choice while it is offered", async () => {
-  const { el } = await mount();
-  el.rows = [
-    { ...ROWS[0]!, invoicePrinter: false },
-    { ...ROWS[1]!, invoicePrinter: true },
-    ROWS[2]!,
-  ];
-  await flush(el);
-  expect(choice(el).value).toBe("pp2");
-  expect(button(el, "[data-test=save-invoice-printer]").disabled).toBe(true);
-  await chooseOption(choice(el), "");
-  await flush(el);
-  el.rows = [{ ...ROWS[0]!, invoicePrinter: true }, ROWS[1]!, ROWS[2]!];
-  await flush(el);
-  expect(choice(el).value).toBe("");
-  expect(button(el, "[data-test=save-invoice-printer]").disabled).toBe(false);
-});
-
-it("drops a staged choice whose printer is no longer active", async () => {
-  const { el } = await mount();
-  await chooseOption(choice(el), "pp2");
-  await flush(el);
-  el.rows = [ROWS[0]!, { ...ROWS[1]!, active: false }, ROWS[2]!];
-  await flush(el);
-  expect(choice(el).value).toBe("pp1");
-  expect(button(el, "[data-test=save-invoice-printer]").disabled).toBe(true);
-});
-
-it("drops the no-printer note once a new list shows a printer chosen for the invoices", async () => {
-  const { el } = await mount();
-  await click(el, "[data-test=disable-page-printer-pp1]");
-  await vi.waitFor(() => expect(q(el, "[data-test=invoice-printer-cleared]")).not.toBeNull());
-  el.rows = [{ ...ROWS[0]!, active: false, invoicePrinter: false }, ROWS[1]!, ROWS[2]!];
-  await flush(el);
-  expect(q(el, "[data-test=invoice-printer-cleared]")).not.toBeNull();
-  el.rows = [
-    { ...ROWS[0]!, active: false, invoicePrinter: false },
-    { ...ROWS[1]!, invoicePrinter: true },
-    ROWS[2]!,
-  ];
-  await flush(el);
-  expect(q(el, "[data-test=invoice-printer-cleared]")).toBeNull();
-});
-
-it.each([
-  ["a saved choice", "choice"],
-  ["a sent rename", "rename"],
-] as const)("%s replaces a refused disable's message", async (_label, action) => {
+it("a sent rename replaces a refused disable's message", async () => {
   const { el, api } = await mount();
   api.updatePagePrinter.mockRejectedValueOnce({ code: "connection.failed" });
   await click(el, "[data-test=disable-page-printer-pp2]");
   await flush(el);
   expect(q(el, "[data-test=page-printers-action-error]")).not.toBeNull();
-  if (action === "choice") {
-    await chooseOption(choice(el), "pp2");
-    await flush(el);
-    await click(el, "[data-test=save-invoice-printer]");
-  } else {
-    await click(el, "[data-test=rename-page-printer-pp2]");
-    await typeName(el, "Upstairs");
-    await click(el, "[data-test=confirm-rename-page-printer]");
-  }
+  await click(el, "[data-test=rename-page-printer-pp2]");
+  await typeName(el, "Upstairs");
+  await click(el, "[data-test=confirm-rename-page-printer]");
   await flush(el);
   expect(q(el, "[data-test=page-printers-action-error]")).toBeNull();
 });

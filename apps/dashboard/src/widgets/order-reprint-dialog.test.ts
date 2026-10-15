@@ -1,9 +1,15 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OrderRowDto } from "../api/client.js";
+import type {
+  DashboardApi,
+  OfferedPrinter,
+  OrderDeliveryAttempt,
+  OrderDetailDto,
+  OrderRowDto,
+} from "../api/client.js";
 import "./order-reprint-dialog.js";
 import type { OrderReprintDialog } from "./order-reprint-dialog.js";
 
@@ -58,6 +64,34 @@ it("prints a duplicate on the selected printer and says where it went", async ()
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
   await vi.waitFor(() => expect(api.reprintOrder).toHaveBeenCalledWith("bill-1", "printer-2"));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Kitchen"));
+});
+
+it("says the printer the copy was sent to, though another was chosen while the request was on its way", async () => {
+  setLocale("en-GB");
+  let finish!: (queued: { jobId: string }) => void;
+  const api = {
+    getOrderPrinters: vi.fn().mockResolvedValue([
+      { id: "printer-1", name: "Barra" },
+      { id: "printer-2", name: "Kitchen" },
+    ]),
+    reprintOrder: vi.fn().mockReturnValue(new Promise((resolve) => (finish = resolve))),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+    api,
+    row,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("printer-1"),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
+  await vi.waitFor(() => expect(api.reprintOrder).toHaveBeenCalledWith("bill-1", "printer-1"));
+  el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "printer-2" }, bubbles: true, composed: true }),
+  );
+  finish({ jobId: "job-1" });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Barra"));
+  expect(el.shadowRoot!.textContent).not.toContain("sent to Kitchen");
 });
 
 it("puts a bill label holding the invoice placeholder, and a printer name holding a replacement pattern, in as written", async () => {
@@ -555,4 +589,452 @@ it("says the printers are loading, not that there is none, when reopened after a
   await el.updateComplete;
   expect(loadingLine(el)?.textContent?.trim()).toBe(texts["en-GB"].loading);
   expect(el.shadowRoot!.textContent).not.toContain(texts["en-GB"].none);
+});
+
+describe("printing a full invoice", () => {
+  const BARRA = { id: "printer-1", name: "Barra", kind: "receipt" as const };
+  const OFICINA = { id: "page-1", name: "Oficina", kind: "a4" as const };
+  const COCINA = { id: "printer-2", name: "Cocina", kind: "receipt" as const };
+  const fullRow: OrderRowDto = { ...row, invoiceType: "F1" };
+  const invoiceDetail = (
+    printers: OfferedPrinter[] | null,
+    originalPrinterId: string | null,
+    designation: "original" | "duplicate" = "duplicate",
+  ): OrderDetailDto => ({
+    row: fullRow,
+    lines: [],
+    invoices: [],
+    tenders: [],
+    payments: [],
+    party: null,
+    departure: null,
+    reprints: [],
+    invoicePdfDownloads: [],
+    deliveries: {
+      current: null,
+      originalCompleted: designation === "duplicate",
+      originalPrinterId,
+      actions: {
+        retryOriginal: null,
+        print: printers === null ? null : { printers, designation },
+        receiptInstead: null,
+        email: null,
+      },
+      history: [],
+    },
+  });
+  const deliveryAttempt = (
+    status: OrderDeliveryAttempt["status"],
+    designation: OrderDeliveryAttempt["designation"] = "original",
+  ): OrderDeliveryAttempt => ({
+    id: "delivery-1",
+    medium: "receipt",
+    designation,
+    status,
+    failureCode: null,
+    requestedAt: "2026-09-30T12:05:00Z",
+    at: null,
+    personId: null,
+    personName: null,
+    printerHold: null,
+    lateSuccess: false,
+  });
+  /** The detail with an attempt in `status` as its current delivery. */
+  const withCurrent = (
+    detail: OrderDetailDto,
+    status: OrderDeliveryAttempt["status"],
+  ): OrderDetailDto => {
+    const attempt = deliveryAttempt(status);
+    return {
+      ...detail,
+      deliveries: { ...detail.deliveries!, current: attempt, history: [attempt] },
+    };
+  };
+  type InvoiceApi = DashboardApi & {
+    getOrder: ReturnType<typeof vi.fn>;
+    getOrderPrinters: ReturnType<typeof vi.fn>;
+    requestOrderPrintDelivery: ReturnType<typeof vi.fn>;
+  };
+  const invoiceApi = (detail: OrderDetailDto, overrides: Record<string, unknown> = {}) =>
+    ({
+      getOrder: vi.fn().mockResolvedValue(detail),
+      getOrderPrinters: vi.fn().mockResolvedValue([{ id: "printer-1", name: "Barra" }]),
+      requestOrderPrintDelivery: vi.fn().mockResolvedValue(deliveryAttempt("queued")),
+      reprintOrder: vi.fn(),
+      liveData: new LiveData(),
+      ...overrides,
+    }) as unknown as InvoiceApi;
+  const openInvoice = async (api: DashboardApi) =>
+    (
+      await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+        api,
+        row: fullRow,
+        mode: "invoice",
+      })
+    ).el;
+  const chooser = (el: OrderReprintDialog) => el.shadowRoot!.querySelector("wt-combobox");
+  const choose = (el: OrderReprintDialog, printerId: string) =>
+    chooser(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: printerId }, bubbles: true, composed: true }),
+    );
+  /** A print request that answers only when the test says so. */
+  const heldPrint = () => {
+    let answer!: (attempt: OrderDeliveryAttempt) => void;
+    let refuse!: (error: unknown) => void;
+    const request = vi.fn().mockReturnValue(
+      new Promise<OrderDeliveryAttempt>((resolve, reject) => {
+        answer = resolve;
+        refuse = reject;
+      }),
+    );
+    return {
+      request,
+      answer: (attempt: OrderDeliveryAttempt) => answer(attempt),
+      refuse: (error: unknown) => refuse(error),
+    };
+  };
+
+  it("preselects the printer the original went to, though it is neither first nor of the first's kind, and lists A4 printers marked", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(3));
+    expect(chooser(el)!.options).toEqual([
+      { value: "printer-1", label: "Barra" },
+      { value: "page-1", label: "Oficina · A4" },
+      { value: "printer-2", label: "Cocina" },
+    ]);
+    expect(chooser(el)!.value).toBe("page-1");
+    expect(api.getOrder).toHaveBeenCalledWith("bill-1");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
+    expect(chooser(el)!.value).toBe("page-1");
+    expect(api.getOrderPrinters).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the original went by email", null],
+    ["the original's printer is now switched off", "printer-9"],
+  ])("preselects the first printer when %s", async (_name, original) => {
+    const api = invoiceApi(invoiceDetail([COCINA, OFICINA], original));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(2));
+    expect(chooser(el)!.value).toBe("printer-2");
+  });
+
+  it("keeps the person's choice when the list is read again, while it is still listed", async () => {
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    chooser(el)!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "printer-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    api.getOrder.mockResolvedValue(invoiceDetail([OFICINA, COCINA, BARRA], OFICINA.id));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(chooser(el)?.options[0]?.value).toBe("page-1"));
+    expect(chooser(el)!.value).toBe("printer-2");
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA], OFICINA.id));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(chooser(el)?.options).toHaveLength(2));
+    expect(chooser(el)!.value).toBe("page-1");
+  });
+
+  it("prints the full invoice on the chosen printer under a request key, and says where it went", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    printButton(el).click();
+    await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
+    const [id, printerId, key] = api.requestOrderPrintDelivery.mock.calls[0] as string[];
+    expect([id, printerId]).toEqual(["bill-1", "page-1"]);
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
+    expect(api.reprintOrder).not.toHaveBeenCalled();
+  });
+
+  it("once printed, keeps the heading and says only where it went while the server offers no print", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFICINA.id), "queued"));
+    printButton(el).click();
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
+    await vi.waitFor(() => expect(chooser(el)).toBeNull());
+    expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("There is no active printer to print on");
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
+      "Print the invoice",
+    );
+    expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+    expect(printButton(el).variant).toBe("secondary");
+  });
+
+  it("never offers the receipt printers' list when the dialog turns to a full invoice", async () => {
+    let answer!: (detail: OrderDetailDto) => void;
+    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id), {
+      getOrder: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+      api,
+      row,
+    });
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
+    el.row = null;
+    await el.updateComplete;
+    el.mode = "invoice";
+    el.row = fullRow;
+    await el.updateComplete;
+    expect(chooser(el)).toBeNull();
+    expect(loadingLine(el)).not.toBeNull();
+    answer(invoiceDetail([OFICINA], OFICINA.id));
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+  });
+
+  it("shows an unavailable printer's refusal under the chooser and keeps the dialog open", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id), {
+      requestOrderPrintDelivery: vi
+        .fn()
+        .mockRejectedValue({ code: "invoice_delivery.printer_invalid" }),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    printButton(el).click();
+    await vi.waitFor(() =>
+      expect(chooser(el)?.error).toBe("That printer is unavailable. Choose another printer"),
+    );
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+  });
+
+  it("shows any other refusal beside the buttons", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA], null), {
+      requestOrderPrintDelivery: vi.fn().mockRejectedValue({ code: "invoice_delivery.active" }),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
+    printButton(el).click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+        codeMessage("invoice_delivery.active"),
+      ),
+    );
+    expect(chooser(el)!.error).toBe("");
+  });
+
+  it.each(["queued", "sending"] as const)(
+    "says the invoice is on its way and keeps Print quiet while its current delivery is %s",
+    async (status) => {
+      setLocale("en-GB");
+      const api = invoiceApi(withCurrent(invoiceDetail(null, null), status));
+      const el = await openInvoice(api);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=print-busy]")?.textContent?.trim()).toBe(
+          codeMessage("invoice_delivery.active"),
+        ),
+      );
+      expect(loadingLine(el)).toBeNull();
+      expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+      expect(printButton(el).variant).toBe("secondary");
+    },
+  );
+
+  it.each([
+    ["en-GB", null, "There is no active printer to print on"],
+    ["en-GB", "sent", "There is no active printer to print on"],
+    ["es-ES", "failed", "No hay ninguna impresora activa"],
+  ] as const)(
+    "says there is no active printer, not that the invoice is on its way, when the server offers no print and nothing is on its way (%s, current %s)",
+    async (locale, current, words) => {
+      setLocale(locale);
+      const offerless = invoiceDetail(null, null);
+      const api = invoiceApi(current === null ? offerless : withCurrent(offerless, current));
+      const el = await openInvoice(api);
+      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(words));
+      expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+      expect(loadingLine(el)).toBeNull();
+      expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+      expect(printButton(el).variant).toBe("secondary");
+    },
+  );
+
+  it("keeps the person's choice when Try again reads the bill again after a failed read", async () => {
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    chooser(el)!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "printer-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    api.getOrder.mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const reads = api.getOrder.mock.calls.length;
+    retryButton(el)!.click();
+    await vi.waitFor(() => expect(retryButton(el)).toBeNull());
+    expect(api.getOrder.mock.calls.length).toBeGreaterThan(reads);
+    await el.updateComplete;
+    expect(chooser(el)!.value).toBe("printer-2");
+  });
+
+  it("chooses the original's printer again on Try again when the first read failed", async () => {
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id), {
+      getOrder: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA], OFICINA.id));
+    retryButton(el)!.click();
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+  });
+
+  it.each([
+    ["en-GB", "original", "Print the invoice", "Print"],
+    ["en-GB", "duplicate", "Print a copy of the invoice", "Print a copy"],
+    ["es-ES", "original", "Imprimir la factura", "Imprimir"],
+    ["es-ES", "duplicate", "Imprimir una copia de la factura", "Imprimir una copia"],
+  ] as const)("words the dialog in %s for an %s", async (locale, designation, title, action) => {
+    setLocale(locale);
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, designation));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(title);
+    expect(printButton(el).textContent?.trim()).toBe(action);
+    if (locale === "es-ES") expect(chooser(el)!.options[1]!.label).toBe("Oficina · A4");
+  });
+
+  it("shows a failed read as a load failure with a retry that reads the bill again", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([BARRA], null), {
+      getOrder: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      codeMessage("connection.failed"),
+    );
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA], null));
+    retryButton(el)!.click();
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
+    expect(api.getOrderPrinters).not.toHaveBeenCalled();
+  });
+
+  it("keeps receipt mode on the receipt printers when the same dialog later prints an invoice and back", async () => {
+    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id));
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    el.row = null;
+    await el.updateComplete;
+    el.mode = "receipt";
+    el.row = row;
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
+    expect(api.getOrderPrinters).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the printer the invoice was sent to, though another was chosen while the request was on its way", async () => {
+    setLocale("en-GB");
+    const held = heldPrint();
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"), {
+      requestOrderPrintDelivery: held.request,
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    printButton(el).click();
+    await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
+    choose(el, "printer-1");
+    await el.updateComplete;
+    held.answer(deliveryAttempt("queued"));
+    await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
+    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina");
+    expect(el.shadowRoot!.textContent).not.toContain("sent to Barra");
+  });
+
+  it("words the confirmation by the copy the server says it made, not by a later offer", async () => {
+    setLocale("en-GB");
+    const held = heldPrint();
+    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+      requestOrderPrintDelivery: held.request,
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    printButton(el).click();
+    await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
+    api.getOrder.mockResolvedValue(invoiceDetail([OFICINA], OFICINA.id, "duplicate"));
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
+        "Print a copy of the invoice",
+      ),
+    );
+    held.answer(deliveryAttempt("queued", "original"));
+    await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
+    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina");
+  });
+
+  it("calls a print a copy when the server answers that it made a copy", async () => {
+    setLocale("en-GB");
+    const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+      requestOrderPrintDelivery: vi.fn().mockResolvedValue(deliveryAttempt("queued", "duplicate")),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    printButton(el).click();
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Copy sent to Oficina"));
+  });
+
+  it.each([
+    ["answers", (held: ReturnType<typeof heldPrint>) => held.answer(deliveryAttempt("queued"))],
+    [
+      "is refused",
+      (held: ReturnType<typeof heldPrint>) =>
+        held.refuse({ code: "invoice_delivery.printer_invalid" }),
+    ],
+    ["fails", (held: ReturnType<typeof heldPrint>) => held.refuse({ code: "connection.failed" })],
+  ])(
+    "leaves a dialog opened for another bill untouched when an earlier opening's print %s",
+    async (_name, settle) => {
+      setLocale("en-GB");
+      const held = heldPrint();
+      const api = invoiceApi(invoiceDetail([OFICINA], OFICINA.id, "original"), {
+        requestOrderPrintDelivery: held.request,
+      });
+      const el = await openInvoice(api);
+      await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+      printButton(el).click();
+      await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
+      el.row = null;
+      await el.updateComplete;
+      const next = { ...fullRow, id: "bill-2", invoiceNumber: "A/13" };
+      api.getOrder.mockResolvedValue({ ...invoiceDetail([BARRA], null, "original"), row: next });
+      el.row = next;
+      await vi.waitFor(() => expect(chooser(el)?.value).toBe("printer-1"));
+      expect(printButton(el).loading).toBe(false);
+      settle(held);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      expect(el.shadowRoot!.textContent).not.toContain("sent to");
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      expect(chooser(el)!.error).toBe("");
+      expect(printButton(el).loading).toBe(false);
+      api.requestOrderPrintDelivery.mockResolvedValue(deliveryAttempt("queued"));
+      printButton(el).click();
+      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Barra"));
+      expect(api.requestOrderPrintDelivery).toHaveBeenLastCalledWith(
+        "bill-2",
+        "printer-1",
+        expect.any(String),
+      );
+    },
+  );
 });

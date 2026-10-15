@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { invoiceDeliveries, nodes, sales, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  nodes,
+  printJobs,
+  printers,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
@@ -12,11 +19,12 @@ import {
   readInvoiceDeliveryState,
   rowAttempt,
   type InvoiceDeliveryAttempt,
+  type PrinterOffer,
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
-import { enqueueOriginalReceipt } from "./receipt-print.js";
-import type { OriginConfig } from "./till-config.js";
+import { enqueueInvoiceReceipt, enqueueOriginalReceipt } from "./receipt-print.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { readSettledTicket } from "./till-sale.js";
 
 type Request = { requestKey: string; personId: string };
@@ -26,44 +34,82 @@ async function replayed(
   tx: Transaction,
   saleId: string,
   requestKey: string,
-  sameRequest: (row: InvoiceDelivery) => boolean,
+  sameRequest: (row: InvoiceDelivery) => boolean | Promise<boolean>,
 ) {
   const [row] = await tx
     .select()
     .from(invoiceDeliveries)
     .where(and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, requestKey)));
-  if (row !== undefined && !sameRequest(row)) {
+  if (row !== undefined && !(await sameRequest(row))) {
     throw new AppError("submission.id_reused", { submissionId: requestKey });
   }
   return row;
 }
 
-const isA4 = (row: InvoiceDelivery) => row.medium === "a4";
 const isReceipt = (row: InvoiceDelivery) => row.medium === "receipt";
 
-/** Prints a full invoice on its location's invoice printer, as the delivery status offers it. */
-export async function requestA4Delivery(
+/**
+ * Prints a full invoice on `request.printerId`, which must be one of the printers `offer` gives for
+ * the sale, as the delivery status offers it. A receipt printer gets a document job built for it;
+ * `onReceiptCopy` hears of a new duplicate one.
+ */
+export async function requestPrintDelivery(
   tx: Transaction,
-  saleId: string,
-  request: Request,
+  deps: {
+    backend: FiscalBackend;
+    cfg: TillConfig;
+    onReceiptCopy?: (copy: { saleId: string; printJobId: string }) => Promise<void>;
+  },
+  sale: { id: string; workingOrderId: string },
+  offer: PrinterOffer,
+  request: Request & { printerId: string },
 ): Promise<InvoiceDeliveryAttempt> {
+  const { printerId, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
-  const replay = await replayed(tx, saleId, request.requestKey, isA4);
-  if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, saleId, { emailAvailable: false });
-  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const offer = state.status.actions.printOnA4;
-  if (offer === null) {
-    throw new AppError(
-      state.printer === null ? "invoice_delivery.printer_invalid" : "invoice_delivery.active",
-      {},
-    );
-  }
-  const row = await reserveInvoiceDelivery(tx, saleId, {
-    ...request,
-    medium: "a4",
-    pagePrinterId: offer.printer.id,
+  const replay = await replayed(tx, sale.id, request.requestKey, async (row) => {
+    if (row.medium === "a4") return row.pagePrinterId === printerId;
+    if (row.medium !== "receipt") return false;
+    const [job] = await tx
+      .select({ printerId: printJobs.printerId })
+      .from(printJobs)
+      .where(eq(printJobs.id, row.printJobId!));
+    return job?.printerId === printerId;
   });
+  if (replay !== undefined) return rowAttempt(replay);
+  const state = await readInvoiceDeliveryState(tx, sale.id, {
+    emailAvailable: false,
+    printers: offer,
+  });
+  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const printer = state.printers.find((candidate) => candidate.id === printerId);
+  if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
+  const print = state.status.actions.print;
+  if (print === null) throw new AppError("invoice_delivery.active", {});
+  if (printer.kind === "a4") {
+    const row = await reserveInvoiceDelivery(tx, sale.id, {
+      ...reserved,
+      medium: "a4",
+      pagePrinterId: printer.id,
+    });
+    return rowAttempt(row);
+  }
+  const [setting] = await tx
+    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .from(printers)
+    .where(eq(printers.id, printer.id));
+  const ticket = await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
+  const row = await enqueueInvoiceReceipt(
+    tx,
+    deps.cfg,
+    ticket,
+    sale.id,
+    { id: printer.id, ...setting! },
+    print.designation,
+    reserved,
+  );
+  if (row.designation === "duplicate" && deps.onReceiptCopy !== undefined) {
+    await deps.onReceiptCopy({ saleId: sale.id, printJobId: row.printJobId! });
+  }
   return rowAttempt(row);
 }
 
@@ -147,19 +193,24 @@ export async function retryEmailDelivery(
 /**
  * Replaces an A4 or email original nothing has claimed with a receipt original, in the caller's one
  * transaction: the attempt ends `switched` before the receipt is reserved, because a reservation is
- * refused while another attempt is active.
+ * refused while another attempt is active. A receipt original a print request sent is resent only
+ * to a printer `offer` still gives.
  */
 export async function switchToReceipt(
   tx: Transaction,
   deps: { backend: FiscalBackend; cfg: OriginConfig },
   sale: { id: string; workingOrderId: string },
+  offer: PrinterOffer,
   deliveryId: string,
   request: Request,
 ): Promise<InvoiceDeliveryAttempt> {
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, isReceipt);
   if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, sale.id, { emailAvailable: false });
+  const state = await readInvoiceDeliveryState(tx, sale.id, {
+    emailAvailable: false,
+    printers: offer,
+  });
   if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
   const { status, receipt } = state;
   const attempt = status.history.find((candidate) => candidate.id === deliveryId);
@@ -171,6 +222,9 @@ export async function switchToReceipt(
       attempt.designation === "original" &&
       receipt.status !== "not_queued"
     ) {
+      if (receipt.canRetry && state.receiptPrinterWithdrawn) {
+        throw new AppError("invoice_delivery.printer_invalid", {});
+      }
       throw new AppError("print_job.not_resendable", { id: receipt.jobId });
     }
     throw new AppError("invoice_delivery.active", {});

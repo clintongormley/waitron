@@ -10,6 +10,7 @@ import {
   kitchenStations,
   locations,
   nowIso,
+  pagePrinters,
   printAgents,
   printJobs,
   printerHolders,
@@ -705,6 +706,44 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
         .sort()
         .map((printerId) => ({ printerId, profileId: waiters!.id, profileName: waiters!.name })),
     ]);
+  });
+
+  it("GET /management-api/printer-profiles lists a receipt printer on an invoice list, and no row for a page printer there", async () => {
+    const app = mountApp(tenantA);
+    const agent = await joinAndAccept(app, "Invoice offers agent");
+    const counter = await createPrinter(app, agent.agentId, "Counter");
+    const [office] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: tenantA.locationId,
+        name: "Office",
+        host: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      })
+      .returning({ id: pagePrinters.id });
+    const [invoices] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: `Invoices ${randomUUID()}`, formFactor: "till" })
+      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: invoices!.id, pagePrinterId: office!.id, role: "invoice", position: 0 },
+      { deviceProfileId: invoices!.id, printerId: counter, role: "invoice", position: 1 },
+    ]);
+
+    const res = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const offers = (await res.json()) as { printerId: string | null; profileId: string }[];
+    expect(offers.filter((o) => o.profileId === invoices!.id)).toEqual([
+      { printerId: counter, profileId: invoices!.id, profileName: invoices!.name },
+    ]);
+    expect(offers.some((o) => o.printerId === null)).toBe(false);
   });
 
   it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {

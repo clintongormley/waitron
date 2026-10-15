@@ -1,5 +1,11 @@
 # A231q implementation plan: invoice delivery, part 2
 
+> **2026-10-15, A661:** a location no longer has one invoice printer. The
+> `page_printers.invoice_default` flag, the Printers tab's choice and
+> `PUT /management-api/page-printers/invoice-printer` are gone. Each device profile lists its
+> invoice printers, receipt or A4, and may name one as its default; a device may choose its own
+> from that list. The location-wide invoice printer described below is historical.
+
 _2026-10-14 update: A576 supersedes Group A's one-queue-per-host discovery assumption.
 Distinct IPP queue paths on one server have separate rows; a raw port inherits queue metadata
 only when one distinct queue is announced. See the

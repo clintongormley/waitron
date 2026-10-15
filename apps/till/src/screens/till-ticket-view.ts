@@ -240,6 +240,23 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
   `;
 }
 
+/** An A4 printer keeps its A4 words; a receipt printer is named. */
+function printLabel(
+  print: NonNullable<InvoiceDeliveryStatus["actions"]["print"]>,
+  againOnA4: boolean,
+): string {
+  const printer = print.printers[0]!;
+  const copy = print.designation === "duplicate";
+  if (printer.kind === "a4")
+    return t(
+      againOnA4 ? "invoice.send_a4_again" : copy ? "invoice.print_a4_copy" : "invoice.print_a4",
+    );
+  return t(copy ? "invoice.print_on_copy" : "invoice.print_on").replace(
+    "{printer}",
+    () => printer.name,
+  );
+}
+
 /** The current attempt in words; a receipt attempt is worded by the original's print status. */
 function deliveryWords(attempt: InvoiceDeliveryAttempt): string | undefined {
   if (attempt.medium === "receipt") return undefined;
@@ -539,7 +556,7 @@ export class TillTicketView extends LitElement {
     const status = this.deliveries;
     const words = status?.current ? deliveryWords(status.current) : undefined;
     const busy = this.deliveryBusy || this.originalReceiptBusy;
-    const a4 = this.canPrintReceipt ? status?.actions.printOnA4 : null;
+    const print = this.canPrintReceipt ? status?.actions.print : null;
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
     const email = this.canPrintReceipt ? status?.actions.email : null;
     const emailAgainId =
@@ -561,13 +578,13 @@ export class TillTicketView extends LitElement {
           : nothing
       }
       ${
-        a4
+        print
           ? html`<wt-button
               variant="secondary"
-              data-test="print-a4"
+              data-test="print-invoice"
               ?disabled=${busy}
-              @click=${() => this.dispatchEvent(new CustomEvent("print-a4", { bubbles: true, composed: true }))}
-              >${t(status?.actions.retryOriginal?.medium === "a4" ? "invoice.send_a4_again" : a4.designation === "duplicate" ? "invoice.print_a4_copy" : "invoice.print_a4")}</wt-button
+              @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
+              >${printLabel(print, status?.actions.retryOriginal?.medium === "a4")}</wt-button
             >`
           : nothing
       }
@@ -845,7 +862,7 @@ export class TillTicketView extends LitElement {
                   failedButSuperseded)
                   ? nothing
                   : html`<p>
-                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
                     </p>`
               }
               ${this.#renderDelivery()}
@@ -905,6 +922,7 @@ export class TillTicketView extends LitElement {
               : r.invoiceType === "F1" &&
                   this.originalReceiptPrint?.status === "failed" &&
                   this.originalReceiptPrint.canRetry &&
+                  !this.originalReceiptPrint.printerWithdrawn &&
                   !failedButSuperseded
                 ? html`<wt-button
                     variant="secondary"

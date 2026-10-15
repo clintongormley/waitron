@@ -47,6 +47,8 @@ const profile: DeviceProfile = {
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
 };
 const station: Station = {
   id: "s1",
@@ -96,6 +98,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
       listZones: async () => [],
       listPrinters: async () => [],
+      listPagePrinters: async () => [],
       listProfileKitchenScreens: async () => [],
       listDeviceProfiles: async () => [profile, { ...profile, id: "p2", name: "Phone" }],
       pairingMode: async () => ({
@@ -203,6 +206,7 @@ for (const [field, initial, edited] of [
   ["receipt-printer", "", "printer1"],
   ["slip-printer", "", "printer2"],
   ["cash-drawer", "", "printer3"],
+  ["invoice-printer", "", "printer4"],
   ["reader", "r1", "r2"],
 ] as const) {
   it(`device ${field} compares submitted values and clears a normalized revert`, async () => {
@@ -250,6 +254,31 @@ it("a saved cash drawer choice closes the dialog with nothing left to warn about
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
         cashDrawerPrinterId: "printer3",
+        madeHereStationIds: ["s1"],
+      },
+    ],
+  ]);
+  expect(unload()).toBe(false);
+});
+it("a saved invoice printer choice closes the dialog with nothing left to warn about", async () => {
+  const sent: unknown[] = [];
+  const { screen } = await mount({
+    updateDevice: async (id, body) => {
+      sent.push([id, body]);
+    },
+  });
+  change(screen, "invoice-printer", "printer4");
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(sent).toEqual([
+    [
+      "d1",
+      {
+        name: "Counter",
+        profileId: "p1",
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        invoicePrinterId: "printer4",
         madeHereStationIds: ["s1"],
       },
     ],

@@ -4144,7 +4144,7 @@ function updateBar(el: TillApp): HTMLElement | null {
   return el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
 }
 
-describe("till-app: a bill's full invoice offers A4 on the location's invoice printer", () => {
+describe("till-app: a bill's full invoice offers A4 on the device's invoice printer", () => {
   const officePrinter = { id: "pp-office", name: "Office HP" };
   const recipient = {
     taxId: "12345678Z",

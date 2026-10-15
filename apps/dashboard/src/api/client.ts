@@ -743,7 +743,8 @@ export interface DeviceRow {
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
   cashDrawerPrinterId: string | null;
-  /** Each role's choice and what it resolves to now: receipt, slip, drawer, then reader. */
+  /** Each role's choice and what it resolves to now: receipt, slip, drawer, invoice, then reader.
+   * The invoice role's `chosenId` is the device's own invoice choice, which the row has no field for. */
   equipment: RoleEquipment[];
   /** A whole percentage, 0 to 100. */
   batteryLevel: number | null;
@@ -751,7 +752,8 @@ export interface DeviceRow {
   batteryReportedAt: string | null;
 }
 
-export type EquipmentRole = "receipt" | "payment_slip" | "cash_drawer" | "card_terminal";
+export type EquipmentRole =
+  "receipt" | "payment_slip" | "cash_drawer" | "invoice" | "card_terminal";
 
 /** The other device holding an item, and who is signed in on it, if anyone. */
 export interface EquipmentHolder {
@@ -805,6 +807,9 @@ export interface DeviceProfile extends ProfileServiceScope {
   receiptPrinterDefaultId: string | null;
   paymentSlipPrinterDefaultId: string | null;
   cashDrawerPrinterDefaultId: string | null;
+  /** Receipt printers and A4 printers alike. */
+  invoicePrinterIds: string[];
+  invoicePrinterDefaultId: string | null;
   /** Never empty: every role when the profile narrows nothing. */
   admittedRoles: PersonRole[];
   personExceptions: PersonException[];
@@ -817,13 +822,16 @@ export type ProfileSaveExtras = Partial<
     Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
 >;
 
-/** The drawer list and each printer list's default; on a new profile, absent is empty and None. */
+/** The drawer and invoice lists and each printer list's default; on a new profile, absent is empty
+ * and None. */
 export type ProfileEquipmentDefaults = Pick<
   DeviceProfile,
   | "cashDrawerPrinterIds"
+  | "invoicePrinterIds"
   | "receiptPrinterDefaultId"
   | "paymentSlipPrinterDefaultId"
   | "cashDrawerPrinterDefaultId"
+  | "invoicePrinterDefaultId"
 >;
 
 /** The card readers a profile's devices may choose, in order, and the one they start on. */
@@ -1260,7 +1268,7 @@ export interface DiscoveredPrinter {
   lastSeenAt: string;
 }
 
-/** An office printer the location prints A4 invoices on, as `GET /management-api/page-printers` lists it. */
+/** An office printer, as `GET /management-api/page-printers` lists it. */
 export interface PagePrinterRow {
   id: string;
   name: string;
@@ -1272,7 +1280,6 @@ export interface PagePrinterRow {
   media: "iso_a4_210x297mm" | "na_letter_8.5x11in";
   resolutionDpi: number;
   active: boolean;
-  invoicePrinter: boolean;
   /** The agent that prints to it, or null once that agent's record is gone. */
   agentId: string | null;
   agentName: string | null;
@@ -2009,13 +2016,23 @@ export interface OrderDeliveryAttempt {
   lateSuccess: boolean;
 }
 
+/** A printer the Orders screen may print a full invoice on. */
+export interface OfferedPrinter {
+  id: string;
+  name: string;
+  kind: "a4" | "receipt";
+}
+
 export interface OrderDeliveries {
   current: OrderDeliveryAttempt | null;
   originalCompleted: boolean;
+  /** The printer the original went to; null when it went by email or there is none. */
+  originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: OrderDeliveryAttempt["medium"] } | null;
-    printOnA4: {
-      printer: { id: string; name: string };
+    /** Every active printer at the sale's location: receipt printers first, then A4 printers. */
+    print: {
+      printers: OfferedPrinter[];
       designation: OrderDeliveryAttempt["designation"];
     } | null;
     receiptInstead: { deliveryId: string } | null;
@@ -3446,6 +3463,8 @@ export class DashboardApi {
       paymentSlipPrinterId: string | null;
       /** Absent leaves the stored drawer choice; null is Use default. */
       cashDrawerPrinterId?: string | null;
+      /** A receipt or A4 printer; absent leaves the stored choice, null is Use default. */
+      invoicePrinterId?: string | null;
       /** Absent leaves the device's stored made-here stations as they are. */
       madeHereStationIds?: string[];
       /** The profiles staff may switch to besides `profileId`; absent leaves them as they are. */
@@ -3539,12 +3558,6 @@ export class DashboardApi {
       `/management-api/page-printers/${id}/test-page`,
       "GET",
     );
-  }
-
-  setInvoicePrinter(pagePrinterId: string | null): Promise<void> {
-    return this.#request<void>("/management-api/page-printers/invoice-printer", "PUT", {
-      pagePrinterId,
-    });
   }
 
   pairBluetooth(
@@ -3916,11 +3929,15 @@ export class DashboardApi {
     });
   }
 
-  requestOrderA4Delivery(id: string, requestKey: string): Promise<OrderDeliveryAttempt> {
+  requestOrderPrintDelivery(
+    id: string,
+    printerId: string,
+    requestKey: string,
+  ): Promise<OrderDeliveryAttempt> {
     return this.#request(
       `/management-api/orders/${encodeURIComponent(id)}/invoice-deliveries`,
       "POST",
-      { medium: "a4", requestKey },
+      { medium: "print", printerId, requestKey },
     );
   }
 

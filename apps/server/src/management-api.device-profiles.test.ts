@@ -189,6 +189,8 @@ type ProfileRow = {
   receiptPrinterDefaultId: string | null;
   paymentSlipPrinterDefaultId: string | null;
   cashDrawerPrinterDefaultId: string | null;
+  invoicePrinterIds: string[];
+  invoicePrinterDefaultId: string | null;
 };
 
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
@@ -241,6 +243,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -268,6 +272,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
@@ -311,6 +317,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       startingScreen: null,
       departmentId: null,
       allowedZoneIds: null,
@@ -1182,6 +1190,116 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     }
   });
 
+  async function seedOfficePrinter(name: string): Promise<string> {
+    const [office] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: venueCfg.locationId,
+        name,
+        host: `office-${randomUUID()}.local`,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+      })
+      .returning({ id: pagePrinters.id });
+    return office!.id;
+  }
+
+  it("stores an invoice list naming an office printer and a receipt printer on POST and PUT, and keeps it when a PUT omits it", async () => {
+    const app = mountApp();
+    const office = await seedOfficePrinter(uniqueName("Office"));
+    const receipt = await seedPrinter(uniqueName("Bar"));
+    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const name = uniqueName("Invoices");
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        ...base,
+        name,
+        invoicePrinterIds: [office, receipt],
+        invoicePrinterDefaultId: office,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const row = (await created.json()) as ProfileRow;
+    expect(row.invoicePrinterIds).toEqual([office, receipt]);
+    expect(row.invoicePrinterDefaultId).toBe(office);
+    const got = await app.request(`/management-api/device-profiles/${row.id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(await got.json()).toEqual(row);
+
+    const put = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        ...base,
+        name,
+        invoicePrinterIds: [receipt, office],
+        invoicePrinterDefaultId: receipt,
+      }),
+    });
+    expect(put.status).toBe(200);
+    const putRow = (await put.json()) as ProfileRow;
+    expect(putRow.invoicePrinterIds).toEqual([receipt, office]);
+    expect(putRow.invoicePrinterDefaultId).toBe(receipt);
+
+    const kept = await app.request(`/management-api/device-profiles/${row.id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, name, receiptPrinterIds: [receipt] }),
+    });
+    expect(kept.status).toBe(200);
+    const keptRow = (await kept.json()) as ProfileRow;
+    expect(keptRow.invoicePrinterIds).toEqual([receipt, office]);
+    expect(keptRow.invoicePrinterDefaultId).toBe(receipt);
+  });
+
+  it("refuses a malformed invoice list and default, and an invoice id that names no printer of either kind", async () => {
+    const app = mountApp();
+    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    for (const [field, value] of [
+      ["invoicePrinterIds", "x"],
+      ["invoicePrinterIds", ["not-a-uuid"]],
+      ["invoicePrinterDefaultId", "not-a-uuid"],
+    ] as const) {
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name: uniqueName("Bad invoice list"), [field]: value }),
+      });
+      expect(res.status, field).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const ghost = randomUUID();
+    for (const lists of [
+      { invoicePrinterIds: [ghost] },
+      { invoicePrinterIds: [], invoicePrinterDefaultId: ghost },
+    ]) {
+      const name = uniqueName("Ghost invoice printer");
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name, ...lists }),
+      });
+      expect(res.status, JSON.stringify(lists)).toBe(404);
+      expect(await res.json()).toEqual({
+        error: { code: "printer.not_found", params: { id: ghost } },
+      });
+      const stored = await suite.db
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, name));
+      expect(stored).toEqual([]);
+    }
+  });
+
   it("answers a staff session 403 before looking at the printers it names", async () => {
     const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
@@ -2041,6 +2159,8 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       receiptPrinterDefaultId: null,
       paymentSlipPrinterDefaultId: null,
       cashDrawerPrinterDefaultId: null,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
       departmentId: ordering.departmentId,
       allowedZoneIds: [place.terrace],
       startingZoneId: place.terrace,

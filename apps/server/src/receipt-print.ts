@@ -11,7 +11,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { profileAllows, readPrinterRoles } from "@waitron/layouts";
+import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { readReceiptLanguage } from "@waitron/catalogue";
@@ -22,7 +22,11 @@ import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
-import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import {
+  expireInvoiceDeliveryClaims,
+  reserveInvoiceDelivery,
+  type InvoiceDelivery,
+} from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
@@ -96,6 +100,28 @@ export async function resolvePaymentSlipPrinter(
   origin: Origin,
 ): Promise<DevicePrinter | undefined> {
   return printerLookup(tx, origin)("payment_slip");
+}
+
+/** A full invoice's printer: an A4 page printer or a receipt printer. */
+export type InvoicePrinter = { kind: "a4" | "receipt"; id: string; name: string };
+
+/**
+ * The printer the device's full invoices resolve to: its own choice, else its profile's default at
+ * its location. `undefined` when it resolves to none, the printer is switched off or, given `at`, is
+ * at another location, or the origin is not a device; no other printer stands in.
+ */
+export async function resolveInvoicePrinter(
+  tx: Transaction,
+  origin: Origin,
+  at?: { locationId: string },
+): Promise<InvoicePrinter | undefined> {
+  if (origin.source !== "device") return undefined;
+  const equipment = await readPrinterEquipment(tx, [origin.deviceId], { lists: false });
+  const role = equipment.roles.get(origin.deviceId)?.find((state) => state.role === "invoice");
+  const printer = role?.resolvedId == null ? undefined : equipment.printers.get(role.resolvedId);
+  if (printer === undefined || !printer.active) return undefined;
+  if (at !== undefined && printer.locationId !== at.locationId) return undefined;
+  return { kind: printer.kind, id: printer.id, name: printer.name };
 }
 
 /** Each role's printer, by role, when the device resolves one and it is switched on. */
@@ -310,6 +336,36 @@ export async function enqueueReceiptCopy(
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
   return job;
+}
+
+/**
+ * A full invoice printed on a receipt printer: an original or a duplicate as `designation` says,
+ * as a document job, so it never opens the drawer, linked to a receipt delivery for `request`.
+ */
+export async function enqueueInvoiceReceipt(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  ticket: TillSaleResult,
+  saleId: string,
+  printer: { id: string } & EscSetting,
+  designation: "original" | "duplicate",
+  request: { requestKey: string; personId: string },
+): Promise<InvoiceDelivery> {
+  const duplicate = designation === "duplicate";
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
+  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
+  /* v8 ignore stop */
+  const job = await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+    saleId,
+    receiptCopy: duplicate,
+  });
+  return reserveInvoiceDelivery(tx, saleId, {
+    ...request,
+    medium: "receipt",
+    printJobId: job.jobId,
+    printerChosen: true,
+  });
 }
 
 async function enrollExplicitInvoiceReceipt(

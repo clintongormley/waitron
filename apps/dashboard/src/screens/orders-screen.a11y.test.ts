@@ -78,3 +78,60 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoA11yViolations(host);
   });
 }
+
+const fullRow: OrderRowDto = { ...row, invoiceType: "F1" };
+const fullApi = {
+  ...api,
+  listOrderPages: vi.fn().mockResolvedValue({ rows: [fullRow], next: null, from: null, to: null }),
+  getOrder: vi.fn().mockResolvedValue({
+    ...detail,
+    row: fullRow,
+    invoicePdfDownloads: [],
+    deliveries: {
+      current: null,
+      originalCompleted: true,
+      originalPrinterId: "page-1",
+      actions: {
+        retryOriginal: null,
+        print: {
+          printers: [
+            { id: "printer-1", name: "Barra", kind: "receipt" },
+            { id: "page-1", name: "Oficina", kind: "a4" },
+          ],
+          designation: "duplicate",
+        },
+        receiptInstead: null,
+        email: null,
+      },
+      history: [],
+    },
+  }),
+} as unknown as DashboardApi;
+
+for (const theme of ["light", "dark"] as const) {
+  it(`has an accessible full invoice's printer list in ${theme} theme`, async () => {
+    history.replaceState(null, "", "/manage/orders");
+    const { el, host } = await mountWidget<OrdersScreen>(
+      "dashboard-orders-screen",
+      { api: fullApi },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+    const dialog = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.querySelector("[data-test=print-invoice]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=print-invoice]")!.click();
+    const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+    );
+    await expectNoA11yViolations(host);
+  });
+}

@@ -74,6 +74,9 @@ export const invoiceDeliveries = table(
     recipient: label("recipient"),
     // A person's "send the email again" made this row: its request key replays only as that action.
     madeByRetry: flag("made_by_retry").notNull().default(false),
+    // A print request chose this receipt row's printer. A resend's row stays false: the row of its
+    // chain's first job holds the mark (`receiptPrinterWithdrawn`, apps/server).
+    printerChosen: flag("printer_chosen").notNull().default(false),
     // Identity owns persons; request actions carry their operator, automatic receipts may lack one.
     personId: id("person_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

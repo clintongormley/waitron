@@ -7,6 +7,7 @@ import {
   devices,
   kitchenStations,
   locations,
+  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -61,15 +62,35 @@ async function devicePrinters(deviceId: string) {
   return row;
 }
 
+async function pagePrinter(locationId: string, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(pagePrinters)
+    .values({
+      locationId,
+      name,
+      host: "10.0.0.9",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+    })
+    .returning({ id: pagePrinters.id });
+  return row!.id;
+}
+
 /** The lists of a profile that had none, once the Demo printer listed itself on every role. */
 function demoEverywhere(printerId: string) {
   return {
     receiptPrinterIds: [printerId],
     paymentSlipPrinterIds: [printerId],
     cashDrawerPrinterIds: [printerId],
+    invoicePrinterIds: [printerId],
     receiptPrinterDefaultId: printerId,
     paymentSlipPrinterDefaultId: printerId,
     cashDrawerPrinterDefaultId: printerId,
+    invoicePrinterDefaultId: printerId,
   };
 }
 
@@ -254,9 +275,11 @@ describe("the Demo printer", () => {
       receiptPrinterIds: [bar, demo!.printerId],
       paymentSlipPrinterIds: [bar, demo!.printerId],
       cashDrawerPrinterIds: [demo!.printerId],
+      invoicePrinterIds: [demo!.printerId],
       receiptPrinterDefaultId: demo!.printerId,
       paymentSlipPrinterDefaultId: demo!.printerId,
       cashDrawerPrinterDefaultId: demo!.printerId,
+      invoicePrinterDefaultId: demo!.printerId,
     });
   });
 
@@ -303,9 +326,11 @@ describe("the Demo printer", () => {
         receiptPrinterIds: [bar],
         paymentSlipPrinterIds: [bar],
         cashDrawerPrinterIds: [bar],
+        invoicePrinterIds: [],
         receiptPrinterDefaultId: bar,
         paymentSlipPrinterDefaultId: null,
         cashDrawerPrinterDefaultId: bar,
+        invoicePrinterDefaultId: null,
       }),
     );
 
@@ -315,9 +340,11 @@ describe("the Demo printer", () => {
       receiptPrinterIds: [bar, demo!.printerId],
       paymentSlipPrinterIds: [bar, demo!.printerId],
       cashDrawerPrinterIds: [bar, demo!.printerId],
+      invoicePrinterIds: [demo!.printerId],
       receiptPrinterDefaultId: bar,
       paymentSlipPrinterDefaultId: demo!.printerId,
       cashDrawerPrinterDefaultId: bar,
+      invoicePrinterDefaultId: demo!.printerId,
     });
   });
 
@@ -380,6 +407,65 @@ describe("the Demo printer", () => {
     expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
 
     expect(await profileLists(profileId)).toEqual(demoEverywhere(demo!.printerId));
+  });
+
+  it("keeps a profile's invoice list and its page printer default, listing itself after them", async () => {
+    const { locationId, profileId } = await venue();
+    const office = await pagePrinter(locationId, "Office");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
+        invoicePrinterIds: [office],
+        invoicePrinterDefaultId: office,
+      }),
+    );
+
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect(await profileLists(profileId)).toEqual({
+      ...demoEverywhere(demo!.printerId),
+      invoicePrinterIds: [office, demo!.printerId],
+      invoicePrinterDefaultId: office,
+    });
+  });
+
+  it("joins every live profile's invoice list, as its default only where there was none", async () => {
+    const { locationId, profileId } = await venue();
+    const { profileId: otherId } = await seedDevice(suite.db, { locationId });
+    const office = await pagePrinter(locationId, "Office");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, otherId, {
+        ...emptyPrinterLists(),
+        invoicePrinterIds: [office],
+      }),
+    );
+
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect((await profileLists(profileId)).invoicePrinterIds).toEqual([demo!.printerId]);
+    expect((await profileLists(profileId)).invoicePrinterDefaultId).toBe(demo!.printerId);
+    expect((await profileLists(otherId)).invoicePrinterIds).toEqual([office, demo!.printerId]);
+    expect((await profileLists(otherId)).invoicePrinterDefaultId).toBe(demo!.printerId);
+  });
+
+  it("takes itself off the invoice list and default in Live mode, keeping a page printer listed", async () => {
+    const { locationId, profileId } = await venue();
+    const office = await pagePrinter(locationId, "Office");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        ...emptyPrinterLists(),
+        invoicePrinterIds: [office],
+      }),
+    );
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+    expect((await profileLists(profileId)).invoicePrinterDefaultId).toBe(demo!.printerId);
+
+    await configureDemoPrinter(suite.db, locationId, false);
+
+    expect(await profileLists(profileId)).toEqual({
+      ...emptyPrinterLists(),
+      invoicePrinterIds: [office],
+    });
   });
 
   it("uses its own inactive agent even when a real agent has the same display name", async () => {

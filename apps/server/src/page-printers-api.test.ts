@@ -251,15 +251,10 @@ describe("page-printer management routes", () => {
   it("refuses every route to a role without printer.manage, and serves a manager", async () => {
     const app = mountApp();
     const { agentId, id, host } = await onePrinter(app);
-    const routes: { method: "GET" | "POST" | "PATCH" | "PUT"; path: string; body?: unknown }[] = [
+    const routes: { method: "GET" | "POST" | "PATCH"; path: string; body?: unknown }[] = [
       { method: "GET", path: "/management-api/page-printers" },
       { method: "POST", path: "/management-api/page-printers", body: target(agentId, host) },
       { method: "PATCH", path: `/management-api/page-printers/${id}`, body: { name: "Renamed" } },
-      {
-        method: "PUT",
-        path: "/management-api/page-printers/invoice-printer",
-        body: { pagePrinterId: id },
-      },
     ];
     for (const route of routes) {
       const refused = await send(app, route.method, route.path, {
@@ -271,7 +266,7 @@ describe("page-printer management routes", () => {
         error: { code: "authorization.not_permitted" },
       });
     }
-    expect(await stored(id)).toMatchObject({ name: "Oficina", invoiceDefault: false });
+    expect(await stored(id)).toMatchObject({ name: "Oficina" });
 
     for (const route of routes) {
       const served = await send(app, route.method, route.path, {
@@ -280,7 +275,7 @@ describe("page-printer management routes", () => {
       });
       expect(served.status, `${route.method} ${route.path}`).toBeLessThan(300);
     }
-    expect(await stored(id)).toMatchObject({ name: "Renamed", invoiceDefault: true });
+    expect(await stored(id)).toMatchObject({ name: "Renamed" });
   });
 
   it("registers from a fresh entry, taking the capabilities from the agent's report, never the body", async () => {
@@ -297,7 +292,6 @@ describe("page-printer management routes", () => {
         media: "na_letter_8.5x11in",
         resolutionDpi: 300,
         active: false,
-        invoiceDefault: true,
       }),
     );
     expect(res.status).toBe(201);
@@ -313,7 +307,6 @@ describe("page-printer management routes", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
-      invoiceDefault: false,
       agentId: agent.agentId,
     });
   });
@@ -478,7 +471,6 @@ describe("page-printer management routes", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 600,
         active: true,
-        invoicePrinter: false,
         agentId,
         agentName: "Office agent",
       },
@@ -493,7 +485,6 @@ describe("page-printer management routes", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
         active: true,
-        invoicePrinter: false,
         agentId: null,
         agentName: null,
       },
@@ -616,42 +607,15 @@ describe("page-printer management routes", () => {
     }
   });
 
-  it("sets and clears the location's invoice printer", async () => {
+  it("serves no location-wide invoice printer route", async () => {
     const app = mountApp();
     const { id } = await onePrinter(app, "10.61.10.1");
-    const put = (pagePrinterId: unknown) =>
-      send(app, "PUT", "/management-api/page-printers/invoice-printer", {
-        cookie: managerCookie,
-        body: { pagePrinterId },
-      });
-
-    expect((await put(id)).status).toBe(204);
-    expect((await list(app))[0]).toMatchObject({ id, invoicePrinter: true });
-    expect((await put(null)).status).toBe(204);
-    expect((await list(app))[0]).toMatchObject({ id, invoicePrinter: false });
-
-    const unknown = await put(randomUUID());
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
-    for (const bad of [undefined, "nope", 3]) {
-      const res = await put(bad);
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "pagePrinterId" } },
-      });
-    }
-  });
-
-  it("refuses a disabled printer as the invoice printer", async () => {
-    const app = mountApp();
-    const { id } = await onePrinter(app, "10.61.10.2");
-    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, id));
     const res = await send(app, "PUT", "/management-api/page-printers/invoice-printer", {
       cookie: managerCookie,
       body: { pagePrinterId: id },
     });
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
+    expect((await list(app))[0]).not.toHaveProperty("invoicePrinter");
   });
 });
 

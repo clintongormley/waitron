@@ -40,12 +40,16 @@ const deliveries = (
 ): OrderDeliveries => ({
   current,
   originalCompleted: false,
-  actions: { retryOriginal: null, printOnA4: null, receiptInstead: null, email: null },
+  originalPrinterId: null,
+  actions: { retryOriginal: null, print: null, receiptInstead: null, email: null },
   history: current === null ? [] : [current],
   ...over,
 });
 
-const OFFICE = { id: "page-1", name: "Oficina" };
+const PRINTERS = [
+  { id: "printer-1", name: "Barra", kind: "receipt" as const },
+  { id: "page-1", name: "Oficina", kind: "a4" as const },
+];
 
 const f1 = (
   status: OrderDeliveries | null,
@@ -87,7 +91,6 @@ const f1 = (
 type Stubbed = DashboardApi & {
   getOrder: ReturnType<typeof vi.fn>;
   background: { getOrder: ReturnType<typeof vi.fn> };
-  requestOrderA4Delivery: ReturnType<typeof vi.fn>;
   downloadOrderInvoicePdf: ReturnType<typeof vi.fn>;
   requestOrderEmailDelivery: ReturnType<typeof vi.fn>;
   retryOrderEmailDelivery: ReturnType<typeof vi.fn>;
@@ -98,7 +101,6 @@ function stubApi(detail: OrderDetailDto, overrides: Record<string, unknown> = {}
     getOrder: vi.fn().mockResolvedValue(detail),
     background: { getOrder: vi.fn().mockResolvedValue(detail) },
     liveData: new LiveData(),
-    requestOrderA4Delivery: vi.fn().mockResolvedValue(attempt()),
     downloadOrderInvoicePdf: vi.fn().mockResolvedValue(new Blob(["%PDF"])),
     requestOrderEmailDelivery: vi.fn().mockResolvedValue(attempt({ medium: "email" })),
     retryOrderEmailDelivery: vi.fn().mockResolvedValue(attempt({ medium: "email" })),
@@ -236,7 +238,7 @@ describe("the full invoice's delivery status", () => {
         stubApi(f1(deliveries(attempt({ status: "sending", printerHold: hold })))),
       );
       expect(text(el, "delivery-status")).toBe(en);
-      expect(find(el, "print-a4")).toBeNull();
+      expect(find(el, "print-invoice")).toBeNull();
       expect(find(el, "download-pdf")).not.toBeNull();
       setLocale("es-ES");
       el.requestUpdate();
@@ -378,49 +380,49 @@ describe("the full invoice's delivery status", () => {
   });
 });
 
-describe("Print on A4 and Download PDF", () => {
+describe("Print invoice and Download PDF", () => {
   const offered = (designation: "original" | "duplicate" = "original") =>
     f1(
       deliveries(null, {
         actions: {
           retryOriginal: null,
-          printOnA4: { printer: OFFICE, designation },
+          print: { printers: PRINTERS, designation },
           receiptInstead: null,
           email: null,
         },
       }),
     );
 
-  it("offers Print on A4 and Download PDF beside Reprint", async () => {
+  it("offers Print invoice and Download PDF", async () => {
     setLocale("en-GB");
-    const el = await open(stubApi(offered()));
-    expect(footerButtons(el)).toEqual(["print-a4", "download-pdf", "Reprint receipt"]);
-    expect(text(el, "print-a4")).toBe("Print on A4");
+    const el = await open(stubApi(offered()), { mayReprint: () => false });
+    expect(footerButtons(el)).toEqual(["print-invoice", "download-pdf"]);
+    expect(text(el, "print-invoice")).toBe("Print invoice");
     expect(text(el, "download-pdf")).toBe("Download PDF");
   });
 
   it.each([
-    ["en-GB", "original", null, "Print on A4"],
-    ["en-GB", "duplicate", null, "Print a copy on A4"],
-    ["en-GB", "original", "a4", "Send to the office printer again"],
-    ["es-ES", "original", null, "Imprimir en A4"],
-    ["es-ES", "duplicate", null, "Imprimir una copia en A4"],
-    ["es-ES", "original", "a4", "Volver a enviar a la impresora de oficina"],
+    ["en-GB", "original", null, "Print invoice"],
+    ["en-GB", "duplicate", null, "Print a copy"],
+    ["en-GB", "original", "a4", "Print invoice"],
+    ["es-ES", "original", null, "Imprimir factura"],
+    ["es-ES", "duplicate", null, "Imprimir una copia"],
+    ["es-ES", "original", "a4", "Imprimir factura"],
   ] as const)(
-    "labels the A4 action in %s for an %s (retry %s)",
+    "labels the print action in %s for an %s (retry %s)",
     async (locale, designation, retry, label) => {
       setLocale(locale);
       const detail = offered(designation);
       detail.deliveries!.actions.retryOriginal = retry === null ? null : { medium: retry };
       const el = await open(stubApi(detail));
-      expect(text(el, "print-a4")).toBe(label);
+      expect(text(el, "print-invoice")).toBe(label);
     },
   );
 
-  it("offers no A4 the server does not offer", async () => {
+  it("offers no print the server does not offer", async () => {
     setLocale("en-GB");
     const el = await open(stubApi(f1(deliveries(attempt({ status: "sent" })))));
-    expect(find(el, "print-a4")).toBeNull();
+    expect(find(el, "print-invoice")).toBeNull();
     expect(find(el, "download-pdf")).not.toBeNull();
   });
 
@@ -463,160 +465,81 @@ describe("Print on A4 and Download PDF", () => {
     setLocale("en-GB");
     const el = await open(stubApi(offered()), { mayExport: false });
     expect(find(el, "download-pdf")).toBeNull();
-    expect(find(el, "print-a4")).not.toBeNull();
+    expect(find(el, "print-invoice")).not.toBeNull();
   });
 
-  it("sends Print on A4 under a new request key each press, then reads the bill again", async () => {
+  it("asks for the printer list with the bill's row, and sends nothing itself", async () => {
     setLocale("en-GB");
-    const api = stubApi(offered());
+    const detail = offered();
+    const api = stubApi(detail);
     const el = await open(api);
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() => expect(api.requestOrderA4Delivery).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(api.background.getOrder).toHaveBeenCalled());
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(false));
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() => expect(api.requestOrderA4Delivery).toHaveBeenCalledTimes(2));
-    const [first, second] = api.requestOrderA4Delivery.mock.calls as [string, string][];
-    expect(first![0]).toBe("bill-1");
-    expect(first![1]).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    const asked = vi.fn();
+    el.addEventListener("order-invoice-print", (event) =>
+      asked((event as CustomEvent<{ row: OrderDetailDto["row"] }>).detail),
     );
-    expect(second![1]).not.toBe(first![1]);
+    const reprint = vi.fn();
+    el.addEventListener("order-reprint", reprint);
+    find(el, "print-invoice")!.click();
+    expect(asked).toHaveBeenCalledWith({ row: detail.row });
+    expect(reprint).not.toHaveBeenCalled();
+    expect(api.downloadOrderInvoicePdf).not.toHaveBeenCalled();
+    expect(api.requestOrderEmailDelivery).not.toHaveBeenCalled();
   });
 
-  it("sends one request while Print on A4 is out", async () => {
+  it("keeps Download PDF and both email actions beside Print invoice", async () => {
     setLocale("en-GB");
-    let answer!: (value: OrderDeliveryAttempt) => void;
-    const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    const detail = offered("duplicate");
+    detail.deliveries!.current = attempt({
+      id: "delivery-9",
+      medium: "email",
+      status: "failed",
+      failureCode: "smtp_refused",
     });
-    const el = await open(api);
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(true));
-    find(el, "print-a4")!.click();
-    expect(api.requestOrderA4Delivery).toHaveBeenCalledTimes(1);
-    answer(attempt());
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(false));
-  });
-
-  it("keeps the dialog open and says why beside the buttons when Print on A4 is refused", async () => {
-    setLocale("en-GB");
-    const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi.fn().mockRejectedValue({ code: "invoice_delivery.active" }),
-    });
-    const el = await open(api);
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() =>
-      expect(text(el, "delivery-refused")).toBe(codeMessage("invoice_delivery.active")),
-    );
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
-    expect(find(el, "read-failed")).toBeNull();
-    const body = [...el.shadowRoot!.querySelector("wt-dialog")!.children].filter(
-      (child) => child.getAttribute("slot") !== "footer",
-    );
-    expect(body.at(-1)).toBe(find(el, "delivery-refused"));
-    await vi.waitFor(() => expect(api.background.getOrder).toHaveBeenCalled());
+    detail.deliveries!.actions.retryOriginal = { medium: "email" };
+    detail.deliveries!.actions.email = { designation: "duplicate" };
+    const el = await open(stubApi(detail), { mayReprint: () => false });
+    expect(footerButtons(el)).toEqual([
+      "print-invoice",
+      "email-again",
+      "email-invoice",
+      "download-pdf",
+    ]);
   });
 
   it("keeps a refused action's reason apart from a failed read, and clears it when the next action starts", async () => {
     setLocale("en-GB");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi
-        .fn()
-        .mockRejectedValue({ code: "invoice_delivery.printer_invalid" }),
+      downloadOrderInvoicePdf: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
     const el = await open(api);
-    find(el, "print-a4")!.click();
+    find(el, "download-pdf")!.click();
     await vi.waitFor(() => expect(find(el, "delivery-refused")).not.toBeNull());
     api.background.getOrder.mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
     await vi.waitFor(() => expect(text(el, "read-failed")).toBe(codeMessage("connection.failed")));
-    expect(text(el, "delivery-refused")).toBe(codeMessage("invoice_delivery.printer_invalid"));
+    expect(text(el, "delivery-refused")).toBe(codeMessage("authorization.not_permitted"));
     api.background.getOrder.mockResolvedValue(offered());
     api.liveData.refresh();
     await vi.waitFor(() => expect(find(el, "read-failed")).toBeNull());
-    expect(text(el, "delivery-refused")).toBe(codeMessage("invoice_delivery.printer_invalid"));
-    api.requestOrderA4Delivery.mockResolvedValue(attempt());
-    find(el, "print-a4")!.click();
+    expect(text(el, "delivery-refused")).toBe(codeMessage("authorization.not_permitted"));
+    api.downloadOrderInvoicePdf.mockResolvedValue(new Blob(["%PDF"]));
+    find(el, "download-pdf")!.click();
     await vi.waitFor(() => expect(find(el, "delivery-refused")).toBeNull());
   });
 
   it("forgets a refused action when another bill opens", async () => {
     setLocale("en-GB");
     const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi.fn().mockRejectedValue({ code: "invoice_delivery.active" }),
+      downloadOrderInvoicePdf: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
     const el = await open(api);
-    find(el, "print-a4")!.click();
+    find(el, "download-pdf")!.click();
     await vi.waitFor(() => expect(find(el, "delivery-refused")).not.toBeNull());
     el.orderId = "bill-2";
     await vi.waitFor(() => expect(api.background.getOrder).toHaveBeenCalledWith("bill-2"));
     await vi.waitFor(() => expect(find(el, "delivery-status")).not.toBeNull());
     expect(find(el, "delivery-refused")).toBeNull();
-  });
-
-  it("drops a refusal that arrives after another bill opened", async () => {
-    setLocale("en-GB");
-    let refuse!: (error: unknown) => void;
-    let request!: Promise<unknown>;
-    const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi.fn(
-        () => (request = new Promise((_resolve, reject) => (refuse = reject))),
-      ),
-    });
-    const el = await open(api);
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() => expect(api.requestOrderA4Delivery).toHaveBeenCalled());
-    el.orderId = "bill-2";
-    await vi.waitFor(() => expect(api.background.getOrder).toHaveBeenCalledWith("bill-2"));
-    await vi.waitFor(() => expect(find(el, "delivery-status")).not.toBeNull());
-    refuse({ code: "invoice_delivery.active" });
-    await handled(el, request);
-    expect(find(el, "print-a4")!.hasAttribute("loading")).toBe(false);
-    expect(find(el, "delivery-refused")).toBeNull();
-  });
-
-  it("keeps Print on A4 busy only for the bill it was pressed for", async () => {
-    setLocale("en-GB");
-    const refusals = new Map<string, (error: unknown) => void>();
-    const answers = new Map<string, (value: OrderDeliveryAttempt) => void>();
-    const requests = new Map<string, Promise<unknown>>();
-    const api = stubApi(offered(), {
-      requestOrderA4Delivery: vi.fn((id: string) => {
-        const request = new Promise((resolve, reject) => {
-          answers.set(id, resolve);
-          refusals.set(id, reject);
-        });
-        requests.set(id, request);
-        return request;
-      }),
-    });
-    const el = await open(api);
-    const switchTo = async (id: string) => {
-      el.orderId = id;
-      await el.updateComplete;
-      await vi.waitFor(() => expect(find(el, "delivery-status")).not.toBeNull());
-    };
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(true));
-    await switchTo("bill-2");
-    expect(find(el, "print-a4")!.hasAttribute("loading")).toBe(false);
-    find(el, "print-a4")!.click();
-    await vi.waitFor(() =>
-      expect(api.requestOrderA4Delivery).toHaveBeenLastCalledWith("bill-2", expect.any(String)),
-    );
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(true));
-    await switchTo("bill-1");
-    expect(find(el, "print-a4")!.hasAttribute("loading")).toBe(true);
-    find(el, "print-a4")!.click();
-    expect(api.requestOrderA4Delivery).toHaveBeenCalledTimes(2);
-    await switchTo("bill-2");
-    refusals.get("bill-1")!({ code: "invoice_delivery.active" });
-    await handled(el, requests.get("bill-1")!);
-    expect(find(el, "print-a4")!.hasAttribute("loading")).toBe(true);
-    expect(find(el, "delivery-refused")).toBeNull();
-    answers.get("bill-2")!(attempt());
-    await vi.waitFor(() => expect(find(el, "print-a4")?.hasAttribute("loading")).toBe(false));
   });
 
   it("keeps Download PDF busy only for the bill it was pressed for", async () => {
@@ -739,7 +662,7 @@ describe("sending the invoice by email", () => {
       deliveries(current, {
         actions: {
           retryOriginal: retry === null ? null : { medium: retry },
-          printOnA4: { printer: OFFICE, designation },
+          print: { printers: PRINTERS, designation },
           receiptInstead: null,
           email: { designation },
         },
@@ -756,7 +679,7 @@ describe("sending the invoice by email", () => {
     setLocale("en-GB");
     const el = await open(stubApi(emailOffered()));
     expect(footerButtons(el)).toEqual([
-      "print-a4",
+      "print-invoice",
       "email-invoice",
       "download-pdf",
       "Reprint receipt",
@@ -785,7 +708,7 @@ describe("sending the invoice by email", () => {
     setLocale("en-GB");
     const el = await open(stubApi(emailOffered("original", failedEmail(), "email")));
     expect(footerButtons(el)).toEqual([
-      "print-a4",
+      "print-invoice",
       "email-again",
       "email-invoice",
       "download-pdf",
@@ -800,7 +723,7 @@ describe("sending the invoice by email", () => {
     const el = await open(stubApi(detail));
     expect(find(el, "email-invoice")).toBeNull();
     expect(find(el, "email-again")).toBeNull();
-    expect(find(el, "print-a4")).not.toBeNull();
+    expect(find(el, "print-invoice")).not.toBeNull();
   });
 
   it("hides both email actions without permission to export reports", async () => {
@@ -811,7 +734,7 @@ describe("sending the invoice by email", () => {
     expect(find(el, "email-invoice")).toBeNull();
     expect(find(el, "email-again")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-invoice-email-dialog")).toBeNull();
-    expect(find(el, "print-a4")).not.toBeNull();
+    expect(find(el, "print-invoice")).not.toBeNull();
   });
 
   it("asks for the address for this bill, and its closing leaves the order detail open", async () => {
@@ -1102,14 +1025,14 @@ describe("re-reading while an attempt is on its way", () => {
 describe("accessibility", () => {
   const offer = {
     retryOriginal: null,
-    printOnA4: { printer: OFFICE, designation: "duplicate" as const },
+    print: { printers: PRINTERS, designation: "duplicate" as const },
     receiptInstead: null,
     email: null,
   };
   const emailFailed = attempt({ medium: "email", status: "failed", failureCode: "smtp_refused" });
   const emailOffer = {
     retryOriginal: { medium: "email" as const },
-    printOnA4: { printer: OFFICE, designation: "original" as const },
+    print: { printers: PRINTERS, designation: "original" as const },
     receiptInstead: null,
     email: { designation: "original" as const },
   };
@@ -1159,7 +1082,9 @@ describe("accessibility", () => {
         it(`has no violations ${name} (${locale}, ${theme})`, async () => {
           setLocale(locale);
           const api = stubApi(detail, {
-            requestOrderA4Delivery: vi.fn().mockRejectedValue({ code: "invoice_delivery.active" }),
+            downloadOrderInvoicePdf: vi
+              .fn()
+              .mockRejectedValue({ code: "authorization.not_permitted" }),
             retryOrderEmailDelivery: vi
               .fn()
               .mockRejectedValue({ code: "invoice_delivery.email_unavailable" }),
@@ -1171,7 +1096,7 @@ describe("accessibility", () => {
           );
           await vi.waitFor(() => expect(find(el, "delivery-status")).not.toBeNull());
           if (flags?.refused) {
-            find(el, "print-a4")!.click();
+            find(el, "download-pdf")!.click();
             await vi.waitFor(() => expect(find(el, "delivery-refused")).not.toBeNull());
             api.background.getOrder.mockRejectedValue({ code: "connection.failed" });
             api.liveData.refresh();

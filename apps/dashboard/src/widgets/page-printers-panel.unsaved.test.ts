@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type { PagePrinterRow } from "../api/client.js";
 import {
@@ -24,7 +23,6 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   media: "iso_a4_210x297mm",
   resolutionDpi: 300,
   active: true,
-  invoicePrinter: true,
   agentId: "a1",
   agentName: "Cocina agent",
   ...over,
@@ -34,10 +32,9 @@ class PanelLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = {
     updatePagePrinter: vi.fn().mockResolvedValue(undefined),
-    setInvoicePrinter: vi.fn().mockResolvedValue(undefined),
   };
   readonly reload = vi.fn().mockResolvedValue(undefined);
-  rows = [row(), row({ id: "pp2", name: "Back office", host: "10.0.0.57", invoicePrinter: false })];
+  rows = [row(), row({ id: "pp2", name: "Back office", host: "10.0.0.57" })];
   canManage = true;
   override render() {
     return html`<dashboard-page-printers-panel
@@ -79,8 +76,6 @@ const nameField = (panel: Panel) =>
     panel,
     "[data-test=rename-page-printer-modal] wt-input[name=name]",
   ) as unknown as HTMLElementTagNameMap["wt-input"];
-const choice = (panel: Panel) =>
-  q(panel, "[data-test=invoice-printer-choice]") as unknown as HTMLElementTagNameMap["wt-combobox"];
 async function openRename(panel: Panel, id = "pp2") {
   q(panel, `[data-test=rename-page-printer-${id}]`)!.click();
   await panel.updateComplete;
@@ -101,10 +96,6 @@ async function question(app: PanelLeaveApp) {
 }
 function cancel(panel: Panel) {
   q(panel, "[data-test=cancel-rename-page-printer]")!.click();
-}
-async function pick(panel: Panel, value: string) {
-  await chooseOption(choice(panel), value);
-  await panel.updateComplete;
 }
 
 it("closing a rename with a typed name asks, keeps the name through Keep, and closes after Discard", async () => {
@@ -174,54 +165,8 @@ it("a name typed before the panel is taken out of the page still counts once it 
   expect((await question(app)).open).toBe(true);
 });
 
-it("a staged invoice-printer choice is a change the app asks about, and Discard puts the stored one back", async () => {
+it("losing printer.manage drops an open rename from the unsaved-changes check", async () => {
   const { app, panel } = await mount();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  await pick(panel, "pp2");
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  const proceed = vi.fn();
-  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed });
-  const q1 = await question(app);
-  expect(q1.open).toBe(true);
-  q1.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  await expect.poll(() => proceed.mock.calls.length).toBe(1);
-  await panel.updateComplete;
-  expect(choice(panel).value).toBe("pp1");
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
-
-it("a saved choice is no longer a change, and a refused one still is", async () => {
-  const { app, panel } = await mount();
-  await pick(panel, "pp2");
-  app.api.setInvoicePrinter.mockRejectedValueOnce({ code: "connection.failed" });
-  q(panel, "[data-test=save-invoice-printer]")!.click();
-  await expect.poll(() => app.api.setInvoicePrinter.mock.calls.length).toBe(1);
-  await panel.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  q(panel, "[data-test=save-invoice-printer]")!.click();
-  await expect.poll(() => app.reload.mock.calls.length).toBe(1);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
-
-it("a choice staged before the panel is taken out of the page still counts once it is put back", async () => {
-  const { app, panel } = await mount();
-  await pick(panel, "pp2");
-  await reattachAfterDetachedUpdate(panel);
-  expect(choice(panel).value).toBe("pp2");
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-});
-
-it("a panel put back and then edited counts the edit", async () => {
-  const { app, panel } = await mount();
-  await reattachAfterDetachedUpdate(panel);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  await pick(panel, "");
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-});
-
-it("losing printer.manage drops a staged choice and an open rename from the unsaved-changes check", async () => {
-  const { app, panel } = await mount();
-  await pick(panel, "pp2");
   await openRename(panel);
   await type(panel, "Upstairs");
   expect(app.leave.coordinator.isDirty()).toBe(true);
@@ -238,7 +183,6 @@ it("losing printer.manage drops a staged choice and an open rename from the unsa
   app.requestUpdate();
   await app.updateComplete;
   await panel.updateComplete;
-  expect(choice(panel).value).toBe("pp1");
   expect(modal(panel).open).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });

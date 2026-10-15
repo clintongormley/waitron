@@ -338,7 +338,7 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
-  it("transfers page-printer capabilities to the target location, clears its invoice choice and agent, and requires reactivation", async () => {
+  it("transfers page-printer capabilities to the target location, clears its agent, and requires reactivation", async () => {
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -359,7 +359,6 @@ describe("configuration transfer database path", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
-      invoiceDefault: true,
       agentId: agent!.id,
     });
     const [operator] = await suite.db.select({ id: persons.id }).from(persons);
@@ -397,13 +396,83 @@ describe("configuration transfer database path", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: false,
-      invoiceDefault: false,
       agentId: null,
     });
     // The agent itself travels, so a kept key would have been remapped to the imported agent.
     expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toHaveLength(1);
     expect(imported!.id).not.toBe("55555555-aaaa-aaaa-aaaa-555555555555");
     expect(await targetSuite.db.select().from(printers)).toEqual([]);
+  });
+
+  it("carries a profile's invoice list naming an A4 printer, pointing at the imported A4 printer", async () => {
+    const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const sourcePagePrinterId = "56565656-aaaa-aaaa-aaaa-565656565656";
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(pagePrinters).values({
+        id: sourcePagePrinterId,
+        locationId: source.locationId,
+        name: "Office A4",
+        host: "192.0.2.40",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      });
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Office till", formFactor: "till" })
+        .returning({ id: deviceProfiles.id });
+      await setProfilePrinterLists(tx, profile!.id, {
+        ...emptyPrinterLists(),
+        invoicePrinterIds: [sourcePagePrinterId],
+        invoicePrinterDefaultId: sourcePagePrinterId,
+      });
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-15T12:00:00Z"),
+      versions,
+    );
+    expect(transferred.tables.device_profile_printers!.map((row) => row.page_printer_id)).toContain(
+      sourcePagePrinterId,
+    );
+    await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const [imported] = await targetSuite.db
+      .select({ id: pagePrinters.id })
+      .from(pagePrinters)
+      .where(eq(pagePrinters.name, "Office A4"));
+    expect(imported!.id).not.toBe(sourcePagePrinterId);
+    const [profile] = await targetSuite.db
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.name, "Office till"));
+    const rows = await targetSuite.db
+      .select({
+        printerId: deviceProfilePrinters.printerId,
+        pagePrinterId: deviceProfilePrinters.pagePrinterId,
+        isDefault: deviceProfilePrinters.isDefault,
+      })
+      .from(deviceProfilePrinters)
+      .where(
+        and(
+          eq(deviceProfilePrinters.deviceProfileId, profile!.id),
+          eq(deviceProfilePrinters.role, "invoice"),
+        ),
+      );
+    expect(rows).toEqual([{ printerId: null, pagePrinterId: imported!.id, isDefault: true }]);
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {

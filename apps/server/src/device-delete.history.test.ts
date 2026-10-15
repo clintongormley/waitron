@@ -304,6 +304,8 @@ describe("a deleted device's history", () => {
       receiptPrinterDefaultId: id,
       paymentSlipPrinterDefaultId: id,
       cashDrawerPrinterDefaultId: id,
+      invoicePrinterIds: [],
+      invoicePrinterDefaultId: null,
     });
     await inTx((tx) => setProfilePrinterLists(tx, profileId, lists(p1)));
     await inTx((tx) =>

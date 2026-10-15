@@ -23,14 +23,10 @@ export const pagePrinters = table(
     media: pagePrinterMedia("media").notNull(),
     resolutionDpi: count("resolution_dpi").notNull(),
     active: flag("active").notNull().default(true),
-    invoiceDefault: flag("invoice_default").notNull().default(false),
     agentId: id("agent_id").references(() => printAgents.id),
   },
   (t) => [
     uniqueIndex("page_printers_endpoint_uq").on(t.locationId, t.host, t.port, t.resourcePath),
-    uniqueIndex("page_printers_invoice_default_uq")
-      .on(t.locationId)
-      .where(sql`${t.invoiceDefault} = 1`),
     check("page_printers_format_ck", enumCheck(t.documentFormat)),
     check("page_printers_media_ck", enumCheck(t.media)),
     check("page_printers_port_ck", sql`${t.port} between 1 and 65535`),

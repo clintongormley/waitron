@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
+  deviceProfilePrinters,
   deviceProfiles,
   kitchenStations,
   pagePrinters,
@@ -46,6 +47,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   OPERATOR,
@@ -189,9 +191,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * any transaction.
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today`,
- * `PUT /api/stations/:stationId/today` and `GET /api/invoice-delivery-options` (the server
- * location's invoice printer; "reads the location's invoice printer, which names no zone") name no
- * zone; the session, staff, till, locale and product
+ * `PUT /api/stations/:stationId/today` and `GET /api/invoice-delivery-options` (the device's
+ * invoice printer; "reads the device's invoice printer, which names no zone") name no zone; the session, staff, till, locale and product
  * reads; the kitchen's `/api/device/station-screen`, notice, ticket-item and
  * `/api/device/working-orders/:id/lines/move-station` routes, scoped by the device's station screen
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
@@ -248,6 +249,7 @@ let v: PartyVenue;
 let app: Hono;
 let f: Fixtures;
 let restaurantProfile: string;
+let deliProfile: string;
 /** Ana on a till whose profile is the Restaurant's, starting at the bar. */
 let restaurant: string;
 /** Ana on a till whose profile has no department row. */
@@ -425,7 +427,7 @@ beforeAll(async () => {
   );
   restaurant = await signIn(restaurantProfile);
   plain = await signIn(await profile());
-  const deliProfile = await profile();
+  deliProfile = await profile();
   await inTx(v, async (tx) =>
     setProfileServiceAccess(tx, v.cfg, deliProfile, {
       departmentId: await departmentOf(tx, f.deliCounter),
@@ -671,7 +673,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/sales/:id/deliveries",
     "POST",
     (x) => `/api/sales/${x.deliOrder}/deliveries`,
-    () => ({ medium: "a4", requestKey: randomUUID() }),
+    () => ({ medium: "print", printerId: randomUUID(), requestKey: randomUUID() }),
     deliOrderZone,
   ],
   [
@@ -1413,30 +1415,54 @@ describe("a Restaurant profile in its own zones", () => {
     expect(orderIds).not.toContain(f.deliTab);
   });
 
-  it("reads the location's invoice printer, which names no zone", async () => {
-    const id = randomUUID();
-    await suite.db.insert(pagePrinters).values({
-      id,
-      locationId: v.cfg.locationId,
-      name: "Invoices",
-      host: id,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-      invoiceDefault: true,
+  it("reads the device's invoice printer, which names no zone", async () => {
+    const ids = { restaurant: randomUUID(), deli: randomUUID() };
+    for (const [profile, id] of [
+      ["restaurant", ids.restaurant],
+      ["deli", ids.deli],
+    ] as const) {
+      await suite.db.insert(pagePrinters).values({
+        id,
+        locationId: v.cfg.locationId,
+        name: `Invoices ${profile}`,
+        host: id,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+      });
+    }
+    await withTransaction(suite.db, async (tx) => {
+      await listInvoicePrinter(tx, {
+        profileId: restaurantProfile,
+        pagePrinterId: ids.restaurant,
+        isDefault: true,
+      });
+      await listInvoicePrinter(tx, {
+        profileId: deliProfile,
+        pagePrinterId: ids.deli,
+        isDefault: true,
+      });
     });
     try {
-      for (const session of [restaurant, deli]) {
+      for (const [session, profile, id] of [
+        [restaurant, "restaurant", ids.restaurant],
+        [deli, "deli", ids.deli],
+      ] as const) {
         expect(await send(session, "GET", "/api/invoice-delivery-options")).toEqual({
           status: 200,
-          body: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+          body: { invoicePrinter: { id, name: `Invoices ${profile}` }, emailAvailable: false },
         });
       }
     } finally {
-      await suite.db.delete(pagePrinters).where(eq(pagePrinters.id, id));
+      await suite.db
+        .delete(deviceProfilePrinters)
+        .where(inArray(deviceProfilePrinters.pagePrinterId, [ids.restaurant, ids.deli]));
+      await suite.db
+        .delete(pagePrinters)
+        .where(inArray(pagePrinters.id, [ids.restaurant, ids.deli]));
     }
   });
 

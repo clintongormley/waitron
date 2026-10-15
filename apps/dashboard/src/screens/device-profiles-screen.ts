@@ -28,7 +28,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
-import { ROLES, printerLabel, roleName } from "../i18n/domain.js";
+import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
 // `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
@@ -52,6 +52,7 @@ import type {
   KitchenScreenKind,
   KitchenScreenScope,
   NarrowedDevice,
+  PagePrinterRow,
   PersonException,
   PersonRole,
   PersonSummary,
@@ -68,11 +69,19 @@ import type {
 } from "../api/client.js";
 import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
 
-/** Every printer list and default a profile holds; the save sends the drawer and defaults apart. */
+/** Every printer list and default a profile holds; the save sends the drawer, invoice list and
+ * defaults apart. */
 type PrinterDraft = ProfilePrinterLists & ProfileEquipmentDefaults;
-type PrinterListKey = "receiptPrinterIds" | "paymentSlipPrinterIds" | "cashDrawerPrinterIds";
+type PrinterListKey =
+  "receiptPrinterIds" | "paymentSlipPrinterIds" | "cashDrawerPrinterIds" | "invoicePrinterIds";
 type PrinterDefaultKey =
-  "receiptPrinterDefaultId" | "paymentSlipPrinterDefaultId" | "cashDrawerPrinterDefaultId";
+  | "receiptPrinterDefaultId"
+  | "paymentSlipPrinterDefaultId"
+  | "cashDrawerPrinterDefaultId"
+  | "invoicePrinterDefaultId";
+/** A receipt printer, or on the invoice list an A4 printer too. */
+type ListablePrinter = Pick<Printer, "id" | "name" | "active">;
+type PrinterChoice = { printer: ListablePrinter; listed: boolean; label: string };
 
 interface ProfileDraft {
   name: string;
@@ -117,6 +126,14 @@ const PRINTER_LISTS = [
     heading: "device_profiles.cash_drawer_printers",
     defaultLabel: "device_profiles.cash_drawer_default",
   },
+  {
+    key: "invoicePrinterIds",
+    defaultKey: "invoicePrinterDefaultId",
+    defaultField: "invoiceDefault",
+    test: "invoice-printers",
+    heading: "device_profiles.invoice_printers",
+    defaultLabel: "device_profiles.invoice_default",
+  },
 ] as const satisfies readonly {
   key: PrinterListKey;
   defaultKey: PrinterDefaultKey;
@@ -128,9 +145,11 @@ const PRINTER_LISTS = [
 
 const NO_EQUIPMENT: ProfileEquipmentDefaults = {
   cashDrawerPrinterIds: [],
+  invoicePrinterIds: [],
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterDefaultId: null,
 };
 
 const NO_PRINTER_LISTS: PrinterDraft = {
@@ -150,13 +169,16 @@ function sameReaders(a: ProfileReaderList, b: ProfileReaderList): boolean {
   return a.defaultReaderId === b.defaultReaderId && sameOrderedIds(a.readerIds, b.readerIds);
 }
 
-/** The drawer list and the three defaults, out of a profile or a draft that carries more. */
+/** The drawer and invoice lists and the four defaults, out of a profile or a draft that carries
+ * more. */
 function equipmentOf(from: ProfileEquipmentDefaults): ProfileEquipmentDefaults {
   return {
     cashDrawerPrinterIds: from.cashDrawerPrinterIds,
+    invoicePrinterIds: from.invoicePrinterIds,
     receiptPrinterDefaultId: from.receiptPrinterDefaultId,
     paymentSlipPrinterDefaultId: from.paymentSlipPrinterDefaultId,
     cashDrawerPrinterDefaultId: from.cashDrawerPrinterDefaultId,
+    invoicePrinterDefaultId: from.invoicePrinterDefaultId,
   };
 }
 
@@ -287,6 +309,7 @@ const FIELDS = [
   "slipDefault",
   "drawerList",
   "drawerDefault",
+  "invoiceDefault",
   "readerDefault",
 ] as const;
 type EditorField = (typeof FIELDS)[number];
@@ -314,6 +337,7 @@ const FIELD_TARGET: Record<EditorField, string> = {
   slipDefault: "[data-test=payment-slip-printers-default]",
   drawerList: "[data-test=cash-drawer-printers] wt-switch",
   drawerDefault: "[data-test=cash-drawer-printers-default]",
+  invoiceDefault: "[data-test=invoice-printers-default]",
   readerDefault: "[data-test=profile-readers-default]",
 };
 
@@ -338,6 +362,7 @@ const FIELD_BY_PARAM: Record<string, EditorField> = {
   paymentSlipPrinterDefaultId: "slipDefault",
   cashDrawerPrinterIds: "drawerList",
   cashDrawerPrinterDefaultId: "drawerDefault",
+  invoicePrinterDefaultId: "invoiceDefault",
   defaultReaderId: "readerDefault",
 };
 
@@ -352,6 +377,7 @@ const FIELD_SENTENCE: Partial<Record<EditorField, StringKey>> = {
   receiptDefault: "device_profiles.err_default_not_listed",
   slipDefault: "device_profiles.err_default_not_listed",
   drawerDefault: "device_profiles.err_default_not_listed",
+  invoiceDefault: "device_profiles.err_default_not_listed",
   readerDefault: "device_profiles.err_default_not_listed",
   drawerList: "device_profiles.err_no_cash_drawer",
 };
@@ -507,7 +533,10 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private canvases: Canvas[] = [];
 
   @state() private printers: Printer[] = [];
+  @state() private pagePrinters: PagePrinterRow[] = [];
   @state() private printersState: "loading" | "ready" | "failed" = "loading";
+  /** Both printer reads must answer before the lists are drawn. */
+  #printerReads = new Set<"printers" | "pages">();
 
   @state() private stations: Station[] = [];
 
@@ -661,12 +690,15 @@ export class DeviceProfilesScreen extends LitElement {
         this.#queries
           .watch("listPrinters", [], (value) => {
             this.printers = value;
-            this.printersState = "ready";
+            this.#printersRead("printers");
           })
-          .catch((error: unknown) => {
-            this.printersState = "failed";
-            throw error;
-          }),
+          .catch(this.#printersFailed),
+        this.#queries
+          .watch("listPagePrinters", [], (value) => {
+            this.pagePrinters = value;
+            this.#printersRead("pages");
+          })
+          .catch(this.#printersFailed),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
         }),
@@ -681,6 +713,16 @@ export class DeviceProfilesScreen extends LitElement {
       this.#showReadError(error);
     }
   }
+
+  #printersRead(read: "printers" | "pages"): void {
+    this.#printerReads.add(read);
+    if (this.#printerReads.size === 2) this.printersState = "ready";
+  }
+
+  readonly #printersFailed = (error: unknown): never => {
+    this.printersState = "failed";
+    throw error;
+  };
 
   #clearErrorOnOpen(): void {
     this.narrowed = [];
@@ -1288,14 +1330,13 @@ export class DeviceProfilesScreen extends LitElement {
     this.#readerScope?.changed();
   }
 
-  /** The drawer list and defaults this save sends: on an edit only those that changed. */
+  /** The drawer and invoice lists and defaults this save sends: on an edit only those that changed. */
   #equipmentToSend(): Partial<ProfileEquipmentDefaults> {
     const draft = this.draftPrinterLists;
     const loaded = this.#loadedEquipment ?? NO_EQUIPMENT;
     const sent: Partial<ProfileEquipmentDefaults> = {};
-    const drawers = draft.cashDrawerPrinterIds;
-    if (!sameOrderedIds(drawers, loaded.cashDrawerPrinterIds))
-      sent.cashDrawerPrinterIds = [...drawers];
+    for (const key of ["cashDrawerPrinterIds", "invoicePrinterIds"] as const)
+      if (!sameOrderedIds(draft[key], loaded[key])) sent[key] = [...draft[key]];
     for (const { defaultKey } of PRINTER_LISTS)
       if (draft[defaultKey] !== loaded[defaultKey]) sent[defaultKey] = draft[defaultKey];
     return sent;
@@ -1603,6 +1644,8 @@ export class DeviceProfilesScreen extends LitElement {
       }
       if (profile.cashDrawerPrinterIds.length > 0)
         extras.cashDrawerPrinterIds = profile.cashDrawerPrinterIds;
+      if (profile.invoicePrinterIds.length > 0)
+        extras.invoicePrinterIds = profile.invoicePrinterIds;
       for (const { defaultKey } of PRINTER_LISTS)
         if (profile[defaultKey] !== null) extras[defaultKey] = profile[defaultKey];
       const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
@@ -1746,31 +1789,35 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The list's own printers first, in its order, switched-off ones included so a save keeps them;
    * then every other printer that is switched on. The drawer list offers only printers with a
-   * drawer, and marks one it still holds whose drawer was since taken off. */
-  #printerChoices(key: PrinterListKey): { printer: Printer; listed: boolean; label: string }[] {
+   * drawer, and marks one it still holds whose drawer was since taken off; the invoice list offers
+   * the A4 printers too, after the receipt printers, each marked. */
+  #printerChoices(key: PrinterListKey): PrinterChoice[] {
     const listed = this.draftPrinterLists[key];
     const drawers = key === "cashDrawerPrinterIds";
-    const label = (printer: Printer) =>
-      drawers && !printer.hasCashDrawer
+    const pool: (ListablePrinter & { drawerless?: boolean })[] = [
+      ...this.printers
+        .filter((printer) => !drawers || printer.hasCashDrawer || listed.includes(printer.id))
+        .map((printer) => ({ ...printer, drawerless: drawers && !printer.hasCashDrawer })),
+      ...(key === "invoicePrinterIds" ? a4Choices(this.pagePrinters) : []),
+    ];
+    const label = (printer: (typeof pool)[number]) =>
+      printer.drawerless
         ? `${printerLabel(printer)} (${t("device_profiles.no_drawer_attached")})`
         : printerLabel(printer);
     return [
       ...listed.flatMap((id) => {
-        const printer = this.printers.find((p) => p.id === id);
+        const printer = pool.find((p) => p.id === id);
         return printer === undefined ? [] : [{ printer, listed: true, label: label(printer) }];
       }),
-      ...this.printers
-        .filter(
-          (printer) =>
-            printer.active && !listed.includes(printer.id) && (!drawers || printer.hasCashDrawer),
-        )
+      ...pool
+        .filter((printer) => printer.active && !listed.includes(printer.id))
         .map((printer) => ({ printer, listed: false, label: label(printer) })),
     ];
   }
 
   #renderPrinterList(
     list: (typeof PRINTER_LISTS)[number],
-    choices: { printer: Printer; listed: boolean; label: string }[],
+    choices: PrinterChoice[],
     errors: FieldErrors,
   ): TemplateResult {
     const drawn = choices.filter((choice) => choice.listed).map((choice) => choice.printer.id);

@@ -128,13 +128,6 @@ function emailLabel(status: OrderDeliveries): StringKey {
   return status.actions.email?.designation === "duplicate" ? "orders.email_copy" : "orders.email";
 }
 
-function a4Label(status: OrderDeliveries): StringKey {
-  if (status.actions.retryOriginal?.medium === "a4") return "orders.send_a4_again";
-  return status.actions.printOnA4?.designation === "duplicate"
-    ? "orders.print_a4_copy"
-    : "orders.print_a4";
-}
-
 /** The name `readInvoiceForDownload` gives the file (`apps/server/src/orders-invoice-pdf.ts`). */
 function pdfFileName(invoiceNumber: string): string {
   const cut = invoiceNumber.lastIndexOf("/");
@@ -178,8 +171,7 @@ export class OrderDetailDialog extends LitElement {
   @state() private detail: OrderDetailDto | null = null;
   @state() private error: string | null = null;
   @state() private refusal: string | null = null;
-  /** The bills whose Print on A4 or Download PDF request is still out. */
-  @state() private a4Busy: ReadonlySet<string> = new Set();
+  /** The bills whose Download PDF request is still out. */
   @state() private downloadBusy: ReadonlySet<string> = new Set();
   @state() private emailAgainBusy: ReadonlySet<string> = new Set();
   #reread?: ReturnType<typeof setInterval>;
@@ -235,21 +227,6 @@ export class OrderDetailDialog extends LitElement {
     return this.orderId !== null && ids.has(this.orderId);
   }
 
-  async #printOnA4(): Promise<void> {
-    const id = this.orderId;
-    if (id === null || this.a4Busy.has(id)) return;
-    this.a4Busy = new Set(this.a4Busy).add(id);
-    this.refusal = null;
-    try {
-      await this.api.requestOrderA4Delivery(id, crypto.randomUUID());
-    } catch (error) {
-      if (this.orderId === id) this.refusal = codeMessage(codeOf(error));
-    } finally {
-      this.a4Busy = without(this.a4Busy, id);
-      this.#readDeliveries();
-    }
-  }
-
   async #emailAgain(deliveryId: string): Promise<void> {
     const id = this.orderId;
     if (id === null || this.emailAgainBusy.has(id)) return;
@@ -290,11 +267,12 @@ export class OrderDetailDialog extends LitElement {
     }
   }
 
-  #reprint(): void {
+  /** Carries the detail's row: the open bill may have left the Orders list's loaded page. */
+  #ask(name: "order-reprint" | "order-invoice-print", row: OrderRowDto): void {
     if (this.orderId === null) return;
     this.dispatchEvent(
-      new CustomEvent("order-reprint", {
-        detail: { id: this.orderId },
+      new CustomEvent(name, {
+        detail: { row },
         bubbles: true,
         composed: true,
       }),
@@ -321,13 +299,16 @@ export class OrderDetailDialog extends LitElement {
     const delivery = !!status && invoiceNumber !== null;
     const retryId = status?.actions.retryOriginal?.medium === "email" ? status.current?.id : null;
     const buttons = [
-      delivery && status.actions.printOnA4
+      delivery && status.actions.print
         ? html`<wt-button
             variant="secondary"
-            data-test="print-a4"
-            ?loading=${this.#busy(this.a4Busy)}
-            @click=${() => void this.#printOnA4()}
-            >${t(a4Label(status))}</wt-button
+            data-test="print-invoice"
+            @click=${() => this.#ask("order-invoice-print", detail.row)}
+            >${t(
+              status.actions.print.designation === "duplicate"
+                ? "orders.print_invoice_copy"
+                : "orders.print_invoice",
+            )}</wt-button
           >`
         : null,
       delivery && this.mayExport && retryId
@@ -361,7 +342,7 @@ export class OrderDetailDialog extends LitElement {
           >`
         : null,
       this.mayReprint(detail.row)
-        ? html`<wt-button variant="secondary" @click=${() => this.#reprint()}
+        ? html`<wt-button variant="secondary" @click=${() => this.#ask("order-reprint", detail.row)}
             >${t("orders.reprint")}</wt-button
           >`
         : null,

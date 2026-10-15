@@ -147,6 +147,7 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
     .select({
       profileId: deviceProfilePrinters.deviceProfileId,
       printerId: deviceProfilePrinters.printerId,
+      pagePrinterId: deviceProfilePrinters.pagePrinterId,
       role: deviceProfilePrinters.role,
       isDefault: deviceProfilePrinters.isDefault,
     })

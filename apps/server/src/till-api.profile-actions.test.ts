@@ -83,7 +83,7 @@ import {
  * | POST /api/orders/:id/stations/:sid/advance                | prepare-orders             | prepare-orders        |
  * | POST /api/kitchen-notices/:id/acknowledge                 | prepare-orders             | prepare-orders        |
  * | POST /api/sales/:id/receipt/retry                         | print-receipt              | receipt_retry         |
- * | POST /api/sales/:id/deliveries (print on A4, email)       | print-receipt              | invoice_delivery      |
+ * | POST /api/sales/:id/deliveries (print, email)             | print-receipt              | invoice_delivery      |
  * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt     | print-receipt              | invoice_delivery_to_receipt |
  * | POST /api/sales/:id/deliveries/:deliveryId/retry (email)  | print-receipt              | invoice_delivery_retry |
  * | POST /api/sales/:id/receipt, /payment-slip                | print-receipt              | receipt, payment-slip |

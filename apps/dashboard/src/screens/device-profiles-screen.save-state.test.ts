@@ -132,6 +132,8 @@ const till: DeviceProfile = {
   receiptPrinterDefaultId: "pr1",
   paymentSlipPrinterDefaultId: "pr-old",
   cashDrawerPrinterDefaultId: "pr4",
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
   startingScreen: "show-station",
   departmentId: "d1",
   // z4 is switched off since, and was the starting zone: the form shows z2 alone, starting there.
@@ -157,6 +159,8 @@ const kds: DeviceProfile = {
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
   startingScreen: null,
   departmentId: null,
   allowedZoneIds: null,
@@ -177,6 +181,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       { id: "c2", name: "Kitchen board", definition: {} },
     ]),
     listPrinters: vi.fn().mockResolvedValue(printers),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     listStations: vi
       .fn()
       .mockResolvedValue([
@@ -581,6 +586,16 @@ describe("the device profile editor's Save", () => {
         await change(el, "cash-drawer-printers-pr4", true);
         await change(el, "cash-drawer-printers-default", "pr4");
       },
+    ],
+    [
+      "an invoice printer",
+      (el) => change(el, "invoice-printers-pr3", true),
+      (el) => change(el, "invoice-printers-pr3", false),
+    ],
+    [
+      "the invoice default",
+      (el) => change(el, "invoice-printers-default", "pr1"),
+      (el) => change(el, "invoice-printers-default", ""),
     ],
     [
       "a card reader",

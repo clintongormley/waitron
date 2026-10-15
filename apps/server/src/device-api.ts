@@ -14,6 +14,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, profilesAdmitting, sessions, type Permission } from "@waitron/identity";
 import {
+  chosenPrinterOf,
   kindOfFormFactor,
   listDeviceProfiles,
   refuseDeletedPrinters,
@@ -726,6 +727,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
+        invoicePrinterId?: unknown;
         madeHereStationIds?: unknown;
         approvedProfileIds?: unknown;
       }>(c);
@@ -750,12 +752,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
         };
-        // Absent leaves the stored drawer choice alone.
+        // Absent leaves the stored drawer and invoice choices alone.
         if (body.cashDrawerPrinterId !== undefined) {
           chosen.cash_drawer = requireNullableBodyUuid(
             body.cashDrawerPrinterId,
             "cashDrawerPrinterId",
           );
+        }
+        if (body.invoicePrinterId !== undefined) {
+          chosen.invoice = requireNullableBodyUuid(body.invoicePrinterId, "invoicePrinterId");
         }
         // Absent leaves the stored stations alone: a kitchen screen's dialog does not show them.
         const madeHere = body.madeHereStationIds;
@@ -797,14 +802,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
-        const current: Record<ProfilePrinterRole, string | null> = {
-          receipt: held.receiptPrinterId,
-          payment_slip: held.paymentSlipPrinterId,
-          cash_drawer: held.cashDrawerPrinterId,
-        };
-        for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
+        for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
           const printerId = chosen[role];
-          if (printerId === undefined || printerId === current[role]) continue;
+          if (printerId === undefined || printerId === chosenPrinterOf(held, role)) continue;
           await selectDeviceEquipment(tx, {
             deviceId: id,
             role,
@@ -860,6 +860,7 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
   "receipt",
   "payment_slip",
   "cash_drawer",
+  "invoice",
   "card_terminal",
 ];
 

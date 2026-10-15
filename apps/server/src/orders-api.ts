@@ -3,7 +3,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq } from "drizzle-orm";
 import { AppError, isUuid, isValidEmail } from "@waitron/shared";
-import { printers, sales, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  printers,
+  receiptReprints,
+  sales,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { currentBusinessDay } from "@waitron/reporting";
 import { authorizeManager, resolveManagementSession, roleHasPermission } from "@waitron/identity";
@@ -25,6 +32,7 @@ import {
   isNumberSearch,
   listOrders,
   optionalSearch,
+  orderInvoicePrinters,
   readOrderDetail,
   type OrderCursor,
   type OrderListFilter,
@@ -37,7 +45,7 @@ import { renderInvoicePdf } from "./invoice-pdf.js";
 import { assertDeviceCapability } from "./device-session.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import {
-  requestA4Delivery,
+  requestPrintDelivery,
   requestEmailDelivery,
   retryEmailDelivery,
 } from "./invoice-delivery-actions.js";
@@ -292,7 +300,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       const id = c.req.param("id").toLowerCase();
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const body = await readJsonBody<Record<string, unknown>>(c);
-      if (body.medium !== "a4" && body.medium !== "email") throw invalid("medium");
+      if (body.medium !== "print" && body.medium !== "email") throw invalid("medium");
       const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       if (body.medium === "email") {
         if (typeof body.recipient !== "string" || !isValidEmail(body.recipient))
@@ -305,6 +313,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
         });
         return c.json(attempt);
       }
+      const printerId = requireBodyUuid(body.printerId, "printerId");
       await assertDeviceCapability(deps, c, "print-receipt", "invoice_delivery");
       const attempt = await withTransaction(deps.db, async (tx) => {
         const personId = await visibleOrderPerson(tx, sessionId, id);
@@ -314,7 +323,19 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
-        return requestA4Delivery(tx, sale.id, { requestKey, personId });
+        return requestPrintDelivery(
+          tx,
+          {
+            backend: deps.backend,
+            cfg: deps.till,
+            onReceiptCopy: async (copy) => {
+              await tx.insert(receiptReprints).values({ ...copy, personId });
+            },
+          },
+          { id: sale.id, workingOrderId: id },
+          orderInvoicePrinters(tx),
+          { requestKey, personId, printerId },
+        );
       });
       return c.json(attempt);
     }),

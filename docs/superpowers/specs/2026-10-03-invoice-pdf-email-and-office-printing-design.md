@@ -1,5 +1,11 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> **2026-10-15, A661:** a location no longer has one invoice printer. The
+> `page_printers.invoice_default` flag, the Printers tab's choice and
+> `PUT /management-api/page-printers/invoice-printer` are gone. Each device profile lists its
+> invoice printers, receipt or A4, and may name one as its default; a device may choose its own
+> from that list. The location-wide invoice printer described below is historical.
+
 > **2026-10-12, A493:** Live venue decoration defaults are retired. Each department owns its decoration and tax-agency description. Earlier contracts below are historical.
 > See [A493](2026-10-12-a493-departments-zones-design.md).
 

@@ -30,6 +30,7 @@ const ROLES = [
   { role: "receipt", column: "receiptPrinterId" },
   { role: "payment_slip", column: "paymentSlipPrinterId" },
   { role: "cash_drawer", column: "cashDrawerPrinterId" },
+  { role: "invoice", column: "invoicePrinterId" },
 ] as const;
 
 type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
@@ -69,6 +70,7 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
       cashDrawerPrinterId: devices.cashDrawerPrinterId,
+      invoicePrinterId: devices.invoicePrinterId,
     })
     .from(devices)
     .where(or(...ROLES.map(({ column }) => eq(devices[column], id))));

@@ -69,6 +69,10 @@ describe("a printer's delete dialog copy, in English", () => {
       "Default payment slip printer used by 2 devices: Bar till, Handheld Ana",
     ],
     [item("device_cash_drawer_default", [bar]), "Default cash drawer used by 1 device: Bar till"],
+    [item("device_invoice"), "Invoice printer of 1 device: Handheld Ana"],
+    [item("profile_invoice", [waiters]), "Invoice printer in 1 profile: Waiters"],
+    [item("profile_invoice_default", [waiters]), "Default invoice printer of 1 profile: Waiters"],
+    [item("device_invoice_default", [bar]), "Default invoice printer used by 1 device: Bar till"],
     [item("station_printers", [{ id: "s-grill", name: "Grill" }]), "Prints for 1 station: Grill"],
   ])("words the setting %j removes, naming each target", (removed, line) => {
     setLocale("en");
@@ -111,6 +115,11 @@ describe("a printer's delete dialog copy, in Spanish", () => {
     [item("device_cash_drawer"), "Cajón de 1 dispositivo: Handheld Ana"],
     [item("profile_payment_slip", [waiters]), "Impresora de justificantes en 1 perfil: Waiters"],
     [item("profile_cash_drawer_default", [waiters]), "Cajón predeterminado de 1 perfil: Waiters"],
+    [item("device_invoice"), "Impresora de facturas de 1 dispositivo: Handheld Ana"],
+    [
+      item("profile_invoice_default", [waiters]),
+      "Impresora de facturas predeterminada de 1 perfil: Waiters",
+    ],
     [
       item("device_receipt_default", [bar]),
       "Impresora de tickets predeterminada que usa 1 dispositivo: Bar till",
@@ -134,7 +143,7 @@ describe.each(["en", "es"])("every fixed item key has its own wording (%s)", (lo
     "print_jobs",
     "invoice_receipts",
     "portable_holder",
-    ...["receipt", "payment_slip", "cash_drawer"].flatMap((role) => [
+    ...["receipt", "payment_slip", "cash_drawer", "invoice"].flatMap((role) => [
       `device_${role}`,
       `profile_${role}`,
       `profile_${role}_default`,
