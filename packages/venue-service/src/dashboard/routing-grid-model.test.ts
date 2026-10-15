@@ -374,9 +374,19 @@ describe("visibleRoutingRows", () => {
     });
 
     it("a refresh that moves an open category to the top level keeps it open", () => {
-      const before = model([folder("q"), folder("c", "q"), folder("d", "q")], [item("x", "c")]);
-      const after = model([folder("q"), folder("c"), folder("d", "d")], [item("x", "c")]);
-      expect([...pruneExpanded(before, after, new Set(["c", "d"]))].sort()).toEqual(["c", "d"]);
+      const before = model(
+        [folder("q"), folder("c", "q"), folder("d", "q"), folder("e", "q")],
+        [item("x", "c")],
+      );
+      const after = model(
+        [folder("q"), folder("c"), folder("d", "d"), folder("e", "gone")],
+        [item("x", "c")],
+      );
+      expect([...pruneExpanded(before, after, new Set(["c", "d", "e"]))].sort()).toEqual([
+        "c",
+        "d",
+        "e",
+      ]);
     });
 
     it("a refresh keeps a category opened under a closed parent open while its parent stays", () => {

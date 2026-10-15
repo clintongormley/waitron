@@ -165,7 +165,6 @@ function collapseIn(
   const next = new Set(expanded);
   next.delete(id);
   const at = tree.findIndex(({ row }) => row.kind === "category" && row.categoryId === id);
-  if (at === -1) return next;
   const depth = tree[at]!.depth;
   for (let i = at + 1; i < tree.length && tree[i]!.depth > depth; i++) {
     const { row } = tree[i]!;
