@@ -51,6 +51,7 @@ import {
 } from "@waitron/shared";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deploymentEnvironment } from "./config.js";
+import { readSettledTicket } from "./till-sale.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { deletePrinter } from "./printer-delete.js";
@@ -957,7 +958,10 @@ describe("a receipt printer as the till's invoice printer", () => {
     expect(answer.body).toMatchObject({ id: row!.id, medium: "receipt", designation: "original" });
     const lines = printedLines(job!.payload);
     const printed = lines.join(" ").replace(/\s+/g, " ");
-    expect(printed).toContain("Factura completa");
+    const { invoiceNumber } = await withTransaction(suite.db, (tx) =>
+      readSettledTicket(backend, tx, v.cfg, orderId),
+    );
+    expect(printed).toContain(`FACTURA ${invoiceNumber}`);
     expect(printed).toContain("Cliente");
     expect(printed).toContain("NIF: 12345678Z");
     expect(printed).toContain("Calle Cliente 9, Madrid");

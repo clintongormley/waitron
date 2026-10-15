@@ -2719,6 +2719,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       optionSnapshots: [frozenAnswer],
       unitName: { [defaultLanguage]: "ud" },
       unitPrecision: 0,
+      soldInEach: true,
     },
     {
       descriptions: { [LOCALE]: "Queso" },

@@ -60,7 +60,8 @@ describe("styled elements on the A4 page", () => {
     expect(texts).toEqual([
       expect.objectContaining({ text: "Gracias", size: 10, bold: true, y: 36 }),
       expect.objectContaining({ text: "Grande", size: 20, bold: false, y: 50 }),
-      expect.objectContaining({ text: "Base 1,00 €", size: 10, bold: true, y: 78 }),
+      expect.objectContaining({ text: "Base", size: 10, bold: true, y: 78 }),
+      expect.objectContaining({ text: "1,00 €", size: 10, bold: true, y: 78 }),
       expect.objectContaining({ text: "Gracias", size: 10, bold: false, y: 92 }),
     ]);
   });

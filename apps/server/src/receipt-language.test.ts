@@ -1100,10 +1100,14 @@ describe("a sale prints its goods in the default content language its lines stor
         ? [element.text.trim()]
         : element.kind === "amount"
           ? [element.caption]
-          : [],
+          : element.kind === "table"
+            ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
+            : [],
     );
-    expect(startsWith(text, "Data"), "Data").toBe(true);
-    expect(startsWith(text, "Fecha")).toBe(false);
+    expect(startsWith(text, "Data de l'operació"), "Data de l'operació").toBe(true);
+    expect(text.some((line) => /^Comanda \d+/u.test(line))).toBe(true);
+    expect(startsWith(text, "Pedido")).toBe(false);
+    expect(text).toContain("Client");
     expectGoods(text, "es");
   });
 

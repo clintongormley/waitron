@@ -39,7 +39,7 @@ export const FULL_INVOICE_DOCUMENT_FIXTURE: ReceiptDocumentInput = {
         quantity: "1",
         gross: "10.89",
         listGross: "12.10",
-        net: { unitPrice: "10.00", priceQuantity: "1.000", base: "9.00", tax: "1.89", rate: "21" },
+        net: { unitPrice: "9.00", priceQuantity: "1.000", base: "9.00", tax: "1.89", rate: "21" },
         adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.21" }],
       },
       {

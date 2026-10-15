@@ -34,11 +34,7 @@ export async function receiptLines(
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const each = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
-    identities.flatMap((identity, i) =>
-      priced.lines[i]?.parentLineNo != null && priced.lines[i]?.unitName != null
-        ? [identity.id]
-        : [],
-    ),
+    identities.flatMap((identity, i) => (priced.lines[i]?.unitName != null ? [identity.id] : [])),
   );
   let lines = ticketLinesFrom(priced, identities).map((line, i) =>
     each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line,

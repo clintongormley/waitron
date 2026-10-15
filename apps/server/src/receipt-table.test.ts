@@ -1,0 +1,258 @@
+import { describe, expect, it } from "vitest";
+import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
+
+const HEADER = { units: "Uds", item: "Concepto", price: "Precio", amount: "Importe", rate: "IVA" };
+const table = (withRate: boolean): ReceiptTable => ({
+  header: HEADER,
+  withRate,
+  rows: [
+    { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64", rate: "10%" },
+    { units: "4", item: "Agua, pan y aceite", price: "5,45", amount: "21,82", rate: "21%" },
+  ],
+});
+
+describe("tableLines", () => {
+  it("lays out one rate on 42 columns, one line a row", () => {
+    expect(tableLines(table(false), 42).map((l) => l.text)).toEqual([
+      "Uds Concepto                Precio Importe",
+      "  1 Bloody Mary              13,64   13,64",
+      "  4 Agua, pan y aceite        5,45   21,82",
+    ]);
+  });
+
+  it("marks the header row's lines", () => {
+    expect(tableLines(table(false), 42).map((l) => l.header)).toEqual([true, false, false]);
+  });
+
+  it("prints no header line when the table has none", () => {
+    const { rows, withRate } = table(false);
+    expect(tableLines({ rows, withRate }, 42).map((l) => l.header)).toEqual([false, false]);
+  });
+
+  it("adds a rate column with several rates", () => {
+    expect(tableLines(table(true), 42)[1]!.text).toBe("  1 Bloody Mary          13,64   13,64 10%");
+  });
+
+  it("prints a discount row with empty units and price, its words indented under the item", () => {
+    const discounted: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [
+        { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64" },
+        { units: "", item: "Descuento 10%", itemIndent: 2, price: "", amount: "-1,36" },
+      ],
+    };
+    expect(
+      tableLines(discounted, 42)
+        .map((l) => l.text)
+        .slice(1),
+    ).toEqual([
+      "  1 Bloody Mary              13,64   13,64",
+      "      Descuento 10%                  -1,36",
+    ]);
+  });
+
+  it("wraps a long item inside its column", () => {
+    const long = {
+      ...table(false),
+      rows: [
+        {
+          units: "1",
+          item: "Menú degustación con maridaje de la casa",
+          price: "72,73",
+          amount: "72,73",
+        },
+      ],
+    };
+    for (const line of tableLines(long, 30)) expect(line.text.length).toBeLessThanOrEqual(30);
+    expect(
+      tableLines(long, 30)
+        .map((l) => l.text)
+        .join(" "),
+    ).toContain("maridaje");
+  });
+
+  it("widens the units column for a weighed line", () => {
+    const weighed: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [
+        { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64" },
+        { units: "0.35 kg", item: "Jamón ibérico", price: "109,09", amount: "38,18" },
+      ],
+    };
+    expect(tableLines(weighed, 42).map((l) => l.text)).toEqual([
+      "    Uds Concepto            Precio Importe",
+      "      1 Bloody Mary          13,64   13,64",
+      "0.35 kg Jamón ibérico       109,09   38,18",
+    ]);
+    const narrow = tableLines(weighed, 30).map((l) => l.text);
+    expect(narrow).toContain("0.35 kg Jamón ibérico");
+    expect(narrow.some((line) => line.endsWith("109,09   38,18"))).toBe(true);
+    for (const line of narrow) expect(line.length).toBeLessThanOrEqual(30);
+  });
+
+  describe("the cut-off between one and two lines a row", () => {
+    // Units 3 ("Uds"), price 6 ("Precio"), amount 7 ("Importe"): the item column is columns − 19.
+    const short: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [{ units: "1", item: "Caña", price: "13,64", amount: "13,64" }],
+    };
+
+    it("keeps one line a row when the item column is exactly 10", () => {
+      expect(tableLines(short, 29).map((l) => l.text)).toEqual([
+        "Uds Concepto   Precio Importe",
+        "  1 Caña        13,64   13,64",
+      ]);
+    });
+
+    it("takes two lines a row when the item column would be 9", () => {
+      expect(tableLines(short, 28).map((l) => l.text)).toEqual([
+        "Uds Concepto",
+        "              Precio Importe",
+        "  1 Caña",
+        "               13,64   13,64",
+      ]);
+    });
+  });
+
+  it("keeps an indented row's indent on its wrapped lines", () => {
+    const captioned: ReceiptTable = {
+      header: HEADER,
+      withRate: false,
+      rows: [
+        {
+          units: "",
+          item: "Descuento por cliente habitual",
+          itemIndent: 2,
+          price: "",
+          amount: "-1,36",
+        },
+      ],
+    };
+    // The item column starts at 4 and is 11 wide on 30 columns.
+    expect(
+      tableLines(captioned, 30)
+        .map((l) => l.text)
+        .slice(1),
+    ).toEqual(["      Descuento          -1,36", "      por", "      cliente", "      habitual"]);
+  });
+
+  it("falls back to two lines a row when the item column would be under 10 on 58 mm", () => {
+    const lines = tableLines(table(true), 30).map((l) => l.text);
+    expect(lines).toContain("  1 Bloody Mary");
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(30);
+    expect(lines.some((line) => line.endsWith("13,64   13,64 10%"))).toBe(true);
+  });
+});
+
+describe("a row with no figures", () => {
+  const answered = (withRate: boolean): ReceiptTable => ({
+    header: HEADER,
+    withRate,
+    rows: [
+      { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64", rate: "10%" },
+      { units: "", item: "Sin hielo", itemIndent: 2, price: "", amount: "" },
+    ],
+  });
+
+  it("prints its words alone, with no trailing spaces, on one line a row", () => {
+    expect(tableLines(answered(true), 42).at(-1)!.text).toBe("      Sin hielo");
+  });
+
+  it("prints no blank figures line in the two-line form", () => {
+    expect(
+      tableLines(answered(true), 30)
+        .map((l) => l.text)
+        .slice(-3),
+    ).toEqual(["  1 Bloody Mary", "             13,64   13,64 10%", "      Sin hielo"]);
+  });
+});
+
+describe("a units cell too wide to leave a useful item column", () => {
+  const LONG_UNITS = "1 raciones de menú degustación";
+  const rows = (units: string): ReceiptTableRow[] => [
+    { units: "1", item: "Bloody Mary", price: "13,64", amount: "13,64" },
+    { units, item: "Menú", price: "72,73", amount: "72,73" },
+  ];
+
+  it("prints the units on their own line and lays out the rest as if the cell were empty", () => {
+    const lines = tableLines({ header: HEADER, withRate: false, rows: rows(LONG_UNITS) }, 30);
+    const empty = tableLines({ header: HEADER, withRate: false, rows: rows("") }, 30);
+    expect(lines.map((l) => l.text)).toEqual([
+      ...empty.slice(0, 2).map((l) => l.text),
+      LONG_UNITS,
+      ...empty.slice(2).map((l) => l.text),
+    ]);
+  });
+
+  it("wraps a units cell wider than the paper", () => {
+    const units = `1 ${"porción ".repeat(8).trim()}`;
+    const lines = tableLines({ header: HEADER, withRate: false, rows: rows(units) }, 30);
+    for (const line of lines) expect(line.text.length).toBeLessThanOrEqual(30);
+    expect(lines.map((l) => l.text.trim()).join(" ")).toContain(units);
+  });
+
+  it("never throws and never prints past the paper, whatever the units cell's width", () => {
+    for (const columns of [30, 42, 48])
+      for (const withRate of [false, true])
+        for (let width = 0; width <= 2 * columns; width++) {
+          const units = "x".repeat(width);
+          const table: ReceiptTable = {
+            header: HEADER,
+            withRate,
+            rows: [{ units, item: "Menú del día", price: "72,73", amount: "72,73", rate: "21%" }],
+          };
+          for (const line of tableLines(table, columns))
+            expect(line.text.length).toBeLessThanOrEqual(columns);
+        }
+  });
+});
+
+describe("figures too wide for one line together", () => {
+  const catering = (columns: number) =>
+    tableLines(
+      {
+        header: HEADER,
+        withRate: true,
+        rows: [
+          {
+            units: "1",
+            item: "Catering",
+            price: "10.000.000,00",
+            amount: "10.000.000,00",
+            rate: "21%",
+          },
+        ],
+      },
+      columns,
+    ).map((l) => l.text);
+
+  it("puts the rate on a line of its own, right-aligned, when it does not fit beside the others", () => {
+    expect(catering(30)).toEqual([
+      "Uds Concepto",
+      "          Precio       Importe",
+      "                           IVA",
+      "  1 Catering",
+      "   10.000.000,00 10.000.000,00",
+      "                           21%",
+    ]);
+  });
+
+  it("never prints past the paper, whatever the figures' widths", () => {
+    for (const columns of [30, 42, 48])
+      for (let width = 0; width <= columns + 5; width++) {
+        const figure = "9".repeat(width);
+        const lines = tableLines(
+          {
+            header: HEADER,
+            withRate: true,
+            rows: [{ units: "1", item: "Catering", price: figure, amount: figure, rate: figure }],
+          },
+          columns,
+        );
+        for (const line of lines) expect(line.text.length).toBeLessThanOrEqual(columns);
+      }
+  });
+});

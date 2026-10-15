@@ -104,6 +104,202 @@ FULL.result.vatBreakdown = [
 ];
 for (const filed of FULL.result.lines) filed.unitName = { es: "ud" };
 
+type SaleLine = ReceiptDocumentInput["result"]["lines"][number];
+const filed = (
+  quantity: string,
+  name: string,
+  gross: string,
+  net: { unitPrice: string; base: string; tax: string; rate: string; priceQuantity?: string },
+  extra: Partial<SaleLine> = {},
+  unit = "ud",
+): SaleLine => ({
+  ...line(quantity, name, gross, unit),
+  net: { priceQuantity: "1.000", ...net },
+  ...extra,
+});
+const BLOODY_MARY = filed("1", "Bloody Mary", "15.00", {
+  unitPrice: "13.64",
+  base: "13.64",
+  tax: "1.36",
+  rate: "10.00",
+});
+// The target layout's water: four at 6,00 €, 10% off.
+const AGUA_DISCOUNTED = filed(
+  "4",
+  "Agua, pan y aceite",
+  "21.60",
+  { unitPrice: "4.91", base: "19.64", tax: "1.96", rate: "10.00" },
+  { listGross: "24.00", adjustments: [{ kind: "discount", percentBp: 1000, amount: "2.40" }] },
+);
+const AGUA = filed("4", "Agua, pan y aceite", "24.00", {
+  unitPrice: "5.45",
+  base: "21.82",
+  tax: "2.18",
+  rate: "10.00",
+});
+const JAMON = filed(
+  "0.35",
+  "Jamón ibérico",
+  "42.00",
+  { unitPrice: "109.09", base: "38.18", tax: "3.82", rate: "10.00" },
+  {},
+  "kg",
+);
+const VENUE_DOMICILE = "Avinguda d'Icària 215, Bajos, 08005 Barcelona";
+
+function fullInvoice(
+  lines: SaleLine[],
+  vatBreakdown: { rate: string; base: string; tax: string }[],
+  total: string,
+  change: string,
+  options: {
+    domicile?: string;
+    billAdjustments?: ReceiptDocumentInput["result"]["billAdjustments"];
+  } = {},
+): ReceiptDocumentInput {
+  return {
+    ...MOCKUP,
+    result: {
+      ...MOCKUP.result,
+      invoiceType: "F1",
+      invoiceNumber: "F-2026/000031",
+      issuedOffsetMinutes: 120,
+      issuer: {
+        venueName: "SANTET DELI CO S.L.",
+        nif: "B00000000",
+        domicile: options.domicile ?? VENUE_DOMICILE,
+      },
+      recipient: {
+        legalName: "Distribuciones Gastronómicas del Mediterráneo S.L.",
+        taxId: "B12345678",
+        countryCode: "ES",
+        address: "Carrer de la Diputació 245, 08007 Barcelona",
+      },
+      lines,
+      vatBreakdown,
+      total,
+      ...(options.billAdjustments ? { billAdjustments: options.billAdjustments } : {}),
+      tender: { method: "cash", change },
+    },
+  };
+}
+
+const TARGET_LINES = [BLOODY_MARY, AGUA_DISCOUNTED];
+const TARGET_VAT = [{ rate: "10.00", base: "33.28", tax: "3.32" }];
+const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
+  "full-addresses-match": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40"),
+  "full-addresses-differ": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40", {
+    domicile: "Carrer de Balmes 100, 08008 Barcelona",
+  }),
+  "full-domicile-with-province": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40", {
+    domicile: `${VENUE_DOMICILE} (Barcelona)`,
+  }),
+  // 10% off the whole bill, over a 21% wine and 10% bread.
+  "full-two-rates-bill-discount": fullInvoice(
+    [
+      filed(
+        "1",
+        "Rioja crianza",
+        "27.00",
+        {
+          unitPrice: "22.31",
+          base: "22.31",
+          tax: "4.69",
+          rate: "21.00",
+        },
+        { listGross: "30.00" },
+      ),
+      filed(
+        "1",
+        "Pan de pueblo",
+        "2.25",
+        {
+          unitPrice: "2.05",
+          base: "2.05",
+          tax: "0.20",
+          rate: "10.00",
+        },
+        { listGross: "2.50" },
+      ),
+    ],
+    [
+      { rate: "21.00", base: "22.31", tax: "4.69" },
+      { rate: "10.00", base: "2.05", tax: "0.20" },
+    ],
+    "29.25",
+    "0.75",
+    { billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.25" }] },
+  ),
+  // The owner's menu del día: 10,00 € at 10%, less 10%.
+  "full-menu-del-dia": fullInvoice(
+    [
+      filed(
+        "1",
+        "Menú del día",
+        "9.00",
+        {
+          unitPrice: "8.18",
+          base: "8.18",
+          tax: "0.82",
+          rate: "10.00",
+        },
+        {
+          listGross: "10.00",
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.00" }],
+        },
+      ),
+    ],
+    [{ rate: "10.00", base: "8.18", tax: "0.82" }],
+    "9.00",
+    "1.00",
+  ),
+  // A comped weighed line, under one kilo.
+  "full-comped-weighed": fullInvoice(
+    [
+      BLOODY_MARY,
+      filed(
+        "0.350",
+        "Jamón ibérico",
+        "0.00",
+        { unitPrice: "0.00", base: "0.00", tax: "0.00", rate: "10.00" },
+        { listGross: "8.40", adjustments: [{ kind: "comp", amount: "8.40" }] },
+        "kg",
+      ),
+    ],
+    [{ rate: "10.00", base: "13.64", tax: "1.36" }],
+    "15.00",
+    "5.00",
+  ),
+  // An extra priced per 0.05 kg portion, picked twice: «2 · Queso extra · 1,24 · 2,48».
+  "full-extra-per-portion": fullInvoice(
+    [
+      filed("1", "Hamburguesa", "12.10", {
+        unitPrice: "10.00",
+        base: "10.00",
+        tax: "2.10",
+        rate: "21.00",
+      }),
+      filed(
+        "0.100",
+        "Queso extra",
+        "3.00",
+        { unitPrice: "1.24", priceQuantity: "0.050", base: "2.48", tax: "0.52", rate: "21.00" },
+        { parentLineNo: 1 },
+        "kg",
+      ),
+    ],
+    [{ rate: "21.00", base: "12.48", tax: "2.62" }],
+    "15.10",
+    "4.90",
+  ),
+  "full-weighed-and-counted": fullInvoice(
+    [BLOODY_MARY, JAMON, AGUA],
+    [{ rate: "10.00", base: "73.64", tax: "7.36" }],
+    "81.00",
+    "19.00",
+  ),
+};
+
 const SAMPLES: Record<string, ReceiptDocumentInput> = {
   "simplified-one-rate": MOCKUP,
   "simplified-two-rates": {
@@ -134,15 +330,30 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
     },
   },
   "full-invoice": { ...FULL, surface: "thermal" },
+  "simplified-weighed-and-counted": {
+    ...MOCKUP,
+    result: {
+      ...MOCKUP.result,
+      lines: [BLOODY_MARY, JAMON, AGUA],
+      vatBreakdown: [{ rate: "10.00", base: "73.64", tax: "7.36" }],
+      total: "81.00",
+      tender: { method: "cash", change: "19.00" },
+    },
+  },
+  ...FULL_INVOICES,
 };
 
 for (const [name, input] of Object.entries(SAMPLES))
   for (const [paper, printer] of Object.entries(PRINTERS))
     await ticketPng(formatReceipt({ ...input, printer }), `${name}-${paper}.png`);
 
-const pages = await renderInvoiceRaster(FULL, 300);
-for (const [index, page] of pages.entries())
-  await sharp(page.pixels, { raw: { width: page.width, height: page.height, channels: 1 } })
-    .png()
-    .toFile(join(out, `full-invoice-a4-page${index + 1}.png`));
-writeFileSync(join(out, "full-invoice-a4.pdf"), await renderInvoicePdf(FULL));
+const A4: Record<string, ReceiptDocumentInput> = { "full-invoice": FULL };
+for (const [name, input] of Object.entries(FULL_INVOICES)) A4[name] = { ...input, surface: "a4" };
+for (const [name, input] of Object.entries(A4)) {
+  const pages = await renderInvoiceRaster(input, 300);
+  for (const [index, page] of pages.entries())
+    await sharp(page.pixels, { raw: { width: page.width, height: page.height, channels: 1 } })
+      .png()
+      .toFile(join(out, `${name}-a4-page${index + 1}.png`));
+  writeFileSync(join(out, `${name}-a4.pdf`), await renderInvoicePdf(input));
+}

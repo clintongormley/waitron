@@ -1322,7 +1322,9 @@ describe("the invoice at full payment", () => {
           expect(decodeTicket(new Uint8Array(job.payload))).not.toContain("DUPLICADO");
         }
         if (invoiceType === "F1") {
-          expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Factura completa");
+          expect(decodeTicket(new Uint8Array(jobs[0]!.payload)).replace(/\s+/g, " ")).toContain(
+            `FACTURA ${completed.invoice!.invoiceNumber}`,
+          );
           expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Cliente SL");
         }
         expect(await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId))).toBeNull();

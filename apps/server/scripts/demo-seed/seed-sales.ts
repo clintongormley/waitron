@@ -18,6 +18,7 @@ import { locations, nodes, withTransaction } from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
+  baseFromGross,
   customerPresentationText,
   localCalendarDate,
   readContentLanguages,
@@ -29,8 +30,6 @@ import {
   AppError,
   addDecimal,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
   percentOf,
   sumDecimals,
   toScale,
@@ -83,7 +82,6 @@ export interface SeedSalesInput {
   clock?: BackDatingClock;
 }
 
-const HUNDRED = decimal("100");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** `anchor`/`currentAnchor` are never called by `recordSale`, so they throw / return null. */
@@ -127,13 +125,8 @@ function randInt(rng: () => number, min: number, max: number): number {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-/** Restates `@waitron/catalogue`'s package-private `baseFromGross`. */
-function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
-  return divideDecimal(multiplyDecimal(gross, HUNDRED), addDecimal(HUNDRED, rate), MONEY_SCALE);
-}
-
 /** Restates `@waitron/core`'s breakdown derivation without its rounding to the cent: the line
- *  totals here come from `baseFromGross` above, already at the money scale. */
+ *  totals here come from `baseFromGross`, already at the money scale. */
 function breakdownOf(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   const bases = new Map<Decimal, Decimal>();
   for (const line of lines) {

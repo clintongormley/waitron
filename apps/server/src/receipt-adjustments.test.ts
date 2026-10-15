@@ -321,6 +321,22 @@ describe("receiptLines", () => {
     expect(receipt.lines[1]).toMatchObject({ quantity: "1", soldInEach: true });
   });
 
+  it("carries the Each context flag to a dish's line, and not to a dish sold by weight", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.350" }]);
+    const dishId = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitName: { es: "pzas" }, unitPrecision: 0 })
+        .where(eq(workingOrderLines.id, dishId));
+    });
+
+    const receipt = await receiptOf(billId);
+    expect(receipt.lines[0]).toMatchObject({ unitName: { es: "pzas" }, soldInEach: true });
+    expect(receipt.lines[1]!.unitName).not.toBeNull();
+    expect(receipt.lines[1]).not.toHaveProperty("soldInEach");
+  });
+
   it("puts a comp of one of three units under the unit it split off", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, {
@@ -439,15 +455,17 @@ describe("receiptLines", () => {
   it("reads nothing when no line was comped or discounted", async () => {
     const billId = await bill([{ name: "Burger" }]);
     const stored = await inTx(venue, (tx) => readStoredOrder(tx, billId));
+    // A line with a unit name reads whether it was sold in Each; this case is about adjustments.
+    const gross = { lines: stored.gross.lines.map((line) => ({ ...line, unitName: null })) };
     const unreadable = new Proxy({} as Transaction, {
       get: () => {
         throw new Error("the bill's adjustments were read");
       },
     });
 
-    await expect(
-      receiptLines(unreadable, billId, stored.gross, stored.identities),
-    ).resolves.toEqual({ lines: ticketLinesFrom(stored.gross, stored.identities) });
+    await expect(receiptLines(unreadable, billId, gross, stored.identities)).resolves.toEqual({
+      lines: ticketLinesFrom(gross, stored.identities),
+    });
   });
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {
@@ -483,11 +501,11 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("1 ud  Hamburguesa", "12,00"),
+      at80("1  Hamburguesa", "12,00"),
       at80("  Invitación", "-12,00"),
-      at80("1 ud  Rioja crianza", "30,00"),
+      at80("1  Rioja crianza", "30,00"),
       at80("  Descuento 20%", "-6,00"),
-      at80("1 ud  Pan de pueblo", "2,50"),
+      at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
@@ -525,10 +543,10 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("2 ud  Croquetas de jamón", "6,66"),
+      at80("2  Croquetas de jamón", "6,66"),
       at80("  Descuento", "-1,00"),
-      at80("1 ud  Pan de pueblo", "2,50"),
-      at80("1 ud  Croquetas de jamón", "3,33"),
+      at80("1  Pan de pueblo", "2,50"),
+      at80("1  Croquetas de jamón", "3,33"),
     ]);
   });
 });

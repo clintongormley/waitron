@@ -292,6 +292,8 @@ describe("receipt labels", () => {
     const labels = SPAIN.receiptLabels?.["es-ES"];
     expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
     expect(labels?.vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
+    expect(labels?.registeredAddress).toBe("Domicilio fiscal");
+    expect(labels?.invoiceHeading).toBe("FACTURA");
   });
 });
 

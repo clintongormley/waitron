@@ -997,7 +997,10 @@ describe("dashboard print on a receipt printer", () => {
       expect.objectContaining({ medium: "receipt", printJobId: job!.id, personId: venue.adminId }),
     ]);
     const printed = decodeTicket(job!.payload).replace(/\s+/g, " ");
-    expect(printed).toContain("Factura completa");
+    const { invoiceNumber } = await inTx(venue, (tx) =>
+      readSettledTicket(venue.backend, tx, venue.cfg, billId),
+    );
+    expect(printed).toContain(`FACTURA ${invoiceNumber}`);
     expect(printed).toContain("Cliente Mayorista SL");
     expect(printed).toContain("NIF: 12345678Z");
     expect(printed).toContain("Calle Cliente 9, Madrid");

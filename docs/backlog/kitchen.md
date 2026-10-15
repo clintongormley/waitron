@@ -148,9 +148,9 @@ list does not exist.
   Each, because `readLinesSoldInEach` looks the seed key up on the live unit row; the unit a product
   with no stored unit reads as cannot be deleted, so only such a stored unit is affected. A line with
   no recorded context but a unit recorded on it prints that unit, so its entries print as sold.
-  **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
-  (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
-  (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
+  **Kept as it is, by the owner's choice (2026-09-28):** the till's ticket view
+  (`apps/till/src/screens/till-ticket-view.ts`) still shows the Each unit. The printed receipt
+  prints an Each count bare since A663 Part 2 (owner, 2026-10-15).
 
 ## A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
 

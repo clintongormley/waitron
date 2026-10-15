@@ -217,15 +217,15 @@ describe("invoice SMTP transport", () => {
         );
         expect(rig.messages).toHaveLength(trustTestCertificate ? 1 : 0);
         if (trustTestCertificate)
-          expect(await attachmentText(rig.messages[0]!)).toContain("Factura FF/1");
+          expect(await attachmentText(rig.messages[0]!)).toMatch(/FACTURA\s+FF\/1/);
       } finally {
         await rig.close();
       }
     },
   );
   it.each([
-    ["es-ES", false, "Factura FF/1", "Factura FF/1", "DUPLICADO"],
-    ["en-GB", true, "Factura FF/1", "Factura FF/1", "DUPLICADO"],
+    ["es-ES", false, "Factura FF/1", /FACTURA\s+FF\/1/, "DUPLICADO"],
+    ["en-GB", true, "Factura FF/1", /FACTURA\s+FF\/1/, "DUPLICADO"],
   ] as const)(
     "sends a readable %s PDF with duplicate=%s after SMTP acceptance",
     async (invoiceLocale, duplicate, subject, caption, marker) => {
@@ -244,7 +244,7 @@ describe("invoice SMTP transport", () => {
         expect(message).toContain("To: customer@example.test");
         expect(message).toContain(`Subject: ${subject}`);
         const text = await attachmentText(message);
-        expect(text).toContain(caption);
+        expect(text).toMatch(caption);
         expect(text).toContain("B11223344");
         expect(text).toContain(invoiceLocale === "es-ES" ? "19,69" : "19.69");
         if (duplicate) expect(text).toContain(marker);

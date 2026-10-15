@@ -98,12 +98,12 @@ describe("department A4 office raster", () => {
       );
       const scale = resolution / 300;
       let ink = 0;
-      for (let y = 244 * scale; y < 289 * scale; y++)
+      for (let y = 186 * scale; y < 231 * scale; y++)
         for (let x = 1190 * scale; x < 1290 * scale; x++)
           if (page!.pixels[y * page!.width + x]! < 128) ink++;
       expect(ink).toBe(4500 * scale * scale);
-      expect(page!.pixels[244 * scale * page!.width + 1150 * scale]).toBe(255);
-      expect(page!.pixels[244 * scale * page!.width + 1330 * scale]).toBe(255);
+      expect(page!.pixels[186 * scale * page!.width + 1150 * scale]).toBe(255);
+      expect(page!.pixels[186 * scale * page!.width + 1330 * scale]).toBe(255);
     },
   );
 });

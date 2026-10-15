@@ -371,50 +371,54 @@ just a green typecheck.
   [Mockup: simplified receipt](mockups/a663-receipt-layout/1-simplified-receipt.png),
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
   receipt, rendered from the code on 2026-10-14.
-  Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md)
-  — Part 2 and Part 3 next.
-  2. **The full invoice.**
-     - "FACTURA" and its number head it, not "Factura completa" sitting left above the centred
-       header.
-     - One row per item under a header row: units, item, price before VAT, amount before VAT. Today
-       each item prints three more lines (price, base and VAT). With more than one VAT rate, a rate
-       column is added; art. 6.2.c then also requires each item's base, which the amount column
-       already is.
-     - A discount not in the unit price gets its own line (art. 6.1.f).
-     - The base and VAT for each rate (art. 6.1.g, h).
-     - "Fecha de operación" only when it differs from the issue date (art. 6.1.i).
-     - Checked 2026-10-14 against the BOE consolidated text of art. 6.
-     - The A4 page is drawn from the same document (`apps/server/src/invoice-page.ts`), so it changes
-       with it.
-  3. **The address on a full invoice** (owner, 2026-10-14). `buildReceiptDocument`
-     (`apps/server/src/receipt-document.ts`) prints the venue's address and then, on a full invoice,
-     the registered address (`issuer.domicile`), both unlabelled — the same text twice when they
-     match. Print it once when they are the same. When they differ, print both, the registered one
-     labelled «Domicilio fiscal:»: art. 6.1.e requires the issuer's «Domicilio». Printing both is
-     deliberate — the venue's address follows the receipt's address switch and the registered
-     address always prints (2026-10-10, A366 slice 7, the note atop
-     [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
-  4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
-  6. **Guests and the amount per person** when the table's guests were entered.
-     Joined tables' counts are added together when they join (or when guests move onto a seated
-     table), so the party's own count holds the sum, or no count when either party had none or the sum
-     is over 999; a bill split by item prints no guests line (A713, owner 2026-10-15, in
-     [till.md](till.md#decisions-and-deliberate-limits)).
+  Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
+  What is left:
+  - **Part 2b: base and VAT on a one-rate simplified receipt** (owner, Q11). The «IVA x% incluido»
+    line gives way to a base row and a VAT row under TOTAL, from the record's own figures.
+  - **Part 2c: each line's price before any discount, and the whole-bill discount once per rate**
+    (owner, Q9 and Q10). A new column on `sale_lines` keeps the price before any discount, so a
+    weighed line under one kilo prints its value; a whole-bill discount prints one row per rate at
+    the end of the table instead of a share under each dish.
+  - **Part 3: guests and the amount per person** when the table's guests were entered.
+    Joined tables' counts are added together when they join (or when guests move onto a seated
+    table), so the party's own count holds the sum, or no count when either party had none or the sum
+    is over 999; a bill split by item prints no guests line (A713, owner 2026-10-15, in
+    [till.md](till.md#decisions-and-deliberate-limits)).
 
 ## The till's on-screen receipt is a second copy of the layout
 
 - **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's receipt
   itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
   … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
-  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and later its item table, do not reach it. Bring it
+  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
+  also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), and a full
+  invoice's discounts with VAT where paper now prints them before VAT. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed.
+
+## On an A4 full invoice, a caption and its amount can split across pages
+
+- **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
+  Part 2).** The A4 page draws an amount row's caption first, then its amount right-aligned
+  (`layoutInvoicePages`, `apps/server/src/invoice-page.ts:266-270`). When the amount does not fit
+  beside the caption's last line, it takes a line of its own, and if the page is full there it
+  moves to the next page, leaving its caption at the foot of the one before. Keep the two
+  together: make room for the caption's lines and the amount's line before drawing either.
+
+## The A4 item table's header can sit alone at a page foot
+
+- **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
+  open by A663 Part 2).** The A4 page draws the table's header row and each item row as separate
+  rows, each checking only its own room (`apps/server/src/invoice-page.ts:248`, `tableRow`). The
+  header can therefore end a page with the items starting on the next, and a table that runs onto
+  a further page shows no header there. Keep the header with the first row, and repeat it at the
+  top of each continuation page.
 
 ## Quantities print with "." whatever the receipt language
 
 - **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt).
   `buildReceiptDocument` (`apps/server/src/receipt-document.ts`) writes quantities into the
-  receipt as their digits: an item's quantity in its line, an option's quantity in its caption,
-  and the quantity in `netFacts`' unit-price line. Print the language's decimal mark there
+  receipt as their digits: an item's quantity in its line or in the full invoice's table, and an
+  option's quantity in its caption. Print the language's decimal mark there
   («0,35 kg»). A663 keeps today's form. The till has the same gap: "Quantity-display follow-ups
   found while tracing A313" in
   [backlog.md → Users, sign-in and the dashboard shell](../backlog.md#users-sign-in-and-the-dashboard-shell).

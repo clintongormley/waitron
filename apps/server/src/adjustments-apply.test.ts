@@ -470,7 +470,7 @@ describe("the receipt (ruling R13)", () => {
         },
       }),
     );
-    const burger = printed.findIndex((line) => /^1 ud {2}Hamburguesa +12,00$/u.test(line));
+    const burger = printed.findIndex((line) => /^1 {2}Hamburguesa +12,00$/u.test(line));
     expect(burger).toBeGreaterThanOrEqual(0);
     expect(printed[burger + 1]).toMatch(/^ {2}Invitación +-12,00$/u);
   });
