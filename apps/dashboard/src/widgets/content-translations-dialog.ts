@@ -170,7 +170,7 @@ export class ContentTranslationsDialog extends LitElement {
   #runReplacedAt = 0;
   #choices = new Map<string, ReviewChoice>();
   /** The last suggestion list a scan read; a scan whose suggestion read fails keeps it, so a refused
-   * read (told in the bar) never stops the translations loading. */
+   * read never stops the translations loading. */
   #suggestions: ContentSuggestionView[] = [];
   #snapshotRevision = 0;
   #generation = 0;
@@ -202,6 +202,7 @@ export class ContentTranslationsDialog extends LitElement {
     this.busy = false;
     this.suggestionBusy = false;
     this.reviewing = false;
+    this.discarding = new Set();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -312,12 +313,17 @@ export class ContentTranslationsDialog extends LitElement {
       check(value);
       retained.push(...value.rows);
     }
-    const suggestions = await this.#readSuggestions(client, language);
+    const suggestions = await this.#readSuggestions(
+      client,
+      language,
+      () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
+    );
     return { generation, revision, rows, retained, suggestions, config: first!.config };
   }
   async #readSuggestions(
     client: Pick<DashboardApi, "getContentSuggestions">,
     language: string,
+    current: () => boolean,
   ): Promise<ContentSuggestionView[]> {
     const suggestions: ContentSuggestionView[] = [];
     let after: string | null = null;
@@ -333,7 +339,7 @@ export class ContentTranslationsDialog extends LitElement {
         after = value.next;
         if (after !== null && pages.has(after)) throw new Error("suggestion scan repeated");
         if (after !== null) pages.add(after);
-      } while (after !== null);
+      } while (after !== null && current());
     } catch {
       return this.#suggestions;
     }
@@ -565,7 +571,14 @@ export class ContentTranslationsDialog extends LitElement {
     input?.focus();
   }
   async #save(): Promise<void> {
-    if (this.busy || this.loading || this.reviewing || !this.model || this.#saveState().unchanged)
+    if (
+      this.busy ||
+      this.loading ||
+      this.reviewing ||
+      this.discarding.size > 0 ||
+      !this.model ||
+      this.#saveState().unchanged
+    )
       return;
     this.attempted = true;
     this.refused = [];
@@ -903,7 +916,7 @@ export class ContentTranslationsDialog extends LitElement {
         <wt-button
           data-test="save"
           variant=${action.variant}
-          ?disabled=${action.unchanged || this.loading || this.busy || this.reviewing || (this.attempted && Boolean(this.model?.validate().length))}
+          ?disabled=${action.unchanged || this.loading || this.busy || this.reviewing || this.discarding.size > 0 || (this.attempted && Boolean(this.model?.validate().length))}
           @click=${() => void this.#save()}
           >${t("translations.save")}</wt-button
         >

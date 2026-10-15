@@ -324,6 +324,7 @@ describe("Translate all suggestions as drafts", () => {
       await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-es one"));
       await click(el, "discard-product-one");
       answers[0]!();
+      // A zero-delay timer runs after every step #discard has left, which are all microtasks.
       await new Promise((resolve) => setTimeout(resolve, 0));
       el.requestUpdate();
       q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.requestUpdate();
@@ -336,6 +337,79 @@ describe("Translate all suggestions as drafts", () => {
       ).toBe(true);
       cleanupWidgets();
     }
+  });
+  it("Save waits while a Discard is being sent, so it never sends the suggestion being discarded", async () => {
+    let answer!: () => void;
+    const { el, api } = await open(
+      venue({ listed: [target("one"), target("two")], suggestions: [suggestion("s1", "one")] }),
+      {
+        discardContentSuggestion: vi.fn(
+          () => new Promise((resolve) => (answer = () => resolve({ deleted: "s1" }))),
+        ),
+      },
+    );
+    await edit(el, "two", "Pan");
+    await click(el, "discard-product-one");
+    expect(save(el).disabled).toBe(true);
+    await click(el, "save");
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    answer();
+    await vi.waitFor(() => expect(save(el).disabled).toBe(false));
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
+    });
+  });
+  it("a Discard held when the dialog is detached does not keep its button disabled after reattaching", async () => {
+    const { el, api } = await open(
+      venue({ listed: [target("one")], suggestions: [suggestion("s1", "one")] }),
+      { discardContentSuggestion: vi.fn(() => new Promise(() => {})) },
+    );
+    await click(el, "discard-product-one");
+    const button = () =>
+      q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")!;
+    expect(button().disabled).toBe(true);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.appendChild(el);
+    const reads = api.getContentTranslationTargets.mock.calls.length;
+    await vi.waitFor(() =>
+      expect(api.getContentTranslationTargets.mock.calls.length).toBeGreaterThan(reads),
+    );
+    await vi.waitFor(async () => {
+      q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.requestUpdate();
+      await settle(el);
+      expect(button().disabled).toBe(false);
+    });
+  });
+  it("a scan replaced while it reads suggestion pages stops reading them", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const state = venue({
+      listed: [target("one")],
+      suggestions: [suggestion("s1", "one"), suggestion("s2", "one"), suggestion("s3", "one")],
+      suggestionPage: 1,
+    });
+    const api = fakeApi(state);
+    const read = api.getContentSuggestions.getMockImplementation()!;
+    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
+      if (after === "1") await held;
+      return read(language, after);
+    });
+    const { el } = await mountWidget<ContentTranslationsDialog>(
+      "dashboard-content-translations-dialog",
+      { open: true, language: "es", api: api as unknown as DashboardApi },
+    );
+    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("es", "1"));
+    el.open = false;
+    await el.updateComplete;
+    release();
+    await held;
+    // A zero-delay timer runs after every microtask the released read queues, so a further page
+    // request would already have been made.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.getContentSuggestions).not.toHaveBeenCalledWith("es", "2");
   });
   it("a stale refusal on save empties that suggested row and keeps the others", async () => {
     const { el, api } = await open(
