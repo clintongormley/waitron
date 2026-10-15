@@ -50,5 +50,12 @@
     "playwright": "^1.64.1",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./paper-protocol": "./src/paper-protocol.ts",
+    "./src/*": "./src/*",
+    "./test/*": "./test/*",
+    "./package.json": "./package.json"
   }
 }

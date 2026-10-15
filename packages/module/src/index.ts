@@ -109,3 +109,12 @@ import "./errors.js";
 export type { BusinessDayClockConflict } from "./module.js";
 
 export type * from "./party-allergy.js";
+
+export type {
+  InitialSetupContext,
+  InitialSetupImport,
+  InitialSetupContribution,
+} from "./initial-setup.js";
+export { initialSetupFor } from "./initial-setup-selection.js";
+export type { ModuleOperationHost } from "./operation-preparation.js";
+export { configureModuleOperations } from "./operation-preparation.js";

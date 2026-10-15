@@ -81,3 +81,5 @@ export {
   createCloudAllocationPreparation,
   readCloudAllocationReport,
 } from "./cloud-preparation.js";
+
+export { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
