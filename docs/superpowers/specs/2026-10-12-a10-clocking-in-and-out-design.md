@@ -7,6 +7,10 @@ Update 2026-10-14: parts 1 and 2 are built. The remaining implementation is trac
 [the workforce backlog](../../backlog/workforce.md). The original design below records the state
 when this spec was agreed.
 
+Update 2026-10-15: parts 1–4 have landed. The
+[part 5 implementation plan](../plans/2026-10-15-a10-5-hours-screens-plan.md) covers the hours screens,
+including own corrections in My Schedule. Parts 5–6 remain unbuilt.
+
 ## Why
 
 Spanish law requires a daily record of each worker's start and end times, kept four years, from the

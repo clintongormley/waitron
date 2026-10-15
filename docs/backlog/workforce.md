@@ -79,6 +79,10 @@ for disagreeing. Original entries and responses remain in the history. Automatic
 before acknowledgment, and administrator self-approval is shown explicitly. If a reply is lost,
 Retry read checks the saved response before another attendance write is offered.
 
+The [part 5 plan](../superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md) covers till My hours,
+the same record and own correction requests in My Schedule, and manager hours. It reuses the
+existing correction executor and approval rules.
+
 Parts 5–6 remain open: My hours, manager hours screens and export/access screens. My hours has no
 placeholder; Fix my hours remains the correction entry until part 5 supplies the hours screen.
 The period-read cost remains open.

@@ -4588,7 +4588,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A10. Finish the working-time record, parts 5–6.** My hours and manager hours screens
   remain in part 5; PDF/CSV and representatives' access remain in part 6. Clocking, end-of-day
   checks, sign-in answers and corrections are built. Fix my hours is available from the name
-  menu or handheld More; My hours waits for its screen.
+  menu or handheld More; My hours waits for its screen. The part 5
+  [implementation plan](superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md) covers the hours
+  screens and own corrections in My Schedule.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 - **Workforce period reads still load complete history.** Narrow them without losing late or
