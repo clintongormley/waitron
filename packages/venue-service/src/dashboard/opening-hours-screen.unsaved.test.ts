@@ -190,8 +190,12 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
       .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
       .not.toBeNull();
     cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
-    await cal.updateComplete;
-    cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("calendar-day-box [data-test=special-edit]"))
+      .not.toBeNull();
+    screen
+      .shadowRoot!.querySelector<HTMLElement>("calendar-day-box [data-test=special-edit]")!
+      .click();
     await expect
       .poll(() =>
         screen

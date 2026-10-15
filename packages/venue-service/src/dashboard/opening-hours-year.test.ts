@@ -5,6 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
+import type { CalendarDayOpen } from "./opening-hours-month.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
 import "./opening-hours-year.js";
@@ -29,11 +30,6 @@ const holiday = (date: LocalDate, name: string): HolidayFact => ({
   scope: "national",
   sourceId: "official",
 });
-
-const everyHoliday = [
-  holiday("2027-01-06", "Epiphany"),
-  holiday("2027-12-08", "Immaculate Conception"),
-];
 
 /** 2027 with a public holiday on 6 January, a special day on 12 May, a special day on the public
  *  holiday of 8 December and a closed day on 26 December. */
@@ -118,12 +114,17 @@ const cell = (el: OpeningHoursYearView, date: LocalDate) =>
   root(el).querySelector<HTMLElement>(`td[data-date="${date}"]`)!;
 const dayButton = (el: OpeningHoursYearView, date: LocalDate) =>
   cell(el, date).querySelector<HTMLButtonElement>("button")!;
-const panel = (el: OpeningHoursYearView) =>
-  root(el).querySelector<HTMLElement>('[data-test="date-panel"]');
 function actions(el: OpeningHoursYearView) {
   const sent: SpecialDayAction[] = [];
   el.addEventListener("special-day-action", (event) =>
     sent.push((event as CustomEvent<SpecialDayAction>).detail),
+  );
+  return sent;
+}
+function opens(el: OpeningHoursYearView) {
+  const sent: CalendarDayOpen[] = [];
+  el.addEventListener("calendar-day-open", (event) =>
+    sent.push((event as CustomEvent<CalendarDayOpen>).detail),
   );
   return sent;
 }
@@ -186,13 +187,11 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector("[tabindex='0']")?.closest("td")?.dataset.date).toBe(
       "0100-01-01",
     );
-    dayButton(el, "0100-03-02").click();
-    await el.updateComplete;
-    expect(panel(el)).not.toBeNull();
+    const opened = opens(el);
     el.model = { ...el.model!, days: [...days] };
     await el.updateComplete;
-    expect(panel(el)).not.toBeNull();
-    expect(dayButton(el, "0100-03-02").getAttribute("aria-pressed")).toBe("true");
+    dayButton(el, "0100-03-02").click();
+    expect(opened.map(({ date }) => date)).toEqual(["0100-03-02"]);
   });
 
   it("tints each day by its season's place in start order, cycling past the fourth", async () => {
@@ -362,94 +361,53 @@ describe("Opening hours year", () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Edit and Delete on a special day's date, each sending the special day", async () => {
+  it("sends calendar-day-open for a date, a viewer's too", async () => {
+    for (const readOnly of [false, true]) {
+      const el = await mount(yearModel(), { readOnly });
+      const opened = opens(el);
+      const sent = actions(el);
+      dayButton(el, "2027-05-12").click();
+      await el.updateComplete;
+      expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
+      expect(opened[0]!.returnTo()).toBe(dayButton(el, "2027-05-12"));
+      expect(sent).toEqual([]);
+    }
+  });
+
+  it("moves nothing on the page when a date is clicked", async () => {
     const el = await mount();
-    const sent = actions(el);
-    expect(panel(el)).toBeNull();
+    const june = () =>
+      root(el).querySelector('[data-month="2027-06"]')!.getBoundingClientRect().top;
+    const before = june();
     dayButton(el, "2027-05-12").click();
     await el.updateComplete;
-    expect(dayButton(el, "2027-05-12").getAttribute("aria-pressed")).toBe("true");
-    await vi.waitFor(() => expect(root(el).activeElement).toBe(panel(el)!.querySelector("h3")));
-    expect(text(panel(el)!.querySelector("h3"))).toContain("Town fair");
-    expect(panel(el)!.closest("[data-month]")?.getAttribute("data-month")).toBe("2027-05");
-    const edit = panel(el)!.querySelector<HTMLElement>('[data-test="special-edit"]')!;
-    edit.click();
-    panel(el)!.querySelector<HTMLElement>('[data-test="special-delete"]')!.click();
-    expect(panel(el)!.querySelector('[data-test="special-add"]')).toBeNull();
-    expect(
-      sent.map(({ kind, date, specialDay, holidays }) => [kind, date, specialDay, holidays]),
-    ).toEqual([
-      ["open", "2027-05-12", { id: "fair", name: "Town fair" }, []],
-      ["delete", "2027-05-12", { id: "fair", name: "Town fair" }, []],
-    ]);
-    expect(sent[0]!.returnTo()).toBe(edit);
+    expect(june()).toBe(before);
   });
 
-  it("offers a public holiday's date as a special day, carrying the holiday", async () => {
+  it("names a holiday or special day when pointed at", async () => {
     const el = await mount();
-    const sent = actions(el);
-    dayButton(el, "2027-01-06").click();
-    await el.updateComplete;
-    expect(text(panel(el))).toContain("Epiphany");
-    panel(el)!.querySelector<HTMLElement>('[data-test="special-add"]')!.click();
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      kind: "open",
-      date: "2027-01-06",
-      specialDay: null,
-      holidays: [holiday("2027-01-06", "Epiphany")],
-      visibleHolidays: everyHoliday,
-    });
+    expect(dayButton(el, "2027-01-06").title).toBe("Epiphany");
+    expect(dayButton(el, "2027-05-12").title).toBe("Town fair");
+    expect(dayButton(el, "2027-12-08").title).toBe("Christmas market");
+    expect(dayButton(el, "2027-08-03").hasAttribute("title")).toBe(false);
   });
 
-  it("names the public holiday beside a special day on the same date, in the panel and the day's name", async () => {
+  it("names the public holiday beside a special day on the same date, in the day's name", async () => {
     const el = await mount();
     expect(dayButton(el, "2027-12-08").getAttribute("aria-label")).toBe(
       "Wednesday, 8 December 2027, Christmas market, Immaculate Conception",
     );
     expect(text(dayButton(el, "2027-12-08"))).toBe("8");
-    dayButton(el, "2027-12-08").click();
-    await el.updateComplete;
-    expect(text(panel(el)!.querySelector("h3"))).toContain("Christmas market");
-    expect([...panel(el)!.querySelectorAll("p")].map(text)).toContain("Immaculate Conception");
-  });
-
-  it("offers an ordinary date as a special day; the panel closes on the same date", async () => {
-    const el = await mount();
-    const sent = actions(el);
-    dayButton(el, "2027-08-03").click();
-    await el.updateComplete;
-    const make = panel(el)!.querySelector<HTMLElement>('[data-test="special-add"]')!;
-    expect(text(make)).toBe("Make this a special day…");
-    make.click();
-    expect(sent[0]).toMatchObject({
-      kind: "open",
-      date: "2027-08-03",
-      specialDay: null,
-      holidays: [],
-    });
-    dayButton(el, "2027-08-03").click();
-    await el.updateComplete;
-    expect(panel(el)).toBeNull();
-  });
-
-  it("drops a chosen date the next year does not hold", async () => {
-    const el = await mount();
-    dayButton(el, "2027-08-03").click();
-    await el.updateComplete;
-    el.model = yearModel({ year: 2028, days: [] });
-    await el.updateComplete;
-    expect(panel(el)).toBeNull();
   });
 
   it("sends nothing and offers no actions when read-only", async () => {
     const el = await mount(yearModel(), { readOnly: true });
     const sent = actions(el);
+    const opened = opens(el);
     expect(root(el).querySelector("season-chips")!.readOnly).toBe(true);
     dayButton(el, "2027-05-12").click();
     await el.updateComplete;
-    expect(text(panel(el))).toContain("Town fair");
-    expect(panel(el)!.querySelector("wt-button")).toBeNull();
+    expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
     expect(sent).toEqual([]);
   });
 

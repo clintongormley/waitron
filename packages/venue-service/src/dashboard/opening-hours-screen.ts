@@ -140,8 +140,12 @@ export class OpeningHoursScreen extends LitElement {
   @state() private monthReadError = "";
   private monthDetach?: () => void;
   private watchedMonth = "";
-  /** The Month's date whose day box is drawn. */
+  /** The Year's or the Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
+  /** The month read behind the Year's day box, kept while the Year shows that month's year. */
+  @state() private boxMonth?: OpeningHoursMonth;
+  private boxMonthDetach?: () => void;
+  private watchedBoxMonth = "";
   /** The date the drawn box was last shown for: a close sent while another date's box waits to be
    *  shown belongs to the old box. */
   private dayBoxShown?: LocalDate;
@@ -479,6 +483,8 @@ export class OpeningHoursScreen extends LitElement {
     this.watchedYear = 0;
     this.holidayDetach?.();
     this.watchedHolidayMonth = "";
+    this.boxMonthDetach?.();
+    this.watchedBoxMonth = "";
     this.generation = {};
     this.busy = false;
     super.disconnectedCallback();
@@ -509,6 +515,7 @@ export class OpeningHoursScreen extends LitElement {
     this.watchYear();
     this.watchMonth();
     this.watchHolidays();
+    this.watchBoxMonth();
   }
   private shownYear() {
     if (this.view !== "year" || !this.model) return 0;
@@ -577,6 +584,29 @@ export class OpeningHoursScreen extends LitElement {
       () => {
         this.monthReadError = "";
       },
+    );
+  }
+  private boxMonthNeeded() {
+    if (this.view !== "year" || this.moduleView) return "";
+    if (this.dayBox) return this.dayBox.date.slice(0, 7);
+    const year = `${String(this.shownYear()).padStart(4, "0")}-`;
+    return this.watchedBoxMonth.startsWith(year) ? this.watchedBoxMonth : "";
+  }
+  private watchBoxMonth() {
+    const month = this.boxMonthNeeded();
+    if (month === this.watchedBoxMonth) return;
+    this.boxMonthDetach?.();
+    this.boxMonthDetach = undefined;
+    this.watchedBoxMonth = month;
+    this.boxMonth = undefined;
+    if (!month) return;
+    this.boxMonthDetach = this.api.watchMonth(
+      month,
+      (model) => {
+        if (this.watchedBoxMonth === month) this.boxMonth = model;
+      },
+      () => {},
+      () => {},
     );
   }
   /** The public holidays this screen already holds for `date`'s month, or none when it holds no
@@ -888,46 +918,6 @@ export class OpeningHoursScreen extends LitElement {
       }}
     ></special-day-painter>`;
   }
-  private openNamedDay(event: CustomEvent<SpecialDayAction>) {
-    event.stopPropagation();
-    if (event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-year")) return;
-    const action = event.detail;
-    if (action.kind === "delete") {
-      void this.askDeleteSpecial(action);
-      return;
-    }
-    const date = isLocalDate(action.date) ? action.date : null;
-    void this.openSpecialPainter(
-      action.specialDay
-        ? { specialDayId: action.specialDay.id, date: null }
-        : { specialDayId: null, date },
-      action.visibleHolidays ?? action.holidays,
-    );
-  }
-  /** The Year panel's Delete: reads the special day, then asks in the screen's own confirmation. */
-  private async askDeleteSpecial(sentAction: SpecialDayAction) {
-    if (!this.isConnected || this.readOnly || this.busy || this.namedAction || this.overlaid())
-      return;
-    const { specialDay, ...detail } = sentAction;
-    if (!specialDay) return;
-    const action: OpenSpecialDay = { ...detail, clockRevision: this.model!.clockRevision };
-    this.namedDeleteError = "";
-    this.specialReadError = "";
-    const generation = this.generation;
-    this.busy = true;
-    let opened: OpenSpecialDay;
-    try {
-      opened = { ...action, detail: await this.api.specialDays.readSpecialDay(specialDay.id) };
-    } catch {
-      if (this.isConnected && generation === this.generation)
-        this.specialReadError = t("opening.load_error");
-      return;
-    } finally {
-      if (generation === this.generation) this.busy = false;
-    }
-    if (!this.isConnected || generation !== this.generation || this.namedAction) return;
-    this.namedAction = opened;
-  }
   private closeNamedDay(action: OpenSpecialDay) {
     if (!this.isConnected || this.namedAction !== action || this.busy) return;
     this.namedAction = undefined;
@@ -1008,7 +998,8 @@ export class OpeningHoursScreen extends LitElement {
     event.stopPropagation();
     if (
       !this.isConnected ||
-      event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-month")
+      event.currentTarget !==
+        this.shadowRoot?.querySelector("opening-hours-month, opening-hours-year")
     )
       return;
     this.afterDayBox = undefined;
@@ -1016,7 +1007,8 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async placeDayBox() {
     const open = this.dayBox;
-    await this.shadowRoot?.querySelector("opening-hours-month")?.updateComplete;
+    await this.shadowRoot?.querySelector<LitElement>("opening-hours-month, opening-hours-year")
+      ?.updateComplete;
     const drawn = this.shadowRoot?.querySelector("calendar-day-box");
     await Promise.all(
       [drawn, ...(drawn?.children ?? [])].map(
@@ -1042,47 +1034,76 @@ export class OpeningHoursScreen extends LitElement {
     this.afterDayBox = undefined;
     act?.();
   }
+  /** What the day box says of `date`: from the month read holding its row, else, over the Year
+   *  while that read is pending, from the year read alone. */
+  private dayBoxContent(date: LocalDate) {
+    const year = this.view === "year" ? this.yearModel : undefined;
+    const read = year ? this.boxMonth : this.monthModel;
+    const day = read?.days?.find((row) => row.date === date);
+    const yearHolidays = year?.days.flatMap((row) => row.holidays) ?? [];
+    if (day && read) {
+      const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
+        ? this.departmentId
+        : "";
+      const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
+      const monthHolidays = read.days.flatMap((row) => row.holidays);
+      return {
+        shown,
+        message: "",
+        specialDayId: shown.specialDayId,
+        season: read.seasons.find(({ id }) => id === shown.seasonId),
+        holidays: year
+          ? [
+              ...yearHolidays.filter((holiday) => !holiday.date.startsWith(read.month)),
+              ...monthHolidays,
+            ]
+          : monthHolidays,
+      };
+    }
+    if (!year || year.year !== Number(date.slice(0, 4))) return undefined;
+    const yearDay = year.days.find((row) => row.date === date);
+    return {
+      shown: undefined,
+      message: t("day.loading"),
+      specialDayId: yearDay?.specialDay?.id ?? null,
+      season: year.seasons.find(({ id }) => id === yearDay?.seasonId),
+      holidays: yearHolidays,
+    };
+  }
   private dayBoxTemplate() {
     const open = this.dayBox;
-    const read = this.monthModel;
-    const day = open && read?.days.find((row) => row.date === open.date);
-    if (!day || !read) return nothing;
-    const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
-      ? this.departmentId
-      : "";
-    const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
-    const season = read.seasons.find(({ id }) => id === shown.seasonId);
+    const content = open && !this.moduleView ? this.dayBoxContent(open.date) : undefined;
+    if (!open || !content) return nothing;
+    const { shown, specialDayId, season, holidays } = content;
     const act = (run: () => unknown) => () => {
       if (this.dayBox !== open) return;
       this.afterDayBox = run;
       this.shadowRoot?.querySelector("calendar-day-box")?.hide();
     };
-    const holidays = read.days.flatMap((row) => row.holidays);
     return html`<calendar-day-box
-      .heading=${formatDate(day.date)}
-      .name=${shown.name}
-      .nameKind=${shown.nameKind}
-      .line=${shown.line}
-      .rows=${shown.rows}
+      .heading=${formatDate(open.date)}
+      .name=${shown?.name ?? ""}
+      .nameKind=${shown?.nameKind ?? ""}
+      .line=${shown?.line ?? ""}
+      .rows=${shown?.rows ?? []}
+      .message=${content.message}
       @calendar-day-box-close=${this.dayBoxClosed}
     >
       ${
         this.readOnly
           ? nothing
-          : shown.specialDayId
+          : specialDayId
             ? html`<wt-button
                 variant="secondary"
                 data-test="special-edit"
-                @click=${act(() =>
-                  this.openSpecialPainter({ specialDayId: shown.specialDayId, date: null }),
-                )}
+                @click=${act(() => this.openSpecialPainter({ specialDayId, date: null }))}
                 >${t("special.edit")}</wt-button
               >`
             : html`<wt-button
                 variant="secondary"
                 data-test="special-add"
                 @click=${act(() =>
-                  this.openSpecialPainter({ specialDayId: null, date: day.date }, holidays),
+                  this.openSpecialPainter({ specialDayId: null, date: open.date }, holidays),
                 )}
                 >${t("day.make_special")}</wt-button
               >`
@@ -1168,7 +1189,7 @@ export class OpeningHoursScreen extends LitElement {
           write({ department: event.detail.departmentId || null, zone: null });
         }}
         >${this.viewSwitch()}</opening-hours-month
-      >${this.dayBoxTemplate()}`;
+      >`;
   }
   override render() {
     return html`${this.calendarHeading()}
@@ -1186,7 +1207,7 @@ export class OpeningHoursScreen extends LitElement {
                   .areaApi=${this.areaWrites}
                   .specialDays=${this.knownSpecialDays}
                   .readOnly=${this.readOnly}
-                  @special-day-action=${this.openNamedDay}
+                  @calendar-day-open=${this.openDayBox}
                   @season-dialog-open=${() => this.readKnownSpecialDays()}
                   @season-week-open=${this.openSeasonWeek}
                   @season-changed=${(event: Event) => {
@@ -1213,6 +1234,7 @@ export class OpeningHoursScreen extends LitElement {
               ? this.month()
               : nothing
     }
+    ${this.dayBoxTemplate()}
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
     ${this.namedDialog()} ${this.seasonPainter()} ${this.specialPainter()} ${this.seasonsWindow()}`;
   }

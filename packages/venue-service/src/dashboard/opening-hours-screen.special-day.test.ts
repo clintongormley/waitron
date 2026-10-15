@@ -78,6 +78,9 @@ interface Recorded {
   months: string[];
   /** Months whose read fails. */
   failing: string[];
+  /** Months whose read never answers: this file's year read and its December disagree on 14
+   *  December, so a Year date's box is held to what the year read says. */
+  holding?: string[];
 }
 function request(recorded: Recorded): DashboardRequest {
   const days: Record<string, SpecialDayDetail> = { sd1: storedDay(), sd2: fair, sd3: labourDay };
@@ -101,6 +104,7 @@ function request(recorded: Recorded): DashboardRequest {
     if (month) {
       recorded.months.push(month[1]!);
       if (recorded.failing.includes(month[1]!)) throw { code: "connection.failed" };
+      if (recorded.holding?.includes(month[1]!)) return new Promise(() => {});
       // The fixture's December 2026, moved to the month asked for.
       return JSON.parse(JSON.stringify(monthModel()).replaceAll("2026-12", month[1]!));
     }
@@ -142,9 +146,14 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 
-async function mount(address: string, readOnly = false, failing: string[] = []) {
+async function mount(
+  address: string,
+  readOnly = false,
+  failing: string[] = [],
+  holding: string[] = [],
+) {
   history.replaceState(null, "", address);
-  const recorded: Recorded = { writes: [], months: [], failing };
+  const recorded: Recorded = { writes: [], months: [], failing, holding };
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(request(recorded));
   el.readOnly = readOnly;
@@ -428,14 +437,21 @@ describe("after the painter writes", () => {
   it("a deleted special day closes the painter once, back to the view it opened over", async () => {
     history.replaceState(null, "", "/manage/before");
     history.pushState(null, "", "/manage/opening-hours/view/year/year/2026");
-    const { el, writes } = await mount("/manage/opening-hours/view/year/year/2026");
+    const { el, writes } = await mount(
+      "/manage/opening-hours/view/year/year/2026",
+      false,
+      [],
+      ["2026-12"],
+    );
     const year = el.shadowRoot!.querySelector("opening-hours-year")!;
     await expect
       .poll(() => year.shadowRoot!.querySelector("td[data-date='2026-12-14'] button"))
       .not.toBeNull();
     year.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-12-14'] button")!.click();
-    await year.updateComplete;
-    year.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("calendar-day-box [data-test=special-edit]"))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("calendar-day-box [data-test=special-edit]")!.click();
     const painter = await shownPainter(el);
     painter.shadowRoot!.querySelector<HTMLElement>("[data-test=delete]")!.click();
     await settle(painter);
@@ -461,8 +477,10 @@ describe("links into the special-day painter", () => {
       .poll(() => year.shadowRoot!.querySelector(`td[data-date='${date}'] button`))
       .not.toBeNull();
     year.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`)!.click();
-    await year.updateComplete;
-    year.shadowRoot!.querySelector<HTMLElement>(`[data-test=${button}]`)!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(`calendar-day-box [data-test=${button}]`))
+      .not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>(`calendar-day-box [data-test=${button}]`)!.click();
   }
   async function shownMonth(el: Screen) {
     await expect
@@ -483,7 +501,7 @@ describe("links into the special-day painter", () => {
   }
 
   it("the Year's Edit on a special day's date opens the painter on it, and closing goes back to that year", async () => {
-    const { el } = await mount("/manage/opening-hours/view/year/year/2026");
+    const { el } = await mount("/manage/opening-hours/view/year/year/2026", false, [], ["2026-12"]);
     const pushed = pushedPaths();
     await yearPanel(el, "2026-12-14", "special-edit");
     await expect
@@ -499,24 +517,19 @@ describe("links into the special-day painter", () => {
   });
 
   it("the Year's Make on a public holiday opens a new day pre-filled from the holidays the Year sent", async () => {
-    const { el, months } = await mount("/manage/opening-hours/view/year/year/2026");
+    const { el, months } = await mount(
+      "/manage/opening-hours/view/year/year/2026",
+      false,
+      [],
+      ["2026-11"],
+    );
     await yearPanel(el, "2026-11-04", "special-add");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/date/2026-11-04");
     const painter = await shownPainter(el);
     expect(nameOf(painter)).toBe("Town feast");
-    expect(months).toEqual([]);
-  });
-
-  it("the Year's Delete still asks in its own confirmation and opens no painter", async () => {
-    const { el } = await mount("/manage/opening-hours/view/year/year/2026");
-    await yearPanel(el, "2026-12-14", "special-delete");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .not.toBeNull();
-    expect(painterOf(el)).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+    expect(months).toEqual(["2026-11"]);
   });
 
   it("the Month's special date opens the painter on its special day, and its public holiday a new day pre-filled", async () => {
