@@ -4636,7 +4636,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
   numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 
-- **A10. Export the working-time record (part 6).** Add PDF/CSV for a date range,
+- **A10. Export the working-time record (part 6).** Follow the
+  [reviewed export plan](superpowers/plans/2026-10-15-a10-6-record-export-plan.md): PDF/CSV for a date range,
   everyone or one person, plus the representatives’ version. Till My hours, My Schedule’s
   Hours tab and manager Hours are built, alongside clocking, end-of-day checks and corrections.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)

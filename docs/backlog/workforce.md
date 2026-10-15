@@ -92,7 +92,8 @@ a request before approval or decline. Time corrections remains a separate queue.
 ends already count while awaiting acknowledgment; stored self-approval, frozen period totals
 and later changes are shown separately.
 
-Part 6 remains open: PDF/CSV and representatives’ export surfaces. Inspector remote access
+Part 6 remains open: PDF/CSV and representatives’ export surfaces, covered by the
+[reviewed export plan](../superpowers/plans/2026-10-15-a10-6-record-export-plan.md). Inspector remote access
 and the period-read cost remain separate open entries.
 
 
