@@ -74,6 +74,12 @@ const en = {
   "staffing.month.today": "Today",
   "staffing.month.closed": "Closed",
   "staffing.month.legend": "Bars: people needed per area",
+  "staffing.grid.label": "Staffing by day",
+  "staffing.grid.follows_season": "Follows the season",
+  "staffing.grid.follow_season": "Follow the season",
+  "staffing.grid.staff_role": "Staff role",
+  "staffing.grid.how_many": "How many",
+  "staffing.grid.delete": "Delete",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -141,6 +147,12 @@ const es: Record<keyof typeof en, string> = {
   "staffing.month.today": "Hoy",
   "staffing.month.closed": "Cerrado",
   "staffing.month.legend": "Barras: personas necesarias por área",
+  "staffing.grid.label": "Personal por día",
+  "staffing.grid.follows_season": "Sigue la temporada",
+  "staffing.grid.follow_season": "Seguir la temporada",
+  "staffing.grid.staff_role": "Rol de personal",
+  "staffing.grid.how_many": "Cuántas personas",
+  "staffing.grid.delete": "Eliminar",
 };
 
 export const STAFFING_STRINGS = { en, es };
