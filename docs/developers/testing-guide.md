@@ -1841,3 +1841,27 @@ Deployment does not set a process time zone in `deploy/Dockerfile`'s runtime `EN
 `docker run --rm --network none node:26.11.1-slim node -e
 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'` printed `UTC`.
 That base-image probe does not measure an operator's configured appliance.
+
+## Wait for a resolved response to reach the screen before checking its late effect
+
+Resolving a deferred request does not mean its consumer has published a snapshot yet. When your
+assertion concerns the resulting screen, let that publication and its render finish before you
+inspect the page.
+
+Measured in A10-4 on Node v26.11.1, Vitest 4.1.11 and Playwright 1.63.0: awaiting one
+`Promise.resolve()` and the app's current `updateComplete` missed two late effects in
+`apps/till/src/till-app.attendance.test.ts`. Removing the Cancel handler's gate reset reached a
+later click timeout instead of the intended page assertion. Removing the approver-opening version
+check still passed its case. Each request had already been resolved by the test.
+
+The cases now await a rendered frame after resolving their held request, then inspect the page.
+In independently installed disposable checkouts, removing the gate reset failed the empty-inbox
+case's page assertion, and removing the opening-version check failed the late-PIN assertion.
+The restored six attendance behavior suites passed 64 cases. You can run the two owning cases with:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.attendance.test.ts \
+  -t 'late answer never reopens the gate|closing during an approver read' --reporter=dot
+```
+
+The controls removed one guard at a time; the command above runs the restored behavior.

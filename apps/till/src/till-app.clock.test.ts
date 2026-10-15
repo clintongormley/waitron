@@ -340,7 +340,10 @@ describe("till clocking integration", () => {
     const old = deferred<TillClockState>();
     f.api.getClockState.mockReturnValueOnce(old.promise);
     await signIn(f.el);
-    await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).not.toBeNull(),
+    );
+    expect(clockPage(f.el)).toBeNull();
     router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: "one", to: "two" } }));
     await vi.waitFor(() =>
       expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),

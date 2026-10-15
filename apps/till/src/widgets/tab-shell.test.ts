@@ -16,9 +16,9 @@ const tabs: TabDef[] = [
 
 describe("till-tab-shell", () => {
   it.each([
-    ["working", ["Start break", "Clock out", "Log out"]],
-    ["on_break", ["End break", "Clock out", "Log out"]],
-    ["out", ["Clock in", "Log out"]],
+    ["working", ["Start break", "Clock out", "Fix my hours", "Log out"]],
+    ["on_break", ["End break", "Clock out", "Fix my hours", "Log out"]],
+    ["out", ["Clock in", "Fix my hours", "Log out"]],
   ] as const)("the name opens the %s clock actions with a text state", async (state, labels) => {
     const locale = currentLocale();
     const width = innerWidth;
