@@ -37,9 +37,10 @@ export class TranslationDrafts {
   readonly #values = new Map<string, DraftValues>();
   #suggestions = new Map<string, RowSuggestion>();
   #filled = new Map<string, DraftValues>();
-  /** What a suggestion had filled when a person's edit began; discarding it takes back each field
-   * still holding that text. */
-  readonly #borrowed = new Map<string, DraftValues>();
+  /** What a suggestion had filled when a person's edit began, and the suggestion ids it came from;
+   * deleting any of those ids takes back each field still holding that text, even once a read no
+   * longer lists the suggestion. */
+  readonly #borrowed = new Map<string, DraftValues & { ids: readonly string[] }>();
   readonly #dismissed = new Set<string>();
   readonly #staleIds = new Set<string>();
   constructor(
@@ -140,7 +141,7 @@ export class TranslationDrafts {
     if (!this.isEdited(ref) && !this.isSuggested(ref) && this.count >= 100) return;
     if (!this.#values.has(key)) {
       const filled = this.#filled.get(key);
-      if (filled) this.#borrowed.set(key, { ...filled });
+      if (filled) this.#borrowed.set(key, { ...filled, ids: [...this.#suggestions.get(key)!.ids] });
       else this.#borrowed.delete(key);
     }
     const next = {
@@ -200,17 +201,22 @@ export class TranslationDrafts {
     this.#suggestions = new Map(found);
     this.#refill();
   }
-  unsuggest(ref: TranslationRef): void {
+  /** `deleted` defaults to every id of the row's current suggestion. */
+  unsuggest(ref: TranslationRef, deleted?: readonly string[]): void {
     const key = translationKey(ref);
-    for (const id of this.#suggestions.get(key)?.ids ?? []) this.#dismissed.add(id);
+    const current = this.#suggestions.get(key)?.ids ?? [];
+    const gone = new Set(deleted ?? current);
+    if (current.some((id) => gone.has(id))) for (const id of current) this.#dismissed.add(id);
     const values = this.#values.get(key);
     const borrowed = this.#borrowed.get(key);
-    if (values && borrowed) {
-      if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
-      if (values.defaultText === borrowed.defaultText) values.defaultText = "";
-      if (!this.isEdited(ref)) this.#values.delete(key);
+    if (borrowed && [...current, ...borrowed.ids].some((id) => gone.has(id))) {
+      if (values) {
+        if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
+        if (values.defaultText === borrowed.defaultText) values.defaultText = "";
+        if (!this.isEdited(ref)) this.#values.delete(key);
+      }
+      this.#borrowed.delete(key);
     }
-    this.#borrowed.delete(key);
     this.#refill();
   }
   markStale(ref: TranslationRef): void {

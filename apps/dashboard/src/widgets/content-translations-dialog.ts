@@ -598,9 +598,10 @@ export class ContentTranslationsDialog extends LitElement {
       if (generation === this.#generation) this.actionError = codeMessage(codeOf(error));
     } finally {
       // Once any of the row's suggestions is gone, the row takes none of them, whichever dialog
-      // opening holds it now.
-      if (this.model?.suggestionFor(row)?.ids.some((id) => this.#deleted.has(id))) {
-        this.model.unsuggest(row);
+      // opening holds it now and whether or not a read since still lists them.
+      const deleted = found.ids.filter((id) => this.#deleted.has(id));
+      if (this.model && deleted.length) {
+        this.model.unsuggest(row, deleted);
         this.#scope?.changed();
       }
       this.discarding = new Set([...this.discarding].filter((held) => held !== key));

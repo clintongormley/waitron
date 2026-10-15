@@ -337,6 +337,52 @@ describe("Translate all suggestions as drafts", () => {
       cleanupWidgets();
     }
   });
+  it("Discard takes the untouched companion out of a person's edit even when a refresh lands between the row's two deletions", async () => {
+    const liveData = new LiveData();
+    const state = venue({
+      listed: [target("one", { defaultRequired: true })],
+      suggestions: [
+        suggestion("s1", "one"),
+        suggestion("s2", "one", { language: "en", text: "CLIENT-en one" }),
+      ],
+    });
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    const { el, api } = await open(state, {
+      liveData,
+      discardContentSuggestion: vi.fn(async (id: string) => {
+        state.suggestions = state.suggestions.filter((view) => view.id !== id);
+        if (id === "s2") await held;
+        return { deleted: id };
+      }),
+    });
+    await edit(el, "one", "Mine");
+    await click(el, "discard-product-one");
+    await vi.waitFor(() => expect(api.discardContentSuggestion).toHaveBeenCalledWith("s2"));
+    liveData.invalidate([{ type: "content_suggestions" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=discard-product-one]")).toBeNull());
+    answer();
+    await api.discardContentSuggestion.mock.results[1]!.value;
+    await settle(el);
+    expect(field(el, "one")!.value).toBe("Mine");
+    expect(field(el, "one", "defaultText")!.value).toBe("");
+    await click(el, "save");
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    await edit(el, "one", "Also mine", "defaultText");
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          expected: "baseline-one",
+          text: "Mine",
+          defaultText: "Also mine",
+        },
+      ],
+    });
+  });
   it("Discard sends once while its own request or a save is being sent", async () => {
     let answer!: () => void;
     const { el, api } = await open(

@@ -501,6 +501,27 @@ describe("suggested drafts", () => {
       ],
     });
   });
+  it("unsuggest takes back what a deleted suggestion filled after a read stopped listing it, and nothing for another suggestion's deletion", () => {
+    const row = target("one");
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.suggest(
+      new Map([
+        [
+          "product:one",
+          found({ ids: ["s1", "s2"], text: "CLIENT-es one", defaultText: "CLIENT-en one" }),
+        ],
+      ]),
+    );
+    drafts.edit(row, "text", "Mine");
+    drafts.suggest(new Map());
+    drafts.unsuggest(row, ["s7"]);
+    expect(drafts.value(row, "defaultText")).toBe("CLIENT-en one");
+    drafts.unsuggest(row, ["s2"]);
+    expect(drafts.value(row, "defaultText")).toBe("");
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Mine" }],
+    });
+  });
   it("unsuggest leaves a row unedited when only the suggestion's text was left in it", () => {
     const row = target("one", { selectedText: "Croqueta" });
     const drafts = new TranslationDrafts("es", "en", [row]);
