@@ -428,7 +428,7 @@ describe("Opening hours month", () => {
     expect(testId(el, "previous-month")).not.toBeNull();
   });
 
-  it("in station mode, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
+  it("in station mode over one row, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
     const el = await mount(stationModel(), {
       readOnly: true,
       stationMode: true,

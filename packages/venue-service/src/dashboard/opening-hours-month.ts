@@ -303,10 +303,7 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
-  /** One prep station's month, its rows the station or, when several departments feed it, one per
-   *  department on every date: no year, no department picker, no special day to add, the season
-   *  chips a key only, the Rows key only over several rows, an empty row of several an empty track,
-   *  and a date it gets nothing reads "No orders" once. */
+  /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
   /** The date that holds the month's one Tab stop. */
   @state() private focusDate: LocalDate | null = null;
@@ -403,16 +400,14 @@ export class OpeningHoursMonthView extends LitElement {
       : format("month.department_closed", { name: row.name });
   }
 
-  /** A station's date with nothing on any of its rows, drawn as one "No orders". */
   #noOrders(rows: readonly Row[]): boolean {
     return this.stationMode && rows.every((row) => !row.ranges.length);
   }
 
-  /** A segment's hover text: a station's several rows name the department beside the period. */
   #title(period: string, row: Row, rows: readonly Row[], range: ClosedRange): string {
     const name =
       this.stationMode && rows.length > 1
-        ? format("prep.times.period", { period, department: row.name })
+        ? format("month.period_department", { period, department: row.name })
         : period;
     return format("month.range", { name, start: range.startsAt, end: range.endsAt });
   }

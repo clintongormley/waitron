@@ -176,7 +176,7 @@ describe("Prep station times", () => {
     }
   });
 
-  it("draws the chosen station's month read-only, one bar per day, from the month and station reads", async () => {
+  it("draws a station one department feeds read-only, one bar per day, from the month and station reads", async () => {
     const { el, calls } = await mount({ stationId: "grill" });
     await drawn(el, "2026-12-01", "grill").not.toBeNull();
     const view = month(el)!;

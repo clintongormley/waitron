@@ -39,6 +39,7 @@ function api(state: State) {
     if (url.pathname.includes("/kitchen/")) return { always: "default", days: [] };
     const days = [];
     const to = url.searchParams.get("to")!;
+    const pass = url.pathname.includes("/pass/");
     for (let date = url.searchParams.get("from")!; date <= to; date = addDays(date, 1))
       days.push({
         date,
@@ -48,9 +49,12 @@ function api(state: State) {
             : [
                 {
                   departmentId: "rest",
-                  ranges: [{ periodId: "dinner", startsAt: "19:00", endsAt: "01:00" }],
+                  ranges:
+                    pass && date.endsWith("3")
+                      ? []
+                      : [{ periodId: "dinner", startsAt: "19:00", endsAt: "01:00" }],
                 },
-                ...(url.pathname.includes("/pass/")
+                ...(pass
                   ? [
                       {
                         departmentId: "bar",
@@ -97,6 +101,21 @@ describe.each(["en", "es"] as const)("Prep station times accessibility (%s)", (l
           "no stations": () => root.querySelector("p"),
         }[state];
         await expect.poll(ready).not.toBeNull();
+        if (state === "several departments") {
+          const month = root.querySelector("opening-hours-month")!.shadowRoot!;
+          for (const shown of [
+            '[data-test="rows"]',
+            '.track[data-row="bar"]',
+            '[data-test="no-orders"]:not([data-all-day])',
+          ])
+            expect(month.querySelector(shown), shown).not.toBeNull();
+          expect(
+            [...month.querySelectorAll('.track[data-row="rest"]')].some(
+              (track) => !track.querySelector(".segment"),
+            ),
+            "an empty Restaurant track",
+          ).toBe(true);
+        }
         await expectNoA11yViolations(host);
       },
     );
