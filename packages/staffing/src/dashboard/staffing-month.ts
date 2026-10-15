@@ -6,7 +6,7 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
-import { seasonTints, seasonTintStyles } from "@waitron/venue-service/season-tint";
+import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";

@@ -10,8 +10,8 @@
     "./hours-types": "./src/hours-types.ts",
     "./hours-occurrences": "./src/hours-occurrences.ts",
     "./holiday-types": "./src/holiday-types.ts",
-    "./season-tint": "./src/dashboard/season-tint.ts",
-    "./live-queries": "./src/dashboard/live-queries.ts",
+    "./dashboard/season-tint": "./src/dashboard/season-tint.ts",
+    "./dashboard/live-queries": "./src/dashboard/live-queries.ts",
     "./testing/zone-menus.js": "./src/testing/zone-menus.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },

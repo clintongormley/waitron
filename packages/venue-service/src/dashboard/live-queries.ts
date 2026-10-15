@@ -44,7 +44,7 @@ const HIERARCHY_DELETE_READS = [
   "department_transfer_requests",
 ] as const;
 
-/** Every table `readCalendarMonthPlan` reads, the holidays' and special days' paint included. */
+/** Every table `readCalendarMonthPlan` reads, the holiday tables and the special days' paint included. */
 export const CALENDAR_MONTH_PLAN_READS = [
   "tenants",
   "locations",

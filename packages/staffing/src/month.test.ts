@@ -223,7 +223,7 @@ describe("readStaffingMonth", () => {
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
-  it("reads each table once, joins included, and none of the hours, zones, holidays or clock status it does not show", async () => {
+  it("reads each table once, joins included, and not floor_zones, the holiday tables or the clock status", async () => {
     const v = await painted();
     const { tables } = await tablesRead((tx) => readStaffingMonth(tx, v.cfg, "2026-08", AT));
     expect(tables).toContain("staffing_days");
@@ -238,7 +238,7 @@ describe("readStaffingMonth", () => {
       expect(tables).not.toContain(unshown);
   });
 
-  it("reads each table once when a repeating special day follows a public holiday, places it by that holiday, and reads again on a change to any of them", async () => {
+  it("reads each table once when a repeating special day follows a public holiday, places it by that holiday, and its live query names every one of them", async () => {
     const v = await painted();
     const semanaSanta = await inTx(async (tx) => {
       await tx

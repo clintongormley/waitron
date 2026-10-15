@@ -1,7 +1,6 @@
-import type { LocationPlace } from "@waitron/reporting";
 import { and, eq } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import type { BusinessDayClock } from "@waitron/shared";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";

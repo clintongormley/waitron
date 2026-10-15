@@ -4593,13 +4593,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   `stepMonth` and the first and last month in `packages/staffing/src/dashboard/staffing-month.ts`
   are a third copy beside `add-dates-calendar.ts` and `opening-hours-month.ts` in
   `packages/venue-service/src/dashboard/`, and its date formatting copies `hours-view.ts`'s (A585-3's
-  review; the season tints are already shared through `@waitron/venue-service/season-tint`). Next:
+  review; the season tints are already shared through `@waitron/venue-service/dashboard/season-tint`). Next:
   move `stepMonth` and the limits into a browser-safe venue-service file and export it.
-- **A700. A failed Opening hours read also hides the Calendar's other views.** The module views and
-  the switch draw only once the page's own model loads
-  (`packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
-  Staffing view sees the Opening hours error instead (A585-3). Next: decide whether the switch and a
-  module view draw without that model.
+- **A700. A failed Opening hours read also hides the Calendar's other views.** A module view draws
+  only once the page's own model loads (`render` in
+  `packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
+  Staffing view sees the switch and the Opening hours error instead (A585-3). Next: decide whether a
+  module view draws without that model.
 - **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
   `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
   and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read

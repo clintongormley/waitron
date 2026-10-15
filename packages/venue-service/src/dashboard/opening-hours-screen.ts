@@ -682,10 +682,7 @@ export class OpeningHoursScreen extends LitElement {
     const pushed = this.atPushedPainter();
     this.pushedPainter = undefined;
     if (pushed) history.back();
-    else
-      this.replaceAddress(
-        new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
-      );
+    else this.replaceAddress(new URL(this.baseHref ?? hoursPath(), location.href));
   }
   /** The painter is given what the address names, not what that resolves to, so that when a
    *  refresh removes it the painter sees it go and tells (ruling R11). */
