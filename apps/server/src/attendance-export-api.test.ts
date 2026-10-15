@@ -356,7 +356,9 @@ describe("authenticated working-time downloads", () => {
         personId: fixture.personId,
         period: { start: "2026-01-01", end: "2026-02-01" },
       });
-      const target = record.entries.find((e) => e.entry.entryKind === "out")!.entry.entryId;
+      const target = record.entries.find(
+        (e) => e.effective && e.entry.correctionStatus === "approved",
+      )!.entry.entryId;
       const request = await backend.requestCorrection(tx, {
         nodeId: fixture.nodeId,
         correctsEntryId: target,
