@@ -369,6 +369,9 @@ export async function buildSuggestionJob(
     items: [] as SuggestionItem[],
     houseStyle: fitHouseStyle(await readHouseStyle(tx, config.languages)),
   };
+  // The job holds no item only past Cloud's 20 languages (the box saves up to 200), where an item
+  // and its head can pass 1 MiB; Cloud refuses such a job with 400 ("languages.enabled holds 1 to
+  // 20"), shown as cloud.request_invalid. The plan leaves that venue unhandled.
   let bytes = Buffer.byteLength(JSON.stringify(job));
   const sent: Record<string, string[]> = {};
   const inJob = new Set<string>();
@@ -391,7 +394,6 @@ export async function buildSuggestionJob(
     headCount += adding.length - 1;
     bytes += size;
   }
-  if (job.items.length === 0) throw new Error("the first item and its head do not fit in one job");
   return {
     body: JSON.stringify(job),
     sent,

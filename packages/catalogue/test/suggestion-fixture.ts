@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { contentLanguageChoices } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createCatalogue, createProduct } from "../src/operations.js";
 import { writeContentLanguages } from "../src/content-languages.js";
@@ -157,6 +158,36 @@ export async function suggestionRows(tx: Transaction) {
       fix: fixField === null ? null : { field: fixField, wrong: fixWrong, right: fixRight },
     })),
   );
+}
+
+/**
+ * Saves 200 languages, the most the box accepts (`writeContentLanguages`), ca still the default,
+ * and adds a product named in all of them and a variant named in all but ca. Every name is 500
+ * characters JSON writes as six bytes, so the variant and its product as context pass 1 MiB
+ * together and no job can hold the variant.
+ */
+export async function addOversizedFamily(
+  tx: Transaction,
+  menuId: string,
+): Promise<{ productId: string; variantId: string }> {
+  const others = contentLanguageChoices("en")
+    .map((choice) => choice.code)
+    .filter((code) => !["ca", "es", "en"].includes(code));
+  const languages = ["ca", "es", "en", ...others].slice(0, 200);
+  await writeContentLanguages(tx, { defaultLanguage: "ca", languages });
+  const named = Object.fromEntries(languages.map((code) => [code, "\u0001".repeat(500)]));
+  const productId = await addProduct(tx, menuId, "Wide", named);
+  const [variant] = await tx
+    .insert(products)
+    .values({
+      catalogueId: menuId,
+      parentId: productId,
+      name: "STAFF Wide glass",
+      kitchenName: "KITCHEN Wide glass",
+      customerName: { ...named, ca: "" },
+    })
+    .returning({ id: products.id });
+  return { productId, variantId: variant!.id };
 }
 
 /** `count` products named in ca and es, so each is missing en; inserted directly for speed. */

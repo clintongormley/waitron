@@ -12,6 +12,7 @@ import { storeSuggestionResults } from "./content-suggestion-store.js";
 import type { SuggestionResults } from "./content-suggestion-types.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
+  addOversizedFamily,
   addPlainProducts,
   addProduct,
   allJobs,
@@ -453,6 +454,22 @@ it("chains the next job of the run, never including an item the run already sent
     done: 2,
     failed: 1,
   });
+});
+
+it("ends the run with what it sent when the next job would hold no item", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app(async (tx) => {
+    // Under 200 languages water has gaps too, and as a product it would come before the variant.
+    await deactivateProduct(tx, venue.water);
+    await addOversizedFamily(tx, venue.menuId);
+  });
+  await store(job.id, done(translateAll(job.sent)));
+  const jobs = await app(allJobs);
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]).toMatchObject({ state: "done", runTotal: 3, done: 3, failed: 0 });
+  await app((tx) => recordSuggestionJobReleased(tx, job.id));
+  expect(await app(readSuggestionRun)).toMatchObject({ state: "done", total: 3, progress: 3 });
 });
 
 it("brings progress to the run's total across a menu over 1,000 items", async () => {

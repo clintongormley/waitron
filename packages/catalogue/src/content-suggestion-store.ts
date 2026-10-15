@@ -193,8 +193,10 @@ export async function storeSuggestionResults(
     })
     .where(eq(contentSuggestionJobs.id, jobId));
   const sent = await sentInRun(tx, job.runId);
-  // The month's spending cap stopped this job, so Cloud would refuse the next one.
-  const next = limitReached ? null : await buildSuggestionJob(tx, context, sent);
+  // The month's spending cap stopped this job, so Cloud would refuse the next one; a next job with
+  // no item would be refused too (see buildSuggestionJob).
+  const built = limitReached ? null : await buildSuggestionJob(tx, context, sent);
+  const next = built && built.included > 0 ? built : null;
   const runTotal = sent.size + (next ? Object.keys(next.sent).length + next.remaining : 0);
   if (next)
     await tx.insert(contentSuggestionJobs).values({

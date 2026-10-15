@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCategory } from "./categories.js";
 import {
@@ -19,7 +19,9 @@ import { sections } from "./schema/sections.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
-import { contentSuggestions } from "./schema/suggestions.js";
+import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
+import { startSuggestionRun } from "./content-suggestion-jobs.js";
+import { addOversizedFamily } from "../test/suggestion-fixture.js";
 import {
   buildSuggestionJob,
   collectSuggestionItems,
@@ -634,25 +636,25 @@ describe("the job's limits", () => {
     });
   });
 
-  it("refuses to build a job its first item and that item's head cannot fit in", async () => {
-    // The box saves up to 200 languages (content-languages.ts), Cloud reads at most 20; a control
-    // character takes six bytes in JSON, so 200 names of 500 make each entry about 600 KB.
-    const codes = contentLanguageChoices("en")
-      .map((choice) => choice.code)
-      .filter((code) => code !== "ca")
-      .slice(0, 199);
-    const wide = "\u0001".repeat(TEXT_LIMIT);
-    await seedTenant(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", ...codes] });
-      const menu = await createCatalogue(tx, { name: "STAFF Lunch", names: { ca: "Dinar" } });
-      const lunch = { menuId: menu.id, rootId: await rootOf(tx, menu.id) };
-      const named = Object.fromEntries(["ca", ...codes].map((code) => [code, wide]));
-      const vi = await product(tx, lunch, "Vi", named);
-      await variant(tx, lunch, vi, "Copa", { ...named, ca: "" });
-      await expect(buildSuggestionJob(tx, context, new Set())).rejects.toThrow(
-        "the first item and its head do not fit in one job",
-      );
+  it("builds a job with no item when the first item and its head pass 1 MiB, and a run start still sends it", async () => {
+    await inVenue(async (tx, lunch) => {
+      const { variantId } = await addOversizedFamily(tx, lunch.menuId);
+      const items = await collectSuggestionItems(tx, context, new Set());
+      expect(items[0]!.ref).toBe(`variant:${variantId}`);
+      const draft = await buildSuggestionJob(tx, context, new Set());
+      expect(draft).toMatchObject({ included: 0, heads: 0, remaining: items.length });
+      expect(draft!.sent).toEqual({});
+      expect(parsed(draft).items).toEqual([]);
+      expect(Buffer.byteLength(draft!.body)).toBe(draft!.bytes);
+
+      expect(await startSuggestionRun(tx, context)).toMatchObject({
+        state: "sending",
+        total: items.length,
+      });
+      const [job] = await tx.select().from(contentSuggestionJobs);
+      expect(job).toMatchObject({ state: "submitting", runTotal: items.length });
+      expect(job!.sent).toEqual({});
+      expect((JSON.parse(job!.body!) as Job).items).toEqual([]);
     });
   });
 
