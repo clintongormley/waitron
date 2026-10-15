@@ -124,11 +124,56 @@ export async function receiptLines(
   const charged = sumDecimals(lines.map(chargedAmount));
   if (placed && compareDecimal(subtractDecimal(listed, takenOff), charged) === 0) {
     return {
-      lines: lines.map((line, i) => withEntries(line, byLine.get(i))),
+      lines: withFamilies(lines, records, rowIndex).map((line, i) =>
+        withEntries(line, byLine.get(i)),
+      ),
       ...(onBill.length === 0 ? {} : { billAdjustments: onBill }),
     };
   }
   return { lines: perDish(lines) };
+}
+
+/**
+ * Marks each filed row of a dish family — the dish groups an adjustment's splits joined — with the
+ * index of the family's first row. A dish group no split joined to another is left unmarked.
+ */
+function withFamilies(
+  lines: TillSaleLine[],
+  records: readonly { splits: readonly { from: string; to: string }[] }[],
+  rowIndex: ReadonlyMap<string | undefined, number>,
+): TillSaleLine[] {
+  if (!lines.some((line) => line.net !== undefined)) return lines;
+  const first = lines.map((_, i) => i);
+  const find = (i: number): number => {
+    while (first[i] !== i) i = first[i] = first[first[i]!]!;
+    return i;
+  };
+  const join = (a: number, b: number) => {
+    const [x, y] = [find(a), find(b)];
+    first[Math.max(x, y)] = Math.min(x, y);
+  };
+  for (const { splits } of records) {
+    for (const { from, to } of splits) {
+      const [a, b] = [rowIndex.get(from), rowIndex.get(to)];
+      if (a !== undefined && b !== undefined) join(a, b);
+    }
+  }
+  const at = new Map(lines.map((line, i) => [line, i]));
+  const groups = groupByParent(lines);
+  for (const { dish, options } of groups) {
+    for (const option of options) join(at.get(dish)!, at.get(option)!);
+  }
+  const dishGroups = new Map<number, number>();
+  for (const { dish } of groups) {
+    const family = find(at.get(dish)!);
+    dishGroups.set(family, (dishGroups.get(family) ?? 0) + 1);
+  }
+  return lines.map((line, i) => {
+    const family = find(i);
+    return line.net !== undefined && dishGroups.get(family)! > 1
+      ? { ...line, dishFamily: family }
+      : line;
+  });
 }
 
 function chargedAmount(line: TillSaleLine) {

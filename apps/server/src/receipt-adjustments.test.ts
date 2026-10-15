@@ -13,7 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
-import { decimal } from "@waitron/shared";
+import { decimal, decimalToCents, sumDecimals } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { beforeVatFigures, isFiled } from "./receipt-figures.js";
@@ -95,6 +95,64 @@ function shown(receipt: Awaited<ReturnType<typeof receiptOf>>) {
     line.adjustments,
   ]);
 }
+
+/** Files the bill as a full invoice to a business, paid by card, and returns the invoice's lines. */
+async function invoiceOf(billId: string) {
+  const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+  try {
+    await inTx(venue, (tx) =>
+      tx
+        .update(tenants)
+        .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
+        .where(eq(tenants.id, 1)),
+    );
+    const [order] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, billId, {
+      revision: order!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    return await inTx(venue, async (tx) => {
+      const stored = await readStoredOrder(tx, billId);
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: `receipt-f1-family-${billId}`,
+          kind: "contribution",
+          method: "card",
+          applied: decimalToCents(sumDecimals(stored.gross.lines.map((line) => line.lineGross))),
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!
+        .lines;
+    });
+  } finally {
+    await inTx(venue, (tx) =>
+      tx
+        .update(tenants)
+        .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+        .where(eq(tenants.id, 1)),
+    );
+  }
+}
+
+/** `[name, quantity, dishFamily]` per line. */
+const families = (
+  lines: readonly { descriptions: Record<string, string>; quantity: string; dishFamily?: number }[],
+) => lines.map((line) => [line.descriptions["es-ES"], line.quantity, line.dishFamily]);
 
 describe("receiptLines", () => {
   it("keeps filed net figures with discounted and weighted F1 lines in either display order", async () => {
@@ -654,5 +712,85 @@ describe("receiptLines", () => {
       at80("1  Pan de pueblo", "2,50"),
       at80("1  Croquetas de jamón", "3,33"),
     ]);
+  });
+
+  it("marks both rows of a full invoice's line its own discount split into two prices as one family", async () => {
+    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+
+    expect(families(await invoiceOf(billId))).toEqual([
+      ["Croquetas de jamón", "2", 0],
+      ["Croquetas de jamón", "1", 0],
+    ]);
+  });
+
+  it("marks a family whose rows another dish sits between, and leaves that dish unmarked", async () => {
+    const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Burger" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    await adjust(billId, { action: "discount_percent", percentBp: 1000 });
+
+    const lines = await invoiceOf(billId);
+    expect(families(lines)).toEqual([
+      ["Croquetas de jamón", "2", 0],
+      ["Hamburguesa", "1", undefined],
+      ["Croquetas de jamón", "1", 0],
+    ]);
+    expect(lines[1]).not.toHaveProperty("dishFamily");
+  });
+
+  it("marks a family the discount on the bill split, and not a dish only its own discount touched", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Croquetas", quantity: "3" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    await adjust(billId, { action: "discount_percent", percentBp: 1000 });
+
+    const lines = await invoiceOf(billId);
+    expect(families(lines)).toEqual([
+      ["Hamburguesa", "1", undefined],
+      ["Croquetas de jamón", "2", 1],
+      ["Croquetas de jamón", "1", 1],
+    ]);
+    expect(lines[0]).not.toHaveProperty("dishFamily");
+  });
+
+  it("marks no family on a simplified receipt", async () => {
+    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    const result = await payWorkingOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "9.00" }, lines: [] },
+    );
+
+    expect(result.lines).toHaveLength(2);
+    for (const line of result.lines) expect(line).not.toHaveProperty("dishFamily");
+  });
+
+  it("marks no family when the records no longer add up to the bill", async () => {
+    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    const croquetas = await lineIdOf(venue, billId, 1);
+    await adjust(billId, { lineId: croquetas, action: "discount_percent", percentBp: 1000 });
+    await adjust(billId, { lineId: croquetas, action: "cancel", quantity: "1" });
+
+    const lines = await invoiceOf(billId);
+    expect(lines.some((line) => line.adjustments?.some((entry) => "percentBp" in entry))).toBe(
+      false,
+    );
+    for (const line of lines) expect(line).not.toHaveProperty("dishFamily");
   });
 });
