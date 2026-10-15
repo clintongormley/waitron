@@ -1,4 +1,12 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -7,7 +15,8 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
 /**
  * A module's `./dashboard` sub-path is bundled into the admin dashboard, so it must never reach
  * server-only code: a runtime import of `@waitron/db`, `hono`, `pg`, `drizzle-orm` or a `node:`
- * builtin would drag Node into the browser bundle. For each listed sub-path this scans every file
+ * builtin would drag Node into the browser bundle. For each listed sub-path (a directory, or a single
+ * `.ts` file when only that entry is browser-safe) this scans every file
  * REACHABLE from it by RELATIVE imports, including ones that leave `src/dashboard`, and forbids
  * reaching the package's own server barrel/entry (`../index.js`, `../bookings.js`).
  *
@@ -21,18 +30,23 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
 const SERVER_ENTRIES = ['from "../index.js"', 'from "../bookings.js"'];
-const SUBPATHS: Array<[string, string]> = [
-  ["@waitron/bookings", "packages/bookings/src/dashboard"],
-  ["@waitron/adjustments", "packages/adjustments/src/dashboard"],
-  ["@waitron/staffing", "packages/staffing/src/dashboard"],
+const SUBPATHS: string[] = [
+  "packages/bookings/src/dashboard",
+  "packages/adjustments/src/dashboard",
+  "packages/staffing/src/dashboard",
+  "packages/venue-service/src/dashboard/painter.ts",
 ];
 
-function tsFiles(dir: string): string[] {
+function tsFiles(path: string): string[] {
+  return statSync(path).isFile() ? [path] : walk(path);
+}
+
+function walk(dir: string): string[] {
   const out: string[] = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) out.push(...tsFiles(p));
-    else if (p.endsWith(".ts") && !p.endsWith(".test.ts")) out.push(p);
+    if (e.isDirectory()) out.push(...walk(p));
+    else if (e.isFile() && p.endsWith(".ts") && !p.endsWith(".test.ts")) out.push(p);
   }
   return out;
 }
@@ -91,11 +105,11 @@ function reachableFrom(entryFiles: string[]): string[] {
 }
 
 describe("module dashboard sub-paths import no server-only specifier", () => {
-  for (const [pkg, dir] of SUBPATHS) {
+  for (const dir of SUBPATHS) {
     const files = tsFiles(join(REPO, dir));
     const reached = reachableFrom(files);
 
-    it(`${pkg}/dashboard scans files (not vacuous)`, () => {
+    it(`${dir} scans files (not vacuous)`, () => {
       expect(files.length).toBeGreaterThan(0);
     });
 
@@ -115,7 +129,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       },
     );
 
-    it(`${pkg}/dashboard imports no sibling server entry`, () => {
+    it(`${dir} imports no sibling server entry`, () => {
       for (const f of files) {
         const text = readFileSync(f, "utf8");
         expect(text.includes('from "../index.js"'), f).toBe(false);
@@ -133,6 +147,26 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
         dependencies?: Record<string, string>;
       };
       expect(Object.keys(m.dependencies ?? {}).filter((d) => FORBIDDEN.includes(d))).toEqual([]);
+    }
+  });
+
+  it("an entry naming a .ts file scans that file alone", () => {
+    const file = join(REPO, "packages/venue-service/src/dashboard/painter.ts");
+    expect(tsFiles(file)).toEqual([file]);
+  });
+
+  it("skips a directory named like a source file, as a failing browser test's screenshots are", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-purity-dirs-"));
+    try {
+      const source = join(root, "grid.ts");
+      writeFileSync(source, "export const x = 1;\n");
+      const shots = join(root, "__screenshots__", "grid.test.ts");
+      mkdirSync(shots, { recursive: true });
+      writeFileSync(join(shots, "shot.png"), "");
+      mkdirSync(join(root, "odd.ts"));
+      expect(tsFiles(root)).toEqual([source]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

@@ -21,6 +21,7 @@ import { locationId as brandLocationId, type BusinessDayClock } from "@waitron/s
 import {
   readDayPlan,
   readServiceDayPlan,
+  readSpecialDayPlan,
   resolveDepartmentDays,
   resolveDepartmentsDays,
   resolveZoneClosedDays,
@@ -827,5 +828,117 @@ describe("special-day paint over the season", () => {
         resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2030-12-13"], CLOCK, partial),
       ),
     ).rejects.toThrow("the day plan does not cover 2030-12-13");
+  });
+});
+
+describe("readSpecialDayPlan", () => {
+  const FRIDAY = 5;
+
+  const paintStatements = <T>(call: (tx: Transaction) => Promise<T>) =>
+    scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const result = await call(tx);
+        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        return { result, texts };
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+  it("plans each of its dates by its own paint, even where another special day repeats onto one", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Winter!, {
+      [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
+    });
+    // Another special day repeating yearly onto 13 December, closed all day.
+    await specialDay(v, "2029-12-13", { repeats: true, closedAllDay: true });
+    const id = await specialDay(v, "2030-12-13", {
+      paint: { [v.departmentId]: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }] },
+      zonePaint: { [v.sala]: [{ kind: "closed", startsAt: "22:00", endsAt: "23:00" }] },
+    });
+    const [later] = await db
+      .insert(specialDayDates)
+      .values({
+        specialDayId: id,
+        locationId: v.cfg.locationId,
+        date: "2030-11-29",
+        closedAllDay: true,
+      })
+      .returning({ id: specialDayDates.id });
+    const { result: found, texts } = await paintStatements((tx) =>
+      readSpecialDayPlan(tx, v.cfg, id),
+    );
+    expect(texts.filter((text) => text.includes('"special_day_dates"'))).toHaveLength(1);
+    expect(texts.filter((text) => text.includes('"special_day_date_id" in'))).toHaveLength(1);
+    expect(found!.name).toBe("Special 2030-12-13");
+    expect(found!.dates.map((d) => [d.storedDate, d.closedAllDay])).toEqual([
+      ["2030-11-29", true],
+      ["2030-12-13", false],
+    ]);
+    expect(found!.dates[0]!.dateId).toBe(later!.id);
+    const thirteenth = found!.plan.special.get("2030-12-13")!;
+    expect(thirteenth.specialDayId).toBe(id);
+    expect(thirteenth.paint.get(v.departmentId)).toEqual([
+      { periodId: null, startsAt: "22:00", endsAt: "23:30" },
+    ]);
+    expect(thirteenth.zonePaint.get(v.sala)).toEqual([
+      { kind: "closed", startsAt: "22:00", endsAt: "23:00" },
+    ]);
+    expect(found!.plan.special.get("2030-11-29")!.paint).toEqual(new Map());
+    expect(found!.plan.seasonIdOn).toEqual(
+      new Map([
+        ["2030-11-29", v.seasons.Autumn],
+        ["2030-12-13", v.seasons.Winter],
+      ]),
+    );
+    const days = await scoped((tx) =>
+      resolveDepartmentDays(
+        tx,
+        v.cfg,
+        v.departmentId,
+        ["2030-11-29", "2030-12-13"],
+        CLOCK,
+        found!.plan,
+      ),
+    );
+    expect(days.get("2030-11-29")?.ranges).toEqual([]);
+    expect(days.get("2030-12-13")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
+    ]);
+  });
+
+  it("answers its name and no dates, reading no paint, for a special day with none", async () => {
+    const v = await venue();
+    const [day] = await db
+      .insert(specialDays)
+      .values({ locationId: v.cfg.locationId, name: "Undated" })
+      .returning({ id: specialDays.id });
+    const { result, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, v.cfg, day!.id));
+    expect(result).toEqual({
+      name: "Undated",
+      dates: [],
+      plan: { seasonIdOn: new Map(), special: new Map() },
+    });
+    expect(texts.filter((text) => text.includes('"special_day_date_id" in'))).toEqual([]);
+  });
+
+  it("plans no season for a date no season holds", async () => {
+    const v = await venue();
+    await db.delete(seasons).where(eq(seasons.locationId, v.cfg.locationId));
+    const id = await specialDay(v, "2030-12-13");
+    const found = await scoped((tx) => readSpecialDayPlan(tx, v.cfg, id));
+    expect(found!.plan.seasonIdOn).toEqual(new Map([["2030-12-13", null]]));
+  });
+
+  it("answers null for a special day it does not hold or another location's", async () => {
+    const v = await venue();
+    const other = await venue();
+    const theirs = await specialDay(other, "2030-12-13");
+    expect(await scoped((tx) => readSpecialDayPlan(tx, v.cfg, theirs))).toBeNull();
+    expect(await scoped((tx) => readSpecialDayPlan(tx, v.cfg, randomUUID()))).toBeNull();
   });
 });

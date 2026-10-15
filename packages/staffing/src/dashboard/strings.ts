@@ -74,6 +74,35 @@ const en = {
   "staffing.month.today": "Today",
   "staffing.month.closed": "Closed",
   "staffing.month.legend": "Bars: people needed per area",
+  "staffing.grid.label": "Staffing by day",
+  "staffing.grid.follows_season": "Follows the season",
+  "staffing.grid.follow_season": "Follow the season",
+  "staffing.grid.staff_role": "Staff role",
+  "staffing.grid.how_many": "How many",
+  "staffing.grid.delete": "Delete",
+  "staffing.grid.people_one": "1 person",
+  "staffing.grid.people_other": "{count} people",
+  "staffing.painter.heading": "Staffing",
+  "staffing.painter.week": "{season} week",
+  "staffing.painter.previous_season": "Previous season",
+  "staffing.painter.next_season": "Next season",
+  "staffing.painter.area": "Department or prep station",
+  "staffing.painter.departments": "Departments",
+  "staffing.painter.stations": "Prep stations",
+  "staffing.painter.paint": "Paint:",
+  "staffing.painter.new_staff_role": "+ New staff role",
+  "staffing.painter.loading": "Loading the staffing…",
+  "staffing.painter.load_error": "Could not load the staffing: {reason}",
+  "staffing.painter.refused_on": "{area}, {day}: {message}",
+  "staffing.painter.refresh_error": "Saved; could not refresh: {reason}",
+  "staffing.painter.removed_one": "{names} was removed; its changes were dropped.",
+  "staffing.painter.removed_other": "{names} were removed; their changes were dropped.",
+  "staffing.painter.no_areas": "This venue has no departments or prep stations yet.",
+  "staffing.painter.dates_removed_one":
+    "{dates} was removed from this special day; its changes were dropped.",
+  "staffing.painter.dates_removed_other":
+    "{dates} were removed from this special day; their changes were dropped.",
+  "staffing.painter.no_dates": "This special day has no dates yet.",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -141,6 +170,36 @@ const es: Record<keyof typeof en, string> = {
   "staffing.month.today": "Hoy",
   "staffing.month.closed": "Cerrado",
   "staffing.month.legend": "Barras: personas necesarias por área",
+  "staffing.grid.label": "Personal por día",
+  "staffing.grid.follows_season": "Sigue la temporada",
+  "staffing.grid.follow_season": "Seguir la temporada",
+  "staffing.grid.staff_role": "Rol de personal",
+  "staffing.grid.how_many": "Cuántas personas",
+  "staffing.grid.delete": "Eliminar",
+  "staffing.grid.people_one": "1 persona",
+  "staffing.grid.people_other": "{count} personas",
+  "staffing.painter.heading": "Personal",
+  "staffing.painter.week": "Semana de {season}",
+  "staffing.painter.previous_season": "Temporada anterior",
+  "staffing.painter.next_season": "Temporada siguiente",
+  "staffing.painter.area": "Departamento o estación de preparación",
+  "staffing.painter.departments": "Departamentos",
+  "staffing.painter.stations": "Estaciones de preparación",
+  "staffing.painter.paint": "Pintar:",
+  "staffing.painter.new_staff_role": "+ Nuevo rol de personal",
+  "staffing.painter.loading": "Cargando el personal…",
+  "staffing.painter.load_error": "No se pudo cargar el personal: {reason}",
+  "staffing.painter.refused_on": "{area}, {day}: {message}",
+  "staffing.painter.refresh_error": "Guardado; no se pudo actualizar: {reason}",
+  "staffing.painter.removed_one": "{names} se eliminó; sus cambios se descartaron.",
+  "staffing.painter.removed_other": "{names} se eliminaron; sus cambios se descartaron.",
+  "staffing.painter.no_areas":
+    "Este local aún no tiene departamentos ni estaciones de preparación.",
+  "staffing.painter.dates_removed_one":
+    "{dates} se quitó de este día especial; sus cambios se descartaron.",
+  "staffing.painter.dates_removed_other":
+    "{dates} se quitaron de este día especial; sus cambios se descartaron.",
+  "staffing.painter.no_dates": "Este día especial aún no tiene fechas.",
 };
 
 export const STAFFING_STRINGS = { en, es };
@@ -181,6 +240,12 @@ export function holderCount(count: number, locale?: string): string {
   if (count === 0) return t("staffing.role.holders_none", locale);
   if (count === 1) return t("staffing.role.holders_one", locale);
   return tf("staffing.role.holders_other", { count: String(count) }, locale);
+}
+
+/** How many people a staffing block needs, in words. */
+export function peopleNeeded(count: number, locale?: string): string {
+  if (count === 1) return t("staffing.grid.people_one", locale);
+  return tf("staffing.grid.people_other", { count: String(count) }, locale);
 }
 
 const COLOUR_NAMES: NameTable = {

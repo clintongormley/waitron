@@ -80,7 +80,12 @@ export {
 
 export { serviceDayContext } from "./service-day-context.js";
 
-export { readDayPlan, type DayPlan } from "./day-resolver.js";
+export {
+  readDayPlan,
+  readSpecialDayPlan,
+  resolveDepartmentsDays,
+  type DayPlan,
+} from "./day-resolver.js";
 export { readSeasons } from "./seasons.js";
 export type { Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";

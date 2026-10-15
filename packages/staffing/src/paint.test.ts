@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  catalogues,
   kitchenStations,
   locations,
   withTransaction,
@@ -16,6 +17,7 @@ import {
   departmentDayRanges,
   departmentDays,
   departments,
+  menuPeriods,
   seasons,
   specialDayDates,
   specialDays,
@@ -281,6 +283,31 @@ describe("season staffing", () => {
       [`station:${v.stationId}`]: emptyWeek(),
     });
   });
+
+  it("carries the location's changeover and every season at the location, by start", async () => {
+    const v = await venue();
+    const other = await venue();
+    const [winter] = await inTx(async (tx) => {
+      await tx
+        .update(locations)
+        .set({ dayCutover: "03:00:00" })
+        .where(eq(locations.id, v.cfg.locationId));
+      return tx
+        .insert(seasons)
+        .values({ locationId: v.cfg.locationId, name: "Winter", startsOn: "01-15" })
+        .returning({ id: seasons.id });
+    });
+    const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+    expect(read.cutover).toBe("03:00");
+    expect(read.seasons).toEqual([
+      { id: winter!.id, name: "Winter", startsOn: "01-15" },
+      { id: v.seasonId, name: "Summer", startsOn: "06-01" },
+    ]);
+    expect(read.seasons.map((s) => s.id)).not.toContain(other.seasonId);
+    expect((await inTx((tx) => readSeasonStaffing(tx, v.cfg, winter!.id))).seasons).toEqual(
+      read.seasons,
+    );
+  });
 });
 
 describe("special-day staffing", () => {
@@ -292,7 +319,15 @@ describe("special-day staffing", () => {
         { area: grill(v), dateId: v.aug14, blocks: [] },
       ]),
     );
+    const noGuide = { [v.aug14]: [], [v.aug15]: [] };
     expect(await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId))).toEqual({
+      cutover: "06:00",
+      name: "Fiesta",
+      guides: {
+        [`department:${v.departmentId}`]: noGuide,
+        [`station:${v.passId}`]: noGuide,
+        [`station:${v.stationId}`]: noGuide,
+      },
       areas: [
         {
           area: dept(v),
@@ -320,6 +355,134 @@ describe("special-day staffing", () => {
         },
       ],
     });
+  });
+
+  it("guides each department per date with its hours that day, none on a date closed all day", async () => {
+    const v = await venue();
+    await inTx(async (tx) => {
+      const menuId = randomUUID();
+      await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+      const [period] = await tx
+        .insert(menuPeriods)
+        .values({ departmentId: v.departmentId, menuId, name: "Service" })
+        .returning({ id: menuPeriods.id });
+      const paint = async (
+        values: typeof departmentDays.$inferInsert,
+        ranges: [periodId: string | null, startsAt: string, endsAt: string][],
+      ) => {
+        const [day] = await tx
+          .insert(departmentDays)
+          .values(values)
+          .returning({ id: departmentDays.id });
+        for (const [periodId, startsAt, endsAt] of ranges)
+          await tx
+            .insert(departmentDayRanges)
+            .values({ dayId: day!.id, departmentId: v.departmentId, periodId, startsAt, endsAt });
+      };
+      // 2026-08-14 is a Friday (5) and 2026-08-15 a Saturday (6).
+      await paint({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 }, [
+        [period!.id, "19:00:00", "23:30:00"],
+      ]);
+      await paint({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 6 }, [
+        [period!.id, "12:00:00", "16:00:00"],
+      ]);
+      // The special day opens a lunch and closes the season's last hour and a half.
+      await paint({ departmentId: v.departmentId, specialDayDateId: v.aug14 }, [
+        [period!.id, "12:00:00", "14:00:00"],
+        [null, "22:00:00", "23:30:00"],
+      ]);
+      await tx
+        .update(specialDayDates)
+        .set({ closedAllDay: true })
+        .where(eq(specialDayDates.id, v.aug15));
+    });
+    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+    expect(guides).toEqual({
+      [`department:${v.departmentId}`]: {
+        [v.aug14]: [
+          { startsAt: "12:00", endsAt: "14:00" },
+          { startsAt: "19:00", endsAt: "22:00" },
+        ],
+        [v.aug15]: [],
+      },
+      [`station:${v.passId}`]: { [v.aug14]: [], [v.aug15]: [] },
+      [`station:${v.stationId}`]: { [v.aug14]: [], [v.aug15]: [] },
+    });
+  });
+
+  it("carries the location's changeover", async () => {
+    const v = await venue();
+    await inTx((tx) =>
+      tx
+        .update(locations)
+        .set({ dayCutover: "04:30:00" })
+        .where(eq(locations.id, v.cfg.locationId)),
+    );
+    expect((await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId))).cutover).toBe(
+      "04:30",
+    );
+  });
+
+  it("guides a date by this special day's own hours when another special day repeats onto it", async () => {
+    const v = await venue();
+    await inTx(async (tx) => {
+      const menuId = randomUUID();
+      await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+      const [period] = await tx
+        .insert(menuPeriods)
+        .values({ departmentId: v.departmentId, menuId, name: "Service" })
+        .returning({ id: menuPeriods.id });
+      const [day] = await tx
+        .insert(departmentDays)
+        .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 })
+        .returning({ id: departmentDays.id });
+      await tx.insert(departmentDayRanges).values({
+        dayId: day!.id,
+        departmentId: v.departmentId,
+        periodId: period!.id,
+        startsAt: "19:00:00",
+        endsAt: "23:30:00",
+      });
+      const [feria] = await tx
+        .insert(specialDays)
+        .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
+        .returning({ id: specialDays.id });
+      await tx.insert(specialDayDates).values({
+        specialDayId: feria!.id,
+        locationId: v.cfg.locationId,
+        date: "2025-08-14",
+        closedAllDay: true,
+      });
+    });
+    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+    expect(guides[`department:${v.departmentId}`]![v.aug14]).toEqual([
+      { startsAt: "19:00", endsAt: "23:30" },
+    ]);
+  });
+
+  it("reads the special day, its dates and its staffing once, joins included", async () => {
+    const v = await venue();
+    const tables = await inTx(async (tx) => {
+      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+        .session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        await readSpecialDayStaffing(tx, v.cfg, v.specialDayId);
+        return prepared.mock.calls.flatMap((call) =>
+          [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
+            (match) => match[1]!,
+          ),
+        );
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    for (const table of ["special_days", "special_day_dates", "staffing_days"])
+      expect(tables.filter((read) => read === table)).toHaveLength(1);
+    // The season's week is read apart from the special day's own paint.
+    expect(new Set(tables.filter((table, i) => tables.indexOf(table) !== i))).toEqual(
+      new Set(["seasons", "department_days", "department_day_ranges"]),
+    );
   });
 
   it("removes a date's row for null blocks and keeps an empty row for []", async () => {

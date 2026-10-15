@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { StaffingMonth } from "../staffing-types.js";
@@ -8,6 +8,7 @@ import "./staffing-month.js";
 import { fakeApi, staffingMonth } from "../testing/staffing-month-fixture.js";
 
 const frames: HTMLElement[] = [];
+beforeEach(() => setLocale("en"));
 afterEach(() => {
   for (const frame of frames.splice(0)) frame.remove();
   setLocale("en");
@@ -18,6 +19,7 @@ interface Options {
   params?: Record<string, string>;
   api?: StaffingApi;
   width?: string;
+  canWrite?: boolean;
 }
 
 async function mount(options: Options = {}) {
@@ -32,6 +34,7 @@ async function mount(options: Options = {}) {
   el.month = options.month ?? "2026-12";
   el.params = options.params ?? { month: el.month };
   el.open = open;
+  el.canWrite = options.canWrite ?? false;
   frame.append(el);
   await settled(el);
   return { el, open };
@@ -102,18 +105,27 @@ describe("the Staffing view's month", () => {
     expect(cell(el, "2026-12-23").querySelector("[data-test=special]")).toBeNull();
   });
 
-  it("shows the month's seasons as chips, in display only", async () => {
-    const { el } = await mount();
+  it("shows the month's seasons as chips, each opening its season's week even for a person who may only look", async () => {
+    const { el, open } = await mount();
     const chips = [...root(el).querySelectorAll<HTMLElement>("[data-test=season]")];
     expect(chips.map((chip) => chip.textContent!.replace(/\s+/g, " ").trim())).toEqual([
       "Autumn · 1 Sept – 30 Nov",
       "Winter · 1 Dec – 28 Feb",
     ]);
     expect(chips.map((chip) => chip.dataset.tint)).toEqual(["1", "2"]);
-    expect(root(el).querySelector("[data-test=seasons] button")).toBeNull();
+    chips[1]!.querySelector("button")!.click();
+    expect(open).toHaveBeenCalledWith("staffing", {
+      month: "2026-12",
+      painter: "season",
+      season: "winter",
+    });
     expect(cell(el, "2026-11-30").dataset.tint).toBe("1");
     expect(cell(el, "2026-12-01").dataset.tint).toBe("2");
-    expect(root(el).querySelector("td button")).toBeNull();
+    expect(
+      [...root(el).querySelectorAll("td button")].map(
+        (button) => button.closest("td")!.dataset.date,
+      ),
+    ).toEqual(["2026-12-24"]);
   });
 
   it("filters the days to one area, kept in the address, and back to every area", async () => {
@@ -313,12 +325,36 @@ describe("the Staffing view's month", () => {
     liveData.clear();
   });
 
-  it("reads the same whether or not the person may write", async () => {
+  it("reads the same whether or not the person may write, a season day only becoming a button for a person who may write", async () => {
     const { el } = await mount();
-    const before = root(el).querySelector("table")!.outerHTML;
+    const markup = (node: Element, part: "outerHTML" | "innerHTML") =>
+      node[part].replace(/<!--[^]*?-->/g, "");
+    const drawn = () => {
+      const table = root(el).querySelector("table")!;
+      return {
+        head: markup(table.querySelector("thead")!, "outerHTML"),
+        cells: [...table.querySelectorAll("tbody td")].map((td) => {
+          const day = td.querySelector<HTMLElement>(".day")!;
+          return {
+            attributes: [...td.attributes].map(({ name, value }) => `${name}=${value}`),
+            label: day.getAttribute("aria-label"),
+            current: day.getAttribute("aria-current"),
+            body: markup(day, "innerHTML"),
+            bars: [...day.querySelectorAll<HTMLElement>("[data-test=bar]")].map((bar) => [
+              bar.style.getPropertyValue("--share"),
+              bar.hasAttribute("data-none"),
+            ]),
+          };
+        }),
+      };
+    };
+    const before = drawn();
+    expect(before.cells.some(({ current }) => current === "date")).toBe(true);
+    expect(cell(el, "2026-12-02").querySelector("button.day")).toBeNull();
     el.canWrite = true;
     await settled(el);
-    expect(root(el).querySelector("table")!.outerHTML).toBe(before);
+    expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
+    expect(drawn()).toEqual(before);
   });
 
   it("speaks Spanish", async () => {
@@ -432,5 +468,265 @@ describe("the Staffing view's month", () => {
     await settled(el);
     expect(picker(el)).not.toBeNull();
     expect(cell(el, "2027-01-05")).not.toBeNull();
+  });
+
+  describe("opening the season painter", () => {
+    const dayButton = (el: StaffingMonthView, date: string) =>
+      cell(el, date).querySelector<HTMLButtonElement>("button.day");
+
+    it("makes each season day a button for a person who may write, opening its season", async () => {
+      const { el, open } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "department:dep-bar", week: "2026-11-30" },
+      });
+      const day = dayButton(el, "2026-12-04")!;
+      expect(day.getAttribute("aria-label")).toBe("Friday 4 December, Bar 2");
+      expect(lines(el, "2026-12-04")).toEqual(["Bar 2"]);
+      day.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "season",
+        season: "winter",
+      });
+      dayButton(el, "2026-11-30")!.click();
+      expect(open).toHaveBeenLastCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "season",
+        season: "autumn",
+      });
+    });
+
+    it("keeps a day no season holds as a plain day", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        read.days[1] = { ...read.days[1]!, seasonId: null };
+        return read;
+      });
+      const { el } = await mount({ api, canWrite: true });
+      expect(dayButton(el, "2026-12-24")).not.toBeNull();
+      expect(cell(el, "2026-12-24").querySelector(".day[role=group]")).toBeNull();
+      expect(dayButton(el, "2026-12-01")).toBeNull();
+      expect(cell(el, "2026-12-01").querySelector(".day[role=group]")).not.toBeNull();
+      expect(dayButton(el, "2026-12-02")).not.toBeNull();
+    });
+
+    it("makes a special day a button for a person who may write, opening its special day, whatever season holds it", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const eve = read.days.findIndex(({ date }) => date === "2026-12-24");
+        read.days[eve] = { ...read.days[eve]!, seasonId: null };
+        return read;
+      });
+      const { el, open } = await mount({
+        api,
+        canWrite: true,
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      const day = dayButton(el, "2026-12-24")!;
+      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
+      expect(day.querySelector("[data-test=special]")!.textContent).toBe("Christmas Eve");
+      day.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
+    });
+
+    it("names a day button by its date, special day, closing, Today and each shown area's number", async () => {
+      const { el } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      expect(dayButton(el, "2026-12-24")!.getAttribute("aria-label")).toBe(
+        "Thursday 24 December, Christmas Eve, Bar 2",
+      );
+      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
+        "Wednesday 2 December, Today, Bar 2",
+      );
+      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
+        "Monday 7 December, Closed",
+      );
+      const { el: every } = await mount({ canWrite: true });
+      expect(dayButton(every, "2026-12-24")!.getAttribute("aria-label")).toBe(
+        "Thursday 24 December, Christmas Eve, Restaurant 6, Bar 2, Kitchen 4",
+      );
+    });
+
+    it("names a day button in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "station:st-kitchen" },
+      });
+      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
+        "miércoles, 2 de diciembre, Hoy, Kitchen 4",
+      );
+      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
+        "lunes, 7 de diciembre, Cerrado",
+      );
+    });
+
+    it("opens a special day without an area when the month shows every area", async () => {
+      const { el, open } = await mount({ canWrite: true });
+      dayButton(el, "2026-12-24")!.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
+    });
+
+    it("draws a day button for a person who may only look only on a special day", async () => {
+      const { el } = await mount();
+      expect(
+        [...root(el).querySelectorAll("td button")].map(
+          (button) => button.closest("td")!.dataset.date,
+        ),
+      ).toEqual(["2026-12-24"]);
+    });
+
+    it("opens a special day's staffing from its date for a person who may only look", async () => {
+      const { el, open } = await mount({
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      const day = dayButton(el, "2026-12-24")!;
+      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
+      expect(day.tabIndex).toBe(0);
+      day.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
+    });
+
+    it("opens a season from its chip, keeping the month and area", async () => {
+      const { el, open } = await mount({
+        canWrite: true,
+        params: { month: "2026-12", area: "station:st-kitchen" },
+      });
+      const chips = [...root(el).querySelectorAll<HTMLButtonElement>("[data-test=season] button")];
+      expect(chips.map((chip) => chip.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+        "Autumn · 1 Sept – 30 Nov",
+        "Winter · 1 Dec – 28 Feb",
+      ]);
+      chips[0]!.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "station:st-kitchen",
+        painter: "season",
+        season: "autumn",
+      });
+    });
+
+    it("opens a season without an area when the month shows every area", async () => {
+      const { el, open } = await mount({ canWrite: true });
+      root(el).querySelector<HTMLButtonElement>("[data-test=season] button")!.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        painter: "season",
+        season: "autumn",
+      });
+    });
+
+    it("gives the days one Tab stop, today, and moves it with the arrow keys past plain days", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const day = read.days.findIndex(({ date }) => date === "2026-12-25");
+        read.days[day] = { ...read.days[day]!, seasonId: null };
+        return read;
+      });
+      const { el } = await mount({ api, canWrite: true });
+      const stops = [...root(el).querySelectorAll<HTMLButtonElement>("button.day")].filter(
+        (button) => button.tabIndex === 0,
+      );
+      expect(stops.map((button) => button.closest("td")!.dataset.date)).toEqual(["2026-12-02"]);
+      const press = async (date: string, key: string) => {
+        dayButton(el, date)!.focus();
+        dayButton(el, date)!.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, composed: true }),
+        );
+        await settled(el);
+        return el.shadowRoot!.activeElement?.closest("td")?.dataset.date;
+      };
+      expect(await press("2026-12-02", "ArrowRight")).toBe("2026-12-03");
+      expect(dayButton(el, "2026-12-03")!.tabIndex).toBe(0);
+      expect(dayButton(el, "2026-12-02")!.tabIndex).toBe(-1);
+      expect(await press("2026-12-03", "ArrowLeft")).toBe("2026-12-02");
+      expect(await press("2026-12-02", "ArrowDown")).toBe("2026-12-09");
+      expect(await press("2026-12-09", "ArrowUp")).toBe("2026-12-02");
+      expect(await press("2026-12-23", "ArrowRight")).toBe("2026-12-24");
+      expect(await press("2026-12-24", "ArrowRight")).toBe("2026-12-26");
+      expect(await press("2026-12-17", "ArrowDown")).toBe("2026-12-24");
+      expect(await press("2026-12-18", "ArrowDown")).toBe("2027-01-01");
+      expect(await press("2027-01-03", "ArrowRight")).toBe("2027-01-03");
+      expect(await press("2026-11-30", "ArrowUp")).toBe("2026-11-30");
+      expect(await press("2026-12-02", "Enter")).toBe("2026-12-02");
+    });
+
+    it("puts the Tab stop on the month's first day when today is not shown", async () => {
+      const { api } = fakeApi(async (month) => ({ ...staffingMonth(month), today: null }));
+      const { el } = await mount({ api, canWrite: true });
+      expect(
+        root(el).querySelector<HTMLButtonElement>("button.day[tabindex='0']")!.closest("td")!
+          .dataset.date,
+      ).toBe("2026-12-01");
+    });
+
+    it("puts a person who may only look's Tab stop on a special day shown from the next month when the month has none", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        read.days = read.days.map((day) => ({
+          ...day,
+          specialDay:
+            day.date === "2027-01-01" ? { id: "sd-new-year", name: "New Year's Day" } : null,
+        }));
+        return read;
+      });
+      const { el } = await mount({ api });
+      const buttons = [...root(el).querySelectorAll<HTMLButtonElement>("button.day")];
+      expect(
+        buttons.map((button) => [button.closest("td")!.dataset.date, button.tabIndex]),
+      ).toEqual([["2027-01-01", 0]]);
+    });
+
+    it("leaves the painter's words behind when the month or area changes", async () => {
+      const { el, open } = await mount({
+        canWrite: true,
+        params: {
+          month: "2026-12",
+          area: "department:dep-bar",
+          painter: "season",
+          season: "winter",
+          "special-day": "sd-eve",
+        },
+      });
+      press(el, "next-month");
+      expect(open).toHaveBeenLastCalledWith("staffing", {
+        month: "2027-01",
+        area: "department:dep-bar",
+      });
+      picker(el).dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "all" }, bubbles: true, composed: true }),
+      );
+      expect(open).toHaveBeenLastCalledWith("staffing", { month: "2026-12" });
+    });
+
+    it("fits a phone's width with its day buttons", async () => {
+      const { el } = await mount({ width: "390px", canWrite: true });
+      expect(el.scrollWidth).toBeLessThanOrEqual(390);
+      for (const part of root(el).querySelectorAll<HTMLElement>("table, .head, .sub, .day"))
+        expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
+          el.parentElement!.getBoundingClientRect().right + 0.5,
+        );
+      const button = dayButton(el, "2026-12-02")!.getBoundingClientRect();
+      const td = cell(el, "2026-12-02").getBoundingClientRect();
+      expect(button.width).toBeCloseTo(td.width, 0);
+    });
   });
 });

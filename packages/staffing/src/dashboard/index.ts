@@ -1,9 +1,11 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { StaffingApi } from "./client.js";
 import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 import "./staffing-month.js";
+import "./staffing-season-painter.js";
+import "./staffing-special-day-painter.js";
 
 export const STAFFING_DASHBOARD: DashboardContribution = {
   module: "staffing",
@@ -27,12 +29,33 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
         return {
           render: () =>
             html`<staffing-month
-              .api=${api}
-              .month=${host.month}
-              .params=${host.params}
-              .canWrite=${host.canWrite}
-              .open=${host.open}
-            ></staffing-month>`,
+                .api=${api}
+                .month=${host.month}
+                .params=${host.params}
+                .canWrite=${host.canWrite}
+                .open=${host.open}
+              ></staffing-month
+              >${
+                host.params.painter === "season" && host.params.season
+                  ? html`<staffing-season-painter
+                      .api=${api}
+                      .seasonId=${host.params.season}
+                      .area=${host.params.area ?? ""}
+                      .month=${host.month}
+                      .readOnly=${!host.canWrite}
+                      .open=${host.open}
+                    ></staffing-season-painter>`
+                  : host.params.painter === "special-day" && host.params["special-day"]
+                    ? html`<staffing-special-day-painter
+                        .api=${api}
+                        .specialDayId=${host.params["special-day"]}
+                        .area=${host.params.area ?? ""}
+                        .month=${host.month}
+                        .readOnly=${!host.canWrite}
+                        .open=${host.open}
+                      ></staffing-special-day-painter>`
+                    : nothing
+              }`,
         };
       },
     },

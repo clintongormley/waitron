@@ -4,7 +4,11 @@ import type { CalendarViewHost, DashboardRequest } from "@waitron/dashboard-kit"
 import { STAFFING_DASHBOARD } from "./index.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
 import type { StaffingMonthView } from "./staffing-month.js";
+import type { StaffingSeasonPainter } from "./staffing-season-painter.js";
+import type { StaffingSpecialDayPainter } from "./staffing-special-day-painter.js";
 import { staffingMonth } from "../testing/staffing-month-fixture.js";
+import { seasonStaffing } from "../testing/season-staffing-fixture.js";
+import { specialDayStaffing } from "../testing/special-day-staffing-fixture.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {
@@ -107,5 +111,143 @@ describe("STAFFING_DASHBOARD", () => {
         { passive: true },
       ),
     );
+  });
+
+  it("draws the season painter beside the month when the address names one", async () => {
+    const view = STAFFING_DASHBOARD.calendarViews![0]!;
+    const request = vi.fn(async (path: string) =>
+      path.includes("/month?")
+        ? staffingMonth(path.slice(-7))
+        : path.includes("/seasons/")
+          ? seasonStaffing()
+          : path.includes("/special-days/")
+            ? specialDayStaffing()
+            : { staffRoles: [] },
+    );
+    const opened = vi.fn();
+    const address = {
+      params: { month: "2026-12", area: "station:st-kitchen" } as Record<string, string>,
+      canWrite: true,
+    };
+    const host: CalendarViewHost = {
+      month: "2026-12",
+      get params() {
+        return address.params;
+      },
+      get canWrite() {
+        return address.canWrite;
+      },
+      open: opened,
+    };
+    const handle = view.create({ request: request as unknown as DashboardRequest }, host);
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(false), container);
+    expect(container.querySelector("staffing-season-painter")).toBeNull();
+
+    address.params = { ...address.params, painter: "season", season: "winter" };
+    render(handle.render(false), container);
+    const painter = container.querySelector<StaffingSeasonPainter>("staffing-season-painter")!;
+    expect(container.querySelector("staffing-month")).not.toBeNull();
+    expect(painter.seasonId).toBe("winter");
+    expect(painter.area).toBe("station:st-kitchen");
+    expect(painter.month).toBe("2026-12");
+    expect(painter.readOnly).toBe(false);
+    painter.open("staffing", { month: "2026-12" });
+    expect(opened).toHaveBeenCalledWith("staffing", { month: "2026-12" });
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/management-api/staffing/seasons/winter",
+        "GET",
+        undefined,
+        { passive: true },
+      ),
+    );
+
+    address.canWrite = false;
+    render(handle.render(false), container);
+    expect(painter.readOnly).toBe(true);
+
+    address.params = { month: "2026-12", painter: "season", season: "winter" };
+    render(handle.render(false), container);
+    expect(painter.area).toBe("");
+
+    address.params = { month: "2026-12", painter: "season" };
+    render(handle.render(false), container);
+    expect(container.querySelector("staffing-season-painter")).toBeNull();
+    address.params = { month: "2026-12", painter: "special-day", "special-day": "sd-eve" };
+    render(handle.render(false), container);
+    expect(container.querySelector("staffing-season-painter")).toBeNull();
+  });
+
+  it("draws the special-day painter beside the month when the address names one", async () => {
+    const view = STAFFING_DASHBOARD.calendarViews![0]!;
+    const request = vi.fn(async (path: string) =>
+      path.includes("/month?")
+        ? staffingMonth(path.slice(-7))
+        : path.includes("/special-days/")
+          ? specialDayStaffing()
+          : { staffRoles: [] },
+    );
+    const opened = vi.fn();
+    const address = {
+      params: {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      } as Record<string, string>,
+      canWrite: true,
+    };
+    const host: CalendarViewHost = {
+      month: "2026-12",
+      get params() {
+        return address.params;
+      },
+      get canWrite() {
+        return address.canWrite;
+      },
+      open: opened,
+    };
+    const handle = view.create({ request: request as unknown as DashboardRequest }, host);
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(false), container);
+    const painter = container.querySelector<StaffingSpecialDayPainter>(
+      "staffing-special-day-painter",
+    )!;
+    expect(container.querySelector("staffing-month")).not.toBeNull();
+    expect(container.querySelector("staffing-season-painter")).toBeNull();
+    expect(painter.specialDayId).toBe("sd-eve");
+    expect(painter.area).toBe("department:dep-bar");
+    expect(painter.month).toBe("2026-12");
+    expect(painter.readOnly).toBe(false);
+    painter.open("staffing", { month: "2026-12" });
+    expect(opened).toHaveBeenCalledWith("staffing", { month: "2026-12" });
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/management-api/staffing/special-days/sd-eve",
+        "GET",
+        undefined,
+        { passive: true },
+      ),
+    );
+
+    address.canWrite = false;
+    render(handle.render(false), container);
+    expect(painter.readOnly).toBe(true);
+
+    address.params = { month: "2026-12", painter: "special-day", "special-day": "sd-eve" };
+    render(handle.render(false), container);
+    expect(painter.area).toBe("");
+
+    address.params = { month: "2026-12", painter: "special-day" };
+    render(handle.render(false), container);
+    expect(container.querySelector("staffing-special-day-painter")).toBeNull();
+    address.params = { month: "2026-12", painter: "season", "special-day": "sd-eve" };
+    render(handle.render(false), container);
+    expect(container.querySelector("staffing-special-day-painter")).toBeNull();
   });
 });

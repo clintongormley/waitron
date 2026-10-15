@@ -51,6 +51,13 @@ const states: Record<string, () => Promise<void>> = {
     }));
     expect(root(el).querySelector("[data-test=area-line]")).toBeNull();
   },
+  "a month a person may write to": async () => {
+    const el = await view();
+    el.canWrite = true;
+    await el.updateComplete;
+    expect(root(el).querySelector("button.day")).not.toBeNull();
+    expect(root(el).querySelector("[data-test=season] button")).not.toBeNull();
+  },
   "a read failure": async () => {
     const el = await view(() => Promise.reject({ code: "connection.failed" }));
     expect(root(el).querySelector("[data-test=load-error]")).not.toBeNull();

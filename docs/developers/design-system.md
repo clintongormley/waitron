@@ -2044,6 +2044,27 @@ when it is one. Delete asks first, saying
 so when the day repeats every year, and closes the painter. A venue viewer gets the painter
 read-only: no paint row, no Delete, and nothing in the panel or grid changes.
 
+The staffing painters (`staffing-season-painter.ts` and `staffing-special-day-painter.ts`, under
+`packages/staffing/src/dashboard/`) paint how many people of each staff role a department or prep
+station needs, in the same frame, on a staffing grid (`staffing-grid.ts`) built from the parts
+venue-service exports from `@waitron/venue-service/painter`. The season painter's bar holds ✕, the
+heading "<season> week", ‹ the season chip ›, a department-or-prep-station picker, and Cancel and
+Save, over a column per weekday. The special-day painter's bar holds ✕, the special day's name, the
+picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
++ New staff role, which opens the staff-role dialog and chooses the role it saves, and How many,
+from 1 to 50. Dragging down a column adds a block of the chosen role and number, dragging a block's
+top or bottom edge resizes it, and clicking a block offers another staff role, How many and Delete.
+Each column's ⋮ offers Copy to… and Clear; in the special-day painter it also offers Follow the
+season, and a date that follows the season reads "Follows the season". A department's opening hours
+are drawn faintly behind each column; a prep station's column has none. One draft holds every area,
+so the picker keeps edits; Save stays quiet until the draft changes and sends only the days that
+differ from what is saved. The staffing is read when the painter opens, when ‹ › step, and after
+each save, never on a live change; the staff roles follow live changes. After a save, each day not
+edited since takes what was read; an area or date that is gone drops its edits and says so beside
+Save. A refusal that names one edit switches the picker to its area, marks that day's heading and
+is told beside Save. A person who may only look gets no Cancel or Save, no paint row, and a grid
+that does not change.
+
 A form that saves opens with its primary action (Save, Add…) disabled and drawn
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
 `primary`; undoing the change back to the opened values makes it quiet and disabled again (owner
@@ -2177,6 +2198,9 @@ and nothing guards it across screens:
   `*.unsaved.test.ts`;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
   Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
+- A585-4: the season and special-day staffing painters
+  (`packages/staffing/src/dashboard/staffing-season-painter.ts` and
+  `staffing-special-day-painter.ts`). Each has a sibling `*.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
@@ -3703,8 +3727,16 @@ hours' month carries that month into its address. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
 covering a month; each day lists the areas with a bar whose width is the area's share of the
 month's largest number, and the number. ‹ › step months, a Show picker offers All areas or one area
-(kept in the address as `area`), the season chips are a key only, and a day closed all day reads
-Closed. Below 560 px of width each bar sits above its label.
+(kept in the address as `area`), and a day closed all day reads Closed. Each season chip is a
+button that opens that season's staffing painter (Forms above). For a person who may write, each
+day a season or special day holds is a button that opens the special day's staffing painter, or
+else its season's; for a person who may only look, only a special day's date is a button, and the
+other days are plain. The arrow keys move between the day buttons. Below 560 px of width each bar
+sits above its label. The staffing painters have their own addresses:
+`/view/staffing[/month/<yyyy-mm>][/area/<area>]/painter/season/season/<id>` and
+`…/painter/special-day/special-day/<id>`; the month opens them with its own month, and with the
+area in its own address. Each opens over the month, and closing it returns to the month and
+area in its address.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season

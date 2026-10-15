@@ -11,7 +11,7 @@ import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import { rangeSpan, serviceMomentAt, type ClosedRange, type ServiceRange } from "./service-day.js";
-import { specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
+import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
 export interface ResolvedDepartmentDay {
   businessDay: LocalDate;
@@ -43,6 +43,30 @@ export async function readDayPlan(
   return {
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
     special: await specialDaysOn(tx, cfg, businessDays, place),
+  };
+}
+
+/** A special day's name, its dates, and the plan of its stored dates, each date standing for this
+ *  special day alone, whatever another repeating one would put there; null when the location has
+ *  no such special day. */
+export async function readSpecialDayPlan(
+  tx: Transaction,
+  cfg: VenueScope,
+  specialDayId: string,
+): Promise<{ name: string; dates: SpecialDayOccurrence[]; plan: DayPlan } | null> {
+  const found = await specialDayOccurrences(tx, cfg, specialDayId);
+  if (found === null) return null;
+  const seasons = await readSeasons(tx, cfg);
+  const dates = found.occurrences;
+  return {
+    name: found.name,
+    dates,
+    plan: {
+      seasonIdOn: new Map(
+        dates.map((d) => [d.storedDate, seasonOn(seasons, d.storedDate)?.id ?? null]),
+      ),
+      special: new Map(dates.map((d) => [d.storedDate, d])),
+    },
   };
 }
 

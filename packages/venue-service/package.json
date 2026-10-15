@@ -12,6 +12,7 @@
     "./holiday-types": "./src/holiday-types.ts",
     "./dashboard/season-tint": "./src/dashboard/season-tint.ts",
     "./dashboard/live-queries": "./src/dashboard/live-queries.ts",
+    "./painter": "./src/dashboard/painter.ts",
     "./testing/zone-menus.js": "./src/testing/zone-menus.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },

@@ -105,3 +105,52 @@ The command was `pnpm --filter @waitron/workforce exec vitest run
 src/zz-read-performance-probe.test.ts --reporter=verbose` in an independently installed disposable
 checkout; the probe and log are retained with PR #1638’s review receipts. Optimise the remaining period paths with their cross-window
 and frozen-history assertions intact; do not replace them with a bare event-time filter.
+
+## A708. Special-day staffing on a date with its own changeover
+
+The special-day staffing painter draws every date's column, and the blocks in it, on the read's one
+`cutover`, which `readSpecialDayStaffing` (`packages/staffing/src/paint.ts`) takes from
+`clock.dayCutover`: the location's baseline changeover, not necessarily the one in force on each
+date. Each date's opening hours behind the paint (`resolveDepartmentsDays`) and the month's slot
+count (`slotsForDay` in `packages/staffing/src/month.ts`, given `day.dayCutover`) use that date's
+own changeover. So when a changeover change is scheduled, a block can be drawn longer than the
+slots it produces: A585-4's review reported a 02:00–04:00 block drawn as 120 minutes against 60 in
+slots, on a date with a 03:00 changeover and a 06:00 baseline. Opening hours' special-day painter
+draws from the first date's changeover and says so when the dates' changeovers differ. Needs a
+decision on how one grid with one time ruler shows dates with different changeovers. Left open by
+A585-4.
+
+## A710. Staffing painter polish
+
+Found by A585-4's look at both painters and its review:
+
+- The staffing paint row has no "Drag down a day to paint…" hint; Opening hours' paint row has one
+  (`painter.hint`, `packages/venue-service/src/dashboard/paint-row.ts`).
+- "+ New staff role" opens the staff-role dialog titled "Add staff role" with a Save button; the
+  period dialog opened from Opening hours' painter says "Add and paint with it".
+- A block shorter than about 45 minutes shows no text.
+- An editable block has no hover tooltip; a read-only one has its full name as `title`
+  (`staffing-grid.ts`).
+- The block menu's How many ignores a value outside 1–50, while the paint row's How many puts it
+  back within 1–50. Two tests pin the two rules: "How many changes the block's headcount, within 1
+  to 50, and keeps the menu open" (`staffing-grid.test.ts`) and "puts How many back to the number
+  it paints when it is given one it cannot use…" (`staffing-season-painter.test.ts`).
+- In the Staffing month, a focused day's ring and today's frame look alike.
+
+Left open by A585-4.
+
+## A711. Shared staffing painter code
+
+- `staffing-season-painter.ts` and `staffing-special-day-painter.ts` (under
+  `packages/staffing/src/dashboard/`) repeat the same lifecycle: the read and its re-read after a
+  save, the draft scope, Save and its refusal, the area picker and the staff-role dialog wiring. A
+  shared base class or controller could hold it.
+- Copied from venue-service rather than exported from `@waitron/venue-service/painter`: the season
+  ‹ › stepper and its CSS; the staffing paint row's markup, which relies on `paintRowStyles`' class
+  names; and the `--paint-grid-fill` height (staffing's `painter-parts.ts`, and venue-service's
+  `season-painter.ts` and `special-day-painter.ts`), whose sum depends on the height of the grid's
+  heading row.
+- The special-day painter takes its list of dates from the read's first area, as no top-level list
+  exists in `SpecialDayStaffing`.
+
+Left open by A585-4.
