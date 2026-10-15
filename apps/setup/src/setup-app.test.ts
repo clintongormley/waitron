@@ -4837,3 +4837,52 @@ describe("live email setup journey", () => {
     );
   });
 });
+
+describe("first setup owner refusals", () => {
+  const cases = [
+    [
+      "setup.owner_required",
+      "Resume setup in its owner tab.",
+      "Reanuda la configuración en la pestaña de su responsable.",
+    ],
+    [
+      "setup.attempt_conflict",
+      "Another setup attempt owns this venue.",
+      "Otro intento de configuración tiene el control de este local.",
+    ],
+    [
+      "setup.attempt_uncertain",
+      "This assignment may have been used. Resume the saved attempt; do not assign it again.",
+      "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
+    ],
+    [
+      "setup.attempt_invalid",
+      "The saved setup cannot be read. Contact support.",
+      "No se puede leer la configuración guardada. Contacta con soporte.",
+    ],
+  ] as const;
+  it.each(cases)(
+    "shows %s without an activation retry in both languages",
+    async (code, english, spanish) => {
+      for (const [locale, sentence] of [
+        ["en-GB", english],
+        ["es-ES", spanish],
+      ]) {
+        try {
+          const el = await mountSetupApp(
+            stubApi({ provision: vi.fn().mockRejectedValue({ code, params: {} }) }),
+          );
+          setLocale(locale!);
+          provisionRequest(el);
+          await flush(el);
+          expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+          const screen = await screenHost(el, "provisioning");
+          expect(screen.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+          expect(screen.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
+        } finally {
+          setLocale("en-GB");
+        }
+      }
+    },
+  );
+});

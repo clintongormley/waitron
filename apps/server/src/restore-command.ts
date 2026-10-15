@@ -1,3 +1,5 @@
+import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
+import { lockVenueDatabase } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, hasCode } from "@waitron/shared";
@@ -266,10 +268,24 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
   }
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  try {
+    if ((await inspectFirstSetupMarker(venueDir)) !== null) {
+      const hold = await lockVenueDatabase(venueDir);
+      try {
+        await assertVenueFirstSetupAllowed(venueDir);
+      } finally {
+        hold.release();
+      }
+    }
+  } catch (error) {
+    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
+    return 1;
+  }
   return {
     stateDir,
     // Unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
-    venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue")),
+    venueDir,
     stagingDir: join(stateDir, RESTORE_STAGING_DIR),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,

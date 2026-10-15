@@ -1,6 +1,7 @@
+import { FIRST_SETUP_HOST_FILES } from "@waitron/provisioning";
 import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { chmod, mkdir, readFile, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -83,6 +84,13 @@ export async function resolveSafeEntryPath(
  * the destination replaced by a symlink mid-run is followed, wherever it points.
  */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
+  if (
+    Object.keys(files).some((name) =>
+      FIRST_SETUP_HOST_FILES.some((reserved) => posix.normalize(name) === reserved),
+    )
+  ) {
+    throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
+  }
   // Created before the guard's `realpath`, which fails on a missing path.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));

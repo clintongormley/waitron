@@ -1,3 +1,4 @@
+import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,6 +41,7 @@ export interface SetupOperationStore {
     kind: SetupOperationKind,
     requestHash: string,
     fn: (operation: ActiveSetupOperation) => Promise<T>,
+    hold?: FirstSetupHold,
   ): Promise<T>;
 }
 
@@ -80,6 +82,7 @@ function parseState(raw: string): SetupOperationState | null {
 export function createSetupOperationStore(
   stateDir: string,
   ownerId: string = randomUUID(),
+  options: { coordinator?: FirstSetupCoordinator; guard?: () => Promise<void> } = {},
 ): SetupOperationStore {
   const statePath = join(stateDir, "setup-operation.json");
   const lockPath = join(stateDir, "setup-operation.lock");
@@ -154,61 +157,72 @@ export function createSetupOperationStore(
 
   return {
     read,
-    async run(kind, requestHash, fn) {
-      if (active) throw new AppError("setup.already_provisioning", {});
-      active = true;
-      let token: string | undefined;
-      try {
-        token = await acquire();
-        const existing = await read();
-        if (existing !== null && (existing.kind !== kind || existing.requestHash !== requestHash)) {
-          throw new AppError("setup.operation_conflict", {});
-        }
-        let state: SetupOperationState = existing ?? {
-          version: 1,
-          id: randomUUID(),
-          kind,
-          requestHash,
-          phase: "started",
-          data: {},
-          updatedAt: new Date().toISOString(),
-        };
-        if (existing === null) await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
-        const persist = async (
-          phase: SetupOperationPhase,
-          data?: Record<string, unknown>,
-        ): Promise<void> => {
-          state = {
-            ...state,
-            phase,
-            data: data ?? state.data,
+    run(kind, requestHash, fn, hold) {
+      const execute = async () => {
+        await options.guard?.();
+        if (active) throw new AppError("setup.already_provisioning", {});
+        active = true;
+        let token: string | undefined;
+        try {
+          token = await acquire();
+          const existing = await read();
+          if (
+            existing !== null &&
+            (existing.kind !== kind || existing.requestHash !== requestHash)
+          ) {
+            throw new AppError("setup.operation_conflict", {});
+          }
+          let state: SetupOperationState = existing ?? {
+            version: 1,
+            id: randomUUID(),
+            kind,
+            requestHash,
+            phase: "started",
+            data: {},
             updatedAt: new Date().toISOString(),
           };
-          await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
-          Object.assign(operation, state);
-        };
-        const operation: ActiveSetupOperation = {
-          ...state,
-          advance: (phase, data) => persist(phase, data),
-          complete: (data) => persist("complete", data),
-        };
-        try {
-          return await fn(operation);
-        } catch (error) {
-          if (operation.phase === "started") {
-            await unlink(statePath).catch((unlinkError: unknown) => {
-              if (!hasCode(unlinkError, "ENOENT")) throw unlinkError;
-            });
+          if (existing === null) await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
+          const persist = async (
+            phase: SetupOperationPhase,
+            data?: Record<string, unknown>,
+          ): Promise<void> => {
+            state = {
+              ...state,
+              phase,
+              data: data ?? state.data,
+              updatedAt: new Date().toISOString(),
+            };
+            await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
+            Object.assign(operation, state);
+          };
+          const operation: ActiveSetupOperation = {
+            ...state,
+            advance: (phase, data) => persist(phase, data),
+            complete: (data) => persist("complete", data),
+          };
+          try {
+            return await fn(operation);
+          } catch (error) {
+            if (operation.phase === "started") {
+              await unlink(statePath).catch((unlinkError: unknown) => {
+                if (!hasCode(unlinkError, "ENOENT")) throw unlinkError;
+              });
+            }
+            throw error;
           }
-          throw error;
-        }
-      } finally {
-        try {
-          if (token !== undefined) await release(token);
         } finally {
-          active = false;
+          try {
+            if (token !== undefined) await release(token);
+          } finally {
+            active = false;
+          }
         }
-      }
+      };
+      return options.coordinator === undefined
+        ? execute()
+        : hold === undefined
+          ? options.coordinator.run(execute)
+          : options.coordinator.held(hold, execute);
     },
   };
 }

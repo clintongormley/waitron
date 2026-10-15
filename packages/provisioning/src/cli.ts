@@ -1,3 +1,4 @@
+import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
 import { parseArgs } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -383,6 +384,7 @@ async function withVenueState(
     throw asUnreadable(error, venueDir);
   }
   try {
+    await assertVenueFirstSetupAllowed(venueDir);
     return await body(store.venue);
   } finally {
     await store.close();

@@ -29,3 +29,20 @@ export type { TenantIdentity } from "./tenant-guard.js";
 export { assertNotAhead } from "./schema-ahead.js";
 export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";
+export {
+  FIRST_SETUP_HOST_FILES,
+  createFirstSetupCoordinator,
+  createFirstSetupStore,
+  assertOtherSetupAllowed,
+  assertVenueFirstSetupAllowed,
+  inspectFirstSetupMarker,
+} from "./first-setup-state.js";
+export type {
+  FirstSetupCoordinator,
+  FirstSetupHold,
+  FirstSetupStore,
+  FirstSetupState,
+  FirstSetupFrozen,
+  FirstSetupChange,
+  FirstSetupMarker,
+} from "./first-setup-state.js";

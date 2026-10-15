@@ -175,6 +175,12 @@ const TAXPAYER_FIELDS = [
   "rectificativeSeriesCode",
 ] as const;
 
+const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
+  "setup.owner_required": "shell.first_setup.owner_required",
+  "setup.attempt_conflict": "shell.first_setup.attempt_conflict",
+  "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
+  "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
+};
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -183,6 +189,7 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
@@ -190,6 +197,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "setup.request_invalid": "shell.reset.request_invalid",
   "setup.not_ready": "shell.not_ready",
 };
@@ -302,6 +310,7 @@ function describeThrottle(params: Record<string, unknown> | undefined): Message 
 
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
 const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "backup.stream_kit_invalid": "shell.bucket.kit_invalid",
   "restore.stream_pointer_missing": "shell.bucket.pointer_missing",
   "restore.stream_pointer_unverified": "shell.bucket.pointer_unverified",
@@ -332,6 +341,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
  * neither here.
  */
 const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
+  ...FIRST_SETUP_ERROR_MESSAGES,
   "restore.schema_too_new": "shell.cloud.newer_software",
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
@@ -906,6 +916,15 @@ export class SetupApp extends LitElement {
     }
   }
 
+  #mapFirstSetupError(code: string): boolean {
+    const key = FIRST_SETUP_ERROR_MESSAGES[code];
+    if (key === undefined) return false;
+    this.provisionMessage = say(key);
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = say("shell.reload");
+    return true;
+  }
+
   /**
    * A venue-data refusal (`provisioning.*`, `fiscal.*`) would fail again on a re-POST of the same
    * data, so it routes back to the venue form rather than offering a retry.
@@ -914,6 +933,7 @@ export class SetupApp extends LitElement {
     // A network drop rejects with a bare `TypeError`, which carries no `code`.
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
+    if (this.#mapFirstSetupError(code)) return;
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
       const key = VENUE_ERROR_MESSAGES[code];
       this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
@@ -1331,6 +1351,7 @@ export class SetupApp extends LitElement {
   async #mapAdoptError(error: ApiError, body: AdoptBody): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
+    if (this.#mapFirstSetupError(code)) return;
     switch (code) {
       // Not read against the saved setup: an adopt still running on the server is past "started" too.
       case "setup.already_provisioning":
