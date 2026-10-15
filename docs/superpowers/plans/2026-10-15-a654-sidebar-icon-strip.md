@@ -83,6 +83,6 @@ above only in that the icon itself stays uncoloured.
    section's name and its pages, the current page marked as in the sidebar. Picking a page opens it
    and closes the panel; the strip stays folded. Enter or Space opens it (it is a button), Escape
    closes it and returns focus to its icon, a click outside it or focus leaving it closes it, and
-   so do unfolding the sidebar and narrowing to a phone. The icon carries `aria-expanded` and
-   `aria-controls`.
+   so do unfolding the sidebar and narrowing to a phone. The icon carries `aria-expanded`, and
+   `aria-controls` while the panel is open.
 4. **LOOK** in both themes at 390, 1024 and 1280 px; tokens only for every colour and size.

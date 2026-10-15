@@ -1791,10 +1791,13 @@ condition); a hidden tooltip is `display: none`. Bind `trackIconTooltip` to the 
 Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). Binding it also
 means a click on a showing tooltip does not press its button. The table's
 Customise columns button, icon-only in the same toolbar, does not use it yet: it has no tooltip and
-no pressed look. Guards: `packages/ui/src/icon-button.test.ts`, and the tooltip cases in
+no pressed look. The folded sidebar's strip buttons take it too, with their own resting, open
+and current look and the tooltip beside them (Dashboard sidebar navigation). Guards:
+`packages/ui/src/icon-button.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts`,
-`apps/dashboard/src/widgets/catalogue-browser.test.ts` and
-`apps/dashboard/src/screens/menus-screen.a11y.test.ts`.
+`apps/dashboard/src/widgets/catalogue-browser.test.ts`,
+`apps/dashboard/src/screens/menus-screen.a11y.test.ts` and
+`apps/dashboard/src/dashboard-app.sidebar-fold.test.ts`.
 
 ### Accessible, clickable labels (`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, `wt-slider`, `wt-combobox`)
 
@@ -2937,10 +2940,12 @@ current page is marked by the highlight alone: a `--wt-color-primary` leading ed
 section with more opens a panel beside its icon, listing the section's name and its pages, and
 placed before its first paint, lifted to stay inside the layout when the icon is low; picking a page
 opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
-to its icon; so do a click outside it, focus leaving it, another section's icon, unfolding the
-sidebar, a page change and narrowing to a phone. Opened from the keyboard it focuses its first page.
-In a window under 40rem tall (a phone held sideways is wider than the drawer breakpoint) the strip
-scrolls and clips its tooltips; the panel still shows whole. Guards: the cases in
+to its icon. A click outside it, focus leaving it, another section's icon, unfolding the sidebar, a
+page change and narrowing to a phone close it too. Opened from the keyboard it focuses its first page.
+In a window 40rem tall or less (a phone held sideways is wider than the drawer breakpoint) the strip
+scrolls and clips its tooltips, and scrolling it while a panel is open closes the panel. A panel
+taller than the layout below the banner is held to the layout's height and scrolls
+(checked with Settings at 844 × 390 px). Guards: the cases in
 `apps/dashboard/src/dashboard-app.sidebar-fold.test.ts`, axe in both themes included. Looked at
 2026-10-15 in Spanish, both themes, at 390, 1024 and 1280 px (screenshots, in a test page).
 
@@ -2953,7 +2958,8 @@ anchoring so that heuristic cannot mask the application correction.
 The sidebar and the content column both scroll independently, bounded to the space below the
 banner (`.shell { height: 100%; max-height: 100vh }` filling `apps/dashboard/index.html`'s body,
 which is one window tall with its padding inside, and `.sidebar`/`.main` both `max-height: 100%;
-overflow-y: auto`) — the page itself never scrolls. Before this, only `.sidebar` was self-contained
+overflow-y: auto`, except the folded strip, which scrolls only in a window 40rem tall or less) — the
+page itself never scrolls. Before this, only `.sidebar` was self-contained
 (`max-height: 100vh`); `.main` just grew with its content and pushed the whole page taller, so once
 a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
 the page actually ended. Both panes now share the same bound, so they always end at the same line.
