@@ -11,7 +11,6 @@ import {
   validateSpanishPhone,
   validateSpanishPostalCode,
 } from "./spain.js";
-import { SPAIN_RECEIPT_LABELS } from "./receipt-labels.js";
 
 describe("validateSpanishNif", () => {
   it.each([
@@ -285,15 +284,14 @@ describe("receipt labels", () => {
     },
   );
 
-  it("labels a simplified invoice and a single VAT rate in every Spanish receipt language", () => {
-    for (const [locale, labels] of Object.entries(SPAIN_RECEIPT_LABELS)) {
-      expect(labels.simplifiedInvoice, locale).not.toBe("");
-      expect(labels.vatIncludedAtRate, locale).toContain("{rate}");
-    }
-    expect(SPAIN_RECEIPT_LABELS["es-ES"].simplifiedInvoice).toBe("Factura simplificada");
-    expect(SPAIN_RECEIPT_LABELS["es-ES"].vatIncludedAtRate.replace("{rate}", "10%")).toBe(
-      "IVA 10% incluido",
-    );
+  it.each(SPAIN.invoiceLocales)("holds {rate} in %s's one-rate VAT label", (locale) => {
+    expect(SPAIN.receiptLabels?.[locale]?.vatIncludedAtRate).toContain("{rate}");
+  });
+
+  it("labels a simplified invoice and a single VAT rate in Spanish", () => {
+    const labels = SPAIN.receiptLabels?.["es-ES"];
+    expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
+    expect(labels?.vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
   });
 });
 

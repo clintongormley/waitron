@@ -207,7 +207,7 @@ describe("saved F1 operation date", () => {
         }),
       );
       expect(lines.join("\n")).not.toContain("Fecha de operación");
-      // A simplified receipt prints its issue date beside the order line, with no "Fecha" caption.
+      // A simplified receipt prints its issue date with no "Fecha" caption.
       expect(
         lines.some((line) =>
           invoiceType === "F1" ? line.startsWith("Fecha ") : line.includes("17 ago 2026"),
@@ -956,7 +956,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // Serie + número (7.1.a).
       expect(s).toContain(FILED_SALE.invoiceNumber);
 
-      // Fecha de expedición (7.1.b): printed beside the order line with no caption, so the day itself.
+      // Fecha de expedición (7.1.b): no caption on a simplified receipt, so the day itself.
       expect(s).toContain("17 ago 2026");
       expect(s).toContain("2026");
 

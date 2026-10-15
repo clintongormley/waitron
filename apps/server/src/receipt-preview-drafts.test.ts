@@ -67,8 +67,9 @@ describe("POST receipt draft preview", () => {
       language: "ca-ES",
     });
     const printed = lines(answer);
-    const issuer = printed.findIndex((line) => line.startsWith("Deli Test SL · NIF: "));
+    const issuer = printed.indexOf("Deli Test SL");
     expect(issuer).toBeGreaterThan(0);
+    expect(printed[issuer + 1]).toMatch(/^NIF: /u);
     expect(printed.indexOf("Bar català")).toBeLessThan(issuer);
     expect(printed).toContain("Gràcies");
     expect(printed).not.toContain("Bar español");
@@ -403,7 +404,9 @@ it("keeps department contacts in the draft and never replaces them with stored v
       printAddress: false,
     },
   });
-  expect(lines(answer)).toContain("Tel. +34 911 000 000 · own@deli.test");
+  const phone = lines(answer).indexOf("Tel. +34 911 000 000");
+  expect(phone).not.toBe(-1);
+  expect(lines(answer).slice(phone, phone + 2)).toEqual(["Tel. +34 911 000 000", "own@deli.test"]);
   expect(lines(answer).join("\n")).not.toContain("venue@example.com");
   expect(lines(answer)).toContain("Department draft");
   expect(lines(answer)).toContain("Thanks");

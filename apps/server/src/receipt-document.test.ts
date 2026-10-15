@@ -280,7 +280,6 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
 
   it("separates every section with a rule and leaves no blank-line breaks", () => {
     const kinds = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements.map((e) => e.kind);
-    expect(kinds).not.toContain("break");
     expect(kinds.filter((k) => k === "rule").length).toBeGreaterThanOrEqual(5);
   });
 

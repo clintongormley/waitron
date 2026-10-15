@@ -125,8 +125,16 @@ export function buildReceiptDocument({
     amount: string,
     indent: ReceiptIndent = 0,
     style?: ReceiptStyle,
+    gap?: number,
   ): void => {
-    elements.push({ kind: "amount", caption, amount, indent, ...(style ? { style } : {}) });
+    elements.push({
+      kind: "amount",
+      caption,
+      amount,
+      indent,
+      ...(style ? { style } : {}),
+      ...(gap === undefined ? {} : { gap }),
+    });
   };
   // Ends a section; a section that drew nothing adds no second rule.
   const rule = (): void => {
@@ -202,13 +210,7 @@ export function buildReceiptDocument({
     .join(" · ");
   if (simplified) {
     // Two spaces at least, or an order number running into the date reads as one figure.
-    elements.push({
-      kind: "amount",
-      caption: orderText,
-      amount: issueDate(result.issuedAt, locale),
-      indent: 0,
-      gap: 2,
-    });
+    row(orderText, issueDate(result.issuedAt, locale), 0, undefined, 2);
     row(label.simplifiedInvoice, result.invoiceNumber);
   } else {
     text(orderText);
