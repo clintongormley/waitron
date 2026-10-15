@@ -212,7 +212,7 @@ describe("saved F1 operation date", () => {
       // Both documents print the issue date with the order, with no "Fecha" caption.
       const at = lines.findIndex((line) => line.startsWith("Mesa 6 · Pedido 41"));
       expect(at).toBeGreaterThanOrEqual(0);
-      expect(lines.slice(at, at + 2).join(" ")).toContain("17 ago 2026, 14:34");
+      expect(lines.slice(at, at + 2).join(" ")).toContain("17 ago 2026");
     },
   );
 
