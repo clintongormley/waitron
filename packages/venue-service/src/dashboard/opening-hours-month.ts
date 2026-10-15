@@ -58,7 +58,8 @@ interface Row {
   key: string;
   name: string;
   ranges: readonly ServiceRange[];
-  /** A zone's closed times, cut to where its department is open. */
+  /** A zone's closed times, cut to where its department is open; none when they cover all of it,
+   *  so the bar is empty. */
   gaps: readonly ClosedRange[];
 }
 
@@ -242,7 +243,8 @@ export class OpeningHoursMonthView extends LitElement {
         background: var(--wt-color-palette-purple);
       }
       /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
-         word kept for a screen reader. */
+         word kept for a screen reader; a station's date closed all day drops "No orders" there, its
+         name saying Closed. */
       @container month (width < 560px) {
         table {
           border-spacing: calc(var(--wt-space-1) / 2);

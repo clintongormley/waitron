@@ -37,7 +37,7 @@ describe("zoneOwnHours", () => {
     });
   });
 
-  it("cuts a closure past the department's close to the close (the Terrace case)", () => {
+  it("cuts a closure past the department's close to the close", () => {
     expect(
       zoneOwnHours([range("open", "18:15", "02:00")], [closure("23:00", "05:00")], day),
     ).toEqual({

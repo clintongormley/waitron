@@ -1,3 +1,4 @@
+// Browser-safe: the dashboard's Month loads this, so it imports types only.
 import type { ClosedRange, ServiceRange } from "./service-day.js";
 
 export interface ZoneOwnHours {

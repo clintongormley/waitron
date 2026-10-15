@@ -1534,7 +1534,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
   (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
   makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
-  closed rows are grey tracks; a zone's bar shows its own hours; the Staffing month follows. Points
+  the Staffing month follows. Points
   1, 2, 5 and 6 landed in #1765 and Part 2; the Week button is A722's, "Seasons…" and the chips' ✎
   A721's; 3, 4 and 7 remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
