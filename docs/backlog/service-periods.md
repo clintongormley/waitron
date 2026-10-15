@@ -255,14 +255,6 @@ Its button goes on the Year view's season row.
 `opening-hours-year.ts`, `opening-hours-month.ts`; for point 7,
 `packages/staffing/src/dashboard/staffing-month.ts`.
 
-3. **A day box instead of the panel that makes the page jump.** Today clicking a day in the Year
-   view adds a panel under that month, which grows it and pushes the next row of months down by a
-   different amount per month. Instead, clicking a day in the Year or Month view opens a floating
-   box: the date, the holiday or special day's name, which season's standard hours apply (or which
-   a special day replaces), and each department and zone with its periods and times. Its buttons:
-   "Make a special day" or "Edit special day", "Edit {season}'s standard week", and "Open this
-   week" (A722). Pointing at a holiday or special day shows its name. Escape or a click elsewhere
-   closes the box; nothing on the page moves.
 4. **Days are picked on the grid.** A click picks one day; a drag, or a click then a shift-click,
    picks a run; a double-click (a long press on a phone) opens the special-day editor with those
    dates, or the special day already there. No hint line (owner: discoverable enough). Keyboard: the
@@ -311,7 +303,7 @@ keeps `/view/week` out of search while it still means the old season painter.
    screen. ‹ › step a week.
 4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
    for the next day.
-5. **No painting here.** Clicking a day's name opens A720's day box.
+5. **No painting here.** Clicking a day's name opens the Calendar's day box (`calendar-day-box.ts`).
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
    department that sends it dishes, from each period's start to its last orders — what A725 retires
    with the Times tab. The same reading as A724 point 2.

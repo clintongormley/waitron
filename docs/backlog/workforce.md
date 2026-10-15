@@ -117,7 +117,7 @@ wording separately, keeping CSV's scalar spellings stable; no legal-field or wri
 Files: `packages/staffing/src/dashboard/staffing-month.ts` and its calendar host.
 
 **Special days are reached from the day box.** The special-day staffing painter exists (A585-4)
-   but opens only from a special day's date. The month gets A720's day box, offering "Edit
+   but opens only from a special day's date. The month gets the Calendar's day box (`calendar-day-box.ts`), offering "Edit
    {special day} staffing" or "Edit {season}'s standard week"; no seasons or special-days row.
 
 ## Rota warning query boundaries

@@ -1552,8 +1552,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
   makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
   the Staffing month follows. Points
-  1, 2, 5 and 6 landed in #1765 and #1770; the Week button is A722's, "Seasons…" and the chips' ✎
-  A721's; 3, 4 and 7 remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  1, 2, 3, 5 and 6 landed in #1765, #1770 and Part 3; the Week button is A722's, "Seasons…" and the
+  chips' ✎ A721's; 4 and 7 remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
