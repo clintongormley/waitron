@@ -74,6 +74,8 @@ const profile = (id: string, name: string, extra: Partial<DeviceProfile> = {}): 
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
   startingScreen: null,
   departmentId: null,
   allowedZoneIds: null,
@@ -236,6 +238,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       })),
     ),
     listPrinters: vi.fn().mockResolvedValue(printers),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     pairingMode: vi.fn().mockResolvedValue({
       open: false,
       openUntil: null,

@@ -34,6 +34,8 @@ const profiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     startingScreen: null,
     departmentId: "d1",
     allowedZoneIds: null,
@@ -99,6 +101,7 @@ function stubApi(
 ): DashboardApi {
   return {
     listPrinters: vi.fn().mockResolvedValue(printers),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
     getDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),

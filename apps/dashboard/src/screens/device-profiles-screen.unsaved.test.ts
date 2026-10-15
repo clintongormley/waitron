@@ -22,6 +22,8 @@ const profile: DeviceProfile = {
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
   departmentId: "d1",
   allowedZoneIds: null,
   startingZoneId: "z1",
@@ -102,6 +104,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
         { id: "c2", name: "Bar", definition: {} },
       ],
       listPrinters: async () => [printer, { ...printer, id: "r2", name: "Bar" }],
+      listPagePrinters: async () => [],
       listStations: async () => [station],
       listProfileKitchenScreens: async () => [
         { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
@@ -608,6 +611,35 @@ for (const [id, initial, edited] of [
 ] as const) {
   it(`W100 profile ${id} protects changed values and clears a revert`, async () => {
     const { screen } = await mountWithEquipment();
+    expect(unload()).toBe(false);
+    change(screen, id, edited);
+    expect(unload()).toBe(true);
+    change(screen, id, initial);
+    expect(unload()).toBe(false);
+  });
+}
+const office = {
+  id: "pg1",
+  name: "Office",
+  host: "192.168.1.20",
+  port: 631,
+  resourcePath: "/ipp/print",
+  documentFormat: "application/pdf" as const,
+  supportedFormats: ["application/pdf"],
+  media: "iso_a4_210x297mm" as const,
+  resolutionDpi: 300,
+  active: true,
+  invoicePrinter: false,
+  agentId: "ag1",
+  agentName: "Box",
+};
+for (const [id, initial, edited] of [
+  ["invoice-printers-pg1", false, true],
+  ["invoice-printers-r2", false, true],
+  ["invoice-printers-default", "", "pg1"],
+] as const) {
+  it(`A661 profile ${id} protects changed values and clears a revert`, async () => {
+    const { screen } = await mountWithEquipment({ listPagePrinters: async () => [office] });
     expect(unload()).toBe(false);
     change(screen, id, edited);
     expect(unload()).toBe(true);

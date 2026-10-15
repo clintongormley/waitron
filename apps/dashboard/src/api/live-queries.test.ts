@@ -311,6 +311,7 @@ it.each([
       "device_profile_printers",
       "device_profile_card_readers",
       "printers",
+      "page_printers",
       "card_readers",
       "device_kitchen_screens",
       "device_kitchen_screen_stations",

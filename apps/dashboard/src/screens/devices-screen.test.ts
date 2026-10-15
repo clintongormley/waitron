@@ -23,9 +23,11 @@ import type {
   DeviceProfile,
   DeviceRow,
   JoinRequestRow,
+  PagePrinterRow,
   Printer,
   ProfileReaderList,
   ReaderRow,
+  RoleEquipment,
   Station,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
@@ -145,6 +147,8 @@ const deviceProfiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -165,6 +169,8 @@ const deviceProfiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     startingScreen: null,
     departmentId: "dep-1",
     allowedZoneIds: null,
@@ -185,6 +191,8 @@ const deviceProfiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     startingScreen: null,
     departmentId: null,
     allowedZoneIds: null,
@@ -289,6 +297,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       })),
     ),
     listPrinters: vi.fn().mockResolvedValue(printers),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     takePairingHold: vi.fn().mockResolvedValue({ holdId: "h1", openUntil: TAKEN_UNTIL }),
     renewPairingHold: vi.fn().mockResolvedValue({ openUntil: TAKEN_UNTIL }),
@@ -640,6 +649,7 @@ describe("the device table", () => {
       ["receipt", t("devices.receipt_printer_now")],
       ["slip", t("devices.slip_printer_now")],
       ["drawer", t("devices.cash_drawer_now")],
+      ["invoice", t("devices.invoice_printer_now")],
       ["reader", t("devices.default_reader")],
       ["battery", t("devices.column_battery")],
       ["status", t("devices.column_status")],
@@ -1132,6 +1142,7 @@ describe("the device table", () => {
         t("devices.receipt_printer_now"),
         t("devices.slip_printer_now"),
         t("devices.cash_drawer_now"),
+        t("devices.invoice_printer_now"),
         t("devices.default_reader"),
         t("devices.column_last_seen"),
         t("devices.actions"),
@@ -2757,6 +2768,127 @@ describe("the Edit dialog", () => {
         { value: "", label: useDefault(t("equipment.none")) },
         { value: "pr1", label: "Cocina" },
       ]);
+    });
+
+    describe("the invoice printer", () => {
+      const office: PagePrinterRow = {
+        id: "pg1",
+        name: "Oficina",
+        host: "10.0.0.20",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        active: true,
+        invoicePrinter: false,
+        agentId: "ag1",
+        agentName: "Box",
+      };
+      const withInvoices: DeviceProfile = {
+        ...withDefaults,
+        invoicePrinterIds: ["pg1", "pr2"],
+        invoicePrinterDefaultId: "pg1",
+      };
+      const invoiceOn = (chosenId: string | null): RoleEquipment => ({
+        role: "invoice",
+        selection: chosenId === null ? "default" : "item",
+        chosenId,
+        resolved:
+          chosenId === null
+            ? { id: "pg1", name: "Oficina", available: true }
+            : { id: chosenId, name: "Terraza", available: true },
+      });
+
+      function invoiceApi(device: DeviceRow, overrides: Partial<DashboardApi> = {}) {
+        return equipmentApi({
+          listDevices: vi.fn().mockResolvedValue([device, kitchen]),
+          listDeviceProfiles: vi.fn().mockResolvedValue([withInvoices, ...editProfiles.slice(1)]),
+          listPagePrinters: vi.fn().mockResolvedValue([office]),
+          ...overrides,
+        });
+      }
+
+      it("is a column of what each device prints invoices on", async () => {
+        const el = await openEdit(invoiceApi({ ...onDefault, equipment: [invoiceOn(null)] }));
+        expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
+          `Oficina (${t("devices.default_mark")})`,
+        );
+      });
+
+      it("offers Use default and the profile's invoice printers, the A4 one marked, none as carried", async () => {
+        const el = await openEdit(invoiceApi({ ...onDefault, equipment: [invoiceOn(null)] }));
+        const invoice = field(el, "edit-invoice-printer");
+        expect([invoice.name, invoice.label, invoice.value]).toEqual([
+          "invoicePrinterId",
+          t("devices.invoice_printer_now"),
+          "",
+        ]);
+        // Terraza is portable and another device carries it; an invoice printer ignores that.
+        expect(invoice.options).toEqual([
+          { value: "", label: useDefault("Oficina · A4") },
+          { value: "pg1", label: "Oficina · A4" },
+          { value: "pr2", label: "Terraza" },
+        ]);
+      });
+
+      it("keeps the device's own choice and sends none while it is unchanged", async () => {
+        const api = invoiceApi({ ...onDefault, equipment: [invoiceOn("pr2")] });
+        const el = await openEdit(api);
+        expect(field(el, "edit-invoice-printer").value).toBe("pr2");
+        await rename(el, "Caja 2");
+        await save(el);
+        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+          "invoicePrinterId",
+        );
+      });
+
+      it("sends a changed choice, and null for Use default", async () => {
+        const api = invoiceApi({ ...onDefault, equipment: [invoiceOn(null)] });
+        const el = await openEdit(api);
+        await chooseOption(q(el, "[data-test=edit-invoice-printer]")!, "pg1");
+        await flush(el);
+        await save(el);
+        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+          invoicePrinterId: "pg1",
+        });
+
+        const chosen = invoiceApi({ ...onDefault, equipment: [invoiceOn("pr2")] });
+        cleanupWidgets();
+        const again = await openEdit(chosen);
+        await chooseOption(q(again, "[data-test=edit-invoice-printer]")!, "");
+        await flush(again);
+        await save(again);
+        await vi.waitFor(() => expect(chosen.updateDevice).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(chosen.updateDevice).mock.calls[0]![1]).toMatchObject({
+          invoicePrinterId: null,
+        });
+      });
+
+      it("a refusal naming the invoice printer shows under it", async () => {
+        const api = invoiceApi(
+          { ...onDefault, equipment: [invoiceOn(null)] },
+          {
+            updateDevice: vi.fn().mockRejectedValue({
+              code: "device.binding_invalid",
+              params: { field: "invoicePrinterId" },
+            }),
+          },
+        );
+        const el = await openEdit(api);
+        await chooseOption(q(el, "[data-test=edit-invoice-printer]")!, "pr2");
+        await flush(el);
+        await save(el);
+        await vi.waitFor(() =>
+          expect(field(el, "edit-invoice-printer").error).toBe(
+            codeMessage("device.binding_invalid"),
+          ),
+        );
+        expect(field(el, "edit-receipt-printer").error).toBe("");
+      });
     });
 
     it("changing the profile puts each choice on Use default", async () => {

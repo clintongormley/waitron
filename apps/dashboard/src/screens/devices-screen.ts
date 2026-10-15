@@ -58,6 +58,7 @@ import type {
   KitchenScreenKind,
   KitchenScreenScope,
   PairingModeState,
+  PagePrinterRow,
   Printer,
   ProfileKitchenScreens,
   ProfileReaderList,
@@ -74,7 +75,7 @@ import { sameValue } from "../widgets/product-editor-model.js";
  * screen's lists; `kitchenStations` is a till's Kitchen screen list. */
 type KitchenField = "screen" | "stations" | "zones" | "kitchenStations";
 type PairField = "name" | "profile" | KitchenField;
-type EditField = PairField | "receipt" | "slip" | "drawer" | "reader" | "approved";
+type EditField = PairField | "receipt" | "slip" | "drawer" | "invoice" | "reader" | "approved";
 type IdentityErrors = Record<PairField, string>;
 const NO_KITCHEN_ERRORS: Record<KitchenField, string> = {
   screen: "",
@@ -115,6 +116,9 @@ function ordered(
 ): string[] | null {
   return ids === null ? null : places.filter((place) => ids.includes(place.id)).map((p) => p.id);
 }
+/** A printer an equipment choice may offer. */
+type RolePrinter = Pick<Printer, "id" | "name" | "active" | "portable" | "holder">;
+
 /** `sentence`, when set, is what the field says in place of the code's own message. */
 type FieldRefusal = { field: EditField; code: string; sentence?: string } | null;
 
@@ -143,6 +147,14 @@ const PRINTER_ROLES = [
     defaultKey: "cashDrawerPrinterDefaultId",
     test: "edit-cash-drawer",
     label: "devices.cash_drawer_now",
+  },
+  {
+    field: "invoice",
+    form: "invoicePrinterId",
+    list: "invoicePrinterIds",
+    defaultKey: "invoicePrinterDefaultId",
+    test: "edit-invoice-printer",
+    label: "devices.invoice_printer_now",
   },
 ] as const;
 
@@ -173,6 +185,7 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   receiptPrinterId: "receipt",
   paymentSlipPrinterId: "slip",
   cashDrawerPrinterId: "drawer",
+  invoicePrinterId: "invoice",
   cardReaderId: "reader",
   approvedProfileIds: "approved",
 };
@@ -240,6 +253,7 @@ interface EditForm {
   receiptPrinterId: string;
   paymentSlipPrinterId: string;
   cashDrawerPrinterId: string;
+  invoicePrinterId: string;
   madeHere: string[];
   /** Ticked profiles staff may switch to; only those {@link DevicesScreen} offers are sent. */
   approved: string[];
@@ -266,6 +280,7 @@ const EQUIPMENT_COLUMNS = [
   { key: "receipt", role: "receipt", label: "devices.receipt_printer_now" },
   { key: "slip", role: "payment_slip", label: "devices.slip_printer_now" },
   { key: "drawer", role: "cash_drawer", label: "devices.cash_drawer_now" },
+  { key: "invoice", role: "invoice", label: "devices.invoice_printer_now" },
   { key: "reader", role: "card_terminal", label: "devices.default_reader" },
 ] as const satisfies readonly { key: string; role: EquipmentRole; label: StringKey }[];
 
@@ -441,6 +456,7 @@ export class DevicesScreen extends LitElement {
   @state() private kitchenScreens: { profileId: string; screens: ProfileKitchenScreens }[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
+  @state() private pagePrinters: PagePrinterRow[] = [];
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
 
@@ -556,9 +572,12 @@ export class DevicesScreen extends LitElement {
     receiptPrinterId: "",
     paymentSlipPrinterId: "",
     cashDrawerPrinterId: "",
+    invoicePrinterId: "",
     madeHere: [],
     approved: [],
   };
+  /** The open device's stored invoice choice, which its row carries only in `equipment`. */
+  #editInvoiceId: string | null = null;
   /** What the read marks no longer available, listed outside the draft until a save clears it. */
   @state() private editGone: GoneEntry[] = [];
   /** The kitchen screens the dialog opened with or last saved, as a request carries them. */
@@ -605,12 +624,15 @@ export class DevicesScreen extends LitElement {
       ...(this.#sendScreens() ? { kitchenScreens: this.#screensPayload(form.screens) } : {}),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-      // Absent leaves the stored drawer choice alone, so only a changed one is sent.
+      // Absent leaves the stored drawer and invoice choices alone, so only a changed one is sent.
       ...(form.cashDrawerPrinterId === (this.editing!.cashDrawerPrinterId ?? "")
         ? {}
         : {
             cashDrawerPrinterId: form.cashDrawerPrinterId === "" ? null : form.cashDrawerPrinterId,
           }),
+      ...(form.invoicePrinterId === (this.#editInvoiceId ?? "")
+        ? {}
+        : { invoicePrinterId: form.invoicePrinterId === "" ? null : form.invoicePrinterId }),
       ...(this.#sharedDisplay(form.profileId)
         ? {}
         : { madeHereStationIds: this.#madeHereToSend() }),
@@ -618,14 +640,16 @@ export class DevicesScreen extends LitElement {
     };
   }
 
-  /** Carries the drawer and approvals whether or not the request does: once they are saved, the
-   * request omits them. */
+  /** Carries the drawer, invoice printer and approvals whether or not the request does: once they
+   * are saved, the request omits them. */
   #editSnapshot() {
     const drawer = this.editForm.cashDrawerPrinterId;
+    const invoice = this.editForm.invoicePrinterId;
     return {
       ...this.#editPayload(),
       kitchenScreens: this.#screensPayload(this.editForm.screens),
       cashDrawerPrinterId: drawer === "" ? null : drawer,
+      invoicePrinterId: invoice === "" ? null : invoice,
       approvedProfileIds: this.#approvedOf(this.editForm.approved),
     };
   }
@@ -642,6 +666,7 @@ export class DevicesScreen extends LitElement {
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
         a.cashDrawerPrinterId === b.cashDrawerPrinterId &&
+        a.invoicePrinterId === b.invoicePrinterId &&
         (a.approvedProfileIds ?? []).length === (b.approvedProfileIds ?? []).length &&
         (a.approvedProfileIds ?? []).every((id) => b.approvedProfileIds?.includes(id)) &&
         (a.madeHereStationIds === undefined
@@ -694,6 +719,9 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
+        }),
+        this.#queries.watch("listPagePrinters", [], (value) => {
+          this.pagePrinters = value;
         }),
         this.#queries.watch("pairingMode", [], (value) => {
           this.pairing = value;
@@ -1175,6 +1203,8 @@ export class DevicesScreen extends LitElement {
     this.editGone = goneFromRead(device.kitchenScreens);
     this.#editSavedScreens = JSON.stringify(this.#screensPayload(screens));
     this.#editOpenProfileId = profileId;
+    this.#editInvoiceId =
+      device.equipment.find((entry) => entry.role === "invoice")?.chosenId ?? null;
     this.editForm = {
       name: device.label,
       profileId,
@@ -1182,6 +1212,7 @@ export class DevicesScreen extends LitElement {
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
       cashDrawerPrinterId: device.cashDrawerPrinterId ?? "",
+      invoicePrinterId: this.#editInvoiceId ?? "",
       madeHere: device.madeHereStationIds,
       approved: device.approvedProfileIds,
     };
@@ -1298,7 +1329,15 @@ export class DevicesScreen extends LitElement {
 
   #editErrors(): Record<EditField, string> {
     return withRefusal(
-      { ...this.#editOwnErrors(), receipt: "", slip: "", drawer: "", reader: "", approved: "" },
+      {
+        ...this.#editOwnErrors(),
+        receipt: "",
+        slip: "",
+        drawer: "",
+        invoice: "",
+        reader: "",
+        approved: "",
+      },
       this.editRefusal,
     );
   }
@@ -1318,6 +1357,7 @@ export class DevicesScreen extends LitElement {
         receiptPrinterId: "",
         paymentSlipPrinterId: "",
         cashDrawerPrinterId: "",
+        invoicePrinterId: "",
       },
       "profile",
       "screen",
@@ -1327,6 +1367,7 @@ export class DevicesScreen extends LitElement {
       "receipt",
       "slip",
       "drawer",
+      "invoice",
       "reader",
       "approved",
     );
@@ -1380,15 +1421,35 @@ export class DevicesScreen extends LitElement {
     this.#setEdit({ approved: checked ? [...rest, profileId] : rest }, "approved");
   }
 
-  /** Another device holding a portable printer; a cash drawer is never held. */
-  #printerHolder(printer: Printer, drawer: boolean): string | null {
+  /** Another device holding a portable printer; a cash drawer or an invoice printer is never held. */
+  #printerHolder(printer: RolePrinter, drawer: boolean): string | null {
     const holder = printer.holder;
     if (drawer || !printer.portable || holder === null || holder.deviceId === this.editing?.id)
       return null;
     return holder.deviceName;
   }
 
-  #printerChoiceLabel(printer: Printer, drawer: boolean): string {
+  /** The printers a role may name: an invoice may name an A4 printer too, marked. */
+  #rolePrinters(role: (typeof PRINTER_ROLES)[number]): RolePrinter[] {
+    if (role.field !== "invoice") return this.printers;
+    return [
+      ...this.printers,
+      ...this.pagePrinters.map(({ id, name, active }) => ({
+        id,
+        name: fill("device_profiles.a4_choice", { name }),
+        active,
+        portable: false,
+        holder: null,
+      })),
+    ];
+  }
+
+  /** The choice the open device has stored for the role. */
+  #storedChoice(device: DeviceRow, role: (typeof PRINTER_ROLES)[number]): string | null {
+    return role.field === "invoice" ? this.#editInvoiceId : device[role.form];
+  }
+
+  #printerChoiceLabel(printer: RolePrinter, drawer: boolean): string {
     const holder = this.#printerHolder(printer, drawer);
     return holder === null
       ? printerLabel(printer)
@@ -1412,15 +1473,16 @@ export class DevicesScreen extends LitElement {
     held: string | null,
   ): { value: string; label: string }[] {
     const ids = profile?.[role.list] ?? [];
-    const drawer = role.field === "drawer";
+    const drawer = role.field === "drawer" || role.field === "invoice";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
+    const pool = this.#rolePrinters(role);
     const listed = ids.flatMap((id) => {
-      const printer = this.printers.find((p) => p.id === id);
+      const printer = pool.find((p) => p.id === id);
       return printer !== undefined && (printer.active || printer.id === keep) ? [printer] : [];
     });
     const unlisted =
-      keep === null || ids.includes(keep) ? undefined : this.printers.find((p) => p.id === keep);
-    const fallback = this.printers.find((p) => p.id === profile?.[role.defaultKey]);
+      keep === null || ids.includes(keep) ? undefined : pool.find((p) => p.id === keep);
+    const fallback = pool.find((p) => p.id === profile?.[role.defaultKey]);
     const resolved =
       fallback === undefined || this.#printerHolder(fallback, drawer) !== null
         ? null
@@ -1514,6 +1576,7 @@ export class DevicesScreen extends LitElement {
         "receipt",
         "slip",
         "drawer",
+        "invoice",
         ...(this.#approvalChoices().length > 0 ? (["approved"] as const) : []),
       ]);
       if (field === null) this.editError = codeOf(error);
@@ -1526,6 +1589,8 @@ export class DevicesScreen extends LitElement {
       return;
     }
     if (epoch === this.#editEpoch) editScope?.commit(submittedDevice);
+    if (epoch === this.#editEpoch && sent.invoicePrinterId !== undefined)
+      this.#editInvoiceId = sent.invoicePrinterId;
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
     if (sent.kitchenScreens !== undefined) {
@@ -2674,7 +2739,7 @@ export class DevicesScreen extends LitElement {
               search="auto"
               searchPlaceholder=${t("categories.combobox_search")}
               noResultsLabel=${t("categories.combobox_no_results")}
-              .options=${this.#printerOptions(role, profile, device[role.form])}
+              .options=${this.#printerOptions(role, profile, this.#storedChoice(device, role))}
               .value=${form[role.form]}
               ?disabled=${this.editSaving}
               .error=${errors[role.field]}

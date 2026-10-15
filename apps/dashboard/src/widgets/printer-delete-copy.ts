@@ -17,6 +17,7 @@ const ROLES = [
   ["receipt", "printers.delete_role_receipt", "printers.delete_default_receipt"],
   ["payment_slip", "printers.delete_role_payment_slip", "printers.delete_default_payment_slip"],
   ["cash_drawer", "printers.delete_role_cash_drawer", "printers.delete_default_cash_drawer"],
+  ["invoice", "printers.delete_role_invoice", "printers.delete_default_invoice"],
 ] as const;
 
 const names = (item: DeleteImpactItem): string => item.targets.map(({ name }) => name).join(", ");

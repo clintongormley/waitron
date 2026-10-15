@@ -27,6 +27,8 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     allowedZoneIds: null,
     admittedRoles: ["staff", "supervisor", "manager", "admin"],
     personExceptions: [],
@@ -44,6 +46,7 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
     ),
     listCanvases: vi.fn(async () => []),
     listPrinters: vi.fn(async () => []),
+    listPagePrinters: async () => [],
     listStations: vi.fn(async () => []),
     listProfileKitchenScreens: vi.fn(async () => []),
     getProfileScopeChoices: vi.fn(async () => ({

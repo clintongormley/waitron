@@ -47,6 +47,8 @@ const profile: DeviceProfile = {
   receiptPrinterDefaultId: null,
   paymentSlipPrinterDefaultId: null,
   cashDrawerPrinterDefaultId: null,
+  invoicePrinterIds: [],
+  invoicePrinterDefaultId: null,
 };
 const station: Station = {
   id: "s1",
@@ -96,6 +98,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStations: async () => [station, { ...station, id: "s2", name: "Bar" }],
       listZones: async () => [],
       listPrinters: async () => [],
+      listPagePrinters: async () => [],
       listProfileKitchenScreens: async () => [],
       listDeviceProfiles: async () => [profile, { ...profile, id: "p2", name: "Phone" }],
       pairingMode: async () => ({

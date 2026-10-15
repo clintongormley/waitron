@@ -11,6 +11,7 @@ import type {
   DashboardApi,
   PersonRole,
   PersonSummary,
+  PagePrinterRow,
   Printer,
   ProfileKitchenScreens,
   ProfileReaderList,
@@ -53,6 +54,8 @@ const profiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     ...OPEN_ACCESS,
     departmentId: "d1",
     startingZoneId: "z1",
@@ -70,6 +73,8 @@ const profiles: DeviceProfile[] = [
     receiptPrinterDefaultId: null,
     paymentSlipPrinterDefaultId: null,
     cashDrawerPrinterDefaultId: null,
+    invoicePrinterIds: [],
+    invoicePrinterDefaultId: null,
     ...OPEN_ACCESS,
     departmentId: null,
     startingZoneId: null,
@@ -116,6 +121,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
     listPrinters: vi.fn().mockResolvedValue([]),
+    listPagePrinters: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
@@ -2550,6 +2556,121 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(
       el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-error]")?.textContent?.trim(),
     ).toBe(t("device_profiles.err_no_cash_drawer"));
+  });
+
+  describe("the invoice list", () => {
+    function a4(id: string, name: string, active = true): PagePrinterRow {
+      return {
+        id,
+        name,
+        host: "10.0.0.20",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        active,
+        invoicePrinter: false,
+        agentId: "ag1",
+        agentName: "Box",
+      };
+    }
+    const offices = [a4("pg1", "Oficina"), a4("pg2", "Almacén", false), a4("pg3", "Recepción")];
+    const invoiceProfile: DeviceProfile = {
+      ...listedProfile,
+      invoicePrinterIds: ["pg3", "pr2"],
+      invoicePrinterDefaultId: "pg3",
+    };
+    const withOffices = { listPagePrinters: vi.fn().mockResolvedValue(offices) };
+    type Switch = HTMLElement & { checked: boolean; label: string };
+    const invoiceSwitches = (el: DeviceProfilesScreen) => [
+      ...el.shadowRoot!.querySelectorAll<Switch>(
+        "[data-test=invoice-printers] wt-switch[data-printer-id]",
+      ),
+    ];
+
+    it("offers the switched-on receipt and A4 printers, the A4 ones marked, the profile's first", async () => {
+      const { el } = await editListed(withOffices, invoiceProfile);
+      expect(
+        invoiceSwitches(el).map((s) => [
+          s.dataset.printerId,
+          s.label,
+          s.checked,
+          s.getAttribute("name"),
+        ]),
+      ).toEqual([
+        ["pg3", "Recepción · A4", true, "invoicePrinterIds"],
+        ["pr2", "Cocina", true, "invoicePrinterIds"],
+        ["pr1", "Barra", false, "invoicePrinterIds"],
+        ["pr3", "Terraza", false, "invoicePrinterIds"],
+        ["pg1", "Oficina · A4", false, "invoicePrinterIds"],
+      ]);
+      expect(el.shadowRoot!.querySelector("#invoice-printers-heading")?.textContent?.trim()).toBe(
+        t("device_profiles.invoice_printers"),
+      );
+      const fallback = field(el, "invoice-printers-default");
+      expect(fallback.getAttribute("name")).toBe("invoicePrinterDefaultId");
+      expect(fallback.getAttribute("label")).toBe(t("device_profiles.invoice_default"));
+      expect(fallback.value).toBe("pg3");
+      expect(fallback.options).toEqual([
+        { value: "", label: t("device_profiles.default_none") },
+        { value: "pg3", label: "Recepción · A4" },
+        { value: "pr2", label: "Cocina" },
+      ]);
+    });
+
+    it("saves the invoice list and its default", async () => {
+      const { api, el } = await editListed(withOffices);
+      toggle(el, "invoice-printers-pr3", true);
+      toggle(el, "invoice-printers-pg1", true);
+      await flush(el);
+      await chooseOption(field(el, "invoice-printers-default"), "pg1");
+      await flush(el);
+      await save(el);
+      expect(savedExtras(api)).toMatchObject({
+        invoicePrinterIds: ["pr3", "pg1"],
+        invoicePrinterDefaultId: "pg1",
+      });
+    });
+
+    it("sends neither the invoice list nor its default when a save leaves them alone", async () => {
+      const { api, el } = await editListed(withOffices, invoiceProfile);
+      rename(el);
+      await save(el);
+      expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+      const extras = savedExtras(api) ?? {};
+      expect(extras).not.toHaveProperty("invoicePrinterIds");
+      expect(extras).not.toHaveProperty("invoicePrinterDefaultId");
+    });
+
+    it("a default_not_listed refusal about the invoice default shows under it", async () => {
+      const { el } = await editListed({
+        ...withOffices,
+        updateDeviceProfile: vi.fn().mockRejectedValue({
+          code: "device_profile.invalid",
+          params: { reason: "default_not_listed", field: "invoicePrinterDefaultId" },
+        }),
+      });
+      rename(el);
+      await save(el);
+      expect(field(el, "invoice-printers-default").error).toBe(
+        t("device_profiles.err_default_not_listed"),
+      );
+      expect(field(el, "receipt-printers-default").error).toBe("");
+    });
+
+    it("copies the invoice list and its default when the profile is duplicated", async () => {
+      const { api, el } = await editListed(withOffices, invoiceProfile);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+      await flush(el);
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
+        invoicePrinterIds: ["pg3", "pr2"],
+        invoicePrinterDefaultId: "pg3",
+      });
+    });
   });
 
   it("lists the venue's card readers, the profile's switched on, with its default", async () => {

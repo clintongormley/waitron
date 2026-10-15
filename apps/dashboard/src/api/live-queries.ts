@@ -115,7 +115,7 @@ export const QUERY_DEPENDENCIES = {
     "print_jobs",
     "invoice_deliveries",
     "printer_holders",
-    // The impact names devices by their receipt, payment slip and cash drawer choices.
+    // The impact names devices by their printer choices.
     "devices",
     "device_profiles",
     "device_profile_printers",
@@ -432,6 +432,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_printers",
     "device_profile_card_readers",
     "printers",
+    "page_printers",
     "card_readers",
     // Each device's kitchen screens (`readDevicesKitchenScreens`, packages/venue-service).
     "device_kitchen_screens",

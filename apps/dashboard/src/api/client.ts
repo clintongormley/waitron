@@ -743,7 +743,8 @@ export interface DeviceRow {
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
   cashDrawerPrinterId: string | null;
-  /** Each role's choice and what it resolves to now: receipt, slip, drawer, then reader. */
+  /** Each role's choice and what it resolves to now: receipt, slip, drawer, invoice, then reader.
+   * The invoice role's `chosenId` is the device's own invoice choice, which the row has no field for. */
   equipment: RoleEquipment[];
   /** A whole percentage, 0 to 100. */
   batteryLevel: number | null;
@@ -751,7 +752,8 @@ export interface DeviceRow {
   batteryReportedAt: string | null;
 }
 
-export type EquipmentRole = "receipt" | "payment_slip" | "cash_drawer" | "card_terminal";
+export type EquipmentRole =
+  "receipt" | "payment_slip" | "cash_drawer" | "invoice" | "card_terminal";
 
 /** The other device holding an item, and who is signed in on it, if anyone. */
 export interface EquipmentHolder {
@@ -805,6 +807,9 @@ export interface DeviceProfile extends ProfileServiceScope {
   receiptPrinterDefaultId: string | null;
   paymentSlipPrinterDefaultId: string | null;
   cashDrawerPrinterDefaultId: string | null;
+  /** Receipt printers and A4 printers alike. */
+  invoicePrinterIds: string[];
+  invoicePrinterDefaultId: string | null;
   /** Never empty: every role when the profile narrows nothing. */
   admittedRoles: PersonRole[];
   personExceptions: PersonException[];
@@ -817,13 +822,16 @@ export type ProfileSaveExtras = Partial<
     Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
 >;
 
-/** The drawer list and each printer list's default; on a new profile, absent is empty and None. */
+/** The drawer and invoice lists and each printer list's default; on a new profile, absent is empty
+ * and None. */
 export type ProfileEquipmentDefaults = Pick<
   DeviceProfile,
   | "cashDrawerPrinterIds"
+  | "invoicePrinterIds"
   | "receiptPrinterDefaultId"
   | "paymentSlipPrinterDefaultId"
   | "cashDrawerPrinterDefaultId"
+  | "invoicePrinterDefaultId"
 >;
 
 /** The card readers a profile's devices may choose, in order, and the one they start on. */
@@ -3446,6 +3454,8 @@ export class DashboardApi {
       paymentSlipPrinterId: string | null;
       /** Absent leaves the stored drawer choice; null is Use default. */
       cashDrawerPrinterId?: string | null;
+      /** A receipt or A4 printer; absent leaves the stored choice, null is Use default. */
+      invoicePrinterId?: string | null;
       /** Absent leaves the device's stored made-here stations as they are. */
       madeHereStationIds?: string[];
       /** The profiles staff may switch to besides `profileId`; absent leaves them as they are. */
