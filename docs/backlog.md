@@ -320,14 +320,18 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
-  corrective-record resolution, filing investigation, outside evidence and fencing, the complete
-  old-backup/new-hardware operational exercise, and the Cloud registry adapter remain queued.
-  The Cloud service has its own workstream; paper allocation does not require a subscription.
-  W41s-C3 is building the [Waitron adapter](developers/cloud-fiscal-allocation.md), including
-  local authenticated restore and retained reports. Cloud's operator correction landed in
-  [Cloud #132](https://github.com/waitron-io/waitron-cloud/pull/132); the separately scheduled
-  PostgreSQL/client joint test remains a dependency. Local recovery must retain that key's node/event identity.
+  corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
+  old-backup/new-hardware operational exercise remain queued. Cloud allocation production
+  enablement still needs qualified custody, signing, subscription and continuity policies; the
+  [manual recovery and explicit report adapters](developers/cloud-fiscal-allocation.md) select
+  none of those defaults. Paper allocation does not require a subscription.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
+
+- **Cloud fiscal reporting has no running host caller yet.** The adapter can collect a committed
+  activation and send its retained report, but reporting is an explicit API call. Choose an
+  authenticated operator entry point or background duty before promising unattended reconciliation.
+  The calls are qualified in `apps/server/src/cloud-fiscal-allocation.test.ts` and the separately
+  owned Cloud joint suite; neither starts a production reporting worker.
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** The bundle can reserve a signed identity, but the public adopter refuses that

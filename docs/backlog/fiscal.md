@@ -238,6 +238,15 @@ open. No production custody, signing or continuity policy is selected by this ch
 Cloud's operator correction subsequently landed as [Cloud #132](https://github.com/waitron-io/waitron-cloud/pull/132)
 at `a7a29f4a73e5115a8f2e9c381eab97710dad4645`; the scheduled joint result still gates completion.
 
+**2026-10-15 implementation boundary:** C3 supplies the signed consumed-receipt verifier,
+configured manual recovery preparation, public receipt retention and explicit report APIs. Both
+FULL reviews were triaged; the report journal publishes complete files, checks the encoded proof
+before binding a new operation and checks the expected receipt in live and cached replies.
+The operator-contract correction is Cloud #132. Source and acceptance checks are documented in
+[the adapter guide](../developers/cloud-fiscal-allocation.md). Production custody/signing/continuity
+policy and a running host reporting caller remain separate work. The dated checkpoints above
+record the earlier branch state rather than current open implementation work.
+
 **2026-10-14, Task 4 review checkpoint:** the supplied-identity/default/text transition,
 regenerated migrations, host/demo inputs and person-or-key-event Cloud handoff are implemented.
 The owner approved the exact archive changes; the original archive/target suites pass 36 cases.
