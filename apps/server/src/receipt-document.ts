@@ -11,7 +11,7 @@ import {
   type ReceiptPresentation,
 } from "@waitron/shared";
 import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
-import { formatMoney } from "./receipt-money.js";
+import { formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -133,9 +133,17 @@ export function buildReceiptDocument({
       `${formatMoney(line.net.unitPrice, locale)} / ${trimQuantityForDisplay(line.net.priceQuantity)}${unit}`,
       indent,
     );
-    row(`${label.base} ${line.net.rate}%`, formatMoney(line.net.base, locale), indent);
+    row(
+      `${label.base} ${formatVatRate(line.net.rate, locale)}`,
+      formatMoney(line.net.base, locale),
+      indent,
+    );
     if (line.net.tax !== undefined) {
-      row(`${label.vat} ${line.net.rate}%`, formatMoney(line.net.tax, locale), indent);
+      row(
+        `${label.vat} ${formatVatRate(line.net.rate, locale)}`,
+        formatMoney(line.net.tax, locale),
+        indent,
+      );
     }
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
@@ -258,8 +266,8 @@ export function buildReceiptDocument({
   for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
   line();
   for (const v of result.vatBreakdown) {
-    row(`${label.base} ${v.rate}%`, formatMoney(v.base, locale));
-    row(`${label.vat} ${v.rate}%`, formatMoney(v.tax, locale));
+    row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
+    row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
   }
   elements.push({ kind: "rule" });
   row(label.total, formatMoney(result.total, locale));

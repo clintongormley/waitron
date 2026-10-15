@@ -71,6 +71,23 @@ describe("format-neutral invoice content", () => {
       { kind: "qr", text: FULL_INVOICE_FIXTURE.result.qr },
     ]);
   });
+
+  it("writes a filed line's two-decimal rate with significant digits only", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines[0]!.net!.rate = "21.00";
+    input.result.lines[1]!.net!.rate = "17.50";
+    input.result.vatBreakdown = [
+      { rate: "21.00", base: "9.00", tax: "1.89" },
+      { rate: "17.50", base: "8.00", tax: "0.80" },
+    ];
+    const captions = buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "amount" ? [e.caption] : [],
+    );
+    expect(captions).toEqual(
+      expect.arrayContaining(["Base 21%", "IVA 21%", "Base 17,5%", "IVA 17,5%"]),
+    );
+    expect(captions.some((c) => c.includes(".00%") || c.includes("17.5"))).toBe(false);
+  });
 });
 
 it.each(["thermal", "a4"] as const)(

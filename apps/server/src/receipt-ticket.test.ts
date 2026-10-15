@@ -344,9 +344,10 @@ it.each([PRINTER_58, PRINTER_80])(
       .join(" ")
       .replace(/\s+/g, " ");
     const dish = content.slice(content.indexOf("Plato"), content.indexOf("Extra"));
-    const extra = content.slice(content.indexOf("Extra"), content.indexOf("Base 21%"));
-    expect(dish).toContain("IVA 21.00% 2,10 €");
-    expect(extra).toContain("IVA 10.00% 0,80 €");
+    const extraStart = content.indexOf("Extra");
+    const extra = content.slice(extraStart, content.indexOf("Base 21%", extraStart));
+    expect(dish).toContain("IVA 21% 2,10 €");
+    expect(extra).toContain("IVA 10% 0,80 €");
   },
 );
 
@@ -478,7 +479,7 @@ it.each([PRINTER_58, PRINTER_80])(
       expect(content).toContain("Factura completa");
       const price = invoiceLocale === "es-ES" ? "25,00 €" : "€25.00";
       expect(content).toContain(`Precio sin IVA ${price} / 1 kg`);
-      expect(content).toContain(`Base 10.00% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`);
+      expect(content).toContain(`Base 10% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`);
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
     }

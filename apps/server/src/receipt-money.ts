@@ -19,3 +19,32 @@ export function formatMoney(value: string, locale: string): string {
     .replace(/[\u{a0}\u{202f}]/gu, " ")
     .replace(/\u{2212}/gu, "-");
 }
+
+const rateFormatters = new Map<string, Intl.NumberFormat>();
+const amountFormatters = new Map<string, Intl.NumberFormat>();
+
+function cached(
+  map: Map<string, Intl.NumberFormat>,
+  locale: string,
+  options: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  let formatter = map.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, options);
+    map.set(locale, formatter);
+  }
+  return formatter;
+}
+
+/** A VAT rate as a receipt prints it: significant digits only, the locale's decimal mark, then "%". */
+export function formatVatRate(rate: string, locale: string): string {
+  return `${cached(rateFormatters, locale, { maximumFractionDigits: 2 }).format(Number(rate))}%`;
+}
+
+/** An amount without the currency sign, for the rows inside a receipt's item list. */
+export function formatAmount(value: string, locale: string): string {
+  return cached(amountFormatters, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .format(Number(value))
+    .replace(/[\u{a0}\u{202f}]/gu, " ")
+    .replace(/\u{2212}/gu, "-");
+}
