@@ -190,6 +190,15 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
   party's or a counter order's print the bare number. Picture 5 in
   [the A650 mockups](mockups/a650-moved-slips/).
 
+- **A prep station's Times tab draws one track per department that sends it orders (A688, owner
+  2026-10-14, mockup 2 of question A2 of A506-12).** A key above the grid names the rows in
+  department order ("Rows: Restaurant · Bar"), and hovering a range names its period and
+  department. A department with nothing on a date that another department fills draws an empty
+  track; a date with nothing at all reads "No orders" once. A station one department feeds keeps
+  one track and no key. The owner turned down one bar holding every range (two ranges at the same
+  time hid each other) and one bar with a label naming both where times overlap. Mockups:
+  [mockups/a506-12-times-overlap/](mockups/a506-12-times-overlap/).
+
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").
 

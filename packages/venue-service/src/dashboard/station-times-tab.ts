@@ -7,7 +7,7 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { RoutingPeriod } from "../routing-types.js";
 import type { StationServiceTimes } from "../station-service-times.js";
-import { browserToday, format } from "./hours-view.js";
+import { browserToday } from "./hours-view.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
@@ -155,8 +155,10 @@ export class PrepStationTimes extends LitElement {
     }
   }
 
-  /** The month read's dates, each carrying the station's one row (empty on a date it gets nothing),
-   *  or nothing until both reads answer for the shown month and station over the same dates. */
+  /** The month read's dates, each carrying one row per department that feeds the station on any
+   *  shown date (empty on a date it sends nothing), in the month read's department order; one
+   *  department or none is one row named the station. Nothing until both reads answer for the shown
+   *  month and station over the same dates. */
   #compose(station: TimesStation, times: StationServiceTimes) {
     const meta = this.monthModel;
     if (
@@ -173,43 +175,41 @@ export class PrepStationTimes extends LitElement {
       cached.periods === this.periods
     )
       return cached;
-    const fed = new Set(
-      times.days.flatMap((day) => day.departments.map((row) => row.departmentId)),
-    );
+    const order = meta.days[0]!.departments.map((row) => row.departmentId);
+    const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length);
+    const fed = [
+      ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
+    ].sort((a, b) => rank(a) - rank(b));
+    const several = fed.length > 1;
+    const rows = several ? fed : [station.id];
     const model: OpeningHoursMonth = {
       ...meta,
       days: meta.days.map((day, index) => {
         const cutover = minutes(day.dayCutover);
         const offset = (time: string) => (minutes(time) - cutover + 1440) % 1440;
+        const sent = times.days[index]!.departments;
         return {
           ...day,
-          departments: [
-            {
-              departmentId: station.id,
-              zones: [],
-              ranges: times.days[index]!.departments.flatMap((row) => row.ranges).sort(
-                (a, b) => offset(a.startsAt) - offset(b.startsAt),
-              ),
-            },
-          ],
+          departments: rows.map((id) => ({
+            departmentId: id,
+            zones: [],
+            ranges: sent
+              .filter((row) => !several || row.departmentId === id)
+              .flatMap((row) => row.ranges)
+              .sort((a, b) => offset(a.startsAt) - offset(b.startsAt)),
+          })),
         };
       }),
     };
-    const departments: MonthDepartment[] = [
-      {
-        id: station.id,
-        name: station.name,
-        zones: [],
-        periods: this.periods.map(({ id, name, colour, departmentName }) => ({
+    const plain = ({ id, name, colour }: TimesPeriod) => ({ id, name, colour });
+    const departments: MonthDepartment[] = several
+      ? fed.map((id) => ({
           id,
-          colour,
-          name:
-            fed.size > 1
-              ? format("prep.times.period", { period: name, department: departmentName })
-              : name,
-        })),
-      },
-    ];
+          name: this.periods.find((period) => period.departmentId === id)?.departmentName ?? "",
+          zones: [],
+          periods: this.periods.filter((period) => period.departmentId === id).map(plain),
+        }))
+      : [{ id: station.id, name: station.name, zones: [], periods: this.periods.map(plain) }];
     this.#composed = { meta, times, station, periods: this.periods, model, departments };
     return this.#composed;
   }

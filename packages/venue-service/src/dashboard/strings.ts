@@ -130,6 +130,7 @@ const en = {
   "month.rows": "Rows:",
   "month.department_closed": "{name} closed",
   "month.no_orders": "No orders",
+  "month.period_department": "{period} ({department})",
   "month.zone_closed": "{name} closed {start}–{end}",
   "month.range": "{name} {start}–{end}",
 
@@ -208,7 +209,6 @@ const en = {
   "prep.station_closed_today": "Closed for today → {station}",
   "prep.when_gets_orders": "When it gets orders",
   "prep.times.station": "Station",
-  "prep.times.period": "{period} ({department})",
   "prep.times.load_error": "This station's times could not be loaded. It will be tried again.",
   "prep.station_no_replacement": "No replacement",
   "prep.station_clock_unreadable": "Venue time cannot be read.",
@@ -985,6 +985,7 @@ const es: Record<keyof typeof en, string> = {
   "month.rows": "Filas:",
   "month.department_closed": "{name}: cerrado",
   "month.no_orders": "Sin pedidos",
+  "month.period_department": "{period} ({department})",
   "month.zone_closed": "{name}: cerrado {start}–{end}",
   "month.range": "{name} {start}–{end}",
 
@@ -1064,7 +1065,6 @@ const es: Record<keyof typeof en, string> = {
   "prep.station_closed_today": "Cerrada por hoy → {station}",
   "prep.when_gets_orders": "Cuándo recibe pedidos",
   "prep.times.station": "Estación",
-  "prep.times.period": "{period} ({department})",
   "prep.times.load_error":
     "No se han podido cargar los horarios de esta estación. Se volverá a intentar.",
   "prep.station_no_replacement": "Sin sustituta",

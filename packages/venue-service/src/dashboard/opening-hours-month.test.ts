@@ -428,7 +428,7 @@ describe("Opening hours month", () => {
     expect(testId(el, "previous-month")).not.toBeNull();
   });
 
-  it("in station mode, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
+  it("in station mode over one row, draws only the month's steps, its dates and the season key, with no Rows legend", async () => {
     const el = await mount(stationModel(), {
       readOnly: true,
       stationMode: true,
@@ -465,6 +465,73 @@ describe("Opening hours month", () => {
       expect(sunday.querySelector(".day")!.getAttribute("aria-label")).not.toContain("Grill");
       expect(cell(el, "2026-12-07").querySelector('[data-test="no-orders"]')).toBeNull();
       expect(cell(el, "2026-12-07").querySelectorAll(".track")).toHaveLength(1);
+      el.remove();
+    }
+  });
+
+  it("in station mode with a row per department, keys the rows and names each period's department on hover", async () => {
+    for (const [locale, rows] of [
+      ["en", "Rows: Restaurant · Bar"],
+      ["es", "Filas: Restaurant · Bar"],
+    ] as const) {
+      setLocale(locale);
+      const model = monthModel();
+      const days = model.days.map((day) => ({
+        ...day,
+        departments: day.departments.map((d) => ({
+          ...d,
+          ranges: day.date === "2026-12-15" ? [] : d.ranges,
+          zones: [],
+        })),
+      }));
+      const el = await mount(
+        { ...model, days },
+        {
+          readOnly: true,
+          stationMode: true,
+          departments: DEPARTMENTS.map(({ id, name, periods }) => ({
+            id,
+            name,
+            zones: [],
+            periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
+          })),
+        },
+      );
+      expect(text(testId(el, "rows"))).toBe(rows);
+      const tracks = [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".track")];
+      expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+      expect(
+        tracks.map((track) =>
+          [...track.querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
+        ),
+      ).toEqual([
+        [
+          "Breakfast (Restaurant) 08:00–11:00",
+          "Lunch (Restaurant) 13:00–16:00",
+          "Dinner (Restaurant) 20:00–23:00",
+        ],
+        ["All day (Bar) 10:00–02:00"],
+      ]);
+      expect(cell(el, "2026-12-07").querySelector(".day")!.getAttribute("aria-label")).toContain(
+        "Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
+      );
+      const words = locale === "en" ? "No orders" : "Sin pedidos";
+      const sunday = cell(el, "2026-12-06");
+      expect([...sunday.querySelectorAll<HTMLElement>(".track")].map((t) => t.dataset.row)).toEqual(
+        ["rest", "bar"],
+      );
+      expect(sunday.querySelectorAll('.track[data-row="rest"] .segment')).toHaveLength(0);
+      expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
+      expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(
+        `Restaurant: ${words}, Bar: All day 10:00–02:00`,
+      );
+      const none = cell(el, "2026-12-15");
+      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
+      expect(none.querySelectorAll(".track")).toHaveLength(0);
+      const label = none.querySelector(".day")!.getAttribute("aria-label")!;
+      expect(label.split(words)).toHaveLength(2);
+      expect(label).not.toContain("Restaurant");
+      expect(cell(el, "2026-12-25").querySelectorAll('[data-test="no-orders"]')).toHaveLength(1);
       el.remove();
     }
   });

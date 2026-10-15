@@ -17,6 +17,7 @@ afterEach(() => {
 const STATIONS = [
   { id: "grill", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
   { id: "kitchen", name: "Kitchen", active: true, isDefault: true, displayOrder: 2 },
+  { id: "pass", name: "Pass", active: true, isDefault: false, displayOrder: 3 },
 ];
 const PERIODS = [
   {
@@ -29,7 +30,7 @@ const PERIODS = [
   { id: "allday", departmentId: "bar", departmentName: "Bar", name: "All day", colour: "purple" },
 ] as const;
 
-type State = "month" | "default" | "error" | "no stations";
+type State = "month" | "several departments" | "default" | "error" | "no stations";
 function api(state: State) {
   return new OpeningHoursApi((async (path: string) => {
     if (state === "error") throw new Error("read refused");
@@ -38,6 +39,7 @@ function api(state: State) {
     if (url.pathname.includes("/kitchen/")) return { always: "default", days: [] };
     const days = [];
     const to = url.searchParams.get("to")!;
+    const pass = url.pathname.includes("/pass/");
     for (let date = url.searchParams.get("from")!; date <= to; date = addDays(date, 1))
       days.push({
         date,
@@ -47,12 +49,19 @@ function api(state: State) {
             : [
                 {
                   departmentId: "rest",
-                  ranges: [{ periodId: "dinner", startsAt: "19:00", endsAt: "01:00" }],
+                  ranges:
+                    pass && date.endsWith("3")
+                      ? []
+                      : [{ periodId: "dinner", startsAt: "19:00", endsAt: "01:00" }],
                 },
-                {
-                  departmentId: "bar",
-                  ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
-                },
+                ...(pass
+                  ? [
+                      {
+                        departmentId: "bar",
+                        ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
+                      },
+                    ]
+                  : []),
               ],
       });
     return { always: null, days };
@@ -61,31 +70,54 @@ function api(state: State) {
 
 describe.each(["en", "es"] as const)("Prep station times accessibility (%s)", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
-    it.each(["month", "default", "error", "no stations"] as const)("%s", async (state) => {
-      setLocale(locale);
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-12-10T10:00:00Z"));
-      await mountThemed("<div></div>", theme);
-      const el = document.createElement("prep-station-times") as PrepStationTimes;
-      Object.assign(el, {
-        api: api(state),
-        stations: state === "no stations" ? [] : STATIONS,
-        periods: PERIODS,
-        stationId: state === "default" ? "kitchen" : "grill",
-      });
-      host.append(el);
-      const root = el.shadowRoot!;
-      const ready = {
-        month: () =>
-          root
-            .querySelector("opening-hours-month")
-            ?.shadowRoot?.querySelector('.track[data-row="grill"]') ?? null,
-        default: () => root.querySelector('[data-test="always-open"]'),
-        error: () => root.querySelector('[role="alert"]'),
-        "no stations": () => root.querySelector("p"),
-      }[state];
-      await expect.poll(ready).not.toBeNull();
-      await expectNoA11yViolations(host);
-    });
+    it.each(["month", "several departments", "default", "error", "no stations"] as const)(
+      "%s",
+      async (state) => {
+        setLocale(locale);
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-12-10T10:00:00Z"));
+        await mountThemed("<div></div>", theme);
+        const el = document.createElement("prep-station-times") as PrepStationTimes;
+        Object.assign(el, {
+          api: api(state),
+          stations: state === "no stations" ? [] : STATIONS,
+          periods: PERIODS,
+          stationId:
+            state === "default" ? "kitchen" : state === "several departments" ? "pass" : "grill",
+        });
+        host.append(el);
+        const root = el.shadowRoot!;
+        const ready = {
+          month: () =>
+            root
+              .querySelector("opening-hours-month")
+              ?.shadowRoot?.querySelector('.track[data-row="grill"]') ?? null,
+          "several departments": () =>
+            root
+              .querySelector("opening-hours-month")
+              ?.shadowRoot?.querySelector('.track[data-row="rest"]') ?? null,
+          default: () => root.querySelector('[data-test="always-open"]'),
+          error: () => root.querySelector('[role="alert"]'),
+          "no stations": () => root.querySelector("p"),
+        }[state];
+        await expect.poll(ready).not.toBeNull();
+        if (state === "several departments") {
+          const month = root.querySelector("opening-hours-month")!.shadowRoot!;
+          for (const shown of [
+            '[data-test="rows"]',
+            '.track[data-row="bar"]',
+            '[data-test="no-orders"]:not([data-all-day])',
+          ])
+            expect(month.querySelector(shown), shown).not.toBeNull();
+          expect(
+            [...month.querySelectorAll('.track[data-row="rest"]')].some(
+              (track) => !track.querySelector(".segment"),
+            ),
+            "an empty Restaurant track",
+          ).toBe(true);
+        }
+        await expectNoA11yViolations(host);
+      },
+    );
   });
 });
