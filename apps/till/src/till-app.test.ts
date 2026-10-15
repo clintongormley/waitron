@@ -11202,6 +11202,12 @@ describe("till-app", () => {
       );
     });
 
+    it("tells the operator a Find a bill collection has no department", async () => {
+      expect(await findBillPayRefused({ code: "sale.department_missing", status: 400 })).toBe(
+        "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
+      );
+    });
+
     it("tells the operator a Find a bill collection's department needs a tax-agency description", async () => {
       expect(
         await findBillPayRefused({

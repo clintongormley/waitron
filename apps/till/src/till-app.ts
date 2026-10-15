@@ -643,6 +643,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "product.not_sold_separately",
   "sale.total_exceeds_simplified_limit",
   "department.operation_description_required",
+  "sale.department_missing",
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -657,11 +658,13 @@ function overLimitOf(error: unknown): { overLimit: string } | undefined {
 /** A settle path's refusal shown in its own words rather than the generic `sale.error`. */
 function settleRefusalOf(
   error: unknown,
-): { overLimit: string } | { code: "department.operation_description_required" } | undefined {
-  if (
-    (error as { code?: string } | undefined)?.code === "department.operation_description_required"
-  )
-    return { code: "department.operation_description_required" };
+):
+  | { overLimit: string }
+  | { code: "department.operation_description_required" | "sale.department_missing" }
+  | undefined {
+  const code = (error as { code?: string } | undefined)?.code;
+  if (code === "department.operation_description_required" || code === "sale.department_missing")
+    return { code };
   return overLimitOf(error);
 }
 

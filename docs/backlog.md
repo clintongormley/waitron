@@ -1719,11 +1719,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
 
-- **A685 — a sale with no department found borrows the missing-description refusal (2026-10-14;
-  open; left open by #1709).** `apps/server/src/sale-operation-description.ts` refuses it as
-  `department.operation_description_required`, which the till words as "add the description in
-  Departments and zones", no help there. Give it its own code. A662 will make it the only case left.
-
 
 ### The kitchen and preparation
 

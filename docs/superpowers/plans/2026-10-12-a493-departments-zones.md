@@ -1,5 +1,10 @@
 # A493 Departments and Zones Implementation Plan
 
+> **2026-10-15 — A685:** The missing-department case now answers `sale.department_missing`;
+> see `apps/server/src/sale-operation-description.ts` and its sibling tests. An existing
+> department without a description still answers `department.operation_description_required`.
+
+
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this plan inline, task by task. The owner chose a Codex driver; do not dispatch routine implementer/reviewer pairs. Read `superpowers:test-driven-development` before writing implementation or tests. Checkbox steps are execution tracking, not claims that this planning delegate ran them.
 
 **Goal:** Replace department pages and venue receipt defaults with one department/zone list and protected dialog editors, including department-owned fiscal descriptions.
