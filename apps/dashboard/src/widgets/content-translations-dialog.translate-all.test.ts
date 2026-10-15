@@ -168,7 +168,7 @@ describe("Translate all in the translations dialog", () => {
     ).toBe("");
   });
 
-  it("says nothing was missing until the next press", async () => {
+  it("says nothing was missing, and the next press clears it", async () => {
     setLocale("en-GB");
     const startContentSuggestions = vi
       .fn()

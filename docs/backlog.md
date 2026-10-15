@@ -1135,7 +1135,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **Translate all wording in the translations dialog that reads wrongly for some counts.** A count
   of one reads "1 suggestions" — `suggestions.waiting`, `suggestions.capacity`, `suggestions.fits`
   and, in Spanish, `suggestions.partly` have no `_one` forms, unlike their siblings in
-  `apps/dashboard/src/i18n/strings.ts` (the plan's wording, kept for A689's fourth PR). And the
+  `apps/dashboard/src/i18n/strings.ts` (the plan's wording, left unchanged by A689's fourth PR). And the
   dialog's counters still say "edited" for every row Save would send, untouched suggestions
   included: `translations.edited`, `translations.hidden`, `translations.show_edited`,
   `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are

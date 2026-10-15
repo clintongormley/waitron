@@ -12989,8 +12989,8 @@ git commit -s -m "Tell the dashboard bell when Translate all suggestions are rea
 
 **Files:**
 - Modify: `docs/developers/cloud-connection.md` (a "Translate all" section)
-- Modify: `docs/developers/products.md` (under "Filling missing customer names together"; also its Content languages paragraph, which still says **Edit translations** opens the Missing translations report in a read-only dialog)
-- Modify: `docs/content-and-images.md` (the **Edit translations** paragraph still says direct text entry is planned separately, and names no Translate all; added by A689 PR4's pre-merge review, 2026-10-15)
+- Modify: `docs/developers/products.md` (under "Filling missing customer names together")
+- Modify: `docs/content-and-images.md` (the **Edit translations** paragraph names no Translate all; added by A689 PR4's pre-merge review, 2026-10-15)
 - Modify: `docs/backlog.md` (the "A 'Translate all' service from Waitron Cloud" entry, about line 1026, and the side-by-side dialog entry, about line 1089)
 
 - [ ] **Step 1: `cloud-connection.md`** — add this section after the paragraph Task 1 rewrote (follow `~/.claude/docs-writing-style.md`; adjust only names the code you wrote spells differently, and say so in the handover):
@@ -13028,6 +13028,8 @@ them. A default-language suggestion for an item with no customer-facing name in 
 shown as a row of its own, although the page's own list still leaves such a name out.
 ```
 
+- [ ] **Step 2b: `content-and-images.md`** — in the **Edit translations** paragraph, add one or two sentences, for the operator, on what **Translate all** does: suggestions fill empty names as drafts marked **Suggested**, reach no diner until saved, and **Discard suggestion** removes one. Check each against the dialog's code before writing it.
+
 - [ ] **Step 3: Backlog** — delete the "A 'Translate all' service from Waitron Cloud" entry. In the same area add three short entries:
   - "Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud once Cloud's side exists (plan `docs/superpowers/plans/2026-10-14-translate-all.md`, Task 21)."
   - "Translate all: a **Use fix** button for a spelling fix to a name someone entered; it waits for the side-by-side translations dialog (plan Decision 6)."
@@ -13040,7 +13042,7 @@ shown as a row of its own, although the page's own list still leaves such a name
 
 ```bash
 pnpm exec prettier --file-info docs/backlog.md
-git add docs/developers/cloud-connection.md docs/developers/products.md docs/backlog.md
+git add docs/developers/cloud-connection.md docs/developers/products.md docs/content-and-images.md docs/backlog.md
 git commit -s -m "Document Translate all and update the backlog for what it finishes and leaves open"
 ```
 
