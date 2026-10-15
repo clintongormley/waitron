@@ -4263,15 +4263,20 @@ content.
 The till's tab-shell bar is one row at every width. On a phone (40rem wide or less) it holds the
 tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
 its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
-The bar draws its actions left to right in priority order — Find a bill, Pass, Kitchen, My
-schedule, Allergens, Profile, Equipment, Transfers (the count and its button together) — and More
-takes them from the right: the Waitron name is hidden first, then Transfers, Equipment, Profile,
-Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with Log out,
-which keep their place after the language chooser. Inside More the items keep the bar's order. The tabs and the language
-chooser never leave the bar; once everything else has left, the tabs scroll sideways. Items come
-back when the screen grows wider, the bar's content other than the transfer count changes, or the
-language changes, but not while More is open. While the transfers are in More, its button carries the pending count. Cases:
-`apps/till/src/widgets/tab-shell.test.ts`.
+Find a bill stays in More at every width and opens the Bills and Transactions page. Its Back
+returns to the counter without replacing the basket. A transaction receipt keeps the page's tab,
+query and server page for its own Back action.
+
+The other bar actions run left to right in priority order: Pass, Kitchen, My schedule, Allergens,
+Profile, Equipment and Transfers (the count and its button together). More takes these from the
+right. The Waitron name hides first, followed by Transfers, Equipment, Profile, Allergens, My
+schedule, Kitchen, Pass, and finally the operator's name with Log out after the language chooser.
+Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
+chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
+when the screen grows wider, the content other than the transfer count changes, or the language
+changes, but they stay in an open More menu until it closes. While Transfers is in More, the
+menu's button carries its pending count. Cases: `apps/till/src/widgets/tab-shell.test.ts` and the
+A737 cases in `apps/till/src/till-app.test.ts`.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation

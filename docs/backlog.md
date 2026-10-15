@@ -2157,12 +2157,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A737 — Find a bill becomes a page with Bills and Transactions tabs (owner, 2026-10-15; open).**
-  Today a dialog with one search box. Bills lists every open order; Transactions lists sales, full
-  invoices and refunds, today by default. Both use the shared table's search, Filters and
-  Customise, with a new date range (Today… This month, or From–To) at the top of Filters and shown
-  as a chip. The first server-paged table: 50 rows a page, search, filters and sort on the server,
-  never every row in memory. [Detail](backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [mockups](backlog/mockups/a737-a740-till-counter-redesign/), [implementation plan](superpowers/plans/2026-10-15-a737-find-bill-page.md)
+- **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
+  Add Refund to the transaction receipt for returning a correct charge, without changing its
+  invoice. Record the attempt before contacting the provider, keep one key per attempt, and
+  recover interrupted returns. Keep the existing permission, manager-PIN, manual-terminal and
+  cash-drawer rules. The page, lists and receipt printing are Part 1.
+  [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
+  [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰

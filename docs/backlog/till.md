@@ -1701,6 +1701,30 @@ shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-bro
 whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
 are.
 
+### A737. Find a bill becomes a page with Bills and Transactions tabs
+
+Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
+☰, with Back to the counter (board 4). Part 1 covers the page, lists and receipt printing; the
+post-invoice Refund action remains Part 2. The approved page contract is:
+
+- **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
+  total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
+  day marked). Filters: zone, staff, state. Tapping a row opens the order where it can be paid.
+- **Transactions** lists paid sales, full invoices and refunds, newest first, today by default:
+  when, invoice number, type, table or name, method (card with its last four digits), staff,
+  amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
+  card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,
+  and Refund.
+- **The same table as everywhere else** (owner): `wt-data-table`'s toolbar, search, Filters panel
+  and Customise. The date range is new: a quick list (Today, Yesterday, This business day, Last 7
+  days, This month) plus From and To, as the first control in the Filters panel (its
+  `filters-start` slot). Each active filter also shows as a chip above the table, so the chosen
+  dates stay visible.
+- **Paging, which no table has today** (owner: there could be thousands of rows, never all loaded
+  into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
+  plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
+  table keeps loading everything.
+
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
 Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
@@ -1724,28 +1748,19 @@ the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading.
 the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
 order off a short screen.
 
-### A737. Find a bill becomes a page with Bills and Transactions tabs
+### A737 Part 2. Refund a paid sale after its invoice
 
-Today Find a bill is a dialog with a "Search for" dropdown and one text box. It becomes a full
-page, opened from ☰, with Back to the counter (board 4):
+Add Refund to the transaction receipt for returning money when the original charge was right.
+The invoice keeps its original fiscal record. A wrong charge still needs the separate correction
+workflow and is outside this item.
 
-- **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
-  total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
-  day marked). Filters: zone, staff, state. Tapping a row opens the order where it can be paid.
-- **Transactions** lists paid sales, full invoices and refunds, newest first, today by default:
-  when, invoice number, type, table or name, method (card with its last four digits), staff,
-  amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
-  card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,
-  and Refund.
-- **The same table as everywhere else** (owner): `wt-data-table`'s toolbar, search, Filters panel
-  and Customise. The date range is new: a quick list (Today, Yesterday, This business day, Last 7
-  days, This month) plus From and To, as the first control in the Filters panel (its
-  `filters-start` slot). Each active filter also shows as a chip above the table, so the chosen
-  dates stay visible.
-- **Paging, which no table has today** (owner: there could be thousands of rows, never all loaded
-  into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
-  plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
-  table keeps loading everything.
+Before calling a card provider, store the attempt with one stable idempotency key. Resume an
+interrupted attempt as the [bill-payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)
+§6b describes. Keep the existing permission and manager-PIN checks, manual-terminal confirmation
+and cash-drawer rule. Close only the post-invoice half of the
+[durable-refund follow-up](payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time);
+the reconciler's reversal remains separate. Follow the
+[Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ### A738. The counter screen: fewer distractions
 
