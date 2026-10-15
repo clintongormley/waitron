@@ -174,6 +174,41 @@ describe("with no stored choice, the window's width decides whether the sidebar 
   }
 });
 
+it("a window too short for the strip, such as a phone held sideways, scrolls it to its last icon", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    expectFolded(el, true);
+    const aside = el.shadowRoot!.querySelector<HTMLElement>("aside.sidebar")!;
+    expect(aside.scrollHeight).toBeGreaterThan(aside.clientHeight);
+    const last = stripButton(el, "configuration");
+    last.scrollIntoView({ block: "end" });
+    const box = aside.getBoundingClientRect();
+    const button = last.getBoundingClientRect();
+    expect(button.bottom).toBeLessThanOrEqual(box.bottom + 1);
+    expect(button.top).toBeGreaterThanOrEqual(box.top);
+    expect(el.shadowRoot!.elementFromPoint(button.left + 2, button.top + 2)).toBe(last);
+  });
+});
+
+it("in a strip that scrolls, a section's panel still shows whole beside the strip", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    const team = stripButton(el, "team");
+    team.scrollIntoView({ block: "end" });
+    await userEvent.click(team);
+    await el.updateComplete;
+    const shown = el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]")!;
+    const box = shown.getBoundingClientRect();
+    const aside = el
+      .shadowRoot!.querySelector<HTMLElement>("aside.sidebar")!
+      .getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(aside.right - 1);
+    const first = shown.querySelector<HTMLElement>(".nav-item")!.getBoundingClientRect();
+    const hit = el.shadowRoot!.elementFromPoint(first.left + 4, (first.top + first.bottom) / 2);
+    expect(shown.contains(hit)).toBe(true);
+  });
+});
+
 it("a stored choice wins over the window's width", async () => {
   await atSize(1024, 768, async () => {
     localStorage.setItem(FOLDED_KEY, "false");

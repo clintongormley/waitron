@@ -400,6 +400,14 @@ export class DashboardApp extends LitElement {
         padding: var(--wt-space-2);
       }
 
+      /* A phone held sideways is wider than the drawer's breakpoint and too short for every icon,
+         so there the strip scrolls, and clips its tooltips; each button keeps its name. */
+      @media (max-height: 40rem) {
+        .sidebar.folded {
+          overflow-y: auto;
+        }
+      }
+
       .strip {
         display: flex;
         flex-direction: column;
