@@ -1268,7 +1268,7 @@ export interface DiscoveredPrinter {
   lastSeenAt: string;
 }
 
-/** An office printer the location prints A4 invoices on, as `GET /management-api/page-printers` lists it. */
+/** An office printer, as `GET /management-api/page-printers` lists it. */
 export interface PagePrinterRow {
   id: string;
   name: string;
