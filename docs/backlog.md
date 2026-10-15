@@ -4655,7 +4655,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   venue-service has no per-weekday station hours read: `stationServiceTimes`
   (`packages/venue-service/src/station-service-times.ts`) works per date, at most 42 days. Left open
   by A585-4.
-- **A707. On a phone, a paint grid's block or column menu can cover the block it belongs to.**
+- **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
   A585-4 moved the code there. Next: place it above or beside the block instead.
@@ -4664,10 +4664,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
   how one grid shows dates with different changeovers. Left open by A585-4.
   [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
-- **A709. The special-day staffing read reads `seasons`, `department_days` and
-  `department_day_ranges` twice** — once in venue-service's `readSpecialDayPlan` and again in
-  `readDepartmentSeasonWeeks` (`readSpecialDayStaffing`, `packages/staffing/src/paint.ts`). Next:
-  let `readDepartmentSeasonWeeks` take what the plan already read. Left open by A585-4.
 - **A710. Staffing painter polish** — no "Drag down a day…" hint, + New staff role's dialog says
   Save where Opening hours' period dialog says "Add and paint with it", short blocks show no text,
   editable blocks have no tooltip, the two How many fields treat a number outside 1–50 differently,
@@ -5756,9 +5752,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
   (#916). [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
-- **`scripts/dashboard-browser-purity.test.ts` checks only one file of venue-service's dashboard
-  code, `src/dashboard/painter.ts`**, beside bookings', adjustments' and staffing's dashboard
-  folders. Nothing checks the rest, including the `./dashboard/season-tint` export staffing uses,
+- **`scripts/dashboard-browser-purity.test.ts` checks venue-service's `src/dashboard/painter.ts`
+  and the files it reaches by relative imports**, beside bookings', adjustments' and staffing's
+  dashboard folders. Nothing else in venue-service's dashboard folder is checked, including the `./dashboard/season-tint` export staffing uses,
   because the whole folder fails the guard: the scan reached `@waitron/db` or `drizzle-orm` from
   many of its files (receipt: the Task 4.0 corrections in
   `docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md`). **Next action:** list each

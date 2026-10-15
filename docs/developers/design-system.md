@@ -3734,8 +3734,8 @@ else its season's; for a person who may only look, only a special day's date is 
 other days are plain. The arrow keys move between the day buttons. Below 560 px of width each bar
 sits above its label. The staffing painters have their own addresses:
 `/view/staffing[/month/<yyyy-mm>][/area/<area>]/painter/season/season/<id>` and
-`…/painter/special-day/special-day/<id>`; the month opens them with its own month, and with its
-area unless it shows All areas. Each opens over the month, and closing it returns to the month and
+`…/painter/special-day/special-day/<id>`; the month opens them with its own month, and with the
+area in its own address. Each opens over the month, and closing it returns to the month and
 area in its address.
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view

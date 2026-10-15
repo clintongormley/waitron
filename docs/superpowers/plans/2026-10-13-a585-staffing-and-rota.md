@@ -1124,7 +1124,8 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
   there reached `@waitron/db` or `drizzle-orm` in 28 files (`season-weeks.ts`, `schema/*.ts`, …). So
   Task 4.1 lets an entry name a FILE (`tsFiles` returns `[path]` for a `.ts` path; 2026-10-15, as
   built: for a path `statSync().isFile()` calls a file, whatever its name) and adds
-  `["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"]`.
+  `["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"]`
+  (2026-10-15, as built: `SUBPATHS` is now a plain list of paths, so the entry is the path alone).
   A585-3's `./dashboard/season-tint` export has no entry; leave it.
 - **The server barrel** (`index.ts`) also gains `resolveDepartmentsDays` (`day-resolver.ts:110`, not
   exported today; the special-day guides below need it). (2026-10-15, as built: it gains
@@ -1168,7 +1169,9 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
     `opening-hours-month.ts:309-330,524-536,645-671`; today it is a `div role="group"`
     (`staffing-month.ts:445`). A day with `specialDay` opens the special-day painter, otherwise one
     with `seasonId` opens the season painter, otherwise it is not a button. A season chip's name
-    (today an `<li>`, `:393`) becomes a button opening that season. Both keep `month` and `area`;
+    (today an `<li>`, `:393`) becomes a button opening that season. (2026-10-15, as built: for a
+    person who may only look, a special day's date is a button too, opening the read-only
+    special-day painter; their other days stay plain.) Both keep `month` and `area`;
     the month's `#go` (`:301-303`) drops `painter`, `season` and `special-day`;
   - inside the painter the area picker is the painter's own state, starting from `params.area` (else
     the first area), and never writes the address: a `host.open` would ask the leave question and the
@@ -1258,7 +1261,8 @@ export function laneLayout(day: readonly StaffingBlock[], cutover: string): { la
   chosen staff role and headcount; overlapping blocks sit side by side; dragging an edge resizes;
   clicking a block opens its staff role and headcount and Delete (Backspace too); each column's ⋮
   offers "Copy to…" and Clear; the guide ranges are drawn faintly behind; keyboard: arrow keys move
-  between blocks, Enter opens one; a11y in both themes.
+  between blocks, Enter opens one; a11y in both themes. (2026-10-15, as built: as the corrections
+  above say, there are no arrow keys between blocks; blocks are reached by Tab.)
 - [x] **Steps 3–5:** implement (the grid uses Task 4.1's ruler, step and menu helpers), run, PASS,
   commit `"A585-4: the staffing block grid"`.
 
