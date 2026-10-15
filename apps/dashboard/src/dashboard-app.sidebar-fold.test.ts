@@ -24,8 +24,10 @@ const SECTION_ICONS = {
 
 beforeEach(() => registerIcons(DASHBOARD_ICONS));
 
+const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  history.replaceState(null, "", initialUrl);
   sessionStorage.clear();
   localStorage.clear();
   setLocale("es-ES");
@@ -190,7 +192,7 @@ it("a window too short for the strip, such as a phone held sideways, scrolls it 
   });
 });
 
-it("in a strip that scrolls, a section's panel still shows whole beside the strip", async () => {
+it("in a strip that scrolls, a section's panel shows beside the strip, its first page uncovered", async () => {
   await atSize(844, 390, async () => {
     const { el } = await mountApp();
     const team = stripButton(el, "team");
@@ -206,6 +208,85 @@ it("in a strip that scrolls, a section's panel still shows whole beside the stri
     const first = shown.querySelector<HTMLElement>(".nav-item")!.getBoundingClientRect();
     const hit = el.shadowRoot!.elementFromPoint(first.left + 4, (first.top + first.bottom) / 2);
     expect(shown.contains(hit)).toBe(true);
+  });
+});
+
+it("in a window too short for it, the Settings panel stays within the layout beside its icon and scrolls", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    expectFolded(el, true);
+    const settings = stripButton(el, "configuration");
+    settings.scrollIntoView({ block: "end" });
+    await userEvent.click(settings);
+    await el.updateComplete;
+    const shown = el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]")!;
+    const area = el.shadowRoot!.querySelector<HTMLElement>(".layout")!.getBoundingClientRect();
+    const box = shown.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(area.top - 0.5);
+    expect(box.bottom).toBeLessThanOrEqual(area.bottom + 0.5);
+    expect(box.left).toBeGreaterThanOrEqual(sidebar(el).getBoundingClientRect().right - 1);
+    const icon = settings.getBoundingClientRect();
+    expect(box.top).toBeLessThanOrEqual(icon.top);
+    expect(box.bottom).toBeGreaterThanOrEqual(icon.bottom);
+    expect(shown.scrollHeight).toBeGreaterThan(shown.clientHeight);
+    const last = [...shown.querySelectorAll<HTMLElement>(".nav-item")].at(-1)!;
+    last.scrollIntoView({ block: "nearest" });
+    const target = last.getBoundingClientRect();
+    expect(target.bottom).toBeLessThanOrEqual(area.bottom + 0.5);
+    const hit = el.shadowRoot!.elementFromPoint(target.left + 4, (target.top + target.bottom) / 2);
+    expect(last.contains(hit)).toBe(true);
+  });
+});
+
+it("scrolling the strip closes an open panel, which would otherwise stay where its icon was", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    const aside = sidebar(el);
+    await userEvent.click(stripButton(el, "team"));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=strip-panel]")).not.toBeNull();
+    const top = aside.scrollTop;
+    aside.scrollTop = top > 20 ? top - 40 : top + 40;
+    expect(aside.scrollTop).not.toBe(top);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=strip-panel]")).toBeNull();
+    expect(stripButton(el, "team").getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+it("in a scrolling strip, a panel opened by Enter just after focus scrolled the strip stays open", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    const aside = sidebar(el);
+    expect(aside.scrollTop).toBe(0);
+    const settings = stripButton(el, "configuration");
+    settings.focus();
+    expect(aside.scrollTop).toBeGreaterThan(0);
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const shown = el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]");
+    expect(shown).not.toBeNull();
+    expect(shown!.contains(el.shadowRoot!.activeElement)).toBe(true);
+  });
+});
+
+it("in a scrolling strip, tabbing to the last page of a panel that scrolls leaves it open", async () => {
+  await atSize(844, 390, async () => {
+    const { el } = await mountApp();
+    stripButton(el, "configuration").focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    const shown = el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]")!;
+    expect(shown.scrollHeight).toBeGreaterThan(shown.clientHeight);
+    const pages = [...shown.querySelectorAll<HTMLElement>(".nav-item")];
+    expect(el.shadowRoot!.activeElement).toBe(pages[0]);
+    for (let i = 1; i < pages.length; i++) await userEvent.tab();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(el.shadowRoot!.querySelector("[data-test=strip-panel]")).toBe(shown);
+    expect(shown.scrollTop).toBeGreaterThan(0);
+    expect(el.shadowRoot!.activeElement).toBe(pages.at(-1));
   });
 });
 
@@ -333,7 +414,6 @@ it("the current section is marked by the highlight alone, its icon staying the t
     expect(otherStyle.backgroundColor).not.toBe("rgb(21, 22, 23)");
     expect(getComputedStyle(other.querySelector("wt-icon")!).color).toBe("rgb(31, 32, 33)");
 
-    // The shared icon button colours an open one's icon; a section's icon never is.
     current.setAttribute("aria-expanded", "true");
     expect(getComputedStyle(current.querySelector("wt-icon")!).color).toBe("rgb(31, 32, 33)");
     expect(getComputedStyle(current).backgroundColor).toBe("rgb(21, 22, 23)");
@@ -493,6 +573,47 @@ describe("a section with several pages opens a panel beside its icon", () => {
       expect(stripButton(el, "team").getAttribute("aria-current")).toBe("true");
       expectFolded(el, true);
       expect(localStorage.getItem(FOLDED_KEY)).toBeNull();
+    });
+  });
+
+  it("picking the page already showing closes it too, putting focus on its icon", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      await userEvent.click(
+        panel(el)!.querySelector<HTMLButtonElement>("[data-test=strip-panel-approvals]")!,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("dashboard-approvals-screen"))
+        .not.toBeNull();
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      const current = panel(el)!.querySelector<HTMLButtonElement>(
+        "[data-test=strip-panel-approvals]",
+      )!;
+      expect(current.getAttribute("aria-current")).toBe("page");
+      await userEvent.click(current);
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(stripButton(el, "team").getAttribute("aria-expanded")).toBe("false");
+      expect(el.shadowRoot!.querySelector("dashboard-approvals-screen")).not.toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(stripButton(el, "team"));
+    });
+  });
+
+  it("its icon names the panel it controls only while the panel is there", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      const team = stripButton(el, "team");
+      expect(team.hasAttribute("aria-controls")).toBe(false);
+      await userEvent.click(team);
+      await el.updateComplete;
+      expect(el.shadowRoot!.getElementById(team.getAttribute("aria-controls")!)).toBe(panel(el));
+      await userEvent.click(team);
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(team.hasAttribute("aria-controls")).toBe(false);
     });
   });
 
@@ -669,7 +790,7 @@ describe("a strip button's tooltip shows its section's name beside it", () => {
         const tooltip = button.querySelector<HTMLElement>(".icon-tooltip")!;
         expect(getComputedStyle(tooltip).display).toBe("none");
         if (how === "hover") await userEvent.hover(button);
-        else await userEvent.tab(); // reaches the first strip button
+        else await userEvent.tab();
         if (how === "focus") {
           for (let i = 0; i < 10 && el.shadowRoot!.activeElement !== button; i++)
             await userEvent.tab();

@@ -147,8 +147,8 @@ type CoreScreen = (typeof CORE_SCREENS)[number];
 /** The `& {}` keeps the `CoreScreen` literal autocomplete while admitting any module id. */
 type ScreenId = CoreScreen | (string & {});
 
-/** Also written as a literal in the CSS `@media` block below: a media query cannot read a custom
- * property. */
+/** Repeated as a literal in this file's CSS and in widgets/alerts-bell.ts, since a media query
+ * cannot read a custom property, and in FOLDED_BY_DEFAULT below. */
 const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 
 /** A tablet-width window, whose sidebar opens folded while no choice is stored. */
@@ -415,7 +415,6 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-1);
       }
 
-      /* Section icons are never coloured, even while a button is pressed or open. */
       .icon-button.strip-button,
       .icon-button.strip-button:is([aria-pressed="true"], [aria-expanded="true"]) {
         border: none;
@@ -450,6 +449,9 @@ export class DashboardApp extends LitElement {
         z-index: 10;
         display: flex;
         flex-direction: column;
+        box-sizing: border-box;
+        max-height: 100%;
+        overflow-y: auto;
         min-width: var(--dashboard-strip-panel-width);
         padding: var(--wt-space-2) 0;
         border: 1px solid var(--wt-color-border);
@@ -460,11 +462,6 @@ export class DashboardApp extends LitElement {
 
       .strip-panel-label {
         padding: var(--wt-space-1) var(--wt-space-3);
-        color: var(--wt-color-primary-text);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
       }
 
       .strip-button > .icon-tooltip::before {
@@ -504,15 +501,20 @@ export class DashboardApp extends LitElement {
         border: none;
         border-inline-start: 3px solid transparent;
         background: transparent;
-        color: var(--wt-color-primary-text);
         font: inherit;
-        font-size: var(--wt-font-size-sm);
         line-height: var(--wt-font-size-lg);
+        text-align: start;
+        cursor: pointer;
+      }
+
+      /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */
+      .nav-group,
+      .strip-panel-label {
+        color: var(--wt-color-primary-text);
+        font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        text-align: start;
-        cursor: pointer;
       }
 
       button.nav-group:hover {
@@ -721,7 +723,7 @@ export class DashboardApp extends LitElement {
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
          content row, below the banner. It leaves the flow and slides in when the layout gains
-         the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
+         the drawer-open class. A CSS media query cannot read a
          --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
          constant that drives the narrow state). */
       @media (max-width: 48rem) {
@@ -874,6 +876,7 @@ export class DashboardApp extends LitElement {
 
   /** The section whose panel is open beside its strip icon. */
   @state() private stripPanel: NavGroupId | null = null;
+  #stripPanelIconTop: number | null = null;
 
   #setFolded(folded: boolean): void {
     this.sidebarFolded = folded;
@@ -890,7 +893,7 @@ export class DashboardApp extends LitElement {
   readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
     this.narrow = e.matches;
     // Wider than a phone the toggle folds the sidebar instead, so a drawer left open would leave its
-    // scrim over the whole layout with nothing to close it.
+    // scrim over the whole layout.
     if (!e.matches) this.drawerOpen = false;
   };
 
@@ -1568,6 +1571,7 @@ export class DashboardApp extends LitElement {
           <aside
             class=${classMap({ sidebar: true, folded: this.#folded() })}
             ?inert=${this.narrow && !this.drawerOpen}
+            @scroll=${() => this.#onSidebarScroll()}
           >
             ${this.#folded() ? this.#strip() : this.#nav()}
           </aside>
@@ -2072,14 +2076,23 @@ export class DashboardApp extends LitElement {
     icon?.focus();
   }
 
-  /** Placed before its first paint: `updated` runs before the frame is drawn. The folded strip does
-   * not scroll, so the panel hangs from its icon's top and is lifted only to stay inside the layout. */
+  /** Focusing an icon scrolls the strip, and that scroll's event can arrive after the panel opened,
+   * so only a scroll that moved the icon since the panel was placed closes it. */
+  #onSidebarScroll(): void {
+    if (this.stripPanel === null) return;
+    const icon = this.#stripPanelParts()?.icon;
+    if (icon && icon.getBoundingClientRect().top !== this.#stripPanelIconTop)
+      this.stripPanel = null;
+  }
+
+  /** Placed before its first paint: `updated` runs before the frame is drawn. */
   #placeStripPanel(): void {
     const parts = this.#stripPanelParts();
     if (parts === null) return;
     const layout = this.renderRoot.querySelector<HTMLElement>(".layout")!;
     const area = layout.getBoundingClientRect();
     const icon = parts.icon.getBoundingClientRect();
+    this.#stripPanelIconTop = icon.top;
     const strip = this.renderRoot.querySelector<HTMLElement>("aside.sidebar")!;
     const top = Math.min(icon.top - area.top, area.height - parts.panel.offsetHeight);
     parts.panel.style.top = `${Math.max(0, top)}px`;
@@ -2101,7 +2114,7 @@ export class DashboardApp extends LitElement {
       aria-label=${label}
       aria-current=${current ? "true" : nothing}
       aria-expanded=${controls ? String(controls.open) : nothing}
-      aria-controls=${controls ? controls.id : nothing}
+      aria-controls=${controls?.open ? controls.id : nothing}
       @click=${onClick}
       @keydown=${controls ? (e: KeyboardEvent) => this.#onStripPanelKeydown(e) : nothing}
       @focusout=${controls?.open ? (e: FocusEvent) => this.#onStripPanelFocusOut(e) : nothing}
@@ -2132,7 +2145,12 @@ export class DashboardApp extends LitElement {
             class="nav-item"
             aria-current=${this.screen === page.screen ? "page" : nothing}
             data-test="strip-panel-${page.screen}"
-            @click=${() => this.#openFromNav(page.screen)}
+            @click=${() => {
+              const icon = this.screen === page.screen ? this.#stripPanelParts()?.icon : undefined;
+              this.stripPanel = null;
+              this.#openFromNav(page.screen);
+              icon?.focus();
+            }}
           >
             ${page.label}
           </button>`,
