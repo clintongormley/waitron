@@ -108,6 +108,34 @@ async function drawn(el: ContentTranslationsDialog): Promise<void> {
 const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("Translate all in the translations dialog", () => {
+  it.each([
+    ["en-GB", "This server is not connected to Waitron Cloud"],
+    ["es-ES", "Este servidor no está conectado a Waitron Cloud"],
+  ])(
+    "explains a missing Cloud connection in %s for a refused start and a failed run",
+    async (locale, message) => {
+      setLocale(locale);
+      const { el } = await mount({
+        startContentSuggestions: vi.fn().mockRejectedValue({ code: "cloud.not_configured" }),
+      });
+      await vi.waitFor(() => expect(bar(el).service).toBe("on"));
+      await drawn(el);
+      await userEvent.click(button(el));
+      await vi.waitFor(() => expect(bar(el).shadowRoot!.textContent).toContain(message));
+      expect(button(el).disabled).toBe(false);
+
+      cleanupWidgets();
+      const failed = await mount({
+        getContentSuggestions: vi.fn(async () =>
+          read({
+            run: run({ state: "failed", code: "cloud.not_configured" }),
+          }),
+        ),
+      });
+      await vi.waitFor(() => expect(bar(failed.el).shadowRoot!.textContent).toContain(message));
+    },
+  );
+
   it("reads the run, the service and the Cloud origin into the bar, and follows the run live", async () => {
     const liveData = new LiveData();
     let current = read({ run: run() });

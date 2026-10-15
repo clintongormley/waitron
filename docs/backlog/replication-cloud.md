@@ -371,6 +371,13 @@ that slice 3 has to restore:
 
 ## Decisions and deliberate limits
 
+- **Translate all keeps the suggestion routes’ existing primary checks** (owner, 2026-10-15,
+  lane B question 3, answer (a)). Do not add a separate primary check to discarding a suggestion;
+  follow the sibling translation-save route and the shared read-only guard for writes.
+- **A missing or revoked Cloud connection uses `cloud.not_configured`** (owner, 2026-10-15,
+  lane B question 4, answer (b)). Say “This server is not connected to Waitron Cloud” in English
+  and “Este servidor no está conectado a Waitron Cloud” in Spanish.
+
 From the Cloud connection integration (2026-09-24): Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
 override, gateway replacement and revocation.
 

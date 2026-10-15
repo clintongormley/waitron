@@ -17,6 +17,29 @@ async function flush(el: CloudServicesScreen) {
 function click(el: CloudServicesScreen, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`#${id}`)!.click();
 }
+it.each([
+  ["en", "This server is not connected to Waitron Cloud"],
+  ["es", "Este servidor no está conectado a Waitron Cloud"],
+])("explains a server without Cloud configuration in %s", async (locale, message) => {
+  const previous = currentLocale();
+  try {
+    setLocale(locale);
+    const api = new DashboardApi("", async () =>
+      Response.json({
+        state: "not_connected",
+        configured: false,
+        isPrimary: true,
+      }),
+    );
+    const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+      api,
+    });
+    await expect.poll(() => el.shadowRoot!.textContent).toContain(message);
+  } finally {
+    setLocale(previous);
+  }
+});
+
 it("offers restored server reconnection and a synchronous busy guard", async () => {
   setLocale("en");
   let release!: (response: Response) => void;
@@ -315,7 +338,9 @@ it("ignores a delayed reply after removal and reloads when the screen is reconne
       legalBusinessName: "Old account",
     }),
   );
-  await expect.poll(() => el.shadowRoot!.textContent).toContain("Cloud services are not available");
+  await expect
+    .poll(() => el.shadowRoot!.textContent)
+    .toContain("This server is not connected to Waitron Cloud");
   expect(el.shadowRoot!.textContent).not.toContain("Old account");
   expect(calls).toBe(2);
 });
