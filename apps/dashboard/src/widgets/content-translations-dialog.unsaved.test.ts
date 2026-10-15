@@ -3,7 +3,7 @@ import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import type { ContentSuggestionView, DashboardApi, TranslationPage } from "../api/client.js";
-import { t, setLocale } from "../i18n/t.js";
+import { fill, t, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,
@@ -349,4 +349,24 @@ it("saving untouched suggestions leaves nothing unsaved when the saved event arr
   expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
     edits: [{ kind: "product", id: "dish", expected: "baseline", text: "CLIENT-es Sopa del día" }],
   });
+});
+
+it("fills at most 100 of 150 suggestions and closes without asking", async () => {
+  const rows = Array.from({ length: 150 }, (_, n) => ({
+    ...result.rows[0]!,
+    id: `dish-${n}`,
+    name: `STAFF Soup ${n}`,
+    expected: `baseline-${n}`,
+  }));
+  const { app, form } = await mountWith(
+    suggestionApi(
+      { ...result, rows },
+      rows.map((row, n) => soup(`s${n}`, row.id, `CLIENT-es Sopa ${n}`)),
+    ),
+  );
+  expect(
+    form.shadowRoot!.querySelector("[data-test=suggestion-capacity]")!.textContent!.trim(),
+  ).toBe(fill("suggestions.capacity", { shown: "100" }));
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await closeUnasked(app, form);
 });

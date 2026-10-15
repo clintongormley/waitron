@@ -907,7 +907,15 @@ export class ContentTranslationsDialog extends LitElement {
                   >${t(this.editedOnly ? "translations.show_all" : "translations.show_edited")}</wt-button
                 >
               </div>
-              ${count >= 100 ? html`<p role="status">${t("translations.capacity")}</p>` : nothing}
+              ${
+                this.model.unfilledCount > 0
+                  ? html`<p role="status" data-test="suggestion-capacity">
+                      ${fill("suggestions.capacity", { shown: String(this.model.suggestedCount) })}
+                    </p>`
+                  : count >= 100
+                    ? html`<p role="status">${t("translations.capacity")}</p>`
+                    : nothing
+              }
               ${this.model.rows.length === 0 ? html`<p data-test="complete">${fill("content_gaps.complete", { language: languageDisplayName(this.language, currentLocale(), false) })}</p>` : html`<wt-data-table aria-label=${fill("content_gaps.table", { language: this.#name(this.language) })} emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${shown} .columns=${this.#columns()} .rowKey=${translationKey}></wt-data-table>`}
               ${
                 visible.length > 50

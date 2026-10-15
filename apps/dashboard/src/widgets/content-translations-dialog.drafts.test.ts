@@ -696,3 +696,60 @@ describe("rows the page leaves out", () => {
     expect(targetReads()).toBe(3);
   });
 });
+
+describe("the 100-draft limit and continuing later", () => {
+  const many = () => {
+    const rows = Array.from({ length: 150 }, (_, n) => target(String(n).padStart(3, "0")));
+    return venue({
+      listed: rows,
+      suggestions: rows.map((row) => suggestion(`s${row.id}`, row.id)),
+    });
+  };
+  it("fills at most 100 drafts, says so, and saves those 100", async () => {
+    const { el, api } = await open(many());
+    expect(q(el, "[data-test=suggestion-capacity]")!.textContent!.trim()).toBe(
+      fill("suggestions.capacity", { shown: "100" }),
+    );
+    await click(el, "next");
+    await click(el, "next");
+    expect(field(el, "100")!.value).toBe("");
+    expect(field(el, "100")!.disabled).toBe(true);
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    const edits = api.saveContentTranslations.mock.calls[0]![1].edits;
+    expect(edits).toHaveLength(100);
+    expect(edits.at(-1)).toEqual({
+      kind: "product",
+      id: "099",
+      expected: "baseline-099",
+      text: "CLIENT-es 099",
+    });
+  });
+  it("closing keeps every suggestion for the next opening", async () => {
+    const { el, api } = await open(
+      venue({
+        listed: [target("one"), target("two")],
+        suggestions: [suggestion("s1", "one"), suggestion("s2", "two")],
+      }),
+    );
+    await click(el, "close");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    el.open = true;
+    await el.updateComplete;
+    await vi.waitFor(() => expect(field(el, "two")?.value).toBe("CLIENT-es two"));
+    expect(field(el, "one")!.value).toBe("CLIENT-es one");
+    expect(api.discardContentSuggestion).not.toHaveBeenCalled();
+  });
+  it("saving a page closes the dialog, and the next opening fills the rest", async () => {
+    const { el } = await open(many());
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    el.open = true;
+    await el.updateComplete;
+    await vi.waitFor(() => expect(field(el, "100")?.value).toBe("CLIENT-es 100"));
+    await settle(el);
+    expect(field(el, "000")).toBeNull();
+    expect(q(el, "[data-test=suggestion-capacity]")).toBeNull();
+    expect(field(el, "149")!.value).toBe("CLIENT-es 149");
+  });
+});

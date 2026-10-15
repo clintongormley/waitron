@@ -586,6 +586,7 @@ export const en = {
   "suggestions.fix_language": "Possible spelling fix in {language}: {wrong} → {right}",
   "suggestions.placeholder": "This name doesn't say what it is, so there is no suggestion.",
   "suggestions.stale": "This name changed after the suggestion was made.",
+  "suggestions.capacity": "{shown} suggestions are filled in. Save them to see the rest.",
   "suggestions.translate_all": "Translate all",
   "suggestions.about":
     "Waitron Cloud can suggest every missing customer-facing name, in every language. Nothing reaches diners until you save it.",
@@ -3556,6 +3557,7 @@ export const es: Record<StringKey, string> = {
   "suggestions.fix_language": "Posible corrección en {language}: {wrong} → {right}",
   "suggestions.placeholder": "Este nombre no dice qué es, así que no hay sugerencia.",
   "suggestions.stale": "Este nombre cambió después de hacer la sugerencia.",
+  "suggestions.capacity": "Hay {shown} sugerencias rellenadas. Guárdalas para ver el resto.",
   "suggestions.translate_all": "Traducir todo",
   "suggestions.about":
     "Waitron Cloud puede sugerir todos los nombres para clientes que faltan, en todos los idiomas. Nada llega a los clientes hasta que lo guardas.",
