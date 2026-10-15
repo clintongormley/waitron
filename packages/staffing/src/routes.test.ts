@@ -75,7 +75,7 @@ async function routed() {
     noopLog,
   );
   const call = (
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     cookie: string,
     body?: unknown,
@@ -89,7 +89,7 @@ async function routed() {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   const send = (
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     cookie: string,
     body?: unknown,
@@ -850,5 +850,94 @@ describe("the staffing month route", () => {
       "authorization.not_permitted",
     );
     await answers(await p.call("GET", path, ""), 401);
+  });
+});
+
+describe("the rota routes", () => {
+  const root = "/management-api/staffing/rota";
+  it("reads only Monday weeks and requires schedule.manage for every rota operation", async () => {
+    const r = await routed();
+    await answers(
+      await r.call("GET", `${root}?week=2026-12-01`, r.manager),
+      400,
+      refusal("management.request_invalid", { field: "week" }),
+    );
+    const ok = await r.call("GET", `${root}?week=2026-11-30`, r.manager);
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { week: string }).week).toBe("2026-11-30");
+    for (const method of ["GET", "POST", "PATCH", "DELETE"] as const) {
+      const path =
+        method === "GET"
+          ? `${root}?week=2026-11-30`
+          : method === "POST"
+            ? `${root}/shifts`
+            : `${root}/shifts/${randomUUID()}`;
+      const body =
+        method === "POST"
+          ? {
+              week: "2026-11-30",
+              businessDay: "2026-12-01",
+              personId: r.ana,
+              area: { kind: "department", id: r.departmentId },
+              staffRoleId: randomUUID(),
+              startsAt: "09:00",
+              endsAt: "15:00",
+            }
+          : method === "PATCH"
+            ? {}
+            : undefined;
+      await answers(
+        await r.call(method, path, r.staff, body),
+        403,
+        refusal("authorization.not_permitted", { permission: "schedule.manage" }),
+      );
+    }
+  });
+  it("fills a slot, patches and deletes it through the real routes, with scoped errors and strict bodies", async () => {
+    const r = await routed();
+    const role = await r.create("Waiter");
+    const input = {
+      week: "2026-11-30",
+      businessDay: "2026-12-01",
+      personId: r.ana,
+      area: { kind: "department", id: r.departmentId },
+      staffRoleId: role.id,
+      startsAt: "09:00",
+      endsAt: "15:00",
+    };
+    const created = await r.call("POST", `${root}/shifts`, r.manager, input);
+    expect(created.status).toBe(201);
+    const { shiftId } = (await created.json()) as { shiftId: string };
+    await answers(
+      await r.call("PATCH", `${root}/shifts/${shiftId}`, r.manager, { personId: r.marc }),
+      204,
+    );
+    const week = (await (await r.call("GET", `${root}?week=2026-11-30`, r.manager)).json()) as {
+      shifts: { shiftId: string; personId: string }[];
+    };
+    expect(week.shifts).toMatchObject([{ shiftId, personId: r.marc }]);
+    await answers(
+      await r.call("POST", `${root}/shifts`, r.manager, { ...input, versionId: randomUUID() }),
+      400,
+      refusal("management.request_invalid", { field: "versionId" }),
+    );
+    for (const field of ["startsAt", "endsAt", "area", "staffRoleId", "personId"]) {
+      const response = await r.call("PATCH", `${root}/shifts/${shiftId}`, r.manager, {
+        [field]: null,
+      });
+      expect(response.status).toBe(400);
+    }
+    const other = await routed();
+    await answers(
+      await other.call("DELETE", `${root}/shifts/${shiftId}`, other.manager),
+      404,
+      refusal("shift.not_found", { shiftId }),
+    );
+    await answers(await r.call("DELETE", `${root}/shifts/${shiftId}`, r.manager), 204);
+    await answers(
+      await r.call("DELETE", `${root}/shifts/${shiftId}`, r.manager),
+      404,
+      refusal("shift.not_found", { shiftId }),
+    );
   });
 });
