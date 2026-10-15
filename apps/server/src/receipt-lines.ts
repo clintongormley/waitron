@@ -66,8 +66,14 @@ export function ticketLinesFrom(
 export function withReceiptListPrices<T extends ReceiptSource>(
   lines: readonly T[],
   identities: readonly Pick<OrderLineIdentity, "listUnitGross">[],
-): (T & { listGross?: string })[] {
-  return lines.map((line, i) => ({ ...line, ...listGrossOf(line, identities[i]!.listUnitGross) }));
+): (T & { listGross?: string; listUnitPriceGross?: string })[] {
+  return lines.map((line, i) => {
+    const listUnit = identities[i]!.listUnitGross;
+    const list = listGrossOf(line, listUnit);
+    return list.listGross === undefined
+      ? { ...line }
+      : { ...line, ...list, listUnitPriceGross: listUnit! };
+  });
 }
 
 /** The line's total at its list price, rounded as a line total is (`grossRows`), when it differs. */

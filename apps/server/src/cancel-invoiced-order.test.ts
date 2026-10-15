@@ -17,6 +17,7 @@ import {
   sales,
   unpaidDepartures,
   withTransaction,
+  workingOrderLines,
 } from "@waitron/db";
 import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
@@ -443,6 +444,58 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await amendmentsOf(id)).toEqual([
       { kind: "order_placed", actorId: venue.operatorId, reason: null },
       { kind: "order_cancelled", actorId: supervisorId, reason: REASON },
+    ]);
+  });
+
+  it("copies each line's unit price before any discount onto the credit unnegated, and its list total negated", async () => {
+    const id = randomUUID();
+    const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      id,
+      zoneId: ticketThenPayZone,
+      lines: [
+        { menuItemId: offerOf("Caña"), quantity: "1" },
+        { menuItemId: offerOf("Caña"), quantity: "2" },
+      ],
+    });
+    expect(parked.status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: 400 })
+        .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 1))),
+    );
+    await issueOrderInvoice(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
+      id,
+      venue.operatorId,
+    );
+    expect(
+      (await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`)).status,
+    ).toBe(200);
+    const original = await invoiceOf(id);
+
+    expect((await cancel(id)).status).toBe(200);
+
+    const [credit] = await creditsOf(original.id);
+    const listPrices = (saleId: string) =>
+      inTx(venue, (tx) =>
+        tx
+          .select({
+            listGross: saleLines.listGross,
+            listUnitPriceGross: saleLines.listUnitPriceGross,
+          })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, saleId))
+          .orderBy(saleLines.lineNo),
+      );
+    expect(await listPrices(original.id)).toEqual([
+      { listGross: 400, listUnitPriceGross: 400 },
+      { listGross: null, listUnitPriceGross: null },
+    ]);
+    expect(await listPrices(credit!.id)).toEqual([
+      { listGross: -400, listUnitPriceGross: 400 },
+      { listGross: null, listUnitPriceGross: null },
     ]);
   });
 

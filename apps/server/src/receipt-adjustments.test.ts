@@ -257,11 +257,17 @@ describe("receiptLines", () => {
         const stored = await readStoredOrder(tx, billId);
         const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
         const saved = await tx
-          .select({ listGross: saleLines.listGross })
+          .select({
+            listGross: saleLines.listGross,
+            listUnitPriceGross: saleLines.listUnitPriceGross,
+          })
           .from(saleLines)
           .where(eq(saleLines.saleId, sale!.id))
           .orderBy(saleLines.lineNo);
-        expect(saved).toEqual([{ listGross: 1200 }, { listGross: null }]);
+        expect(saved).toEqual([
+          { listGross: 1200, listUnitPriceGross: 1200 },
+          { listGross: null, listUnitPriceGross: null },
+        ]);
         const identities = stored.identities.map((identity) => ({
           ...identity,
           listUnitGross: decimal("99.00"),
@@ -509,6 +515,36 @@ describe("receiptLines", () => {
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
+  });
+
+  it("stores the unit price before a discount on a bill paid at once, and nothing on an untouched line", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Bread" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: billId,
+      tender: { method: "cash", amount: "13.30" },
+      lines: [],
+    });
+
+    const saved = await inTx(venue, async (tx) => {
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      return tx
+        .select({
+          listGross: saleLines.listGross,
+          listUnitPriceGross: saleLines.listUnitPriceGross,
+        })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, sale!.id))
+        .orderBy(saleLines.lineNo);
+    });
+    expect(saved).toEqual([
+      { listGross: 1200, listUnitPriceGross: 1200 },
+      { listGross: null, listUnitPriceGross: null },
+    ]);
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
