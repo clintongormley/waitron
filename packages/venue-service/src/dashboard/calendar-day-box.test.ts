@@ -28,6 +28,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   host.remove();
+  scrollTo(0, 0);
   await page.viewport(1280, 800);
 });
 
@@ -193,6 +194,100 @@ describe("calendar-day-box", () => {
     const rect = popup().getBoundingClientRect();
     expect(rect.right).toBeLessThanOrEqual(390 - 8);
     expect(rect.left).toBeGreaterThanOrEqual(8);
+  });
+
+  it("follows its date across the viewport when a phone turns, staying on screen", async () => {
+    await page.viewport(844, 390);
+    anchor.style.cssText = "position: fixed; right: 8px; top: 80px;";
+    box.rows = [{ name: "Restaurant", text: "Lunch 13:00–16:00" }];
+    await box.updateComplete;
+    box.show(anchor);
+    await page.viewport(390, 844);
+    expect([innerWidth, innerHeight]).toEqual([390, 844]);
+    await expect.poll(() => popup().getBoundingClientRect().right).toBeLessThanOrEqual(390 - 8);
+    const placed = popup().getBoundingClientRect();
+    expect(placed.left).toBeGreaterThanOrEqual(8);
+    expect(Math.abs(placed.top - anchor.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
+  });
+
+  const scrolled = (target: EventTarget) =>
+    new Promise((resolve) => target.addEventListener("scroll", resolve, { once: true }));
+
+  it("stays beside its date when the page scrolls", async () => {
+    host.style.height = "3000px";
+    anchor.style.marginTop = "300px";
+    box.show(anchor);
+    const gap = () => popup().getBoundingClientRect().top - anchor.getBoundingClientRect().bottom;
+    expect(Math.abs(gap())).toBeLessThanOrEqual(1);
+    const scroll = scrolled(window);
+    window.scrollBy(0, 150);
+    await scroll;
+    expect(anchor.getBoundingClientRect().top).toBeLessThan(300);
+    expect(Math.abs(gap())).toBeLessThanOrEqual(1);
+    expect(box.shown).toBe(true);
+  });
+
+  it("stays beside a date inside another shadow root's scrolling box when that box scrolls", async () => {
+    const shadowHost = document.createElement("div");
+    host.prepend(shadowHost);
+    const root = shadowHost.attachShadow({ mode: "open" });
+    const scroller = document.createElement("div");
+    scroller.style.cssText = "height: 300px; overflow: auto;";
+    const inner = document.createElement("button");
+    inner.textContent = "17";
+    inner.style.marginTop = "200px";
+    const tail = document.createElement("div");
+    tail.style.height = "1000px";
+    scroller.append(inner, tail);
+    root.append(scroller);
+    box.show(inner);
+    const gap = () => popup().getBoundingClientRect().top - inner.getBoundingClientRect().bottom;
+    expect(Math.abs(gap())).toBeLessThanOrEqual(1);
+    const scroll = scrolled(scroller);
+    scroller.scrollTop = 100;
+    await scroll;
+    expect(Math.abs(gap())).toBeLessThanOrEqual(1);
+    expect(box.shown).toBe(true);
+  });
+
+  it("closes when its date scrolls out of view", async () => {
+    host.style.height = "3000px";
+    anchor.style.marginTop = "300px";
+    box.show(anchor);
+    const scroll = scrolled(window);
+    window.scrollBy(0, 600);
+    await scroll;
+    expect(anchor.getBoundingClientRect().bottom).toBeLessThan(0);
+    await expect.poll(() => closes).toBe(1);
+    expect(box.shown).toBe(false);
+    // Focus goes back to the date without scrolling the page back to it.
+    expect(deepActive()).toBe(anchor);
+    expect(scrollY).toBe(600);
+  });
+
+  it.each([
+    ["closed", () => box.hide()],
+    [
+      "taken off the page",
+      () => {
+        box.remove();
+        host.append(box);
+      },
+    ],
+  ])("stops following the page once %s", async (_, end) => {
+    host.style.height = "3000px";
+    anchor.style.marginTop = "300px";
+    box.show(anchor);
+    end();
+    expect(box.shown).toBe(false);
+    // Placing it again would show it: placement opens a closed popover.
+    const scroll = scrolled(window);
+    window.scrollBy(0, 100);
+    await scroll;
+    expect(box.shown).toBe(false);
+    await page.viewport(1000, 700);
+    await expect.poll(() => innerWidth).toBe(1000);
+    expect(box.shown).toBe(false);
   });
 
   it("opens above its anchor when there is no room below but room above, covering nothing of it", async () => {

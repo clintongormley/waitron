@@ -103,19 +103,64 @@ export class CalendarDayBox extends LitElement {
 
   #anchor: HTMLElement | undefined;
   #focusWasInside = false;
+  #scrollTargets: EventTarget[] = [];
 
   /** Opens below `anchor`, or above it when only there it fits, kept on screen; called again after
-   *  the content changes, it places the box again without moving focus. */
+   *  the content changes, it places the box again without moving focus. While open it follows
+   *  `anchor` as the window resizes or anything scrolls, and closes once `anchor` is out of view. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
+    this.#place();
+    this.#follow(anchor);
+    if (opening) this.headingEl.focus();
+  }
+
+  #place(): void {
+    const anchor = this.#anchor!;
     placePopover(this.popup, anchor, false);
     const below = anchor.getBoundingClientRect();
     const height = this.popup.getBoundingClientRect().height;
     // It never covers the day it explains while it fits above it.
     if (below.bottom + height > innerHeight - 8 && below.top - height >= 8)
       this.popup.style.top = `${below.top - height}px`;
-    if (opening) this.headingEl.focus();
+  }
+
+  #follow(anchor: HTMLElement): void {
+    this.#stopFollowing();
+    // A scroll does not bubble or leave its shadow root, so the capture phase is heard on the
+    // window and on each shadow root between the anchor and the document.
+    this.#scrollTargets = [window];
+    for (
+      let root = anchor.getRootNode();
+      root instanceof ShadowRoot;
+      root = root.host.getRootNode()
+    )
+      this.#scrollTargets.push(root);
+    for (const target of this.#scrollTargets)
+      target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", this.#onResize, { passive: true });
+  }
+
+  #stopFollowing(): void {
+    for (const target of this.#scrollTargets.splice(0))
+      target.removeEventListener("scroll", this.#onScroll, { capture: true });
+    window.removeEventListener("resize", this.#onResize);
+  }
+
+  readonly #onScroll = (): void => {
+    const date = this.#anchor!.getBoundingClientRect();
+    // Held on screen, a box whose date has gone would sit beside some other day.
+    if (date.bottom < 0 || date.top > innerHeight || date.right < 0 || date.left > innerWidth)
+      this.hide();
+    else this.#place();
+  };
+
+  readonly #onResize = (): void => this.#place();
+
+  override disconnectedCallback(): void {
+    this.#stopFollowing();
+    super.disconnectedCallback();
   }
 
   get shown(): boolean {
@@ -128,6 +173,7 @@ export class CalendarDayBox extends LitElement {
 
   #beforeToggle(event: ToggleEvent): void {
     if (event.newState !== "closed") return;
+    this.#stopFollowing();
     this.#focusWasInside =
       this.shadowRoot!.activeElement !== null ||
       this.contains((this.getRootNode() as Document | ShadowRoot).activeElement);
@@ -135,7 +181,7 @@ export class CalendarDayBox extends LitElement {
 
   #toggle(event: ToggleEvent): void {
     if (event.newState !== "closed") return;
-    if (this.#focusWasInside) this.#anchor?.focus();
+    if (this.#focusWasInside) this.#anchor?.focus({ preventScroll: true });
     this.dispatchEvent(
       new CustomEvent("calendar-day-box-close", { bubbles: true, composed: true }),
     );
