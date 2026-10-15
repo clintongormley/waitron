@@ -1071,7 +1071,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
 - **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
-  tasks 1–4 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
+  tasks 1–10 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
@@ -1088,7 +1088,23 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   "proposed" until its first implementation change updates it. **Tasks 1–4 (the box's Cloud calls
   and a fake Cloud) are on `main`:** the box now asks for the service with `servicesVersion` 2, which
   a Cloud without version 2 refuses, so Cloud's version 2 must be deployed before a box built from
-  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)).
+  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)). **Tasks 5–10 (the
+  catalogue's job and suggestion tables, collecting and building a job, recording a job, and
+  storing, listing and discarding suggestions) are on `main` too**; nothing calls them until the
+  runner and routes (Task 11 onwards).
+
+- **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
+  The box saves up to 200 languages; past 20 a job can hold no item at all, and the box sends it
+  anyway, so Cloud's 400 reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
+  second PR). A box-side refusal before any job is built would say what is wrong.
+
+- **Translate all: open points from the review of A689's second PR.** (1) A suggestion's
+  out-of-date check starts from the item as it stood when the results were stored, not when the
+  job was sent, so an owner change (an included menu moved between sections) while Cloud works is
+  not noticed. (2) A waiting placeholder ("the name doesn't say what it is") stops every later run
+  from asking for that item, even after its staff name is clarified, until someone discards it.
+  (3) A variant whose product's staff name is over 500 characters is sent with no product as
+  context, because that product is left out of the job (plan Decisions 9 and 10).
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
@@ -5254,7 +5270,8 @@ the tree. What remains, largest first:
   whose dashboard wording was written for a server with no Cloud set up at all** ("Cloud services
   are not available on this server yet"). The neighbouring Cloud calls use
   `cloud.binding_conflict`. Owner to choose the code and the wording before A689's dashboard dialog
-  (plan Tasks 13–17). Raised by #1729's review.
+  (plan Tasks 13–17). Raised by #1729's review. The same code is also set by
+  `FAILURE_CODES.not_connected` in `packages/catalogue/src/content-suggestion-jobs.ts`.
 
 - **The signing and size-capped reading of a request to Cloud is repeated across the
   `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729

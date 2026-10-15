@@ -103,8 +103,8 @@ The route:
    the item has text in other languages. A venue with one language therefore gets suggestions for
    names left empty there, and a name blank in every language is asked for in every language. The
    translations dialog's own paging query, `listTranslationTargets`
-   (`packages/catalogue/src/content-translation-targets.ts:330`), lists most of these; under the
-   default language it leaves out a name stored as empty (`content-translation-targets.ts:369`),
+   (`packages/catalogue/src/content-translation-targets.ts`), lists most of these; under the
+   default language it leaves out a name stored as empty (`blankIn` there),
    so collecting adds those. The gap report's candidate query, `readContentTranslationCandidates`
    (`packages/catalogue/src/content-languages.ts:84-133`), is not the source: it leaves out a
    wholly empty name (its comment at `:87-89`). An extras list with no customer-facing name is left

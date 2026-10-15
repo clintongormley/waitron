@@ -438,8 +438,7 @@ export async function listTranslationTargets(
 /**
  * The live products, variants, options lists, options labels, menus and sections whose
  * customer-facing name is stored as null or `{}`, in the dialog's order. Under the default language
- * {@link listTranslationTargets} leaves these out, so a venue with one language would never see
- * them. Extras lists, includes and units are never absent here: an absent extras list's name reaches
+ * {@link listTranslationTargets} leaves these out. Extras lists, includes and units are never absent here: an absent extras list's name reaches
  * no order or receipt, an include fixing no name is listed under the included menu, and a unit's
  * name is required.
  */
