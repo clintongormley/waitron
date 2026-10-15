@@ -28,7 +28,7 @@ function uuid(value: unknown, field: string): string {
   return value.toLowerCase();
 }
 
-async function actor(
+async function monitoringActor(
   tx: Transaction,
   deps: TillApiDeps,
   session: Awaited<ReturnType<typeof requireSession>>,
@@ -45,13 +45,23 @@ async function actor(
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
   const scope = await VENUE_SERVICE.readProfileZones(tx, deps.cfg, device.deviceProfileId);
-  if (scope.departmentId === null) throw new AppError("department_transfer.not_allowed", {});
+  if (scope.departmentId === null) return null;
   return {
     departmentId: scope.departmentId,
     personId: session.personId,
     profileId: device.deviceProfileId,
     device,
   };
+}
+
+async function actor(
+  tx: Transaction,
+  deps: TillApiDeps,
+  session: Awaited<ReturnType<typeof requireSession>>,
+) {
+  const result = await monitoringActor(tx, deps, session);
+  if (result === null) throw new AppError("department_transfer.not_allowed", {});
+  return result;
 }
 
 export function mountDepartmentTransferApi(
@@ -66,7 +76,7 @@ export function mountDepartmentTransferApi(
       run(c, log, async () => {
         const authenticate = async () => {
           const session = await requireSession(deps, c, { action: "take-orders", passive: true });
-          await withTransaction(deps.db, (tx) => actor(tx, deps, session));
+          await withTransaction(deps.db, (tx) => monitoringActor(tx, deps, session));
         };
         await authenticate();
         const response = streamSSE(c, async (stream) => {
@@ -146,8 +156,10 @@ export function mountDepartmentTransferApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const requests = await withTransaction(deps.db, async (tx) => {
-        const receiver = await actor(tx, deps, session);
-        return VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
+        const receiver = await monitoringActor(tx, deps, session);
+        return receiver === null
+          ? null
+          : VENUE_SERVICE.listIncomingDepartmentTransfers(tx, deps.cfg, receiver);
       });
       return c.json(
         requests === null
@@ -161,7 +173,8 @@ export function mountDepartmentTransferApi(
       const session = await requireSession(deps, c, { action: "take-orders" });
       const tabId = uuid(c.req.param("id"), "tabId");
       const requests = await withTransaction(deps.db, async (tx) => {
-        const sender = await actor(tx, deps, session);
+        const sender = await monitoringActor(tx, deps, session);
+        if (sender === null) return [];
         const rows = await VENUE_SERVICE.listSentDepartmentTransfers(tx, deps.cfg, tabId, sender);
         const context = await VENUE_SERVICE.getOrderContext(tx, deps.cfg, tabId);
         if (context.departmentId === sender.departmentId)
@@ -176,8 +189,10 @@ export function mountDepartmentTransferApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const requests = await withTransaction(deps.db, async (tx) => {
-        const sender = await actor(tx, deps, session);
-        return VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
+        const sender = await monitoringActor(tx, deps, session);
+        return sender === null
+          ? []
+          : VENUE_SERVICE.listDepartmentSentTransfers(tx, deps.cfg, sender);
       });
       return c.json({ requests });
     }),
