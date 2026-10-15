@@ -25,11 +25,9 @@ import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
 import "./opening-hours-month.js";
-import "./ordinary-date-dialog.js";
-import type { CalendarDayOpen, OrdinaryDateOpen } from "./opening-hours-month.js";
+import type { CalendarDayOpen } from "./opening-hours-month.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
-import { seasonTints } from "./season-tint.js";
 import {
   calendarViewPath,
   calendarWindowPath,
@@ -142,7 +140,6 @@ export class OpeningHoursScreen extends LitElement {
   @state() private monthReadError = "";
   private monthDetach?: () => void;
   private watchedMonth = "";
-  @state() private ordinary?: OrdinaryDateOpen;
   /** The Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
   /** The date the drawn box was last shown for: a close sent while another date's box waits to be
@@ -1104,45 +1101,6 @@ export class OpeningHoursScreen extends LitElement {
       }
     </calendar-day-box>`;
   }
-  private ordinaryDialog() {
-    const open = this.ordinary;
-    const seasons = this.monthModel?.seasons ?? [];
-    if (!open) return nothing;
-    const season = seasons.find((row) => row.id === open.seasonId);
-    const leave = (event: Event) => {
-      event.stopPropagation();
-      if (!this.isConnected || this.ordinary !== open) return false;
-      this.ordinary = undefined;
-      return true;
-    };
-    return keyed(
-      open,
-      html`<ordinary-date-dialog
-        .open=${true}
-        .date=${open.date}
-        .season=${season ? { id: season.id, name: season.name } : undefined}
-        .tint=${season ? (seasonTints(seasons).get(season.id) ?? "") : ""}
-        .specialDays=${this.knownSpecialDays}
-        .returnTo=${open.returnTo}
-        @ordinary-date-close=${leave}
-        @ordinary-date-edit-week=${(event: CustomEvent<{ seasonId: string }>) => {
-          if (!leave(event)) return;
-          void this.openPainter(event.detail.seasonId);
-        }}
-        @ordinary-date-make-special=${(event: CustomEvent<{ date: string }>) => {
-          if (!leave(event)) return;
-          void this.openSpecialPainter({ specialDayId: null, date: event.detail.date });
-        }}
-        @ordinary-date-add-to-special=${(
-          event: CustomEvent<{ date: string; specialDayId: string }>,
-        ) => {
-          if (!leave(event)) return;
-          const { date, specialDayId } = event.detail;
-          void this.openSpecialPainter({ specialDayId, date });
-        }}
-      ></ordinary-date-dialog>`,
-    );
-  }
   private viewSwitch() {
     const option = (value: View) =>
       html`<label
@@ -1256,8 +1214,7 @@ export class OpeningHoursScreen extends LitElement {
               : nothing
     }
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-    ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}
-    ${this.seasonsWindow()}`;
+    ${this.namedDialog()} ${this.seasonPainter()} ${this.specialPainter()} ${this.seasonsWindow()}`;
   }
 }
 declare global {

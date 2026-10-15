@@ -31,13 +31,6 @@ export interface CalendarDayOpen {
   returnTo: () => HTMLElement | null;
 }
 
-/** What `ordinary-date-open` carries: a date no special day or public holiday holds. */
-export interface OrdinaryDateOpen {
-  date: LocalDate;
-  seasonId: string | null;
-  returnTo: () => HTMLElement | null;
-}
-
 /** The months the month read serves: its first week must start in year 0100 or later. */
 const FIRST_MONTH = "0100-02";
 const LAST_MONTH = "9998-12";
