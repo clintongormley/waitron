@@ -1310,7 +1310,11 @@ export class TillTableOrderScreen extends LitElement {
   @state() private naming: { value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
   /** Split a table's choice, while its guests window is open. */
-  @state() private splitGuests: { tableId: string; billId: string | null } | null = null;
+  @state() private splitGuests: {
+    tableId: string;
+    billId: string | null;
+    staying: string;
+  } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
   @state() private transferLineNos = new Set<number>();
@@ -1664,6 +1668,16 @@ export class TillTableOrderScreen extends LitElement {
     }
     if (changed.has("guestsRefusal") && this.guestsRefusal !== null) {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
+    }
+    // The app re-points this screen at whichever party holds the table, so a window opened for the
+    // old party would otherwise save to the new one.
+    const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
+    if (partySwitched) this.counting = null;
+    if (
+      this.splitGuests !== null &&
+      (partySwitched || !this.party?.tableIds.includes(this.splitGuests.tableId))
+    ) {
+      this.splitGuests = null;
     }
     if (changed.has("cancelOffer") && this.cancelOffer !== null) {
       const offered = this.lines.find(
@@ -4628,7 +4642,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #splitTable(tableId: string, billId: string | null): void {
     this.#closeActions();
-    this.splitGuests = { tableId, billId };
+    this.splitGuests = { tableId, billId, staying: this.#savedGuests() };
   }
 
   #splitGuestsDialog(): TemplateResult | typeof nothing {
@@ -4642,12 +4656,13 @@ export class TillTableOrderScreen extends LitElement {
         this.tables,
       )}
       .leavingLabel=${leaving === undefined ? "" : tableShownName(leaving)}
-      .staying=${party.guestCount === null ? "" : String(party.guestCount)}
+      .staying=${splitting.staying}
       @split-guests-confirm=${(event: Event) => {
         event.stopPropagation();
         this.splitGuests = null;
         this.#dispatch("split-table", {
-          ...splitting,
+          tableId: splitting.tableId,
+          billId: splitting.billId,
           guests: (event as CustomEvent<SplitGuestsDetail>).detail,
         } satisfies SplitTableDetail);
       }}
