@@ -417,6 +417,20 @@ describe("the simplified receipt's own layout (A663)", () => {
     expect(oneRate("ca-ES")).toContainEqual(["IVA 10% inclòs", "1,79 €", undefined]);
   });
 
+  it("prints a dish priced per pack by its quantity and unit, not its count of packs", () => {
+    const input = structuredClone(SIMPLIFIED);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Jamón ibérico" },
+        unitName: { es: "kg" },
+        quantity: "0.300",
+        gross: "9.00",
+        net: { unitPrice: "2.73", priceQuantity: "0.100", base: "8.18", tax: "0.82", rate: "10" },
+      },
+    ];
+    expect(rows(input)).toContainEqual(["0.300 kg  Jamón ibérico", "9,00", undefined]);
+  });
+
   it("never draws two rules in a row, or a rule first or last, on a simplified receipt", () => {
     for (const vatBreakdown of [[], SIMPLIFIED.result.vatBreakdown.slice(0, 1)])
       for (const lines of [[], SIMPLIFIED.result.lines])

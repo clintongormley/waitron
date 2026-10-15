@@ -306,7 +306,9 @@ export function buildReceiptDocument({
     }
   };
   const withVatGroup = ({ dish, options }: LineGroup): void => {
-    const quantity = `${quantityText(dish, namesLocale)}  `;
+    // Without its filed figures, a dish priced per pack prints its quantity, not its packs.
+    const { quantity: count, unitName, soldInEach } = dish;
+    const quantity = `${quantityText({ quantity: count, unitName, soldInEach }, namesLocale)}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     row(
       `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,
