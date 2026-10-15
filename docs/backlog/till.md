@@ -1487,6 +1487,10 @@ the window stays open, and on confirm the app's `#onNameParty` sends the name to
 which is by then the other party. This comes from reading the code, plus the reviewer's real-Chromium
 probe of the Guests window; the Name window itself was not probed.
 
+The Name window also keeps comparing against the name stored when it opened when the name is changed on
+another till while it is open, the defect A713 fixed for the Guests window (found by reading, not
+probed).
+
 **Next action:** close the Name window when the screen's party id changes, in the same `willUpdate`
 check A713 added, with a test that switches the party while the window is open and sees nothing sent.
 

@@ -76,7 +76,7 @@ export class TillPartyGuestsDialog extends LitElement {
   }
 
   /** A count stored elsewhere while the window is open becomes what Save compares against, and
-   * replaces the field only where the waiter has not changed it. */
+   * replaces the field only while the field still reads the previous stored count. */
   #followStored(): void {
     const stored = this.savedValue;
     if (stored === undefined || sameGuestCount(stored, this.#baseline!)) return;

@@ -40,8 +40,8 @@ export class TillSplitGuestsDialog extends LitElement {
   @property() stayingLabel = "";
   @property() leavingLabel = "";
   @property() staying = "";
-  /** The party's count as stored now; the staying side opens from it and follows it while the
-   * waiter has not changed that side. */
+  /** The party's count as stored now: what the staying side's unsaved changes are measured against,
+   * and what that field follows while it still reads the previous stored count. */
   @property({ attribute: false }) savedStaying: string | undefined;
   @property() leaving = "";
   @property() stayingRefusal = "";
