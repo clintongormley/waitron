@@ -628,6 +628,15 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(order.bills).toEqual([tabBill, checkBill]);
   });
 
+  it("gives the table screen the floor's zones, which decide the free tables its lists offer", async () => {
+    const bar: FloorZone = { ...zone, id: "z2", name: "Barra", serviceMode: "prepay" };
+    const { el } = await mountApp({ listZones: vi.fn().mockResolvedValue([zone, bar]) });
+
+    const order = await openMesa(el);
+
+    expect(order.zones).toEqual([zone, bar]);
+  });
+
   it("finishes the table at the revision it read and goes back to the floor", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);

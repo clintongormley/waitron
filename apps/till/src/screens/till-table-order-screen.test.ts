@@ -14,6 +14,7 @@ import {
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
+  FloorZone,
   OfferedModifier,
   OrderGroup,
   PartyBill,
@@ -3990,6 +3991,96 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
+    });
+
+    describe("an area that does not seat guests", () => {
+      const zone = (id: string, serviceMode: FloorZone["serviceMode"]): FloorZone => ({
+        id,
+        name: id,
+        closesAt: null,
+        closed: false,
+        displayOrder: 0,
+        active: true,
+        hasPlan: true,
+        serviceMode,
+      });
+      /** Ana at Mesa 4 in the dining room; Luis holds Mesa 7 at the bar, where Mesa 8 is free. */
+      const floor = (barMode: FloorZone["serviceMode"] = "prepay") => {
+        const { party, tables } = partyTables();
+        const bar = new Set(["t7", "t8"]);
+        return {
+          lines: [pendingLine],
+          orderId: "wo-check",
+          party,
+          bills: partyBills().bills,
+          zones: [zone("zone-dining", "table_tab"), zone("zone-bar", barMode)],
+          tables: [...tables, tableState({ id: "t8", label: "Mesa 8" })].map((table) => ({
+            ...table,
+            zoneId: bar.has(table.id) ? "zone-bar" : "zone-dining",
+          })),
+        };
+      };
+
+      it.each([
+        ["Move guests", "move", ["t6", "t7", "t9"]],
+        ["Move this bill", "move-bill", ["counter", "t6", "t7", "t9"]],
+      ])(
+        "%s leaves out a free table in a pay-first area, and keeps one there another party holds",
+        async (_name, action, offered) => {
+          const { el } = await mount(floor());
+          await toMenu(el);
+          click(el, `[data-action="${action}"]`);
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(offered);
+        },
+      );
+
+      it.each([["ticket_then_pay" as const], [null]])(
+        "Move guests treats an area whose service mode is %s like a pay-first one",
+        async (mode) => {
+          const { el } = await mount(floor(mode));
+          await toMenu(el);
+          click(el, '[data-action="move"]');
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
+        },
+      );
+
+      it("Move guests keeps a free table whose area the screen has not read, or that has none", async () => {
+        const setUp = floor();
+        const { el } = await mount({
+          ...setUp,
+          tables: setUp.tables.map((table) =>
+            table.id === "t8"
+              ? { ...table, zoneId: "zone-garden" }
+              : table.id === "t9"
+                ? { ...table, zoneId: null }
+                : table,
+          ),
+        });
+        await toMenu(el);
+        click(el, '[data-action="move"]');
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["t6", "t7", "t8", "t9"]);
+      });
+
+      it("Join a table leaves out a free table in the pay-first area the party sits in, then says no other tables", async () => {
+        const setUp = floor();
+        const atBar = (tables: TableState[]) =>
+          tables.map((table) => (table.id === "t4" ? { ...table, zoneId: "zone-bar" } : table));
+        const { el } = await mount({ ...setUp, tables: atBar(setUp.tables) });
+        await toMenu(el);
+        click(el, '[data-action="join"]');
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["t7"]);
+
+        el.tables = atBar(setUp.tables).filter((table) => table.id !== "t7");
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual([]);
+        expect(
+          el.shadowRoot!.querySelector("[data-target-picker] .empty")!.textContent!.trim(),
+        ).toBe(t("table.no_other_tables"));
+      });
     });
 
     it.each([

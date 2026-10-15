@@ -87,6 +87,7 @@ import type {
   CurrentOrderGroup,
   CurrentOrderRow,
   CurrentOrders,
+  FloorZone,
   GroupLine,
   OrderGroup,
   OrderLinePatch,
@@ -120,7 +121,11 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
-import { outOfServiceJoined, shownName as tableShownName } from "../state/floor-today.js";
+import {
+  outOfServiceJoined,
+  seatsGuests,
+  shownName as tableShownName,
+} from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -1164,6 +1169,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
   /** The move and join target lists read this; merge and transfer offer {@link bills}. */
   @property({ attribute: false }) tables: TableState[] = [];
+  /** The floor's zones, whose service mode decides whether a free table there may take guests. */
+  @property({ attribute: false }) zones: FloorZone[] = [];
   /** The party seated at this table, or null for a tab that belongs to none. */
   @property({ attribute: false }) party: TableParty | null = null;
   /** Every bill of {@link party}, merged parties' included. */
@@ -4322,7 +4329,9 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Every table but the party's own; Move guests also offers the party's own tables while it holds
    * more than one, since moving to one of them leaves the others. Join a table offers only the
-   * party's zone, as `joinTables` refuses any other while the party's zone is known. */
+   * party's zone, as `joinTables` refuses any other while the party's zone is known. A free table in
+   * an area that does not seat guests is left out, as `refuseUnseatable` refuses it for Move guests,
+   * Join a table and Move this bill. */
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
@@ -4330,6 +4339,10 @@ export class TillTableOrderScreen extends LitElement {
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
+      .filter(
+        (table) =>
+          table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),
+      )
       .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];

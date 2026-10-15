@@ -9883,6 +9883,7 @@ export class TillApp extends LitElement {
           .stations=${this.stations}
           .fireControl=${this.fireControl}
           .tables=${this.tables}
+          .zones=${this.zones}
           .orderId=${this.activeTabId}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
