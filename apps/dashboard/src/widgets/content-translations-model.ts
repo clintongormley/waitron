@@ -37,6 +37,9 @@ export class TranslationDrafts {
   readonly #values = new Map<string, DraftValues>();
   #suggestions = new Map<string, RowSuggestion>();
   #filled = new Map<string, DraftValues>();
+  /** What a suggestion had filled when a person's edit began; discarding it takes back each field
+   * still holding that text. */
+  readonly #borrowed = new Map<string, DraftValues>();
   readonly #dismissed = new Set<string>();
   readonly #staleIds = new Set<string>();
   constructor(
@@ -135,6 +138,11 @@ export class TranslationDrafts {
     const row = this.#targets.get(key);
     if (!row?.eligible || (field === "defaultText" && !this.needsDefault(row))) return;
     if (!this.isEdited(ref) && !this.isSuggested(ref) && this.count >= 100) return;
+    if (!this.#values.has(key)) {
+      const filled = this.#filled.get(key);
+      if (filled) this.#borrowed.set(key, { ...filled });
+      else this.#borrowed.delete(key);
+    }
     const next = {
       text: this.value(row, "text"),
       defaultText: this.value(row, "defaultText"),
@@ -193,7 +201,16 @@ export class TranslationDrafts {
     this.#refill();
   }
   unsuggest(ref: TranslationRef): void {
-    for (const id of this.#suggestions.get(translationKey(ref))?.ids ?? []) this.#dismissed.add(id);
+    const key = translationKey(ref);
+    for (const id of this.#suggestions.get(key)?.ids ?? []) this.#dismissed.add(id);
+    const values = this.#values.get(key);
+    const borrowed = this.#borrowed.get(key);
+    if (values && borrowed) {
+      if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
+      if (values.defaultText === borrowed.defaultText) values.defaultText = "";
+      if (!this.isEdited(ref)) this.#values.delete(key);
+    }
+    this.#borrowed.delete(key);
     this.#refill();
   }
   markStale(ref: TranslationRef): void {
@@ -284,6 +301,7 @@ export class TranslationDrafts {
   }
   reset(): void {
     this.#values.clear();
+    this.#borrowed.clear();
     this.#refill();
   }
 }

@@ -467,6 +467,53 @@ describe("suggested drafts", () => {
     drafts.suggest(new Map([["product:one", found({ ids: ["s9"], text: "CLIENT-es again" })]]));
     expect(drafts.value(one, "text")).toBe("CLIENT-es again");
   });
+  it("unsuggest takes back from a person's edit each field they left as the suggestion filled it", () => {
+    const typedName = target("one");
+    const typedCompanion = target("two");
+    const both = target("three");
+    const drafts = new TranslationDrafts("es", "en", [typedName, typedCompanion, both]);
+    drafts.suggest(
+      new Map(
+        ["one", "two", "three"].map((id) => [
+          `product:${id}`,
+          found({ ids: [`s-${id}`], text: `CLIENT-es ${id}`, defaultText: `CLIENT-en ${id}` }),
+        ]),
+      ),
+    );
+    drafts.edit(typedName, "text", "Mi nombre");
+    drafts.edit(typedCompanion, "defaultText", "My name");
+    drafts.edit(both, "text", "Pan");
+    drafts.edit(both, "defaultText", "Bread");
+    for (const row of [typedName, typedCompanion, both]) drafts.unsuggest(row);
+    expect(drafts.value(typedName, "defaultText")).toBe("");
+    expect(drafts.value(typedCompanion, "text")).toBe("");
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [
+        { kind: "product", id: "one", expected: "baseline-one", text: "Mi nombre" },
+        { kind: "product", id: "two", expected: "baseline-two", text: "", defaultText: "My name" },
+        {
+          kind: "product",
+          id: "three",
+          expected: "baseline-three",
+          text: "Pan",
+          defaultText: "Bread",
+        },
+      ],
+    });
+  });
+  it("unsuggest leaves a row unedited when only the suggestion's text was left in it", () => {
+    const row = target("one", { selectedText: "Croqueta" });
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.suggest(
+      new Map([["product:one", found({ text: "CLIENT-es one", defaultText: "CLIENT-en one" })]]),
+    );
+    drafts.edit(row, "text", "Croqueta");
+    expect(drafts.isEdited(row)).toBe(true);
+    drafts.unsuggest(row);
+    expect(drafts.isEdited(row)).toBe(false);
+    expect(drafts.value(row, "text")).toBe("Croqueta");
+    expect(drafts.submission()).toEqual({ edits: [] });
+  });
   it("an edited row compares with the newest suggestion, not the one it was filled from", () => {
     const one = target("one", { defaultRequired: false });
     const two = target("two", { defaultRequired: false });
