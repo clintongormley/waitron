@@ -2149,9 +2149,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   (in dark, while switched off in those cases, the dim disabled blue, A535).
   A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
-  A689 brought the translations dialog's Translate all under it: it is drawn `secondary` until a
-  suggestion read says the service is on, and while a run is being sent or translated, and keeps
-  its own variant while its own press is being sent.
+  A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
+  latest suggestion read does not say the service is on, or while a run is being sent or
+  translated, and keeps its own variant while its own press is being sent.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks, the sign-in screens, and the canvas editor's Delete on a canvas's last tab
   (canvases are being retired, A182). Nothing guards it across screens.
