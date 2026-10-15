@@ -230,6 +230,18 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## A venue without Cloud needs a usable paper-custodian route
 
+**Owner redesign, 2026-10-15 at about 18:10–18:15:** replace the downloaded tool and separate
+custodian/computer with one PDF made by the setup page. You may download it, print it over the
+ordinary network, or both, and keep it in the restaurant’s office. Offline operation, paper/file
+separation, ink marking, handover drills and print-queue/OS-copy warnings are not requirements.
+The page must not upload the key anywhere on its own; your download or print is the intended delivery. The
+[short replacement design](../superpowers/specs/2026-10-15-a679-simple-pdf-design.md) needs owner
+approval before any more product code or a replacement plan. Preserve reusable work from draft
+PR #1752; the earlier implementation and review results do not qualify this new design. The old
+44-step paper check and FOLLOW-UP are cancelled. The replacement check will open the built PDF
+and, if recovery is part of the approved design, check recovery from a downloaded or printed copy.
+Earlier dated decisions below are historical and superseded where they contradict this direction.
+
 **Approval and plan update, 2026-10-15:** at about 06:35 the owner approved the complete
 A679 design: **“A — Approve, plan and build”**. This supersedes the historical unanswered
 approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)

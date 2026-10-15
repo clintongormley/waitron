@@ -1,5 +1,12 @@
 # A679: first Live fiscal setup
 
+**Superseded design direction, 2026-10-15 at about 18:10–18:15:** the owner replaced the
+separate custody tool, custodian/computer and offline ceremony with one PDF created by the box’s
+setup page, to download, print over the normal network, or both. Further A679 implementation is
+paused for approval of the [short replacement design](2026-10-15-a679-simple-pdf-design.md).
+The old paper check and FOLLOW-UP are cancelled. The earlier decisions below are retained as
+history; they do not authorise continuing the old custody flow or imply approval of the replacement.
+
 **Approval update, 2026-10-15 at about 06:35:** the owner selected **“A — Approve, plan and build”** for the complete design at `4ce402b2eebec957091c218610fb5d991ea91d35`, including custody, restoration, handover and loss checks. The earlier proposal and pending-approval statements below are historical and superseded by this answer. W41s-6, A680 and C3 have landed. The [implementation plan](../plans/2026-10-15-a679-first-fiscal-setup.md) records the driver’s fresh-context review corrections; native inline implementation is next. This documentation publication does not qualify product, encryption or physical-paper behavior.
 
 **Proposal for owner review, decision update 2026-10-15. No full-design or build approval.**

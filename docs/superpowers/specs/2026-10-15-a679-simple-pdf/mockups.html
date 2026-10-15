@@ -1,0 +1,528 @@
+<!doctype html><html lang="en" data-wt-theme-root><meta charset="utf-8"><title>A679 proposed simple PDF</title><style>:where([data-wt-theme-root]) {
+  /* Native controls the app does not paint itself — radios, checkboxes, scrollbars — are drawn by
+     the user agent, which reads this property and never `data-theme`. Without it the dark theme got
+     the light drawing, and an unchecked radio came out a solid white dot. */
+  color-scheme: light;
+  --wt-color-bg: #f7f7f8;
+  --wt-color-surface: #ffffff;
+  --wt-color-surface-raised: #ffffff;
+  --wt-color-surface-lifted: #e3ebfb;
+  --wt-color-surface-sunken: #d6d9e0;
+  --wt-color-text: #16181d;
+  --wt-color-text-muted: #5c626e;
+  --wt-color-primary: #1f6feb;
+  --wt-color-primary-hover: #1a5fd0;
+  --wt-color-on-primary: #ffffff;
+  --wt-color-primary-text: #1a5fd0;
+  --wt-color-danger: #b3261e;
+  --wt-color-danger-hover: #9a1f18;
+  --wt-color-on-danger: #ffffff;
+  --wt-color-primary-disabled: #8fb7f5;
+  --wt-color-on-primary-disabled: #ffffff;
+  --wt-color-danger-disabled: #d9928e;
+  --wt-color-on-danger-disabled: #ffffff;
+  --wt-color-success: #1a7f5a;
+  --wt-color-warning: #8a5300;
+  --wt-color-on-warning: #ffffff;
+  --wt-color-border: #d6d9e0;
+  --wt-color-focus: #1f6feb;
+  --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #f0f1f4;
+  --wt-color-field-line: #7d8390;
+  --wt-color-field-label-focus: #1a5fd0;
+  --wt-color-field-fill-disabled: #f7f7f8;
+  --wt-color-field-value: #000000;
+  --wt-color-stepper-button: #e8f0ff;
+  /* Google's sign-in button colours: developers.google.com/identity/branding-guidelines */
+  --wt-color-google-button-fill: #ffffff;
+  --wt-color-google-button-line: #747775;
+  --wt-color-google-button-text: #1f1f1f;
+  /* The Hours calendar: six colours a special date picks from, each with its text colour, and the
+     two reserved for a standard day and a day every department is Closed. */
+  --wt-color-palette-red: #c62828;
+  --wt-color-on-palette-red: #ffffff;
+  --wt-color-palette-amber: #f5a623;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #6b6e78;
+  --wt-color-on-palette-grey: #ffffff;
+  --wt-color-palette-blue: #2f55d4;
+  --wt-color-on-palette-blue: #ffffff;
+  --wt-color-palette-green: #1e7a4f;
+  --wt-color-on-palette-green: #ffffff;
+  --wt-color-palette-purple: #7e3fb8;
+  --wt-color-on-palette-purple: #ffffff;
+  --wt-color-day-standard: #dff3e8;
+  --wt-color-on-day-standard: #16181d;
+  --wt-color-day-closed: #3a3b42;
+  --wt-color-on-day-closed: #ffffff;
+  --wt-color-season-1: #dcf1dc;
+  --wt-color-on-season-1: #16181d;
+  --wt-color-season-1-line: #3c8a4a;
+  --wt-color-season-2: #fbecc0;
+  --wt-color-on-season-2: #16181d;
+  --wt-color-season-2-line: #a87a12;
+  --wt-color-season-3: #f9dccd;
+  --wt-color-on-season-3: #16181d;
+  --wt-color-season-3-line: #b8603a;
+  --wt-color-season-4: #dbe7f9;
+  --wt-color-on-season-4: #16181d;
+  --wt-color-season-4-line: #3d6fc4;
+  /* Prep stations: twelve fills a station picks from, each with a dot colour. */
+  --wt-color-station-red: #fde2e1;
+  --wt-color-station-red-dot: #d64545;
+  --wt-color-station-orange: #fde6cf;
+  --wt-color-station-orange-dot: #c26a1f;
+  --wt-color-station-amber: #fcefc0;
+  --wt-color-station-amber-dot: #a67a00;
+  --wt-color-station-lime: #e9f4c9;
+  --wt-color-station-lime-dot: #688c19;
+  --wt-color-station-green: #d6f0dc;
+  --wt-color-station-green-dot: #2d934b;
+  --wt-color-station-teal: #d0eeea;
+  --wt-color-station-teal-dot: #1e9085;
+  --wt-color-station-cyan: #d3ecf7;
+  --wt-color-station-cyan-dot: #1a8abb;
+  --wt-color-station-blue: #dce6fb;
+  --wt-color-station-blue-dot: #2f66d6;
+  --wt-color-station-indigo: #e1e0f8;
+  --wt-color-station-indigo-dot: #5b55d0;
+  --wt-color-station-purple: #ecdff8;
+  --wt-color-station-purple-dot: #8d4fcf;
+  --wt-color-station-pink: #fbdfec;
+  --wt-color-station-pink-dot: #d2468c;
+  --wt-color-station-brown: #eee2d6;
+  --wt-color-station-brown-dot: #8a5a3c;
+  --wt-color-table-free: #dff3e8;
+  --wt-color-on-table-free: #16181d;
+  --wt-color-table-seated: #1f6feb;
+  --wt-color-on-table-seated: #ffffff;
+  --wt-color-table-bill: #7e3fb8;
+  --wt-color-on-table-bill: #ffffff;
+  --wt-color-table-clearing: #f5a623;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #fde7c8;
+  --wt-color-on-table-reserved: #16181d;
+  --wt-color-highlight: #fff3b0;
+  --wt-color-on-highlight: #241500;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where([data-wt-theme-root]) {
+    color-scheme: dark;
+    --wt-color-bg: #101216;
+    --wt-color-surface: #191c22;
+    --wt-color-surface-raised: #22262e;
+    --wt-color-surface-lifted: #2f3a4d;
+    --wt-color-surface-sunken: #101216;
+    --wt-color-text: #eceef2;
+    --wt-color-text-muted: #a1a7b3;
+    --wt-color-primary: #4c8dff;
+    --wt-color-primary-hover: #78a9ff;
+    --wt-color-on-primary: #06101f;
+    --wt-color-primary-text: #78a9ff;
+    --wt-color-danger: #ff7f73;
+    --wt-color-danger-hover: #ffa197;
+    --wt-color-on-danger: #2a0705;
+    --wt-color-primary-disabled: #28344a;
+    --wt-color-on-primary-disabled: #93a0ba;
+    --wt-color-danger-disabled: #3d2828;
+    --wt-color-on-danger-disabled: #c09894;
+    --wt-color-success: #4ac08d;
+    --wt-color-warning: #f2b24c;
+    --wt-color-on-warning: #241500;
+    --wt-color-border: #333945;
+    --wt-color-focus: #4c8dff;
+    --wt-color-scrim: rgb(0 0 0 / 0.4);
+    --wt-color-field-fill: #262a33;
+    --wt-color-field-line: #7a8291;
+    --wt-color-field-label-focus: #5c98ff;
+    --wt-color-field-fill-disabled: #1f2229;
+    --wt-color-field-value: #ffffff;
+    --wt-color-stepper-button: #172946;
+    --wt-color-google-button-fill: #131314;
+    --wt-color-google-button-line: #8e918f;
+    --wt-color-google-button-text: #e3e3e3;
+    --wt-color-palette-red: #ff7a70;
+    --wt-color-on-palette-red: #2a0705;
+    --wt-color-palette-amber: #f5b34a;
+    --wt-color-on-palette-amber: #241500;
+    --wt-color-palette-grey: #8b8d98;
+    --wt-color-on-palette-grey: #101216;
+    --wt-color-palette-blue: #7aa2ff;
+    --wt-color-on-palette-blue: #06101f;
+    --wt-color-palette-green: #4ac08d;
+    --wt-color-on-palette-green: #06190f;
+    --wt-color-palette-purple: #c39bf0;
+    --wt-color-on-palette-purple: #1d0b33;
+    --wt-color-day-standard: #183626;
+    --wt-color-on-day-standard: #eceef2;
+    --wt-color-day-closed: #d5d7de;
+    --wt-color-on-day-closed: #101216;
+    --wt-color-season-1: #1d3a23;
+    --wt-color-on-season-1: #eceef2;
+    --wt-color-season-1-line: #4ac08d;
+    --wt-color-season-2: #3f3315;
+    --wt-color-on-season-2: #eceef2;
+    --wt-color-season-2-line: #f5b34a;
+    --wt-color-season-3: #45281c;
+    --wt-color-on-season-3: #eceef2;
+    --wt-color-season-3-line: #f09a74;
+    --wt-color-season-4: #1c2a44;
+    --wt-color-on-season-4: #eceef2;
+    --wt-color-season-4-line: #7aa2ff;
+    --wt-color-station-red: #592222;
+    --wt-color-station-red-dot: #e15656;
+    --wt-color-station-orange: #55301a;
+    --wt-color-station-orange-dot: #e09452;
+    --wt-color-station-amber: #44391a;
+    --wt-color-station-amber-dot: #e0ba52;
+    --wt-color-station-lime: #323f18;
+    --wt-color-station-lime-dot: #b1e052;
+    --wt-color-station-green: #194325;
+    --wt-color-station-green-dot: #52e07a;
+    --wt-color-station-teal: #19413d;
+    --wt-color-station-teal-dot: #52e0d2;
+    --wt-color-station-cyan: #1d3f4e;
+    --wt-color-station-cyan-dot: #52b6e0;
+    --wt-color-station-blue: #223459;
+    --wt-color-station-blue-dot: #5483e1;
+    --wt-color-station-indigo: #242259;
+    --wt-color-station-indigo-dot: #7e79e7;
+    --wt-color-station-purple: #3d2259;
+    --wt-color-station-purple-dot: #a667e4;
+    --wt-color-station-pink: #59223d;
+    --wt-color-station-pink-dot: #e05299;
+    --wt-color-station-brown: #42362c;
+    --wt-color-station-brown-dot: #c29170;
+    --wt-color-table-free: #183626;
+    --wt-color-on-table-free: #eceef2;
+    --wt-color-table-seated: #4c8dff;
+    --wt-color-on-table-seated: #06101f;
+    --wt-color-table-bill: #c39bf0;
+    --wt-color-on-table-bill: #1d0b33;
+    --wt-color-table-clearing: #f5b34a;
+    --wt-color-on-table-clearing: #241500;
+    --wt-color-table-reserved: #4a3a1c;
+    --wt-color-on-table-reserved: #eceef2;
+    --wt-color-highlight: #614a0f;
+    --wt-color-on-highlight: #fff3b0;
+  }
+}
+
+:where([data-wt-theme-root][data-theme="light"]) {
+  color-scheme: light;
+  --wt-color-bg: #f7f7f8;
+  --wt-color-surface: #ffffff;
+  --wt-color-surface-raised: #ffffff;
+  --wt-color-surface-lifted: #e3ebfb;
+  --wt-color-surface-sunken: #d6d9e0;
+  --wt-color-text: #16181d;
+  --wt-color-text-muted: #5c626e;
+  --wt-color-primary: #1f6feb;
+  --wt-color-primary-hover: #1a5fd0;
+  --wt-color-on-primary: #ffffff;
+  --wt-color-primary-text: #1a5fd0;
+  --wt-color-danger: #b3261e;
+  --wt-color-danger-hover: #9a1f18;
+  --wt-color-on-danger: #ffffff;
+  --wt-color-primary-disabled: #8fb7f5;
+  --wt-color-on-primary-disabled: #ffffff;
+  --wt-color-danger-disabled: #d9928e;
+  --wt-color-on-danger-disabled: #ffffff;
+  --wt-color-success: #1a7f5a;
+  --wt-color-warning: #8a5300;
+  --wt-color-on-warning: #ffffff;
+  --wt-color-border: #d6d9e0;
+  --wt-color-focus: #1f6feb;
+  --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #f0f1f4;
+  --wt-color-field-line: #7d8390;
+  --wt-color-field-label-focus: #1a5fd0;
+  --wt-color-field-fill-disabled: #f7f7f8;
+  --wt-color-field-value: #000000;
+  --wt-color-stepper-button: #e8f0ff;
+  --wt-color-google-button-fill: #ffffff;
+  --wt-color-google-button-line: #747775;
+  --wt-color-google-button-text: #1f1f1f;
+  --wt-color-palette-red: #c62828;
+  --wt-color-on-palette-red: #ffffff;
+  --wt-color-palette-amber: #f5a623;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #6b6e78;
+  --wt-color-on-palette-grey: #ffffff;
+  --wt-color-palette-blue: #2f55d4;
+  --wt-color-on-palette-blue: #ffffff;
+  --wt-color-palette-green: #1e7a4f;
+  --wt-color-on-palette-green: #ffffff;
+  --wt-color-palette-purple: #7e3fb8;
+  --wt-color-on-palette-purple: #ffffff;
+  --wt-color-day-standard: #dff3e8;
+  --wt-color-on-day-standard: #16181d;
+  --wt-color-day-closed: #3a3b42;
+  --wt-color-on-day-closed: #ffffff;
+  --wt-color-season-1: #dcf1dc;
+  --wt-color-on-season-1: #16181d;
+  --wt-color-season-1-line: #3c8a4a;
+  --wt-color-season-2: #fbecc0;
+  --wt-color-on-season-2: #16181d;
+  --wt-color-season-2-line: #a87a12;
+  --wt-color-season-3: #f9dccd;
+  --wt-color-on-season-3: #16181d;
+  --wt-color-season-3-line: #b8603a;
+  --wt-color-season-4: #dbe7f9;
+  --wt-color-on-season-4: #16181d;
+  --wt-color-season-4-line: #3d6fc4;
+  --wt-color-station-red: #fde2e1;
+  --wt-color-station-red-dot: #d64545;
+  --wt-color-station-orange: #fde6cf;
+  --wt-color-station-orange-dot: #c26a1f;
+  --wt-color-station-amber: #fcefc0;
+  --wt-color-station-amber-dot: #a67a00;
+  --wt-color-station-lime: #e9f4c9;
+  --wt-color-station-lime-dot: #688c19;
+  --wt-color-station-green: #d6f0dc;
+  --wt-color-station-green-dot: #2d934b;
+  --wt-color-station-teal: #d0eeea;
+  --wt-color-station-teal-dot: #1e9085;
+  --wt-color-station-cyan: #d3ecf7;
+  --wt-color-station-cyan-dot: #1a8abb;
+  --wt-color-station-blue: #dce6fb;
+  --wt-color-station-blue-dot: #2f66d6;
+  --wt-color-station-indigo: #e1e0f8;
+  --wt-color-station-indigo-dot: #5b55d0;
+  --wt-color-station-purple: #ecdff8;
+  --wt-color-station-purple-dot: #8d4fcf;
+  --wt-color-station-pink: #fbdfec;
+  --wt-color-station-pink-dot: #d2468c;
+  --wt-color-station-brown: #eee2d6;
+  --wt-color-station-brown-dot: #8a5a3c;
+  --wt-color-table-free: #dff3e8;
+  --wt-color-on-table-free: #16181d;
+  --wt-color-table-seated: #1f6feb;
+  --wt-color-on-table-seated: #ffffff;
+  --wt-color-table-bill: #7e3fb8;
+  --wt-color-on-table-bill: #ffffff;
+  --wt-color-table-clearing: #f5a623;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #fde7c8;
+  --wt-color-on-table-reserved: #16181d;
+  --wt-color-highlight: #fff3b0;
+  --wt-color-on-highlight: #241500;
+}
+
+:where([data-wt-theme-root][data-theme="dark"]) {
+  color-scheme: dark;
+  --wt-color-bg: #101216;
+  --wt-color-surface: #191c22;
+  --wt-color-surface-raised: #22262e;
+  --wt-color-surface-lifted: #2f3a4d;
+  --wt-color-surface-sunken: #101216;
+  --wt-color-text: #eceef2;
+  --wt-color-text-muted: #a1a7b3;
+  --wt-color-primary: #4c8dff;
+  --wt-color-primary-hover: #78a9ff;
+  --wt-color-on-primary: #06101f;
+  --wt-color-primary-text: #78a9ff;
+  --wt-color-danger: #ff7f73;
+  --wt-color-danger-hover: #ffa197;
+  --wt-color-on-danger: #2a0705;
+  --wt-color-primary-disabled: #28344a;
+  --wt-color-on-primary-disabled: #93a0ba;
+  --wt-color-danger-disabled: #3d2828;
+  --wt-color-on-danger-disabled: #c09894;
+  --wt-color-success: #4ac08d;
+  --wt-color-warning: #f2b24c;
+  --wt-color-on-warning: #241500;
+  --wt-color-border: #333945;
+  --wt-color-focus: #4c8dff;
+  --wt-color-scrim: rgb(0 0 0 / 0.4);
+  --wt-color-field-fill: #262a33;
+  --wt-color-field-line: #7a8291;
+  --wt-color-field-label-focus: #5c98ff;
+  --wt-color-field-fill-disabled: #1f2229;
+  --wt-color-field-value: #ffffff;
+  --wt-color-stepper-button: #172946;
+  --wt-color-google-button-fill: #131314;
+  --wt-color-google-button-line: #8e918f;
+  --wt-color-google-button-text: #e3e3e3;
+  --wt-color-palette-red: #ff7a70;
+  --wt-color-on-palette-red: #2a0705;
+  --wt-color-palette-amber: #f5b34a;
+  --wt-color-on-palette-amber: #241500;
+  --wt-color-palette-grey: #8b8d98;
+  --wt-color-on-palette-grey: #101216;
+  --wt-color-palette-blue: #7aa2ff;
+  --wt-color-on-palette-blue: #06101f;
+  --wt-color-palette-green: #4ac08d;
+  --wt-color-on-palette-green: #06190f;
+  --wt-color-palette-purple: #c39bf0;
+  --wt-color-on-palette-purple: #1d0b33;
+  --wt-color-day-standard: #183626;
+  --wt-color-on-day-standard: #eceef2;
+  --wt-color-day-closed: #d5d7de;
+  --wt-color-on-day-closed: #101216;
+  --wt-color-season-1: #1d3a23;
+  --wt-color-on-season-1: #eceef2;
+  --wt-color-season-1-line: #4ac08d;
+  --wt-color-season-2: #3f3315;
+  --wt-color-on-season-2: #eceef2;
+  --wt-color-season-2-line: #f5b34a;
+  --wt-color-season-3: #45281c;
+  --wt-color-on-season-3: #eceef2;
+  --wt-color-season-3-line: #f09a74;
+  --wt-color-season-4: #1c2a44;
+  --wt-color-on-season-4: #eceef2;
+  --wt-color-season-4-line: #7aa2ff;
+  --wt-color-station-red: #592222;
+  --wt-color-station-red-dot: #e15656;
+  --wt-color-station-orange: #55301a;
+  --wt-color-station-orange-dot: #e09452;
+  --wt-color-station-amber: #44391a;
+  --wt-color-station-amber-dot: #e0ba52;
+  --wt-color-station-lime: #323f18;
+  --wt-color-station-lime-dot: #b1e052;
+  --wt-color-station-green: #194325;
+  --wt-color-station-green-dot: #52e07a;
+  --wt-color-station-teal: #19413d;
+  --wt-color-station-teal-dot: #52e0d2;
+  --wt-color-station-cyan: #1d3f4e;
+  --wt-color-station-cyan-dot: #52b6e0;
+  --wt-color-station-blue: #223459;
+  --wt-color-station-blue-dot: #5483e1;
+  --wt-color-station-indigo: #242259;
+  --wt-color-station-indigo-dot: #7e79e7;
+  --wt-color-station-purple: #3d2259;
+  --wt-color-station-purple-dot: #a667e4;
+  --wt-color-station-pink: #59223d;
+  --wt-color-station-pink-dot: #e05299;
+  --wt-color-station-brown: #42362c;
+  --wt-color-station-brown-dot: #c29170;
+  --wt-color-table-free: #183626;
+  --wt-color-on-table-free: #eceef2;
+  --wt-color-table-seated: #4c8dff;
+  --wt-color-on-table-seated: #06101f;
+  --wt-color-table-bill: #c39bf0;
+  --wt-color-on-table-bill: #1d0b33;
+  --wt-color-table-clearing: #f5b34a;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #4a3a1c;
+  --wt-color-on-table-reserved: #eceef2;
+  --wt-color-highlight: #614a0f;
+  --wt-color-on-highlight: #fff3b0;
+}
+:where([data-wt-theme-root]) {
+  --wt-space-1: 4px;
+  --wt-space-2: 8px;
+  --wt-space-3: 12px;
+  --wt-space-4: 16px;
+  --wt-space-5: 24px;
+  --wt-space-6: 32px;
+
+  --wt-radius-sm: 4px;
+  --wt-radius-md: 8px;
+  --wt-radius-lg: 16px;
+  /* A fully-rounded radius for circular chrome (status dots) and the round table-token shape. Large
+     enough to round any small element to a pill/circle; a component keeps its own square aspect if it
+     wants a true circle. */
+  --wt-radius-full: 9999px;
+
+  --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Google's sign-in button: developers.google.com/identity/branding-guidelines */
+  --wt-font-family-google: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-size-sm: 12px;
+  --wt-font-size-md: 14px;
+  --wt-font-size-lg: 18px;
+  --wt-font-size-xl: 22px;
+  --wt-font-weight-normal: 400;
+  --wt-font-weight-medium: 500;
+  --wt-font-weight-bold: 600;
+
+  --wt-tap-min: 44px;
+
+  --wt-google-mark-size: 20px;
+  --wt-google-mark-gap: 10px;
+  --wt-google-button-line-height: 20px;
+
+  --wt-field-height: 56px;
+  --wt-field-line-width: 1px;
+  --wt-field-line-width-active: 2px;
+  --wt-dropdown-row-height: 48px;
+
+  --wt-opacity-disabled: 0.5;
+  --wt-opacity-hover: 0.85;
+
+  /* How long a notice that goes by itself takes to fade out (wt-notice). */
+  --wt-duration-fade: 400ms;
+  /* How long a row takes to slide into its new place while a list is reordered by dragging (ReorderController). */
+  --wt-duration-move: 150ms;
+  --wt-duration-disclosure: 900ms;
+
+  /* wt-modal's sizes: compact for a confirmation or one or two short fields, standard for an
+     ordinary editor, and --wt-modal-max-width for wide content (and an unsized modal). */
+  --wt-modal-compact-width: 28rem;
+  --wt-modal-standard-width: 42rem;
+  --wt-modal-max-width: 64rem;
+  --wt-dialog-max-width: min(90vw, 48rem);
+  /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and
+     which wt-modal sets to --wt-form-max-width on its body. */
+  --wt-form-max-width: 36rem;
+  --wt-field-max-width: none;
+
+  /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
+     Fluid rather than a breakpoint: a media query cannot read a token, and the no-hardcoded-chrome
+     guard refuses a literal breakpoint in a packages/ui primitive. */
+  --wt-modal-inline-margin: clamp(var(--wt-space-1), 5vw - var(--wt-space-4), var(--wt-space-5));
+  --wt-modal-inline-padding: clamp(var(--wt-space-3), 3vw, var(--wt-space-5));
+
+  /* One sizing value for the NAME column of a table a form owns, used in BOTH directions. It is
+     larger than --wt-tap-min either way, which is what structure.test.ts pins.
+
+     As a CAP (`max-width`): the modifier form's choices, the variants table, and the product
+     editor's attached-lists table. The name is the one cell that can be long, so capping it makes
+     it wrap and keeps the controls after it (a switch, a row menu) on screen at phone width
+     instead of pushing the row into a sideways scroll.
+
+     As a FLOOR (`min-width`): the single-input cells of the options list form, which have no
+     width of their own and would otherwise shrink to the tap-target minimum and cut the value off
+     mid-word. That table accepts a sideways scroll — it has its own focusable horizontal scroller
+     so the dialog does not scroll instead.
+
+     As a FLEX BASIS: the extras list form's product picker, which is a combobox rather than a
+     table cell and sizes its open panel to its trigger.
+
+     So the uses genuinely disagree about the scroll, and whether the floor should be a token of
+     its own is an open question (docs/backlog.md, the `--wt-cell-name-max-width` entry). Grep
+     before quoting a list of consumers here: it has gone stale once already. */
+  --wt-cell-name-max-width: 140px;
+
+  /* The tallest wt-floor-plan-preview draws; a page or panel may set its own. */
+  --wt-floor-plan-preview-max-height: calc(4 * var(--wt-tap-min));
+
+  /* The narrowest box: both buttons and room for a three-digit number between them. */
+  --wt-stepper-field-width: 88px;
+  /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and
+     24px is WCAG 2.2's level AA minimum target (2.5.8). */
+  --wt-stepper-button-width: 24px;
+
+  /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
+     --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box
+     beyond this. */
+  --wt-price-field-width: 96px;
+  /* Room for a range placeholder such as "1000.00 – 9999.99"; the "fits the longest range
+     placeholder" cases in apps/dashboard/src/widgets/menu-prices-table.test.ts measure it. */
+  --wt-price-range-field-width: 168px;
+
+  --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
+  --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
+
+  --wt-focus-ring: 2px solid var(--wt-color-focus);
+  --wt-focus-offset: 2px;
+
+  /* The SELECTED-state ring (distinct from focus): the marker on a chosen item, e.g. the canvas
+     editor's selected card tile. Composite ring + offset, mirroring --wt-focus-ring; inset (negative
+     offset) so it sits inside the tile's border rather than growing its footprint. */
+  --wt-selected-ring: 2px solid var(--wt-color-primary);
+  --wt-selected-ring-offset: -2px;
+}
+*{box-sizing:border-box}body{margin:0;font-family:var(--wt-font-family);font-size:var(--wt-font-size-md);color:var(--wt-color-text);background:var(--wt-color-bg)}header{background:var(--wt-color-surface);padding:var(--wt-space-5) var(--wt-space-6);border-bottom:1px solid var(--wt-color-border);display:flex;justify-content:space-between;align-items:center}.brand{font-size:var(--wt-font-size-xl);font-weight:var(--wt-font-weight-bold)}main{padding:var(--wt-space-6);max-width:840px}h1{font-size:calc(var(--wt-font-size-xl) + var(--wt-space-2));margin:var(--wt-space-2) 0 var(--wt-space-4);font-weight:var(--wt-font-weight-bold);line-height:1.2}h2{font-size:var(--wt-font-size-lg);margin:0 0 var(--wt-space-3)}p{line-height:1.6;margin:var(--wt-space-2) 0 var(--wt-space-4)}.muted{color:var(--wt-color-text-muted)}.eyebrow{color:var(--wt-color-primary-text);font-weight:var(--wt-font-weight-bold);font-size:var(--wt-font-size-sm);letter-spacing:1px}.card{background:var(--wt-color-surface);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-lg);padding:var(--wt-space-5);margin:var(--wt-space-5) 0}.identity{display:flex;gap:var(--wt-space-4);align-items:center}.icon{background:var(--wt-color-surface-lifted);padding:var(--wt-space-4);font-size:var(--wt-font-size-xl);border-radius:var(--wt-radius-md)}.buttons{display:flex;gap:var(--wt-space-3);margin-top:var(--wt-space-5)}button{font:inherit;min-height:var(--wt-tap-min);padding:var(--wt-space-3) var(--wt-space-5);border-radius:var(--wt-radius-md);border:1px solid var(--wt-color-border);background:var(--wt-color-surface);color:var(--wt-color-primary-text);font-weight:var(--wt-font-weight-bold)}.primary{background:var(--wt-color-primary);color:var(--wt-color-on-primary);border-color:var(--wt-color-primary)}.foot{display:flex;justify-content:space-between;align-items:center;margin-top:var(--wt-space-6)}.caption{font-size:var(--wt-font-size-sm);margin-top:var(--wt-space-5)}.paper{display:none;background:var(--wt-color-surface);height:1123px;width:794px;padding:48px}.paper h1{font-size:32px}.rule{height:4px;background:var(--wt-color-primary);margin:var(--wt-space-5) 0}.pair{display:flex;justify-content:space-between;gap:var(--wt-space-5);padding:var(--wt-space-3) 0;border-bottom:1px solid var(--wt-color-border)}.payload{margin:var(--wt-space-5) 0;padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);display:flex;gap:var(--wt-space-5);align-items:center}.qr{width:128px;height:128px;flex:none;border:2px dashed var(--wt-color-field-line);display:flex;align-items:center;justify-content:center;text-align:center;font-size:var(--wt-font-size-sm);color:var(--wt-color-text-muted)}code{font:var(--wt-font-size-sm) var(--wt-font-family-mono);overflow-wrap:anywhere}ol{padding-left:var(--wt-space-5);line-height:1.8}.paperfooter{margin-top:var(--wt-space-6);padding-top:var(--wt-space-4);border-top:1px solid var(--wt-color-border);font-size:var(--wt-font-size-sm);color:var(--wt-color-text-muted)}@media(max-width:600px){header{padding:var(--wt-space-4) var(--wt-space-5)}main{padding:var(--wt-space-5)}h1{font-size:calc(var(--wt-font-size-xl) + var(--wt-space-1))}.card{padding:var(--wt-space-4)}.buttons{flex-direction:column}.foot{gap:var(--wt-space-4)}.desktopOnly{display:none}}</style><body><div id="screen"><header><div class="brand">Waitron</div><div class="muted">English ▾</div></header><main><div class="eyebrow">LIVE SETUP · RECOVERY</div><h1>Keep your recovery PDF</h1><p>Download it, print it, or both.<br>Keep it in the office.</p><div class="card"><div class="identity"><div class="icon">▤</div><div><h2>Olivo recovery sheet</h2><div class="muted">Restaurante Olivo S.L. · B12345674</div></div></div><p class="muted" style="margin-top:var(--wt-space-5)">Your box reference, recovery key and instructions.<br class="desktopOnly"> It helps recover a backup; it does not contain your sales.</p><div class="buttons"><button class="primary">↓ Download PDF</button><button>Print</button></div></div><p class="muted">You can use your usual network printer.</p><div class="foot"><button>Back</button><button class="primary">Continue</button></div><p class="caption muted">Proposed layout · no working controls · example data</p></main></div><section id="sheet" class="paper"><div class="eyebrow">WAITRON · RECOVERY SHEET</div><h1>Restaurante Olivo</h1><p class="muted">Keep this PDF or printout with your office records.</p><div class="rule"></div><div class="pair"><span>Taxpayer</span><strong>Restaurante Olivo S.L. · B12345674</strong></div><div class="pair"><span>Box reference</span><strong>Olivo · Main box</strong></div><div class="pair"><span>Recovery key name</span><strong>olivo-main · example</strong></div><div class="pair"><span>Created / format</span><strong>15 October 2026 · Version 1</strong></div><h2 style="margin-top:var(--wt-space-6)">Your recovery key</h2><div class="payload"><div class="qr">QR code<br>placeholder<br><br>Not scannable</div><div><strong>ILLUSTRATION — NO REAL KEY</strong><p class="muted">The saved PDF and printed code carry the same recovery details.</p><code>[RECOVERY CODE INSERTED HERE]</code></div></div><h2>If you replace this box</h2><ol><li>Open setup on the replacement and choose <strong>Recover from backup</strong>.</li><li>Select your backup. Upload this PDF or scan its code.</li><li>Enter the backup password if the backup is encrypted.</li><li>Confirm the old box is disconnected and continue.</li></ol><div class="card"><strong>This sheet does not contain your sales.</strong><p>You also need a usable backup. Someone with this sheet and a usable matching backup could recover the venue’s data.</p></div><p class="muted">Keep older sheets for backups that name older recovery keys.</p><div class="paperfooter">Proposed design · synthetic example · no working recovery code<br>Page 1 of 1</div></section></body></html>

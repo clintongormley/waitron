@@ -314,19 +314,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
-- **A679. First Live fiscal setup without Cloud.** The owner approved the complete
-  [design](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) on 2026-10-15 at about
-  06:35: “A — Approve, plan and build”. The reviewed
-  [implementation plan](superpowers/plans/2026-10-15-a679-first-fiscal-setup.md) is ready for native
-  inline execution. Build both guided outside-kit and existing-custodian import routes, durable
-  setup ownership, and Live readiness using A680 in its separate preproduction database. A new kit
-  keeps one paper-original current master, a protected key file and separate secret recovery paper;
-  actual saved-file reopen and actual-paper recovery remain required acceptance checks. W41s-6
-  [#1717](https://github.com/clintongormley/waitron/pull/1717), A680
-  [#1718](https://github.com/clintongormley/waitron/pull/1718) and C3
-  [#1725](https://github.com/clintongormley/waitron/pull/1725) landed. Keep public import for Cloud
-  subscribers; wizard fetching is separate. No product implementation or joint qualification is
-  claimed by the plan publication. Build this before W41s-7. [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+- **A679. First Live setup: one page and one recovery PDF.** The owner’s 2026-10-15
+  18:10–18:15 direction replaces the downloaded custody tool and separate-custodian model.
+  Approve the [short revised design](superpowers/specs/2026-10-15-a679-simple-pdf-design.md)
+  before more implementation or a replacement plan. Keep the existing branch work for reuse;
+  the old 44-step paper check and FOLLOW-UP are cancelled. The replacement check will open the
+  built PDF and check recovery from its downloaded or printed copy if the approved design uses it.
+  [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete

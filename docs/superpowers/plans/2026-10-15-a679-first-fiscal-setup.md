@@ -1,5 +1,11 @@
 # A679 First Live Fiscal Setup Implementation Plan
 
+**BUILD PAUSED, owner 2026-10-15 at about 18:15:** do not execute further tasks in this plan.
+The owner requires one PDF from the setup page and approval of the
+[short replacement design](../specs/2026-10-15-a679-simple-pdf-design.md). Preserve reusable work;
+write a replacement implementation plan only after design approval. The separate custody tool,
+old actual-paper procedure and FOLLOW-UP are superseded.
+
 > **For agentic workers:** use `superpowers:executing-plans` and implement inline, as the owner selected. Read the TDD skill before writing implementation or tests. Work task by task; record observed failures before implementing. No automatic delegation.
 
 **Goal:** let you complete first Live setup through the real wizard, with either a new outside paper kit or an existing custodian, without a checkout, shell or Cloud subscription.
