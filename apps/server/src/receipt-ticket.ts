@@ -30,7 +30,19 @@ function toTextStyle(style: ReceiptStyle | undefined): TextStyle {
   return { bold: style?.bold === true, double: style?.double === true };
 }
 
-export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptInput): Uint8Array {
+export function formatReceipt(input: FormatReceiptInput): Uint8Array {
+  return drawReceipt(input).bytes;
+}
+
+/**
+ * The receipt's commands, and which of the pictures they draw, counted from 0, are the rules that
+ * end its sections, so a preview can tell a rule from a trim line of dashes that draws the same.
+ */
+export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInput): {
+  bytes: Uint8Array;
+  rules: number[];
+} {
+  const rules: number[] = [];
   const document = buildReceiptDocument({ ...input, surface: "thermal" });
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
@@ -87,6 +99,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         break;
       }
       case "rule":
+        rules.push(b.pictures);
         b.line("-".repeat(columns));
         break;
       case "align":
@@ -111,5 +124,5 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
       }
     }
   }
-  return b.feedAndCut().bytes();
+  return { bytes: b.feedAndCut().bytes(), rules };
 }

@@ -30,7 +30,7 @@ import {
   type PrintJobPreview,
   type PrintPreviewBlock,
 } from "./print-job-preview.js";
-import { formatReceipt } from "./receipt-ticket.js";
+import { drawReceipt } from "./receipt-ticket.js";
 import { createLogoCache, drawPreviewLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
 import type { TillConfig } from "./till-config.js";
@@ -76,9 +76,14 @@ export interface ReceiptPreviewResponse {
 
 /**
  * Where `withField` differs from `without`: the blocks between their common start and end, less
- * any rule at either end, which belongs to the section a field opens or closes, not to the field.
+ * any of `withField`'s `rules` at either end, which belong to the section a field opens or closes,
+ * not to the field.
  */
-function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[]): BlockRange {
+function addedBlocks(
+  without: PrintPreviewBlock[],
+  withField: PrintPreviewBlock[],
+  rules: ReadonlySet<number>,
+): BlockRange {
   const same = (a: PrintPreviewBlock | undefined, b: PrintPreviewBlock | undefined) =>
     JSON.stringify(a) === JSON.stringify(b);
   let start = 0;
@@ -91,11 +96,22 @@ function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[
   )
     tail++;
   let end = withField.length - tail;
-  const rule = (block: PrintPreviewBlock | undefined) =>
-    block?.kind === "image" && /^-+$/u.test(block.text?.trim() ?? "");
-  while (start < end && rule(withField[start])) start++;
-  while (end > start && rule(withField[end - 1])) end--;
+  while (start < end && rules.has(start)) start++;
+  while (end > start && rules.has(end - 1)) end--;
   return { start, end };
+}
+
+/** The indexes of `preview`'s blocks that show the job's pictures numbered `pictures`. */
+function pictureBlocks(preview: PrintJobPreview, pictures: number[]): Set<number> {
+  const wanted = new Set(pictures);
+  const blocks = new Set<number>();
+  let picture = 0;
+  preview.blocks.forEach((block, index) => {
+    if (block.kind !== "image") return;
+    if (wanted.has(picture)) blocks.add(index);
+    picture++;
+  });
+  return blocks;
 }
 
 /** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */
@@ -219,23 +235,24 @@ async function renderDraftPreview(
           bytes: async () => (await readImageBytes(deps.db, filename))?.bytes ?? null,
         })));
   const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
-  const draw = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
-    previewPrintJob(
-      formatReceipt({
-        result: sample,
-        receipt: trim,
-        printer,
-        invoiceLocale: locale,
-        receiptHeader,
-        issuer,
-        venueAddress,
-        logo: picture,
-        simulated: deps.cfg.practiceMode,
-      }),
-      { widthDots },
-    );
-  const preview = draw(receipt);
-  const without = (other: PrintJobPreview) => addedBlocks(other.blocks, preview.blocks);
+  const job = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
+    drawReceipt({
+      result: sample,
+      receipt: trim,
+      printer,
+      invoiceLocale: locale,
+      receiptHeader,
+      issuer,
+      venueAddress,
+      logo: picture,
+      simulated: deps.cfg.practiceMode,
+    });
+  const draw = (...args: Parameters<typeof job>) =>
+    previewPrintJob(job(...args).bytes, { widthDots });
+  const drawn = job(receipt);
+  const preview = previewPrintJob(drawn.bytes, { widthDots });
+  const rules = pictureBlocks(preview, drawn.rules);
+  const without = (other: PrintJobPreview) => addedBlocks(other.blocks, preview.blocks, rules);
   const markOf = (field: "headerSubtitle" | "footerMessage" | "phone" | "email") =>
     receipt[field] ? without(draw({ ...receipt, [field]: undefined })) : null;
   const response: ReceiptPreviewResponse = {

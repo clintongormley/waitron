@@ -46,6 +46,7 @@ export interface EscSetting {
 export class EscBuilder {
   private readonly parts: number[] = [];
   private alignment: Alignment = "left";
+  private drawn = 0;
   /** Undefined for a builder made without a setting, which can send anything but text. */
   readonly grid: TextGrid | undefined;
 
@@ -132,6 +133,7 @@ export class EscBuilder {
       (heightDots >> 8) & 0xff,
     );
     for (const b of data) this.parts.push(b);
+    this.drawn++;
   }
 
   /** `GS L nL nH` followed by `GS W nL nH`, in dots. */
@@ -229,6 +231,11 @@ export class EscBuilder {
 
   bytes(): Uint8Array {
     return Uint8Array.from(this.parts);
+  }
+
+  /** The `GS v 0` pictures sent so far: each line of text, bitmap and QR code is one. */
+  get pictures(): number {
+    return this.drawn;
   }
 }
 

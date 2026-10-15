@@ -344,6 +344,35 @@ describe("POST /management-api/receipt-preview", () => {
     ]);
   });
 
+  describe.each([
+    ["an ordinary", false],
+    ["a practice", true],
+  ])("trim made only of dashes, on %s receipt", (_, practiceMode) => {
+    it.each(["---", "-----"])("marks a footer of %s", async (footer) => {
+      const result = await rendered({ footerMessage: footer }, { practiceMode });
+      expect(printedLines(result)).toContain(footer);
+      const mark = result.marks.footerMessage!;
+      expect(linesOf(result, mark.start, mark.end)).toEqual([footer]);
+    });
+
+    it("marks a header subtitle of dashes", async () => {
+      const result = await rendered({ headerSubtitle: "---" }, { practiceMode });
+      const mark = result.marks.headerSubtitle!;
+      expect(linesOf(result, mark.start, mark.end)).toEqual(["---"]);
+      expect(linesOf(result, mark.end, mark.end + 1)).toEqual([legal()]);
+    });
+
+    it("marks a footer exactly as wide as the roll's rule, and not the rule beside it", async () => {
+      const footer = "-".repeat(42);
+      const result = await rendered({ footerMessage: footer }, { practiceMode });
+      expect(result.preview.columns).toBe(42);
+      const mark = result.marks.footerMessage!;
+      expect(linesOf(result, mark.start, mark.end)).toEqual([footer]);
+      const ruled = practiceMode ? mark.end : mark.start - 1;
+      expect(linesOf(result, ruled, ruled + 1)).toEqual([footer]);
+    });
+  });
+
   it("marks nothing for absent trim and marks the explicitly enabled location address", async () => {
     const result = await rendered({});
     const lines = printedLines(result);

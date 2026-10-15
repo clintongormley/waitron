@@ -372,6 +372,15 @@ describe("text drawn as images", () => {
     ]);
   });
 
+  it("counts every picture drawn so far, a line, a bitmap and a QR code alike, and nothing else", () => {
+    const b = esc(TM_T88_58);
+    expect(b.pictures).toBe(0);
+    b.init().align("center").feed(2).line("Hola").line();
+    expect(b.pictures).toBe(2);
+    b.bitmap({ widthDots: 8, heightDots: 1, bits: Uint8Array.of(0xff) }).qrRaster([[true]]);
+    expect(b.pictures).toBe(4);
+  });
+
   it("draws an empty line as a blank band of the same size", () => {
     expect([...esc(TM_T88_58).line().bytes()]).toEqual([
       ...header(45, 28),
