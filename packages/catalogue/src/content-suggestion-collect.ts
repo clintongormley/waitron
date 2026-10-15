@@ -152,7 +152,7 @@ async function readCategoryNames(
   return names;
 }
 
-/** Turns live items into job items, leaving out what Cloud's bounds would refuse. */
+/** Turns live items into job items, in `wanted`'s order, less what Cloud's bounds would refuse. */
 async function describeItems(
   tx: Transaction,
   config: ContentLanguages,
@@ -188,9 +188,7 @@ async function describeItems(
       missing,
     });
   }
-  return items.sort(
-    (a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.ref < b.ref ? -1 : 1),
-  );
+  return items;
 }
 
 /**
