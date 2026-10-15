@@ -3074,10 +3074,18 @@ describe("TOTAL drawn double size", () => {
   );
 
   it("puts a wide TOTAL's amount on its own double line on 58 mm", () => {
-    expect(doubleLines({ ...FILED_WITHOUT_TEXT, total: "10000.00" }, PRINTER_58)).toEqual([
-      "TOTAL",
-      "10.000,00 €",
-    ]);
+    const result = { ...FILED_WITHOUT_TEXT, total: "10000.00" };
+    expect(doubleLines(result, PRINTER_58)).toEqual(["TOTAL", "10.000,00 €"]);
+    const amountLine = printedCommands(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    ).filter((command) => command.heightDots === 56)[1]!;
+    expect(amountLine.text).toBe(`${" ".repeat(4)}10.000,00 €`);
   });
 
   it("keeps a wide TOTAL on one double line on 80 mm", () => {

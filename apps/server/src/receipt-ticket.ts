@@ -36,10 +36,10 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots);
-  const indentation = (indent: ReceiptIndent): number => {
+  const indentation = (indent: ReceiptIndent, available: number): number => {
     if (typeof indent === "number") return indent;
     const width = prepareText(indent.after).length;
-    return width > columns / 2 ? 2 : width;
+    return width > available / 2 ? 2 : width;
   };
   const textLines = (
     text: string,
@@ -76,7 +76,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         for (const line of textLines(
           element.text,
           element.parts,
-          indentation(element.indent),
+          indentation(element.indent, width),
           width,
         )) {
           b.line(line, style);
@@ -86,10 +86,10 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
       case "amount": {
         const caption = prepareText(element.caption);
         const amount = prepareText(element.amount);
-        const indent = indentation(element.indent);
         const style = toTextStyle(element.style);
         if (style.double) {
           const half = Math.floor(columns / 2);
+          const indent = indentation(element.indent, half);
           const double = labelAmountLines(caption, amount, half, indent);
           if (double.length === 1) {
             b.line(double[0], style);
@@ -102,7 +102,12 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
             break;
           }
         }
-        for (const line of labelAmountLines(caption, amount, columns, indent)) {
+        for (const line of labelAmountLines(
+          caption,
+          amount,
+          columns,
+          indentation(element.indent, columns),
+        )) {
           b.line(line, { bold: style.bold });
         }
         break;
