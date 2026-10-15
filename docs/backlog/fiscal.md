@@ -61,8 +61,8 @@ No stored fiscal row is to be rewritten.
   accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
   simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
   [verifactu-findings.md](../compliance/verifactu-findings.md) and the
-  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)). The
-  branch refuses over €3,000, the owner's choice of 2026-10-15 (A741). The 3,010.00 that
+  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)).
+  A Veri\*Factu venue refuses a sale over €3,000, the owner's choice of 2026-10-15 (A741). The 3,010.00 that
   `@waitron/verifactu`'s validator applies (3,000 plus its 10.00 tolerance) stays a ceiling the
   limit sits inside.
 
@@ -206,10 +206,13 @@ with no backward-compatibility implementation.
 does with an email or A4 choice (A555), obtain the asesor's manual-remedy approval and settle
 applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
-and foreign-recipient `IDOtro`/`IDType` remain separate decisions. What enabling it also changes
-after A741 (the till's `fullInvoices` flag, the over-limit wording, a saved F1 choice) is listed in
-the A1e/A231 entry in [the backlog](../backlog.md#fiscal-records-invoices-and-the-asesor). Follow the campaign's current
-queue order; this landing does not start another fiscal item.
+and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Enabling it also means: the
+server sends `fullInvoices: true` in `GET /api/till` (`apps/server/src/till-api.ts`), so the till
+draws its Full invoice buttons again (A741); `sale.over_simplified_limit` is reworded, since it
+says the till cannot issue a full invoice; and someone decides whether the server should go on
+accepting a saved F1 choice (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which
+lifts its check on an order growing past the limit. A741 left that last one unchanged. Follow the
+campaign's current queue order; this landing does not start another fiscal item.
 
 ## When the business e-invoicing regime starts
 
@@ -887,6 +890,12 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **A741, owner decision 2026-10-15: one large-bill limit of €3,000.** A sale of exactly
+  €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,
+  `packages/fiscal-verifactu/src/backend.ts`), inside the 3,010.00 that `@waitron/verifactu`'s
+  validator applies. The till asks whether a large bill is for different people at the server's
+  limit, and asks no full-invoice question and draws no Full invoice button while the server sends
+  `fullInvoices: false`.
 - **A696, owner decision 2026-10-15: “A — Venue's time zone”.** Every new invoice date and
   record offset, ordinary receipt and till use the saved venue zone, including DST, independently
   of the process zone. Old records, including their dates, offsets and hashes, stay unchanged.

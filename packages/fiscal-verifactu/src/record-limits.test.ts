@@ -107,7 +107,7 @@ describe("the simplified-invoice limit is €3,000, within the validator's F2 ce
     });
   });
 
-  it("lets through nothing the validator refuses", () => {
+  it("refuses each of these totals the validator refuses", () => {
     for (const [total] of rows) {
       if (refusedByValidator(total)) expect(refusedByUs(total), total).toBe(true);
     }

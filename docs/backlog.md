@@ -194,6 +194,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
+- **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
+  left open by A741. The bill still shows its Full invoice line and payment refuses it; the server
+  accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
+
 - **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
   shown to happen either way. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
@@ -275,14 +279,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   calls `recordSubstitution`. Asesor Q5(d) remains open for F3 and R5. **Next action:** verify
   physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4
   choice (A555), obtain the asesor's manual-remedy approval and settle applicable B2B delivery
-  before enabling public F1. Enabling it also means: the server sends `fullInvoices: true` in
-  `GET /api/till` (`apps/server/src/till-api.ts`), so the till draws its Full invoice buttons again
-  (A741); `sale.over_simplified_limit` is reworded, since it says the till cannot issue a full
-  invoice; and someone decides whether the server should go on accepting a saved F1 choice
-  (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which lifts its check on an
-  order growing past the limit. A741 left that last one unchanged; a bill already saved as F1 still
-  shows its Full invoice line, payment refuses it, and the till offers no way back to a simplified
-  invoice.
+  before enabling public F1; what else enabling it changes since A741 is in the A231 detail.
   The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 

@@ -2331,7 +2331,6 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages staff may choose, the location's own first. */
   @state() private receiptLanguages: string[] = [];
-  /** Off unless the server sends true. */
   @state() private fullInvoices = false;
   #simplifiedInvoiceLimit: string | null = null;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
@@ -2770,6 +2769,7 @@ export class TillApp extends LitElement {
       // A server too old to send it sets no limit.
       this.#simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
       this.#store.simplifiedInvoiceLimit = this.#simplifiedInvoiceLimit;
+      // A server too old to send it counts as off.
       this.fullInvoices = till.fullInvoices === true;
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
