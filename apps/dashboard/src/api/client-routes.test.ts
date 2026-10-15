@@ -216,6 +216,52 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("starts Translate all, reads suggestion pages and discards one suggestion by id", async () => {
+    const run = {
+      state: "sending",
+      total: 3,
+      progress: 0,
+      done: 0,
+      failed: 0,
+      code: null,
+      fits: null,
+      waiting: 0,
+      finishedAt: null,
+      opened: false,
+    };
+    const read = {
+      language: "ca-ES-valencia",
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "on",
+      cloudOrigin: "https://cloud.example.test",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ run }))
+      .mockResolvedValueOnce(jsonResponse(read))
+      .mockResolvedValueOnce(jsonResponse(read))
+      .mockResolvedValueOnce(jsonResponse({ deleted: "a/b c" }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.startContentSuggestions()).resolves.toEqual({ run });
+    await expect(api.getContentSuggestions("ca-ES-valencia")).resolves.toEqual(read);
+    await expect(api.getContentSuggestions("ca-ES-valencia", "s 1&x")).resolves.toEqual(read);
+    await expect(api.discardContentSuggestion("a/b c")).resolves.toEqual({ deleted: "a/b c" });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/content-suggestions/jobs", "POST", {}],
+      ["/management-api/content-suggestions?language=ca-ES-valencia", "GET", undefined],
+      [
+        "/management-api/content-suggestions?language=ca-ES-valencia&after=s+1%26x",
+        "GET",
+        undefined,
+      ],
+      ["/management-api/content-suggestions/a%2Fb%20c", "DELETE", undefined],
+    ]);
+  });
+
   it("reads the missing-translations report from the management route", async () => {
     const report = [
       { language: "es", gaps: [] },

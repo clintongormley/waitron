@@ -57,7 +57,7 @@ not the new default, it holds the change up too, and **Missing translations** li
 **Edit translations** opens a dialog containing **Missing translations** for your content
 languages. The language you chose opens; languages marked **Required** come first and have a note
 saying how many names still need translating into them. The report keeps its Kind and Why filters
-and links to each existing editor; direct text entry in this dialog is planned separately. A name
+and links to each existing editor. A name
 filled in for some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
 staff name is shown instead; an extras list is the exception, because its own name never reaches a

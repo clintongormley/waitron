@@ -22,6 +22,14 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
     getContentTranslationGaps: vi.fn().mockResolvedValue([]),
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
       language,
       config: CONFIG,
@@ -927,6 +935,14 @@ it("opens fresh translation fields for a language just added", async () => {
             : [],
       })),
     ),
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
       language,
       config,
@@ -1140,6 +1156,14 @@ it("a real translation PUT closes once before a failing report refresh", async (
     expected: "baseline",
   };
   const client = api({
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn().mockResolvedValue({
       language: "ca",
       config: CONFIG,

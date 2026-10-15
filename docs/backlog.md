@@ -1073,7 +1073,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
 - **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
-  tasks 1–12 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
+  tasks 1–17 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
@@ -1094,8 +1094,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   catalogue's job and suggestion tables, collecting and building a job, recording a job, and
   storing, listing and discarding suggestions) are on `main` too**, and so are **Tasks 11–12**: the
   job runner, which starts with the server when a Cloud address is configured and works only while
-  the node is primary, and the three `/management-api/content-suggestions` routes. Nothing in the
-  dashboard calls those routes until Task 13 onwards.
+  the node is primary, and the three `/management-api/content-suggestions` routes. **Tasks 13–17
+  are on `main` too:** the translations dialog's Translate all bar, suggestions filled in as drafts
+  with Discard and Save, spelling-fix, placeholder and out-of-date notes, and the 100-draft limit.
+  The "translations ready" notice (Tasks 18–19) is not built yet.
 
 - **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
   The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
@@ -1129,6 +1131,35 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
   enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
   `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
+
+- **Translate all wording in the translations dialog that reads wrongly for some counts.** A count
+  of one reads "1 suggestions" — `suggestions.waiting`, `suggestions.capacity`, `suggestions.fits`
+  and, in Spanish, `suggestions.partly` have no `_one` forms, unlike their siblings in
+  `apps/dashboard/src/i18n/strings.ts` (the plan's wording, left unchanged by A689's fourth PR). And the
+  dialog's counters still say "edited" for every row Save would send, untouched suggestions
+  included: `translations.edited`, `translations.hidden`, `translations.show_edited`,
+  `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are
+  edited"). Owner to choose the wording.
+
+- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
+  A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
+  dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
+  do, `packages/dashboard-kit/src/request.ts`). And on the default language's page, an item a read
+  by reference showed should not be listed is skipped for the rest of that opening, so an item that
+  becomes listable again while the dialog is open shows only from the next opening
+  (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`). And after a Discard
+  that deleted some of a row's suggestions before one was refused, that language's row takes no
+  suggestion including any of them, and shows no Discard, for the rest of the opening the refusal
+  lands in (or, if the dialog was closed then, the very next opening, when that is on the same language);
+  the refused suggestion is still stored and fills the row again at that language's opening after
+  that.
+
+- **The translations dialog capitalises a language name mid-sentence in Spanish in two older
+  places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
+  accessible label `content_gaps.table` ("Sin traducir al Inglés"): both go through the dialog's
+  `#name`, which passes `standalone=true` by default
+  (`apps/dashboard/src/widgets/content-translations-dialog.ts`). Fixing
+  them changes existing test assertions.
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
@@ -5318,8 +5349,9 @@ the tree. What remains, largest first:
 - **A box that is not connected, or is revoked, refuses Translate all with `cloud.not_configured`,
   whose dashboard wording was written for a server with no Cloud set up at all** ("Cloud services
   are not available on this server yet"). The neighbouring Cloud calls use
-  `cloud.binding_conflict`. Owner to choose the code and the wording before A689's dashboard dialog
-  (plan Tasks 13–17). Raised by #1729's review. The same code is also set by
+  `cloud.binding_conflict`. The translations dialog's Translate all bar now shows this wording when a
+  run ends because the box is no longer connected, and when the start request is refused. Owner to
+  choose the code and the wording (lane B's question 4, 2026-10-15). Raised by #1729's review. The same code is also set by
   `FAILURE_CODES.not_connected` in `packages/catalogue/src/content-suggestion-jobs.ts`.
 
 - **The signing and size-capped reading of a request to Cloud is repeated across the

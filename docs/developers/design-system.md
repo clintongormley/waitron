@@ -2149,6 +2149,9 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   (in dark, while switched off in those cases, the dim disabled blue, A535).
   A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
+  A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
+  latest suggestion read does not say the service is on, or while a run is being sent or
+  translated, and keeps its own variant while its own press is being sent.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks, the sign-in screens, and the canvas editor's Delete on a canvas's last tab
   (canvases are being retired, A182). Nothing guards it across screens.
@@ -2254,6 +2257,9 @@ These open already savable:
   untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
   in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
   option, or by Edit on an option with no refusal, it opens quiet;
+- the translations dialog while Translate all suggestions are filled in: they are drafts nobody
+  typed, so Save opens ready, and closing over suggestions nobody has edited asks nothing, because
+  the draft scope compares only a person's own edits (`personalSubmission`, `apps/dashboard/src/widgets/content-translations-dialog.ts`);
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 
@@ -3106,8 +3112,8 @@ owner 2026-09-30): Content languages' Make default and Delete save straight away
 missing-name count, or a loading/read-failure message while the report cannot supply that count.
 Every row has a pinned Actions menu; the default has no Make default or Delete, and a language kept
 enabled for the venue's area has no Delete and shows "Required". Add language opens its own dialog.
-Edit translations opens the existing grouped report in a read-only dialog with its Kind and Why
-filters and links to the relevant editors. Direct text entry is pending A420 part 2's spec approval. A second exception (A212): the course
+Edit translations opens a dialog where the missing names for one language are typed in and saved
+together, with its Kind and Why filters, links to the relevant editors, and Translate all. A second exception (A212): the course
 list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds and renames
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's

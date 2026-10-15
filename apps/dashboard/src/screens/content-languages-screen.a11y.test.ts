@@ -33,6 +33,14 @@ function stubApi(
     getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
     getContentTranslationGaps: vi.fn().mockResolvedValue(gaps),
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
       language,
       config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
