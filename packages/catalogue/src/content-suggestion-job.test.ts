@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import type { ContentLanguages } from "@waitron/shared";
+import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCategory } from "./categories.js";
 import {
@@ -630,6 +630,28 @@ describe("the job's limits", () => {
       }
       expect(Buffer.byteLength(JSON.stringify(job.houseStyle))).toBeLessThanOrEqual(
         HOUSE_STYLE_BYTE_LIMIT,
+      );
+    });
+  });
+
+  it("refuses to build a job its first item and that item's head cannot fit in", async () => {
+    // The box saves up to 200 languages (content-languages.ts), Cloud reads at most 20; a control
+    // character takes six bytes in JSON, so 200 names of 500 make each entry about 600 KB.
+    const codes = contentLanguageChoices("en")
+      .map((choice) => choice.code)
+      .filter((code) => code !== "ca")
+      .slice(0, 199);
+    const wide = "\u0001".repeat(TEXT_LIMIT);
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", ...codes] });
+      const menu = await createCatalogue(tx, { name: "STAFF Lunch", names: { ca: "Dinar" } });
+      const lunch = { menuId: menu.id, rootId: await rootOf(tx, menu.id) };
+      const named = Object.fromEntries(["ca", ...codes].map((code) => [code, wide]));
+      const vi = await product(tx, lunch, "Vi", named);
+      await variant(tx, lunch, vi, "Copa", { ...named, ca: "" });
+      await expect(buildSuggestionJob(tx, context, new Set())).rejects.toThrow(
+        "the first item and its head do not fit in one job",
       );
     });
   });

@@ -369,9 +369,6 @@ export async function buildSuggestionJob(
     items: [] as SuggestionItem[],
     houseStyle: fitHouseStyle(await readHouseStyle(tx, config.languages)),
   };
-  // The first item always fits: the house style takes at most a quarter of the job, and an item
-  // with its head is two entries of at most 22 fields of 500 characters (staff name, category and
-  // Cloud's 20 languages), under 140 KB even with every character escaped as six bytes.
   let bytes = Buffer.byteLength(JSON.stringify(job));
   const sent: Record<string, string[]> = {};
   const inJob = new Set<string>();
@@ -394,6 +391,7 @@ export async function buildSuggestionJob(
     headCount += adding.length - 1;
     bytes += size;
   }
+  if (job.items.length === 0) throw new Error("the first item and its head do not fit in one job");
   return {
     body: JSON.stringify(job),
     sent,
