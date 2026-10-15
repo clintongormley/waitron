@@ -211,6 +211,9 @@ The dialog's existing draft scope, leave guard and stale-row choice apply unchan
 reported, all languages side by side" (queued 2026-10-14) changes this dialog; Translate all works
 with today's one-language dialog and gains from that change, and neither depends on the other.
 
+> 2026-10-15, A689 part 4: the draft scope now compares only a person's own edits, so closing over
+> untouched suggestions asks nothing (plan Decision 5).
+
 ### 7. The notice
 
 A new alert source computed from `content_suggestion_jobs`: open while a finished job's
