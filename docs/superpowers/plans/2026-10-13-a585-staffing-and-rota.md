@@ -1059,11 +1059,153 @@ Branch `feat/a585-4-staffing-painters`. Waits for A585-3.
 
 ### Task 4.0: Re-check on the base
 
-- [ ] Read the landed `paint-model.ts`, `paint-grid.ts`, `painter-frame.ts`, `season-painter.ts`
+- [x] Read the landed `paint-model.ts`, `paint-grid.ts`, `painter-frame.ts`, `season-painter.ts`
   and `special-day-painter.ts` in `packages/venue-service`, and the A506 plan's Tasks 8.2–8.6 and
   9.x. List the frame's slots, properties and events, `stepAt`'s signature, the drag-autoscroll and
   "Copy to…" menu code, and how the season painter's address is built. Correct Tasks 4.1–4.3 in
   this branch before starting them; commit the plan fix on its own.
+
+**Corrections from Task 4.0 (re-checked on `main` f87319704, 2026-10-15).** Where these differ from
+Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` unless named.
+
+- **What exists.** `paint-model.ts` is at `src/paint-model.ts`, not under `dashboard/`.
+  `stepAt(offsetPx, rowPx, cutover): string` (`paint-model.ts:71`) and
+  `stepMinuteAt(offsetPx, rowPx, cutover): number` (`:76`, minutes from the changeover; the grid
+  calls it as `stepMinuteAt(clientY - box.top, box.height / ROWS, cutover)`, `paint-grid.ts:435-438`).
+  `clockAt(step, cutover)` is `day-paint.ts:33`. Staffing already has its own `blockSpan`
+  (`packages/staffing/src/slots.ts:58`), so it needs only `stepMinuteAt` and `clockAt`.
+- **The frame** (`dashboard/painter-frame.ts`) is a `wt-modal size="full"` (`:166`), not the native
+  dialog the A506 plan describes. Properties (`:126-139`): `open`, `heading`, `scope`, `dirty`,
+  `coordinator`, `busy`, `refusal` (shown beside Save), `readOnly` (only ✕). Slots: `picker`, `link`,
+  `actions` (before Cancel/Save), `row` (above the content), default (fills the rest)
+  (`:191-203`, `:228-229`). Events: `painter-save` (`:161`, only on a dirty draft and not busy) and
+  `painter-close` (`:175`, after it has closed, however). Its Cancel, Save and ✕ labels come from
+  venue-service's `t` (`:13`), whose `strings.ts` registers the whole venue-service catalogue on load
+  (`strings.ts:1731-1733`); in the app that catalogue is already loaded, and its keys do not collide
+  with `staffing.*`. Reusing venue-service's own words for the shared pieces (Cancel, Save, Copy to…,
+  Clear) is intended; staffing's own text keeps the `staffing.` prefix.
+- **What is private in `dashboard/paint-grid.ts` today** (everything below is a `#` member or inline
+  template of the one `PaintGrid` element): the time ruler (hour list `:862-863`, `.times` `:916-923`,
+  hour lines `:942-948`, CSS `:157-193`, `ROWS = 96` `:48`); the scroll box with its overflow fade
+  (`:78-117`, `:371-398`); the column heading ⋮ menu with "Copy to…" and Clear (`:893-912`, CSS
+  `:118-156`); the copy chooser (`:656-694`, `:812-859`, CSS `:288-332`); popover placement `#place`
+  (`:570-577`); the drag stroke and its edge-band autoscroll (`MAX_SCROLL_STEP`/`BAND_DWELL_MS`
+  `:49-53`, `#start`…`#stop` `:440-557`, including the click-after-drag suppression `#dragged`).
+  The grid's public surface, for reference: properties `columns`, `days`, `underlay`, `periods`,
+  `chosen`, `cutover`, `closedErases`, `columnErrors`, `paintable`, `closedAllDay`, `readOnly`,
+  `target` (`:336-355`); event `paint-change` `{ key, day }` (`:417-425`); slots `column-menu-<key>`
+  and `column-head-<key>` (`:895`, `:913`). A block is found by `startsAt` (`:412-416`), which is
+  unique there; staffing blocks are not (two sous chefs may start at 09:00), so the staffing grid
+  finds a block by index.
+- **The `./painter` export** (`dashboard/painter.ts`, `package.json` `"./painter"`), decided:
+  `PainterFrame` (and its side-effect registration), `stepMinuteAt`, `stepAt`, `clockAt`,
+  `periodColourStyles` (`dashboard/period-colour-styles.ts:15`; staff roles use the same
+  `CalendarColour`, `packages/staffing/src/staffing-types.ts:2`), `paintRowStyles`
+  (`dashboard/paint-row.ts:16`; staffing draws its own chip row with those classes, because
+  `paintRow` hard-codes "+ New period" and the period hint, `paint-row.ts:180,185`), `seasonLastDay`
+  (`season-rules.ts:48`), and the pieces extracted from `paint-grid.ts` into a new
+  `dashboard/paint-grid-parts.ts`: `ROWS`, `hourMarks(cutover)`, `timeRuler(cutover)`,
+  `hourLines(cutover)`, `paintGridStyles` (the scroll, layout, heading, ruler, day, line, menu and
+  chooser CSS), `OverflowFade` (a controller for `:371-398`), `columnMenu(label, { copy, clear },
+  extra?)` (extra items let staffing add "Follow the season"), `placePopover(popup, trigger,
+  alignEnd)`, `ColumnStroke` (a controller for the drag stroke and autoscroll, calling back with the
+  preview stretch and the released stretch in minutes), and `CopyChooser` (a controller plus its
+  template; it reports `from` and the ticked keys and leaves the copying to its host). `paint-grid.ts`
+  then uses them, and `paint-grid.test.ts`/`paint-grid.a11y.test.ts` stay unchanged as the proof
+  that its behaviour did not move. Nothing reachable from these imports a client or anything
+  server-side: run on 2026-10-15 with a copy of the purity guard's scan
+  (`scripts/dashboard-browser-purity.test.ts:51-91`) from `painter-frame.ts`, `paint-model.ts`,
+  `day-paint.ts`, `paint-grid.ts` and `paint-row.ts`, it reached no forbidden specifier and no server
+  entry (the `import type` edge `day-paint.ts:1` → `service-day.ts` reaches only `@waitron/shared`,
+  `@waitron/reporting` and `@waitron/module`, which the scan does not follow).
+- **The purity guard takes a directory today** (`SUBPATHS` `:24-28`, read by `tsFiles(dir)` `:30-38`),
+  and the whole `src/dashboard` of venue-service fails it: the same scan from every non-test file
+  there reached `@waitron/db` or `drizzle-orm` in 28 files (`season-weeks.ts`, `schema/*.ts`, …). So
+  Task 4.1 lets an entry name a FILE (`tsFiles` returns `[path]` for a `.ts` path) and adds
+  `["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"]`.
+  A585-3's `./dashboard/season-tint` export has no entry; leave it.
+- **The server barrel** (`index.ts`) also gains `resolveDepartmentsDays` (`day-resolver.ts:110`, not
+  exported today; the special-day guides below need it).
+- **Station guides: none, in both painters.** venue-service has no per-weekday station hours read:
+  `stationServiceTimes` (`station-service-times.ts:70`, exported `index.ts:55-59`) works per DATE, at
+  most 42 days (`:80-82`), and answers `always: "default"` for the default station. `readSeasonStaffing`
+  already returns a key for every area with stations' weekdays empty
+  (`packages/staffing/src/paint.ts:243-257`, `staffing-types.ts:24-25`). Add a backlog entry for a
+  station's guide.
+- **The painter reads lack what the painters show.** `SeasonStaffing` has no changeover, no season
+  name and no season list; `SpecialDayStaffing` has no changeover, no name and no guides
+  (`staffing-types.ts:22-36`). The seasons in `StaffingMonth` are only those the month touches
+  (`staffing-types.ts:60-61`), so they cannot drive ‹ ›. New Task 4.2a adds: `SeasonStaffing.cutover`
+  and `SeasonStaffing.seasons` (every season, `readSeasons` order, `{ id, name, startsOn }`; the
+  dashboard works out each `lastDay` with `seasonLastDay`, as `season-painter.ts:535` does);
+  `SpecialDayStaffing.cutover`, `.name`, and `.guides: Record<areaKey, Record<dateId, { startsAt;
+  endsAt }[]>>` (departments from `resolveDepartmentsDays` with `readLocationClock`; stations empty;
+  a date closed all day gives `[]`). The painters read once when opened or stepped and after a save
+  (passive GET), and do not follow live changes while open; a save replaces only the pairs it sends
+  (`paint.ts:262-287`, `:321-342`).
+- **Staff role dialog** exists as named: `<staff-role-dialog .api .staffRole .open>`
+  (`packages/staffing/src/dashboard/staff-role-dialog.ts:45,60-63`), emitting `staff-role-saved`
+  (detail: the `StaffRole`, `:263`) and `staff-role-close` (`{ wrote }`, `:360`). "+ New staff role"
+  opens it with no `staffRole`, and a `staff-role-saved` chooses the new staff role as the chip. Render
+  it AFTER `<painter-frame>`, as a sibling, as `season-painter.ts:656` does with its period dialog. Its
+  people list needs `person.manage` (`client.ts:115-119`) and shows its own error without it.
+- **How the month opens a painter.** The venue-service season painter's address is
+  `seasonPainterPath` → `view/season/season/<id>/department/<id>/zone/<id>`
+  (`dashboard/opening-hours-paths.ts:14-25`), pushed by `openPainter` and rewritten in place on
+  `painter-navigate` (`opening-hours-screen.ts:586-605`, `:700-704`). A module view has only
+  `host.open(view, params)` (`packages/dashboard-kit/src/contract.ts:50-58`), which always PUSHES and
+  asks the leave question first when anything is dirty (`opening-hours-screen.ts:269-274`, `:546-555`; `packages/ui/src/navigation-guard.ts:172-176`).
+  So:
+  - address: `view/staffing[/month/<m>][/area/<areaKey>]/painter/season/season/<seasonId>` and
+    `…/painter/special-day/special-day/<specialDayId>`; the Staffing handle (`dashboard/index.ts:25-36`)
+    renders `<staffing-month>` and, when `host.params.painter` is `season` or `special-day`, the
+    painter beside it, with `readOnly = !host.canWrite`;
+  - the month: each day becomes a `<button class="day">` when `canWrite`, with the roving focus of
+    `opening-hours-month.ts:309-330,524-536,645-671`; today it is a `div role="group"`
+    (`staffing-month.ts:445`). A day with `specialDay` opens the special-day painter, otherwise one
+    with `seasonId` opens the season painter, otherwise it is not a button. A season chip's name
+    (today an `<li>`, `:393`) becomes a button opening that season. Both keep `month` and `area`;
+    the month's `#go` (`:301-303`) drops `painter`, `season` and `special-day`;
+  - inside the painter the area picker is the painter's own state, starting from `params.area` (else
+    the first area), and never writes the address: a `host.open` would ask the leave question and the
+    draft must survive a switch. ‹ › call `host.open` with the new `season` (the leave question
+    covers the draft); close calls `host.open("staffing", { month, area })` from `painter-close`.
+    Each step and close adds a history entry, because the host has no replace.
+- **Task 4.2's grid, as it will be built** (`packages/staffing/src/dashboard/staffing-grid.ts`,
+  element `staffing-grid`): properties `columns: readonly { key; label }[]` (stable between renders,
+  as `season-painter.ts:597-610` keeps them), `days: ReadonlyMap<string, readonly StaffingBlock[] |
+  null>` (null: follows the season), `guides: ReadonlyMap<string, readonly { startsAt; endsAt }[]>`,
+  `staffRoles`, `chosen` (a staff role id or `undefined`), `headcount` (1–50, the server's bound,
+  `paint-rules.ts:34-41`), `cutover`, `readOnly`, `target` (as `paint-grid.ts:353-355`),
+  `columnErrors`, `followable` (adds "Follow the season" to each ⋮); event `staffing-change`
+  `{ key, blocks: StaffingBlock[] | null }`, bubbling and composed. A column whose value is null shows
+  a "Follows the season" note; painting on it starts from `[]`. Hours never stop painting: there is
+  no `closedAllDay` (spec: staffing paint is independent of the hours). The block menu offers the
+  staff roles, a How many `wt-number-stepper` and Delete. Keyboard is the shared grid's: blocks are
+  buttons in tab order, Enter opens, Delete or Backspace deletes (`paint-grid.ts:642-649`); there are
+  NO arrow keys between blocks. `copyDay` in `block-model.ts` copies `null` as a value.
+- **Refusals** map as `season-painter.ts:480-515` does: `staffing.invalid` whose `field` is
+  `edits.<i>.…` (`packages/staffing/src/routes.ts:94-105`) names the i-th SENT edit, so the painter
+  switches its picker to that area and marks that column; any other code shows `codeMessage(code)`
+  beside Save, the draft kept.
+- **Not built:** the mockup's "Opening hours | Staffing" switch inside the painter bar (the host can
+  return only to Opening hours' month or year, `contract.ts:56`), and the season's blocks drawn
+  faintly under a special-day column that follows the season.
+- **Task 4.3's files:** no `.save-state.test.ts` — no guard asks for one (`git grep save-state --
+  scripts docs/developers` finds nothing), the frame owns Save's state and is tested there, and
+  venue-service's painters have none; save and refusal cases go in each painter's `.test.ts`. Keep
+  `.test.ts`, `.a11y.test.ts`, `.unsaved.test.ts`.
+- **Split, to stay under about 100 tool calls a dispatch:**
+  - **4.1a** `./painter` with the frame, the pure helpers, the two style exports and `seasonLastDay`;
+    the purity guard's file entry; `resolveDepartmentsDays` on the barrel.
+  - **4.1b** extract `paint-grid-parts.ts` from `paint-grid.ts` and re-export it from `./painter`;
+    paint-grid's tests unchanged.
+  - **4.2a** `block-model.ts` (node tests) and the read changes above in `paint.ts`,
+    `staffing-types.ts` and `client.ts` (`readSeason`, `saveSeason`, `readSpecialDay`,
+    `saveSpecialDay`).
+  - **4.2b** `staffing-grid.ts` with its `.test.ts` and `.a11y.test.ts`.
+  - **4.3a** the season painter, and the month's day, chip and address wiring.
+  - **4.3b** the special-day painter.
 
 ### Task 4.1: venue-service exports its painter frame
 
