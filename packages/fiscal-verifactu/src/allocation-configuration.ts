@@ -9,6 +9,16 @@ import { createBoundPaperAllocationSource } from "./allocation-paper-source.js";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
 
 import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
+import { createDeclaredPaperPreparation } from "./declared-paper-preparation.js";
+
+function declared(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    value.kind === "paper-declared-confirmation"
+  );
+}
 
 function configuredOperations(
   environment: Readonly<Record<string, string | undefined>>,
@@ -16,9 +26,18 @@ function configuredOperations(
 ): ModuleOperationPreparation {
   return {
     async prepare(operation, run) {
-      if (host !== undefined && operation.binding.action === "setup") {
+      if (host !== undefined) {
         const evidence = await host.readPublicEvidence(operation.binding);
-        if (evidence !== undefined || operation.binding.sourceId.startsWith("first-setup:")) {
+        if (declared(evidence?.current)) {
+          return createDeclaredPaperPreparation(async () => evidence!.current).prepare(
+            operation,
+            run,
+          );
+        }
+        if (
+          operation.binding.action === "setup" &&
+          (evidence !== undefined || operation.binding.sourceId.startsWith("first-setup:"))
+        ) {
           return createAllocationPreparation(
             createBoundPaperAllocationSource({
               ...host,
@@ -27,6 +46,11 @@ function configuredOperations(
           ).prepare(operation, run);
         }
       }
+      const input = operation.input as {
+        allocation?: { reservationEvidence?: { kind?: unknown } };
+      } | null;
+      if (input?.allocation?.reservationEvidence?.kind === "paper-declared-evidence")
+        throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
       if (
         typeof operation.input === "object" &&
         operation.input !== null &&

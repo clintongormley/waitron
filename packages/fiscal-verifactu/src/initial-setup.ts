@@ -24,6 +24,12 @@ import {
 import { enrolPaperCustodian } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import {
+  readDeclaredPaperInput,
+  readDeclaredPaperConfirmation,
+  type DeclaredPaperEvidence,
+} from "./declared-paper-evidence.js";
+import { isAllocatedSeries } from "./allocation-identity.js";
 
 function refuse(reason = "malformed_allocation"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -147,12 +153,23 @@ function readInput(context: InitialSetupContext, value: unknown) {
     refuse();
   const { reservationEvidence, ...candidateValue } = value.allocation;
   const candidate = parsePaperAllocation(candidateValue);
-  if (
-    candidate === null ||
-    !held.candidates.some((item) => isDeepStrictEqual(item, candidate)) ||
-    !record(reservationEvidence) ||
-    !exact(reservationEvidence, ["block", "consumption"])
-  )
+  if (candidate === null || !held.candidates.some((item) => isDeepStrictEqual(item, candidate)))
+    refuse("reservation_mismatch");
+  if (record(reservationEvidence) && reservationEvidence.kind === "paper-declared-evidence") {
+    const input = readDeclaredPaperInput(value);
+    const proof = input.allocation.reservationEvidence as DeclaredPaperEvidence;
+    if (
+      !isDeepStrictEqual(proof.reservation.binding, context.binding) ||
+      proof.reservation.recipientVenueId !== context.recipientVenueId ||
+      input.approval.operatorId !== context.administratorId ||
+      input.approval.oldMachineAbsent !== true ||
+      input.approval.oldMachineOffline !== false ||
+      input.approval.noParallelRecovery !== true
+    )
+      refuse("event_mismatch");
+    return { kind: "declared" as const, input, proof };
+  }
+  if (!record(reservationEvidence) || !exact(reservationEvidence, ["block", "consumption"]))
     refuse("reservation_mismatch");
   const signedBlock = reservationEvidence.block;
   const signedConsumption = reservationEvidence.consumption;
@@ -212,6 +229,7 @@ function readInput(context: InitialSetupContext, value: unknown) {
       refuse("event_mismatch");
   }
   return {
+    kind: "signed" as const,
     input: {
       allocation: structuredClone(value.allocation) as unknown as FiscalAllocation,
       approval: structuredClone(approval) as unknown as RecoveryApproval,
@@ -230,7 +248,21 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
   },
   request,
   inspect(context, value) {
-    const { input, block } = readInput(context, value);
+    const checked = readInput(context, value);
+    const { input } = checked;
+    if (checked.kind === "declared") {
+      return freeze({
+        input,
+        summary: {
+          allocationId: input.allocation.allocationId,
+          installationIdentity: input.allocation.installationIdentity,
+          series: input.allocation.series,
+          integrity: "owner-declared",
+          historyDigest: checked.proof.historyDigest,
+        },
+      });
+    }
+    const { block } = checked;
     // Public inspection grants neither key enrolment nor a current-master confirmation.
     return freeze({
       input,
@@ -254,7 +286,27 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
     return freeze(trust);
   },
   confirmation(context, imported, statement) {
-    const { input, block } = readInput(context, imported.input);
+    const checked = readInput(context, imported.input);
+    const { input } = checked;
+    if (checked.kind === "declared") {
+      const facts = readDeclaredPaperConfirmation(statement);
+      if (
+        !isDeepStrictEqual(facts.input, input) ||
+        !isDeepStrictEqual(facts.history.scope, {
+          taxpayerNif: context.taxId,
+          softwareId: WAITRON_ID_SISTEMA,
+          environment: context.environment,
+        }) ||
+        !isAllocatedSeries(
+          input.allocation.series,
+          input.allocation.installationIdentity,
+          context.bases,
+        )
+      )
+        refuse("event_mismatch");
+      return facts;
+    }
+    const { block } = checked;
     if (
       !record(statement) ||
       !exact(statement, ["trust", "current"]) ||

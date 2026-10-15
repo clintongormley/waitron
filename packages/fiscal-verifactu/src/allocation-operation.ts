@@ -147,6 +147,7 @@ export async function withCollectedModuleAllocation<T>(
 }
 
 function snapshotAllocationEvidence(evidence: AllocationOperationEvidence) {
+  // Declared admission is scoped by object identity; its token cannot be cloned with public facts.
   return {
     ...evidence,
     requiredBases: evidence.requiredBases?.map((base) => ({ ...base })),
@@ -159,7 +160,9 @@ function snapshotAllocationEvidence(evidence: AllocationOperationEvidence) {
                 ? null
                 : [...evidence.authority.knownIdentities],
           }
-        : structuredClone(evidence.authority),
+        : evidence.authority.kind === "paper-declared"
+          ? { ...evidence.authority, token: evidence.authority.token }
+          : structuredClone(evidence.authority),
   };
 }
 

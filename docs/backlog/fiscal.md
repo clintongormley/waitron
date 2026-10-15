@@ -272,7 +272,12 @@ text. Revised Task 2 adds the unsigned history library: sequential reservations 
 known-head refusals, permanent typed burn floors, and exact displaced public-history retention.
 Revised Task 3 adds browser PDF rendering and exact attachment reading, including grouped printed
 codes, local font/worker assets, ambiguous-carrier refusals and attachment-preserving form resaves.
-These are library/PDF checks, not wizard, recovery or owner acceptance. PDF delivery and the
+Revised Task 4 adds explicitly unsigned admission through module preparation under live operator
+authority. The new preparation checks public history, exact consumption and kept-document references;
+its callback token cannot be recreated from submitted JSON. New tests exercise S/P activation and
+exact committed-result reading without changing the activation writer or existing fiscal assertions
+(`declared-paper-preparation.test.ts`). Durable host delivery/grants remain Task 5.
+These are library/preparation checks, not wizard, recovery or owner acceptance. PDF delivery and the
 remaining replacement-plan tasks stay open.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
