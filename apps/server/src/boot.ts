@@ -1099,7 +1099,6 @@ async function bootServer(
                 migrationsRoot: config.migrationsRoot,
                 modules,
                 venue: request.venue,
-                initialOperations: request.initialOperations,
                 contribution,
                 secret,
                 ring,
