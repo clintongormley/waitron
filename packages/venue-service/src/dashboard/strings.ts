@@ -730,7 +730,7 @@ const en = {
   "period.title": "Periods",
   "period.add_button": "+ Add period",
   "period.column.period": "Period",
-  "period.open_hours": "Open in Opening hours",
+  "period.open_hours": "Open in Calendar",
   "period.load_error": "Periods could not be loaded. It will be tried again.",
   "period.painted_in_error":
     "Where periods are painted could not be loaded. It will be tried again.",
@@ -1603,7 +1603,7 @@ const es: Record<keyof typeof en, string> = {
   "period.title": "Periodos",
   "period.add_button": "+ Añadir periodo",
   "period.column.period": "Periodo",
-  "period.open_hours": "Abrir en Horario de apertura",
+  "period.open_hours": "Abrir en Calendario",
   "period.load_error": "No se pudieron cargar los periodos. Se volverá a intentar.",
   "period.painted_in_error":
     "No se pudo cargar dónde se pintan los periodos. Se volverá a intentar.",

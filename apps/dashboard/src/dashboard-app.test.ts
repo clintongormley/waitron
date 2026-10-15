@@ -2717,6 +2717,24 @@ describe("dashboard-app", () => {
       },
     );
 
+    it.each([
+      "/manage/opening-hours/view/staffing/area/station%3Aa/week/2026-11-30",
+      "/manage/opening-hours/view/staffing/painter/season/season/s1",
+    ])(
+      "keeps a Calendar view's own address words through the shell's rewrite: %s",
+      async (path) => {
+        history.replaceState(null, "", path);
+        const calendar = {
+          ...hostModule([]),
+          screen: { ...hostModule([]).screen, id: "opening-hours" },
+        };
+        const el = await mountWith([calendar, viewModule([view("staffing", 1)])], ["x"]);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await flush(el);
+        expect(location.pathname).toBe(path);
+      },
+    );
+
     it("mounts with a view whose id is not taken", async () => {
       const el = await mountWith([viewModule([view("staffing", 1)])], ["staffing.write"]);
       expect(login(el)).toBeNull();

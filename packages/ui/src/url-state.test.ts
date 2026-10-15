@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { UrlStateController } from "./url-state.js";
 import { cleanup, mount } from "./test-helpers.js";
@@ -138,4 +138,51 @@ it("keeps the rest of the path when an unrecognised field carries a malformed va
   const el = (await mount("<test-url-screen></test-url-screen>")) as UrlScreen;
   expect(el.url.read("tab")).toBe("floor");
   expect(el.url.read("menu")).toBe("lunch");
+});
+
+class KeptScreen extends LitElement {
+  readonly url = new UrlStateController(this, () => {}, {
+    basePath: "/cal",
+    primary: "page",
+    children: { calendar: { view: "view", month: "month" }, other: { view: "view" } },
+    keepUnlisted: ["calendar"],
+  });
+}
+customElements.define("test-kept-url-screen", KeptScreen);
+
+it("keeps a kept destination's unlisted pairs where they stand while it stays there", async () => {
+  history.replaceState(null, "", "/cal/calendar/view/staffing/painter/season/month/2026-12/x/1");
+  const el = (await mount("<test-kept-url-screen></test-kept-url-screen>")) as KeptScreen;
+  const replace = vi.spyOn(history, "replaceState");
+  el.url.write({ page: "calendar" }, true);
+  expect(location.pathname).toBe("/cal/calendar/view/staffing/painter/season/month/2026-12/x/1");
+  expect(replace).not.toHaveBeenCalled();
+  el.url.write({ month: "2027-01" }, true);
+  expect(location.pathname).toBe("/cal/calendar/view/staffing/painter/season/month/2027-01/x/1");
+  el.url.write({ month: null, view: "year" }, true);
+  expect(location.pathname).toBe("/cal/calendar/view/year/painter/season/x/1");
+  replace.mockRestore();
+});
+
+it("drops the unlisted pairs on moving to another destination, and keeps none on one not kept", async () => {
+  history.replaceState(null, "", "/cal/calendar/view/staffing/week/2026-11-30");
+  const el = (await mount("<test-kept-url-screen></test-kept-url-screen>")) as KeptScreen;
+  el.url.write({ page: "other" }, true);
+  expect(location.pathname).toBe("/cal/other/view/staffing");
+  history.replaceState(null, "", "/cal/other/view/staffing/week/2026-11-30");
+  el.url.write({ page: "other" }, true);
+  expect(location.pathname).toBe("/cal/other/view/staffing");
+  history.replaceState(null, "", "/cal/other/view/staffing/week/2026-11-30");
+  el.url.write({ page: "calendar" }, true);
+  expect(location.pathname).toBe("/cal/calendar/view/staffing");
+});
+
+it("keeps a kept pair's escaped value exactly as the address spells it", async () => {
+  const path = "/cal/calendar/view/staffing/area/station%3Aa%2Fb/note/~/bad/%E0%A4%A";
+  history.replaceState(null, "", path);
+  const el = (await mount("<test-kept-url-screen></test-kept-url-screen>")) as KeptScreen;
+  el.url.write({ page: "calendar" }, true);
+  expect(location.pathname).toBe(path);
+  el.url.write({ month: "2027-01" }, true);
+  expect(location.pathname).toBe(`${path}/month/2027-01`);
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html, LitElement } from "lit";
 import { userEvent } from "vitest/browser";
 import {
+  CALENDAR_OWN_VIEW_IDS,
   registerCatalogue,
   setLocale,
   type CalendarViewHost,
@@ -1917,7 +1918,69 @@ describe("the Calendar's module views", () => {
       views: [],
     };
     expect(hostsSeen["staffing"]![0]!.canWrite).toBe(false);
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=calendar-switch]")).toBeNull();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
   });
+
+  it("returns to Opening hours' month when the view it shows leaves a changed list", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/month/2027-03");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const length = history.length;
+    (el as Screen & { calendar?: unknown }).calendar = {
+      ctx: { request: async () => ({}) },
+      views: [{ view: rota, canWrite: true }],
+    };
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2027-03");
+    expect(history.length).toBe(length);
+    expect(switchLabels(el)).toEqual(["Opening hours", "Rota"]);
+    expect(checked(el)).toBe("hours");
+  });
+
+  it("keeps showing a view that stays in a changed list", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    (el as Screen & { calendar?: unknown }).calendar = {
+      ctx: { request: async () => ({}) },
+      views: [{ view: staffing, canWrite: false }],
+    };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+    expect(renders.at(-1)!.readOnly).toBe(true);
+  });
+
+  it("leaves a view param named view out of the address it opens", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const host = hostsSeen["staffing"]![0]!;
+    host.open("staffing", { view: "rota", week: "2026-11-30" });
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+    expect(host.params).toEqual({ week: "2026-11-30" });
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
+  });
+
+  // The words the screen routes itself, in `followUrl` and `openCalendarView`: the app refuses a
+  // module view by these names only while the kit's list holds every one.
+  it.each(["year", "month", "season", "special-day", "date", "calendar", "hours"])(
+    "keeps its own view word %s in the kit's list of words no module view may take",
+    (word) => {
+      expect(CALENDAR_OWN_VIEW_IDS).toContain(word);
+    },
+  );
 
   it("never shows a view the person may not read, not even from its address", async () => {
     history.replaceState(null, "", "/manage/opening-hours/view/staffing");

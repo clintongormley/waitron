@@ -257,8 +257,8 @@ it("declares no Station hours destination while retaining Opening hours navigati
     year: "year",
     month: "month",
     "special-day": "special-day",
-    week: "week",
   });
+  expect(dashboardPath.keepUnlisted).toEqual(["opening-hours"]);
 });
 
 it("reads the floor plan editor's zone from its path", () => {

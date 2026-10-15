@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -295,17 +295,26 @@ export class OpeningHoursScreen extends LitElement {
    *  `params.month` names one, else its year). A view it was not given is ignored. */
   private openCalendarView(view: string, params: Record<string, string>) {
     if (!this.isConnected) return;
+    if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
+    if (!this.calendarView(view)) return;
+    const url = this.calendarUrl();
+    // A `view` pair would name a second view in the address.
+    const pairs = Object.entries(params).filter(([key]) => key !== "view");
+    url.pathname = [screenPath, "view", view, ...pairs.flat()]
+      .map((part, i) => (i === 0 ? part : encodePathSegment(part)))
+      .join("/");
+    void this.writeAddress(url);
+  }
+  private calendarUrl() {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
     url.searchParams.delete("station");
-    if (view === "hours") {
-      const month = parseCalendarMonth(params["month"]);
-      url.pathname = `${screenPath}/view/${month ? `month/month/${month}` : "year"}`;
-    } else if (this.calendarView(view)) {
-      url.pathname = [screenPath, "view", view, ...Object.entries(params).flat()]
-        .map((part, i) => (i === 0 ? part : encodePathSegment(part)))
-        .join("/");
-    } else return;
-    void this.writeAddress(url);
+    return url;
+  }
+  private hoursUrl(params: Readonly<Record<string, string>>) {
+    const url = this.calendarUrl();
+    const month = parseCalendarMonth(params["month"]);
+    url.pathname = `${screenPath}/view/${month ? `month/month/${month}` : "year"}`;
+    return url;
   }
   /** The switch carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
@@ -417,7 +426,13 @@ export class OpeningHoursScreen extends LitElement {
       departments[0]
     );
   }
-  protected override willUpdate() {
+  protected override willUpdate(changed: PropertyValues<this>) {
+    // A new list without the shown view returns to Opening hours, replacing the address naming it.
+    if (changed.has("calendar") && this.moduleView && !this.calendarView(this.moduleView.id)) {
+      const { params } = this.moduleView;
+      this.moduleView = undefined;
+      this.replaceAddress(this.hoursUrl(params));
+    }
     if (!this.model) return;
     this.watchYear();
     this.watchMonth();

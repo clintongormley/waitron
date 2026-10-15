@@ -50,8 +50,7 @@ export interface DashboardFurtherScreen {
 export interface CalendarViewHost {
   /** The month the Calendar is showing, YYYY-MM. */
   month: string;
-  /** The address's `<key>/<value>` pairs after `view/<id>`; a key survives the shell's rewrite only
-   * when the dashboard's `navigation.ts` lists it. */
+  /** The address's `<key>/<value>` pairs after `view/<id>`. */
   params: Readonly<Record<string, string>>;
   canWrite: boolean;
   /** Moves the Calendar to `view/<view>/<key>/<value>…`; `"hours"` returns to Opening hours. */

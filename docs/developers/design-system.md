@@ -4205,7 +4205,7 @@ at 1280 px. Measured 2026-10-14 in Vitest browser mode in the 898 px frame the A
 measured, with that LOOK's demo names: without `wrapToFit` the Spanish table was 972 px wide against
 an 897 px box in DejaVu Sans on Linux (the Playwright 1.63.0 image; CI run 38552881820 measured the
 same 972) and 967 px in Verdana on macOS. Guard: the M1 cases in `periods-screen.test.ts`, in
-English and Spanish, each again in Verdana. The row menu offers Edit, Open in Opening hours
+English and Spanish, each again in Verdana. The row menu offers Edit, Open in Calendar
 (the season painter on the period's department) and Delete. Someone with only `venue.view` sees
 the list with no "+ Add period" and no row menu.
 
