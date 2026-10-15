@@ -294,6 +294,43 @@ describe("Opening hours month", () => {
     expect(percent(segments[2]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
   });
 
+  it("places a zone's piece that starts past the changeover at the end of a 25-hour day", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-09"
+        ? {
+            ...day,
+            endMinute: 1500,
+            departments: day.departments.map((d) =>
+              d.departmentId === "rest"
+                ? {
+                    ...d,
+                    ranges: [{ periodId: "dinner", startsAt: "22:00", endsAt: "07:00" }],
+                    zones: [
+                      { zoneId: "terrace", closed: [{ startsAt: "05:00", endsAt: "06:00" }] },
+                    ],
+                  }
+                : d,
+            ),
+          }
+        : day,
+    );
+    const el = await mount({ ...model, days }, { departmentId: "rest" });
+    const terrace = cell(el, "2026-12-09").querySelector<HTMLElement>('[data-row="terrace"]')!;
+    const segments = [...terrace.querySelectorAll<HTMLElement>(".segment")];
+    expect(segments.map((segment) => segment.title)).toEqual([
+      "Dinner 22:00–05:00",
+      "Dinner 06:00–07:00",
+    ]);
+    // 06:00 tomorrow is 24 hours into the 25-hour day.
+    expect(percent(segments[1]!.style.left)).toBeCloseTo((24 / 25) * 100, 3);
+    expect(percent(segments[1]!.style.width)).toBeCloseTo((1 / 25) * 100, 3);
+    const gap = terrace.querySelector<HTMLElement>('[data-test="gap"]')!;
+    expect(gap.title).toBe("Terrace closed 05:00–06:00");
+    expect(percent(gap.style.left)).toBeCloseTo((23 / 25) * 100, 3);
+    expect(percent(gap.style.width)).toBeCloseTo((1 / 25) * 100, 3);
+  });
+
   /** The Terrace on 2 December is closed 22:00–03:00, past the Restaurant's 23:00 close. */
   function lateClosureModel(): OpeningHoursMonth {
     const model = monthModel();
@@ -791,6 +828,20 @@ describe("Opening hours month", () => {
       );
     };
     expect(contentHeight(sunday!)).toBe(contentHeight(monday!));
+  });
+
+  it('in station mode at a phone\'s width, drops "No orders" from a date closed all day only', async () => {
+    const el = await mountAt(PHONE, stationModel(), {
+      readOnly: true,
+      stationMode: true,
+      departments: STATION,
+    });
+    const shown = (date: LocalDate) => {
+      const line = cell(el, date).querySelector<HTMLElement>('[data-test="no-orders"]')!;
+      return getComputedStyle(line).display !== "none" && line.getBoundingClientRect().height > 0;
+    };
+    expect(shown("2026-12-25")).toBe(false);
+    expect(shown("2026-12-06")).toBe(true);
   });
 
   it("draws a date closed all day with a bar per row, at a phone's width too", async () => {

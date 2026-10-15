@@ -9,7 +9,7 @@ import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
-import { zoneOwnHours } from "../zone-own-hours.js";
+import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -36,12 +36,9 @@ export interface OrdinaryDateOpen {
 /** The months the month read serves: its first week must start in year 0100 or later. */
 const FIRST_MONTH = "0100-02";
 const LAST_MONTH = "9998-12";
-const DAY = 1440;
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
 const ALL = "all";
-
-const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
@@ -57,10 +54,10 @@ interface Names {
 interface Row {
   key: string;
   name: string;
-  ranges: readonly ServiceRange[];
+  ranges: readonly (ServiceRange & Placed)[];
   /** A zone's closed times, cut to where its department is open; none when they cover all of it,
    *  so the bar is empty. */
-  gaps: readonly ClosedRange[];
+  gaps: readonly (ClosedRange & Placed)[];
 }
 
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
@@ -344,16 +341,19 @@ export class OpeningHoursMonthView extends LitElement {
   }
 
   #rows(day: Day, chosen: string, { name }: Names): Row[] {
+    const place = placeOnDay(day);
+    const placed = (ranges: readonly ServiceRange[]) =>
+      ranges.map((range) => ({ ...range, ...place(range) }));
     if (!chosen)
       return day.departments.map((d) => ({
         key: d.departmentId,
         name: name(d.departmentId),
-        ranges: d.ranges,
+        ranges: placed(d.ranges),
         gaps: [],
       }));
     const department = day.departments.find((d) => d.departmentId === chosen)!;
     return [
-      { key: chosen, name: name(chosen), ranges: department.ranges, gaps: [] },
+      { key: chosen, name: name(chosen), ranges: placed(department.ranges), gaps: [] },
       ...department.zones.map((zone) => {
         const own = zoneOwnHours(department.ranges, zone.closed, day);
         return {
@@ -366,19 +366,12 @@ export class OpeningHoursMonthView extends LitElement {
     ];
   }
 
-  /** Places a range on the business day's track, which runs from the day's changeover to the next
-   *  day's; a time at or before the start is on the clock's next day. */
-  #placer({ dayCutover, endMinute }: Day) {
-    const cutover = minutes(dayCutover);
-    const minute = (time: string) => (minutes(time) - cutover + DAY) % DAY;
-    return ({ startsAt, endsAt }: ClosedRange) => {
-      const start = minute(startsAt);
-      const end = minute(endsAt) + (minute(endsAt) <= start ? DAY : 0);
-      return styleMap({
+  #placer({ endMinute }: Day) {
+    return ({ start, end }: Placed) =>
+      styleMap({
         left: `${(start / endMinute) * 100}%`,
         width: `${((end - start) / endMinute) * 100}%`,
       });
-    };
   }
 
   #noOrders(rows: readonly Row[]): boolean {
