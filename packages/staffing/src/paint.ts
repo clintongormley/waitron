@@ -8,6 +8,7 @@ import {
   type DayPlan,
   readDepartmentSeasonWeeks,
   readSeasons,
+  readSpecialDayPlan,
   resolveDepartmentsDays,
   seasons,
   specialDayDates,
@@ -293,7 +294,10 @@ export async function readSpecialDayStaffing(
   cfg: Cfg,
   specialDayId: string,
 ): Promise<SpecialDayStaffing> {
-  const { name: specialDayName, dates } = await specialDayHere(tx, cfg, specialDayId);
+  const found = await readSpecialDayPlan(tx, venueScope(cfg), specialDayId);
+  if (found === null) throw new AppError("special_day.not_found", { specialDayId });
+  const { name: specialDayName, plan } = found;
+  const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
   const areas = await listStaffingAreas(tx, cfg);
   const clock = await readLocationClock(tx, cfg.locationId);
   const cutover = clock.dayCutover;
@@ -312,6 +316,7 @@ export async function readSpecialDayStaffing(
     idsOf(areas, "department"),
     dates.map((d) => d.date),
     clock,
+    plan,
   );
   return {
     cutover,

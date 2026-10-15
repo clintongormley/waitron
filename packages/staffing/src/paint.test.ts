@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -420,6 +420,68 @@ describe("special-day staffing", () => {
     );
     expect((await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId))).cutover).toBe(
       "04:30",
+    );
+  });
+
+  it("guides a date by this special day's own hours when another special day repeats onto it", async () => {
+    const v = await venue();
+    await inTx(async (tx) => {
+      const menuId = randomUUID();
+      await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+      const [period] = await tx
+        .insert(menuPeriods)
+        .values({ departmentId: v.departmentId, menuId, name: "Service" })
+        .returning({ id: menuPeriods.id });
+      const [day] = await tx
+        .insert(departmentDays)
+        .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 })
+        .returning({ id: departmentDays.id });
+      await tx.insert(departmentDayRanges).values({
+        dayId: day!.id,
+        departmentId: v.departmentId,
+        periodId: period!.id,
+        startsAt: "19:00:00",
+        endsAt: "23:30:00",
+      });
+      const [feria] = await tx
+        .insert(specialDays)
+        .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
+        .returning({ id: specialDays.id });
+      await tx.insert(specialDayDates).values({
+        specialDayId: feria!.id,
+        locationId: v.cfg.locationId,
+        date: "2025-08-14",
+        closedAllDay: true,
+      });
+    });
+    const { guides } = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+    expect(guides[`department:${v.departmentId}`]![v.aug14]).toEqual([
+      { startsAt: "19:00", endsAt: "23:30" },
+    ]);
+  });
+
+  it("reads the special day, its dates and its staffing once, joins included", async () => {
+    const v = await venue();
+    const tables = await inTx(async (tx) => {
+      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+        .session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        await readSpecialDayStaffing(tx, v.cfg, v.specialDayId);
+        return prepared.mock.calls.flatMap((call) =>
+          [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
+            (match) => match[1]!,
+          ),
+        );
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    for (const table of ["special_days", "special_day_dates", "staffing_days"])
+      expect(tables.filter((read) => read === table)).toHaveLength(1);
+    // The season's week is read apart from the special day's own paint.
+    expect(new Set(tables.filter((table, i) => tables.indexOf(table) !== i))).toEqual(
+      new Set(["seasons", "department_days", "department_day_ranges"]),
     );
   });
 

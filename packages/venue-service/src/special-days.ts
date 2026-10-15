@@ -243,7 +243,27 @@ export async function specialDaysOn(
     if (row !== undefined) matched.set(day, row);
   }
   if (matched.size === 0) return found;
-  const dateIds = [...new Set([...matched.values()].map((row) => row.dateId))];
+  const occurrence = await occurrencesOf(tx, [
+    ...new Set([...matched.values()].map((r) => r.dateId)),
+  ]);
+  for (const [day, row] of matched) found.set(day, occurrence(row));
+  return found;
+}
+
+interface OccurrenceRow {
+  specialDayId: string;
+  name: string;
+  dateId: string;
+  date: LocalDate;
+  closedAllDay: boolean;
+}
+
+/** One read of the department and zone paint of `dateIds`, and a builder of each date's
+ *  occurrence from it. */
+async function occurrencesOf(
+  tx: Transaction,
+  dateIds: readonly string[],
+): Promise<(row: OccurrenceRow) => SpecialDayOccurrence> {
   const paint = await tx
     .select({
       dateId: departmentDays.specialDayDateId,
@@ -255,7 +275,7 @@ export async function specialDaysOn(
     })
     .from(departmentDays)
     .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
-    .where(inArray(departmentDays.specialDayDateId, dateIds))
+    .where(inArray(departmentDays.specialDayDateId, [...dateIds]))
     .unionAll(
       tx
         .select({
@@ -268,7 +288,7 @@ export async function specialDaysOn(
         })
         .from(zoneDays)
         .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
-        .where(inArray(zoneDays.specialDayDateId, dateIds)),
+        .where(inArray(zoneDays.specialDayDateId, [...dateIds])),
     );
   const departmentPaint = new Map<string, Map<string, PaintRange[]>>();
   const zonePaint = new Map<string, Map<string, ZonePaint[]>>();
@@ -288,17 +308,49 @@ export async function specialDaysOn(
       add(departmentPaint, row.dateId!, row.ownerId, { periodId: row.periodId, ...range });
     else add(zonePaint, row.dateId!, row.ownerId, { kind: row.kind, ...range });
   }
-  for (const [day, row] of matched)
-    found.set(day, {
-      specialDayId: row.specialDayId,
-      name: row.name,
-      dateId: row.dateId,
-      storedDate: row.date,
-      closedAllDay: row.closedAllDay,
-      paint: departmentPaint.get(row.dateId) ?? new Map(),
-      zonePaint: zonePaint.get(row.dateId) ?? new Map(),
-    });
-  return found;
+  return (row) => ({
+    specialDayId: row.specialDayId,
+    name: row.name,
+    dateId: row.dateId,
+    storedDate: row.date,
+    closedAllDay: row.closedAllDay,
+    paint: departmentPaint.get(row.dateId) ?? new Map(),
+    zonePaint: zonePaint.get(row.dateId) ?? new Map(),
+  });
+}
+
+/** The location's special day `specialDayId` and each of its dates' own occurrence, at its stored
+ *  date, in date order: one read of the day with its dates, and one of the paint when it has dates.
+ *  Null when the location has no such special day. */
+export async function specialDayOccurrences(
+  tx: Transaction,
+  cfg: VenueScope,
+  specialDayId: string,
+): Promise<{ name: string; occurrences: SpecialDayOccurrence[] } | null> {
+  const rows = await tx
+    .select({
+      name: specialDays.name,
+      dateId: specialDayDates.id,
+      date: specialDayDates.date,
+      closedAllDay: specialDayDates.closedAllDay,
+    })
+    .from(specialDays)
+    .leftJoin(specialDayDates, eq(specialDayDates.specialDayId, specialDays.id))
+    .where(and(eq(specialDays.id, specialDayId), eq(specialDays.locationId, cfg.locationId)))
+    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  const [first] = rows;
+  if (first === undefined) return null;
+  const dates = rows.flatMap(({ name, dateId, date, closedAllDay }) =>
+    dateId === null
+      ? []
+      : [{ specialDayId, name, dateId, date: date!, closedAllDay: closedAllDay! }],
+  );
+  if (dates.length === 0) return { name: first.name, occurrences: [] };
+  const occurrence = await occurrencesOf(
+    tx,
+    dates.map((d) => d.dateId),
+  );
+  return { name: first.name, occurrences: dates.map(occurrence) };
 }
 
 export interface MissingHoliday {
