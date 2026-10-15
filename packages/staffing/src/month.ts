@@ -1,8 +1,9 @@
 import type { Transaction } from "@waitron/db";
-import { locationId } from "@waitron/shared";
+import { cutoverForBusinessDay, locationId } from "@waitron/shared";
 import { readCalendarMonthPlan } from "@waitron/venue-service";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
-import { areaKey, slotsForDay } from "./slots.js";
+import { areaKey, slotsForDay, placeShift, matchAreaDay } from "./slots.js";
+import { mondayOf, readRotaRows } from "./rota-data.js";
 import type { StaffingMonth } from "./staffing-types.js";
 
 /** `month` is a `YYYY-MM` the caller has checked; `at` decides `today`. */
@@ -24,6 +25,15 @@ export async function readStaffingMonth(
     cfg,
     frame.days.map((day) => day.date),
     { plan: frame.plan, areas, cutover: frame.clock.dayCutover },
+  );
+  const first = frame.days[0]!.date;
+  const last = mondayOf(frame.days.at(-1)!.date);
+  const rota = await readRotaRows(tx, cfg, first, last);
+  const placed = new Map(
+    [...rota.byWeek].map(([week, rows]) => [
+      week,
+      rows.map((row) => placeShift(row, (day) => cutoverForBusinessDay(frame.clock, day))),
+    ]),
   );
   return {
     month,
@@ -47,7 +57,20 @@ export async function readStaffingMonth(
           const blocks = byArea.get(areaKey(area));
           if (blocks === undefined) return [];
           const needed = slotsForDay(day.date, area, blocks, day.dayCutover).length;
-          return [{ area, needed, unfilled: null }];
+          const week = mondayOf(day.date);
+          const unfilled = rota.selected.has(week)
+            ? matchAreaDay(
+                slotsForDay(day.date, area, blocks, day.dayCutover),
+                (placed.get(week) ?? []).filter(
+                  (s) =>
+                    s.businessDay === day.date &&
+                    s.area !== null &&
+                    areaKey(s.area) === areaKey(area),
+                ),
+                () => true,
+              ).slots.filter((s) => s.status.kind === "unfilled").length
+            : null;
+          return [{ area, needed, unfilled }];
         }),
       };
     }),

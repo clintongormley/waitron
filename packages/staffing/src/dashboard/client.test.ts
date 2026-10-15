@@ -250,3 +250,61 @@ describe("StaffingApi", () => {
     });
   });
 });
+
+describe("the rota client", () => {
+  it("watches its real response passively and re-reads after a shift assignment changes", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ week: "2026-11-30", shifts: [] }));
+    const live = new LiveData();
+    const client = api(fetchImpl, live);
+    const queries = new QueryController(host(), () => live, vi.fn());
+    const apply = vi.fn();
+    await client.watchRota(queries, "2026-11-30", apply);
+    expect(sent(fetchImpl)).toEqual({
+      path: "/management-api/staffing/rota?week=2026-11-30",
+      method: "GET",
+      body: undefined,
+      live: "1",
+    });
+    fetchImpl.mockResolvedValue(jsonResponse({ week: "2026-11-30", shifts: [{ shiftId: "new" }] }));
+    live.invalidate([{ type: "shift_assignments" }]);
+    await vi.waitFor(() =>
+      expect(apply).toHaveBeenLastCalledWith({ week: "2026-11-30", shifts: [{ shiftId: "new" }] }),
+    );
+    queries.hostDisconnected();
+  });
+  it("adds, updates and deletes through active requests, encoding a shift id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const client = api(fetchImpl);
+    const input = {
+      week: "2026-11-30",
+      businessDay: "2026-12-01",
+      personId: "ana",
+      area: { kind: "station" as const, id: "kitchen" },
+      staffRoleId: "cook",
+      startsAt: "09:00",
+      endsAt: "17:00",
+    };
+    fetchImpl.mockResolvedValueOnce(jsonResponse({ shiftId: "new" }));
+    expect(await client.addRotaShift(input)).toEqual({ shiftId: "new" });
+    expect(sent(fetchImpl)).toEqual({
+      path: "/management-api/staffing/rota/shifts",
+      method: "POST",
+      body: input,
+      live: null,
+    });
+    await client.updateRotaShift("a/b", { personId: "marc" });
+    expect(sent(fetchImpl, 1)).toEqual({
+      path: "/management-api/staffing/rota/shifts/a%2Fb",
+      method: "PATCH",
+      body: { personId: "marc" },
+      live: null,
+    });
+    await client.removeRotaShift("a/b");
+    expect(sent(fetchImpl, 2)).toEqual({
+      path: "/management-api/staffing/rota/shifts/a%2Fb",
+      method: "DELETE",
+      body: undefined,
+      live: null,
+    });
+  });
+});

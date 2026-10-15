@@ -4707,9 +4707,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
-- **A585. Staffing needs and the rota** — build the Calendar's Rota view by area and by person,
-  fill its slots, show live labour warnings, publish and change a week, then retire the old Rota
-  screen and free-text staff role. Parts 6–8 remain, in the order of the
+- **A585. Staffing needs and the rota** — add the Calendar's Rota view by person, live labour
+  warnings, publishing and changing a week, then retire the old Rota screen and free-text staff
+  role. The area view and slot filling are built. Parts 7–8 remain in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
   [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
   [mockups](backlog/mockups/a585-staffing/) define the remaining views.
@@ -4752,7 +4752,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
   hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
   block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
-  review). Next: decide with A585-6 whether a block may run to the day's real end.
+  review). Next: decide whether a block may run to the day's real end.
 - **A645. A staffing save whose body is a JSON string names field "0".** `"x"` sent as the body of a
   staffing PUT answers `management.request_invalid` with `field: "0"` (`onlyKeys` in
   `packages/staffing/src/routes.ts` reads the string's character keys); it is refused and nothing is
@@ -5631,6 +5631,12 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   The snapshot before the isolated probe includes two A650 Codex review processes; the probe
   passed in 62,597 ms. Neither that pass nor the later successful hook retry establishes
   the cause of either deadline overrun.
+  On 2026-10-15, A585-6's normal hook reached its current 171,000 ms overall deadline at
+  171,087 ms, during `core/0157_mature_sir_ram` migrate (419 ms into that phase). Its unchanged
+  migration inputs were checked against main; an isolated main walk passed in 157,630 ms at
+  recorded host load 12.09–13.22, versus 22.07 after the hook failure. This does not establish
+  CPU load as the cause. Lane F retained `receipts/a585-6/push2.log` and
+  `receipts/a585-6/main-migration-upgrade.log`.
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux

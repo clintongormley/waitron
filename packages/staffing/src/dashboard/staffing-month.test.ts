@@ -730,3 +730,59 @@ describe("the Staffing view's month", () => {
     });
   });
 });
+
+describe("the month opens its rota week", () => {
+  it("opens the Monday's rota retaining the selected area and lists unfilled counts", async () => {
+    const client = fakeApi(async (month) => {
+      const r = staffingMonth(month);
+      r.days.find((d) => d.date === "2026-12-01")!.areas[0]!.unfilled = 2;
+      return r;
+    });
+    const { el, open } = await mount({
+      api: client.api,
+      params: { area: "department:dep-restaurant" },
+    });
+    (el as StaffingMonthView & { canOpenRota: boolean }).canOpenRota = true;
+    await el.updateComplete;
+    const link = root(el).querySelector<HTMLElement>("[data-rota-week='2026-11-30']");
+    expect(link).not.toBeNull();
+    link!.click();
+    expect(open).toHaveBeenCalledWith("rota", {
+      week: "2026-11-30",
+      area: "department:dep-restaurant",
+    });
+    expect(cell(el, "2026-12-01").textContent).toContain("2 unfilled");
+  });
+});
+
+describe("week links stay within their month cells", () => {
+  it.each(["390px", "1280px"])("fits the link below its day at %s", async (width) => {
+    const { el } = await mount({ width });
+    el.canOpenRota = true;
+    await el.updateComplete;
+    for (const link of root(el).querySelectorAll<HTMLElement>("[data-rota-week]")) {
+      const td = link.closest("td")!;
+      const box = td.querySelector<HTMLElement>(".day")!.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(link.getBoundingClientRect().top + 0.5);
+      expect(link.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        td.getBoundingClientRect().bottom + 0.5,
+      );
+    }
+    expect(el.scrollWidth).toBeLessThanOrEqual(parseInt(width));
+  });
+});
+
+describe("week link labels fit narrow month columns", () => {
+  it.each(["en", "es"] as const)("keeps the %s label inside a phone column", async (locale) => {
+    setLocale(locale);
+    const { el } = await mount({ width: "310px" });
+    el.canOpenRota = true;
+    await settled(el);
+    for (const link of root(el).querySelectorAll<HTMLElement>("[data-rota-week]")) {
+      const button = link.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? link;
+      const td = link.closest("td")!.getBoundingClientRect();
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(td.right + 0.5);
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    }
+  });
+});

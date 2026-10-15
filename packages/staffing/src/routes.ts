@@ -13,6 +13,14 @@ import type { Logger } from "@waitron/server-kit";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, normaliseUuid } from "@waitron/shared";
 import { parseCalendarMonth } from "@waitron/venue-service";
+import {
+  addRotaShift,
+  isRotaWeek,
+  readRotaWeek,
+  removeRotaShift,
+  updateRotaShift,
+} from "./rota.js";
+import type { RotaShiftInput, RotaShiftPatch } from "./staffing-types.js";
 import { readStaffingMonth } from "./month.js";
 import { parseArea, parseBlocks, record, uuid } from "./paint-rules.js";
 import {
@@ -53,6 +61,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "staff_role.name_taken": 409,
   "staff_role.in_use": 409,
   "season.not_found": 404,
+  "shift.not_found": 404,
+  "shift.invalid": 400,
+  "roster.not_draft": 409,
+  "roster.not_found": 404,
+  "roster.draft_exists": 409,
   "special_day.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "staffing.failed");
@@ -145,6 +158,66 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
     const cutoverOf = async (tx: Transaction) =>
       (await readLocationClock(tx, ctx.cfg.locationId)).dayCutover;
+
+    const rotaBody = (body: unknown, patch: boolean) => {
+      const fields = patch
+        ? ["personId", "startsAt", "endsAt", "area", "staffRoleId"]
+        : ["week", "businessDay", "personId", "startsAt", "endsAt", "area", "staffRoleId"];
+      if (body === null || typeof body !== "object" || Array.isArray(body))
+        throw new AppError("management.request_invalid", { field: "body" });
+      onlyKeys(body, fields);
+      const input = body as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      for (const field of fields) {
+        if (patch && !(field in input)) continue;
+        result[field] =
+          field === "area"
+            ? parseArea(input[field], field)
+            : field === "personId" || field === "staffRoleId"
+              ? uuid(input[field], field)
+              : requireString(input[field], field);
+      }
+      return result;
+    };
+    app.get(`${ROOT}/rota`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const week = c.req.query("week");
+        if (!isRotaWeek(week)) throw new AppError("management.request_invalid", { field: "week" });
+        return c.json(
+          await gatedBy("schedule.manage", sessionId, (tx) => readRotaWeek(tx, ctx.cfg, week)),
+        );
+      }),
+    );
+    app.post(`${ROOT}/rota/shifts`, (c) =>
+      runPaintSave(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<unknown>(c);
+        const shiftId = await gatedBy("schedule.manage", sessionId, (tx) =>
+          addRotaShift(tx, ctx.cfg, rotaBody(body, false) as unknown as RotaShiftInput),
+        );
+        return c.json({ shiftId }, 201);
+      }),
+    );
+    app.patch(`${ROOT}/rota/shifts/:shiftId`, (c) =>
+      runPaintSave(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
+        const body = await readJsonBody<unknown>(c);
+        await gatedBy("schedule.manage", sessionId, (tx) =>
+          updateRotaShift(tx, ctx.cfg, shiftId, rotaBody(body, true) as RotaShiftPatch),
+        );
+        return c.body(null, 204);
+      }),
+    );
+    app.delete(`${ROOT}/rota/shifts/:shiftId`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
+        await gatedBy("schedule.manage", sessionId, (tx) => removeRotaShift(tx, ctx.cfg, shiftId));
+        return c.body(null, 204);
+      }),
+    );
 
     app.get(`${ROOT}/areas`, (c) =>
       run(c, log, async () => {

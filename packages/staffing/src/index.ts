@@ -30,3 +30,4 @@ export {
   type StaffRoleInput,
 } from "./staff-roles.js";
 export { describeShifts } from "./describe-shifts.js";
+export { readRotaWeek, addRotaShift, updateRotaShift, removeRotaShift } from "./rota.js";

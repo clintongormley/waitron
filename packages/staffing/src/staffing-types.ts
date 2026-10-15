@@ -99,3 +99,37 @@ export interface StaffingMonth {
     areas: StaffingMonthArea[];
   }[];
 }
+
+export interface RotaWeek {
+  week: string;
+  version: { id: string; status: "draft" | "published"; changedSincePublished: boolean } | null;
+  days: {
+    businessDay: string;
+    cutover: string;
+    closedAllDay: boolean;
+    areas: { area: AreaRef; match: import("./slots.js").AreaDayMatch }[];
+    notInSlot: { shiftId: string; outsideWeek: boolean }[];
+  }[];
+  shifts: import("./slots.js").PlacedShift[];
+  people: {
+    personId: string;
+    name: string;
+    staffRoleIds: string[];
+    contractedMinutes: number | null;
+    plannedMinutes: number;
+  }[];
+  absences: { personId: string; startsOn: string; endsOn: string }[];
+  areas: { area: AreaRef; name: string; active: boolean }[];
+  staffRoles: StaffRole[];
+}
+
+export interface RotaShiftInput {
+  week: string;
+  personId: string;
+  businessDay: string;
+  area: AreaRef;
+  staffRoleId: string;
+  startsAt: string;
+  endsAt: string;
+}
+export type RotaShiftPatch = Partial<Omit<RotaShiftInput, "week" | "businessDay">>;

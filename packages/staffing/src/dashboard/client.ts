@@ -2,6 +2,9 @@ import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashb
 import type { DeleteImpact } from "@waitron/shared";
 import type { AreaRef } from "../slots.js";
 import type {
+  RotaWeek,
+  RotaShiftInput,
+  RotaShiftPatch,
   CalendarColour,
   SeasonStaffing,
   SeasonStaffingEdit,
@@ -111,6 +114,44 @@ export class StaffingApi {
           ),
       },
       apply,
+    );
+  }
+
+  watchRota(
+    queries: QueryController,
+    week: string,
+    apply: (read: RotaWeek) => void,
+  ): Promise<void> {
+    return queries.watch(
+      "rota",
+      {
+        key: `staffing:rota:${week}`,
+        dependencies: QUERY_DEPENDENCIES.rota.map((type) => ({ type })),
+        read: () =>
+          this.request<RotaWeek>(
+            `/management-api/staffing/rota?week=${encodeURIComponent(week)}`,
+            "GET",
+            undefined,
+            { passive: true },
+          ),
+      },
+      apply,
+    );
+  }
+  addRotaShift(input: RotaShiftInput): Promise<{ shiftId: string }> {
+    return this.request("/management-api/staffing/rota/shifts", "POST", input);
+  }
+  updateRotaShift(shiftId: string, patch: RotaShiftPatch): Promise<void> {
+    return this.request(
+      `/management-api/staffing/rota/shifts/${encodeURIComponent(shiftId)}`,
+      "PATCH",
+      patch,
+    );
+  }
+  removeRotaShift(shiftId: string): Promise<void> {
+    return this.request(
+      `/management-api/staffing/rota/shifts/${encodeURIComponent(shiftId)}`,
+      "DELETE",
     );
   }
 

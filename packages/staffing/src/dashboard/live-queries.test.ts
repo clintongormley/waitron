@@ -22,6 +22,9 @@ describe("QUERY_DEPENDENCIES", () => {
 
   it("reads the month again when its paint, a staff role, an area, a season, a special day, a holiday area, the location or the day's changeover changes", () => {
     expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
+      "shifts",
+      "roster_versions",
+      "shift_assignments",
       "staffing_days",
       "staffing_blocks",
       "staff_roles",
@@ -43,6 +46,7 @@ describe("QUERY_DEPENDENCIES", () => {
       "staff-roles",
       "staff-role-delete-impact",
       "staffing-month",
+      "rota",
     ]);
   });
 });

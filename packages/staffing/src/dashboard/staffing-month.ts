@@ -111,11 +111,34 @@ export class StaffingMonthView extends LitElement {
         padding: 0;
         vertical-align: top;
       }
+      .cell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .rota-week {
+        flex: none;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-1);
+        border: 0;
+        border-radius: var(--wt-radius-sm);
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+        cursor: pointer;
+      }
+      .rota-week:hover {
+        background: var(--wt-color-surface-raised);
+      }
       .day {
+        flex: 1;
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
-        height: 100%;
         min-width: 0;
         min-height: calc(var(--wt-tap-min) * 2);
         padding: var(--wt-space-1);
@@ -134,6 +157,7 @@ export class StaffingMonthView extends LitElement {
         cursor: pointer;
       }
       button.day:focus-visible,
+      .rota-week:focus-visible,
       .chip button:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
@@ -191,6 +215,10 @@ export class StaffingMonthView extends LitElement {
       }
       td[data-closed] .special {
         color: inherit;
+      }
+      .unfilled {
+        font-size: var(--wt-font-size-sm);
+        overflow-wrap: anywhere;
       }
       .line {
         display: flex;
@@ -259,6 +287,7 @@ export class StaffingMonthView extends LitElement {
   /** The address's words after `view/staffing`; `area` holds the chosen area's key. */
   @property({ attribute: false }) params: Readonly<Record<string, string>> = {};
   @property({ type: Boolean }) canWrite = false;
+  @property({ type: Boolean }) canOpenRota = false;
   /** Moves the Calendar's address. */
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
 
@@ -491,7 +520,11 @@ export class StaffingMonthView extends LitElement {
     const isToday = day.date === today;
     const shown = day.areas
       .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
-      .map(({ area, needed }) => ({ name: names.get(areaKey(area)) ?? "", needed }));
+      .map(({ area, needed, unfilled }) => ({
+        name: names.get(areaKey(area)) ?? "",
+        needed,
+        unfilled,
+      }));
     const label = [
       cellLabel.format(utc(day.date)),
       day.specialDay?.name ?? "",
@@ -508,30 +541,33 @@ export class StaffingMonthView extends LitElement {
       ?data-outside=${!day.inMonth}
       ?data-closed=${day.closedAllDay}
     >
-      ${
-        opens
-          ? html`<button
-              type="button"
-              class="day"
-              tabindex=${stop ? 0 : -1}
-              aria-label=${label}
-              aria-current=${isToday ? "date" : nothing}
-              @click=${() => this.#openDay(day)}
-              @focus=${() => {
-                this.focusDate = day.date;
-              }}
-            >
-              ${body}
-            </button>`
-          : html`<div
-              class="day"
-              role="group"
-              aria-label=${label}
-              aria-current=${isToday ? "date" : nothing}
-            >
-              ${body}
-            </div>`
-      }
+      <div class="cell">
+        ${
+          opens
+            ? html`<button
+                type="button"
+                class="day"
+                tabindex=${stop ? 0 : -1}
+                aria-label=${label}
+                aria-current=${isToday ? "date" : nothing}
+                @click=${() => this.#openDay(day)}
+                @focus=${() => {
+                  this.focusDate = day.date;
+                }}
+              >
+                ${body}
+              </button>`
+            : html`<div
+                class="day"
+                role="group"
+                aria-label=${label}
+                aria-current=${isToday ? "date" : nothing}
+              >
+                ${body}
+              </div>`
+        }
+        ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<button type="button" class="rota-week" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</button>` : nothing}
+      </div>
     </td>`;
   }
 
@@ -546,7 +582,7 @@ export class StaffingMonthView extends LitElement {
   #dayBody(
     day: Day,
     isToday: boolean,
-    shown: readonly { name: string; needed: number }[],
+    shown: readonly { name: string; needed: number; unfilled: number | null }[],
     largest: number,
   ) {
     return html`
@@ -567,20 +603,20 @@ export class StaffingMonthView extends LitElement {
           : nothing
       }
       ${shown.map(
-        ({ name, needed }) =>
+        ({ name, needed, unfilled }) =>
           html`<span class="line" data-test="area-line">
-            <span
-              class="bar"
-              aria-hidden="true"
-              data-test="bar"
-              ?data-none=${needed === 0}
-              style=${styleMap({ "--share": String(needed / largest) })}
-            ></span>
-            <span class="label"
-              ><span class="name" data-test="area-name" title=${name}>${name}</span
-              ><span class="count" data-test="area-count"> ${needed}</span></span
-            >
-          </span>`,
+              <span
+                class="bar"
+                aria-hidden="true"
+                data-test="bar"
+                ?data-none=${needed === 0}
+                style=${styleMap({ "--share": String(needed / largest) })}
+              ></span>
+              <span class="label"
+                ><span class="name" data-test="area-name" title=${name}>${name}</span
+                ><span class="count" data-test="area-count">${` ${needed}`}</span></span
+              > </span
+            >${unfilled !== null ? html`<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}`,
       )}
     `;
   }

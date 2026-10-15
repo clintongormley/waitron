@@ -207,3 +207,16 @@ visible. Part 7's approved plan requires a marker and confirmation saying that d
 request, and warns before changing its person or time. Build those controls with the first
 application caller of `copyPublishedToDraft`; part 5 adds only the library method. See
 [Task 7.2](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
+
+
+### A585. A rota version and its business-day overflow
+
+The approved [part 6 plan](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
+settles the calendar-week/business-week difference: a week reads its version's shifts and unattached
+shifts by local calendar date, then places each on its business day. An existing unattached shift
+keeps that calendar week when edited. A local Monday 00:30 shift therefore appears under Not in a
+slot on Monday's week, labelled as belonging to the previous week; the preceding Sunday's slot
+remains unfilled. A shift filled from Sunday's slot instead attaches to that slot's authoring week.
+This limit was reproduced during part 6 review and retained from the approved plan. Part 7's editor
+must retain the overflow label; changing membership to the business week requires changing that
+agreed rule. Published-week edits and deletion remain refused even for an unattached shift.
