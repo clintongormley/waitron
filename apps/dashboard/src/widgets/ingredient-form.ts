@@ -9,6 +9,7 @@ import {
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
+import { allergensForComparison } from "./allergen-choices.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -174,7 +175,11 @@ export class IngredientForm extends LitElement {
         id: this,
         current: () => this.#current(),
         snapshot: (value) => structuredClone(value),
-        equal: sameValue,
+        equal: (a, b) =>
+          sameValue(
+            { ...a, allergens: allergensForComparison(a.allergens ?? null) },
+            { ...b, allergens: allergensForComparison(b.allergens ?? null) },
+          ),
         restore: (value) => this.#restore(value),
       });
       this.#leave = coordinator;

@@ -37,7 +37,11 @@ import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-dietary-picker.js";
-import { allergenChoices, allergensFromChoices } from "./allergen-choices.js";
+import {
+  allergenChoices,
+  allergensFromChoices,
+  allergensForComparison,
+} from "./allergen-choices.js";
 import "./image-upload.js";
 import "./product-appearance.js";
 import "./variant-form.js";
@@ -934,6 +938,7 @@ export class ProductEditor extends LitElement {
 
   private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = this.submissionValue(draft);
+    value.allergens = allergensForComparison(value.allergens);
     value.unitPrice = comparablePrice(value.unitPrice);
     value.variants = value.variants.map((variant) => ({
       ...variant,
@@ -1651,7 +1656,12 @@ export class ProductEditor extends LitElement {
 
   private renderVariants() {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
-    const unsaved = this.value !== null && !sameValue(this.draft, this.value);
+    const unsaved =
+      this.value !== null &&
+      !sameValue(
+        { ...this.draft, allergens: allergensForComparison(this.draft.allergens) },
+        { ...this.value, allergens: allergensForComparison(this.value.allergens) },
+      );
     const { variants } = this.draft;
     return keyed(
       this.generation,

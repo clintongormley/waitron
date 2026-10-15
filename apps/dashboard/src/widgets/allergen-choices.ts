@@ -36,3 +36,7 @@ export function allergensFromChoices(values: readonly string[]): NonNullable<All
   }
   return result;
 }
+
+export function allergensForComparison(value: AllergenDeclaration): AllergenDeclaration {
+  return value === null ? null : allergensFromChoices(allergenChoices(value).sort());
+}

@@ -8,8 +8,7 @@ import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
 
-// Every field holds something other than its default (switched off, declared allergens with a
-// source, a dietary origin), so a field that rewrites its value on first draw would show as a change.
+// Every field holds something other than its default, so a rewrite on first draw shows as a change.
 const MILK: Ingredient = {
   id: "ing-1",
   name: "Leche entera",
@@ -185,4 +184,30 @@ it("Escape with no leave coordinator closes the form", async () => {
   await typeName(el, "Leche");
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => el.open).toBe(false);
+});
+
+it("treats removing and re-adding a kind as unchanged, regardless of stored kind order", async () => {
+  const el = await mount({
+    ...MILK,
+    allergens: { gluten: { kinds: ["rye", "wheat"] }, nuts: { kinds: ["walnuts", "almonds"] } },
+  });
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
+  await picker.updateComplete;
+  expect(await saveState(el)).toEqual(quiet);
+  for (const choice of ["gluten:rye", "nuts:walnuts"]) {
+    picker.shadowRoot!.querySelector<HTMLElement>(`[data-test="remove-${choice}"]`)!.click();
+    await picker.updateComplete;
+    await el.updateComplete;
+    expect(await saveState(el)).toEqual(ready);
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>(`[data-test="choose-${choice}"]`)!.click();
+    await picker.updateComplete;
+    await el.updateComplete;
+    expect(await saveState(el)).toEqual(quiet);
+  }
+  const send = sent(el);
+  saveButton(el).click();
+  await el.updateComplete;
+  expect(send).not.toHaveBeenCalled();
 });
