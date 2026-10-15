@@ -2005,6 +2005,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   taken off) — still print the bare order number (`formatCorrectionSlip`,
   `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
+- **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
+  owner decision).** Since A683 a named party's kitchen tickets read "Order 5 · Ana", but Name the
+  party prints no MOVED slip (A650 design, path 17), so a ticket already on the rail keeps the old
+  name, or none, while later tickets for the same order carry the new one. Decide: should a rename
+  of a party with sent food print a slip? Raised by A683's review (#1724).
+
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
   (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
   kitchen items and sends replacements. The dish keeps its earlier made-here choice
