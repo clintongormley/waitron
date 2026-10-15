@@ -759,3 +759,167 @@ describe("a viewer's painter", () => {
     expect(writes).toEqual([]);
   });
 });
+
+describe("the Calendar window address", () => {
+  it("opens Seasons after loading and closes only its window pair", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027/window/seasons");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]"))
+      .not.toBeNull();
+    const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+      "[data-test=calendar-window]",
+    )!;
+    await modal.updateComplete;
+    const chips = modal.querySelector("season-chips")!;
+    await expect.poll(() => chips.shadowRoot!.textContent).toContain("Spring");
+    expect(modal.heading).toBe("Seasons");
+    const close = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=close-calendar-window]",
+    );
+    expect(close).not.toBeNull();
+    await close!.updateComplete;
+    expect(
+      close!.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
+    ).toBeGreaterThan(0);
+    close!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    expect(checkedView(el)).toBe("year");
+  });
+  it("offers weeks but no editing actions in a read-only Seasons window", async () => {
+    const el = await mount(
+      "/manage/opening-hours/view/year/window/seasons",
+      undefined,
+      undefined,
+      true,
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window] season-chips"))
+      .not.toBeNull();
+    const chips = el.shadowRoot!.querySelector("[data-test=calendar-window] season-chips")!;
+    await expect
+      .poll(() => chips.shadowRoot!.querySelector("[data-test=season-week]"))
+      .not.toBeNull();
+    expect(chips.shadowRoot!.querySelector("[data-test=season-edit]")).toBeNull();
+    expect(chips.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
+    chips
+      .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!
+      .click();
+    const painter = await shownPainter(el);
+    expect(painter.seasonId).toBe("spring");
+    expect(painter.readOnly).toBe(true);
+    expect(location.pathname).not.toContain("/window/");
+  });
+  it("removes an unknown window by replacement without pushing an entry", async () => {
+    const pushed = vi.spyOn(history, "pushState");
+    const el = await mount("/manage/opening-hours/view/year/window/unknown");
+    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(pushed).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+  });
+  it("window-only Back and Forward retain the actual painter and its edited ranges", async () => {
+    const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+    history.replaceState(null, "", base);
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal, destination) => {
+        const screen = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+        return app.leave.coordinator.request({
+          scopes: screen.navigationScopes(new URL(destination)) ?? "all",
+          reason: "navigation",
+          proceed,
+          signal,
+        });
+      },
+    });
+    try {
+      const mounted = await mountApp();
+      app = mounted.app;
+      const el = mounted.el;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      const before = painter.edited();
+      expect(before).toEqual({ departments: ["d1"], zones: [] });
+      await guard.write(`${base}/window/seasons`);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]"))
+        .not.toBeNull();
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      history.back();
+      await expect.poll(() => location.pathname).toBe(base);
+      expect(painter.edited()).toEqual(before);
+      history.forward();
+      await expect.poll(() => location.pathname).toBe(`${base}/window/seasons`);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+    } finally {
+      guard.dispose();
+    }
+  });
+});
+
+it("closing the Seasons window protects its own season draft while retaining the painter draft", async () => {
+  const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+  history.replaceState(null, "", base);
+  let app!: PainterApp;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+    request: (proceed, signal, destination) => {
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      return app.leave.coordinator.request({
+        scopes: el.navigationScopes(new URL(destination)) ?? "all",
+        reason: "navigation",
+        proceed,
+        signal,
+      });
+    },
+  });
+  try {
+    const mounted = await mountApp();
+    app = mounted.app;
+    const el = mounted.el;
+    const painter = await shownPainter(el);
+    await drag(painter, "3", 120, 240);
+    await guard.write(`${base}/window/seasons`);
+    const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+      "[data-test=calendar-window]",
+    )!;
+    const chips = modal.querySelector("season-chips")!;
+    await expect
+      .poll(() => chips.shadowRoot!.querySelector("[data-test=season-edit]"))
+      .not.toBeNull();
+    chips.shadowRoot!.querySelector<HTMLElement>("[data-test=season-edit]")!.click();
+    await chips.updateComplete;
+    const dialog = chips.shadowRoot!.querySelector("season-dialog")!;
+    await dialog.updateComplete;
+    const name = dialog.shadowRoot!.querySelector<HTMLElement>("[name=name]")!;
+    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed spring" } }));
+    await dialog.updateComplete;
+    const closing = guard.write(base);
+    await choose(app, "keep");
+    await closing;
+    expect(location.pathname).toBe(`${base}/window/seasons`);
+    expect(
+      (dialog.shadowRoot!.querySelector("[name=name]") as HTMLElementTagNameMap["wt-input"]).value,
+    ).toBe("Changed spring");
+    const discarding = guard.write(base);
+    await choose(app, "discard");
+    await discarding;
+    expect(location.pathname).toBe(base);
+    expect(painterOf(el)).toBe(painter);
+    expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+  } finally {
+    guard.dispose();
+  }
+});
+
+it("a same-path station query still resolves the old address after the Calendar has loaded", async () => {
+  const el = await mount("/manage/opening-hours");
+  history.pushState(null, "", "/manage/opening-hours?station=s1");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => painterOf(el)?.seasonId).toBe("winter");
+  expect(location.pathname).toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+});

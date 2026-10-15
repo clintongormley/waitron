@@ -784,6 +784,7 @@ export const en = {
   "nav.toggle": "Toggle navigation",
   "nav.account_menu": "Account menu",
   "nav.search": "Search pages",
+  "nav.destination": "{label} — in {page}",
   "nav.no_matches": "No pages match.",
   "alerts.bell": "Alerts",
   "alerts.bell_count": "Alerts, {count} open",
@@ -3793,6 +3794,7 @@ export const es: Record<StringKey, string> = {
   "nav.toggle": "Mostrar u ocultar la navegación",
   "nav.account_menu": "Menú de cuenta",
   "nav.search": "Buscar páginas",
+  "nav.destination": "{label} — en {page}",
   "nav.no_matches": "Ninguna página coincide.",
   "venue_details.address_notice":
     "Los recibos impresos después de esta corrección usan la dirección actual, incluidas las copias de ventas anteriores. El emisor y el nombre comercial registrados se conservan como se emitieron.",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render } from "lit";
+import { render, type LitElement } from "lit";
 import type { CalendarViewHost, DashboardRequest } from "@waitron/dashboard-kit";
 import { STAFFING_DASHBOARD } from "./index.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
@@ -324,7 +324,7 @@ it("opens the Rota modes declared for search on the real view", async () => {
       { month: "2026-10", params: destination.params, canWrite: false, open: () => undefined },
     );
     render(handle.render(), container);
-    const view = container.querySelector("staffing-rota")!;
+    const view = container.querySelector<LitElement>("staffing-rota")!;
     await view.updateComplete;
     await vi.waitFor(() =>
       expect(

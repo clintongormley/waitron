@@ -18,6 +18,8 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "./season-chips.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
@@ -28,6 +30,7 @@ import type { OrdinaryDateOpen } from "./opening-hours-month.js";
 import { seasonTints } from "./season-tint.js";
 import {
   calendarViewPath,
+  calendarWindowPath,
   hoursPath,
   openingHoursPath,
   seasonPainterPath,
@@ -115,6 +118,9 @@ export class OpeningHoursScreen extends LitElement {
   @property({ attribute: false }) calendar?: CalendarViews;
   /** Set while the address names one of `calendar`'s views. */
   @state() private moduleView?: ModuleAddress;
+  @state() private windowId = "";
+  private contentKey = "";
+  private readonly windowDraftRoot = {};
   /** Each view's handle, created the first time it is shown and kept for this screen's life. */
   private readonly viewHandles = new Map<string, DashboardScreenHandle>();
   @state() private model?: OpeningHoursModel;
@@ -170,11 +176,23 @@ export class OpeningHoursScreen extends LitElement {
         date: "date",
         year: "year",
         month: "month",
+        window: "window",
       },
     },
   });
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
+    const current = new URL(navigationGuardFor(window)?.href ?? location.href);
+    const windowId = this.url.read("window");
+    if (windowId !== null && windowId !== "seasons") {
+      this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
+      return;
+    }
+    this.windowId = windowId ?? "";
+    const contentPath = calendarWindowPath(current.pathname, null);
+    const contentKey = contentPath + current.search + current.hash;
+    if (contentKey === this.contentKey) return;
+    this.contentKey = contentKey;
     const view = this.url.read("view");
     if (this.calendarView(view)) {
       this.painter = undefined;
@@ -219,7 +237,9 @@ export class OpeningHoursScreen extends LitElement {
       ).then(() => this.followUrl());
       return;
     }
-    const href = navigationGuardFor(window)?.href ?? location.href;
+    const underlying = new URL(current);
+    underlying.pathname = contentPath;
+    const href = underlying.href;
     const shown: View | undefined =
       view === "year" || view === "month"
         ? view
@@ -249,7 +269,7 @@ export class OpeningHoursScreen extends LitElement {
     const parts = path.slice(openingHoursPath.length + 1).split("/");
     const params: Record<string, string> = {};
     for (let i = 0; i + 1 < parts.length; i += 2) {
-      if (parts[i] === "view") continue;
+      if (parts[i] === "view" || parts[i] === "window") continue;
       try {
         params[decodePathSegment(parts[i]!)] = decodePathSegment(parts[i + 1]!);
       } catch {
@@ -267,6 +287,65 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** Moves the Calendar to a module view, or with `"hours"` back to Opening hours (its month when
    *  `params.month` names one, else its year). A view it was not given is ignored. */
+  navigationScopes(destination: URL): readonly object[] | undefined {
+    const current = new URL(navigationGuardFor(window)?.href ?? location.href);
+    if (
+      destination.origin !== current.origin ||
+      destination.search !== current.search ||
+      destination.hash !== current.hash ||
+      calendarWindowPath(destination.pathname, null) !== calendarWindowPath(current.pathname, null)
+    )
+      return undefined;
+    return this.windowId === "seasons" ? [this.windowDraftRoot] : [];
+  }
+  private readonly beforeWindowClose = async () => {
+    await this.closeWindow();
+    return false;
+  };
+  private async closeWindow() {
+    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
+    await this.writeAddress(this.calendarUrl(calendarWindowPath(path, null)));
+  }
+  private seasonsWindow() {
+    if (this.windowId !== "seasons" || !this.model) return nothing;
+    return html`<wt-modal
+      data-test="calendar-window"
+      size="compact"
+      .open=${true}
+      heading=${t("season.seasons")}
+      .beforeClose=${this.beforeWindowClose}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (
+          event.target === event.currentTarget &&
+          event.currentTarget === this.shadowRoot?.querySelector("[data-test=calendar-window]")
+        )
+          void this.closeWindow();
+      }}
+      ><season-chips
+        .draftParent=${this.windowDraftRoot}
+        .seasons=${this.yearModel?.seasons ?? this.monthModel?.seasons ?? []}
+        .clockRevision=${this.model.clockRevision}
+        .api=${this.api}
+        .specialDays=${this.knownSpecialDays}
+        .readOnly=${this.readOnly}
+        @season-week-open=${this.openSeasonWeek}
+        @season-changed=${(event: Event) => {
+          event.stopPropagation();
+          this.api.rereadWithSpecialDays();
+        }}
+      ></season-chips
+      ><wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          data-test="close-calendar-window"
+          variant="secondary"
+          @click=${() => void this.closeWindow()}
+          >${t("calendar.window.close")}</wt-button
+        ></wt-form-actions
+      ></wt-modal
+    >`;
+  }
   private openCalendarView(view: string, params: Record<string, string>) {
     if (!this.isConnected) return;
     if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
@@ -574,7 +653,12 @@ export class OpeningHoursScreen extends LitElement {
       this.followUrl();
     };
     const coordinator = leaveCoordinatorFor(this);
-    if (coordinator) await coordinator.request({ scopes: "all", reason: "navigation", proceed });
+    if (coordinator)
+      await coordinator.request({
+        scopes: this.navigationScopes(url) ?? "all",
+        reason: "navigation",
+        proceed,
+      });
     else proceed();
   }
   /** Rewrites the address in place without the leave question: the painter keeps its draft across
@@ -1069,7 +1153,8 @@ export class OpeningHoursScreen extends LitElement {
               : nothing
     }
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-    ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}`;
+    ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}
+    ${this.seasonsWindow()}`;
   }
 }
 declare global {

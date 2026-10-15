@@ -78,6 +78,7 @@ export class SeasonChips extends LitElement {
   /** Special days by id, so an end-offset refusal can name one. */
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
+  @property({ attribute: false }) draftParent?: object;
   /** Draws the chips as a key to the tints alone: no week to ask for and nothing to write. */
   @property({ type: Boolean }) keyOnly = false;
   @state() private opening?: Opening;
@@ -188,6 +189,7 @@ export class SeasonChips extends LitElement {
     return keyed(
       opening,
       html`<season-dialog
+        .draftParent=${this.draftParent}
         .open=${true}
         .season=${opening.season}
         .seasons=${this.seasons}

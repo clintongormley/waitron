@@ -50,6 +50,13 @@ describe("collectSearchDestinations", () => {
     value.pages = pages.filter((x) => x.screen !== "prep-stations");
     expect(ids(collectSearchDestinations(value))).not.toContain("routes");
   });
+  it("honours a read-only child gate without a write permission", () => {
+    const value = input();
+    value.declarations = [{ ...declaration, readPermission: "routing.view" }];
+    expect(ids(collectSearchDestinations(value))).not.toContain("routes");
+    value.permissions = ["routing.view"];
+    expect(ids(collectSearchDestinations(value))).toContain("routes");
+  });
   it("uses only supplied visible settings tabs, without duplicate panel results", () => {
     const value = input();
     value.settingsTabs = [{ id: "tables", label: "Tables" }];

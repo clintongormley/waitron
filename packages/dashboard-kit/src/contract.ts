@@ -28,6 +28,8 @@ export type DashboardPanelRenderer = (
 /** A mounted screen instance: the app calls render() to paint it. */
 export interface DashboardScreenHandle {
   render(readOnly?: boolean): TemplateResult;
+  /** Scopes this navigation may release; undefined protects every scope. */
+  navigationScopes?(destination: URL): readonly object[] | undefined;
 }
 
 /** Where a contributed screen sits in the nav, and the permission that opens it. */

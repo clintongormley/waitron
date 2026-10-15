@@ -86,6 +86,7 @@ export class SeasonDialog extends LitElement {
     `,
   ];
   @property({ type: Boolean }) open = false;
+  @property({ attribute: false }) draftParent?: object;
   /** The request in flight, so only the action that sent it shows it is busy. */
   @property() pending: "save" | "impact" | "delete" | "" = "";
   /** Reading the delete impact failed. */
@@ -147,6 +148,7 @@ export class SeasonDialog extends LitElement {
     if (this.isConnected && !this.scope) {
       const { scope, coordinator } = draftScopeFor(this, {
         id: this.identity,
+        parent: this.draftParent,
         current: () => copy(this.draft),
         snapshot: copy,
         equal: same,

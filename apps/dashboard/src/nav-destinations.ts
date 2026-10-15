@@ -64,8 +64,9 @@ export function collectSearchDestinations(input: {
       throw new Error(`dashboard search destination "${item.id}" has an invalid screen or path`);
     if (ids.has(item.id)) throw new Error(`dashboard repeats search destination "${item.id}"`);
     const allowed =
-      item.requiresPermission === undefined ||
-      input.permissions.includes(item.requiresPermission) ||
+      (item.requiresPermission === undefined && item.readPermission === undefined) ||
+      (item.requiresPermission !== undefined &&
+        input.permissions.includes(item.requiresPermission)) ||
       (item.readPermission !== undefined && input.permissions.includes(item.readPermission));
     if (allowed) add(item.id, item.screen, input.label(item.labelKey), item.path);
     else ids.add(item.id);

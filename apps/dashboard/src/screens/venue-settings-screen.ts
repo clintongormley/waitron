@@ -16,7 +16,7 @@ export const VENUE_SETTINGS_TABS = [
 ] as const;
 export type VenueSettingsTab = (typeof VENUE_SETTINGS_TABS)[number];
 
-const TAB_LABELS: Record<VenueSettingsTab, StringKey> = {
+export const TAB_LABELS: Record<VenueSettingsTab, StringKey> = {
   "venue-details": "venue_settings.tab.venue_details",
   tables: "venue_settings.tab.tables",
   "adjustment-reasons": "venue_settings.tab.adjustment_reasons",
