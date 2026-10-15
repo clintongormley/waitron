@@ -139,7 +139,7 @@ export class ProductAppearance extends LitElement {
         aria-label=${`${t("image.label")} · ${t("editor.color")}`}
         aria-describedby=${!this.image && this.inheritedImage ? this.#captionId : nothing}
         aria-invalid=${this.invalid ? "true" : nothing}
-        aria-haspopup="true"
+        aria-haspopup="dialog"
         ?disabled=${this.disabled}
         @click=${(event: Event) => {
           event.stopPropagation();

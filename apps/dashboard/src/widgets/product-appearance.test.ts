@@ -21,6 +21,7 @@ it("opens one image-and-colour panel and returns focus to the pencil thumbnail o
   expect(thumb).not.toBeNull();
   expect(thumb).not.toBeUndefined();
   expect(thumb!.querySelector("wt-icon")).not.toBeNull();
+  expect(thumb!.getAttribute("aria-haspopup")).toBe("dialog");
   await userEvent.click(thumb!);
   expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
   expect(control.checkVisibility()).toBe(true);
