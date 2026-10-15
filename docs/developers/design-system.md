@@ -2999,10 +2999,7 @@ The window pair is independent of the underlying view and subject. Window-only t
 that view's drafts and protects edits made inside the window. The handle's `navigationScopes`
 callback supplies those draft roots; ordinary navigation retains full protection. A719 can reuse
 `calendarWindowPath` for Periods, and A721 replaces this chooser with its editable table.
-Chromium cases are in `dashboard-app.search-destinations.test.ts`, `dashboard-app.search-modules.test.ts`
-under `apps/dashboard/src/`, and `opening-hours-screen.painter.test.ts` under
-`packages/venue-service/src/dashboard/`. The search and chooser were inspected in EN/ES, both
-themes, at 390 and 1280 pixels using the tests' read fixtures.
+
 
 ### Dashboard authentication
 

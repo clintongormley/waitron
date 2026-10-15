@@ -2064,7 +2064,10 @@ export class DashboardApp extends LitElement {
       (item) => item.id === destination.id && item.href === destination.href,
     );
     if (!current) return;
-    const outcome = await navigationGuardFor(window)?.write(new URL(current.href, location.origin));
+    const guard = navigationGuardFor(window);
+    const url = new URL(guard?.href ?? location.href);
+    url.pathname = current.href;
+    const outcome = await guard?.write(url);
     if (outcome === "proceeded" && this.isConnected && this.screen === current.screen) {
       this.#openGroupOf(current.screen);
       this.drawerOpen = false;

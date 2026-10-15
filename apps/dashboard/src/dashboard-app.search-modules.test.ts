@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
-import type { WtInput } from "@waitron/ui";
+import { navigationGuardFor, leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import type { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./widgets/test-helpers.js";
@@ -24,10 +24,35 @@ const model = {
   timeZone: "Europe/Madrid",
   clockReadable: true,
   dayCutover: "06:00",
-  menus: [],
+  menus: [{ id: "menu", name: "Lunch menu", active: true, includes: [] }],
   seasons: [{ id: "spring", name: "Spring", startsOn: "03-01" }],
   currentSeasonId: "spring",
-  departments: [],
+  departments: [
+    {
+      id: "restaurant",
+      name: "Restaurant",
+      active: true,
+      zones: [],
+      periods: [
+        {
+          id: "lunch",
+          name: "Lunch",
+          colour: "blue",
+          menuId: "menu",
+          staffMenuIds: [],
+          endOffsetMinutes: 0,
+          weekdays: [1],
+          routingUses: [],
+        },
+      ],
+      seasonWeeks: [
+        {
+          seasonId: "spring",
+          week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
+        },
+      ],
+    },
+  ],
 };
 const request = (async (path: string) => {
   const url = new URL(path, location.origin);
@@ -95,6 +120,7 @@ const request = (async (path: string) => {
 }) as DashboardRequest;
 async function mount(
   options: {
+    path?: string;
     locale?: string;
     theme?: "light" | "dark";
     width?: number;
@@ -103,7 +129,7 @@ async function mount(
   } = {},
 ) {
   await page.viewport(options.width ?? 1280, 800);
-  history.replaceState(null, "", "/manage/opening-hours/view/year");
+  history.replaceState(null, "", options.path ?? "/manage/opening-hours/view/year");
   const session = {
     personId: "p1",
     role: "manager",
@@ -242,3 +268,67 @@ it.each(["light", "dark"] as const)(
       }
   },
 );
+
+it("the real shell delegates window-only navigation without discarding the actual painter draft", async () => {
+  const base = "/manage/opening-hours/view/season/season/spring/department/restaurant";
+  const { el } = await mount({ path: base });
+  await vi.waitFor(() =>
+    expect(
+      calendar(el)
+        .shadowRoot!.querySelector("season-painter")
+        ?.shadowRoot?.querySelector("paint-grid"),
+    ).not.toBeNull(),
+  );
+  const painter = calendar(el).shadowRoot!.querySelector("season-painter")!;
+  const grid = painter.shadowRoot!.querySelector("paint-grid")!;
+  const painted = [{ periodId: "lunch", startsAt: "12:00", endsAt: "14:00" }];
+  grid.dispatchEvent(
+    new CustomEvent("paint-change", {
+      detail: { key: "3", day: painted },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await painter.updateComplete;
+  expect(grid.days.get("3")).toEqual(painted);
+  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+  const opening = navigationGuardFor(window)!.write(`${base}/window/seasons`);
+  await vi.waitFor(() =>
+    expect(calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")).not.toBeNull(),
+  );
+  await opening;
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(calendar(el).shadowRoot!.querySelector("season-painter")).toBe(painter);
+  expect(grid.days.get("3")).toEqual(painted);
+  calendar(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close-calendar-window]")!.click();
+  await vi.waitFor(() => expect(location.pathname).toBe(base));
+  expect(grid.days.get("3")).toEqual(painted);
+  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+});
+it("opening Calendar preserves an unrelated bookmark query and hash but removes stale station", async () => {
+  const { el } = await mount({
+    path: "/manage/opening-hours/view/year?source=bookmark&station=old#calendar",
+  });
+  await search(el, "seasons");
+  await userEvent.click(result(el, "venue-service:seasons")!);
+  await vi.waitFor(() =>
+    expect(calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")).not.toBeNull(),
+  );
+  expect(location.search).toBe("?source=bookmark");
+  expect(location.hash).toBe("#calendar");
+});
+it("settings destinations follow the real permitted panels rather than every enabled module", async () => {
+  const { el, session } = await mount({
+    modules: ["venue-service", "adjustments"],
+    permissions: ["venue.view"],
+  });
+  await search(el, "adjustment");
+  expect(result(el, "settings:adjustment-reasons")).toBeNull();
+  session.permissions = ["venue.view", "adjustment.manage"];
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.waitFor(() => expect(result(el, "settings:adjustment-reasons")).not.toBeNull());
+  await search(el, "tables");
+  expect(
+    el.shadowRoot!.querySelectorAll('[data-search-destination="settings:tables"]'),
+  ).toHaveLength(1);
+});

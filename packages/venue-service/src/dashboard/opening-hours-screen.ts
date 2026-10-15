@@ -184,6 +184,17 @@ export class OpeningHoursScreen extends LitElement {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const current = new URL(navigationGuardFor(window)?.href ?? location.href);
     const windowId = this.url.read("window");
+    const requestedView = this.url.read("view");
+    if (
+      current.searchParams.has("station") &&
+      (windowId === "seasons" ||
+        requestedView === "year" ||
+        requestedView === "month" ||
+        this.calendarView(requestedView))
+    ) {
+      this.replaceAddress(this.calendarUrl(current.pathname));
+      return;
+    }
     if (windowId !== null && windowId !== "seasons") {
       this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
       return;
