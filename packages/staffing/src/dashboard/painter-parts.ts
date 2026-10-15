@@ -2,6 +2,7 @@ import { css, html, nothing } from "lit";
 import { codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
+import { MAX_HEADCOUNT } from "../block-model.js";
 import { areaKey, type AreaRef, type StaffingBlock } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
@@ -11,7 +12,6 @@ import "./staff-role-dialog.js";
 /** What the season and special-day staffing painters share: their chip row, area picker, staff role
  *  dialog, refusal reading and styles. */
 
-export const MAX_HEADCOUNT = 50;
 export const NOTHING_BY_KEY: ReadonlyMap<string, never> = new Map<string, never>();
 
 export const painterStyles = css`

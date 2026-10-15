@@ -1,4 +1,5 @@
 import { AppError, isUuid } from "@waitron/shared";
+import { MAX_HEADCOUNT } from "./block-model.js";
 import { blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
 import "./errors.js";
 
@@ -36,7 +37,7 @@ function parseBlock(value: unknown, field: string, cutover: string): StaffingBlo
     typeof headcount !== "number" ||
     !Number.isInteger(headcount) ||
     headcount < 1 ||
-    headcount > 50
+    headcount > MAX_HEADCOUNT
   )
     throw invalid(`${field}.headcount`);
   const startsAt = stepTime(raw.startsAt, `${field}.startsAt`);

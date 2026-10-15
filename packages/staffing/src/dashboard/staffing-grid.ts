@@ -19,6 +19,7 @@ import {
 } from "@waitron/venue-service/painter";
 import {
   MAX_BLOCK_MINUTES,
+  MAX_HEADCOUNT,
   addBlock,
   changeBlock,
   clockAt,
@@ -44,7 +45,6 @@ export interface StaffingChange {
 }
 
 const DAY = 1440;
-const MAX_HEADCOUNT = 50;
 
 /** Not `span`: a range crossing the changeover is drawn to it, as `slotsForDay` counts it, so a
  *  block kept on the day's last quarter hour still shows. */
