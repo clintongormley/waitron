@@ -1100,7 +1100,9 @@ describe("a sale prints its goods in the default content language its lines stor
         ? [element.text.trim()]
         : element.kind === "amount"
           ? [element.caption]
-          : [],
+          : element.kind === "table"
+            ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
+            : [],
     );
     expect(startsWith(text, "Data"), "Data").toBe(true);
     expect(startsWith(text, "Fecha")).toBe(false);

@@ -821,12 +821,15 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
           ? [element.text]
           : element.kind === "amount"
             ? [element.caption]
-            : [],
+            : element.kind === "table"
+              ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
+              : [],
       )
       .join("\n");
-    expect(text).toContain("Fecha");
+    expect(text).toMatch(/^Pedido 0$/mu);
+    expect(text).not.toContain("Comanda");
     expect(text).not.toContain("Data");
-    expect(text).toMatch(/2 CA-rac {2}CA Torrada/u);
+    expect(text).toMatch(/^2 CA-rac CA Torrada$/mu);
     expect(text).toContain("CA Tipus de pa: CA Sègol");
     for (const other of ["ES Tostada", "ES-rac", "ES Tipo de pan", "ES Centeno"]) {
       expect(text, other).not.toContain(other);
