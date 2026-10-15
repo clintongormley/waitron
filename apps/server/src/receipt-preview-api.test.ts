@@ -635,21 +635,21 @@ describe("POST /management-api/receipt-preview", () => {
 
     it("draws the sample in a language asked for, whatever the location has saved", async () => {
       const lines = await at("gl-ES");
-      expect(labelled(lines, "Data")).toBe(true);
+      expect(labelled(lines, "IVE 10% incluído")).toBe(true);
       expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
-      expect(labelled(lines, "Fecha")).toBe(false);
+      expect(labelled(lines, "IVA 10% incluido")).toBe(false);
     });
 
     it("follows the location's saved language when none is asked for", async () => {
       await setLocationLanguages(["gl-ES"]);
       try {
         const lines = await at();
-        expect(labelled(lines, "Data")).toBe(true);
+        expect(labelled(lines, "IVE 10% incluído")).toBe(true);
         expect(lines.some((line) => line.startsWith("IVE "))).toBe(true);
       } finally {
         await setLocationLanguages(["es-ES"]);
       }
-      expect(labelled(await at(), "Fecha")).toBe(true);
+      expect(labelled(await at(), "IVA 10% incluido")).toBe(true);
     });
 
     it("checks permission before reading the body, then draws from one transaction snapshot", async () => {
