@@ -204,7 +204,6 @@ describe("registering a page printer from discovery", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 600,
         active: true,
-        invoiceDefault: false,
         agentId: v.agentOne,
       },
     ]);
@@ -270,7 +269,6 @@ describe("registering a page printer from discovery", () => {
         id,
         name: "Back office",
         active: true,
-        invoiceDefault: false,
         documentFormat: "image/urf",
         supportedFormats: ["image/urf"],
         media: "na_letter_8.5x11in",
@@ -414,7 +412,6 @@ describe("listing and renaming page printers", () => {
         id: office.id,
         name: "Back office",
         active: true,
-        invoiceDefault: false,
         agentId: v.agentOne,
         agentName: "Back office agent",
       }),

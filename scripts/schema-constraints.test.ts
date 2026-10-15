@@ -445,7 +445,6 @@ const EXPECTED_UNIQUE_INDEXES = [
   "period_extensions_day_key",
   "zone_extensions_day_key",
   "page_printers_endpoint_uq",
-  "page_printers_invoice_default_uq",
   "print_agents_tenant_node_key",
   "printers_local_key_key",
   "product_modifiers_product_extra_uq",

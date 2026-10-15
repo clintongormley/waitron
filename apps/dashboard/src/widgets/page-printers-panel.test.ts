@@ -328,14 +328,6 @@ it("puts a printer name holding a replacement pattern into its menu and rename h
   );
 });
 
-it("disabling a printer that was not chosen says nothing about the choice", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=disable-page-printer-pp2]");
-  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { active: false });
-  await flush(el);
-  expect(q(el, "[data-test=invoice-printer-cleared]")).toBeNull();
-});
-
 it("shows a refused disable as the panel's alert and keeps the row's Disable usable", async () => {
   const { el, api, reload } = await mount();
   api.updatePagePrinter.mockRejectedValueOnce({ code: "connection.failed" });
@@ -343,7 +335,6 @@ it("shows a refused disable as the panel's alert and keeps the row's Disable usa
   await flush(el);
   expect(text(el, "[data-test=page-printers-action-error]")).toBe(codeMessage("connection.failed"));
   expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
-  expect(q(el, "[data-test=invoice-printer-cleared]")).toBeNull();
   expect(button(el, "[data-test=disable-page-printer-pp2]").disabled).toBe(false);
   expect(reload).not.toHaveBeenCalled();
 });

@@ -292,7 +292,6 @@ describe("page-printer management routes", () => {
         media: "na_letter_8.5x11in",
         resolutionDpi: 300,
         active: false,
-        invoiceDefault: true,
       }),
     );
     expect(res.status).toBe(201);
@@ -308,7 +307,6 @@ describe("page-printer management routes", () => {
       media: "iso_a4_210x297mm",
       resolutionDpi: 600,
       active: true,
-      invoiceDefault: false,
       agentId: agent.agentId,
     });
   });

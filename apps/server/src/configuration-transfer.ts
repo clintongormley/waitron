@@ -728,10 +728,7 @@ export async function importConfigurationTables(
       }
       if (declaration.name === "printers" || declaration.name === "page_printers")
         row.active = false;
-      if (declaration.name === "page_printers") {
-        row.invoice_default = false;
-        row.agent_id = null;
-      }
+      if (declaration.name === "page_printers") row.agent_id = null;
       // Every key was checked against `pragma_table_info` above, so `sql.identifier` names a real
       // column of a real table; the values bind.
       const fields = Object.keys(row);
