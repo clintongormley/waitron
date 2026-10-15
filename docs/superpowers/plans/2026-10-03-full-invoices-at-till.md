@@ -1,5 +1,11 @@
 # A231 implementation plan: full invoices at the till
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> the till's modal search and header placement described below. Find a bill stays in More and
+> opens Bills/Transactions with server paging; collection receives a fresh selected bill.
+> Historical receipts open by sale ID. Use that plan for the current search and collection contract.
+
+
 > **2026-10-12, A493:** Live venue receipt defaults are retired. Decoration and the tax-agency description belong to each department. Earlier contracts below are historical.
 > See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
 

@@ -1,5 +1,11 @@
 # The dashboard's Orders screen — Implementation Plan
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> the till's modal search and header placement described below. Find a bill stays in More and
+> opens Bills/Transactions with server paging; collection receives a fresh selected bill.
+> Historical receipts open by sale ID. Use that plan for the current search and collection contract.
+
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

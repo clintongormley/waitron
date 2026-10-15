@@ -193,14 +193,18 @@ screen is designed.
   else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
   `design-system.md` says which icon means which menu. While More is open nothing moves out of
   it; the bar refits when it closes.
+  Since A737 Part 1 (2026-10-16), Find a bill stays in More at every width; the other actions
+  retain that priority and the current contract is in `design-system.md`.
   - **Open, decided as built:** a change in the pending-transfer count alone never brings items
     back onto the bar, so when the count shrinks or goes away, items can stay in More although they
     would now fit, until the next resize or other change refits the bar.
-  - **Open: three cases run close to, and sometimes past, their 15 s limit locally.** The "fits as a fresh bar does when
+  - **Open: the timing-variation header tests spend most of their time waiting for frames.** The "fits as a fresh bar does when
     …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
     owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
     changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
-    them slow rather than raising the limit.
+    them slow rather than raising the limit. A737 Part 1 (2026-10-16) measured reset/final waits
+    of 70–267 ms in a local probe and splits the same 0–40 microtask cuts into smaller cases,
+    retaining the 15 s limit and every layout assertion. The frame-wait cost remains to investigate.
   - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
     any one leaves every test passing): the phone-width early return in `#release`, the return
     after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.

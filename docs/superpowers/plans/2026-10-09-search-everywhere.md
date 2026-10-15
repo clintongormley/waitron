@@ -1,5 +1,11 @@
 # Every search follows one rule — implementation plan
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> the till's modal search and header placement described below. Find a bill stays in More and
+> opens Bills/Transactions with server paging; collection receives a fresh selected bill.
+> Historical receipts open by sale ID. Use that plan for the current search and collection contract.
+
+
 > 2026-10-10: [A461's plan](../plans/2026-10-10-a461-product-search.md) supersedes
 > Products and Menus Structure tree-search presentation and selection lifetime, and adds matching
 > sections to the till's results. Search closeness and table-sort ties remain unchanged.

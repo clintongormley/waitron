@@ -66,7 +66,7 @@ type BillState = 'unpaid' | 'held' | 'part-paid' | 'paid-not-handed-over';
 type TransactionType = 'sale' | 'full-invoice' | 'correction';
 type TenderMethod = 'cash' | 'card' | 'voucher' | 'transfer' | 'other';
 type FindBillPage<Row> = { rows: Row[]; total: number; page: number; pageSize: 50; openCount: number };
-type FindBillOptions = { zones:{id:string;name:string}[]; billStaff:{id:string;name:string}[]; transactionStaff:{id:string;name:string}[] };
+type FindBillOptions = { timeZone:string; zones:{id:string;name:string}[]; billStaff:{id:string;name:string}[]; transactionStaff:{id:string;name:string}[] };
 type DateWindow = { startAt: string; endAt: string; from: string; to: string } | null;
 type TransactionsPage = FindBillPage<TransactionRow> & { dates: DateWindow };
 resolveFindBillDates(clock: BusinessDayClock, dates: FindBillDates, now: Date): DateWindow;
@@ -216,3 +216,12 @@ linked to a working order retains that order's delivery controls; an orderless r
 - Wire types, column sort keys, list/options/by-ID/client results and sale-ID receipt context agree. Static legacy lookup route precedes the new by-ID route; fresh `collectionStatus` maps to existing `BillLookupRow.status`.
 - Every Review Focus condition has behavioral cases in its owning task. No refund migration/route/UI/reporting or refund-specific review/omission gate is required by Part 1.
 - No unresolved conflict between the A737 detail and the explicit watcher amendment was found. These are plan/source checks; this authoring pass runs no product tests and claims no implementation completion beyond the preserved Task 4 record.
+
+## Review corrections (2026-10-16)
+
+The list options carry the venue's `timeZone`; both list time columns use it, independently of
+the browser's zone. Back cancels pending reads but leaves `active` under the parent's control,
+so declining a navigation request keeps the page usable. Bills switch their paid projection from
+received bill payments to linked tenders when the sale is settled. An issued, unsettled projection
+is tested with synthetic `not_applicable` invoice data; this does not claim the till can issue
+that invoice through its currently disabled F1 action. Existing writers remain unchanged.

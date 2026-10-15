@@ -1,5 +1,11 @@
 # A425 — the till's top bar in priority order, "Transfers" for short
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> the till's modal search and header placement described below. Find a bill stays in More and
+> opens Bills/Transactions with server paging; collection receives a fresh selected bill.
+> Historical receipts open by sale ID. Use that plan for the current search and collection contract.
+
+
 Source: lane B queue item A425 (owner, 2026-10-08 ~15:05, on A395's #1435 open point): "maybe it's a
 question of putting the highest priority items to the left, so they stand the best chance of
 remaining on the top [bar]. transfers will be less used. also we don't need the full 'departmental
