@@ -58,3 +58,54 @@ it("refuses a job state outside the list", async () => {
     ),
   ).rejects.toThrow(/content_suggestion_jobs_state_ck/);
 });
+
+it.each([
+  { fixField: "es", fixWrong: null, fixRight: null },
+  { fixField: null, fixWrong: "Pan", fixRight: null },
+  { fixField: null, fixWrong: null, fixRight: "Pa" },
+  { fixField: "es", fixWrong: "Pan", fixRight: null },
+  { fixField: "es", fixWrong: null, fixRight: "Pa" },
+  { fixField: null, fixWrong: "Pan", fixRight: "Pa" },
+])("refuses a fix with some of its three columns set: %o", async (fix) => {
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      tx.insert(contentSuggestions).values({ kind: "unit", itemId: "u3", language: "es", ...fix }),
+    ),
+  ).rejects.toThrow(/content_suggestions_fix_ck/);
+});
+
+it("refuses a named suggestion without a language", async () => {
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      tx
+        .insert(contentSuggestions)
+        .values({ kind: "unit", itemId: "u4", language: null, text: "Kilo", expected: "{}" }),
+    ),
+  ).rejects.toThrow(/content_suggestions_text_language_ck/);
+});
+
+it("accepts a whole fix, a placeholder and a named suggestion", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(contentSuggestions).values([
+      {
+        kind: "unit",
+        itemId: "u5",
+        language: "es",
+        fixField: "es",
+        fixWrong: "Pan",
+        fixRight: "Pa",
+      },
+      {
+        kind: "unit",
+        itemId: "u5",
+        language: null,
+        fixField: "internal",
+        fixWrong: "Kilo",
+        fixRight: "Kilogram",
+        placeholder: true,
+      },
+      { kind: "unit", itemId: "u6", language: "ca", text: "Quilo", expected: "{}" },
+    ]);
+    expect(await tx.select().from(contentSuggestions)).toHaveLength(3);
+  });
+});

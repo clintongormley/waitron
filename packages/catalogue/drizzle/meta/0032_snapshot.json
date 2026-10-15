@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "23242c57-9acd-4b22-a0a1-3dc7876d3718",
+  "id": "cc926c3f-26ff-4fe1-842b-d02d844f3f8b",
   "prevId": "6922bcbb-2741-4292-a268-28bcb14ba8e9",
   "tables": {
     "content_languages": {
@@ -1969,6 +1969,14 @@
         "content_suggestions_name_ck": {
           "name": "content_suggestions_name_ck",
           "value": "\"content_suggestions\".\"text\" is null or \"content_suggestions\".\"expected\" is not null"
+        },
+        "content_suggestions_fix_ck": {
+          "name": "content_suggestions_fix_ck",
+          "value": "(\"content_suggestions\".\"fix_field\" is null) = (\"content_suggestions\".\"fix_wrong\" is null) and (\"content_suggestions\".\"fix_field\" is null) = (\"content_suggestions\".\"fix_right\" is null)"
+        },
+        "content_suggestions_text_language_ck": {
+          "name": "content_suggestions_text_language_ck",
+          "value": "\"content_suggestions\".\"text\" is null or \"content_suggestions\".\"language\" is not null"
         }
       }
     }

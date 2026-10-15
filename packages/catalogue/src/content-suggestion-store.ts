@@ -267,11 +267,14 @@ export async function listContentSuggestions(
   const live = await liveByRef(tx, config.defaultLanguage, [...refs.values()], context);
   const byLanguage = new Map<string, TranslationRef[]>();
   for (const row of rows)
-    if (row.text !== null && row.language !== null && live.has(keyOf(row)))
-      byLanguage.set(row.language, [
-        ...(byLanguage.get(row.language) ?? []),
+    if (row.text !== null && live.has(keyOf(row))) {
+      // A row with text has a language (content_suggestions_text_language_ck).
+      const textLanguage = row.language!;
+      byLanguage.set(textLanguage, [
+        ...(byLanguage.get(textLanguage) ?? []),
         { kind: row.kind, id: row.itemId },
       ]);
+    }
   const tokens = new Map<string, string>();
   for (const [textLanguage, languageRefs] of byLanguage)
     for (const [key, entry] of await liveByRef(tx, textLanguage, languageRefs, context))
@@ -287,7 +290,7 @@ export async function listContentSuggestions(
       language: row.language,
       text: row.text,
       placeholder: row.placeholder,
-      // The store writes the three fix columns together, from one correction.
+      // The three fix columns are set together or not at all (content_suggestions_fix_ck).
       fix:
         row.fixField === null
           ? null

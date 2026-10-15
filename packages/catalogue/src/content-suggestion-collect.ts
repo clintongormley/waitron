@@ -422,10 +422,9 @@ export async function pruneSuggestions(
   const gone = rows
     .filter((row) => {
       const gap = gaps.get(suggestionRef({ kind: row.kind, id: row.itemId }));
+      // A row with text has a language (content_suggestions_text_language_ck).
       return (
-        !gap ||
-        gap.missing.size === 0 ||
-        (row.text !== null && !gap.missing.has(row.language ?? ""))
+        !gap || gap.missing.size === 0 || (row.text !== null && !gap.missing.has(row.language!))
       );
     })
     .map((row) => row.id);

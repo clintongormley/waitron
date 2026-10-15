@@ -40,7 +40,9 @@ CREATE TABLE `content_suggestions` (
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`job_id`) REFERENCES `content_suggestion_jobs`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "content_suggestions_kind_ck" CHECK("content_suggestions"."kind" in ('product', 'variant', 'option_list', 'option_label', 'extra_list', 'menu', 'section', 'included_menu', 'unit')),
-	CONSTRAINT "content_suggestions_name_ck" CHECK("content_suggestions"."text" is null or "content_suggestions"."expected" is not null)
+	CONSTRAINT "content_suggestions_name_ck" CHECK("content_suggestions"."text" is null or "content_suggestions"."expected" is not null),
+	CONSTRAINT "content_suggestions_fix_ck" CHECK(("content_suggestions"."fix_field" is null) = ("content_suggestions"."fix_wrong" is null) and ("content_suggestions"."fix_field" is null) = ("content_suggestions"."fix_right" is null)),
+	CONSTRAINT "content_suggestions_text_language_ck" CHECK("content_suggestions"."text" is null or "content_suggestions"."language" is not null)
 );
 --> statement-breakpoint
 CREATE INDEX `content_suggestions_language_idx` ON `content_suggestions` (`language`);--> statement-breakpoint

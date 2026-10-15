@@ -116,6 +116,14 @@ export const contentSuggestions = table(
     index("content_suggestions_job_idx").on(t.jobId),
     check("content_suggestions_kind_ck", enumCheck(t.kind)),
     check("content_suggestions_name_ck", sql`${t.text} is null or ${t.expected} is not null`),
+    check(
+      "content_suggestions_fix_ck",
+      sql`(${t.fixField} is null) = (${t.fixWrong} is null) and (${t.fixField} is null) = (${t.fixRight} is null)`,
+    ),
+    check(
+      "content_suggestions_text_language_ck",
+      sql`${t.text} is null or ${t.language} is not null`,
+    ),
   ],
 );
 
