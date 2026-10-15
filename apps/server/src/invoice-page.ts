@@ -71,6 +71,8 @@ function wrap(text: string, available: number, size: number): string[] {
   return lines;
 }
 
+type TextStyle = { size: number; bold: boolean; centered: boolean };
+
 interface Columns {
   /** The widest units cell the units column holds; a wider one takes a line of its own. */
   unitsRoom: number;
@@ -79,6 +81,7 @@ interface Columns {
   itemWidth: number;
   priceRight: number;
   amountRight: number;
+  contentRight: number;
 }
 
 /** Measured over every table in the document, so a table continuing after a line lines up with the first. */
@@ -102,6 +105,7 @@ function columnsFor(tables: readonly ReceiptTable[]): Columns {
     itemWidth: itemRight - itemLeft,
     priceRight,
     amountRight,
+    contentRight,
   };
 }
 
@@ -136,26 +140,6 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     y = MARGIN;
     for (let count = 0; count < strandedRules; count++) rule();
   };
-  const text = (
-    value: string,
-    x: number,
-    available: number,
-    { size, bold, centered }: { size: number; bold: boolean; centered: boolean },
-  ): void => {
-    const height = (LINE_HEIGHT * size) / BODY_SIZE;
-    for (const line of wrap(value, available, size)) {
-      room(height);
-      pages.at(-1)!.elements.push({
-        kind: "text",
-        text: line,
-        x: centered ? (INVOICE_PAGE_WIDTH - width(line, size)) / 2 : x,
-        y,
-        size,
-        bold,
-      });
-      y += height;
-    }
-  };
   const place = (
     page: InvoicePage,
     at: number,
@@ -166,6 +150,18 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   ): void => {
     if (value !== "") page.elements.push({ kind: "text", text: value, x, y: at, size, bold });
   };
+  const textLines = (lines: readonly string[], x: number, style: TextStyle): void => {
+    const { size, bold, centered } = style;
+    const height = (LINE_HEIGHT * size) / BODY_SIZE;
+    for (const line of lines) {
+      room(height);
+      const left = centered ? (INVOICE_PAGE_WIDTH - width(line, size)) / 2 : x;
+      place(pages.at(-1)!, y, line, left, size, bold);
+      y += height;
+    }
+  };
+  const text = (value: string, x: number, available: number, style: TextStyle): void =>
+    textLines(wrap(value, available, style.size), x, style);
   const placeRight = (
     page: InvoicePage,
     at: number,
@@ -200,8 +196,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     }
     placeRight(page, top, row.price, columns.priceRight, BODY_SIZE, bold);
     placeRight(page, top, row.amount, columns.amountRight, BODY_SIZE, bold);
-    if (withRate)
-      placeRight(page, top, row.rate ?? "", INVOICE_PAGE_WIDTH - MARGIN, BODY_SIZE, bold);
+    if (withRate) placeRight(page, top, row.rate ?? "", columns.contentRight, BODY_SIZE, bold);
   };
   for (const element of document.elements) {
     const previousWasRule = afterRule;
@@ -268,7 +263,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         const besideLast =
           captionLines.length > 0 &&
           width(captionLines.at(-1)!, size) + size + width(element.amount, size) <= available;
-        text(element.caption, x, available, { size, bold, centered: false });
+        textLines(captionLines, x, { size, bold, centered: false });
         const height = (LINE_HEIGHT * size) / BODY_SIZE;
         if (besideLast) y -= height;
         else room(height);
