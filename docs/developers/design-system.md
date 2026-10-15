@@ -288,7 +288,7 @@ themes, that each text colour is 4.5:1 or more on its fill, that the five fills 
 `prefers-color-scheme` blocks give the same values as the explicit themes.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
-badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
+badge when some open alert is a warning and none is an error. Text on it uses `--wt-color-on-warning`.
 
 `--wt-color-highlight` is the background of matched text in a search result, and
 `--wt-color-on-highlight` its text colour:

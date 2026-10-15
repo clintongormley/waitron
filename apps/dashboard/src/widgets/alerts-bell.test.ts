@@ -79,7 +79,7 @@ describe("dashboard-alerts-bell", () => {
     expect(q(el, "wt-count-badge")!.getAttribute("tone")).toBe("notice");
   });
 
-  it("counts open alerts, red when any is an error and amber otherwise, and says the count", async () => {
+  it("counts open alerts, red when any is an error and amber when any is a warning, and says the count", async () => {
     setLocale("en-GB");
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
       alerts: [event("1", "warning"), event("2", "warning")],
