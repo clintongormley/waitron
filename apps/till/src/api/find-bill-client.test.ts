@@ -177,3 +177,40 @@ describe("Find a bill client", () => {
     },
   );
 });
+it("reads a historical receipt by sale ID with the caller's cancellation signal", async () => {
+  const receipt = { invoiceNumber: "A/91", total: "12.10", lines: [], qr: "stored-qr" };
+  const fetcher = vi.fn<typeof fetch>(async () => response(receipt));
+  const api = new TillApi("", fetcher),
+    signal = new AbortController().signal;
+  expect(api.getTransactionReceipt).toBeTypeOf("function");
+  expect(await api.getTransactionReceipt("sale/id", { signal })).toEqual(receipt);
+  expect(fetcher.mock.calls[0]).toEqual([
+    "/api/transactions/sale%2Fid/receipt",
+    { method: "GET", credentials: "include", signal },
+  ]);
+});
+it.each([undefined, "en-GB"])(
+  "requests a historical duplicate with optional language %s",
+  async (language) => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }));
+    const api = new TillApi("", fetcher);
+    expect(api.reprintTransaction).toBeTypeOf("function");
+    expect(await api.reprintTransaction("sale/id", language)).toBeUndefined();
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe("/api/transactions/sale%2Fid/reprint");
+    expect(init!.method).toBe("POST");
+    expect(JSON.parse(String(init!.body))).toEqual(language === undefined ? {} : { language });
+  },
+);
+it("keeps a historical reprint refusal as a failed action", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () =>
+    response({ error: { code: "device.forbidden_action", params: { action: "reprint" } } }, 403),
+  );
+  const api = new TillApi("", fetcher);
+  expect(api.reprintTransaction).toBeTypeOf("function");
+  await expect(api.reprintTransaction("sale")).rejects.toMatchObject({
+    code: "device.forbidden_action",
+    action: "reprint",
+    status: 403,
+  });
+});

@@ -3463,6 +3463,23 @@ export class TillApi {
     return this.#request("/api/find-bill/options", "GET", undefined, options.signal);
   }
 
+  getTransactionReceipt(saleId: string, options: ReadOptions = {}): Promise<TillSaleResult> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/receipt`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  async reprintTransaction(saleId: string, language?: string): Promise<void> {
+    await this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/reprint`,
+      "POST",
+      language === undefined ? {} : { language },
+    );
+  }
+
   /** Free a table that needs clearing → `POST /api/tables/:tableId/cleared`. A table that does not
    * need it is left as it is; rejects `table.not_found`. */
   async markTableCleared(tableId: string): Promise<void> {

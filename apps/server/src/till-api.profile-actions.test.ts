@@ -45,6 +45,8 @@ import {
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
  * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
+ * | GET /api/transactions/:saleId/receipt | session only; no profile action | transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
+ * | POST /api/transactions/:saleId/reprint | print-receipt | reprint; transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | GET /api/clock/state                                    | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on state" |
  * | POST /api/clock/in                                      | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on in" |
  * | POST /api/clock/out                                     | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on out" |
