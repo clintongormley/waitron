@@ -702,8 +702,8 @@ export class ContentTranslationsDialog extends LitElement {
     if (this.#leave) void this.#leave.request({ scopes: [this], reason: "navigation", proceed });
     else proceed();
   }
-  #name(language: string): string {
-    return languageDisplayName(language, currentLocale());
+  #name(language: string, standalone = true): string {
+    return languageDisplayName(language, currentLocale(), standalone);
   }
   #heldColumns?: { key: string; value: DataTableColumn<TranslationTarget>[] };
   #columns(): DataTableColumn<TranslationTarget>[] {
@@ -758,7 +758,7 @@ export class ContentTranslationsDialog extends LitElement {
     const found = this.model!.suggestionFor(row);
     if (!found) return nothing;
     const key = `${row.kind}-${row.id}`;
-    return html`${found.stale ? html`<span part="translation-meta" data-test=${`stale-${key}`}>${t("suggestions.stale")}</span>` : nothing}${found.placeholder ? html`<span part="translation-meta" data-test=${`placeholder-${key}`}>${t("suggestions.placeholder")}</span>` : nothing}${found.fixes.map((fix) => html`<span part="translation-meta" data-test=${`fix-${key}-${fix.field}`}>${fix.field === "internal" ? fill("suggestions.fix_internal", { wrong: fix.wrong, right: fix.right }) : fill("suggestions.fix_language", { language: this.#name(fix.field), wrong: fix.wrong, right: fix.right })}</span>`)}`;
+    return html`${found.stale ? html`<span part="translation-meta" data-test=${`stale-${key}`}>${t("suggestions.stale")}</span>` : nothing}${found.placeholder ? html`<span part="translation-meta" data-test=${`placeholder-${key}`}>${t("suggestions.placeholder")}</span>` : nothing}${found.fixes.map((fix) => html`<span part="translation-meta" data-test=${`fix-${key}-${fix.field}`}>${fix.field === "internal" ? fill("suggestions.fix_internal", { wrong: fix.wrong, right: fix.right }) : fill("suggestions.fix_language", { language: this.#name(fix.field, false), wrong: fix.wrong, right: fix.right })}</span>`)}`;
   }
   #reviewCell(row: TranslationTarget) {
     const current = this.model!.current(row);

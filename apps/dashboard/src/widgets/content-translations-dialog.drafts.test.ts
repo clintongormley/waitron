@@ -558,7 +558,7 @@ describe("Translate all notes", () => {
     );
     expect(q(el, "[data-test=fix-product-one-en]")!.textContent!.trim()).toBe(
       fill("suggestions.fix_language", {
-        language: languageDisplayName("en", currentLocale()),
+        language: languageDisplayName("en", currentLocale(), false),
         wrong: "Croquetes",
         right: "Croquettes",
       }),

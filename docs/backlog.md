@@ -1130,6 +1130,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
   `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
 
+- **The translations dialog capitalises a language name mid-sentence in Spanish in two older
+  places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
+  accessible label `content_gaps.table` ("Sin traducir al Inglés"): both call `languageDisplayName`
+  without `standalone=false` (`apps/dashboard/src/widgets/content-translations-dialog.ts`). Fixing
+  them changes existing test assertions.
+
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
   default content language, under every receipt-language key, before it gets there
