@@ -185,7 +185,7 @@ import {
   zonesOf,
 } from "./floor-revision.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
-import type { AttendanceRecorder } from "./attendance-capture.js";
+import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -2801,7 +2801,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               later = { slips: { mergedInto: new Map<string, string>() }, before };
             }
             const slipsLater = later?.slips;
-            const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
+            const acted = await act(
+              tx,
+              sendCfg,
+              partyId,
+              tableId,
+              { ...command, slipsLater },
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
+            );
             await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
             if (merge !== null) {
               const held = merge.moving === tableId ? merge.target : merge.moving;
@@ -3645,6 +3654,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
         const split = await splitBill(tx, cfg, billId, transfers, command);
         await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
+        await captureKitchenActivity(
+          tx,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+          personId,
+          [billId, split.billId],
+        );
         return split;
       });
       return c.json(result);
@@ -3663,7 +3680,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
-        return mergeBills(tx, cfg, intoBillId, fromBillId, command);
+        await mergeBills(tx, cfg, intoBillId, fromBillId, command);
+        await captureKitchenActivity(
+          tx,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+          personId,
+          [intoBillId, fromBillId],
+        );
       });
       return c.body(null, 204);
     }),
@@ -3682,7 +3707,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
-        return transferItems(tx, cfg, fromBillId, toBillId, transfers, command);
+        await transferItems(tx, cfg, fromBillId, toBillId, transfers, command);
+        await captureKitchenActivity(
+          tx,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+          personId,
+          [fromBillId, toBillId],
+        );
       });
       return c.body(null, 204);
     }),

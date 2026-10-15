@@ -6,6 +6,7 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
@@ -136,14 +137,18 @@ export async function saveDraft(
     }
     draftId = newId();
     await tx.insert(orderDrafts).values({ id: draftId, partyId, ownerId: operatorId });
-    await recordDraftEvents(tx, {
-      draftId,
-      kind: "created",
-      fromPerson: null,
-      toPerson: operatorId,
-      actorId: operatorId,
-      detail: {},
-    });
+    await recordDraftEvents(
+      tx,
+      attendance === undefined ? undefined : { recorder: attendance, at },
+      {
+        draftId,
+        kind: "created",
+        fromPerson: null,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
   } else {
     draftId = draft.id;
     await tx
@@ -214,7 +219,7 @@ export async function takeOverDraft(
       ...(own === undefined ? {} : { state: "discarded" as const }),
     })
     .where(eq(orderDrafts.id, draft.id));
-  await recordDraftEvents(tx, {
+  await recordDraftEvents(tx, attendance === undefined ? undefined : { recorder: attendance, at }, {
     draftId: draft.id,
     kind: "taken_over",
     fromPerson: draft.ownerId,
@@ -233,7 +238,14 @@ export async function takeOverDraft(
     at,
   );
   if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
-  await addDiscardedDraft(tx, draft.id, own, operatorId, operatorId);
+  await addDiscardedDraft(
+    tx,
+    draft.id,
+    own,
+    operatorId,
+    operatorId,
+    attendance === undefined ? undefined : { recorder: attendance, at },
+  );
   return readOpenDraft(tx, cfg, partyId, own.id);
 }
 
@@ -248,6 +260,7 @@ export async function moveDraftsToParty(
   fromPartyId: string,
   intoPartyId: string,
   operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const moving = await openDraftsOn(tx, fromPartyId);
   if (moving.length === 0) return;
@@ -276,7 +289,14 @@ export async function moveDraftsToParty(
     absorbed.map((draft) => draft.id),
   );
   for (const draft of absorbed) {
-    await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, operatorId);
+    await addDiscardedDraft(
+      tx,
+      draft.id,
+      held.get(draft.ownerId)!,
+      draft.ownerId,
+      operatorId,
+      attendance,
+    );
   }
 }
 
@@ -296,6 +316,7 @@ export async function discardPartyDrafts(
   );
   await recordDraftEvents(
     tx,
+    attendance === undefined ? undefined : { recorder: attendance.recorder, at },
     ...open.map((draft) => ({
       draftId: draft.id,
       kind: "discarded" as const,
@@ -400,14 +421,18 @@ export async function submitDraft(
           ...(emptied ? { state: "submitted" as const } : {}),
         })
         .where(eq(orderDrafts.id, id));
-      await recordDraftEvents(tx, {
-        draftId: id,
-        kind: "submitted",
-        fromPerson: operatorId,
-        toPerson: operatorId,
-        actorId: operatorId,
-        detail: { groupIds: placed.groups.map((group) => group.id) },
-      });
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance, at },
+        {
+          draftId: id,
+          kind: "submitted",
+          fromPerson: operatorId,
+          toPerson: operatorId,
+          actorId: operatorId,
+          detail: { groupIds: placed.groups.map((group) => group.id) },
+        },
+      );
       await captureDraft(
         tx,
         attendance,
@@ -653,8 +678,9 @@ async function addDiscardedDraft(
   into: { id: string; revision: number },
   ownerId: string,
   actorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
-  await recordDraftEvents(tx, {
+  await recordDraftEvents(tx, attendance, {
     draftId: fromDraftId,
     kind: "discarded",
     fromPerson: ownerId,
@@ -684,8 +710,31 @@ async function personName(tx: Transaction, personId: string): Promise<string> {
 
 type DraftEvent = typeof orderDraftEvents.$inferInsert;
 
-async function recordDraftEvents(tx: Transaction, ...events: DraftEvent[]): Promise<void> {
-  await tx.insert(orderDraftEvents).values(events);
+async function recordDraftEvents(
+  tx: Transaction,
+  attendance: { recorder: AttendanceRecorder; at: string } | undefined,
+  ...events: DraftEvent[]
+): Promise<void> {
+  const saved = await tx.insert(orderDraftEvents).values(events).returning();
+  if (attendance === undefined) return;
+  for (const event of saved) {
+    const orders = await tx
+      .selectDistinct({ locationId: workingOrders.locationId })
+      .from(workingOrders)
+      .innerJoin(orderDrafts, eq(orderDrafts.partyId, workingOrders.partyId))
+      .where(eq(orderDrafts.id, event.draftId));
+    if (orders.length !== 1) continue;
+    await attendance.recorder(tx, {
+      source: "draft",
+      key: `event:${event.id}`,
+      personId: event.actorId,
+      locationId: orders[0]!.locationId,
+      kind: "order",
+      at: attendance.at,
+      offsetMinutes: 0,
+      outcome: "qualified",
+    });
+  }
 }
 
 /**

@@ -84,9 +84,14 @@ too. The command tests check their original location after the bill's stored loc
 and one instant shared with the basket edit or adjustment. Move a bill and Split a table now snapshot
 their arriving-group events under the admitted mover at the trusted command instant. The tests check
 that a refused snapshot rolls back the move and that a later location change preserves the original
-activity. Held and fired arrivals share the supplied instant. Draft-event snapshots,
-the remaining source-command classifications, restore-path qualification and
-final branch checks remain open; part 3 is unfinished.
+activity. Held and fired arrivals share the supplied instant. Draft creation, takeover, submission
+and discard also retain their natural event snapshots, including an absorbed draft when parties
+combine. Bill-line splits, merges and transfers capture both affected bills under the admitted
+worker at one trusted instant. Party names, bill-request flags and group reminder timing do not
+extend attendance as order or payment activity. Database-content restore checks restart discovery
+before processing and retain the original chain plus question and reminder identities. These checks
+keep the destination's identity and skip fiscal restore hooks. Branch review and final delivery
+checks remain open; part 3 is unfinished.
 
 My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
 closure/questions, corrections, hours and the export/access screens. The period-read cost and the

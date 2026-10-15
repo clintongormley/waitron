@@ -102,11 +102,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 3. **Finish the working-time record** (A10, under _Working time and staff_). Till clocking and
    breaks are built. End-of-day closure and questions, corrections, own hours and the export
-   surfaces remain in parts 3–6. The part-3 branch now captures direct group commands, legacy prep
-   and reporting an already placed bill as unpaid. Course releases and group moves that empty a group
-   also snapshot their derived events. Draft submissions, basket edits and held-line cancellations
-   capture their group events too. Remaining event snapshots and restore checks precede branch
-   review. My hours is omitted until part 5 supplies its screen.
+   surfaces remain in parts 3–6. The part-3 branch captures draft and group events, including derived
+   events, and bill-line splits, merges and transfers. Its database-content restore checks retain
+   the original chain and restart discovery before processing. Branch review and delivery checks
+   remain. My hours is omitted until part 5 supplies its screen.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
@@ -4577,8 +4576,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   retain rollback, replay, unchanged-command and device-only controls; a group spanning two bills
   records each affected bill at one trusted instant. Move a bill and Split a table now snapshot their
   arriving-group events; their new tests check the admitted mover, trusted instant, rollback on
-  capture refusal and retained location. Remaining work includes draft-event snapshots,
-  source-command classification, restore-path qualification and final branch checks.
+  capture refusal and retained location. Draft creation, takeover, submission and discard now keep
+  their natural event snapshots, including drafts absorbed when parties combine. Bill-line splits,
+  merges and transfers capture both bills at one admitted worker's trusted instant. Party names,
+  bill-request flags and group reminder timing do not become order or payment activity. Restoring
+  database contents restarts discovery and retains one automatic finish, question and reminder
+  identity; this check keeps the destination's identity and does not exercise fiscal restore hooks.
+  Branch review and final delivery checks remain.
   Left: end-of-day discovery and questions (part 3), correction screens (part 4), hours screens
   (part 5), and PDF/CSV plus representatives' access (part 6). The
   [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the legal

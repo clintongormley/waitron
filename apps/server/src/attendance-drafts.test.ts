@@ -72,6 +72,17 @@ function save(draft?: Draft, recorder: AttendanceRecorder | undefined = recordAt
 const operations = () =>
   suite.db.select().from(attendanceOperationFacts).orderBy(attendanceOperationFacts.sequence);
 
+async function eventKey(
+  draftId: string,
+  kind: "created" | "taken_over" | "submitted" | "discarded",
+) {
+  const rows = await suite.db
+    .select()
+    .from(orderDraftEvents)
+    .where(eq(orderDraftEvents.draftId, draftId));
+  return `event:${rows.find((event) => event.kind === kind)!.id}`;
+}
+
 describe("accepted draft attendance capture", () => {
   it("Finish table captures the discard under its acting worker", async () => {
     const draft = await save();
@@ -86,12 +97,14 @@ describe("accepted draft attendance capture", () => {
       ),
     ).toEqual({ state: "closed" });
     expect((await operations()).map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
+      [await eventKey(draft.id, "created"), OPERATOR, v.cfg.locationId, "2026-01-05T09:00:00.000Z"],
       [
         `${draft.id}:${draft.revision}:save`,
         OPERATOR,
         v.cfg.locationId,
         "2026-01-05T09:00:00.000Z",
       ],
+      [await eventKey(draft.id, "discarded"), other, v.cfg.locationId, "2026-01-05T14:00:00.000Z"],
       [
         `${draft.id}:${draft.revision + 1}:discard`,
         other,
@@ -135,6 +148,13 @@ describe("accepted draft attendance capture", () => {
       (await operations()).map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
     ).toEqual([
       [
+        await eventKey(first.id, "created"),
+        OPERATOR,
+        v.cfg.locationId,
+        "2026-01-05T09:00:00.000Z",
+        "qualifying",
+      ],
+      [
         `${first.id}:${first.revision}:save`,
         OPERATOR,
         v.cfg.locationId,
@@ -161,7 +181,9 @@ describe("accepted draft attendance capture", () => {
       takeOverDraft(tx, v.cfg, partyId, first.id, other, taken.revision, recordAttendanceFact),
     );
     expect((await operations()).map((r) => [r.key, r.personId, r.at])).toEqual([
+      [await eventKey(first.id, "created"), OPERATOR, "2026-01-05T09:00:00.000Z"],
       [`${first.id}:${first.revision}:save`, OPERATOR, "2026-01-05T09:00:00.000Z"],
+      [await eventKey(first.id, "taken_over"), other, "2026-01-05T12:00:00.000Z"],
       [`${first.id}:${taken.revision}:take-over`, other, "2026-01-05T12:00:00.000Z"],
     ]);
   });
@@ -186,8 +208,10 @@ describe("accepted draft attendance capture", () => {
     expect(await operations()).toEqual(before);
     const [groupEvent] = await suite.db.select().from(orderGroupEvents);
     expect(before.map((r) => [r.key, r.at])).toEqual([
+      [await eventKey(first.id, "created"), "2026-01-05T09:00:00.000Z"],
       [`${first.id}:${first.revision}:save`, "2026-01-05T09:00:00.000Z"],
       [`group:${groupEvent!.id}`, "2026-01-05T12:00:00.000Z"],
+      [await eventKey(first.id, "submitted"), "2026-01-05T12:00:00.000Z"],
       [`${first.id}:${first.revision + 1}:submit`, "2026-01-05T12:00:00.000Z"],
     ]);
   });
@@ -209,12 +233,14 @@ describe("accepted draft attendance capture", () => {
     );
     expect(await operations()).toEqual(before);
     expect(before.map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
+      [await eventKey(first.id, "created"), OPERATOR, v.cfg.locationId, "2026-01-05T09:00:00.000Z"],
       [
         `${first.id}:${first.revision}:save`,
         OPERATOR,
         v.cfg.locationId,
         "2026-01-05T09:00:00.000Z",
       ],
+      [await eventKey(first.id, "discarded"), other, v.cfg.locationId, "2026-01-05T14:00:00.000Z"],
       [
         `${first.id}:${first.revision + 1}:discard`,
         other,

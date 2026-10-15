@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { billPaymentRefunds, billPayments, devices, newId, withTransaction } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  devices,
+  newId,
+  orderDraftEvents,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, persons, sessions, startManagementSession } from "@waitron/identity";
@@ -133,6 +140,13 @@ describe("till attendance recorder admission", () => {
           .filter((r) => r.source === "draft")
           .map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
       ).toEqual([
+        [
+          `event:${(await suite.db.select().from(orderDraftEvents).where(eq(orderDraftEvents.draftId, draft.id))).find((event) => event.kind === "discarded")!.id}`,
+          OPERATOR,
+          v.cfg.locationId,
+          "2026-10-14T13:00:00.000Z",
+          "qualifying",
+        ],
         [
           `${draft.id}:${draft.revision + 1}:discard`,
           OPERATOR,
@@ -379,6 +393,12 @@ describe("till attendance recorder admission", () => {
       ]),
     ).toEqual([
       ["session", expect.any(String), OPERATOR, "2026-10-14T12:00:00.000Z"],
+      [
+        "draft",
+        `event:${(await suite.db.select().from(orderDraftEvents).where(eq(orderDraftEvents.draftId, draft.id)))[0]!.id}`,
+        OPERATOR,
+        "2026-10-14T13:00:00.000Z",
+      ],
       ["draft", `${draft.id}:${draft.revision}:save`, OPERATOR, "2026-10-14T13:00:00.000Z"],
     ]);
   });
