@@ -1865,3 +1865,14 @@ pnpm --filter @waitron/till exec vitest run src/till-app.attendance.test.ts \
 ```
 
 The controls removed one guard at a time; the command above runs the restored behavior.
+
+
+## Finished browser probes can still be lint inputs
+
+During A585-6 on 2026-10-15, the normal pre-push hook's `pnpm lint` scanned two untracked
+Playwright `.mjs` probes under `.superpowers/sdd/` and reported browser globals such as `document`
+and `window` as undefined inside their page callbacks. Git ignored the directory, and
+`pnpm exec prettier --file-info <probe.html>` reported `ignored: true`; neither excluded its
+JavaScript from root ESLint. Archiving the finished QA workspace outside the checkout and removing
+it kept the visual receipts without adding lint exceptions. A package-only lint pass had not
+scanned those root-level probe files.
