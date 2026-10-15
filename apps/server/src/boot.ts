@@ -183,7 +183,7 @@ import {
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
-import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
@@ -2030,11 +2030,7 @@ async function bootServer(
     },
     log,
   );
-  // Must match the context `mountCatalogueApi` gives the translations routes.
-  const translationContext = {
-    fallbackLanguage: venueLocale,
-    required: contentLanguageRules.required,
-  };
+  const translationContext = translationContextFor({ venueLocale, contentLanguageRules });
   const suggestionRunner = cloudConnection
     ? createContentSuggestionRunner({
         db,

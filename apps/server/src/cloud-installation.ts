@@ -257,7 +257,6 @@ export function pendingRequest(
     body,
   };
 }
-/** What a 403 `revoked` from any machine-signed call leaves in the saved lifecycle. */
 export function markRevoked(c: CloudInstallationState): void {
   c.revoked = true;
   c.unavailable = false;
