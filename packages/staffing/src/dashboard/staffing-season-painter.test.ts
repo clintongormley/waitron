@@ -55,6 +55,13 @@ async function settle(el: StaffingSeasonPainter) {
 const root = (el: StaffingSeasonPainter) => el.shadowRoot!;
 const frame = (el: StaffingSeasonPainter) =>
   root(el).querySelector<HTMLElementTagNameMap["painter-frame"]>("painter-frame")!;
+/** The frame sends painter-close from wt-modal's wt-close, which the browser fires on the next
+ *  rendered frame, so a test waits for it rather than for a timer. */
+function closed(painter: StaffingSeasonPainter) {
+  return new Promise<void>((resolve) =>
+    frame(painter).addEventListener("painter-close", () => resolve(), { once: true }),
+  );
+}
 const grid = (el: StaffingSeasonPainter) => root(el).querySelector<StaffingGrid>("staffing-grid")!;
 const byTest = (el: StaffingSeasonPainter, test: string) =>
   root(el).querySelector<HTMLElement>(`[data-test="${test}"]`);
@@ -374,7 +381,9 @@ it("a refusal with no field shows the code's message", async () => {
 
 it("✕ returns to the month at the address's area", async () => {
   const { painter, open } = await mount({ area: "department:dep-bar" });
+  const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+  await close;
   await vi.waitFor(() =>
     expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12", area: "department:dep-bar" }),
   );
@@ -382,7 +391,9 @@ it("✕ returns to the month at the address's area", async () => {
 
 it("✕ without an area in the address returns to the month alone", async () => {
   const { painter, open } = await mount();
+  const close = closed(painter);
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
+  await close;
   await vi.waitFor(() => expect(open).toHaveBeenCalledWith("staffing", { month: "2026-12" }));
 });
 

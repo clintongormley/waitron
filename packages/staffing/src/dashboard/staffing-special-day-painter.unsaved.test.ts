@@ -61,6 +61,13 @@ async function choose(decision: "keep" | "discard") {
 }
 const frame = (painter: StaffingSpecialDayPainter) =>
   painter.shadowRoot!.querySelector<HTMLElementTagNameMap["painter-frame"]>("painter-frame")!;
+/** The frame sends painter-close from wt-modal's wt-close, which the browser fires on the next
+ *  rendered frame, so a test waits for it rather than for a timer. */
+function closed(painter: StaffingSpecialDayPainter) {
+  return new Promise<void>((resolve) =>
+    frame(painter).addEventListener("painter-close", () => resolve(), { once: true }),
+  );
+}
 const grid = (painter: StaffingSpecialDayPainter) =>
   painter.shadowRoot!.querySelector<StaffingGrid>("staffing-grid")!;
 const frameButton = (painter: StaffingSpecialDayPainter, test: string) =>
@@ -112,8 +119,10 @@ it.each(["dismiss", "cancel"])(
     expect(frame(painter).open).toBe(true);
     expect(grid(painter).days.get("eve")).toBeNull();
     expect(app.open).not.toHaveBeenCalled();
+    const close = closed(painter);
     frameButton(painter, button).click();
     await choose("discard");
+    await close;
     await expect.poll(() => app.open.mock.calls.length).toBe(1);
     expect(app.open).toHaveBeenCalledWith("staffing", { month: "2026-12" });
     expect(grid(painter).days.get("eve")).toEqual([headChef]);
@@ -122,7 +131,9 @@ it.each(["dismiss", "cancel"])(
 
 it("closes without asking when nothing changed", async () => {
   const painter = await mount();
+  const close = closed(painter);
   frameButton(painter, "cancel").click();
+  await close;
   await expect.poll(() => app.open.mock.calls.length).toBe(1);
   expect(question().open).toBe(false);
 });
