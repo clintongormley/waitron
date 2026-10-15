@@ -1,4 +1,34 @@
 export { WORKFORCE_MIGRATIONS } from "./migrations.js";
+export {
+  attendanceDayWork,
+  attendanceSourceState,
+  attendanceOperationFacts,
+  attendanceQuestions,
+  attendanceMail,
+} from "./schema/attendance.js";
+export { enqueueAttendanceDay } from "./attendance-state.js";
+export {
+  claimAttendanceMail,
+  expireAttendanceMailClaims,
+  reportAttendanceMail,
+} from "./attendance-mail.js";
+export { processAttendanceDay } from "./end-of-day.js";
+export { retireObsoleteRotaQuestions } from "./attendance-rota.js";
+export {
+  upsertAttendanceQuestion,
+  listPendingAttendanceQuestions,
+  mergeAttendanceQuestions,
+} from "./attendance-questions.js";
+export type {
+  ActivityKind,
+  AttendanceSource,
+  AttendanceFact,
+  AttendanceDay,
+  AttendanceQuestion,
+  PlannedAttendanceShift,
+  AttendanceDayInput,
+  AttendanceDayResult,
+} from "./attendance-types.js";
 export { employments } from "./schema/employments.js";
 export {
   timeEntries,

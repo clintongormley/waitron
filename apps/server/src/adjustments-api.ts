@@ -149,6 +149,9 @@ export function mountAdjustmentsApi(
             { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
             deps.venueLocale,
             attempts,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
           );
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);

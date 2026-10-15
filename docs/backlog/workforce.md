@@ -48,14 +48,30 @@ your time record open. If the finish was recorded but logout fails, the till sta
 Clocked out. A lost clock response is checked with a fresh own-state read before another write is
 available. An open shift in another location is shown with clock actions unavailable.
 
-Part 3 has a reviewed [end-of-day plan](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
-Its implementation remains open: attributed activity capture, completed-day processing, durable worker
-questions and missing-time reminders. The plan records conservative handling of conflicting historical
-clock events; planning alone has added no attendance behavior.
+Part 3 connects the [end-of-day checks](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
+A forgotten clock-out closes at your last later sign-in, order, accepted payment or break activity
+in that business day. Without later activity, the shift stays open and a question records the missing
+time. A published rota shift without a clock-in, or till work without a clock-in, also creates a
+question. Automatic ends count immediately; their questions wait for the response screens in part 4.
+Your clock state and clock actions reconcile an overdue open day before returning the current state.
 
-My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
-closure/questions, corrections, hours and the export/access screens. The period-read cost and the
-correction waiting-list follow-ups remain in the backlog.
+Missing-time reminders use the venue's email setup and your saved address. Without an address,
+the question remains without email. SMTP acceptance and uncertain delivery suppress another
+automatic attempt; an explicit refusal waits fifteen minutes before retrying. SMTP acceptance does
+not establish inbox delivery. Restoring an older backup can lose the sent marker and permit a
+duplicate. Background checks run only on a writable primary with workforce enabled. They catch up
+after restart and wait for source discovery before processing an old day. Database-content restore
+checks retain the chain, questions and reminder identity; these keep the destination's identity and
+skip fiscal restore hooks.
+
+Order and draft snapshots retain the admitted worker, original location and command instant.
+Payment callbacks qualify the original request instead of creating later human activity. Party
+names, bill-request flags and group reminder timing do not count as order or payment activity.
+
+My hours stays with part 5; no placeholder is offered. Parts 4–6 remain open: answering questions,
+corrections, hours and the export/access screens. The period-read cost and correction waiting-list
+follow-ups remain below.
+
 
 ## A10 period read cost
 

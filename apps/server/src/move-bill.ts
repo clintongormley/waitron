@@ -33,6 +33,7 @@ import {
   serviceModesMatch,
   unsentDishLines,
 } from "./working-order.js";
+import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
 export type MoveTarget = { tableId: string } | { counter: { zoneId: string | null } };
@@ -79,6 +80,7 @@ export async function moveBill(
   billId: string,
   to: MoveTarget,
   options: MoveBillOptions,
+  attendance?: OrderAttendance,
 ): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
   const destination = await resolveDestination(tx, cfg, path.partyId, to, options);
@@ -86,6 +88,13 @@ export async function moveBill(
   if (path.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
   if (path.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
   const open = path.status === "open";
+  const activity =
+    attendance === undefined
+      ? undefined
+      : {
+          recorder: attendance.recorder,
+          at: attendance.clock.now().instant.toISOString(),
+        };
 
   // Read before the bill's party changes, which clears the party's main bill when it is this bill.
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
@@ -117,7 +126,14 @@ export async function moveBill(
       tableId: destination.tableId,
     });
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
-    ({ held } = await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers));
+    ({ held } = await groupArrivingDishes(
+      tx,
+      partyId,
+      billId,
+      options.operatorId,
+      firers,
+      activity,
+    ));
     if (open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId, merged: false };
   } else {
@@ -125,7 +141,14 @@ export async function moveBill(
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
-    ({ held } = await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers));
+    ({ held } = await groupArrivingDishes(
+      tx,
+      partyId,
+      billId,
+      options.operatorId,
+      firers,
+      activity,
+    ));
     const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&

@@ -96,6 +96,9 @@ import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
+
+export type BillPaymentDeps = TillSaleDeps & { attendance?: AttendanceRecorder };
 
 /**
  * Payments taken against a bill before its invoice exists (bill payments design): the balance they
@@ -1022,6 +1025,7 @@ async function beginBillPayment(
   operator: { personId: string; sessionId: string },
   state: "received" | "pending",
   now: Date,
+  attendance?: AttendanceRecorder,
 ): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
   // Before the replay lookup: a retry the route would now refuse is refused too.
   await assertStillSignedIn(tx, {
@@ -1081,7 +1085,44 @@ async function beginBillPayment(
       .insert(billPaymentLines)
       .values(items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })));
   }
+  await captureBillPaymentAttendance(
+    tx,
+    payment!,
+    attendance,
+    state === "received" ? "qualified" : "pending",
+    {
+      locationId: cfg.locationId,
+      at: now.toISOString(),
+    },
+  );
   return { payment: payment!, total };
+}
+
+async function captureBillPaymentAttendance(
+  tx: Transaction,
+  payment: PaymentRow,
+  attendance: AttendanceRecorder | undefined,
+  outcome: "pending" | "qualified" | "refused",
+  requested?: { locationId: string; at: string },
+): Promise<void> {
+  if (attendance === undefined) return;
+  const [order] =
+    requested === undefined
+      ? await tx
+          .select({ locationId: workingOrders.locationId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, payment.workingOrderId))
+      : [requested];
+  await attendance(tx, {
+    source: "bill-payment",
+    key: payment.id,
+    personId: payment.requestedBy,
+    locationId: order!.locationId,
+    kind: "payment",
+    at: requested?.at ?? payment.createdAt,
+    offsetMinutes: 0,
+    outcome,
+  });
 }
 
 /**
@@ -1089,7 +1130,7 @@ async function beginBillPayment(
  * at once, and when it leaves the bill fully paid the same transaction issues the invoice.
  */
 export async function takeBillPayment(
-  deps: TillSaleDeps,
+  deps: BillPaymentDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
@@ -1106,6 +1147,7 @@ export async function takeBillPayment(
       operator,
       "received",
       receivedAt,
+      deps.attendance,
     );
     if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
     const { payment } = begun;
@@ -1148,7 +1190,7 @@ export function billPaymentIsLive(db: Database, billPaymentId: string): boolean 
 }
 
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
-export type ReaderBillPaymentDeps = TillSaleDeps & {
+export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
   /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
   readerRef?: string;
@@ -1180,7 +1222,7 @@ export function attestationColumns(attestation: Attestation | undefined) {
  */
 export async function completeBillPayment(
   tx: Transaction,
-  deps: TillSaleDeps,
+  deps: BillPaymentDeps,
   cfg: TillConfig,
   billPaymentId: string,
   receivedAt: Date,
@@ -1195,6 +1237,7 @@ export async function completeBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
+  await captureBillPaymentAttendance(tx, payment!, deps.attendance, "qualified");
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
@@ -1214,6 +1257,7 @@ export async function failBillPayment(
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
+  attendance?: AttendanceRecorder,
 ): Promise<PaymentRow> {
   const [payment] = await tx
     .update(billPayments)
@@ -1224,6 +1268,7 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
+  await captureBillPaymentAttendance(tx, payment!, attendance, "refused");
   return payment!;
 }
 
@@ -1278,6 +1323,7 @@ export async function takeReaderBillPayment(
         operator,
         "pending",
         deps.clock.now().instant,
+        deps.attendance,
       );
       if ("replay" in started) {
         return {
@@ -1307,7 +1353,7 @@ export async function takeReaderBillPayment(
     } catch (error) {
       if (isAppError(error) && REFUSED_START.has(error.code)) {
         await withTransaction(deps.db, (tx) =>
-          failBillPayment(tx, payment.id, deps.clock.now().instant),
+          failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
         );
       }
       throw error;
@@ -1322,7 +1368,13 @@ export async function takeReaderBillPayment(
       if (!NOT_CHARGED.has(result.state)) {
         return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
       }
-      const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant);
+      const failed = await failBillPayment(
+        tx,
+        payment.id,
+        deps.clock.now().instant,
+        undefined,
+        deps.attendance,
+      );
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",

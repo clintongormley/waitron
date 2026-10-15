@@ -6,6 +6,7 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
@@ -29,6 +30,7 @@ import { screenNote } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
 export interface DraftLine {
@@ -101,7 +103,9 @@ export async function saveDraft(
   partyId: string,
   operatorId: string,
   input: SaveDraftInput,
+  attendance?: AttendanceRecorder,
 ): Promise<Draft> {
+  const at = nowIso();
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
   let previous: DraftLine[] = [];
@@ -133,14 +137,18 @@ export async function saveDraft(
     }
     draftId = newId();
     await tx.insert(orderDrafts).values({ id: draftId, partyId, ownerId: operatorId });
-    await recordDraftEvents(tx, {
-      draftId,
-      kind: "created",
-      fromPerson: null,
-      toPerson: operatorId,
-      actorId: operatorId,
-      detail: {},
-    });
+    await recordDraftEvents(
+      tx,
+      attendance === undefined ? undefined : { recorder: attendance, at },
+      {
+        draftId,
+        kind: "created",
+        fromPerson: null,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
   } else {
     draftId = draft.id;
     await tx
@@ -167,7 +175,18 @@ export async function saveDraft(
     draftId,
     normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
   );
-  return readOpenDraft(tx, cfg, partyId, draftId, offers);
+  const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
+  await captureDraft(
+    tx,
+    attendance,
+    cfg.locationId,
+    operatorId,
+    saved.id,
+    saved.revision,
+    "save",
+    at,
+  );
+  return saved;
 }
 
 /**
@@ -183,7 +202,9 @@ export async function takeOverDraft(
   draftId: string,
   operatorId: string,
   revision: number,
+  attendance?: AttendanceRecorder,
 ): Promise<Draft> {
+  const at = nowIso();
   const draft = await requireDraft(tx, foldIfUuid(draftId), partyId);
   await requireOpenParty(tx, partyId);
   if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, partyId, draft.id);
@@ -198,7 +219,7 @@ export async function takeOverDraft(
       ...(own === undefined ? {} : { state: "discarded" as const }),
     })
     .where(eq(orderDrafts.id, draft.id));
-  await recordDraftEvents(tx, {
+  await recordDraftEvents(tx, attendance === undefined ? undefined : { recorder: attendance, at }, {
     draftId: draft.id,
     kind: "taken_over",
     fromPerson: draft.ownerId,
@@ -206,8 +227,25 @@ export async function takeOverDraft(
     actorId: operatorId,
     detail: {},
   });
+  await captureDraft(
+    tx,
+    attendance,
+    cfg.locationId,
+    operatorId,
+    draft.id,
+    draft.revision + 1,
+    "take-over",
+    at,
+  );
   if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
-  await addDiscardedDraft(tx, draft.id, own, operatorId, operatorId);
+  await addDiscardedDraft(
+    tx,
+    draft.id,
+    own,
+    operatorId,
+    operatorId,
+    attendance === undefined ? undefined : { recorder: attendance, at },
+  );
   return readOpenDraft(tx, cfg, partyId, own.id);
 }
 
@@ -222,6 +260,7 @@ export async function moveDraftsToParty(
   fromPartyId: string,
   intoPartyId: string,
   operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const moving = await openDraftsOn(tx, fromPartyId);
   if (moving.length === 0) return;
@@ -250,7 +289,14 @@ export async function moveDraftsToParty(
     absorbed.map((draft) => draft.id),
   );
   for (const draft of absorbed) {
-    await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, operatorId);
+    await addDiscardedDraft(
+      tx,
+      draft.id,
+      held.get(draft.ownerId)!,
+      draft.ownerId,
+      operatorId,
+      attendance,
+    );
   }
 }
 
@@ -259,7 +305,9 @@ export async function discardPartyDrafts(
   tx: Transaction,
   partyId: string,
   operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; locationId: string },
 ): Promise<void> {
+  const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
   if (open.length === 0) return;
   await discardDrafts(
@@ -268,6 +316,7 @@ export async function discardPartyDrafts(
   );
   await recordDraftEvents(
     tx,
+    attendance === undefined ? undefined : { recorder: attendance.recorder, at },
     ...open.map((draft) => ({
       draftId: draft.id,
       kind: "discarded" as const,
@@ -277,6 +326,20 @@ export async function discardPartyDrafts(
       detail: {},
     })),
   );
+  if (attendance !== undefined) {
+    for (const draft of open) {
+      await captureDraft(
+        tx,
+        attendance.recorder,
+        attendance.locationId,
+        operatorId,
+        draft.id,
+        draft.revision + 1,
+        "discard",
+        at,
+      );
+    }
+  }
 }
 
 export interface SubmitDraftInput extends PartyCommandArgs {
@@ -305,7 +368,9 @@ export async function submitDraft(
   partyId: string,
   draftId: string,
   input: SubmitDraftInput,
+  attendance?: AttendanceRecorder,
 ): Promise<SubmittedDraft> {
+  const at = nowIso();
   const { operatorId } = input;
   const id = foldIfUuid(draftId);
   const groups = input.groups.map(({ lineIds, release }) => ({
@@ -330,16 +395,22 @@ export async function submitDraft(
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
-      const placed = await placeGroups(tx, cfg, partyId, {
-        groups: groups.map(({ lineIds, release }) => {
-          const inGroup = new Set(lineIds);
-          return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
-        }),
-        joinGroupId,
-        operatorId,
-        billId: input.billId,
-        revisionMoved: true,
-      });
+      const placed = await placeGroups(
+        tx,
+        cfg,
+        partyId,
+        {
+          groups: groups.map(({ lineIds, release }) => {
+            const inGroup = new Set(lineIds);
+            return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
+          }),
+          joinGroupId,
+          operatorId,
+          billId: input.billId,
+          revisionMoved: true,
+        },
+        attendance === undefined ? undefined : { recorder: attendance, at },
+      );
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
       await tx
@@ -350,18 +421,54 @@ export async function submitDraft(
           ...(emptied ? { state: "submitted" as const } : {}),
         })
         .where(eq(orderDrafts.id, id));
-      await recordDraftEvents(tx, {
-        draftId: id,
-        kind: "submitted",
-        fromPerson: operatorId,
-        toPerson: operatorId,
-        actorId: operatorId,
-        detail: { groupIds: placed.groups.map((group) => group.id) },
-      });
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance, at },
+        {
+          draftId: id,
+          kind: "submitted",
+          fromPerson: operatorId,
+          toPerson: operatorId,
+          actorId: operatorId,
+          detail: { groupIds: placed.groups.map((group) => group.id) },
+        },
+      );
+      await captureDraft(
+        tx,
+        attendance,
+        cfg.locationId,
+        operatorId,
+        id,
+        draft.revision + 1,
+        "submit",
+        at,
+      );
       return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
     },
     cfg.madeHereSink,
   );
+}
+
+async function captureDraft(
+  tx: Transaction,
+  recorder: AttendanceRecorder | undefined,
+  locationId: string,
+  personId: string,
+  draftId: string,
+  revision: number,
+  action: "save" | "take-over" | "submit" | "discard",
+  at: string,
+): Promise<void> {
+  await recorder?.(tx, {
+    source: "draft",
+    key: `${draftId}:${revision}:${action}`,
+    personId,
+    locationId,
+    kind: "order",
+    at,
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 /** Each party's open drafts holding at least one line, oldest first, in one query. */
@@ -571,8 +678,9 @@ async function addDiscardedDraft(
   into: { id: string; revision: number },
   ownerId: string,
   actorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
-  await recordDraftEvents(tx, {
+  await recordDraftEvents(tx, attendance, {
     draftId: fromDraftId,
     kind: "discarded",
     fromPerson: ownerId,
@@ -602,8 +710,31 @@ async function personName(tx: Transaction, personId: string): Promise<string> {
 
 type DraftEvent = typeof orderDraftEvents.$inferInsert;
 
-async function recordDraftEvents(tx: Transaction, ...events: DraftEvent[]): Promise<void> {
-  await tx.insert(orderDraftEvents).values(events);
+async function recordDraftEvents(
+  tx: Transaction,
+  attendance: { recorder: AttendanceRecorder; at: string } | undefined,
+  ...events: DraftEvent[]
+): Promise<void> {
+  const saved = await tx.insert(orderDraftEvents).values(events).returning();
+  if (attendance === undefined) return;
+  for (const event of saved) {
+    const orders = await tx
+      .selectDistinct({ locationId: workingOrders.locationId })
+      .from(workingOrders)
+      .innerJoin(orderDrafts, eq(orderDrafts.partyId, workingOrders.partyId))
+      .where(eq(orderDrafts.id, event.draftId));
+    if (orders.length !== 1) continue;
+    await attendance.recorder(tx, {
+      source: "draft",
+      key: `event:${event.id}`,
+      personId: event.actorId,
+      locationId: orders[0]!.locationId,
+      kind: "order",
+      at: attendance.at,
+      offsetMinutes: 0,
+      outcome: "qualified",
+    });
+  }
 }
 
 /**

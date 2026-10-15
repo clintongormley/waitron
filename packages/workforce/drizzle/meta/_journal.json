@@ -50,6 +50,13 @@
       "when": 1791967605312,
       "tag": "0006_a10_self_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792000312754,
+      "tag": "0007_attendance_state",
+      "breakpoints": true
     }
   ]
 }

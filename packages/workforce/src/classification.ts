@@ -25,6 +25,19 @@ export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("absences", "state", STATE),
   classify("availability", "state", STATE),
   classify("roster_versions", "state", STATE),
+  ...[
+    "attendance_day_work",
+    "attendance_source_state",
+    "attendance_operation_facts",
+    "attendance_questions",
+    "attendance_mail",
+  ].map((name) =>
+    classify(
+      name,
+      "state",
+      "attendance processing, questions and delivery state; copied with the venue",
+    ),
+  ),
 ];
 
 export const WORKFORCE_CHANGE_SOURCES: readonly ChangeSource[] = WORKFORCE_CLASSIFICATION.map(

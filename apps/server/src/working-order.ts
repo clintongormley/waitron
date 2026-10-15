@@ -159,6 +159,7 @@ import type {
   ZoneOffers,
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
@@ -231,11 +232,74 @@ export interface WorkingOrderDeps {
   db: Database;
 }
 
+export interface OrderAttendance {
+  recorder: AttendanceRecorder;
+  clock: TrustedClock;
+}
+
+export async function captureOrderEdit(
+  tx: Transaction,
+  attendance: OrderAttendance | undefined,
+  orderId: string,
+  personId: string | undefined,
+  locationId: string,
+  revision: number,
+  action:
+    | "park"
+    | "save"
+    | "line"
+    | "label"
+    | "discard"
+    | "invoice-choice"
+    | "receipt-language"
+    | "adjustment"
+    | "course"
+    | "send"
+    | "recall"
+    | "make-at",
+  at?: string,
+): Promise<void> {
+  if (attendance === undefined || personId === undefined) return;
+  await attendance.recorder(tx, {
+    source: "order",
+    key: `${orderId}:${revision}:${action}`,
+    personId,
+    locationId,
+    kind: "order",
+    at: at ?? attendance.clock.now().instant.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
+}
+
+export async function captureOrderService(
+  tx: Transaction,
+  attendance: (OrderAttendance & { personId: string }) | undefined,
+  orderId: string,
+  action: "course" | "send" | "recall" | "make-at",
+): Promise<void> {
+  if (attendance === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId, revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await captureOrderEdit(
+    tx,
+    attendance,
+    orderId,
+    attendance.personId,
+    order!.locationId,
+    order!.revision,
+    action,
+  );
+}
+
 /** `db` plus the fiscal backend and trusted clock that a path filing a sale needs. */
 export interface TillSaleDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
+  attendance?: AttendanceRecorder;
   /** Where a failure that must not undo the sale or attempt around it is logged. */
   log?: Logger;
 }
@@ -1238,6 +1302,7 @@ export async function parkOrder(
   deps: WorkingOrderDeps,
   cfg: OriginConfig,
   req: ParkOrderRequest,
+  attendance?: OrderAttendance,
 ): Promise<ParkOrderResult> {
   if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
@@ -1249,6 +1314,7 @@ export async function parkOrder(
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
       });
+      await captureOrderEdit(tx, attendance, req.id, req.operatorId, cfg.locationId, 0, "park");
       return { id: req.id, orderNumber };
     });
   } catch (error) {
@@ -1944,11 +2010,12 @@ export async function fireCourse(
   orderId: string,
   courseId: string,
   firer: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await requireCourse(tx, cfg, courseId);
-  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing);
-  await releaseHeld(
+  await fireHeldGroupsOfCourse(tx, cfg, orderId, courseId, firer, routing, attendance);
+  const released = await releaseHeld(
     tx,
     cfg,
     orderId,
@@ -1960,6 +2027,10 @@ export async function fireCourse(
     undefined,
     routing,
   );
+  if (released > 0)
+    await captureKitchenActivity(tx, attendance, "personId" in firer ? firer.personId : undefined, [
+      orderId,
+    ]);
 }
 
 /**
@@ -1993,7 +2064,7 @@ async function releaseHeld(
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   mark?: "FIRE",
   routing = routingOnce(tx, cfg, new Date()),
-): Promise<void> {
+): Promise<number> {
   const firedNow = routing.at.toISOString();
   const rerouted = await rerouteHeldAtRelease(tx, cfg, orderId, ticketScope, routing);
   const firedItems = await tx
@@ -2020,6 +2091,7 @@ async function releaseHeld(
     routing,
     rerouted,
   );
+  return firedItems.length + noRoute.lines.length;
 }
 
 /**
@@ -2087,6 +2159,7 @@ export async function sendLines(
   cfg: OriginConfig,
   tabId: string,
   lineNos: number[],
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
@@ -2168,6 +2241,8 @@ export async function sendLines(
     routing,
     rerouted,
   );
+  if (firedItems.length > 0 || noRoute.lines.length > 0)
+    await captureOrderService(tx, attendance, tabId, "send");
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -2202,6 +2277,7 @@ export async function recallLines(
   cfg: TillConfig,
   tabId: string,
   lineNos: number[],
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
   if (lineNos.length === 0) {
@@ -2269,6 +2345,7 @@ export async function recallLines(
     );
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
   await bumpRevision(tx, [tabId]);
+  if (recalled.length > 0) await captureOrderService(tx, attendance, tabId, "recall");
 }
 
 /**
@@ -2280,9 +2357,11 @@ export async function bumpCourseReady(
   cfg: TillConfig,
   orderId: string,
   courseId: string,
+  firer?: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   void cfg;
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set(advanceSet("ready"))
     .where(
@@ -2292,7 +2371,14 @@ export async function bumpCourseReady(
         ne(ticketItems.state, "ready"),
         isNotNull(ticketItems.firedAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    firer && "personId" in firer ? firer.personId : undefined,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /**
@@ -2305,9 +2391,11 @@ export async function markCourseAway(
   cfg: TillConfig,
   orderId: string,
   courseId: string,
+  firer?: Firer,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set({ awayAt: nowIso() })
     .where(
@@ -2317,7 +2405,14 @@ export async function markCourseAway(
         eq(ticketItems.state, "ready"),
         isNull(ticketItems.awayAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    firer && "personId" in firer ? firer.personId : undefined,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /**
@@ -2479,6 +2574,7 @@ export async function removeFromLine(
   target: VoidTarget,
   removed: number | null,
   operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
   const extra =
@@ -2564,7 +2660,13 @@ export async function removeFromLine(
       );
     if (extra !== null) await tellKitchenOfCancelledExtra(tx, cfg, tabId, extra);
     await assertBillInvariant(tx, [tabId]);
-    await partyAfterEdit(tx, tabId, target.groupId === null ? [] : [target.groupId], operatorId);
+    await partyAfterEdit(
+      tx,
+      tabId,
+      target.groupId === null ? [] : [target.groupId],
+      operatorId,
+      attendance,
+    );
     return;
   }
   const children = await tx
@@ -2578,7 +2680,7 @@ export async function removeFromLine(
     .where(eq(workingOrderLines.parentLineId, target.id));
   await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
   await assertBillInvariant(tx, [tabId]);
-  await partyAfterEdit(tx, tabId, [], operatorId);
+  await partyAfterEdit(tx, tabId, [], operatorId, attendance);
 }
 
 /**
@@ -2620,10 +2722,11 @@ export async function partyAfterEdit(
   orderId: string,
   leftGroups: readonly string[],
   operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const partyId = await partyOfOrder(tx, orderId);
   if (partyId === null) return;
-  await removeEmptiedHeldGroups(tx, partyId, leftGroups, operatorId);
+  await removeEmptiedHeldGroups(tx, partyId, leftGroups, operatorId, attendance);
   await bumpPartyRevision(tx, partyId);
 }
 
@@ -2778,13 +2881,18 @@ export async function setLineCourse(
   tabId: string,
   lineNo: number,
   courseId: string | null,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
   const [line] = await tx
-    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .select({
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      courseId: workingOrderLines.courseId,
+    })
     .from(workingOrderLines)
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
   if (line === undefined) {
@@ -2807,6 +2915,7 @@ export async function setLineCourse(
     .set({ courseId })
     .where(onDishesOrTheirExtras(tx, [line.id]));
   await bumpRevision(tx, [tabId]);
+  if (line.courseId !== courseId) await captureOrderService(tx, attendance, tabId, "course");
 }
 
 /** A dish line on a bill of a party, as a served command reads it. */
@@ -3015,8 +3124,9 @@ export async function markServed(
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, partyId, items, args, "line.served");
+  return changeServed(tx, cfg, partyId, items, args, "line.served", attendance);
 }
 
 /** Take back part or all of what was marked served on each named dish line, for a mis-tap. */
@@ -3026,8 +3136,9 @@ export async function unmarkServed(
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  return changeServed(tx, cfg, partyId, items, args, "line.unserved");
+  return changeServed(tx, cfg, partyId, items, args, "line.unserved", attendance);
 }
 
 async function changeServed(
@@ -3037,6 +3148,7 @@ async function changeServed(
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
   kind: "line.served" | "line.unserved",
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -3075,6 +3187,13 @@ async function changeServed(
         return { line, served: line.servedQuantity + (serving ? amount : -amount) };
       });
       await writeServed(tx, changes);
+      await captureKitchenActivity(
+        tx,
+        attendance,
+        args.operatorId,
+        changes.map((change) => change.line.workingOrderId),
+        `party:${partyId}:${args.submissionId}`,
+      );
       return { revision };
     },
     cfg.madeHereSink,
@@ -3092,6 +3211,7 @@ export async function markGroupServed(
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
+  attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
@@ -3108,11 +3228,16 @@ export async function markGroupServed(
         throw new AppError("group.not_found", { groupId });
       }
       lines.forEach(refuseUnreleased);
-      await writeServed(
+      const changes = lines
+        .filter((line) => line.servedQuantity < line.quantity)
+        .map((line) => ({ line, served: line.quantity }));
+      await writeServed(tx, changes);
+      await captureKitchenActivity(
         tx,
-        lines
-          .filter((line) => line.servedQuantity < line.quantity)
-          .map((line) => ({ line, served: line.quantity })),
+        attendance,
+        args.operatorId,
+        changes.map((change) => change.line.workingOrderId),
+        `party:${partyId}:${args.submissionId}`,
       );
       return { revision };
     },
@@ -3563,6 +3688,7 @@ export async function setOrderInvoiceChoice(
   orderId: string,
   request: InvoiceChoiceRequest,
   deliveryContext?: InvoiceChoiceDeliveryContext,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   if (request.invoiceType !== "F1" && request.invoiceType !== "F2") {
     throw new AppError("management.request_invalid", { field: "invoiceType" });
@@ -3605,6 +3731,15 @@ export async function setOrderInvoiceChoice(
         revision,
       })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    await captureOrderEdit(
+      tx,
+      attendance,
+      orderId,
+      attendance?.personId,
+      order.locationId,
+      revision,
+      "invoice-choice",
+    );
     return revision;
   });
 }
@@ -3619,6 +3754,7 @@ export async function setOrderReceiptLanguage(
   cfg: Pick<TillConfig, "nodeId">,
   orderId: string,
   request: { revision: number; language: unknown },
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
@@ -3634,6 +3770,15 @@ export async function setOrderReceiptLanguage(
       .update(workingOrders)
       .set({ receiptLocale: language, revision })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    await captureOrderEdit(
+      tx,
+      attendance,
+      orderId,
+      attendance?.personId,
+      order.locationId,
+      revision,
+      "receipt-language",
+    );
     return revision;
   });
 }
@@ -4559,12 +4704,13 @@ async function requireEditableOrder(
   tx: Transaction,
   orderId: string,
   revision: number,
-): Promise<{ label: string | null }> {
+): Promise<{ label: string | null; locationId: string }> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
       revision: workingOrders.revision,
       label: workingOrders.label,
+      locationId: workingOrders.locationId,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
@@ -4577,7 +4723,7 @@ async function requireEditableOrder(
       revision: order.revision,
     });
   }
-  return { label: order.label };
+  return { label: order.label, locationId: order.locationId };
 }
 
 /**
@@ -4852,7 +4998,8 @@ async function applyLineEdits(
     fresh: RequestedLine[];
   },
   operatorId: string | undefined,
-): Promise<{ changed: boolean }> {
+  attendance?: OrderAttendance,
+): Promise<{ changed: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, cfg, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
@@ -5144,6 +5291,11 @@ async function applyLineEdits(
   // one fired now, one held, as the lines' `kitchen` says, except units added beside an adjusted
   // line, which join that line's group. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
+  const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
+  const activity =
+    attendance === undefined || operatorId === undefined || !changed
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
   if (order.partyId !== null) {
     for (const as of pricedAs) {
       if (
@@ -5156,13 +5308,17 @@ async function applyLineEdits(
       }
       const actorId = requireOperator(operatorId);
       const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId);
-      await recordGroupEvent(tx, {
-        partyId: order.partyId,
-        groupId,
-        kind: "submitted",
-        actorId,
-        detail: { workingOrderId: orderId, release: as.kitchen },
-      });
+      await recordGroupEvent(
+        tx,
+        {
+          partyId: order.partyId,
+          groupId,
+          kind: "submitted",
+          actorId,
+          detail: { workingOrderId: orderId, release: as.kitchen },
+        },
+        activity,
+      );
       newGroups.set(as.kitchen, groupId);
     }
   }
@@ -5480,7 +5636,6 @@ async function applyLineEdits(
       );
   }
   await assertBillInvariant(tx, [orderId]);
-  const changed = changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0;
   if (changed) await refuseOrderOverSimplifiedLimit(tx, cfg, orderId, before);
   if (changed) {
     await partyAfterEdit(
@@ -5488,9 +5643,10 @@ async function applyLineEdits(
       orderId,
       plan.removed.flatMap((parent) => (parent.groupId === null ? [] : [parent.groupId])),
       operatorId,
+      activity,
     );
   }
-  return { changed };
+  return { changed, at: activity?.at };
 }
 
 /**
@@ -5621,9 +5777,10 @@ export async function setWorkingOrderLabel(
   db: Database,
   orderId: string,
   request: { label: string; revision: number },
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   return withTransaction(db, async (tx) => {
-    const { label } = await requireEditableOrder(tx, orderId, request.revision);
+    const { label, locationId } = await requireEditableOrder(tx, orderId, request.revision);
     const changed = label !== request.label;
     if (changed) {
       await tx
@@ -5631,7 +5788,18 @@ export async function setWorkingOrderLabel(
         .set({ label: request.label })
         .where(eq(workingOrders.id, orderId));
     }
-    return countEdit(tx, orderId, request.revision, changed);
+    const revision = await countEdit(tx, orderId, request.revision, changed);
+    if (changed)
+      await captureOrderEdit(
+        tx,
+        attendance,
+        orderId,
+        attendance?.personId,
+        locationId,
+        revision,
+        "label",
+      );
+    return revision;
   });
 }
 
@@ -5648,6 +5816,8 @@ export async function updateHeldOrder(
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
+  issue?: undefined,
+  attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -5655,6 +5825,7 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest & { operatorId: string },
   issue: IssueOnSave,
+  attendance?: OrderAttendance,
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -5662,9 +5833,10 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest,
   issue?: IssueOnSave,
+  attendance?: OrderAttendance,
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
-    const { label } = await requireEditableOrder(tx, id, req.revision);
+    const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
@@ -5706,13 +5878,14 @@ export async function updateHeldOrder(
         },
       });
     }
-    const { changed } = await applyLineEdits(
+    const { changed, at } = await applyLineEdits(
       tx,
       cfg,
       id,
       order,
       { edits, removed: order.parents.filter((parent) => !claimed.has(parent.id)), fresh },
       req.operatorId,
+      attendance,
     );
     const relabelled = (req.label ?? null) !== label;
     if (relabelled) {
@@ -5726,6 +5899,8 @@ export async function updateHeldOrder(
     if (issue !== undefined) {
       await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
     }
+    if (changed || relabelled)
+      await captureOrderEdit(tx, attendance, id, req.operatorId, locationId, revision, "save", at);
     return revision;
   });
 }
@@ -5744,8 +5919,9 @@ export async function updateOrderLine(
   patch: OrderLinePatch,
   revision: number,
   operatorId?: string,
+  attendance?: OrderAttendance,
 ): Promise<number> {
-  await requireEditableOrder(tx, orderId, revision);
+  const { locationId } = await requireEditableOrder(tx, orderId, revision);
   const order = await readEditableOrder(tx, cfg, orderId);
   const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
   if (line === undefined) {
@@ -5755,7 +5931,7 @@ export async function updateOrderLine(
   if (parent === undefined) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  const { changed } = await applyLineEdits(
+  const { changed, at } = await applyLineEdits(
     tx,
     cfg,
     orderId,
@@ -5777,8 +5953,12 @@ export async function updateOrderLine(
       fresh: [],
     },
     operatorId,
+    attendance,
   );
-  return countEdit(tx, orderId, revision, changed);
+  const saved = await countEdit(tx, orderId, revision, changed);
+  if (changed)
+    await captureOrderEdit(tx, attendance, orderId, operatorId, locationId, saved, "line", at);
+  return saved;
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
@@ -5786,11 +5966,16 @@ export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        locationId: workingOrders.locationId,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
@@ -5800,6 +5985,15 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
+    await captureOrderEdit(
+      tx,
+      attendance,
+      id,
+      attendance?.personId,
+      locked.locationId,
+      locked.revision,
+      "discard",
+    );
   });
 }
 
@@ -5840,7 +6034,7 @@ export async function placeOrder(
       .set({ sentAt: nowIso() })
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
-    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
+    await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
 
     if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
       await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
@@ -5933,6 +6127,31 @@ export async function issueUnpaidInvoice(
   return { saleId, fiscal, locale: language.locale, ...order };
 }
 
+async function captureOrderAmendment(
+  tx: Transaction,
+  attendance: AttendanceRecorder | undefined,
+  orderId: string,
+  amendmentId: string,
+  personId: string,
+  at: Date,
+): Promise<void> {
+  if (attendance === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await attendance(tx, {
+    source: "order",
+    key: amendmentId,
+    personId,
+    locationId: order!.locationId,
+    kind: "order",
+    at: at.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
+}
+
 /** An open order becomes placed, and its `order_placed` amendment is appended. */
 export async function markOrderPlaced(
   tx: Transaction,
@@ -5940,11 +6159,12 @@ export async function markOrderPlaced(
   cfg: OriginConfig,
   id: string,
   operatorId: string,
+  attendance?: AttendanceRecorder,
 ): Promise<void> {
   await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
 
   const now = clock.now();
-  await appendOrderAmendment(tx, {
+  const amendment = await appendOrderAmendment(tx, {
     workingOrderId: id,
     kind: "order_placed",
     actorId: operatorId,
@@ -5954,6 +6174,7 @@ export async function markOrderPlaced(
     eventAt: now.instant,
     eventOffsetMinutes: now.offsetMinutes,
   });
+  await captureOrderAmendment(tx, attendance, id, amendment.id, operatorId, now.instant);
 }
 
 /**
@@ -6034,7 +6255,7 @@ async function cancelPlaced(
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
 
     const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
+    const amendment = await appendOrderAmendment(tx, {
       workingOrderId: id,
       kind: "order_cancelled",
       actorId: operator.personId,
@@ -6044,6 +6265,14 @@ async function cancelPlaced(
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,
     });
+    await captureOrderAmendment(
+      tx,
+      deps.attendance,
+      id,
+      amendment.id,
+      operator.personId,
+      now.instant,
+    );
   });
 }
 
@@ -6055,6 +6284,7 @@ export async function sendToPrep(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
     const [order] = await tx
@@ -6072,6 +6302,8 @@ export async function sendToPrep(
       .orderBy(workingOrderLines.lineNo);
     // No sold-out check: a settled order's lines cannot be removed, so refusing would strand paid work.
     await fireLines(tx, cfg, id, firedLines);
+    if (firedLines.length > 0)
+      await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
   });
 }
 
@@ -6097,20 +6329,26 @@ export function handOverOrder(
   cfg: TillConfig,
   id: string,
   submissionId?: string,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  if (submissionId === undefined) return handOver(tx, cfg, id);
+  if (submissionId === undefined) return handOver(tx, cfg, id, attendance);
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: id },
     submissionId,
     "order.collect",
     { workingOrderId: id },
-    () => handOver(tx, cfg, id),
+    () => handOver(tx, cfg, id, attendance),
     cfg.madeHereSink,
   );
 }
 
-async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+async function handOver(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  attendance?: OrderAttendance & { personId: string },
+): Promise<void> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
@@ -6144,6 +6382,7 @@ async function handOver(tx: Transaction, cfg: TillConfig, id: string): Promise<v
     .update(workingOrders)
     .set({ collectedAt: nowIso() })
     .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
+  await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
 }
 
 /** The service modes in which a counter order is sent to the kitchen before it is paid. */
@@ -6360,6 +6599,7 @@ export async function advanceTicketItem(
   cfg: TillConfig,
   itemId: string,
   to: TicketState,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
   // Own string keys only: `hasOwn` converts its key, so ["preparing"] would otherwise match, and an
@@ -6380,7 +6620,7 @@ export async function advanceTicketItem(
         isNotNull(ticketItems.firedAt),
       ),
     )
-    .returning({ id: ticketItems.id });
+    .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId });
   if (updated.length === 0) {
     const [item] = await tx
       .select({ firedAt: ticketItems.firedAt })
@@ -6391,6 +6631,12 @@ export async function advanceTicketItem(
     }
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    attendance?.personId,
+    updated.map((row) => row.orderId),
+  );
 }
 
 /** Advance the fired items of one order at one station; held items are skipped. */
@@ -6400,9 +6646,10 @@ export async function advanceTicket(
   orderId: string,
   stationId: string,
   to: Exclude<TicketState, "queued">,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
-  await tx
+  const changed = await tx
     .update(ticketItems)
     .set(advanceSet(to))
     .where(
@@ -6412,7 +6659,14 @@ export async function advanceTicket(
         eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
         isNotNull(ticketItems.firedAt),
       ),
-    );
+    )
+    .returning({ orderId: ticketItems.workingOrderId });
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    attendance?.personId,
+    changed.map((row) => row.orderId),
+  );
 }
 
 /** The LIVE course row an item's snapshotted `course_id` names. Not filtered by `active`, so a course

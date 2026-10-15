@@ -2,6 +2,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { withTransaction, locations, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
@@ -11,6 +12,7 @@ import {
   listPendingSwaps,
   setAbsenceStatus,
   listPendingAbsences,
+  rosterVersions,
 } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -23,6 +25,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
 export interface WorkforceApiDeps {
   db: Database;
@@ -135,9 +138,11 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const body = await readJsonBody<{ locationId?: unknown; period?: unknown }>(c);
       const locationId = requireBodyUuid(body.locationId, "locationId");
       const period = requirePeriod(body.period, "period");
-      const versionId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.createRosterVersion(tx, { locationId, period }),
-      );
+      const versionId = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
+        const id = await backend.createRosterVersion(tx, { locationId, period });
+        await markAttendanceSourceChanged(tx, "rota", id);
+        return id;
+      });
       return c.json({ versionId }, 201);
     }),
   );
@@ -157,8 +162,8 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       );
       const endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       const role = requireNullableString(body.role, "role");
-      const shiftId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.addShift(tx, {
+      const shiftId = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
+        const id = await backend.addShift(tx, {
           versionId,
           personId,
           locationId,
@@ -167,8 +172,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           endsAt,
           endsOffsetMinutes,
           role,
-        }),
-      );
+        });
+        await markAttendanceSourceChanged(tx, "shift", id);
+        return id;
+      });
       return c.json({ shiftId }, 201);
     }),
   );
@@ -192,7 +199,11 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       if (body.endsOffsetMinutes !== undefined)
         patch.endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
-      await gated(sessionId, SCHEDULE_PERMISSION, (tx) => backend.updateShift(tx, patch));
+      await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
+        await markAttendanceSourceChanged(tx, "shift", shiftId);
+        await backend.updateShift(tx, patch);
+        await markAttendanceSourceChanged(tx, "shift", shiftId);
+      });
       return c.body(null, 204);
     }),
   );
@@ -201,7 +212,11 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
-      await gated(sessionId, SCHEDULE_PERMISSION, (tx) => backend.removeShift(tx, { shiftId }));
+      await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
+        await markAttendanceSourceChanged(tx, "shift", shiftId);
+        await backend.removeShift(tx, { shiftId });
+        await markAttendanceSourceChanged(tx, "shift", shiftId);
+      });
       return c.body(null, 204);
     }),
   );
@@ -223,11 +238,27 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const ruleset = await resolveWorkTimeRuleset(tx, {
           locationId: version.locationId,
         });
-        return backend.publishRoster(tx, {
+        const previous = await tx
+          .select({ id: rosterVersions.id })
+          .from(rosterVersions)
+          .where(
+            and(
+              eq(rosterVersions.locationId, version.locationId),
+              eq(rosterVersions.periodStart, version.periodStart),
+              eq(rosterVersions.periodEnd, version.periodEnd),
+              eq(rosterVersions.status, "published"),
+            ),
+          );
+        for (const row of previous) await markAttendanceSourceChanged(tx, "rota", row.id);
+        await markAttendanceSourceChanged(tx, "rota", versionId);
+        const breaches = await backend.publishRoster(tx, {
           versionId,
           publishedByPersonId: authorizedBy,
           ruleset,
         });
+        for (const row of previous) await markAttendanceSourceChanged(tx, "rota", row.id);
+        await markAttendanceSourceChanged(tx, "rota", versionId);
+        return breaches;
       });
       return c.json({ breaches });
     }),

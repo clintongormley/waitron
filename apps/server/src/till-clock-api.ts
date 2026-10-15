@@ -23,6 +23,7 @@ import {
 } from "./device-session.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { readTillClockState, type TillClockState } from "./till-clock-state.js";
+import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 
 export interface TillClockApiDeps {
   db: Database;
@@ -89,10 +90,12 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
       if (new URL(c.req.url).search !== "") invalid();
       const state = await withTransaction(deps.db, async (tx) => {
         await admit(tx, deps, session);
+        const at = deps.now();
+        await reconcileAttendanceBeforeClock(tx, { ...deps.cfg, personId: session.personId }, at);
         return readTillClockState(
           tx,
           { personId: session.personId, locationId: deps.cfg.locationId },
-          deps.now(),
+          at,
         );
       });
       return c.json(state);
@@ -105,19 +108,22 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
         const session = await requireSession(deps, c, { action: "clock-in" });
         const expectedEntryId = await expectedEntry(c);
         // Admission may change after authentication while this write waits for the venue lock.
-        const state = await withTransaction(deps.db, async (tx) => {
+        const result = await withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
           const at = deps.now();
+          await reconcileAttendanceBeforeClock(tx, { ...deps.cfg, personId: session.personId }, at);
           const before = await readTillClockState(
             tx,
             { personId: session.personId, locationId: deps.cfg.locationId },
             at,
           );
           if (before.lastEntryId !== expectedEntryId)
-            throw new AppError("attendance.state_changed", {});
-          return writeClock(tx, deps, session, action, before, at);
+            // Commit reconciliation even when its new end makes the submitted action stale.
+            return { error: new AppError("attendance.state_changed", {}) };
+          return { state: await writeClock(tx, deps, session, action, before, at) };
         });
-        return c.json(state);
+        if (result.error !== undefined) throw result.error;
+        return c.json(result.state);
       }),
     );
   }

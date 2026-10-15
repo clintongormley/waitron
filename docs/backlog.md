@@ -100,9 +100,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    layouts as fixed built-in screens, and redesign the screens afterwards; no new feature is built
    as a canvas card.
 
-3. **Finish the working-time record** (A10, under _Working time and staff_). Till clocking and
-   breaks are built. End-of-day closure and questions, corrections, own hours and the export
-   surfaces remain in parts 3–6. My hours is omitted until part 5 supplies its screen.
+3. **Finish the working-time record** (A10, under _Working time and staff_). Till clocking, breaks
+   and end-of-day checks are built. Answering pending questions and requesting corrections, own
+   hours and the export surfaces remain in parts 4–6. My hours is omitted until part 5 supplies
+   its screen.
 
 4. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
@@ -4556,19 +4557,20 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
   numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
 
-- **A10. Finish the working-time record, parts 3–6.** Till clocking and breaks are built from
+- **A10. Finish the working-time record, parts 4–6.** Till clocking and breaks are built from
   the reviewed [part-2 plan](superpowers/plans/2026-10-14-a10-2-till-clock-plan.md). An admitted
   person can clock themselves from a profile with `clock-in`: Clock in/Cancel at the first
   sign-in of the business day, then actions behind their name or in handheld More. Clock out
   locks the till and logs out; Log out alone leaves the attendance record open. New Counter
   and Handheld profiles enable clocking; existing profiles opt in through Device profiles.
-  My hours is omitted until part 5 supplies its screen.
-  Part 3 has a reviewed [end-of-day plan](superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md); implementation remains open.
-  Left: end-of-day discovery and questions (part 3), correction screens (part 4), hours screens
-  (part 5), and PDF/CSV plus representatives' access (part 6). The
-  [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the legal
-  basis checked on 12 Oct 2026 and the October 2025 draft it builds to. Owner rulings
-  (2026-10-14): automatic ends count immediately; only admins may self-approve, with a stored flag.
+  The [end-of-day checks](superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md) close forgotten
+  clock-outs at the last later activity, retain questions for missing times and automatic finishes,
+  and send missing-time reminders through the venue's email setup. Automatic ends count immediately;
+  only admins may self-approve a later correction, with a stored flag (owner, 2026-10-14).
+  Left: answering questions at sign-in and correction screens (part 4), My hours and manager hours
+  screens (part 5), and PDF/CSV plus representatives' access (part 6). My hours is omitted until
+  its screen exists. The [design](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md)
+  records the legal basis checked on 12 Oct 2026 and the October 2025 draft it builds to.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 - **Workforce period reads still load complete history.** Narrow them without losing late or
@@ -5423,10 +5425,16 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   keeps the machine's own loopback and can still meet the stall (how often was not measured), and a
   box's restore over a real network was not measured.
 
-- **The upgrade test overran its 165,500 ms deadline once in CI, on a branch that changed no
-  migration** (PR #1705, run 38607502363, job 116002045326, 2026-10-14). Its finished phases summed
+- **The upgrade test overran its 165,500 ms deadline in CI and a local pre-push run, on branches
+  that changed no migration.** In CI (PR #1705, run 38607502363, job 116002045326, 2026-10-14), its finished phases summed
   168,686 ms and none took 2 seconds; the four main runs before it took 81,898 to 122,555 ms.
-  Whether the runner or the walk was slow was not established.
+  Locally on 2026-10-14, A10-2's pre-push run reached 165,546 ms, with the current
+  `venue-service/0051_wakeful_loa` migrate phase at 386 ms. Its finished phases summed
+  131,521 ms; the longest took 1,350 ms. Lane F retained `receipts/a10-2-ci-fix-push.log`,
+  `receipts/a10-2-upgrade-ps-before.txt` and `receipts/a10-2-upgrade-deadline-probe.log`.
+  The snapshot before the isolated probe includes two A650 Codex review processes; the probe
+  passed in 62,597 ms. Neither that pass nor the later successful hook retry establishes
+  the cause of either deadline overrun.
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
@@ -6285,7 +6293,7 @@ partial scope; the detail for a live thread is in its area.
 | 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (_Payments and card readers_); payroll export (integrate-not-build)                                                       |
 | 14  | Bookings                     | Bookings-1, now the `@waitron/bookings` module (#270, #273)                                                                                                                                                                                                                                                                                                                                                                       | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits                                                                                            |
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
-| 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal                                                                                                                                                                                                                                                                                               | A10 parts 3–6: automatic closure/questions, corrections, hours and export screens; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
+| 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal                                                                                                                                                                                                                                                                                               | A10 parts 4–6: answering questions, corrections, hours and export screens; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
 | 18  | Menu/recipes/allergens       | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu schedule (publishing landed, #677); customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
@@ -6368,7 +6376,7 @@ while it holds decisions still open.
 | Spec                                                                                                                                                                                              | State                                                                                                                                                                      | Open work lives in                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [POS architecture](superpowers/specs/2026-07-18-pos-architecture-design.md)                                                                                                                       | the strategy; §2's sub-projects                                                                                                                                            | _What's built_                                                            |
-| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; till clocking and breaks built; A10 parts 3–6 open                                                                                                                                               | A10 and _Wages / labour cost (SP16)_ (_Working time and staff_)                 |
+| [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | partly built; till clocking, breaks and end-of-day checks built; A10 parts 4–6 open                                                                                                                                               | A10 and _Wages / labour cost (SP16)_ (_Working time and staff_)                 |
 | [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | _Payments and card readers_                                               |
 | [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan                                                                                                      | not started; parked; the plan predates SQLite and Vitest 4                                                                                                                 | _Later and parked_ (recipes depth)                                        |
 | [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | superseded by A366 slice 5 Part A (a device's pass screen and pass monitor)                                                                                                  | —                                                                         |

@@ -1,3 +1,5 @@
+import type { AttendanceRecorder } from "./attendance-capture.js";
+import { captureKitchenActivity } from "./attendance-capture.js";
 import { nowIso, unpaidDepartures } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
@@ -50,7 +52,13 @@ export interface RecordedDeparture {
  */
 export async function recordUnpaidDeparture(
   tx: Transaction,
-  deps: { db: Database; backend: FiscalBackend; clock: TrustedClock; log?: Logger },
+  deps: {
+    db: Database;
+    backend: FiscalBackend;
+    clock: TrustedClock;
+    log?: Logger;
+    attendance?: AttendanceRecorder;
+  },
   cfg: DeviceRequestConfig,
   partyId: string,
   req: UnpaidDepartureRequest,
@@ -118,7 +126,7 @@ export async function recordUnpaidDeparture(
     );
     saleOf.set(invoice.id, saleId);
     if (openIds.has(invoice.id)) {
-      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);
+      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId, deps.attendance);
     }
   }
   for (const id of owingIds) {
@@ -139,10 +147,26 @@ export async function recordUnpaidDeparture(
           deviceId: cfg.origin.deviceId,
         });
 
+  await captureKitchenActivity(
+    tx,
+    deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock: deps.clock },
+    operator.personId,
+    departing.filter((id) => !openIds.has(id)),
+    `unpaid-departure:${partyId}:${req.expectedPartyRevision}`,
+  );
+
   const empty = bills
     .filter((bill) => bill.status === "open" && bill.lines === 0)
     .map((bill) => bill.workingOrderId);
-  const closed = await closeParty(tx, partyId, empty, operator.personId);
+  const closed = await closeParty(
+    tx,
+    partyId,
+    empty,
+    operator.personId,
+    deps.attendance === undefined
+      ? undefined
+      : { recorder: deps.attendance, locationId: cfg.locationId },
+  );
   return { ...closed, departures };
 }
 

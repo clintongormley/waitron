@@ -57,7 +57,19 @@ import {
   toVatBreakdown,
   unsentDishLines,
 } from "./working-order.js";
-import type { GrossOrder, LineExtras, OrderLineIdentity, TillSaleDeps } from "./working-order.js";
+import type {
+  GrossOrder,
+  LineExtras,
+  OrderLineIdentity,
+  TillSaleDeps as BaseTillSaleDeps,
+} from "./working-order.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
+import {
+  beginIntegratedAttendance,
+  finishIntegratedAttendance,
+  pendingIntegratedAttendanceKey,
+} from "./attendance-integrated.js";
+type TillSaleDeps = BaseTillSaleDeps & { attendance?: AttendanceRecorder };
 import { issuancePass } from "./issuance-pass.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
@@ -82,6 +94,30 @@ import {
 export interface TillMoneyOperator {
   personId: string;
   sessionId: string;
+}
+
+async function captureWholePayment(
+  tx: Transaction,
+  attendance: AttendanceRecorder | undefined,
+  orderId: string,
+  personId: string | undefined,
+  at: Date | undefined,
+): Promise<void> {
+  if (attendance === undefined || personId === undefined || at === undefined) return;
+  const [order] = await tx
+    .select({ locationId: workingOrders.locationId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  await attendance(tx, {
+    source: "whole-payment",
+    key: orderId,
+    personId,
+    locationId: order!.locationId,
+    kind: "payment",
+    at: at.toISOString(),
+    offsetMinutes: 0,
+    outcome: "qualified",
+  });
 }
 
 type WriteAdmission = (tx: Transaction) => Promise<void>;
@@ -601,6 +637,8 @@ async function runPayWorkingOrder(
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
 
+      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+
       refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
 
       // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
@@ -646,7 +684,7 @@ async function runPayWorkingOrder(
       }
 
       // A walk-up is created with no party.
-      return fireAndFileSale(
+      const ticket = await fireAndFileSale(
         tx,
         deps,
         cfg,
@@ -656,6 +694,8 @@ async function runPayWorkingOrder(
         locked?.partyId ?? null,
         operatorId,
       );
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+      return ticket;
     });
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
@@ -1076,9 +1116,15 @@ async function payIntegrated(
         workingOrderId: req.id,
       });
       if (captured !== undefined && captured.saleId === null) {
+        const attendanceKey = await pendingIntegratedAttendanceKey(
+          tx,
+          deps.attendance,
+          req.id,
+          deps.provider.provider,
+        );
         return outstanding !== undefined
-          ? { kind: "recover-settle" as const, captured, outstanding }
-          : { kind: "recover" as const, captured };
+          ? { kind: "recover-settle" as const, captured, outstanding, attendanceKey }
+          : { kind: "recover" as const, captured, attendanceKey };
       }
 
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
@@ -1088,13 +1134,26 @@ async function payIntegrated(
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
           // owes nothing.
           tipOf(cfg, req);
+          const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+          const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+          await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
           return {
             kind: "owes-nothing" as const,
-            ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
+            ticket,
           };
         }
         if (locked.status === "placed") onLive(PLACED_ATTEMPT);
-        return { kind: "settle" as const, outstanding };
+        const attendanceKey = await beginIntegratedAttendance(
+          tx,
+          deps.attendance,
+          {
+            id: req.id,
+            provider: deps.provider.provider,
+            personId: operatorId,
+          },
+          () => deps.clock.now().instant,
+        );
+        return { kind: "settle" as const, outstanding, attendanceKey };
       }
 
       // After the recovery above, so a till pressing Pay again to file a captured payment is never
@@ -1134,21 +1193,21 @@ async function payIntegrated(
       // malformed tip when tips are on. A placed order's dishes were sent when it was placed, and a
       // walk-up is created with no party.
       tipOf(cfg, req);
-      return {
-        kind: "owes-nothing" as const,
-        ticket: wasPlaced
-          ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
-          : await fireAndFileSale(
-              tx,
-              deps,
-              cfg,
-              req.id,
-              null,
-              order,
-              locked?.partyId ?? null,
-              operatorId,
-            ),
-      };
+      const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+      const ticket = wasPlaced
+        ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
+        : await fireAndFileSale(
+            tx,
+            deps,
+            cfg,
+            req.id,
+            null,
+            order,
+            locked?.partyId ?? null,
+            operatorId,
+          );
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+      return { kind: "owes-nothing" as const, ticket };
     }
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
@@ -1166,6 +1225,16 @@ async function payIntegrated(
     // Inside the transaction, so no release pass runs between a mark and its registration, and a
     // check of this order in any transaction after this one (`refusePlacedPaymentInFlight`, a
     // cancel's `paymentAttemptIsLive`) sees the attempt live until this call ends.
+    const attendanceKey = await beginIntegratedAttendance(
+      tx,
+      deps.attendance,
+      {
+        id: req.id,
+        provider: deps.provider.provider,
+        personId: operatorId,
+      },
+      () => deps.clock.now().instant,
+    );
     onLive(attemptAt ?? PLACED_ATTEMPT);
     return {
       kind: "collect" as const,
@@ -1173,6 +1242,7 @@ async function payIntegrated(
       identities: order.identities,
       wasPlaced,
       attemptAt,
+      attendanceKey,
     };
   });
 
@@ -1181,10 +1251,17 @@ async function payIntegrated(
   }
   // P2 is skipped entirely: the card was already charged.
   if (prepared.kind === "recover") {
-    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
+    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId, prepared.attendanceKey);
   }
   if (prepared.kind === "recover-settle") {
-    return finalizeSettleRecovery(deps, cfg, req, prepared.captured, prepared.outstanding);
+    return finalizeSettleRecovery(
+      deps,
+      cfg,
+      req,
+      prepared.captured,
+      prepared.outstanding,
+      prepared.attendanceKey,
+    );
   }
 
   // ---- P2 (no tx) ----
@@ -1211,6 +1288,11 @@ async function payIntegrated(
     throw error;
   }
   if (result.state !== "captured" && result.state !== "accepted_offline") {
+    if (result.state === "failed" || result.state === "network_unavailable") {
+      await withTransaction(deps.db, (tx) =>
+        finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
+      );
+    }
     // A timed-out reader leaves its payment `attempting`, which keeps the mark: the provider's
     // sweep may still capture it.
     await releasePaymentAttempt(deps, req.id, attemptAt);
@@ -1221,7 +1303,15 @@ async function payIntegrated(
   if (prepared.kind === "settle") {
     return {
       outcome: "captured",
-      ticket: await finalizeSettle(deps, cfg, req, prepared.outstanding, tip, result),
+      ticket: await finalizeSettle(
+        deps,
+        cfg,
+        req,
+        prepared.outstanding,
+        tip,
+        result,
+        prepared.attendanceKey,
+      ),
     };
   }
   const ticket = await finalizeCapture(
@@ -1234,6 +1324,7 @@ async function payIntegrated(
     result,
     operatorId,
     prepared.wasPlaced,
+    prepared.attendanceKey,
   );
   return { outcome: "captured", ticket };
 }
@@ -1392,6 +1483,7 @@ async function finalizeCapture(
   operatorId?: string,
   // True when the order was `placed` at P1.
   wasPlaced = false,
+  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
@@ -1464,6 +1556,7 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
       if (notSent !== null) {
         await raiseDishesNotSent(
           tx,
@@ -1525,6 +1618,7 @@ async function finalizeRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   operatorId?: string,
+  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -1623,6 +1717,7 @@ async function finalizeRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
     if (notSent !== null) {
       await raiseDishesNotSent(
         tx,
@@ -1717,6 +1812,7 @@ async function finalizeSettle(
   outstanding: { saleId: SaleId; amountDue: Decimal },
   tip: Decimal,
   result: PaymentResult,
+  attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
   /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`/`accepted_offline`
@@ -1753,6 +1849,7 @@ async function finalizeSettle(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -1784,6 +1881,7 @@ async function finalizeSettleRecovery(
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
+  attendanceKey?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -1840,6 +1938,7 @@ async function finalizeSettleRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -1914,6 +2013,8 @@ async function runCollectOrder(
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     }
 
+    const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
+
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
@@ -1930,7 +2031,9 @@ async function runCollectOrder(
       // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
       const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
-        return settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+        const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+        await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+        return ticket;
       }
       const settledAt = deps.clock.now().instant;
 
@@ -1971,13 +2074,16 @@ async function runCollectOrder(
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
+      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return ticket;
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
     await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
-    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+    const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+    await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
+    return ticket;
   });
 }
 

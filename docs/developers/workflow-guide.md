@@ -415,3 +415,10 @@ receipt did not contain findings or the running checks' results. After checking 
 subprocesses had exited, the driver retried the incomplete dispatch in the same installed
 candidate with synchronous bounded checks. The retry published completed findings in 81 seconds.
 Keep both reports and their timing/usage receipts; a pending response is no approval to push or land.
+
+Wait for the background task's completion status, and put an outer deadline on any polling loop.
+Do not recognise completion by grepping the last output line. In A10-3's 2026-10-15 review, the
+experiments had finished, but `until grep ... <(tail -1 ...)` accepted only an empty line or Git
+status while the task output ended `[exited with code 0]`. `ps -p 54448 -o pid,ppid,etime,command`
+showed that wait still running at 8:58. The driver retained the output and stopped that recorded
+wait process and its recorded sleep child; the same review then published its completed findings.

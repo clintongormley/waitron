@@ -36,6 +36,7 @@ import {
 } from "./parties.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { serviceModesMatch } from "./working-order.js";
+import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -82,6 +83,7 @@ export async function moveGuests(
   partyId: string,
   toTableId: string,
   options: TableActionOptions,
+  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, toTableId, partyId, options);
@@ -90,7 +92,16 @@ export async function moveGuests(
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
   const held = await memberTables(tx, partyId);
   if (table.holding !== null && table.holding !== partyId) {
-    const combined = await combineAt(tx, cfg, partyId, table.holding, "leave", options);
+    const combined = await combineAt(
+      tx,
+      cfg,
+      partyId,
+      table.holding,
+      "leave",
+      options,
+      undefined,
+      attendance,
+    );
     await leaveMergeOf(tx, toTableId, held);
     return combined;
   }
@@ -139,6 +150,7 @@ export async function joinTables(
   partyId: string,
   tableId: string,
   options: TableActionOptions,
+  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, tableId, partyId, options);
@@ -151,7 +163,7 @@ export async function joinTables(
     });
   }
   if (table.holding !== null) {
-    return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId);
+    return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId, attendance);
   }
   await refuseUnseatable(tx, cfg, table);
 
@@ -175,17 +187,23 @@ async function combineAt(
   tables: "leave" | "join",
   options: TableActionOptions,
   intoZoneId?: string | null,
+  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   const later = options.slipsLater;
   const before = later === undefined ? await readPartiesSentWork(tx, [from, into]) : null;
-  const combined = await combineParties(tx, cfg, {
-    from,
-    into,
-    bills: options.bills,
-    tables,
-    operatorId: options.operatorId,
-    intoZoneId,
-  });
+  const combined = await combineParties(
+    tx,
+    cfg,
+    {
+      from,
+      into,
+      bills: options.bills,
+      tables,
+      operatorId: options.operatorId,
+      intoZoneId,
+    },
+    attendance,
+  );
   if (later !== undefined) {
     for (const [billId, intoBillId] of combined.mergedInto)
       later.mergedInto.set(billId, intoBillId);
@@ -215,6 +233,7 @@ export async function combineParties(
     /** `into`'s zone, when the caller has just read it. */
     intoZoneId?: string | null;
   },
+  attendance?: OrderAttendance,
 ): Promise<CombineResult> {
   const { from, into } = args;
   const mains = await tx
@@ -225,7 +244,15 @@ export async function combineParties(
   const fromMain = mainOf(from);
   const intoMain = mainOf(into);
   await moveGroupsToParty(tx, from, into);
-  await moveDraftsToParty(tx, from, into, args.operatorId);
+  await moveDraftsToParty(
+    tx,
+    from,
+    into,
+    args.operatorId,
+    attendance === undefined
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+  );
 
   const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
   let fromMainState: BillState | undefined;
@@ -289,6 +316,7 @@ export async function splitTable(
   tableId: string,
   billId: string | null,
   options: { expectedPartyRevision: number; operatorId: string },
+  attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const held = await memberTables(tx, partyId);
@@ -317,7 +345,19 @@ export async function splitTable(
     mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
   } else {
     const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-    const { held } = await groupArrivingDishes(tx, newParty, billId, options.operatorId, firers);
+    const { held } = await groupArrivingDishes(
+      tx,
+      newParty,
+      billId,
+      options.operatorId,
+      firers,
+      attendance === undefined
+        ? undefined
+        : {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+    );
     await printHoldTickets(tx, cfg, held);
     if (status === "open") {
       await setMainBill(tx, newParty, billId);

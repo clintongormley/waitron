@@ -1,3 +1,5 @@
+import { captureKitchenActivity } from "./attendance-capture.js";
+import type { OrderAttendance } from "./working-order.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
@@ -178,6 +180,7 @@ export interface StationMover {
 }
 
 export interface StationMoveOptions {
+  attendance?: OrderAttendance;
   /** Closing a station relocates all waiting kitchen work, including split-off extras. */
   includeExtras?: boolean;
   /** Refuses the named dishes by the station they sit at, asked once per station; runs inside the
@@ -360,6 +363,13 @@ export async function moveDishesToStation(
           });
       }
       await bumpRevision(tx, [orderId]);
+      await captureKitchenActivity(
+        tx,
+        options.attendance,
+        mover.personId,
+        [orderId],
+        `bill:${orderId}:${request.submissionId}`,
+      );
       return {
         revision: await readOrderRevision(tx, orderId),
         stationId: request.stationId,
