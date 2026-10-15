@@ -37,6 +37,7 @@ export {
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "./first-setup-state.js";
+export { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 export type {
   FirstSetupCoordinator,
   FirstSetupHold,

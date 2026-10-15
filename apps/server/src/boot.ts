@@ -1,6 +1,5 @@
+import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
-  createFirstSetupCoordinator,
-  createFirstSetupStore,
   assertOtherSetupAllowed,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
@@ -768,6 +767,13 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  const firstSetupHost = createFirstSetupModuleHost({
+    environment: env,
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    modules: ALL_MODULES,
+  });
+  const availableModules = firstSetupHost.modules;
   const cloudOrigin = loadCloudOrigin(env);
   // The addresses this box tells the LAN to reach it on: the leaf's IP SANs, discovery's URLs and the
   // mDNS answers all read this one resolver.
@@ -827,7 +833,7 @@ async function bootServer(
     await assertDeploymentMatches(
       stampProbe.venue,
       config.environment,
-      ALL_MODULES.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
+      availableModules.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
     );
   } finally {
     await stampProbe.close();
@@ -838,7 +844,7 @@ async function bootServer(
   // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
-    config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
+    config.till === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
   const migrationOptions = migrationOptionsFor(
     orderedMigrationSets(setsToMigrate),
     config.migrationsRoot,
@@ -870,7 +876,7 @@ async function bootServer(
   // soft-disabled module's data is kept; it is simply not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
-    const myModuleVersions = await schemaVersionsByModule(db, ALL_MODULES);
+    const myModuleVersions = await schemaVersionsByModule(db, availableModules);
     appliedModuleVersions = myModuleVersions;
     const migrated = new Set(
       Object.entries(myModuleVersions)
@@ -959,12 +965,8 @@ async function bootServer(
             environment: config.environment,
           })
         : undefined;
-    const firstSetupCoordinator = createFirstSetupCoordinator();
-    const firstSetupStore = createFirstSetupStore({
-      venueDir: config.venueDir,
-      stateDir: config.stateDir,
-      coordinator: firstSetupCoordinator,
-    });
+    const firstSetupCoordinator = firstSetupHost.coordinator;
+    const firstSetupStore = firstSetupHost.store;
     const firstSetup = {
       coordinator: firstSetupCoordinator,
       assertOtherAllowed: async () => assertOtherSetupAllowed(await firstSetupStore.read()),
@@ -986,7 +988,7 @@ async function bootServer(
             stateDir: config.stateDir,
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
-            modules: ALL_MODULES,
+            modules: availableModules,
           }),
         previewCloudRestore:
           cloudRecovery === undefined
@@ -999,7 +1001,7 @@ async function bootServer(
                       stateDir: config.stateDir,
                       stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
                       migrationsRoot: config.migrationsRoot,
-                      modules: ALL_MODULES,
+                      modules: availableModules,
                     }),
                   pointId,
                 ),
@@ -1009,7 +1011,7 @@ async function bootServer(
             stateDir: config.stateDir,
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
-            modules: ALL_MODULES,
+            modules: availableModules,
             environment,
             litestreamBin: config.litestreamBin,
             oldBoxGone,
@@ -1025,7 +1027,7 @@ async function bootServer(
               stateDir: config.stateDir,
               stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
               migrationsRoot: config.migrationsRoot,
-              modules: ALL_MODULES,
+              modules: availableModules,
               environment: candidate.environment,
             });
             try {
@@ -1054,7 +1056,7 @@ async function bootServer(
             stateDir: config.stateDir,
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
-            modules: ALL_MODULES,
+            modules: availableModules,
             environment,
             litestreamBin: config.litestreamBin,
             oldBoxGone,
@@ -1071,7 +1073,7 @@ async function bootServer(
               moduleConfig,
               bundle.venue.location.fiscalTerritory,
             );
-            const modules = enabledModules(ALL_MODULES, resolvedConfig);
+            const modules = enabledModules(availableModules, resolvedConfig);
             validateConfigurationBundle(bundle, modules, await schemaVersionsByModule(db, modules));
           }),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
@@ -1080,7 +1082,7 @@ async function bootServer(
             moduleConfig,
             request.venue.location.fiscalTerritory,
           );
-          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const modules = enabledModules(availableModules, resolvedConfig);
           const moduleVersions = await schemaVersionsByModule(db, modules);
           const input = fiscalReadinessInput({
             venue: request.venue,
@@ -1111,7 +1113,7 @@ async function bootServer(
             moduleConfig,
             request.venue.location.fiscalTerritory,
           );
-          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const modules = enabledModules(availableModules, resolvedConfig);
           const moduleVersions = await schemaVersionsByModule(db, modules);
           await createFiscalReadinessStore(
             config.stateDir,
@@ -1134,7 +1136,7 @@ async function bootServer(
             moduleConfig,
             req.venue.location.fiscalTerritory,
           );
-          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const modules = enabledModules(availableModules, resolvedConfig);
           const staged = req.configurationImport
             ? await readStagedConfigurationImport(config.stateDir, ring)
             : null;
@@ -1173,11 +1175,12 @@ async function bootServer(
                   }),
             },
             req,
+            availableModules,
           );
           return result;
         },
         recoverProvision: async (req) => {
-          const result = await recoverProvisionedVenue(db, req);
+          const result = await recoverProvisionedVenue(db, req, availableModules);
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
@@ -1898,7 +1901,7 @@ async function bootServer(
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,
-    modules: ALL_MODULES,
+    modules: availableModules,
     environment: config.environment,
     stateDir: config.stateDir,
     jitterSeed: till.nodeId,
@@ -1921,7 +1924,7 @@ async function bootServer(
     db,
     nodeId: till.nodeId,
     stateDir: config.stateDir,
-    modules: ALL_MODULES,
+    modules: availableModules,
     resolvers: {},
     environment: config.environment,
     readRecoveryKey,
@@ -2432,7 +2435,7 @@ async function bootServer(
             createCloudSnapshotArchive(
               {
                 db,
-                modules: ALL_MODULES,
+                modules: availableModules,
                 environment: config.environment,
                 stateDir: config.stateDir,
               },
