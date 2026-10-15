@@ -284,7 +284,7 @@ describe("receipt labels", () => {
     },
   );
 
-  it("labels a simplified invoice and a single VAT rate in Spanish", () => {
+  it("labels a simplified invoice and the taxable base in Spanish", () => {
     const labels = SPAIN.receiptLabels?.["es-ES"];
     expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
     expect(labels?.taxableBase).toBe("Base imponible");
