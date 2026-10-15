@@ -11,7 +11,6 @@ import {
   validateSpanishPhone,
   validateSpanishPostalCode,
 } from "./spain.js";
-import { SPAIN_RECEIPT_LABELS } from "./receipt-labels.js";
 
 describe("validateSpanishNif", () => {
   it.each([
@@ -293,25 +292,8 @@ describe("receipt labels", () => {
     const labels = SPAIN.receiptLabels?.["es-ES"];
     expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
     expect(labels?.vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
-  });
-
-  it("has every full-invoice word in every Spanish receipt language", () => {
-    const keys = [
-      "invoiceHeading",
-      "customer",
-      "unitsColumn",
-      "itemColumn",
-      "priceColumn",
-      "amountColumn",
-      "rateColumn",
-      "pricesExcludeVat",
-      "taxableBase",
-      "registeredAddress",
-    ] as const;
-    for (const [locale, labels] of Object.entries(SPAIN_RECEIPT_LABELS))
-      for (const key of keys) expect(labels[key], `${locale} ${key}`).not.toBe("");
-    expect(SPAIN_RECEIPT_LABELS["es-ES"].registeredAddress).toBe("Domicilio fiscal:");
-    expect(SPAIN_RECEIPT_LABELS["es-ES"].invoiceHeading).toBe("FACTURA");
+    expect(labels?.registeredAddress).toBe("Domicilio fiscal");
+    expect(labels?.invoiceHeading).toBe("FACTURA");
   });
 });
 

@@ -201,7 +201,7 @@ export function buildReceiptDocument({
   if (!simplified && issuer.domicile) {
     if (venueLines.length === 0) text(issuer.domicile);
     else if (!sameAddress(venueLines, issuer.domicile)) {
-      text(`${label.registeredAddress} ${issuer.domicile}`);
+      text(`${label.registeredAddress}: ${issuer.domicile}`);
     }
   }
   if (duplicate) text(label.duplicate);
