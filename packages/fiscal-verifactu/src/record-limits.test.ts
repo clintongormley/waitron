@@ -2,15 +2,23 @@ import { describe, expect, it } from "vitest";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import type { AltaInput } from "@waitron/verifactu";
 import { getCountryPack } from "@waitron/country-packs";
-import { centsToDecimal, decimal, decimalToCents, subtractDecimal } from "@waitron/shared";
+import { refuseOverSimplifiedLimit } from "@waitron/core";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  subtractDecimal,
+} from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { TEST_SISTEMA } from "./testing/seed.js";
 
 /**
- * The drift guard for the two limits `VerifactuBackend` hands the generic sale path, each a rule
- * `@waitron/verifactu`'s validator owns: the simplified-invoice ceiling (`F2_AMOUNT_LIMIT`) and the
- * recipient name cap (`XSD_TEXT_LENGTH` on `NombreRazon`). Also the customer tax ID check that core
- * makes through the Spanish country pack, against the validator's own `NIF_CONTROL`.
+ * The drift guard for the two limits `VerifactuBackend` hands the generic sale path, each checked
+ * against `@waitron/verifactu`'s validator: the simplified-invoice limit must sit within its
+ * `F2_AMOUNT_LIMIT`, and the recipient name cap must match its `XSD_TEXT_LENGTH` on `NombreRazon`.
+ * Also the customer tax ID check that core makes through the Spanish country pack, against the
+ * validator's own `NIF_CONTROL`.
  */
 
 const backend = new VerifactuBackend({
@@ -64,19 +72,46 @@ function codes(record: ReturnType<typeof recordFor>): string[] {
     .map((issue) => issue.code);
 }
 
-describe("the simplified-invoice limit matches the validator's F2 ceiling", () => {
-  it("is 3,010.00", () => {
-    expect(backend.simplifiedInvoiceLimit).toBe("3010.00");
+describe("the simplified-invoice limit is €3,000, within the validator's F2 ceiling", () => {
+  it("is 3,000.00", () => {
+    expect(backend.simplifiedInvoiceLimit).toBe("3000.00");
   });
 
-  // Both sides of the limit, so moving it a cent either way flips a case.
-  it.each(["3009.99", "3010.00", "3010.01", "3500.00"])(
-    "gives the validator's verdict on an F2 of %s",
-    (total) => {
-      const over = decimalToCents(decimal(total)) > decimalToCents(backend.simplifiedInvoiceLimit!);
-      expect(codes(recordFor(total)).includes("F2_AMOUNT_LIMIT")).toBe(over);
-    },
-  );
+  const refusedByUs = (total: string): boolean => {
+    try {
+      refuseOverSimplifiedLimit(backend.simplifiedInvoiceLimit, decimal(total));
+      return false;
+    } catch (error) {
+      if (error instanceof AppError && error.code === "sale.total_exceeds_simplified_limit")
+        return true;
+      throw error;
+    }
+  };
+  const refusedByValidator = (total: string): boolean =>
+    codes(recordFor(total)).includes("F2_AMOUNT_LIMIT");
+
+  // Both sides of our limit and both sides of the validator's, so moving either a cent flips a row.
+  const rows: [total: string, ours: boolean, validator: boolean][] = [
+    ["2999.99", false, false],
+    ["3000.00", false, false],
+    ["3000.01", true, false],
+    ["3010.00", true, false],
+    ["3010.01", true, true],
+    ["3500.00", true, true],
+  ];
+
+  it.each(rows)("an F2 of %s: refused by us %s, by the validator %s", (total, ours, validator) => {
+    expect({ ours: refusedByUs(total), validator: refusedByValidator(total) }).toEqual({
+      ours,
+      validator,
+    });
+  });
+
+  it("lets through nothing the validator refuses", () => {
+    for (const [total] of rows) {
+      if (refusedByValidator(total)) expect(refusedByUs(total), total).toBe(true);
+    }
+  });
 
   it("the ceiling is the F2's alone: the same total named to a customer (F1) passes", () => {
     expect(

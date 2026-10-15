@@ -1710,7 +1710,7 @@ describe("startServer, against a migrated venue directory", () => {
       const till = await fetch(`http://127.0.0.1:${port}/api/till`);
       expect(till.status).toBe(200);
       expect(await till.json()).toMatchObject({
-        simplifiedInvoiceLimit: "3010.00",
+        simplifiedInvoiceLimit: "3000.00",
       });
 
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.

@@ -39,7 +39,7 @@ useVenueDb({
       const cat = await createCatalogue(tx, { name: "Banquetes" });
       const category = await createCategory(tx, { name: "Eventos" });
       for (const [name, unitPrice] of [
-        ["Lote", "3010.00"],
+        ["Lote", "3000.00"],
         ["Mitad", "1600.00"],
         ["Céntimo", "0.01"],
         ["Gratis", "0.00"],
@@ -198,7 +198,7 @@ describe("a counter sale", () => {
   it("is filed at exactly the limit", async () => {
     const answer = await cashSale({ Lote: 1 });
     expect(answer.status).toBe(200);
-    expect(answer.json.total).toBe("3010.00");
+    expect(answer.json.total).toBe("3000.00");
   });
 
   it("does not file an explicit walk-up F1 request as F2", async () => {
@@ -353,7 +353,7 @@ describe("a counter sale", () => {
     const answer = await cashSale({ Lote: 1, Céntimo: 1 }, id);
     expect(answer).toEqual({
       status: 409,
-      json: { ...REFUSED, params: { total: "3010.01", limit: "3010.00" } },
+      json: { ...REFUSED, params: { total: "3000.01", limit: "3000.00" } },
     });
     expect(written()).toEqual(before);
     expect(orderRow(id)).toBeUndefined();
@@ -581,7 +581,7 @@ describe("placing and collecting a ticket-then-pay counter order", () => {
       tender: { method: "cash", amount: "4000.00" },
     });
     expect(answer.status).toBe(409);
-    expect(answer.json).toEqual({ ...REFUSED, params: { total: "3010.01", limit: "3010.00" } });
+    expect(answer.json).toEqual({ ...REFUSED, params: { total: "3000.01", limit: "3000.00" } });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("placed");
   });
@@ -701,7 +701,7 @@ describe("an edit that grows an order", () => {
     // The second bill's one line grows to two, as an order that grew before the limit existed,
     // so a part of it can move.
     venue.db.run(
-      sql`update working_order_lines set quantity = 2000, line_total = 602000 where working_order_id = ${secondBill}`,
+      sql`update working_order_lines set quantity = 2000, line_total = 600000 where working_order_id = ${secondBill}`,
     );
     const answer = await send(limited, venue.cookie, "POST", `/api/bills/${secondBill}/transfer`, {
       toBillId: mainBill,
@@ -929,7 +929,7 @@ describe("an edit that does not raise an order already over the limit", () => {
     });
     expect(answer).toEqual({
       status: 409,
-      json: { ...REFUSED, params: { total: "3200.01", limit: "3010.00" } },
+      json: { ...REFUSED, params: { total: "3200.01", limit: "3000.00" } },
     });
     expect(storedLines(id)).toEqual(["1:2000"]);
     expect(orderRow(id)!.revision).toBe(revision);
