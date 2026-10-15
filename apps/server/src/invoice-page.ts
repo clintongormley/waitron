@@ -85,11 +85,14 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   const room = (height: number): void => {
     if (y + height <= INVOICE_PAGE_HEIGHT - MARGIN) return;
     const previous = pages.at(-1)!.elements;
-    const strandedRule = previous.at(-1)?.kind === "rule";
-    if (strandedRule) previous.pop();
+    let strandedRules = 0;
+    while (previous.at(-1)?.kind === "rule") {
+      previous.pop();
+      strandedRules++;
+    }
     pages.push({ elements: [] });
     y = MARGIN;
-    if (strandedRule) rule();
+    for (let count = 0; count < strandedRules; count++) rule();
   };
   const text = (
     value: string,
