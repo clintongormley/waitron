@@ -16,13 +16,13 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
 import { saveSeasonStaffing, saveSpecialDayStaffing } from "./paint.js";
-import { staffRoles } from "./schema/staffing.js";
+import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 const suite = useVenueDb({
@@ -273,5 +273,46 @@ describe("readStaffingMonth", () => {
     expect(tables.filter((table) => !watched.includes(table))).toEqual([]);
     for (const unshown of ["floor_zones", "location_business_day_settings"])
       expect(tables).not.toContain(unshown);
+  });
+});
+
+describe("rota counts in the staffing month", () => {
+  it("counts unfilled slots only in weeks with a version, retaining the single-read budget", async () => {
+    const v = await painted();
+    const backend = new WorkforceBackend();
+    await inTx(async (tx) => {
+      const id = await backend.createRosterVersion(tx, { ...v.cfg, period: "2026-08-10" });
+      const shiftId = await backend.addShift(tx, {
+        ...v.cfg,
+        versionId: id,
+        personId: v.ana,
+        startsAt: "2026-08-14T10:00:00Z",
+        endsAt: "2026-08-14T14:00:00Z",
+        startsOffsetMinutes: 120,
+        endsOffsetMinutes: 120,
+        role: null,
+      });
+      const [role] = await tx
+        .select()
+        .from(staffRoles)
+        .where(eq(staffRoles.locationId, v.cfg.locationId));
+      await tx
+        .insert(shiftAssignments)
+        .values({ shiftId, departmentId: v.departmentId, staffRoleId: role!.id });
+    });
+    const { result: month, tables } = await tablesRead((tx) =>
+      readStaffingMonth(tx, v.cfg, "2026-08", AT),
+    );
+    expect(month.days.find((d) => d.date === "2026-08-14")!.areas).toEqual([
+      { area: v.dept, needed: 5, unfilled: 4 },
+      { area: v.grill, needed: 4, unfilled: 4 },
+    ]);
+    expect(month.days.find((d) => d.date === "2026-08-07")!.areas[0]!.unfilled).toBeNull();
+    expect(tables.filter((t, i) => tables.indexOf(t) !== i)).toEqual([]);
+    expect(
+      tables.filter(
+        (t) => !(QUERY_DEPENDENCIES["staffing-month"] as readonly string[]).includes(t),
+      ),
+    ).toEqual([]);
   });
 });
