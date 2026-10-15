@@ -316,11 +316,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
 - **A679. First Live setup: one page and one recovery PDF.** Implement the
-  [two-route redesign](superpowers/specs/2026-10-15-a679-two-route-redesign.md) after its design checkpoint:
-  one setup-page PDF, current paper S/P history or the built Cloud C protocol, and the approved
-  emergency E route and repair-v2 rules. The earlier N proposal is withdrawn. Product build is
-  paused; preserve the existing branch work. The old 44-step paper check/FOLLOW-UP remain
-  cancelled; qualification opens the built PDF and checks recovery from its saved or printed copy.
+  [two-route redesign](superpowers/specs/2026-10-15-a679-two-route-redesign.md) through the
+  [replacement implementation plan](superpowers/plans/2026-10-15-a679-one-pdf-implementation.md):
+  one setup-page PDF, current paper S/P history or the built Cloud C protocol, emergency E and
+  repair-v2 rules. Preserve the existing branch work. Original-recipient paper imports remain
+  unavailable pending the verified Cloud admission contract described in the detail. The N
+  proposal and old 44-step paper check/FOLLOW-UP are cancelled. Qualification opens the built
+  PDF, re-uploads the original saved file, and checks continuation/recovery by typing from its printout. Scanning is not required.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,

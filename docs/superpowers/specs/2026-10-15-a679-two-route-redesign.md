@@ -1,5 +1,7 @@
 # A679: keep invoice names distinct after recovery
 
+**Owner update, 2026-10-15 at 19:35:** use the original saved PDF or type the short recovery block from its printout. This appendix supersedes the earlier scanning and no-hand-typing proposals. Remove QR, image and camera recovery from A679. The PDF contains an embedded data attachment; uploading that file preserves complete supplied history. Typing restores the custody signer and a conservative allocation position, **not** the missing original signatures. It permanently excludes all earlier S/P names. The other six requirements and V2/A731–A733 authority boundaries stand. These are proposed changes; no PDF, Chrome round trip, typing journey or physical recovery was tested during this read-only revision.
+
 **Redesign under the owner’s existing requirements, 2026-10-15 at 18:55.** Product implementation stays paused. Behavior below is proposed; source observations are unverified at runtime except for the selected existing checks recorded in the qualification section. No Cloud, provider or physical-printer operation ran. The earlier `N` proposal is withdrawn.
 
 The purpose is simple: **restoring an old backup must not make an old invoice series available again.** The backup cannot tell you which names were used after it was made. You therefore keep the allocation history outside the restored box: in your current paper register, or in Cloud’s current register.
@@ -411,3 +413,183 @@ The first run passed 234 tests in six files; the second passed 33 in two. They e
 A fresh reviewer checked the six owner requirements and the cited October 4/12 contract and built Cloud registry. It found two gaps: the lost-trust A732 description omitted the actual-original full-fingerprint comparison; the register drawing made S000003 look like a replacement. The text now preserves that comparison and records the owner’s confirmation, and both language boards explicitly show Olivo Centro as a genuinely new venue. A focused reread accepted both corrections.
 
 Requirements 1–6 and the mandatory-source checks all passed that design review. No unresolved conflict between the requirements was identified within the approved current-history and isolation assumptions. This is a source/design review result, not implementation or recovery acceptance. Product build remains paused at this checkpoint; the old physical procedure remains cancelled.
+
+
+## Replacement-plan checkpoint, 2026-10-15
+
+The [replacement implementation plan](../plans/2026-10-15-a679-one-pdf-implementation.md) follows this design and the completed six-requirement review. Its new source check identifies the original first-setup paper-recipient mismatch with Cloud’s UUID admission contract. The plan keeps that import unavailable until the separately owned Cloud contract admits the unchanged signed facts; no remapping, re-signing or release of consumed names is authorised. This is an implementation dependency, not a new allocation policy or a claim that the integration ran.
+
+
+## Manual entry revision, owner 2026-10-15 at 19:35
+
+## Keep the PDF, or keep its printout
+
+The page offers **Upload saved PDF** and **Type from printout**. You do not need a scanner.
+
+The original PDF contains the readable register and one embedded attachment named `waitron-register-v1.json`. Your browser reads that attachment locally. It sends only checked public evidence to the box. The custody key and whole PDF never go to an upload endpoint.
+
+Keep the original downloaded file. A PDF viewer may preserve the attachment when saving, or remove it when printing/exporting another PDF. If the attachment is missing, the page says:
+
+> **This copy no longer contains its register data. Choose the original downloaded PDF, or type the recovery block from your printout.**
+
+It does not infer allocations from visible PDF text or silently create an empty register. A preserved attachment must pass the same checks after resaving. Editing visible text cannot change the checked allocation facts.
+
+## What typing restores
+
+The printout has a short block for continuing the paper register and a separate block for each named node recovery key.
+
+The register block restores:
+
+- The **same custody signing key**.
+- The taxpayer/software/environment scope, checked against the frozen setup or recovery context.
+- The highest reserved S and P numbers.
+- A short reference to the supplied paper’s history head.
+- A check code for transcription mistakes.
+
+It does **not** reconstruct old signed blocks, consumption signatures, venue lists, Cloud receipts or import acknowledgements. The printed original remains historical evidence; keep it.
+
+Typed continuation permanently excludes **every S number through the stated S position and every P number through the stated P position**, including previously reserved but unused entries. It allocates above those limits. Fresh module evidence checks for recovery, re-registration, standby and promotion enforce those same limits; an old signed reservation below the floor cannot bypass them with a new confirmation. Exact committed publication remains its separate no-new-activation path. This sacrifices unused reservations rather than risk reusing one.
+
+This is a distinct **checkpoint continuation**, visibly labelled in its successor PDF. It never describes itself as a lossless reconstruction. Uploaded complete history remains lossless and is never replaced with the typed minimum.
+
+### Worked example
+
+Olivo’s current printout says S position `000042` and P position `000007`.
+
+You type its register block into another fresh setup. After currentness and custody checks, the page permanently excludes `S000001..S000042` and `P000001..P000007`. The next initial allocation is `S000043`; a recovery needs a fresh `P000008`.
+
+It does not recover an unused `P000006` reservation from the missing file. Nor does it invent its original signed block.
+
+If the box already knows S position 43, the typed position 42 refuses. If it recognises the short history reference as an older retained head, that also refuses. A disconnected replacement cannot discover an unseen newer printout. You still confirm:
+
+> **This is the current register for this taxpayer, software and environment. No other paper allocation is underway.**
+
+Unknown currency cannot proceed with short allocation.
+
+## Exact printed fields and character counts
+
+The printed U (UUID) or T (text) reference label selects an explicit form option; that click adds no typed character. Never infer the reference kind from its length. Use case-sensitive unpadded base64url for secrets and UUID references. Spaces between printed groups are optional and are not data. Do not remove `-` or `_`; they are valid secret characters.
+
+| Register field | Characters entered |
+| --- | ---: |
+| Custodian reference, when not already independently bound | 22 |
+| Custody seed | 43 |
+| S position | 6 |
+| P position | 6 |
+| History reference | 16 |
+| Register check | 8 |
+| **Fresh box continuing an existing printed register** | **101** |
+| **Same operation with independently bound custodian reference** | **79** |
+
+The ordinary newly created custodian ID is a UUID. Its 16 bytes encode into the 22-character reference. Preserve an existing supplied custodian ID unchanged. For a non-UUID ID, print its canonical UTF-8 base64url reference and the actual count: **79 + reference length**. Never rename an existing custodian to shorten typing.
+
+The custody seed is the existing Ed25519 key’s 32-byte seed, encoded into 43 characters. Reconstruct the existing 48-byte PKCS8 value by adding its fixed 16-byte DER prefix. Derive the public key and compare its full fingerprint with independently established trust. This is key recovery, not custody rotation.
+
+| Named node-key field | Characters entered |
+| --- | ---: |
+| Existing node recovery secret | 32 |
+| Node-key check | 8 |
+| **Named key alone** | **40** |
+| **Register plus named key, fresh context** | **141** |
+| **Register plus named key, custodian independently bound** | **119** |
+
+The 32-character count applies to keys generated by this Waitron flow. For another imported key, print/select the UTF-8 mode and encode its complete UTF-8 bytes in base64url; show its actual encoded character count plus the eight-character check. Never truncate or reject an otherwise supported key to fit the common count. The source generator uses 24 random bytes encoded as 32 base64url characters: `packages/provisioning/src/identifiers.ts:16`; `apps/server/src/break-glass.ts:24` uses that generator. Preserve those exact secret characters.
+
+Node ID and key name come from the selected backup preview. NIF, software and environment come from the frozen validated context. They are shown for comparison, not retyped. Existing archive passwords and authority proofs remain separate; their variable lengths are outside these printed-block counts.
+
+A genuinely first register requires **zero** paper characters: setup generates it. These counts concern continuing an existing register or restoring a backup.
+
+### Screen and paper layout
+
+Proposed static mockups, for the driver to render:
+
+- `manual-register-desktop-en.png`
+- `manual-register-phone-en.png`
+- `manual-register-paper-en.png`
+
+```text
+Reserve invoice series
+
+[ Upload saved PDF ]  [ Type from printout ]
+
+Taxpayer: …        Software: W1        Environment: Production
+
+Custodian reference  [ 22 characters ]  (omitted if independently bound)
+Custody seed         [ 43 characters ]
+S position           [ 000042 ]
+P position           [ 000007 ]
+History reference    [ 16 characters ]
+Register check       [ 8 characters ]
+
+All S names through 000042 and P names through 000007
+will remain unavailable, including unused reservations.
+
+[ ] This is the current register. No other paper allocation is underway.
+[ Check printed details ]
+```
+
+```text
+TYPE FROM THIS PRINTOUT — FORMAT C1
+
+Custodian:  xxxxx xxxxx xxxxx xxxxx xx
+Custody:    xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxx
+S position: 000042       P position: 000007
+History:    xxxx xxxx xxxx xxxx
+Check:      xxxx xxxx
+
+NODE RECOVERY KEY — <node ID> — <key name>
+Key:        xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+Check:      xxxx xxxx
+```
+
+The `x` strings illustrate layout and lengths; they are not valid recovery fixtures or computed checks. Mockups use synthetic reference calculations of this format, not a claim that the product codec or recovery path has been implemented.
+
+With those exact groupings, the 101 data characters occupy 117 displayed characters including grouping spaces. The named-key block has 40 data characters, 48 with grouping spaces. Together: **141 data characters, 165 displayed characters**. Labels and line breaks are not typed.
+
+## Check bytes, known staleness and authority
+
+For all three formulas, `scope` is exactly `{environment,softwareId,taxpayerNif}` in lexical key order. It excludes the custodian ID, which is a separate register-check argument; node-only Cloud documents need no custodian. Browser and Node must share exact vectors.
+
+Register check:
+
+`first 40 bits of SHA-256(canonical UTF-8 JSON(["waitron.paper-compact-check",1,scope,custodianId,publicSpkiBase64url,sHighWater,pHighWater,sourceHeadTag]))`
+
+Encode those 40 bits as eight Crockford characters. Obtain the public SPKI by deriving it from the entered seed. A changed seed, position or frozen scope normally changes the check.
+
+History reference:
+
+`first 80 bits of SHA-256(canonical UTF-8 JSON(["waitron.paper-head-reference",1,head])))`
+
+Encode as sixteen Crockford characters. The complete source head remains in the saved-file attachment. The typed reference is explicitly a truncated reference, not a predecessor digest.
+
+Node-key check:
+
+`first 40 bits of SHA-256(canonical UTF-8 JSON(["waitron.node-paper-check",1,scope,nodeId,keyName,secret])))`
+
+Encode as eight Crockford characters. Never send a node secret to the public-evidence checker. Its appropriate recovery endpoint still checks the actual stored verifier.
+
+For an unrelated accidental change with uniformly distributed hash output, the check’s matching probability is `2^-40`; a truncated head reference can collide with probability `2^-80` for an unrelated pair. Neither is a guarantee against every typo. These unkeyed checks provide **no forgery resistance or freshness proof**. A malicious holder can recompute them.
+
+The host verifies new public signatures with independent trust, rejects lower known positions and recognised stale/conflicting heads, and requires currentness and local authority separately. Losing independent trust does not permit self-enrolment from a seed or PDF. A732’s actual-original fingerprint comparison and fresh-deployment authority remain separately gated.
+
+## Explicit history and Cloud limits
+
+A typed checkpoint is signed anew by the recovered current signer. It records a burn floor and its declared evidence gap. It does not claim to be an old revision or invent a predecessor/signature.
+
+Preserve every available original signed object. A later uploaded old PDF can contribute historical evidence, but cannot lower the checkpoint’s floor or displace subsequent facts.
+
+Checkpoint-only evidence cannot produce a complete original-paper import into Cloud. Neither can a printed short block reconstruct a consumed C receipt. Obtain the original saved evidence or use the existing authorised Cloud journey. Never synthesize receipts, rewrite signed recipients or transfer consumed identities.
+
+The already identified Cloud original-recipient/admission dependency remains unavailable until Lane D supplies its contract. This revision adds no Cloud code or service.
+
+The owner acceptance becomes: **open the built PDF, upload the Chrome-downloaded original successfully, and continue or recover by typing its printed blocks**. No scanner, transcription drill, ink procedure or separate tool is required.
+
+
+### Manual-entry drawing and reference-calculation receipt
+
+The typing update’s [desktop](2026-10-15-a679-two-route-redesign/manual-register-desktop-en.png),
+[phone](2026-10-15-a679-two-route-redesign/manual-register-phone-en.png) and
+[printout](2026-10-15-a679-two-route-redesign/manual-register-paper-en.png) use synthetic values
+calculated from the proposed canonical hash/base64url formulas. They are static proposal pictures,
+not product-codec, PDF download or recovery acceptance. English/Spanish and both screen themes are
+in the [drawing index](2026-10-15-a679-two-route-redesign/README.md).

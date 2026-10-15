@@ -238,11 +238,42 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 [two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
 history, the existing C Cloud contract and emergency E, with one setup-page PDF. Currentness is
 an owner declaration from the current record, never a fact proved by a stale PDF signature.
-Repair-v2 core and A731–A733 retain their approved authority. Product work remains paused at this
-design checkpoint; keep reusable work in draft #1752. The old 44-step check and FOLLOW-UP remain
+Repair-v2 core and A731–A733 retain their approved authority. Product work was paused at that
+design checkpoint; the replacement plan below resumes the preserved draft #1752 work. The old 44-step check and FOLLOW-UP remain
 cancelled. The design records the missing Waitron Cloud setup integration and separately owned
 Cloud enablement work; no Cloud service is enabled by this publication. Earlier dated directions
 below are historical where superseded, including the now-withdrawn short N proposal.
+
+**Replacement plan, 2026-10-15:** the [one-PDF implementation
+plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign
+checkpoint and preserves the existing product branch. New C-only documents need no fabricated paper
+master; preactivation key reissue stays in host staging until the node exists. Actual PDF recovery
+and the whole revised candidate still require implementation qualification.
+
+**Owner 19:35 typing update, 2026-10-15:** the current design/plan add original-PDF upload and
+typing from the printout, with no scanner dependency. The original PDF has an embedded data
+attachment; missing attachment after a viewer re-save gives an explicit original-file/typing choice.
+A common printed register takes 101 data characters (79 when its custodian ID is already
+independently bound), and a newly generated named node key takes 40, for 141 or 119 together.
+Imported identifiers/keys print their actual length. Typed continuation signs a distinct checkpoint
+burning every earlier S/P name, including unused reservations; it cannot reconstruct missing
+original signatures, qualify Cloud imports or replace the matching backup key. Existing full
+evidence remains intact. Actual Chrome download/upload, changed-resave, typed controls and owner
+print/typing qualification remain to build.
+
+**Paper-to-Cloud admission dependency found during plan review, 2026-10-15 (source reading only):**
+preserved Waitron `cc553697b`, `packages/fiscal-verifactu/src/initial-setup.ts:91–92`, binds the
+signed recipient to `first-setup:<attempt>`. Cloud `2912202e`,
+`packages/fiscal-allocation/src/validation.ts:581`, requires that recipient to be a UUID;
+`paper-import.ts:149–169` refuses transfer of consumed identities and requires their owner to equal
+the Cloud venue. Registration creates a separate Cloud venue ID
+(`packages/registration/src/index.ts:199–204`). A lookup cannot rewrite those original signed facts.
+Keep this import unavailable and add the exact-original rejection/disabled-state tests in Waitron.
+Lane D must supply an independently checked original-recipient admission contract, then the joint
+original-block/consumption acceptance check must pass before enabling this transition. New blocks
+also need pre-sign partitioning within the existing import count/byte limits; old indivisible
+oversized blocks remain intact and explicitly unavailable for import. This records missing
+integration; it authorises no Cloud repository change or new campaign item.
 
 **Owner redesign, 2026-10-15 at about 18:10–18:15:** replace the downloaded tool and separate
 custodian/computer with one PDF made by the setup page. You may download it, print it over the

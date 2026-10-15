@@ -1,0 +1,51 @@
+{
+  "status": "TEST-ONLY reference calculations for a proposed format; not product-codec or recovery acceptance",
+  "scope": {
+    "taxpayerNif": "89890001K",
+    "softwareId": "W1",
+    "environment": "production"
+  },
+  "custodianId": "12345678-1234-4234-8234-123456789abc",
+  "referenceKind": "uuid",
+  "nodeKeyFormat": "generated",
+  "fingerprint": "fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2",
+  "head": {
+    "registerId": "a679-proposal-test-only",
+    "revision": "7",
+    "digest": "c4b7cd4188d9dc65edc1ae4a459f3f65ff20aed03cc28b7764d6907b51d6cee1"
+  },
+  "fields": {
+    "custodianReference": "EjRWeBI0QjSCNBI0VniavA",
+    "custodySeed": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "sPosition": "000042",
+    "pPosition": "000007",
+    "sourceHeadTag": "J9S8KYVX2YCG0R5B",
+    "check": "6BF75PFS"
+  },
+  "displayed": {
+    "custodianReference": "EjRWe BI0Qj SCNBI 0Vnia vA",
+    "custodySeed": "AQEBA QEBAQ EBAQE BAQEB AQEBA QEBAQ EBAQE BAQEB AQE",
+    "sPosition": "000042",
+    "pPosition": "000007",
+    "sourceHeadTag": "J9S8 KYVX 2YCG 0R5B",
+    "check": "6BF7 5PFS"
+  },
+  "node": {
+    "nodeId": "11111111-1111-4111-8111-111111111111",
+    "name": "2026-10-15 \u00b7 DEMO",
+    "secret": "AgICAgICAgICAgICAgICAgICAgICAgIC",
+    "check": "H578ZHQ3"
+  },
+  "nodeDisplayed": {
+    "secret": "AgIC AgIC AgIC AgIC AgIC AgIC AgIC AgIC",
+    "check": "H578 ZHQ3"
+  },
+  "counts": {
+    "registerData": 101,
+    "registerDisplayed": 117,
+    "nodeData": 40,
+    "nodeDisplayed": 48,
+    "combinedData": 141,
+    "combinedDisplayed": 165
+  }
+}
