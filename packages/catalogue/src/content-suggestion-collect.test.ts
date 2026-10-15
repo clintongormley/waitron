@@ -399,6 +399,28 @@ describe("the gaps a run starts from", () => {
     });
   });
 
+  it("counts a name of tabs or newlines as entered, as the listing does, when the item is blank in another language", async () => {
+    await inVenue(THREE, async (tx, lunch) => {
+      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", es: "\t" });
+      const oli = await product(tx, lunch, "Oli", { ca: "\n", es: "CLIENT-ES Aceite" });
+      expect(await missingByRef(tx)).toEqual({
+        [`product:${pa}`]: ["en"],
+        [`product:${oli}`]: ["en"],
+      });
+      const items = await collectSuggestionItems(tx, context, new Set());
+      expect(items.map(({ ref, existing, missing }) => ({ ref, existing, missing }))).toEqual(
+        inListOrder([
+          { ref: `product:${pa}`, existing: { ca: "CLIENT-CA Pa", es: "\t" }, missing: ["en"] },
+          {
+            ref: `product:${oli}`,
+            existing: { ca: "\n", es: "CLIENT-ES Aceite" },
+            missing: ["en"],
+          },
+        ]),
+      );
+    });
+  });
+
   it("collects from, prunes against and builds a job from the gaps it is handed, leaving them as they were", async () => {
     await inVenue(THREE, async (tx, lunch) => {
       const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });

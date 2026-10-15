@@ -52,8 +52,13 @@ export function isLiveTarget(entry: ResolvedTranslationTarget): entry is LiveTar
   );
 }
 
+/** Blank as the listing judges a stored name: SQLite's one-argument `trim` removes spaces only. */
+export function blankName(text: string | null | undefined): boolean {
+  return /^ *$/.test(text ?? "");
+}
+
 function fits(text: string): boolean {
-  return text.trim() !== "" && text.length <= TEXT_LIMIT;
+  return !blankName(text) && text.length <= TEXT_LIMIT;
 }
 
 export function effectiveNames(entry: LiveTarget): Record<string, string> {
@@ -90,7 +95,7 @@ export async function readSuggestionGaps(
     gaps.set(suggestionRef(entry.target), {
       entry,
       target: entry.target,
-      missing: new Set(config.languages.filter((language) => !(effective[language] ?? "").trim())),
+      missing: new Set(config.languages.filter((language) => blankName(effective[language]))),
     });
   }
   return gaps;
@@ -158,7 +163,7 @@ async function describeItems(
       ref: suggestionRef(entry.target),
       kind: entry.target.kind,
       family: familyOf(entry.target, roots),
-      category: category !== null && category.trim() !== "" ? category : null,
+      category: category !== null && !blankName(category) ? category : null,
       staffName: entry.target.name,
       existing: Object.fromEntries(
         config.languages

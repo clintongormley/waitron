@@ -173,6 +173,49 @@ it("a name entered during the job is not overwritten or suggested", async () => 
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, done: 1, failed: 2 });
 });
 
+it("counts a name of tabs saved during the job as entered, as the listing does", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app(async (tx) => {
+    await tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT-CA Pa", es: "\t" } })
+      .where(eq(products.id, venue.bread));
+    await tx
+      .update(products)
+      .set({ customerName: { ca: "CLIENT-CA Formatge", es: "\n" } })
+      .where(eq(products.id, venue.cheese));
+  });
+  await store(
+    job.id,
+    done(
+      [
+        result(ref(venue.bread), { es: "CLIENT-ES Pan", en: "CLIENT-EN Bread" }),
+        result(
+          ref(venue.cheese),
+          { en: "CLIENT-EN Cheese" },
+          { corrections: [{ field: "es", wrong: "Queso", right: "Quesos" }] },
+        ),
+      ],
+      [ref(venue.wine)],
+    ),
+  );
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([
+      text(venue.bread, "en", "CLIENT-EN Bread"),
+      {
+        itemId: venue.cheese,
+        language: "es",
+        text: null,
+        placeholder: false,
+        fix: { field: "es", wrong: "Queso", right: "Quesos" },
+      },
+      text(venue.cheese, "en", "CLIENT-EN Cheese"),
+    ]),
+  );
+  expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, done: 2, failed: 1 });
+});
+
 it("drops names in a language the venue disabled during the job, and counts the items done", async () => {
   const venue = await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);

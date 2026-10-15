@@ -3,6 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
+  blankName,
   buildSuggestionJob,
   effectiveNames,
   parseSuggestionRef,
@@ -121,7 +122,7 @@ export async function storeSuggestionResults(
       }
       usable = true;
       const language = fix.field === "internal" ? null : fix.field;
-      const entered = language === null || (effective[language] ?? "").trim() !== "";
+      const entered = language === null || !blankName(effective[language]);
       if (!entry || !entered || rows.has(language)) {
         dropped += 1;
         continue;
@@ -144,7 +145,7 @@ export async function storeSuggestionResults(
       const key = suggestionRef(ref);
       const target = targets.get(key)!.target;
       const rows = planned.get(key)!.rows;
-      if ((target.effectiveSelectedText ?? "").trim()) {
+      if (!blankName(target.effectiveSelectedText)) {
         dropped += 1;
         rows.delete(language);
       } else rows.set(language, { ...rows.get(language)!, expected: target.expected });
