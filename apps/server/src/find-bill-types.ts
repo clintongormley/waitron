@@ -26,3 +26,26 @@ export type FindBillOptions = {
   billStaff: { id: string; name: string }[];
   transactionStaff: { id: string; name: string }[];
 };
+
+export interface BillRow {
+  workingOrderId: string;
+  openedAt: string;
+  orderNumber: number;
+  label: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  tables: string[];
+  zoneId: string | null;
+  zoneName: string | null;
+  staff: { id: string; name: string | null }[];
+  itemCount: number;
+  total: string;
+  paid: string;
+  stillOwed: string;
+  state: BillState;
+  earlierDay: boolean;
+  invoiceNumber: string | null;
+  departedAt: string | null;
+  orderStatus: "open" | "placed" | "settled" | "abandoned";
+  collectionStatus: "waiting_for_payment" | "left_without_paying" | null;
+}
