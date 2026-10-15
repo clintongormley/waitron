@@ -408,6 +408,13 @@ it("puts a refusal naming no shown line at the bottom", async () => {
   expect(bottom(el)).toBe("This station is disabled. Choose an active station.");
 });
 
+it("opens a standard-width modal at the medium height", async () => {
+  const el = await mount();
+  const modal = one<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!;
+  expect(modal.getAttribute("size")).toBe("standard");
+  expect(modal.getAttribute("height")).toBe("medium");
+});
+
 it("Cancel closes and tells the screen", async () => {
   const el = await mount();
   const cancels = events(el, "routing-cell-close");

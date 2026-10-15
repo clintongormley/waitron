@@ -3949,31 +3949,21 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
 - **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
-  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height
-  (`packages/ui/src/components/wt-modal.ts:17`) and `wt-dialog` puts the form's message at the end
-  of the body (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
+  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height unless
+  given `height="medium"` (`packages/ui/src/components/wt-modal.ts`, the `dialog` rule) and
+  `wt-dialog` puts the form's message at the end of the body
+  (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
   150 px between the message and the buttons (seen in the Prep stations station editor; the same at
   main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
   buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
   full-height dialog those are not the same place. Options: push the message to the bottom of the
-  body, or into the footer.
+  body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
+  this stays open.
 
-- **A short notice in a full-height dialog leaves most of it empty** (found by A507's look; decided
-  by the owner 2026-10-15, below). The Prep stations route-change notice (`size="wide"`, `#previewDialog` in
-  `packages/venue-service/src/dashboard/prep-stations-screen.ts`) now holds its sentences with its
-  product list closed, but `wt-modal` gives every dialog except a compact one the full
-  screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
-  Decide whether a wide dialog should shrink to fit its content. A second case (owner, 2026-10-14):
-  the Routes tab's cell editor (`routing-cell-editor.ts`), one field and "+ Add route" above a
-  screen of white, its buttons at the bottom
-  ([screenshot](backlog/mockups/a656-routes-tab/1-editor-no-period-route.png)). The entry above,
-  about a form's message sitting far above its buttons, has the same cause; settle them together.
-  **Decided (owner, 2026-10-15):** not shrink-to-fit, since a dialog that followed its content would
-  change size as rows are added or removed. `wt-modal` gains a fixed medium height beside today's
-  full height and compact's fit-to-content, chosen separately from width; the middle scrolls when
-  content outgrows it. The Routes cell editor is medium (A726 moves its Clear setting); the
-  implementer proposes which other dialogs should be, for the owner to approve, and settles the
-  medium height once in design-system.md.
+- **Which other dialogs take the medium height (owner to approve)** — left open by A734. OPEN,
+  waiting for the owner. `wt-modal`'s `height="medium"` is used only by the Routes tab's cell
+  editor; the other candidates are listed in the detail.
+  [Detail](backlog/dashboard.md#which-other-dialogs-take-the-medium-height-owner-to-approve)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave

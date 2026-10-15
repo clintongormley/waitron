@@ -64,6 +64,32 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     }
   });
 
+  test.each([
+    [1280, "short", "<p>The printer stops receiving tickets.</p>"],
+    [390, "short", "<p>The printer stops receiving tickets.</p>"],
+    [1280, "scrolling", '<p style="height:1800px">Changes to review</p>'],
+    [390, "scrolling", '<p style="height:1800px">Changes to review</p>'],
+  ])("a medium-height modal at %ipx with a %s body", async (width, _kind, body) => {
+    await page.viewport(width, 600);
+    try {
+      const modal = (await mountThemed(
+        `<wt-modal heading="Review changes" size="standard" height="medium">
+          ${body}
+          <wt-form-actions slot="footer">
+            <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+            <wt-button>Save</wt-button>
+          </wt-form-actions>
+        </wt-modal>`,
+        theme,
+      )) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   test("with the form's message at the end of the body", async () => {
     const modal = (await mountThemed(
       `<wt-modal heading="Add passkey">

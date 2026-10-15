@@ -16,7 +16,7 @@ session's own numbering; this is where each job went.
 | 28, 29, 30 | A725 — prep stations |
 | 31, 32 ("Clear setting") | A726 — Routes |
 | 27 | A727 — page search |
-| 32 (dialog heights) | the full-height dialog entry under _Users, sign-in and the dashboard shell_ |
+| 32 (dialog heights) | A734 — the medium dialog height; see _Decisions and deliberate limits_ in `docs/backlog/dashboard.md` |
 
 Invented for the drawings: the Takeaway department, School holidays' hours, staff counts, and the
 other search results on board 13. Board 11 was drawn before periods moved into a window (board 13);

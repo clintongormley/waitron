@@ -6,6 +6,8 @@ import { WtDialog } from "./wt-dialog.js";
 export class WtModal extends WtDialog {
   /** Unset, or any other value, is wide. */
   @property({ reflect: true }) size?: "compact" | "standard" | "wide" | "full";
+  /** Unset, or any other value, keeps the height the size gives. */
+  @property({ reflect: true }) height?: "medium";
 
   protected override readonly bodyTabStop = "always";
 
@@ -38,6 +40,11 @@ export class WtModal extends WtDialog {
         width: calc(100dvw - 2 * var(--wt-modal-inline-margin));
         height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
         max-height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
+      }
+
+      /* After the size rules, which it overrides; each size's max-height still bounds it. */
+      :host([height="medium"]) dialog {
+        height: var(--wt-modal-medium-height);
       }
 
       .body {

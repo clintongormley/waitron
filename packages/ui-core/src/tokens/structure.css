@@ -51,6 +51,8 @@
   --wt-modal-compact-width: 28rem;
   --wt-modal-standard-width: 42rem;
   --wt-modal-max-width: 64rem;
+  /* wt-modal's height="medium": a fixed height for a short notice or form, at any size. */
+  --wt-modal-medium-height: 32rem;
   --wt-dialog-max-width: min(90vw, 48rem);
   /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and
      which wt-modal sets to --wt-form-max-width on its body. */

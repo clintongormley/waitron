@@ -202,9 +202,6 @@ list does not exist.
 4. **In the cell editor, "Clear setting" stays red and moves to the left of the bottom row, beside
    Cancel**, away from Save (owner: on the left, not quiet).
 
-The editor's height is the full-height dialog entry under _Users, sign-in and the dashboard shell_,
-decided the same day.
-
 ## Decisions and deliberate limits
 
 - **Routes keeps one Expand/Collapse control beside Search (A656, owner 2026-10-14).**

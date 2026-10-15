@@ -48,6 +48,7 @@ test("defines the structural contract", () => {
     "--wt-modal-max-width",
     "--wt-modal-compact-width",
     "--wt-modal-standard-width",
+    "--wt-modal-medium-height",
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-form-max-width",
@@ -156,6 +157,12 @@ test("the modal sizes run compact, then standard, then wide", () => {
   expect(standard).toBe(672);
   expect(compact).toBeLessThan(standard);
   expect(standard).toBeLessThan(wide);
+});
+
+test("the medium modal height is 32rem, 512px", () => {
+  const el = mount();
+  expect(token(el, "--wt-modal-medium-height")).toBe("32rem");
+  expect(lengthPx(el, "var(--wt-modal-medium-height)")).toBe(512);
 });
 
 test("a standard modal holds a form at the form width beside a classic scrollbar", () => {
