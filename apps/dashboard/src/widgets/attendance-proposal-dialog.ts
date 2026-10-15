@@ -83,6 +83,7 @@ export class AttendanceProposalDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) view: AttendanceDayView | null = null;
   @property({ attribute: false }) initialChanges: AttendanceChange[] = [];
+  @property() purpose: "propose" | "request" = "propose";
   @property() timeZone = "UTC";
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) blocked = false;
@@ -308,7 +309,7 @@ export class AttendanceProposalDialog extends LitElement {
     return html`<wt-dialog
       .open=${this.open}
       .beforeClose=${this.#beforeClose}
-      .heading=${t(this.reasonOnly ? "attendance.disagree_heading" : "attendance.edit_heading")}
+      .heading=${t(this.reasonOnly ? "attendance.disagree_heading" : this.purpose === "request" ? "attendance.request_heading" : "attendance.edit_heading")}
       @wt-close=${this.#closed}
     >
       <div

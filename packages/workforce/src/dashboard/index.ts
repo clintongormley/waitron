@@ -12,6 +12,26 @@ export const WORKFORCE_DASHBOARD: DashboardContribution = {
     group: "team",
     requiresPermission: "workforce.correct",
   },
+  moreScreens: [
+    {
+      screen: {
+        id: "hours",
+        navLabelKey: "nav.hours",
+        group: "team",
+        requiresPermission: "workforce.correct",
+      },
+      create(ctx) {
+        return {
+          render: () =>
+            html`<dashboard-attendance-corrections-screen
+              .mode=${"hours"}
+              .request=${ctx.request}
+              .liveData=${ctx.liveData}
+            ></dashboard-attendance-corrections-screen>`,
+        };
+      },
+    },
+  ],
   strings: WORKFORCE_STRINGS,
   create(ctx) {
     return {

@@ -1,6 +1,6 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
@@ -20,13 +20,12 @@ import {
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { createErrorBoundary, readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import {
-  attendanceQuestions,
   executeAttendanceCommand,
   readAttendanceCommand,
   readAttendanceDay,
   readAttendanceInbox,
+  readPersonHours,
   reconcileAttendanceResponses,
-  timeEntries,
 } from "@waitron/workforce";
 import type { AttendanceCommand, CorrectionItem } from "@waitron/workforce/attendance-contract";
 import {
@@ -39,6 +38,9 @@ import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { readLocationClock } from "@waitron/reporting";
+import { parseHoursQuery } from "./hours-request.js";
+import { assertOwnAttendanceLocation } from "./attendance-own-scope.js";
 import type { Logger } from "./logger.js";
 
 export interface TillAttendanceApiDeps {
@@ -102,31 +104,6 @@ async function admit(tx: Transaction, deps: TillAttendanceApiDeps, session: Sign
   if (!(await canUseDeviceProfile(tx, current.deviceProfileId, session.personId)))
     throw new AppError("attendance.not_permitted", { personId: session.personId });
 }
-async function ownLocation(
-  tx: Transaction,
-  deps: TillAttendanceApiDeps,
-  personId: string,
-  locationId: string,
-) {
-  if (locationId === deps.cfg.locationId) return;
-  const [entry] = await tx
-    .select({ id: timeEntries.id })
-    .from(timeEntries)
-    .where(and(eq(timeEntries.personId, personId), eq(timeEntries.locationId, locationId)))
-    .limit(1);
-  if (entry) return;
-  const [question] = await tx
-    .select({ id: attendanceQuestions.id })
-    .from(attendanceQuestions)
-    .where(
-      and(
-        eq(attendanceQuestions.personId, personId),
-        eq(attendanceQuestions.locationId, locationId),
-      ),
-    )
-    .limit(1);
-  if (!question) throw new AppError("attendance.not_permitted", { personId });
-}
 async function ownItem(tx: Transaction, personId: string, itemId: string): Promise<CorrectionItem> {
   const inbox = await readAttendanceInbox(tx, personId);
   const item = inbox.items.find((i) => i.id === itemId || i.requestEntryIds.includes(itemId));
@@ -158,6 +135,25 @@ function envelope(raw: unknown): { command: AttendanceCommand; override?: Overri
 }
 
 export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, log: Logger): void {
+  app.get("/api/attendance/hours", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "clock-in", passive: true });
+      const scope = parseHoursQuery(new URL(c.req.url).searchParams, "own");
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          await admit(tx, deps, session);
+          await assertOwnAttendanceLocation(tx, {
+            personId: session.personId,
+            locationId: scope.locationId,
+            currentLocationId: deps.cfg.locationId,
+          });
+          const now = deps.now();
+          const clock = await readLocationClock(tx, scope.locationId);
+          return readPersonHours(tx, { ...scope, personId: session.personId, clock, now });
+        }),
+      );
+    }),
+  );
   app.get("/api/attendance/inbox", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "clock-in", passive: true });
@@ -191,7 +187,11 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
-          await ownLocation(tx, deps, session.personId, scope.locationId);
+          await assertOwnAttendanceLocation(tx, {
+            personId: session.personId,
+            locationId: scope.locationId,
+            currentLocationId: deps.cfg.locationId,
+          });
           return readAttendanceDay(tx, { ...scope, personId: session.personId });
         }),
       );
@@ -250,7 +250,11 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
           await admit(tx, deps, session);
           if ("itemId" in command) await ownItem(tx, session.personId, command.itemId);
           if (command.action === "request")
-            await ownLocation(tx, deps, session.personId, command.locationId);
+            await assertOwnAttendanceLocation(tx, {
+              personId: session.personId,
+              locationId: command.locationId,
+              currentLocationId: deps.cfg.locationId,
+            });
           const authorizedByPersonId =
             override === undefined
               ? session.personId

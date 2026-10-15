@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import type { TillApi, TillClockState, TillInfo } from "../src/api/client.js";
 import type { TillApp } from "../src/till-app.js";
 import "../src/till-app.js";
+import { hoursView } from "./hours-fixtures.js";
 import { mountWidget, type Theme } from "../src/widgets/test-helpers.js";
 
 export function clockState(
@@ -45,6 +46,7 @@ type ClockTestApi = {
       | "getTablesState"
       | "getDeviceIdentity"
       | "listDefaultZoneOffers"
+      | "getHours"
       | "getAttendanceInbox"
       | "getAttendanceDay"
       | "getAttendanceCommand"
@@ -171,6 +173,11 @@ export async function clockApp(
     listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
+    getHours: vi
+      .fn()
+      .mockImplementation(async (locationId: string, selection) =>
+        hoursView({ personId: state.personId, locationId, selection }),
+      ),
     getAttendanceInbox: vi.fn().mockImplementation(async () => ({
       personId: state.personId,
       revision: "revision",

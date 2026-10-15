@@ -32,4 +32,11 @@ export type {
   AttendanceManagerQueue,
   AttendanceLookups,
   CorrectionItem,
+  OwnAttendanceCommand,
+  HoursSelection,
+  HoursDay,
+  HoursOpenShift,
+  HoursClosure,
+  PersonHours,
+  ManagerHours,
 } from "@waitron/workforce/attendance-contract";

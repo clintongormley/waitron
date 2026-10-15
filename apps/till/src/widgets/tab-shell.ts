@@ -589,6 +589,14 @@ export class TillTabShell extends LitElement {
                       ${action("out", t("clock.out"))}`
               }
               <wt-button
+                data-my-hours
+                variant="secondary"
+                align="start"
+                .disabled=${this.hoursBusy}
+                @click=${() => this.#emit("my-hours")}
+                >${t("hours.mine")}</wt-button
+              >
+              <wt-button
                 data-fix-hours
                 variant="secondary"
                 align="start"

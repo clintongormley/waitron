@@ -395,11 +395,14 @@ describe("dashboard attendance corrections", () => {
       .poll(() => m.root.querySelector("[data-read-error]")?.textContent)
       .toContain("connect");
   });
-  it("a manager's own day explains the till correction path instead of offering self-proposals", async () => {
+  it("a manager's own day explains My Schedule Hours and offers no self-proposals", async () => {
     const m = await mount({ own: true });
     await details(m.root);
     expect(m.root.querySelector("[data-add-shift]")).toBeNull();
-    expect(m.root.textContent).toContain("Fix my hours");
+    expect(m.root.textContent).toContain("My Schedule → Hours");
+    expect(m.root.querySelector("a[data-own-hours]")?.getAttribute("href")).toBe(
+      "/manage/my-schedule/view/hours",
+    );
   });
   it("a refusal survives a later successful passive read", async () => {
     const m = await mount({ live: true });

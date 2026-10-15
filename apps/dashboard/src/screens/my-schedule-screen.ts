@@ -1,7 +1,8 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  UrlStateController,
   submitOnEnter,
   baseStyles,
   draftScopeFor,
@@ -30,6 +31,10 @@ import type {
   RosterEntry,
 } from "../api/client.js";
 
+import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import { dashboardPath } from "../navigation.js";
+import "../widgets/my-hours-panel.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];
 
 const WINDOW_DAYS = 14;
@@ -130,6 +135,33 @@ export class MyScheduleScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) request!: DashboardRequest;
+  @property({ attribute: false }) liveData?: LiveData;
+  @property({ attribute: false }) modules: readonly string[] = [];
+  @state() private tab: "schedule" | "hours" = "schedule";
+  readonly #url = new UrlStateController(this, () => this.#restoreTab(), dashboardPath);
+  #restoreTab(): void {
+    if (this.#url.read("dashboard") !== "my-schedule") return;
+    const selected = this.#url.read("view");
+    this.tab = selected === "hours" && this.modules.includes("workforce") ? "hours" : "schedule";
+    if (selected !== null && selected !== this.tab) this.#url.write({ view: this.tab }, true);
+  }
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("modules")) this.#restoreTab();
+  }
+  #selectTab(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected) return;
+    const tab = event.detail.value;
+    if (tab !== "schedule" && (tab !== "hours" || !this.modules.includes("workforce"))) return;
+    if (tab === this.tab) return;
+    void Promise.resolve(this.#url.write({ dashboard: "my-schedule", view: tab })).then(
+      (outcome) => {
+        if (outcome === undefined || outcome === "proceeded") this.#restoreTab();
+        this.requestUpdate();
+      },
+    );
+  }
   /** One controller per read, because a controller's error callback does not say which read failed,
    * and a later live refresh can fail or succeed for one list alone. */
   readonly #roster = this.#reads("roster");
@@ -370,7 +402,15 @@ export class MyScheduleScreen extends LitElement {
             </p>`
           : nothing
       }
-      ${this.#body()}
+      <wt-tabs
+        label=${t("myschedule.title")}
+        .value=${this.tab}
+        .items=${[{ key: "schedule", label: t("hours.schedule") }, ...(this.modules.includes("workforce") ? [{ key: "hours", label: t("hours.tab") }] : [])]}
+        @wt-tab-change=${this.#selectTab}
+      >
+        <div slot="schedule">${this.#body()}</div>
+        ${this.modules.includes("workforce") ? html`<div slot="hours"><dashboard-my-hours-panel .request=${this.request} .liveData=${this.liveData} .personId=${this.myPersonId} .active=${this.tab === "hours"}></dashboard-my-hours-panel></div>` : nothing}
+      </wt-tabs>
     `;
   }
 

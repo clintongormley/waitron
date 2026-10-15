@@ -356,3 +356,34 @@ it.each(["persons", "locations"] as const)(
     watched.unsubscribe();
   },
 );
+
+it.each(["send", "receipt"] as const)(
+  "a %s result refreshes shared manager Hours even when its feed is silent",
+  async (resultKind) => {
+    const cache = new LiveData();
+    caches.push(cache);
+    const { HoursApi } = await import("./hours.js");
+    const { managerHours } = await import("../../test/manager-hours-fixtures.js");
+    const hours = managerHours();
+    const request = createRequest({
+      fetchImpl: async (path) => {
+        if (path.includes("/commands")) {
+          hours.people[0]!.hours.workedMinutes = 540;
+          return Response.json(saved);
+        }
+        return Response.json(hours);
+      },
+    });
+    const { AttendanceApi } = await modules["./attendance.ts"]!();
+    const api = new AttendanceApi(request, cache);
+    const watched = cache.observe(
+      new HoursApi(request, cache).managerQuery("shop", { kind: "pay-period" }),
+      () => {},
+    );
+    await expect.poll(() => watched.snapshot.value?.people[0]?.hours.workedMinutes).toBe(480);
+    if (resultKind === "send") await api.send(command);
+    else await api.background.command(command.commandId);
+    await expect.poll(() => watched.snapshot.value?.people[0]?.hours.workedMinutes).toBe(540);
+    watched.unsubscribe();
+  },
+);

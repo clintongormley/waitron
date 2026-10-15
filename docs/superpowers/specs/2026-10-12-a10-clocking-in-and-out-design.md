@@ -11,6 +11,10 @@ Update 2026-10-15: parts 1–4 have landed. The
 [part 5 implementation plan](../plans/2026-10-15-a10-5-hours-screens-plan.md) covers the hours screens,
 including own corrections in My Schedule. Parts 5–6 remain unbuilt.
 
+Update 2026-10-15, part 5 implementation: the hours screens are built through the
+[part 5 plan](../plans/2026-10-15-a10-5-hours-screens-plan.md). Export surfaces remain in part 6;
+[the workforce backlog](../../backlog/workforce.md) tracks the remaining work.
+
 ## Why
 
 Spanish law requires a daily record of each worker's start and end times, kept four years, from the

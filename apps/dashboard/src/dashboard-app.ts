@@ -249,6 +249,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 /** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
 const UNLISTED_SCREENS: ScreenRule[] = [
+  { screen: "my-schedule" },
   { screen: "email", requiresManager: true },
   { screen: "demo-printer", requiresManager: true },
   { screen: "demo-reader", requiresManager: true },
@@ -700,6 +701,7 @@ export class DashboardApp extends LitElement {
    * session. */
   @state() private screen: ScreenId = "login";
 
+  #enabledModules: readonly string[] = [];
   #activeScreens = new Map<
     string,
     { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
@@ -1185,6 +1187,7 @@ export class DashboardApp extends LitElement {
     this.sessionRole = undefined;
     this.myPersonId = "";
     this.#sessionPermissions = [];
+    this.#enabledModules = [];
     this.#activeScreens.clear();
     this.#navGroups.clear();
     this.#activePanels = [];
@@ -1205,6 +1208,7 @@ export class DashboardApp extends LitElement {
    * throw rather than silently dropping or replacing a contribution.
    */
   #activate(enabled: readonly string[]): void {
+    this.#enabledModules = [...enabled];
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
     const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
     const ids = new Set<string>(CORE_SCREENS);
@@ -1744,8 +1748,20 @@ export class DashboardApp extends LitElement {
           requested = undefined;
         }
         const profile = this.renderRoot.querySelector<ProfileScreen>("dashboard-profile-screen");
-        const scopes =
-          requested === "profile"
+        const retainedSchedule =
+          requested === "my-schedule" && this.screen === "my-schedule" && !this.profileOpen
+            ? this.renderRoot.querySelector("dashboard-my-schedule-screen")
+            : null;
+        const hoursPanel = retainedSchedule?.shadowRoot?.querySelector("dashboard-my-hours-panel");
+        const hoursDraft = hoursPanel?.shadowRoot?.querySelector(
+          "dashboard-attendance-proposal-dialog",
+        );
+        // A tab change retains the schedule forms and releases only the Hours editor's draft.
+        const scopes = retainedSchedule
+          ? hoursDraft
+            ? [hoursDraft]
+            : []
+          : requested === "profile"
             ? []
             : this.profileOpen && requested === this.screen && profile
               ? [profile]
@@ -2018,6 +2034,9 @@ export class DashboardApp extends LitElement {
     switch (this.screen) {
       case "my-schedule":
         return html`<dashboard-my-schedule-screen
+          .request=${this.request}
+          .liveData=${this.api.liveData}
+          .modules=${this.#enabledModules}
           .api=${this.api}
           .myPersonId=${this.myPersonId}
         ></dashboard-my-schedule-screen>`;
