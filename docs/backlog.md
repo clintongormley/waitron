@@ -1130,15 +1130,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`content.suggestions_ready`, `apps/dashboard/src/i18n/alert-messages.ts`), because the alert
   formatter has no plural forms.
 
-- **Translate all: no bell notice when a run's last job fails, expires or is refused, although an
-  earlier job's suggestions wait (A689's fifth PR, 2026-10-15).** `contentSuggestionsAlertSource`
-  (`apps/server/src/alert-sources.ts`) raises the notice only for a run that is `done` or
-  `partly_done`, as the plan's Task 19 says; a run of two jobs whose second fails ends `failed` with
-  the first job's suggestions still counted in `waiting`, and the bell says nothing. Measured by
-  Task 19's review with a temporary case: job 1 done with 3 suggestions, job 2 failed → notice `[]`.
-  Owner question filed; the alternative is a notice for any run that is neither sending nor running
-  with `waiting > 0`.
-
 - **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
   (`readSuggestionRun`, `packages/catalogue/src/content-suggestion-jobs.ts`) counts every stored
   suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,

@@ -17,7 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { readSuggestionRun } from "@waitron/catalogue";
+import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/catalogue";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   type A4HoldCode,
@@ -798,20 +798,16 @@ export function batteryAlertSource(deps: {
   };
 }
 
-/** The Translate all notice: open after a run ends done or partly done while any suggestion is
- * waiting, until someone opens the translations dialog. */
+/** The Translate all notice: open once a run has stopped, however it stopped, while any suggestion
+ * is waiting, until someone opens the translations dialog. A run with a job still active is not
+ * stopped: opening the dialog cannot mark it opened (`markSuggestionRunOpened`). */
 export function contentSuggestionsAlertSource(): AlertSource {
   return {
     area: "content",
     permission: "catalogue.manage",
     async read({ tx }): Promise<readonly OngoingAlert[]> {
       const run = await readSuggestionRun(tx);
-      if (
-        run === null ||
-        run.opened ||
-        run.waiting === 0 ||
-        (run.state !== "done" && run.state !== "partly_done")
-      )
+      if (run === null || run.opened || run.waiting === 0 || (await readActiveSuggestionJob(tx)))
         return [];
       const params = { count: run.waiting, failed: run.failed };
       const shared = {

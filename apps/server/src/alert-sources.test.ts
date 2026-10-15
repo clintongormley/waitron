@@ -5,6 +5,7 @@ import {
   CATALOGUE_MIGRATIONS,
   contentSuggestionJobs,
   contentSuggestions,
+  markSuggestionRunOpened,
 } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
@@ -1382,12 +1383,135 @@ describe("contentSuggestionsAlertSource", () => {
     expect(await readNotice()).toEqual([]);
   });
 
-  it.each([
+  const STOPPED = [
     ["failed", { state: "failed" as const, failure: "provider" as const }],
     ["refused", { state: "refused" as const, refusal: "consent" as const }],
     ["expired", { state: "expired" as const }],
-  ])("raises nothing for a %s run, even beside waiting suggestions", async (_name, values) => {
-    await seedWaiting(await seedSuggestionJob(values), 1);
+  ] as const;
+
+  it.each(STOPPED)(
+    "raises the notice for a %s run beside waiting suggestions",
+    async (_name, values) => {
+      await seedWaiting(await seedSuggestionJob(values), 1);
+      expect(await readNotice()).toEqual([
+        {
+          key: "content.suggestions_ready",
+          code: "content.suggestions_ready",
+          params: { count: 1, failed: 0 },
+          severity: "notice",
+          since: FINISHED,
+          screen: "content-languages",
+        },
+      ]);
+    },
+  );
+
+  it.each(STOPPED)(
+    "raises nothing for a %s run with no suggestion waiting",
+    async (_name, values) => {
+      await seedWaiting(await seedSuggestionJob(values), 0);
+      expect(await readNotice()).toEqual([]);
+    },
+  );
+
+  it("raises the notice for what an earlier job stored when the run's last job failed", async () => {
+    const runId = randomUUID();
+    const sent = { "product:p0": ["en"], "product:p1": ["en"], "product:p2": ["en"] };
+    const first = await seedSuggestionJob({ runId, sent, runTotal: 6, total: 3, done: 3 });
+    await seedSuggestionJob({
+      runId,
+      position: 2,
+      state: "failed",
+      failure: "provider",
+      sent: { "product:p3": ["en"], "product:p4": ["en"], "product:p5": ["en"] },
+      runTotal: 6,
+      total: 0,
+      done: 0,
+      finishedAt: "2026-09-15T11:40:00.000Z",
+    });
+    await seedWaiting(first, 3);
+    expect(await readNotice()).toEqual([
+      {
+        key: "content.suggestions_ready",
+        code: "content.suggestions_ready",
+        params: { count: 3, failed: 0 },
+        severity: "notice",
+        since: "2026-09-15T11:40:00.000Z",
+        screen: "content-languages",
+      },
+    ]);
+  });
+
+  it("raises the partly done notice for a stopped run whose earlier job had failures", async () => {
+    const runId = randomUUID();
+    const first = await seedSuggestionJob({
+      runId,
+      state: "partly_done",
+      runTotal: 12,
+      total: 7,
+      done: 2,
+      failed: 5,
+    });
+    await seedSuggestionJob({
+      runId,
+      position: 2,
+      state: "expired",
+      runTotal: 12,
+      total: 0,
+      done: 0,
+      finishedAt: "2026-09-15T11:40:00.000Z",
+    });
+    await seedWaiting(first, 2);
+    expect(await readNotice()).toEqual([
+      {
+        key: "content.suggestions_ready",
+        code: "content.suggestions_ready_partly",
+        params: { count: 2, failed: 5 },
+        severity: "notice",
+        since: "2026-09-15T11:40:00.000Z",
+        screen: "content-languages",
+      },
+    ]);
+  });
+
+  it("raises nothing while the run is still sending", async () => {
+    const jobId = await seedSuggestionJob({ state: "submitting", finishedAt: null });
+    await seedWaiting(jobId, 1);
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises nothing for a failed job whose Cloud job is not yet released, which opening could not clear", async () => {
+    const jobId = await seedSuggestionJob({
+      state: "failed",
+      failure: "provider",
+      cloudJobId: "cloud-job-1",
+      released: false,
+    });
+    await seedWaiting(jobId, 1);
+    expect(await readNotice()).toEqual([]);
+    await withTransaction(suite.db, (tx) => markSuggestionRunOpened(tx));
+    expect(await readNotice()).toEqual([]);
+  });
+
+  it("raises the notice for a failed run once its Cloud job is released, until someone opens it", async () => {
+    const jobId = await seedSuggestionJob({
+      state: "failed",
+      failure: "provider",
+      cloudJobId: "cloud-job-1",
+      released: true,
+    });
+    await seedWaiting(jobId, 1);
+    expect(await readNotice()).toEqual([
+      {
+        key: "content.suggestions_ready",
+        code: "content.suggestions_ready",
+        params: { count: 1, failed: 0 },
+        severity: "notice",
+        since: FINISHED,
+        screen: "content-languages",
+      },
+    ]);
+    await withTransaction(suite.db, (tx) => markSuggestionRunOpened(tx));
     expect(await readNotice()).toEqual([]);
   });
 });
