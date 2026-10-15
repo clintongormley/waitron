@@ -35,6 +35,12 @@ export function createFirstSetupModuleHost(options: {
   venueDir: string;
   modules: readonly WaitronModule[];
   moduleConfig?: ModuleConfig;
+  freezeConfiguration?: (
+    request: import("@waitron/provisioning").VenueRequest,
+    newTaxpayer: boolean,
+  ) => Promise<
+    NonNullable<import("@waitron/provisioning").FirstSetupFrozen["configurationImport"]>
+  >;
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
 }) {
   const coordinator = createFirstSetupCoordinator();
@@ -45,7 +51,7 @@ export function createFirstSetupModuleHost(options: {
     store,
     coordinator,
     bootId,
-    freeze: async (request, environment, ids) => {
+    freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
         options.modules,
         request.location.fiscalTerritory,
@@ -53,8 +59,17 @@ export function createFirstSetupModuleHost(options: {
       );
       const selected = enabledModules(options.modules, selection.config);
       planVenue(request, selected);
+      let configurationImport;
+      if (intent?.configurationImport) {
+        if (options.freezeConfiguration === undefined) throw new AppError("setup.not_ready", {});
+        configurationImport = await options.freezeConfiguration(
+          request,
+          intent.newTaxpayer === true,
+        );
+      }
       return {
         ...ids,
+        ...(configurationImport === undefined ? {} : { configurationImport }),
         sourceId: `first-setup:${ids.attemptId}`,
         environment,
         request,

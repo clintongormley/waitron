@@ -37,6 +37,13 @@ export function firstFiscalProvisionRequest(state: FirstSetupState) {
   const offering = state.frozen.modules.filter((module) => module.request !== null);
   return {
     environment: state.frozen.environment,
+    ...(state.frozen.configurationImport === undefined
+      ? {}
+      : {
+          configurationImport: true,
+          configurationDigest: state.frozen.configurationImport.digest,
+          newTaxpayer: state.frozen.configurationImport.newTaxpayer,
+        }),
     venue: structuredClone(state.frozen.request),
     initialOperations: {
       nodeId: state.frozen.nodeId,
@@ -145,6 +152,7 @@ export function firstFiscalPayload(
           nodeId: state.frozen.nodeId,
           administratorId: state.frozen.administratorId,
           modules: state.frozen.modules,
+          configurationImport: state.frozen.configurationImport ?? null,
           inputs: Object.fromEntries(
             Object.entries(state.inputs).filter(([name]) => name !== "$publication"),
           ),

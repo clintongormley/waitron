@@ -47,6 +47,7 @@ export interface ProvisionRequest {
   venue: VenueRequest;
   /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
   configurationImport?: boolean;
+  configurationDigest?: string;
   /** The import goes to a different taxpayer: the request's tax ID must differ from the bundle's. */
   newTaxpayer?: boolean;
   initialOperations?: InitialVenueInput;

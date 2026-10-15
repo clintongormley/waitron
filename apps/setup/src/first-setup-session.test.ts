@@ -706,3 +706,11 @@ describe("explicit replacement after abandonment", () => {
     expect(requests).toHaveLength(1);
   });
 });
+
+it("passes import intent only in the owner claim without persisting the wizard draft", async () => {
+  const { session, requests } = create(() => claim());
+  await session.open();
+  await session.claim(venue, "es", { configurationImport: true, newTaxpayer: true });
+  expect(requests[0]!.body).toMatchObject({ venue, configurationImport: true, newTaxpayer: true });
+  expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("configurationImport");
+});

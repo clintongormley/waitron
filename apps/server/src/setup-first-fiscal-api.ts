@@ -192,7 +192,17 @@ export function mountSetupFirstFiscalApi(
   );
   app.post(`${root}/claim`, (c) =>
     boundary(c, log, async () => {
-      const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "venue"]);
+      const body = exact(
+        await readFirstFiscalBody(c),
+        ["clientClaimNonce", "venue"],
+        ["configurationImport", "newTaxpayer"],
+      );
+      if (
+        (body.configurationImport !== undefined && typeof body.configurationImport !== "boolean") ||
+        (body.newTaxpayer !== undefined && typeof body.newTaxpayer !== "boolean") ||
+        (body.newTaxpayer === true && body.configurationImport !== true)
+      )
+        invalid();
       const raw = exact(body.venue, [
         "country",
         "taxId",
@@ -244,7 +254,12 @@ export function mountSetupFirstFiscalApi(
       void __;
       return c.json(
         await host.owner.claimFirstSetup(
-          { environment, request: { ...venue, admin: { ...normalized, password, pin } } },
+          {
+            environment,
+            request: { ...venue, admin: { ...normalized, password, pin } },
+            configurationImport: body.configurationImport === true,
+            newTaxpayer: body.newTaxpayer === true,
+          },
           text(body.clientClaimNonce),
         ),
       );

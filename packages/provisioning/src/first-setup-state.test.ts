@@ -682,3 +682,36 @@ it("refuses candidate and post-consumption imports for modules outside the froze
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   expect(await f.store.read()).toEqual(state);
 });
+
+it("retains the exact configuration import binding and refuses a changed digest after restart", async () => {
+  const f = await fixture();
+  const input = { ...frozen(), configurationImport: { digest: "a".repeat(64), newTaxpayer: true } };
+  await f.claim(input);
+  expect((await createFirstSetupStore(f.options).read())?.frozen.configurationImport).toEqual({
+    digest: "a".repeat(64),
+    newTaxpayer: true,
+  });
+  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  disk.frozen.configurationImport.digest = "b".repeat(64);
+  await writeFile(f.statePath, JSON.stringify(disk));
+  await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+});
+it.each([
+  null,
+  {},
+  { digest: "not-a-digest", newTaxpayer: false },
+  { digest: 1, newTaxpayer: false },
+  { digest: "a".repeat(64), newTaxpayer: "false" },
+  { digest: "a".repeat(64), newTaxpayer: false, path: "/foreign" },
+])(
+  "refuses malformed configuration import binding %j before claiming",
+  async (configurationImport) => {
+    const f = await fixture();
+    await expect(
+      f.claim({ ...frozen(), configurationImport } as FirstSetupFrozen),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    await expect(readFile(f.statePath)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
