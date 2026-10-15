@@ -20,6 +20,7 @@ import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { CALENDAR_MONTH_PLAN_READS } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   readCalendarMonthPlan,
@@ -622,6 +623,72 @@ describe("the Opening hours month read", () => {
     expect(month.days.map(({ seasonId, departments }) => ({ seasonId, departments }))).toEqual(
       Array(42).fill({ seasonId: null, departments: [] }),
     );
+  });
+
+  it("plans the month from the tables it declares, holidays and special-day paint included", async () => {
+    const v = await venue();
+    const semanaSanta = await special(v, {
+      name: "Semana Santa",
+      repeatsYearly: true,
+      dates: [{ date: "2025-04-18", closedAllDay: false }],
+    });
+    await suite.db
+      .update(specialDayDates)
+      .set({ holidayName: "Viernes Santo" })
+      .where(eq(specialDayDates.specialDayId, semanaSanta.id));
+    const tables = await run(async (tx) => {
+      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+        .session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        const frame = await readCalendarMonthPlan(tx, v.cfg, "2026-04", AT);
+        expect(frame.plan.special.get("2026-04-03")?.specialDayId).toBe(semanaSanta.id);
+        return prepared.mock.calls.flatMap((call) =>
+          [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
+            (match) => match[1]!,
+          ),
+        );
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    expect([...new Set(tables)].sort()).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
+  });
+
+  it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
+    const v = await venue();
+    const semanaSanta = await special(v, {
+      name: "Semana Santa",
+      repeatsYearly: true,
+      dates: [{ date: "2025-04-18", closedAllDay: true }],
+    });
+    // 2025's list is not shipped, so the save cannot have named the holiday itself.
+    await suite.db
+      .update(specialDayDates)
+      .set({ holidayName: "Viernes Santo" })
+      .where(eq(specialDayDates.specialDayId, semanaSanta.id));
+    const { month, tables } = await run(async (tx) => {
+      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+        .session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        return {
+          month: await readOpeningHoursMonth(tx, v.cfg, "2026-04", AT),
+          tables: prepared.mock.calls.flatMap((call) =>
+            [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
+              (match) => match[1]!,
+            ),
+          ),
+        };
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    // Viernes Santo falls on 2026-04-03.
+    const day = (date: string) => month.days.find((d) => d.date === date)!;
+    expect(day("2026-04-03").specialDay).toEqual({ id: semanaSanta.id, name: "Semana Santa" });
+    expect(day("2026-04-18").specialDay).toBeNull();
+    expect(tables.filter((table) => table === "locations")).toHaveLength(1);
   });
 
   it("sends the same statements for one department as for three, not one per day or department", async () => {

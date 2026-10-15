@@ -11,6 +11,7 @@ import {
   civilDateOf,
   currentBusinessDay,
   readLocationClock,
+  readLocationClockAndPlace,
   validateBusinessDay,
   validateCutover,
   validateTimeZone,
@@ -169,6 +170,30 @@ describe("readLocationClock", () => {
     const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, location!.id));
 
     expect(clock).toEqual({ cutoverChanges: [], timeZone: "Atlantic/Canary", dayCutover: "04:30" });
+  });
+
+  it("reads the clock beside the location's province and city", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Sala",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurante",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00:00",
+        province: "Sevilla",
+        city: "Dos Hermanas",
+      })
+      .returning({ id: locations.id });
+
+    const read = await withTransaction(suite.db, (tx) =>
+      readLocationClockAndPlace(tx, location!.id),
+    );
+
+    expect(read).toEqual({
+      clock: { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "05:00" },
+      place: { province: "Sevilla", city: "Dos Hermanas" },
+    });
   });
 
   it("throws a plain Error for a location the database does not hold", async () => {

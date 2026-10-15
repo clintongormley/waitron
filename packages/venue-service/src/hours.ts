@@ -1,3 +1,4 @@
+import type { LocationPlace } from "@waitron/reporting";
 import { and, eq } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
@@ -74,6 +75,7 @@ export type HolidayReader = (
   cfg: VenueScope,
   from: LocalDate,
   to: LocalDate,
+  place?: LocationPlace,
 ) => Promise<readonly HolidayFact[]>;
 
 async function readHolidays(

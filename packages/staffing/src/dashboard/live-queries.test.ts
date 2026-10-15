@@ -20,19 +20,24 @@ describe("QUERY_DEPENDENCIES", () => {
     ]);
   });
 
-  it("reads the month again when its paint, a staff role, an area, a season, a special day, the location or the day's changeover changes", () => {
+  it("reads the month again when its paint, a staff role, an area, a season, a special day, a holiday area, the location or the day's changeover changes", () => {
     expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
       "staffing_days",
       "staffing_blocks",
       "staff_roles",
       "departments",
       "kitchen_stations",
+      "tenants",
+      "locations",
+      "location_day_cutover_changes",
+      "holiday_geographies",
       "seasons",
       "special_days",
       "special_day_dates",
-      "locations",
-      "location_business_day_settings",
-      "location_day_cutover_changes",
+      "department_days",
+      "department_day_ranges",
+      "zone_days",
+      "zone_day_ranges",
     ]);
     expect(Object.keys(QUERY_DEPENDENCIES)).toEqual([
       "staff-roles",

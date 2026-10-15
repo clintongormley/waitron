@@ -1,6 +1,10 @@
 import type { Transaction } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
-import { readLocationClock } from "@waitron/reporting";
+import {
+  readLocationClock,
+  readLocationClockAndPlace,
+  type LocationPlace,
+} from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import {
   readDayPlan,
@@ -139,6 +143,7 @@ export interface CalendarMonthPlan {
   seasons: readonly (Season & { lastDay: string })[];
   /** As stored; the days' changeovers read a zone this runtime cannot place as UTC. */
   clock: BusinessDayClock;
+  place: LocationPlace;
   plan: DayPlan;
   /** The whole Monday-to-Sunday weeks that cover `month`. */
   days: readonly {
@@ -168,10 +173,10 @@ export async function readCalendarMonthPlan(
   const from = addDays(first, -((weekdayOf(first) + 6) % 7));
   const to = addDays(last, (7 - weekdayOf(last)) % 7);
   const dates = rangeDates(from, to);
-  const stored = await readLocationClock(tx, cfg.locationId);
+  const { clock: stored, place } = await readLocationClockAndPlace(tx, cfg.locationId);
   const clock = wallClock(stored);
   const seasons = await readSeasons(tx, cfg);
-  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const plan = await readDayPlan(tx, cfg, dates, seasons, place);
   const touched = new Map<string, Season & { lastDay: string }>();
   for (const date of dates) {
     const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
@@ -183,6 +188,7 @@ export async function readCalendarMonthPlan(
     today: venueLocalMoment(at, stored)?.civilDate ?? null,
     seasons: [...touched.values()],
     clock: stored,
+    place,
     plan,
     days: dates.map((date) => {
       const special = plan.special.get(date) ?? null;
@@ -229,7 +235,7 @@ export async function readOpeningHoursMonth(
     plan,
   );
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of await readHolidayFacts(tx, cfg, dates[0]!, dates.at(-1)!))
+  for (const fact of await readHolidayFacts(tx, cfg, dates[0]!, dates.at(-1)!, frame.place))
     factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   return {
     ...status,

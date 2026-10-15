@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  kitchenStations,
+  locations,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import {
@@ -13,6 +19,7 @@ import {
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
+import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
 import { saveSeasonStaffing, saveSpecialDayStaffing } from "./paint.js";
 import { staffRoles } from "./schema/staffing.js";
@@ -95,6 +102,26 @@ async function painted() {
 
 const read = (cfg: { locationId: string }) =>
   inTx((tx) => readStaffingMonth(tx, cfg, "2026-08", AT));
+
+/** What `fn` returned, and every table each statement it sent names after `from` or `join`. */
+async function tablesRead<T>(fn: (tx: Transaction) => Promise<T>) {
+  return inTx(async (tx) => {
+    const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+      .session;
+    const prepared = vi.spyOn(session, "prepareQuery");
+    try {
+      const result = await fn(tx);
+      const tables = prepared.mock.calls.flatMap((call) =>
+        [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
+          (match) => match[1]!,
+        ),
+      );
+      return { result, tables };
+    } finally {
+      prepared.mockRestore();
+    }
+  });
+}
 
 describe("readStaffingMonth", () => {
   it("counts each painted area's slots on each business day of the month's whole weeks", async () => {
@@ -196,29 +223,55 @@ describe("readStaffingMonth", () => {
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
-  it("reads each table once, and none of the hours, zones, holidays or clock status it does not show", async () => {
+  it("reads each table once, joins included, and none of the hours, zones, holidays or clock status it does not show", async () => {
     const v = await painted();
-    const tables = await inTx(async (tx) => {
-      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
-        .session;
-      const prepared = vi.spyOn(session, "prepareQuery");
-      try {
-        await readStaffingMonth(tx, v.cfg, "2026-08", AT);
-        return prepared.mock.calls.map(
-          (call) => /\bfrom "(\w+)"/.exec((call[0] as { sql: string }).sql)?.[1],
-        );
-      } finally {
-        prepared.mockRestore();
-      }
-    });
+    const { tables } = await tablesRead((tx) => readStaffingMonth(tx, v.cfg, "2026-08", AT));
     expect(tables).toContain("staffing_days");
-    expect(tables.length).toBe(new Set(tables).size);
+    expect(tables).toContain("location_day_cutover_changes");
+    expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
     for (const unshown of [
       "floor_zones",
       "holiday_geographies",
       "location_business_day_settings",
       "tenants",
     ])
+      expect(tables).not.toContain(unshown);
+  });
+
+  it("reads each table once when a repeating special day follows a public holiday, places it by that holiday, and reads again on a change to any of them", async () => {
+    const v = await painted();
+    const semanaSanta = await inTx(async (tx) => {
+      await tx
+        .update(locations)
+        .set({ province: "Sevilla", city: "Sevilla" })
+        .where(eq(locations.id, v.cfg.locationId));
+      const [row] = await tx
+        .insert(specialDays)
+        .values({ locationId: v.cfg.locationId, name: "Semana Santa", repeatsYearly: true })
+        .returning({ id: specialDays.id });
+      await tx.insert(specialDayDates).values({
+        specialDayId: row!.id,
+        locationId: v.cfg.locationId,
+        date: "2025-04-18",
+        holidayName: "Viernes Santo",
+      });
+      return row!.id;
+    });
+    const { result: month, tables } = await tablesRead((tx) =>
+      readStaffingMonth(tx, v.cfg, "2026-04", AT),
+    );
+    // Viernes Santo falls on 2026-04-03, not on the saved date's 04-18.
+    expect(month.days.find((d) => d.date === "2026-04-03")!.specialDay).toEqual({
+      id: semanaSanta,
+      name: "Semana Santa",
+    });
+    expect(month.days.find((d) => d.date === "2026-04-18")!.specialDay).toBeNull();
+    expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
+    for (const holidayTable of ["tenants", "holiday_geographies"])
+      expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
+    const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
+    expect(tables.filter((table) => !watched.includes(table))).toEqual([]);
+    for (const unshown of ["floor_zones", "location_business_day_settings"])
       expect(tables).not.toContain(unshown);
   });
 });

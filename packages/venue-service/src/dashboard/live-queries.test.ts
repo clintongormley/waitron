@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { CALENDAR_MONTH_PLAN_READS, QUERY_DEPENDENCIES } from "./live-queries.js";
 
 it("declares no health query: Prep stations reads no live kitchen numbers", () => {
   expect(Object.keys(QUERY_DEPENDENCIES)).not.toContain("health");
@@ -195,4 +195,9 @@ it("refreshes a station's delete impact when a table or group is named for today
   expect(QUERY_DEPENDENCIES["station-delete-impact"]).toEqual(
     expect.arrayContaining(["floor_today_tables", "floor_today_join_tables", "floor_today_joins"]),
   );
+});
+
+it("reads the Opening hours month again on a change to anything its plan reads", () => {
+  const watched: readonly string[] = QUERY_DEPENDENCIES["opening-hours-month"];
+  expect(CALENDAR_MONTH_PLAN_READS.filter((table) => !watched.includes(table))).toEqual([]);
 });

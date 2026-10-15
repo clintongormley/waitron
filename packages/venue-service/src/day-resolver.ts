@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
@@ -37,11 +37,12 @@ export async function readDayPlan(
   cfg: VenueScope,
   businessDays: readonly LocalDate[],
   venueSeasons?: readonly Season[],
+  place?: LocationPlace,
 ): Promise<DayPlan> {
   const seasons = venueSeasons ?? (await readSeasons(tx, cfg));
   return {
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
-    special: await specialDaysOn(tx, cfg, businessDays),
+    special: await specialDaysOn(tx, cfg, businessDays, place),
   };
 }
 
