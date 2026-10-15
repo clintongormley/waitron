@@ -268,8 +268,10 @@ qualifies no new runtime behavior.
 **Branch implementation checkpoint, 2026-10-15:** revised Task 1 adds separate unsigned
 position/key codecs and explicit browser-safe exports. Its Node and Chromium checks cover
 four-character groups, check domains, canonical byte encoding and exact original recovery-key
-text. These are codec tests, not PDF, wizard, recovery or owner acceptance. Unsigned history,
-PDF delivery and the remaining replacement-plan tasks stay open.
+text. Revised Task 2 adds the unsigned history library: sequential reservations and consumption,
+known-head refusals, permanent typed burn floors, and exact displaced public-history retention.
+These are library checks, not PDF, wizard, recovery or owner acceptance. PDF delivery and the
+remaining replacement-plan tasks stay open.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
 [two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
