@@ -2096,12 +2096,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
   the server's refusal is the backstop.
 
-- **A660 — Moving an open counter order with nothing sent into a party printed a kitchen ticket
-  (2026-10-14; check).** Found by A650's probe (Move this bill, an open counter order holding a
-  Burger nobody had sent, into Mesa 43's party): the move queued an ordinary kitchen ticket and the
-  dish counted as sent. The cause was not traced (`groupArrivingDishes`,
-  `apps/server/src/order-groups.ts`, puts a bill's released dishes in a fired group); decide whether
-  a counter order's dishes count as already released, and if not, stop the move firing them.
+- **A660 — Moving an open counter order with nothing sent into a party sends its dishes to the
+  kitchen (2026-10-14; traced 2026-10-15; next action: owner decision).** Found by A650's probe. It
+  is a deliberate rule, not a defect: a bill entering table service from another service mode sends
+  its unsent dishes at the move, "as a round is sent" (`adoptZone` and `moveWouldSend`,
+  `apps/server/src/move-bill.ts`), added by #864 because a pay-first counter order moved to a table
+  otherwise never reached the kitchen. Five cases in `apps/server/src/party-move-bill.test.ts`
+  ("the dishes of an open bill moved between service modes") pin it. Measured 2026-10-15 in A660's
+  worktree: an unsent pay-first counter order moved into a seated party gained one fired kitchen
+  item and a fired group; with `moveWouldSend` forced false, the same move left the dish unsent in a
+  held group and those five cases failed; a placed counter order whose dish was already sent kept
+  its one kitchen item. Held groups for arriving dishes (#874) landed after #864, so the other
+  option — the dishes arrive held and the waiter releases them — did not exist when the rule was
+  made. The question is in lane A's questions file.
 
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
