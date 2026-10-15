@@ -78,7 +78,7 @@ export interface LockedLine {
 }
 
 // base = gross ÷ (1 + rate/100) = gross × 100 ÷ (100 + rate). One rounded division.
-function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
+export function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
   const hundred = decimal("100");
   return divideDecimal(multiplyDecimal(gross, hundred), addDecimal(hundred, rate), MONEY_SCALE);
 }
