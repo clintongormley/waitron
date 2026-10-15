@@ -1107,6 +1107,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
   second PR). A box-side refusal before any job is built would say what is wrong.
 
+- **Translate all: a submit Cloud accepted whose reply was lost, followed by the box ending the job,
+  leaves Cloud holding the job until its own 24-hour expiry.** The box never learns Cloud's job id,
+  so when it then ends the job as not connected (the service switched off) or expired (its own
+  24-hour clock), it marks the job released without releasing it in Cloud; resending after 24 hours
+  could create a second job. Pinned by "a job Cloud took but whose reply was lost…" in
+  `apps/server/src/content-suggestion-runner.test.ts`. What would fix it is open.
+
 - **Translate all: open points from the review of A689's second PR.** (1) A suggestion's
   out-of-date check starts from the item as it stood when the results were stored, not when the
   job was sent, so an owner change (an included menu moved between sections) while Cloud works is
