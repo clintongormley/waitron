@@ -1,6 +1,8 @@
 # A668 — Allergen information in the editor, at publishing and on the till
 
-Date: 2026-10-14. Status: design agreed with the owner in chat; awaiting review of this written spec.
+Date: 2026-10-14. Status: approved by the owner, 2026-10-15. How the till opens the info window and
+the line window was redrawn the same day by A738 (see `docs/backlog/till.md`, "A738"); where the two
+differ on the till, the owner's answer recorded below decides.
 Companion spec: [A669 — an allergy at the table](2026-10-14-a669-allergy-at-the-table-design.md).
 
 ## Why
