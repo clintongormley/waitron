@@ -1,5 +1,11 @@
 # Cloud fiscal allocation registry Implementation Plan
 
+**Dated A679 update, 2026-10-15 at 21:30:** the owner removed custody signing from the new
+paper-register flow. The [current A679 revision](../specs/2026-10-15-a679-two-route-redesign.md#authoritative-revision-owner-decision-2026-10-15-at-2130)
+records unsigned paper integrity, typed positions and the separately owned Cloud admission work.
+The signed protocol and implementation receipts below remain historical where superseded.
+Cloud C receipts keep their signatures; this note changes no deployed contract or protected writer.
+
 > **For agentic workers:** Use `superpowers:executing-plans` for future inline implementation, task by task. Read `superpowers:test-driven-development` before writing implementation or tests. Steps use checkboxes. This authorised handoff starts no Cloud code. Proposed adapters remain subject to the owner enablement gates below.
 
 **Goal:** Give subscribers an optional outside register for fresh fiscal identities, with a phone receipt that an offline Waitron node can validate through its recovery flow.

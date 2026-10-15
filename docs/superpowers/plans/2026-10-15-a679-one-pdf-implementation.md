@@ -1,544 +1,462 @@
-# A679 One-PDF Implementation Plan
+# A679 One-PDF Implementation Plan — replacement, 2026-10-15 21:30 revision
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` for **INLINE execution**, one task at a time. Read `superpowers:test-driven-development` before writing implementation or tests. Observe each expected failure before implementing. Inline implementation is authorised after review/publication; do not reopen the six settled requirements.
+> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` for INLINE execution, one task at a time. Read `superpowers:test-driven-development` before implementation or tests. Observe the intended RED before implementing. Do not delegate automatically or reopen settled owner requirements.
 
-**Goal:** Complete first Live setup and ordinary recovery using outside allocation history, with one PDF supporting original-file upload and short typed continuation from its printout.
+**Goal:** Complete first Live setup and ordinary recovery with one PDF, unsigned owner-declared paper history, and 20-character register continuation.
 
-**Architecture:** The browser transiently creates or recovers custody material and produces the secret PDF. The host receives public evidence only and retains frozen attempts, public history, retirement records and node-key verifiers. Complete-file history and conservative typed checkpoints are distinct. Existing module preparation and activation remain the fiscal boundary.
+**Architecture:** The browser handles PDF bytes and reversible printed node-key encoding transiently. The host retains public history, frozen attempts, retirement evidence and key verifiers. A distinct owner-declared module admission branch feeds explicitly unsigned evidence into existing fiscal activation; Cloud receipts retain their signed protocol.
 
-**Tech stack:** TypeScript, Lit/shared controls, Hono, Web Crypto, existing durable JSON, PDFKit 0.20.2, PDF.js 6.4.299, fontkit 2.0.4, existing Noto Sans, Vitest, Playwright and installed Chrome. No QR/image/camera dependency.
+**Tech Stack:** TypeScript, Lit/shared controls, Hono, Web Crypto, existing durable JSON, Vitest, Playwright/installed Chrome. Proposed PDF dependencies remain PDFKit 0.20.2, PDF.js 6.4.299 and fontkit 2.0.4, subject to package/API qualification in Task 3.
 
-**Spec:** `docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md`, including the dated 19:35 note and manual-entry appendix.
+**Spec:** `docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md`, authoritative 21:30 revision.
 
-**Target:** `docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md`.
+## Authority and state
 
-## Authority and starting state
-
-| Source | Revision/authority |
-| --- | --- |
-| Published redesign/current docs base | `4539d3903702571d3a9d2020a14b7f4a52a2d165` |
-| Preserved product | `cc553697b898a7e0a8ebf8e3089c57c634212f67` |
-| Remote product/draft #1752 | `6318bd61e6f237491146e758c3f52710165b2ec1`, campaign receipt |
-| Product/docs common ancestor | `0802457c531130181590503b4177e91a9040b0ed` |
-| Read-only Cloud | `2912202e4b8a7ffed86845e430935d101962556e` |
-| Owner authority | `questions.md`: 17:15 V2, 18:35–19:15 requirements/result, final 19:35 entry |
-| Inherited constraints | October 4 §9; October 12 Cloud plan; A679 queue |
-
-The revised draft’s accepted source-review corrections are retained below. That review predates typed recovery and does not qualify it.
-
-This author performed source reading only. No implementation, tests, Chrome probe, PDF generation, credential operation or physical recovery ran. Earlier recorded 234 fiscal/33 server passes and proposal images do not qualify this candidate.
-
-Continue the preserved whole product branch after plan review/publication. Reconcile main while retaining reusable commits. One whole A679 production branch/PR; one coherent plan task per campaign firing. No invented queue items.
-
-The historical tool plan remains paused; its Task 9 stays incomplete. Earlier reviews remain historical.
+- Owner decision: `/Users/clintongormley/waitron-campaign-e/questions.md:4565–4569`.
+- V2 scope: the same file, `4374–4381`; exact authority boundary at `4311–4323`.
+- Inherited allocation contract: Oct 4 design §9 and Oct 12 Cloud implementation plan.
+- Product inspected at `aa6c1b957508570d60b3652c5c0ac79044556993`.
+- Task ledger: `.superpowers/sdd/2026-10-15-a679-one-pdf-implementation/progress.md`.
+- Cloud inspected at `54ec9f1714f661c3bdcb19020628003dfb94b58e`.
+- Previous Task 1 and its receipts remain historical; revised active behavior needs fresh RED/GREEN evidence.
+- The author read source only. No test, build, service, browser or physical operation ran.
+- Driver applies and fresh-reviews the spec and this complete plan before product implementation.
+- The owner’s explicit removal authorises unsigned admission work. Actual protected-writer or existing fiscal-assertion edits still need exact permission.
+- One eventual whole A679 product PR revises Task 1 and completes dependent tasks.
+- The old tool plan’s Task 9 remains incomplete; no historical acceptance is inherited.
 
 ## Global constraints
 
-- Scope is `(taxpayerNif,softwareId,fiscalEnvironment,prefix)` across every venue/node/organisation of that taxpayer.
-- Preserve paper `S000001..S999999`, paper recovery `P000001..P999999`, Cloud `C000001..C999999`; refuse zero/exhaustion without wrap or gap reuse.
-- Preserve emergency E plus 26 Crockford characters, 128 random bits, first suffix character `0..7`; no N namespace.
-- Emergency checksum stays four uppercase CRC-16/CCITT-FALSE hexadecimal digits over the 27 ASCII identity bytes, outside the filed identity.
-- Installation ≤27; base ≤21 with `[A-Za-z0-9/_.-]`; invoice ≤60; counter `1..9,999,999,999`.
-- Software ID: two uppercase ASCII letters/digits; NIF: canonical nine uppercase letters/digits.
-- Preserve every configured `{code,purpose}`, including multiple bases per purpose and `FF/full`; changed bases require fresh allocation.
-- Cloud registration `test` maps to fiscal `preproduction`; production maps to production.
-- Outside consumption precedes activation; explicit kept-document confirmation precedes activation. Download/print events do not prove retention.
-- Freeze attempt/event/source/target/admin/module versions/environment/bases/allocation. Route or scope changes require retirement and fresh bindings.
-- Consumption, abandonment, retirement and uncertainty never free names. “Not consumed” never clears saved intent.
-- Full uploaded history remains lossless. Typed checkpoint continuation burns all prior S/P names and visibly declares missing original history.
-- Never use restored-disk absence as free-name evidence. Signatures/checksums/trust do not prove unseen currentness.
-- Paper documents contain matching custody material and named node keys. C-only documents need no paper signer; optional supplied paper material stays an indivisible pair.
-- Exclude admin/archive passwords, provider credentials, Cloud cookies, machine signing credentials and TLS private keys from the PDF.
-- Raw custody material and whole PDFs stay browser-transient. Only intended PDF/print output and appropriate authenticated recovery delivery may carry node secrets.
-- Public-only host verification receives no seed, private key, node secret or PDF. Structural browser reading grants no authority.
-- No signature/seed/PDF self-enrolment. Preserve independent trust and A732’s separately approved actual-original comparison.
-- No code changes to hash/`computeHuella`, numbering, `registros`, alta builders, `registerSif`, `restoreFiscal`, SQL/migrations or guards.
-- Existing fiscal assertions and golden huella/inmutabilidad files stay unedited. Required assertion changes return with exact lines before editing.
-- No network on the sale transaction, automatic conflict switching, seller-fencing promise or reconstruction of missing sales.
-- Readiness/Demo/Preparation retain separate preproduction targets and throwaway identities.
-- A731/A732/A733 remain separate before-go-live requirements; implement none of their repair-page mutations here.
-- No QR generation, scanner, image decoding or camera recovery work.
-- Every commit uses `git commit -s`; normal hook/current-head CI; no automatic landing.
+- Scope: taxpayer/software/fiscal-environment/prefix across venues, nodes and organisations.
+- Preserve `S000001..S999999`, `P000001..P999999`, `C000001..C999999`; no zero, wrap or gap reuse.
+- Preserve E plus 26 Crockford symbols/128 random bits, first suffix `0..7`, and existing emergency CRC protocol.
+- Installation ≤27; base ≤21 using `[A-Za-z0-9/_.-]`; invoice ≤60; counter `1..9,999,999,999`.
+- NIF nine canonical uppercase ASCII letters/digits; software ID two.
+- Preserve the complete configured `{code,purpose}` set, multiple bases per purpose and `FF/full`.
+- Cloud `test` maps to fiscal `preproduction`.
+- No new paper signing key, paper signatures, hidden signer, seed/reference/head-tag typing or custody enrolment.
+- Signed Cloud receipts, independent issuer trust and exact consumed-context checks remain.
+- Outside consumption and explicit kept-document confirmation precede activation.
+- Freeze IDs, scope, module versions, bases, operator, allocation and route; retirement precedes replacement.
+- Burn floors and terminal states never fall; restored absence supplies no free-name authority.
+- Full uploaded history stays lossless; checkpoint gaps remain explicit.
+- Typed checks bind frozen context and catch accidental errors only.
+- Generated node secrets retain 24 random bytes/192 bits and their exact existing verifier value.
+- Raw keys/PDFs stay transient; appropriate authenticated HTTPS recovery delivery remains permitted.
+- No PDF/raw-key host persistence, browser storage, logs, telemetry or retained real-secret captures.
+- V2 strict readers, password rebind, retirement, workspace selection and publication-only finish remain.
+- Any known/unknown existing register excludes the password-free no-master exception.
+- A731/A732/A733 remain separate before-go-live work; no repair-page mutations for them here.
+- Unsigned paper Cloud import/report stays unavailable until a separately owned contract lands.
+- No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change.
+- The owner’s removal covers paper-signature admission semantics, not an exception to H2 or protected assertions.
+- No scanner, QR, image decoding, camera, offline tool, PBKDF gate, ink or loss exercise.
+- No sale-path network, automatic conflict switching, seller-fencing or missing-sales reconstruction.
+- Signed commits, normal hooks, current-head CI, two required installed Claude reviews and owner physical acceptance.
 
 ## Review focus
 
-| Failure class | Required outcome and owning tests |
+| Input or failure | Expected behavior; owning task |
 | --- | --- |
-| Original PDF resaved without its attachment or with conflicting public contents | Explicit original-file/typing error; no empty-register fallback. Task 2 download/resave tests. |
-| Mistyped seed/position/key, wrong frozen scope or known stale paper | Refuse before signing/use; actual recovery verifier still required. Tasks 1–3 compact/session tests. |
-| Typed checkpoint mistaken for complete history or used to overwrite newer facts | Burn all earlier names; preserve original evidence; no fabricated predecessor or Cloud import. Tasks 1, 3, 5, 10. |
-| Consumption followed by lost response/rebind/publication failure | No freed allocation/rekey/blind activation; exact committed finish only. Tasks 4, 8–9. |
-| Missing DB, restored retired roots or delayed Cloud response after route retirement | Inspect before opening; no fallback, retained-data unlock or delayed activation. Tasks 5–9. |
+| Lowercase/aliases, separators, noncanonical padding or wrong key format | Normalise display only; reconstruct exact secret or refuse; Task 1. |
+| Equal-floor old sheet versus genuinely current sheet | No invented head comparison; require declaration and retain known facts; Task 2. |
+| Missing/edited/duplicate attachment or actually changed resave | Exact attachment round trip or explicit refusal; Tasks 3 and 11. |
+| Unsigned JSON submitted without live owner/node authority | Cannot activate, reserve or establish; Tasks 0, 4 and 5. |
+| Consumption followed by crash, key loss or retired delayed response | No freed identity, blind activation or silent rekey; Tasks 5–11. |
 
-## Keep/change/drop inventory
+## Files and ownership
 
-| Existing piece | Disposition |
+`fiscal/` means `packages/fiscal-verifactu/src/`; `server/` means `apps/server/src/`; `setup/` means `apps/setup/src/`.
+
+| Files | Responsibility |
 | --- | --- |
-| Generic initial-setup/browser seats and module registry | Keep; extend opaque interfaces. |
-| Canonical paper block/consumption bytes and Node verification | Keep unchanged. |
-| Candidate validator | Keep real validator; add complete configured-set cases and P wrapper. |
-| Durable claim/marker/coordinator/exclusion/frozen IDs | Keep and extend. |
-| Any-browser password recovery and eligible marker repair | Keep preserved primitives; finish eligibility/invalidation/entry integration. |
-| One-use public evidence grants | Keep boot/revision/generation/time binding; add history/delivery/stage binding. |
-| Exact committed-result checks/readiness isolation | Keep. |
-| Native custody seed/DER/public derivation | Reuse transiently; no rotation. |
-| Full-history PDF reader | Keep, with real Chrome download/upload and resave handling. |
-| Printed recovery | Change to compact seed/position/checkpoint plus named key; no complete-history claim. |
-| QR/scanner/image/camera work | Drop, including planned dependencies/tests. |
-| Offline downloaded tool/PBKDF gate/ink/challenge drills | Remove from normal flow; preserve unrelated CLI/reusable code until reviewed disposition. |
-| Superseded non-fiscal tool/UI checks | Replace with equally strict file/typed checks; inventory every change. |
-| Resolution retirement/workspace/entry/finish | Remaining implementation. |
-| Old reviews, 44-step/FOLLOW-UP and scan proposals | Historical/cancelled; no acceptance credit. |
+| New `fiscal/paper-register-protocol.ts`, `paper-register-compact.ts` | Version-2 public types, canonical bytes and typed display codec |
+| New `fiscal/paper-register-history.ts` | Unsigned history replay, monotonic floors and original retention |
+| Existing signed `register-protocol.ts`, `register-history.ts`, `custodian/register-compact.ts` | Historical libraries only; no active new-flow imports |
+| New `fiscal/register-pdf.ts`, `register-reader.ts` | Browser PDF rendering and exact attachment reading |
+| New `fiscal/register-session.ts`, `setup/register-picker.ts` | Memory-only selection, declarations and successor construction |
+| New `fiscal/declared-paper-evidence.ts`, `declared-paper-preparation.ts` | Explicit unsigned evidence and callback-scoped admission |
+| Existing module/setup/configuration/preparation files | Opaque routing and authority wiring |
+| `fiscal/allocation-envelope.ts`, `standby-allocation.ts`, limited `allocation.ts` verifier branch | Explicit owner-declared admission only; no activation-writer edits |
+| New `server/first-fiscal-delivery.ts`, `first-setup-node-key.ts` | Kept-document binding and verifier staging |
+| Existing owner/evidence/activation/API files | Host ownership, grants, checked commitment and publication |
+| New provisioning resolution/workspace files and server adapters | V2 inspection, retirement and entry selection |
+| Existing recovery UI plus new `server/recovery-document-api.ts` | Ordinary restore selection and authorised reissue |
+| New/affected sibling tests | Focused behavioral qualification without changing protected assertions |
 
-## Files and contracts
+New browser exports are explicit subpaths. Do not expose Node verifier modules to the browser.
 
-Paths under `fiscal/` below mean `packages/fiscal-verifactu/src/`; `server/` means `apps/server/src/`; `setup/` means `apps/setup/src/`. Other paths are written fully.
+## Shared contracts
 
-| Owner/files | Responsibility |
-| --- | --- |
-| `fiscal/register-protocol.ts`, `register-history.ts` | Canonical public history/checkpoint shapes and verification |
-| `fiscal/custodian/register-compact.ts`, `register-key.ts`, `register-session.ts` | Browser-only typed decoding, key recovery and session |
-| `fiscal/custodian/register-pdf.ts`, `register-reader.ts`, `custodian/assets/register-noto-sans.ttf` | PDF generation/attachment reading/printed blocks |
-| `fiscal/initial-paper-candidates.ts`, `initial-setup.ts`, `initial-cloud-setup.ts`, `register-cloud-export.ts` | Module-owned candidates/preparation/import |
-| `fiscal/setup/first-fiscal-screen.ts`, `register-picker.ts`, `strings.ts` | Fiscal browser interaction/copy |
-| `packages/module/src/initial-setup.ts`, `setup-contract.ts`, `operation-preparation.ts` | Generic opaque seats |
-| `packages/dashboard-modules/src/setup.ts` | Browser composition |
-| `server/first-fiscal-delivery.ts`, `first-setup-node-key.ts` | Public delivery binding and verifier stage |
-| Existing host owner/evidence/activation/API files | Retained authority/preparation/publication |
-| `packages/provisioning/src/first-setup-resolution.ts`, `first-setup-workspace.ts` | Durable resolution/workspace records |
-| `server/first-setup-resolution-inspection.ts`, `first-setup-resolution.ts`, `first-setup-entry.ts`, `first-setup-resolution-api.ts` | Inspection, authority and boot admission |
-| `setup/screens/first-setup-resolution-screen.ts`, sibling strings | Resolution UI |
-| Existing `setup/screens/recovery-allocation.ts`, `recovery-copy.ts` | Ordinary backup recovery integration |
-| `server/recovery-document-api.ts` | Authorised staged/committed key reissue |
-| Named sibling tests below | Behavioral qualification |
-| Current developer/operator/backlog docs | Procedure, limits and changed-check inventory |
-
-All proposed signatures below are **new**, except retained named interfaces/functions. Browser exports use explicit browser-safe subpaths.
+Use exact-key parsers; all types below are new version-2 contracts unless explicitly retained.
 
 ```ts
 type RegisterScope = {
-  readonly taxpayerNif: string; readonly softwareId: string;
-  readonly environment: "preproduction" | "production";
+  taxpayerNif: string; softwareId: string;
+  environment: "preproduction" | "production";
 };
-type RegisterHead = {
-  readonly registerId: string; readonly revision: string; readonly digest: string;
+type RegisterPosition = { sHighWater: number; pHighWater: number };
+type RegisterHead = { registerId: string; revision: string; digest: string };
+type NamedNodeKey = { nodeId: string; name: string; secret: string };
+type PrintedPositionFields = { sPosition: string; pPosition: string; check: string };
+type PrintedNodeFields = {
+  encoding: "raw192" | "utf8"; value: string; check: string;
 };
-type NamedNodeKey = {
-  readonly nodeId: string; readonly name: string; readonly secret: string;
+type PublicOriginal = {
+  kind: "signed-paper" | "cloud-receipt" | "declared-paper-history";
+  bytesBase64url: string; digest: string;
 };
-type RegisterPosition = {
-  readonly sHighWater: number; readonly pHighWater: number;
-};
-type CompactRegisterFields = {
-  readonly referenceKind: "uuid" | "text"; readonly custodianReference: string | null;
-  readonly custodySeed: string;
-  readonly sPosition: string; readonly pPosition: string;
-  readonly sourceHeadTag: string; readonly check: string;
-};
-type RegisterCurrentStatement = {
-  readonly head: RegisterHead; readonly currentRegisterConfirmed: true;
-  readonly noParallelPaperAllocation: true; readonly confirmedAt: string;
+type CurrentStatement = {
+  currentRegisterConfirmed: true; noParallelPaperAllocation: true;
+  confirmedAt: string;
 };
 ```
 
-`InitialSetupContext`, `FirstSetupOwnerAttempt`, `FirstSetupHold`, `OperationBinding`, `CustodyKey`, `CustodyPublic`, `SignedPaperValue`, `PaperBlock`, `PaperConsumption` and `ReceiptTrust` retain their existing owners.
-
-### Full history and checkpoint history
-
-- `RegisterHistory` is a strict tagged union with `mode:"complete"|"checkpoint"`.
-- Complete mode retains scope/register/custodian/custody-version identity and **every** signed revision/original object.
-- Revision payload: `{version:1,registerId,scope,revision,previousDigest,createdAt,sHighWater,pHighWater,events}`.
-- Revision is a canonical positive decimal string. Predecessor is full lowercase SHA-256; genesis uses 64 zeroes.
-- Sign `["waitron.paper-register-revision",1,payload]`, using recursive lexical object-key order and preserved array order. Digest the canonical signed revision.
-- Preserve existing `paperBlockBytes` and `paperConsumptionBytes` exactly.
-- Checkpoint mode has a newly signed `PaperBurnCheckpoint`, retained original evidence if available, and complete subsequent signed revisions.
-- `PaperBurnCheckpoint` exact payload: `{version:1,kind:"paper-burn-checkpoint",checkpointId,scope,custodianId,fingerprint,sHighWater,pHighWater,sourceHeadTag,currentOriginalConfirmed:true,noParallelPaperAllocation:true,completeHistoryUnavailable:true,burnAllPrior:true,createdAt}`.
-- Sign `["waitron.paper-burn-checkpoint",1,payload]`. Its full signed digest anchors the new continuation’s first revision.
-- `sourceHeadTag` is only a truncated source reference. Never put it in `previousDigest` or claim it reconstructs the original register ID/revision.
-- Retain known custody version when independently established; unknown checkpoint custody version remains explicit and supplies no Cloud import authority.
-- Replay marks all S/P values ≤checkpoint floors permanently unavailable; it need not invent one historical allocation object per excluded number.
-- Subsequent PDF attachments retain the checkpoint, all available originals and every subsequent fact. No silent upgrade to “complete”.
-
-### Secret document variants
-
-```ts
-type PaperRegisterMaterial = {
-  readonly publicHistory: RegisterHistory;
-  readonly custody: {
-    readonly scope: RegisterScope; readonly fingerprint: string; readonly pkcs8: string;
-  };
-};
-type SecretRegisterDocument =
-  | { readonly version: 1; readonly kind: "waitron-secret-register-document";
-      readonly route: "paper"; readonly paper: PaperRegisterMaterial;
-      readonly cloudReceipts: readonly unknown[]; readonly nodeKeys: readonly NamedNodeKey[] }
-  | { readonly version: 1; readonly kind: "waitron-secret-register-document";
-      readonly route: "cloud"; readonly paper: PaperRegisterMaterial | null;
-      readonly cloudReceipts: readonly unknown[]; readonly nodeKeys: readonly NamedNodeKey[] };
-```
-
-A paper pair is indivisible and key-matched. C-only documents require public consumed-receipt evidence and named keys, without generating S/P or enrolling a paper signer.
-
-Browser reading checks structure. Node verifies public signatures/trust/active context before use. Neither scope nor trust is taken from an uploaded success flag.
-
-### Dependencies, carrier and compact encoding
-
-- Use browser PDFKit **0.20.2**, `pdfkit/output` `toBytes`, `file(Uint8Array,options)` for the embedded attachment.
-- Use PDF.js **6.4.299**, local worker, `getAttachments()` and `render()`; disable scripting/evaluation/remote resources.
-- Copy `apps/server/src/assets/invoice-noto-sans.ttf` byte-for-byte to the fiscal asset above. Use fontkit **2.0.4** for coverage; unsupported glyphs visibly escape as `[U+1F600]`, while attachment Unicode remains exact.
-- Retain Noto OFL notices and add the identical browser asset to their README; existing npm notice/Vite/Docker machinery carries dependency and worker notices.
-- Remove planned qrcode-generator/jsQR dependencies from this feature. No new executable/system package.
-- Attachment: exact canonical UTF-8 `waitron-register-v1.json`; ≤8 MiB. Selected PDF ≤64 MiB. Refuse over-limit input without truncation.
-- Require exactly one expected attachment. Missing/multiple/conflicting attachments refuse; never OCR visible text or infer an empty register.
-- Preserve original canonical data through original Chrome download/upload and supported attachment-preserving resave. Attachment-stripping copies produce the explicit error.
-- New custodian IDs use UUIDs; compact U reference is canonical base64url of their 16 bytes, 22 characters. Existing non-UUID IDs use T reference, canonical UTF-8 base64url, unchanged identity.
-- Seed: canonical case-sensitive base64url of 32 bytes, 43 characters. Reconstruct fixed DER prefix `302e020100300506032b657004220420`; derive SPKI/fingerprint with existing browser key code.
-- S/P fields: six decimal digits each, `000000..999999`; they mean highest excluded/reserved, not next candidate.
-- Source head tag: first 80 SHA-256 bits of `["waitron.paper-head-reference",1,head]`, sixteen Crockford characters.
-- Register check: first 40 SHA-256 bits of `["waitron.paper-compact-check",1,scope,custodianId,publicSpkiBase64url,sHighWater,pHighWater,sourceHeadTag]`, eight Crockford characters.
-- Named-node check: first 40 SHA-256 bits of `["waitron.node-paper-check",1,scope,nodeId,keyName,secret]`, eight Crockford characters.
-- In every compact/head/node-check formula, `scope` means exactly the three-field `RegisterScope` (`environment`, `softwareId`, `taxpayerNif` in lexical key order), never four-field `CustodyScope`. Custodian ID is the separate listed argument. Pin identical complete hash vectors in browser and Node.
-- Print reference kind U (UUID) or T (text) beside the reference. The form has an explicit `referenceKind` selector; choosing it adds no typed data character. Never infer it from length: a text reference can also be 22 characters. Test both equal-length encodings and wrong-kind refusal.
-- Canonical arrays use UTF-8 JSON; embedded objects use recursive lexical keys. Checks exclude grouping spaces. Accept ASCII grouping whitespace only; preserve base64url case, `-` and `_`. Reject invalid alphabet, noncanonical padding/bits and extra data.
-- UUID reference/seed/positions/tag/check total **101** characters, or **79** with independently bound custodian ID. A newly generated 32-character node secret/check totals **40**; combined **141/119**. Imported nongenerator keys retain their full actual value: encode UTF-8 bytes as canonical base64url, print/select `nodeKeyFormat:"utf8"`, show actual encoded character count `n+8`, and decode exactly before the existing verifier. Generated mode prints/selects `nodeKeyFormat:"generated"` and preserves its raw 32 characters. Never reject/truncate a valid imported key merely to fit the common count; test both formats, whitespace/Unicode in imported text and checksum scope parity.
-- Custom reference length `n` gives **79+n** register characters; show the actual count on that document/screen. NIF/software/environment and backup node/name are frozen context, not extra secret fields.
-- These checks detect many accidental errors; random unrelated matches are `2^-40`, head-tag collisions `2^-80`. No forgery/freshness guarantee.
-
-## Task 1: History, conservative checkpoint and exact candidates
-
-**Spec:** Appendices A/B/E plus 19:35 manual appendix.
-
-**Files:** create `fiscal/register-protocol.ts`, `register-history.ts`, `custodian/register-compact.ts` and sibling tests; modify candidate/protocol exports and module initial setup.
-
-**Interfaces:**
-
-- `parseRegisterHistory(value:unknown):RegisterHistory`.
-- `verifyRegisterHistory(history:RegisterHistory,trust:CustodyPublic,known:KnownRegisterEvidence):Promise<RegisterProjection>`.
-- `KnownRegisterEvidence` contains independently trusted identity, maximum known S/P floors, current/retained full heads and retained originals.
-- `RegisterProjection` contains mode, full head, floors, occupied facts, recipients, next S/P candidates and completeness limits.
-- Browser `recoverCompactRegister(fields:CompactRegisterFields,context:CompactContext):Promise<RecoveredCompactRegister>`.
-- `CompactContext` contains frozen scope, independently bound custodian ID if any, expected public trust and known public evidence.
-- `RecoveredCompactRegister` contains transient key handle and checked public position/reference, never a reconstructed old history.
-- `validatePaperCandidates(context:InitialSetupContext,prefix:"S"|"P",serials:readonly number[]):ValidatedInitialCandidates`; retain initial S wrapper.
-
-- [ ] Add tests for two venues consuming S1/S2, original-object preservation, predecessor gaps/forks, duplicate IDs/names, lowered floors, scope/key mismatch and terminal-to-free refusal.
-- [ ] Add browser/Node exact-vector tests for canonical three-field scope, both reference kinds (including text whose encoded length is 22), both node-key formats, and group counts.
-- [ ] Add compact tests asserting the recovered public key equals the original; lengths are 22/43/6/6/16/8; omitted bound reference gives 79; custom IDs preserve exact text.
-- [ ] Wrong scope/seed/check/alphabet/padding refuses before signing. Known lower floors or a recognised older head refuse, including equal floors with a known older head.
-- [ ] Assert `nextS===43`, `nextP===8` for floors 42/7; all prior reserved entries are unusable. Checkpoint contains no fabricated original blocks/revisions/signatures.
-- [ ] Unknown head with adequate floors still needs explicit human currentness; a matching tag is not proof. A later older full file cannot lower floors.
-- [ ] Add four-base success and omitted/relabelled/duplicate-code refusals without editing existing fiscal assertions.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/register-history.test.ts src/custodian/register-compact.test.ts src/custodian/register-compact.browser.test.ts src/initial-paper-candidates.test.ts`; first observe missing/new behavioral failures.
-- [ ] Implement pure canonical shapes, browser seed recovery/checks and Node public verification. Never send seed to Node. Refuse overflows/exhaustion; no inferred free names.
-- [ ] Keep real validator checks at counters 1/9999999999, base 21/22 and invoice 60/61; rerun protocol/evidence/allocation-boundary suites unchanged.
-- [ ] Commit with `git commit -s -m "feat: retain register history and conservative typed checkpoints"`.
-
-## Task 2: Real PDF, printed blocks and Chrome file round trip
-
-**Files:** create `fiscal/custodian/register-pdf.ts`, `register-reader.ts`, font asset, `register-pdf.browser.test.ts`; modify fiscal package/config/lockfile and notices.
-
-**Interfaces:**
-
-- `renderRegisterPdf(document:SecretRegisterDocument,locale:"en"|"es"):Promise<Uint8Array>`.
-- `readRegisterPdf(bytes:Uint8Array):Promise<SecretRegisterDocument>`.
-- `formatCompactRegister(document:SecretRegisterDocument):PrintedRegisterBlock|null`.
-- `formatNodeRecoveryKey(key:NamedNodeKey,scope:RegisterScope):PrintedNodeKeyBlock`.
-- Printed blocks expose checked fields, groupings and exact entered/displayed character counts.
-
-- [ ] Add full, checkpoint, C-only and C-plus-paper attachment round trips; assert exact canonical bytes and every supplied original object.
-- [ ] Verify paper tables, complete configured purposes, consumed/completion-unknown wording and C-only absence of invented paper keys.
-- [ ] Render `Peña Λάδι` and unsupported emoji; inspect extracted text/raster: supported glyphs render, unsupported glyphs escape, attachment text remains exact.
-- [ ] Keep actual installed-Chrome/wizard download/upload acceptance in Task 11 after Tasks 3/9 supply the picker and real wizard. This task’s independently passing deliverable is the real PDF/attachment/printed-block library; do not mark the later Chrome journey done here.
-- [ ] Add a real harmless annotation/form change before PDF.js `saveDocument()`. Assert the resaved PDF SHA-256 differs and exact canonical attachment content survives. Test no-change save separately: it may return original bytes and is not changed-resave evidence.
-- [ ] Library-reader controls reject corrupt/missing/repeated/conflicting attachments. Task 11 supplies the actual Chrome print/export-derived missing-attachment upload case after the wizard exists.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project browser src/custodian/register-pdf.browser.test.ts`; observe the named PDF/attachment/changed-resave/printed-code failures before implementation. Repeat this exact command after the minimal implementation; require counted passes.
-- [ ] Implement PDFKit attachment/collection and local PDF.js worker. Do not parse visual text as history or upload PDF bytes to the host.
-- [ ] Test extracted printed blocks through the real compact codec, including all 101/79/40/141/119 counts. This is automated data recovery, not physical typing acceptance.
-- [ ] Rerun counted suites and setup build; inspect worker, notices, font hash and no remote fetches. Commit with `git commit -s -m "feat: round trip fiscal PDFs and print compact recovery blocks"`.
-
-## Task 3: File/typed session, independent trust and currentness
-
-**Files:** create `fiscal/custodian/register-key.ts`, `register-session.ts`, session browser tests; create `fiscal/setup/register-picker.ts` and browser/a11y tests; modify custodian exports/internal helpers.
-
-**Interfaces:**
-
-- `RegisterSession.select(document:SecretRegisterDocument):Promise<RegisterSummary>`.
-- `RegisterSession.selectTyped(fields:CompactRegisterFields):Promise<RegisterSummary>`.
-- `RegisterSession.create(scope:CustodyScope,recordkeeper:string,noExistingRegister:true):Promise<RegisterSummary>`.
-- `RegisterSession.confirmCurrent(statement:RegisterCurrentStatement):void`.
-- `RegisterSession.successor(events:readonly RegisterEvent[],nodeKeys:readonly NamedNodeKey[]):Promise<SecretRegisterDocument>`.
-- `RegisterSession.dispose():void`.
-
-- [ ] Add failures: file/seed selection cannot enrol trust, confirm currency, sign or activate. Wrong valid signer refuses before signing.
-- [ ] Typed mode shows floors/burn consequence/history limits and derives full fingerprint for independent comparison; it does not create a replacement signer.
-- [ ] Existing/enrolled/unknown custody cannot use first-register creation. Lost trust cannot bypass A732 or unlock retained data.
-- [ ] Selection/edit/route change invalidates currentness, candidate review, receipt summary and delivery; known stale input refuses.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project browser src/custodian/register-session.browser.test.ts src/setup/register-picker.browser.test.ts`; observe named state/authority failures, then repeat after implementation and require counted passes.
-- [ ] Implement memory-only handles and explicit original-file/typed choices. When complete evidence is available, keep every original byte/object; typed fields cannot downgrade it.
-- [ ] A typed-only successor retains its signed checkpoint and complete future facts; printing it makes another usable compact block without pretending the gap disappeared.
-- [ ] Test storage/network/log bodies for absence of seed, PKCS8 and PDF. Clear handles/references/URLs on Continue/close; no guaranteed erasure claim.
-- [ ] Rerun browser/a11y suites, both themes. Commit with `git commit -s -m "feat: continue paper custody from a saved PDF or typed block"`.
-
-## Task 4: Public evidence, consumed delivery and staged verifier
-
-**Files:** create `server/first-fiscal-delivery.ts`, `first-setup-node-key.ts` and tests; modify evidence/host/API/activation and generic browser actions. Modify fiscal `allocation-paper-source.ts`, `allocation-preparation.ts`, `allocated-standby.ts`, `standby-allocation.ts`, `paper-evidence.ts` and checkpoint helpers/tests for fresh current-evidence admission; leave activation/numbering writers unchanged.
-
-**Interfaces:**
-
-- `stageInitialNodeKey(owner:FirstSetupOwnerAttempt,reconfirmation:string):Promise<{stage:StagedNodeKey,key:NamedNodeKey}>`.
-- `registerFirstFiscalDelivery(owner:FirstSetupOwnerAttempt,input:DeliveryInput,hold:FirstSetupHold):Promise<void>`.
-- `DeliveryInput` contains public history reference, exact input digest, document digest, register head or verified C receipt identity, and stage ID.
-- `confirmFirstFiscalDocumentKept(owner:FirstSetupOwnerAttempt,input:{documentDigest:string,kept:true},reconfirmation:string,hold:FirstSetupHold):Promise<void>`.
-- `installStagedNodeKey(db:Database,state:FirstSetupState,stage:StagedNodeKey):Promise<void>`.
-
-- [ ] Fail activation before intent, checked public consumption, delivery binding or explicit kept confirmation. Print/download/resave success flags confer nothing.
-- [ ] Fail wrong document/history/input/stage, stale owner/revision/generation, expired grant and concurrent/delayed submissions.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-delivery.test.ts src/first-setup-node-key.test.ts src/first-fiscal-evidence.test.ts`; observe the new grant/stage failures, then repeat after implementation and require counted passes.
-- [ ] Stage named raw secret transiently over actual same-origin HTTPS/no-store. Durable stage holds verifier/name/frozen binding only.
-- [ ] Retain bounded public history separately from existing 64-KiB grant/trust records. Transfer public revisions/objects in bounded chunks; validate/finalise the complete signed set before issuing a reference. Partial uploads grant nothing; never raise old parser/guard limits to admit secret PDFs.
-- [ ] Complete and checkpoint evidence are independently verified by the module, with known floors/originals retained. A checkpoint never deletes stored evidence or grants replay of an old allocation.
-- [ ] Add module-owned `assertPaperCheckpointAllows(checkpoint:VerifiedBurnCheckpoint,allocation:PaperAllocation,purpose:"new-activation"|"reserve"|"establish"|"promotion"):void`. `VerifiedBurnCheckpoint` is produced only after signature, independent trust, frozen scope and monotonic known-evidence verification; caller JSON cannot construct it. Check S/P identity against signed burn floors, not a claimed next-candidate number.
-- [ ] Trace and wire every fresh paper-current-evidence consumer before changing admission: initial module preparation; `createPaperAllocationSource` for ordinary restore/re-registration and promotion; `createPaperStandbySource`, `createStandbyAllocationPreparation` and `verifyPaperReservation` for reserve/establish; the promotion preparation before unchanged `allocation.ts`. Retained signature-only historical verification remains historical and cannot itself grant new activation. Missing checkpoint data when a checkpoint/floor is known refuses; omitting it cannot bypass the floor.
-- [ ] Observe direct RED cases through those real sources/preparations: signed checkpoint P42 plus a valid otherwise-current unused P40 reservation refuses `sif.allocation_invalid` (reservation no longer current), despite fresh owner confirmation; a newly reserved P43 succeeds. Repeat for initial S, restore/re-registration, standby reserve/establish and promotion. Include direct verifier and integration assertions, not only `nextP===43`. Publication-only finish of a genuinely checked committed event stays a separate zero-activation path, never a flag-based floor bypass.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-paper-source.test.ts src/allocation-preparation.test.ts src/standby-allocation.test.ts src/dormant-allocation.test.ts`; see expected floor-admission failures before adding that wiring, then counted passes. Keep all existing assertions and writers unchanged.
-- [ ] Write intent before browser signing of outside consumption; bind resulting public evidence and PDF digest. Require owner confirmation that the successor was kept, then issue one-use boot/revision/generation/time-bound evidence.
-- [ ] After exact fiscal commit, `installStagedNodeKey` owns one publication `withTransaction`: install only when verifier/name both absent; otherwise require exact equality; refuse partial/mismatch.
-- [ ] State at the call site why installation follows the fiscal commit: the node does not exist before it. Crash recovery uses the same saved stage and fresh authority, never minting on retry.
-- [ ] Same-visit Download/Print reuse exact Blob/key/stage. Assert no raw secret in DB/files/backups/logs/public evidence.
-- [ ] Rerun interruption cases. Commit with `git commit -s -m "feat: bind kept recovery documents before fiscal publication"`.
-
-## Task 5: Cloud preparation, original imports and capability limits
-
-**Files:** create `fiscal/initial-cloud-setup.ts`, `register-cloud-export.ts` and tests; modify initial setup/cloud preparation/configuration; add server Cloud route tests and module/browser wiring.
-
-**Interfaces:**
-
-- `prepareInitialCloudSetup(context:InitialSetupContext,input:unknown,evidence:{trust:ReceiptTrust,current:unknown}):InitialSetupImport`.
-- `createInitialCloudRequest(context:InitialSetupContext,venueId:string,operationId:string,incidentEvidence:string):CloudReserveInput`.
-- `readInitialCloudPacket(packet:string,trust:ReceiptTrust,context:InitialSetupContext):InitialSetupImport`.
-- Node `validateCloudDocumentEvidence(receipts:readonly unknown[],trust:ReceiptTrust,active:AllocationContext):CloudDocumentVerification`.
-- `CloudDocumentVerification={activeReceiptId:string,receiptDigests:readonly string[]}`.
-- `exportCloudPaperImports(history:RegisterHistory,cursor:CloudPaperImportCursor,venueBindings:ReadonlyMap<string,string>):readonly CloudPaperImportRequest[]`.
-
-- [ ] Fail untrusted/reserved/abandoned/unknown/changed scope/operator/event/source/target/bases receipts; assert planned local admin is not inferred from Cloud actor.
-- [ ] Public-only host action verifies all retained receipt signatures and active consumed context using independent trust. Browser binds summary to submitted receipt digests and invalidates it on edits.
-- [ ] Browser never imports Node `cloud-evidence.ts`; no PDF/private key/seed/node secret in this action. Activation independently re-verifies through existing preparation.
-- [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/initial-cloud-setup.test.ts src/register-cloud-export.test.ts`, then separately `pnpm --filter @waitron/server exec vitest run src/first-fiscal-cloud.route.test.ts src/cloud-fiscal-allocation-client.test.ts src/cloud-fiscal-allocation.test.ts`; observe named setup/evidence/export failures, repeat after implementation, require counted passes. No live service is implied.
-- [ ] Add module-owned setup preparation, dispatching Cloud before the paper-only setup branch; preserve recovery/re-registration and callback-scoped authority.
-- [ ] Export frozen public request file; open existing authenticated Cloud journey; import existing consumed manual packet. No cookies bypass/collection/forwarding.
-- [ ] Preserve exact operation IDs/bodies; full session/CSRF/exact portal origin; reserve/consume lost replies reconcile via status. Unknown never activates.
-- [ ] Add retired/different-binding verifier cases now. Full route retirement waits for Tasks 7–8 and is exercised in Task 9.
-- [ ] Report checked commitment afterward through existing machine report signing/reconciliation, outside the transaction; no reserve/activate from report.
-- [ ] Partition new max-100 candidate lists into original blocks **before signing**, ≤20 entries and ≤16,384 request bytes including signatures/facts/schema-maximum unknown bindings. Refuse indivisible oversized entries before reservation/signing.
-- [ ] Export existing objects only at original block boundaries; never truncate/re-sign/rewrite signed recipients. Cloud import sequence/predecessor is distinct from PDF revision and uses prior exact import-request digest.
-- [ ] Checkpoint-only history cannot synthesize earlier blocks or claim a complete import. Keep that transition unavailable until original evidence is supplied; preserve any authentic subsequent blocks without representing them as complete history.
-- [ ] Preserve exact original-recipient gate: `first-setup:<attempt>` is not Cloud’s UUID venue. No `venueBindings` remap or transfer of consumed identity can repair it.
-- [ ] Test compatible UUID originals and explicit unavailable state for first-setup originals; actual joint acceptance remains outstanding.
-- [ ] Loopback tests retain exact protocol auth/refusal/lost-reply/report behavior; label **synthetic, unverified live**.
-- [ ] Commit with `git commit -s -m "feat: prepare initial setup from verified consumed Cloud evidence"`.
-
-Cloud stays unavailable by default without production custody/entitlement/continuity/signer/timing and first-operator admission. The portal lacks public-request file import; do not simulate it as shipped.
-
-Lane D proposed work, no Cloud edits/new queue items: original-recipient admission without signature rewriting/freeing names; portal file import; production adapters; initial operator admission; restored namespace discovery; transfer/compromise policy.
-
-Source receipts: product `initial-setup.ts:91–92`; Cloud `validation.ts:581`, `paper-import.ts:149–169`, registration `index.ts:199–204`. These are source reads, not joint runtime qualification.
-
-## Task 6: Read-only inspection and password recovery
-
-**Files:** provisioning resolution module/tests; server resolution-inspection module/tests; existing owner/host/recovery routes.
-
-**Interfaces:**
-
-- `FirstSetupRoots={anchorVenueDir:string,anchorStateDir:string}`.
-- `inspectFirstSetupResolution(roots:FirstSetupRoots):Promise<FirstSetupInspection>`.
-- `recoverFirstSetupOwner(request:{inspectionId:string,expectedRevision:number,clientClaimNonce:string,password:string}):Promise<RecoveredOwner>`.
-- Inspection contains server-derived evidence digest, DB classification and allowed actions; abandoned recovery grants resolution authority only.
-
-- [ ] Fail interrupted-pair inspection while ordinary readers/raw boot remain strict. Marker repair must leave state bytes identical before separate rebind.
-- [ ] Fail wrong password, uncheckable verifier, racing/new-browser/lost-response/stale-proof cases; preserve frozen facts and invalidate old grants.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/first-setup-resolution-inspection.test.ts src/first-setup-owner.test.ts src/first-setup-recovery.route.test.ts`; observe named inspection/rebind failures, then repeat after implementation and require counted passes.
-- [ ] Reuse preserved repair/recover primitives, derive outside DB transaction, use `inTurn` plus actual throttling, then reread under exclusion.
-- [ ] Distinguish missing/corrupt/unreadable/partly migrated/unknown DB. Existence check precedes opener; inspection never creates/migrates/checkpoints.
-- [ ] EMPTY requires complete preactivation provenance and existing successful unused reads; tenant/location absence alone is insufficient. Missing proof returns unknown, not new SQL.
-- [ ] Rerun strict-reader positives/refusals. Commit with `git commit -s -m "feat: inspect and recover interrupted setup ownership"`.
-
-## Task 7: Register answers, retirement and isolated workspace
-
-**Files:** provisioning resolution/workspace modules/tests/exports; server resolution/workspace tests.
-
-**Interfaces:**
-
-- `RegisterAnswer={kind:"current-master",status:"Consumed"|"Not consumed"|"Unknown",custodian:string,reference:string,consultedAt:string}|{kind:"no-current-master",confirmed:true}`.
-- `startAgainFirstSetup(request:{inspectionId:string,expectedRevision:number,register:RegisterAnswer,authority:ResolutionAuthority}):Promise<WorkspaceBinding>`.
-- `resolveFirstSetupWorkspace(anchor:FirstSetupRoots):Promise<BootTarget>`.
-- `assertFirstSetupBootTarget(target:BootTarget):Promise<void>`.
-
-
-Carry forward the exact V2 records below. Source: preserved `cc553697b`, `docs/superpowers/plans/2026-10-15-a679-first-setup-repair.md`, “Proposed exports and durable records” and Tasks 3–4. Do not invent different anchor/backlink shapes in each entry path.
-
-```ts
-type WorkspaceBinding = {
-  workspaceId: string; anchorVenueDir: string; anchorStateDir: string;
-  venueDir: string; stateDir: string; resolutionId: string; selectionGeneration: number;
-};
-type ResolutionRecord = {
-  version: 1; resolutionId: string; sequence: number; previousRecordDigest: string | null;
-  attemptId: string | null; observedRevision: number | null; observedOwnerGeneration: number | null;
-  evidenceDigest: string; evidenceReferences: string[];
-  database: "empty-preactivation" | "missing" | "committed-exact" | "unknown-or-nonempty";
-  authority: "original-password" | "local-empty-no-custodian";
-  register: RegisterAnswer;
-  action: "marker-repair" | "ownership-rebind" | "retire" | "select-workspace" | "finish-publication";
-  phase: "prepared" | "applied"; nextWorkspace: WorkspaceBinding | null; recordedAt: string;
-};
-```
-
-- [ ] Fail all three answers: consumed preserved; Not consumed never clears intent; Unknown leaves old identity unavailable. Typed position/check does not substitute for this answer.
-- [ ] Fail password-free reset with enrolled/unknown custody, nonempty/unknown DB or incomplete provenance; retain eligible empty/no-master positive.
-- [ ] Run `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-workspace.test.ts`, then separately `pnpm --filter @waitron/server exec vitest run src/first-setup-workspace.test.ts`; observe named retirement/selection failures, repeat after implementation, require counted passes.
-- [ ] Retain exact original files and ordered prepared/applied resolution records with sequence/predecessor/evidence/authority/register/selection bindings.
-- [ ] Existing durable discipline: regular files/no symlinks, 0600/0700, fsync/rename/directory sync, bounded exact schemas, no secrets.
-- [ ] Stage server-named `<anchorStateDir>/first-setup-workspaces/<id>/{state,venue}`. Retire before selection; no copied business data/settings/credentials.
-- [ ] Require fixed `<anchorVenueDir>/first-setup-selection.json`, matching anchor-state witness, applied resolution record and target backlink binding both anchor roots, both target roots, resolution ID and selection generation. Disagreement/incomplete selection serves resolution only; no orphan selection/fallback.
-- [ ] Old missing DB path stays missing. Eligible password-authorised new workspace gets fresh schema/IDs/password/assignment; lost-password existing-custody/business cases remain A732.
-- [ ] Fault every write; restore old roots/state/DB, lose witnesses, substitute backlink/direct retired roots. Refuse before opening; include valid selected/ordinary venue positives.
-- [ ] Rerun counted suites. Commit with `git commit -s -m "feat: retire setup attempts into isolated workspaces"`.
-
-## Task 8: Exact finish and pre-open entry admission
-
-**Files:** server entry/resolution API and boot tests; modify bin/node-entry/boot/recovery-surface/activation/mode; CLI and restore-command admission.
-
-**Interfaces:**
-
-- `finishFirstFiscalSetup(request:{owner:FirstSetupOwnerAttempt,inspectionId:string,publication:unknown},hold:FirstSetupHold):Promise<VenueResult>`.
-- `publishCheckedFirstFiscal(host:FirstFiscalHost,deps:SetupDeps,state:FirstSetupState,checked:CheckedFirstFiscalCommit,publication:unknown,hold:FirstSetupHold):Promise<VenueResult>`.
-- `CheckedFirstFiscalCommit=NonNullable<Awaited<ReturnType<typeof checkedFirstFiscalCommit>>>`.
-- `startServerOrFirstSetupResolution(env:Record<string,string|undefined>):Promise<StartedServer>`.
-
-- [ ] Fail commit-before-host-result/publication/unfinished-marker cases. Finish needs exact commit, fresh owner/outside evidence and matching stage; assert zero activation calls.
-- [ ] Missing verifier installs only from saved bound stage after exact commit; existing verifier/name must match. Test crashes on both sides.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-interruption.test.ts src/first-setup-entry.test.ts src/first-setup-resolution.boot.test.ts`; observe named finish/pre-open failures, then repeat after implementation and require counted passes.
-- [ ] Extract publication helper; finish cannot reach provision/activation. Typed checkpoints cannot recreate lost old consumption/commit binding and therefore cannot authorise guessed replay.
-- [ ] Direct entry resolves before strict start; supervised before staged operations/ahead DB checks; already-recovery mounts same resolution service first.
-- [ ] Raw boot/CLI/restore retain strict refusals and reject retired/mismatched targets pre-open; lock anchor then target and reread.
-- [ ] Resolution listener exposes only resolution/status/public guidance; no provision/readiness/restore/adoption/trading or Retry bypass.
-- [ ] Actual TLS socket/same-origin required for passwords/keys. HTTP public guidance only; missing/unusable TLS remains A733.
-- [ ] Real processes cover every entry, omitted/conflicting roots, missing DB and interrupted selection; no premature mutations/trading.
-- [ ] Rerun unaffected boot positives. Commit with `git commit -s -m "feat: finish exact setup publication behind pre-open admission"`.
-
-## Task 9: Real file/typed wizard and resolution UI
-
-**Files:** fiscal screen/picker/strings; setup client/session/API types/initial screen/shell; new resolution screen/strings/browser/a11y/unsaved tests; browser composition.
-
-Remove normal offline-tool asset/build/download wiring and superseded non-fiscal tests. Add no scanner files/dependencies/routes.
-
-- [ ] Fail real-app flows through venue/admin/certificate/email/readiness, original PDF or typed current paper, complete candidate review, consumption, Download/Print, kept confirmation and activation.
-- [ ] Typed forms show exact count, frozen scope, derived full fingerprint, S/P burn ranges and incomplete-history limit. Seed/check/position changes invalidate prior checks.
-- [ ] Add C unavailable/import/unknown states; after Tasks 7–8 test explicit retirement/fresh workspace/bindings before switching to paper. Delayed C refuses; possible local commitment must resolve first.
-- [ ] Run `pnpm --filter @waitron/setup exec vitest run src/setup-app-first-fiscal.test.ts src/setup-app-first-fiscal.unsaved.test.ts src/screens/first-setup-resolution-screen.test.ts`; observe the new real-app flow failures, then repeat after implementation and require counted passes.
-- [ ] Generic setup mounts module contributions; host interprets no prefixes/purposes/secret codec. Fiscal-none skips; readiness remains isolated.
-- [ ] Same visit uses one cached PDF Blob/digest; Print/Download never auto-confirm kept. Resave/upload failure offers original file or typed route, never new signer.
-- [ ] EN/ES fixed V2 wording: interrupted/recover/start again/finish/abandoned/password refusal/uncheckable. Unknown currentness remains Unknown.
-- [ ] Show A731/A732/A733 unavailable explanations/prerequisites without enabled mutations, shell instructions or “incident handling” destination.
-- [ ] Shared primitives/semantic names/required markers/field errors/bottom message; request refusal alone does not disable. `draftScopeFor`, applicable `saveActionState`, declared tokens.
-- [ ] Test typed whitespace/case, wrong key/scope/check, stale selection, delayed replies, duplicate tabs/Web Locks, keyboard/focus and successful-write/failed-refresh.
-- [ ] Keep raw typed material out of persisted drafts/session storage/logs; draft controller snapshots remain memory-only and clear on teardown.
-- [ ] Inventory replaced non-fiscal tool/ceremony checks in `docs/operations/a679-changed-checks.md`; existing fiscal assertions stay unchanged.
-- [ ] Run setup/fiscal browser/a11y, browser-registry tests, setup build and unchanged root seam/purity/native-field/token/cycle guards.
-- [ ] Commit with `git commit -s -m "feat: offer saved-file and typed paper setup in the wizard"`.
-
-## Task 10: Ordinary restore, matching printed key and reissue
-
-**Files:** setup recovery allocation/copy/API; server recovery-document API/tests; ordinary archive/stream/managed/recovery-pack suites.
-
-**Interfaces:**
-
-- `selectRecoveryNodeKey(document:SecretRegisterDocument,preview:RecoveryBackupPreview):NamedNodeKey`.
-- `readTypedNodeKey(fields:{nodeKeyFormat:"generated"|"utf8",secret:string,check:string},scope:RegisterScope,preview:RecoveryBackupPreview):NamedNodeKey`; the checksum always hashes the actual decoded secret, not its display encoding.
-- `prepareRegisterRecovery(request:unknown,current:SecretRegisterDocument,confirmation:RegisterCurrentStatement):Promise<{publicOperation:unknown,successor:SecretRegisterDocument}>`.
-- `reissueNodeRecoveryKey(authority:ReissueAuthority,request:{nodeId:string,currentPublicHistory:unknown,expectedKeyName:string|null}):Promise<NamedNodeKey>`.
-- `reissueStagedNodeKey(owner:FirstSetupOwnerAttempt,request:{expectedStageId:string,expectedRevision:number,reconfirmation:string},hold:FirstSetupHold):Promise<{stage:StagedNodeKey,key:NamedNodeKey}>`.
-
-- [ ] Fail archive recovery using older matching key PDF/printout plus current newer history/typed checkpoint; prior P remains unavailable, fresh P is required.
-- [ ] Typed key check binds actual backup node/name/scope; wrong/missing secret cannot proceed with position alone. Actual recovery verifier remains authoritative.
-- [ ] Add bucket/managed variants through existing real restore seats; preserve archive password/source/isolation/operator checks.
-- [ ] Run `pnpm --filter @waitron/setup exec vitest run src/screens/recovery-allocation.test.ts src/screens/recovery-copy.a11y.test.ts`, then separately `pnpm --filter @waitron/server exec vitest run src/recovery-document-api.test.ts src/recovery-pack-api.test.ts`; observe named typed/key-reissue failures, repeat after implementation, require counted passes.
-- [ ] Integrate original-file and typed blocks, yielding opaque public operation plus separate `nodeRecoverySecret`. Node secret goes only to appropriate authenticated HTTPS recovery request.
-- [ ] C-only printed key does not reconstruct a C receipt; obtain original public packet/current authorised Cloud result. No invented S/P or synthetic C evidence.
-- [ ] Reprint preserves supplied history/keys without allocation; never replace newer outside history with local snapshot or typed minimum.
-- [ ] Reissue requires current route evidence and original-password unfinished authority or manager `system.manage`, rechecked before mutation.
-- [ ] Positively preactivation reissue changes only saved stage, never DB writer; invalidates old delivery/kept/grants and requires new document confirmation. Existing spent name remains spent.
-- [ ] Started/unknown activation must resolve commitment first. Exact committed node uses existing verifier writer; unresolved refuses.
-- [ ] Committed reissue changes future-backup named verifier only; old backups still need retained old keys. Preserve custody signer; zero fiscal activation/Cloud reserve/consume.
-- [ ] `/api/box/recovery-pack` retains manager permission, matching key, HTTPS/no-store; module payload public. Whole secret PDF/seed never enters it.
-- [ ] Public operation import rejects PDF bytes/private envelopes/keys; dedicated reader/typed codec handles them locally.
-- [ ] Rerun unchanged ordinary restore assertions. No A731/A732/A733 action is added.
-- [ ] Commit with `git commit -s -m "feat: recover named backup keys from saved or printed documents"`.
-
-## Task 11: Integrated acceptance and fourteen clash cases
-
-**Files:** existing server first-fiscal e2e/launch/interruption/entry suites; new clashes e2e/download e2e; fiscal PDF/compact/session and setup real-app tests.
-
-- [ ] First observe each new behavioral failure, then fix remaining integration. Real retained DB/public files, not an all-mocked mount, supply evidence.
-- [ ] Real wizard publishes/restarts with distinct readiness/production identities and installed named verifier.
-- [ ] Fault intent/signing/document retention/kept/grant/rollback/commit/verifier/publication boundaries; no duplicate activation or freed name.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts src/first-fiscal-clashes.e2e.test.ts src/first-fiscal-launch.test.ts src/first-fiscal-interruption.test.ts src/first-setup-resolution.boot.test.ts src/first-fiscal-document-download.e2e.test.ts`; observe each new integration failure before its fix, then repeat with counted passes and inspected DB/public-file facts. The download suite launches an isolated installed Chrome via Playwright `channel:"chrome"`, and closes only its own browser/context/server in guarded teardown.
-- [ ] In that real wizard, await `page.waitForEvent("download")`, click its PDF action, call `download.saveAs(path)`, then select that exact file with the real picker’s `setInputFiles(path)`. Assert original PDF SHA-256 and canonical attachment equality, not a DOM success flag. Re-upload an actually changed annotation/form resave with a different PDF hash and unchanged attachment; include a no-change control. Finally print/export rendered pages through Chrome into a genuinely attachment-free PDF; its real upload must show the explicit original-file/typing refusal.
-- [ ] Exercise print-only continuation using real PDF-extracted compact fields, independently typed through controls. Assert matching custody key, conservative burn and correct new allocation.
-- [ ] Exercise print-only archive recovery with both register block and matching 40-character named-key block. Missing backup key refuses.
-- [ ] EN/ES × light/dark ×390/1280: inspect real wizard/manual/reader/Cloud-unavailable/resolution captures, computed colors, keyboard and axe. Synthetic secrets only; no secret captures in retained receipts.
-- [ ] Start dev via `wa-wt onboarding <registered-worktree-name>` only; distinguish dev/preproduction from production-shaped synthetic host.
-- [ ] Prepare owner check: open actual PDF; upload original Chrome download; continue/recover from printed typed fields. No scan, ink, separate tool or old 44-step exercise.
-- [ ] Commit with `git commit -s -m "test: qualify PDF file and typed fiscal recovery journeys"`.
-
-| Appendix D row | Paper Waitron assertion | Cloud assertion / separate Cloud-owned probe |
-| --- | --- | --- |
-| a. Two fresh boxes | Full history gives S1/S2; typed floor burns prior range and gives next S. | Distinct signed C fixtures; real two-worker allocator remains Cloud continuity probe. |
-| b. Stale backup/dead box | Current full/checkpoint evidence never reuses earlier P; matching old key is authentication only. | Fresh consumed C required; restored PostgreSQL continuity probe is Cloud-owned. |
-| c. Old box returns | Replacement series distinct; isolation declaration required, not fencing. | Distinct replacement C plus existing membership refusals; no seller-fencing claim. |
-| d. Interrupted retry | Spent remains spent; exact finish zero activation; checkpoint cannot fabricate missing replay facts. | Lost reserve/consume status retains binding; local commit checked separately. |
-| e. Bucket rebuild | Real restore uses current P evidence and matching backup key. | Fresh verified C; unavailable authority refuses; actual journal rebuild is Cloud-owned. |
-| f. Reissue | Key-stage/installed-key paths preserve fiscal state and all burn floors; zero activation. | Zero reserve/consume; actual journal event count needs Cloud probe. |
-| g. Disk clone | Declared recovery gets fresh P; undeclared activated clone remains disclosed limit. | Declared fresh C; no global lock on already activated clone. |
-
-Also test P42/C42 disjointness, older full uploads never lowering checkpoint/newer facts, and compatible Cloud imports never freeing omissions. First-setup recipient mismatch remains unavailable until Lane D’s joint original-object acceptance passes.
-
-Other chain starts retain existing CLI/re-registration/standby/promotion/emergency/changed-base/exhausted-counter/emergency-to-short assertions, with Task 4’s additive floor-admission cases wherever fresh paper evidence is consulted. No new UI or automatic switch. Restart/reprint/reissue/report/filing retry/finish activate zero times.
-
-## Task 12: Controls, protected checks, docs and branch gates
-
-**Files:** current developer paper-custodian/offline-restore/workflow docs; operator first-live guide; changed-check inventory; backlog/detail. Historical docs get dated pointers.
-
-- [ ] In an owned installed throwaway candidate checkout, run deletion controls serially; never swap feature-checkout files.
-- [ ] Remove independently: predecessor/floor check; compact checksum/scope check; known-stale refusal; burn-range exclusion; attachment-required check; kept grant; owner generation; exact commit lookup; staged verifier; retirement admission; readiness isolation.
-- [ ] Each must fail its intended behavioral assertion. Restore immediately and rerun positive before next control; retain command/candidate/diff/counts. Never mutate protected fiscal code/guards/assertions.
-- [ ] Run unchanged allocation/boundary/operation/lifecycle/paper/Cloud/restore-committed/standby/dormant/recovery-key and golden amount/chain/verify/registro-sif/restore suites.
-- [ ] Explicitly run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts` and `pnpm --filter @waitron/fiscal test`; record counts.
-- [ ] Compare protected paths/assertions/shipped SQL against base and current main: no edits. Run affected unchanged root/schema/module guards, package types/builds and normal focused-local/CI coverage split.
-- [ ] Audit complete changed prose. Replace scanning/no-typing/tool procedures with original-PDF and typed-checkpoint behavior; retain theft/co-loss/currentness/backup/Cloud-import limits.
-- [ ] Keep A679 backlog until actual build complete. Retain A731–A733 and Lane D dependencies without invented queue items.
-- [ ] Finalise every changed non-fiscal check’s old/new assertion and decision receipt; no loose matcher/deletion.
-- [ ] Obtain two installed Claude run-it whole-branch reviews through `~/workspace/tools/claude-seat.sh review-run <candidate-checkout> <brief-file> <report-file>`.
-- [ ] Both inspect/run full candidate with new typing, lossless-vs-checkpoint, exact character counts, original-recipient Cloud gate, stage crash/reissue, V2 authority and protected checks. Read completed findings; triage/fix test-first.
-- [ ] Old source/implementation reviews do not qualify new typing. Rebase alone does not require repeating completed whole-branch reviews; qualify substantive new changes.
-- [ ] Commit docs with `git commit -s -m "docs: record saved-PDF and typed recovery qualification"`.
-- [ ] Announce ready for `finish-branch`; run installed workflow, normal push hook, exact-head required CI and selected package coverage/merge jobs.
-- [ ] End `needs-owner-review` until owner’s built-PDF/manual journey gate is met. Report original-file, resave, automated typing and actual owner print/typing results separately.
-- [ ] No automatic land. Driver retains PR/branch for the owner gate; later landing follows its authorised H11/H12 workflow.
-
-## Coverage and remaining gates
+Canonical JSON recursively sorts object keys, preserves arrays and uses UTF-8 without Unicode normalisation.
+Reject extra keys, nonfinite numbers, invalid timestamps and malformed/unbounded structures.
+Full digests are lowercase SHA-256 hex; revision is a canonical decimal string with at most 20 digits.
+Version-2 history is explicitly `integrity:"owner-declared"`; no `signature`, custody identity or custody version.
+Historical signed objects remain opaque original bytes, separately labelled and verified only where needed.
+A `declared-paper-history` original contains the exact canonical public-only history bytes and
+its full digest. When a typed checkpoint replaces an active unsigned lineage, retain that entire
+prior lineage as an original, alongside its already retained originals. Never copy the secret
+PDF attachment or named node keys into this carrier. Do not splice displaced revisions into the
+new checkpoint’s ancestry or treat their retention as complete missing history.
+No version-1 secret-document conversion, data migration or automatic signer recovery is required pre-live.
+
+A revision contains `{version:2,registerId,scope,revision,previousDigest,createdAt,sHighWater,pHighWater,events}`.
+Complete genesis uses a zero predecessor; later revisions link the digest of canonical preceding revision bytes.
+Reserve events contain the original validated `PaperAllocation`, recipient and reservation binding/time.
+Consume events contain allocation ID, reservation digest, event/operator/source/target/incident and time.
+Retire/abandon/uncertain events contain allocation ID, event ID, reason and time; none frees a name.
+Use existing `OperationBinding` and person-or-recovery-key `OperationOperator` types.
+A checkpoint contains `{version:2,kind:"declared-burn-checkpoint",checkpointId,scope,sHighWater,pHighWater,current:CurrentStatement,completeHistoryUnavailable:true,burnAllPrior:true,createdAt}`.
+It has no source-head tag or fabricated predecessor. Its digest anchors subsequent revisions.
+`DeclaredRegisterHistory` contains format/version/integrity/scope/register ID/mode/revisions/originals.
+Checkpoint mode additionally contains that checkpoint; complete mode cannot contain a hidden evidence gap.
+`KnownRegisterEvidence` contains known high-water marks, burn floors, full heads, public originals and retired bindings.
+`RegisterProjection` returns those monotonic facts, occupied allocations, next S/P or null, completeness and `currentnessRequired:true`.
+Version-2 `RegisterDocument` contains `{version:2,kind:"waitron-register-document",route,paper,cloudOriginals,nodeKeys}`.
+`paper` is `DeclaredRegisterHistory|null`; paper route requires it, Cloud route permits null.
+Node-key format is display metadata, never a replacement secret value.
+
+## Task 0: Apply the owner revision and record the implementation boundary
+
+**Files:** current spec/plan, historical dated pointers, backlog detail and campaign decision record.
+**Output:** applied/fresh-reviewed documents and a traced boundary inventory; no product code.
+
+- [ ] Apply the authoritative spec, replace this plan and add dated pointers to superseded Oct 4/12/A679 documents.
+- [ ] Record the owner decision against every removed signer/reference/head-tag assumption and Task 1’s completed ledger entry.
+- [ ] Retain historical source/test/visual receipts with their original qualification limits.
+- [ ] Reconfirm the chain from `initial-setup.ts` through preparation, operation, envelope and actual activation.
+- [ ] Record that removing signing is already owner-approved. Ask only for a concrete change to an H2-protected writer or existing protected fiscal assertion if one becomes necessary.
+- [ ] Add a new `paper-declared` authority branch and tagged v2 evidence in implementation; old signed/Cloud/emergency branches remain strict.
+- [ ] Trace admission sites: `allocation-envelope.ts:71–94,335–374`; `standby-allocation.ts:31–67`; `allocation.ts:238–282` for retained dormant evidence only.
+- [ ] Preparation changes preserve an opaque live admission token by reference; JSON or a cloned token cannot create authority.
+- [ ] Do not modify `allocation.ts:301–429` activation/replay writer, SQL statements, identities, hashes or protected assertions.
+- [ ] Source reading suggests admission can change without editing the writer; verify that in Task 4. A discovered protected edit stops that dependent task, not independent codec/history work.
+- [ ] Commit documentation through the driver’s authorised docs workflow with `git commit -s`.
+- [ ] After publication resume Task 1 inline/TDD; keep all protected constraints in force.
+
+## Task 1: Revise Task 1 with the unsigned typed codec
+
+**Files:** new `fiscal/paper-register-protocol.ts`, `paper-register-compact.ts`, sibling Node/browser tests and new synthetic fixture; fiscal package exports.
+**Interfaces:** `normaliseTypedCode(text:string):string`; `encodePosition(scope,position):Promise<PrintedPositionBlock>`; `decodePosition(fields,scope):Promise<RegisterPosition>`; `encodeNodeKey(key,scope,encoding):Promise<PrintedNodeBlock>`; `decodeNodeKey(fields,scope,nodeId,keyName):Promise<string>`.
+
+- [ ] RED: encode floors 42/7; assert `000 042`, `000 007`, eight check symbols, data count 20/display count 24.
+- [ ] RED: enter lowercase, `O/I/L` aliases, spaces/hyphens/tabs/newlines; expect identical decoded position/key.
+- [ ] RED: position `000 00A`, wrong scope/check, extra symbols and unsupported Unicode separators refuse.
+- [ ] RED: generated secret round trips byte-for-byte through 39 payload symbols plus eight check symbols; counts 47/61 and combined 67/85.
+- [ ] RED: raw192 final padding violations refuse; raw192 length must be exactly 39.
+- [ ] RED: imported UTF-8 keys preserve case, hyphens, underscores, spaces and Unicode; assert actual `ceil(8n/5)+8`.
+- [ ] RED: explicit wrong encoding refuses; use equal-length cases so length-based inference would fail.
+- [ ] RED: check scope/node/name/encoding/byte-length substitutions refuse before recovery use.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/paper-register-compact.test.ts src/paper-register-compact.browser.test.ts`.
+- [ ] Expect the new named behavioral failures; retain the actual failing names/reasons.
+- [ ] Implement the spec’s two check domains, both version 2, with identical browser/Node vectors.
+- [ ] Implement byte-stream base32: right-pad zero bits; require `ceil(8n/5)===m` and zero unused bits.
+- [ ] For general input infer byte length from canonical symbol count; reject impossible length residues and noncanonical re-encodings.
+- [ ] For raw192 reconstruct canonical base64url from decoded bytes; never case-fold that secret.
+- [ ] For UTF-8 decode fatally and preserve the exact supported text; no trimming or Unicode normalisation.
+- [ ] Print per-field groups of three; format labels are clicks, not typed symbols.
+- [ ] New active code imports no custody DER/seed/signing helper; leave historical signed codec assertions intact.
+- [ ] Repeat the exact command; require counted GREEN with no skipped named cases.
+- [ ] Commit: `git commit -s -m "feat: replace paper signer typing with checked positions and reversible keys"`.
+
+## Task 2: Unsigned history, burn floors and complete candidates
+
+**Files:** new `fiscal/paper-register-history.ts`, sibling tests; retain Task 1’s candidate validator and unchanged signed-history libraries.
+**Interfaces:** `parseDeclaredHistory(value:unknown):DeclaredRegisterHistory`; `projectDeclaredHistory(history,known):RegisterProjection`; `assertPaperFloorAllows(projection,allocation,purpose):void`.
+**Retained:** `validatePaperCandidates(context,prefix,serials):ValidatedInitialCandidates`.
+
+- [ ] RED: two sequential venues consume S1 then S2; preserve complete bases, recipients, event bindings and original public bytes.
+- [ ] RED: duplicate IDs/names, predecessor gaps/conflicts, decreasing positions and terminal-to-reserved transitions refuse.
+- [ ] RED: typed 42/7 yields S43/P8 and excludes an otherwise valid unused P6.
+- [ ] RED: known higher floor refuses typed lower input; equal-floor typed input remains declaration-dependent with no asserted head recognition.
+- [ ] RED: full-file known older/forked heads refuse; an unrelated unseen newer sheet remains an explicitly untested human-currentness assumption.
+- [ ] RED: later old-file evidence cannot lower checkpoint floors or remove newer originals.
+- [ ] RED: full unsigned history → typed checkpoint → successor PDF retains every prior unsigned revision/event as exact public-only original bytes and digest, plus existing originals; burn floors remain permanent.
+- [ ] Retain a displaced unsigned lineage as `declared-paper-history`, outside the checkpoint’s active ancestry; assert no node key or secret attachment bytes enter the public carrier.
+- [ ] RED: absent historical consumption does not fabricate recipients, a previous head or Cloud receipts.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/paper-register-history.test.ts src/initial-paper-candidates.test.ts`.
+- [ ] Observe each new behavioral RED, then implement exact v2 replay and original-byte retention.
+- [ ] Store high-water marks separately from burn floors: a known reserved name is not reusable after a typed burn.
+- [ ] Checkpoint mode remains checkpoint after later additions; complete input never discards available facts to fit typed minimum.
+- [ ] Preserve 999999 exhaustion as null next candidate; reserve serial zero never succeeds.
+- [ ] Preserve existing four-base/full-purpose and real-validator behavioral assertions.
+- [ ] Repeat the command; require counted GREEN.
+- [ ] Rerun unchanged signed history/protocol tests; this is historical support, not qualification of new unsigned authority.
+- [ ] Commit: `git commit -s -m "feat: replay owner-declared paper history with permanent burn floors"`.
+
+## Task 3: Actual PDF carrier and printed blocks
+
+**Files:** new `fiscal/register-pdf.ts`, `register-reader.ts`, browser tests, copied Noto font/notices; package/config/lockfile.
+**Interfaces:** `renderRegisterPdf(document:RegisterDocument,locale:"en"|"es"):Promise<Uint8Array>`; `readRegisterPdf(bytes):Promise<{document:RegisterDocument,attachmentBytes:Uint8Array}>`.
+
+- [ ] RED: complete, checkpoint, C-only and C-plus-paper documents round trip the exact canonical attachment bytes.
+- [ ] RED: a checkpoint successor round trip preserves the displaced unsigned public lineage byte-for-byte, without marking the new active history complete.
+- [ ] RED: tables retain all configured bases, original receipts and named keys; no custody seed/reference/head-tag fields appear.
+- [ ] RED: printed fields decode through Task 1 and give exactly 20/47/67 data characters.
+- [ ] RED: missing, repeated/conflicting, corrupt and oversized attachments refuse without visual-text recovery.
+- [ ] RED: annotation/form-changing resave has different PDF SHA-256 and identical attachment bytes; include no-change save control.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project browser src/register-pdf.browser.test.ts`.
+- [ ] Observe named RED before adding the renderer/reader.
+- [ ] Qualify PDFKit attachment bytes and PDF.js extraction/save APIs with installed pinned packages; do not call source reading proof.
+- [ ] Use exactly one `waitron-register-v2.json`; cap attachment at 8 MiB and selected PDF at 64 MiB.
+- [ ] Refuse limits without truncation; paginate one PDF rather than shortening history.
+- [ ] Load worker/fonts locally; disable scripting/evaluation/remote resources; retain third-party notices.
+- [ ] Test `Peña Λάδι` and unsupported emoji: supported glyphs render, unsupported glyphs visibly escape, attachment text remains unchanged.
+- [ ] Render consumed/completion-unknown wording and the no-sales/backup distinction.
+- [ ] Repeat the exact command; require counted GREEN and inspect real raster output.
+- [ ] Actual installed-Chrome/wizard download and stripping-resave acceptance belongs to Task 11.
+- [ ] Commit: `git commit -s -m "feat: embed unsigned register history and grouped recovery codes in one PDF"`.
+
+## Task 4: Distinct unsigned admission through the module boundary
+
+**Boundary:** Task 0’s traced admission scope; no protected-writer edits. **Files:** new declared-evidence/preparation tests/modules; existing `initial-setup.ts`, `allocation-configuration.ts`, `allocation-operation.ts`, preparation and generic setup seats; the traced envelope admission sites only.
+**Interfaces:** `createDeclaredPaperPreparation(source:DeclaredEvidenceSource):ModuleOperationPreparation`; `withDeclaredPaperAdmission<T>(request:DeclaredAdmissionRequest,run:(token:object)=>Promise<T>):Promise<T>`; `validateDeclaredPaperEvidence(input:unknown,context:AllocationContext,replay:boolean):AllocationValidation`.
+**Request:** authenticated operation, exact allocation/approval, projected public history, declaration, phase and kept-delivery reference.
+
+- [ ] RED through actual preparation: unsigned tagged S/P succeeds only with a live owner/node-authorised source and exact consumed binding.
+- [ ] RED: raw JSON `validated:true`, forged/copied/cloned/expired admission objects, changed binding or token use after callback refuses.
+- [ ] RED: stripping signatures from old signed evidence still refuses; no fallback selects unsigned based on failed verification.
+- [ ] RED: wrong taxpayer/environment/operator/source/target/full-purpose set refuses before the existing writer.
+- [ ] RED: ordinary unbound or retired attempts cannot reach signed-file fallback.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/declared-paper-preparation.test.ts src/initial-setup.test.ts src/allocation-operation.test.ts src/allocation-preparation.test.ts`.
+- [ ] Observe behavioral RED; implement explicit `authority.kind:"paper-declared"` and `reservationEvidence.kind:"paper-declared-evidence",version:2`.
+- [ ] New evidence contains checked reservation/consumption facts and exact digests; no empty, synthetic or locally generated signature field.
+- [ ] Mint admission tokens only after independently reading host authority/public evidence; retain them in a private callback-scoped map.
+- [ ] Preserve token reference in `snapshotAllocationEvidence`; clone public values, never serialise authority.
+- [ ] Existing envelope common checks and all old signed/Cloud/emergency branches remain unchanged.
+- [ ] Extend setup inspection/confirmation/committed reading by explicit format dispatch; do not reinterpret unsigned data as custody trust.
+- [ ] Keep generic host evidence opaque. Add `bindEvidence(context,value:unknown):unknown` to the generic initial seat if needed; signed enrolment remains its legacy operation.
+- [ ] `committed()` still compares exact retained allocation/approval/result and active series.
+- [ ] Repeat the command; require counted GREEN, including unchanged protected assertions.
+- [ ] Run unchanged `allocation-envelope.test.ts` and boundary suites separately; any required assertion edit stops for exact permission.
+- [ ] Commit: `git commit -s -m "feat: admit explicitly declared paper evidence under live module authority"`.
+
+## Task 5: All fresh consumers, delivery and staged verifier
+
+**Files:** declared preparation/source modules; the traced standby and dormant admission verifier branches; new server delivery/node-key files/tests; host evidence/API/publication wiring.
+**Interfaces:** `stageInitialNodeKey(owner,reconfirmation):Promise<{stage:StagedNodeKey,key:NamedNodeKey}>`; `registerFirstFiscalDelivery(owner,input,hold):Promise<void>`; `confirmFirstFiscalDocumentKept(owner,input,reconfirmation,hold):Promise<void>`; `installStagedNodeKey(db,state,stage):Promise<void>`.
+**Delivery input:** public-history/input/document digests, stage ID and frozen operation identity.
+
+- [ ] RED: activation before intent, consumed successor binding or explicit kept confirmation refuses.
+- [ ] RED: stale owner/revision/generation, wrong stage/document/history, expired or duplicate grants refuse.
+- [ ] RED through real consumers: initial S, restore/re-registration P, standby reserve/establish and promotion reject below-burn reservations.
+- [ ] Include legacy signed P40 with known burn42 plus fresh confirmation: refuse; fresh P43 is the positive.
+- [ ] Include omitted-checkpoint input when known floors exist: refusal remains.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/declared-paper-consumers.test.ts src/allocation-paper-source.test.ts src/standby-allocation.test.ts src/dormant-allocation.test.ts`.
+- [ ] Separately run: `pnpm --filter @waitron/server exec vitest run src/first-fiscal-delivery.test.ts src/first-setup-node-key.test.ts src/first-fiscal-evidence.test.ts`.
+- [ ] Observe each intended RED before wiring consumers or delivery.
+- [ ] Trace initial, ordinary file preparation, bound sources, reserve/establish and promotion; floor checks apply before every fresh use.
+- [ ] For explicit unsigned dormant evidence only, verify retained reservation digest/binding and fresh current consumption through the new admission.
+- [ ] Keep old signed dormant verification strict; leave actual activation writer/SQL unchanged.
+- [ ] Stage generated raw secret transiently; persist only verifier/name/stage/frozen binding, using existing durable discipline.
+- [ ] Store public history in separately bounded chunks, finalised only after complete validation; do not inflate old grant-file limits.
+- [ ] Record intent before successor creation; bind checked consumed public facts, exact PDF digest and explicit kept declaration.
+- [ ] Install staged verifier after exact fiscal commit, before trading; absent pair installs once, existing pair must exactly match.
+- [ ] Document why verifier installation follows commit; retry uses the same stage and fresh authority, never silent minting.
+- [ ] Same-visit Download/Print reuse the same Blob/key/stage; events alone issue no grant.
+- [ ] Repeat both commands separately; require counted GREEN and absence of raw keys/PDFs in persisted fixtures.
+- [ ] Commit: `git commit -s -m "feat: enforce paper floors and kept-document binding across allocation consumers"`.
+
+## Task 6: Signed Cloud setup and honest unsigned-import limits
+
+**Files:** new `fiscal/initial-cloud-setup.ts`, `register-cloud-export.ts`, tests; existing Cloud preparation/configuration and server/client route tests.
+**Interfaces:** `prepareInitialCloudSetup(context,input,evidence):InitialSetupImport`; `createInitialCloudRequest(context,venueId,operationId,incidentEvidence):CloudReserveInput`; `cloudPaperImportAvailability(history):{available:false,reason:"unsigned-format"|"checkpoint"|"recipient-admission"|"original-limits"}|{available:true,originalRequests:readonly unknown[]}`.
+
+- [ ] RED: untrusted/reserved/abandoned/unknown or changed scope/operator/event/source/target/bases receipt refuses.
+- [ ] RED: Cloud actor never substitutes for planned local administrator/recovery-key operator.
+- [ ] RED: unsigned full/checkpoint history is unavailable for legacy import and machine reporting; assert zero transport calls.
+- [ ] RED: legacy originals remain exact; invalid UUID recipient and consumed transfer cannot be “fixed” by remapping.
+- [ ] Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/initial-cloud-setup.test.ts src/register-cloud-export.test.ts`.
+- [ ] Separately run: `pnpm --filter @waitron/server exec vitest run src/first-fiscal-cloud.route.test.ts src/cloud-fiscal-allocation-client.test.ts src/cloud-fiscal-allocation.test.ts`.
+- [ ] Observe RED; dispatch signed Cloud before paper setup preparation and support setup mode without loosening recovery checks.
+- [ ] Keep public receipt verification on Node; browser structural reading grants no authority.
+- [ ] Preserve exact operation/request through status/retry, full session, CSRF, origin and independently configured capabilities.
+- [ ] Export frozen public request and import consumed packet through existing journey; missing portal file-import convenience stays explicitly unavailable.
+- [ ] Report C commitment afterward, outside activation/sale transaction, with existing machine authentication.
+- [ ] Preserve signed receipt bytes and independent issuer trust; no paper key is generated for C-only documents.
+- [ ] New unsigned imports/reports stay unavailable; propose no fake legacy packet or automatic Cloud signing upgrade.
+- [ ] Existing signed originals export only unchanged, at whole-block boundaries and within 20-object/16,384-byte limits.
+- [ ] Oversized indivisible legacy blocks refuse; do not re-sign or silently truncate them.
+- [ ] Cloud owner separately designs declared-fact/burn-floor admission, recipient attribution, continuity replay and authenticated retries.
+- [ ] Production adapters, first-operator admission, namespace discovery and genuine joint acceptance remain named dependencies.
+- [ ] Repeat both commands; label fixtures synthetic, not live enablement.
+- [ ] Commit: `git commit -s -m "feat: verify signed Cloud setup and expose unsigned paper import limits"`.
+
+## Task 7: V2 inspection and ownership recovery
+
+**Files:** new provisioning resolution module/tests; server inspection/resolution modules; owner/host/recovery routes and tests.
+**Interfaces:** `inspectFirstSetupResolution(roots:FirstSetupRoots):Promise<FirstSetupInspection>`; `recoverFirstSetupOwner(request):Promise<RecoveredOwner>`.
+**Request:** inspection ID, expected revision, fresh client nonce and original password; never client paths/classification.
+
+- [ ] RED: inspect eligible claimed+claiming and abandoned+active pairs while ordinary readers/raw boot still refuse.
+- [ ] RED: correct original password from a new browser rebinds; wrong/uncheckable password, stale snapshot and racing requests refuse appropriately.
+- [ ] RED: repair preserves exact state bytes; rebind changes only proof/capability hashes, revision/generation and ownership history.
+- [ ] Run: `pnpm --filter @waitron/server exec vitest run src/first-setup-resolution-inspection.test.ts src/first-setup-owner.test.ts src/first-setup-recovery.route.test.ts`.
+- [ ] Observe RED; reuse password derivation outside transactions, `inTurn`, throttling and under-exclusion rereads.
+- [ ] Existence check precedes database opener; inspection creates/migrates/checkpoints nothing.
+- [ ] Preserve missing/corrupt/unreadable/partial/unknown classifications; exceptions never mean empty or no register.
+- [ ] Eligible marker repair needs complete preactivation provenance and successful existing unused reads, without new SQL.
+- [ ] Invalidate all old owner/evidence/delivery grants after rebind; abandoned remains abandoned.
+- [ ] Repeat the command; require counted GREEN and strict-reader positives/refusals.
+- [ ] Commit: `git commit -s -m "feat: inspect and recover unfinished setup ownership without weakening admission"`.
+
+## Task 8: V2 retirement, workspace selection and publication-only finish
+
+**Files:** provisioning resolution/workspace modules/tests; server resolution/entry/API files; bin/node-entry/boot/recovery and CLI/restore admission.
+**Interfaces:** retain V2 `WorkspaceBinding`, `ResolutionRecord` and `RegisterAnswer` shapes; `startAgainFirstSetup(request):Promise<WorkspaceBinding>`; `resolveFirstSetupWorkspace(anchor):Promise<BootTarget>`; `assertFirstSetupBootTarget(target):Promise<void>`; `finishFirstFiscalSetup(request,hold):Promise<VenueResult>`.
+
+- [ ] RED: Consumed stays spent; Not consumed never clears saved intent; Unknown leaves old assignment unavailable.
+- [ ] RED: no signing key cannot satisfy no-master; any existing/unknown paper history refuses password-free empty reset.
+- [ ] RED: missing DB remains missing at the old path; known exact commit finishes publication with zero activation.
+- [ ] RED: restore old roots/marker, lose either selection witness or substitute backlink; refuse before database open.
+- [ ] Run: `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-workspace.test.ts`.
+- [ ] Separately run: `pnpm --filter @waitron/server exec vitest run src/first-setup-workspace.test.ts src/first-setup-entry.test.ts src/first-setup-resolution.boot.test.ts src/first-fiscal-interruption.test.ts`.
+- [ ] Observe RED; preserve original remnants and ordered prepared/applied records with predecessor/evidence digests.
+- [ ] `RegisterAnswer.custodian` records the consulted recordkeeper/owner, not invented key trust; derive typed reference from its public checkpoint digest.
+- [ ] No extra custody reference is typed; resolution’s answer remains separate from position checking.
+- [ ] Stage server-named `<anchorStateDir>/first-setup-workspaces/<id>/{state,venue}`; retire before selecting.
+- [ ] Require fixed venue selection, matching anchor-state witness, applied resolution and target backlink binding both roots/generation.
+- [ ] Never copy business data/settings/credentials or fall back to retired roots.
+- [ ] Preserve 0600/0700, regular-file/no-symlink, sync/rename/directory-sync discipline; fault each durable boundary.
+- [ ] Extract `publishCheckedFirstFiscal(host,deps,state,checked,publication,hold)`; finish cannot call activation/provision.
+- [ ] Require original-password ownership, fresh outside evidence, exact checked commit and matching stage/publication bindings.
+- [ ] Direct entry resolves before strict start; supervised before staged/ahead opens; already-recovery mounts the same service first.
+- [ ] Raw boot/CLI/restore reject retired targets before opening; lock anchor then target and reread.
+- [ ] Unresolved listener exposes resolution/status/public guidance only; Retry cannot bypass it.
+- [ ] HTTP collects no secrets; missing TLS remains A733. Lost-password existing/possible business data remains unavailable A732.
+- [ ] Repeat both commands; require counted GREEN and normal unaffected boot positives.
+- [ ] Commit: `git commit -s -m "feat: retain setup retirement and finish exact publication before boot"`.
+
+## Task 9: Real wizard, typed forms and resolution interface
+
+**Files:** fiscal screen/picker/session/strings and browser tests; setup client/session/API/shell/initial/resolution screens; browser composition.
+**Interfaces:** `RegisterSession.selectFile(bytes)`, `selectTyped(fields)`, `createFirst(scope,noExistingRegister:true)`, `confirmCurrent(statement)`, `successor(events,nodeKeys)`, `dispose()`.
+
+- [ ] RED through real setup app: venue/admin/certificate/email/readiness → file/typed selection → review → consumed PDF → kept confirmation → activation.
+- [ ] RED: selecting/editing code, file, route or scope invalidates declarations, review, delivery and grants.
+- [ ] RED: first-register creation refuses existing/unknown register evidence; no file selection establishes ownership/reset authority.
+- [ ] RED: Cloud unknown/retired delayed response cannot activate; possible local commitment must resolve before route replacement.
+- [ ] Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app-first-fiscal.test.ts src/setup-app-first-fiscal.unsaved.test.ts src/screens/first-setup-resolution-screen.test.ts`.
+- [ ] Separately run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project browser src/setup/register-picker.browser.test.ts src/register-session.browser.test.ts`.
+- [ ] Observe RED; implement module-owned fiscal UI with generic opaque host actions.
+- [ ] Show frozen taxpayer/software/environment and backup node/key name; no extra identifier typing.
+- [ ] Show S/P ranges, 20/47/67 counts, history gap, typo-only check and equal-floor/unseen-stale limits.
+- [ ] Use shared inputs/required markers/semantic names, per-field errors and one bottom message.
+- [ ] Preserve caret on normalisation; passive reads, draft scopes and applicable save state follow existing contracts.
+- [ ] Typed material/drafts/Blob URLs stay memory-only; disposal clears references without promising physical memory erasure.
+- [ ] Download/Print reuse one Blob; attachment failure offers original file or typing.
+- [ ] Retain fixed EN/ES V2 wording and disabled A731/A732/A733 explanations, without terminal/reset substitutes.
+- [ ] Remove normal tool/download/seed/fingerprint/scan UI wiring; old signed libraries receive no new active path.
+- [ ] Inventory replaced non-protected checks in `docs/operations/a679-changed-checks.md`; never loosen existing fiscal matchers.
+- [ ] Repeat both commands; run affected a11y/unsaved tests, setup build and unchanged seam/native-field/token/cycle guards.
+- [ ] Commit: `git commit -s -m "feat: offer original PDF and grouped paper typing through the real wizard"`.
+
+## Task 10: Ordinary restore, exact backup key and zero-activation reissue
+
+**Files:** setup recovery allocation/copy/API tests; server recovery-document API/tests and existing archive/bucket/managed recovery suites.
+**Interfaces:** `selectRecoveryNodeKey(document,preview):NamedNodeKey`; `prepareRegisterRecovery(request,current,confirmation):Promise<{publicOperation:unknown,successor:RegisterDocument}>`; `reissueNodeRecoveryKey(authority,request):Promise<NamedNodeKey>`; `reissueStagedNodeKey(owner,request,hold):Promise<{stage:StagedNodeKey,key:NamedNodeKey}>`.
+
+- [ ] RED: older key document plus newer current register restores the matching backup with fresh P; old consumed P remains unavailable.
+- [ ] RED: typed key decodes to the exact verifier value; wrong/missing key, wrong backup node/name or checksum refuses.
+- [ ] RED: C-only typed node key cannot invent a consumed C receipt.
+- [ ] RED: reprint/reissue makes zero fiscal activation and zero Cloud reserve/consume calls.
+- [ ] Run: `pnpm --filter @waitron/setup exec vitest run src/screens/recovery-allocation.test.ts src/screens/recovery-copy.a11y.test.ts`.
+- [ ] Separately run: `pnpm --filter @waitron/server exec vitest run src/recovery-document-api.test.ts src/recovery-pack-api.test.ts`.
+- [ ] Observe RED; integrate file/typed input into existing archive/bucket/managed restore seats.
+- [ ] Send public operation separately from `nodeRecoverySecret`; actual existing backup verifier remains authoritative.
+- [ ] Preserve archive password, source, operator and isolation checks; no repair-page A731 action.
+- [ ] Reissue needs fresh original-password unfinished authority or manager `system.manage`; recheck immediately before mutation.
+- [ ] Precommit reissue changes stage only, invalidates kept/delivery/grants and retains all spent names.
+- [ ] Started/uncertain activation first resolves exact commitment; never silently mint another stage.
+- [ ] Committed reissue changes only future-backup named verifier; retain old keys for old backups.
+- [ ] Recovery-pack/public importer retain permission, matching-key, HTTPS/no-store and secret-rejection checks.
+- [ ] Repeat commands and unchanged ordinary restore assertions; stop on any protected dependency outside Task 0’s boundary.
+- [ ] Commit: `git commit -s -m "feat: recover exact named backup keys from saved and printed registers"`.
+
+## Task 11: Installed Chrome, fault recovery and clash acceptance
+
+**Files:** new server `first-fiscal-document-download.e2e.test.ts`, `first-fiscal-clashes.e2e.test.ts`; existing setup/launch/interruption/entry e2e suites.
+**Interfaces:** real host, real wizard, retained database/public files; installed Chrome owned by the fixture.
+
+- [ ] RED: actual wizard download/re-upload retains exact PDF hash and attachment bytes.
+- [ ] Await Chrome `download`, save its exact file, then use real picker `setInputFiles`; do not substitute renderer bytes.
+- [ ] RED: actually changed annotation/form resave has different PDF hash, identical attachment; no-change control remains separate.
+- [ ] RED: Chrome print/export of rendered pages yields attachment-free file; real upload shows original-file/typing refusal.
+- [ ] RED: printed R2 fields typed through real controls produce S43/P8; K2 yields exact backup secret and successful authenticated recovery.
+- [ ] Run: `pnpm --filter @waitron/server exec vitest run src/first-fiscal-document-download.e2e.test.ts src/first-fiscal-clashes.e2e.test.ts src/first-fiscal-setup.e2e.test.ts src/first-fiscal-launch.test.ts src/first-fiscal-interruption.test.ts src/first-setup-resolution.boot.test.ts`.
+- [ ] Observe named RED; fix only missing integration, then repeat with counted GREEN.
+- [ ] Use Playwright `channel:"chrome"`; allocate ports together, retain owned PIDs and guard teardown.
+- [ ] Fault intent/document/kept/grant/rollback/commit/verifier/publication; inspect actual records, not only success flags.
+- [ ] Qualify fourteen comparisons: paper/Cloud × fresh boxes, stale backup, old box return, interruption, bucket rebuild, reissue and declared clone.
+- [ ] Paper assertions cover next names, burned unused reservations, retained originals and no second activation.
+- [ ] Cloud fixtures cover exact signed receipts, lost replies and independent local commitment; genuine outside allocator/continuity probes stay Cloud-owned.
+- [ ] Include P42/C42 disjointness, old uploads after checkpoints, missing matching key and unsigned import/report unavailability.
+- [ ] No ordinary restart/reprint/reissue/report/filing retry/finish activates a chain.
+- [ ] Inspect EN/ES × light/dark ×390/1280 actual screens/PDFs; axe, keyboard, focus, inner controls and computed theme colors.
+- [ ] Use synthetic secrets only in retained captures; dev stack uses `wa-wt onboarding <registered-worktree-name>`.
+- [ ] Prepare owner acceptance: open actual PDF, upload Chrome original, physically type register and matching recovery-key blocks.
+- [ ] Record automated extraction/typing separately from owner physical typing; leave owner gate open until actually performed.
+- [ ] Commit: `git commit -s -m "test: qualify original PDF and unsigned printed recovery journeys"`.
+
+## Task 12: Controls, complete prose audit and branch gates
+
+**Files:** current operator/developer procedures, backlog/detail, changed-check inventory and dated historical pointers; no protected test edits.
+
+- [ ] In an owned installed throwaway candidate checkout, run serial deletion controls only on permitted new code.
+- [ ] Controls: scope/check, canonical padding, floor admission, attachment-required, currentness declaration, kept grant, owner generation, exact commit, staged verifier and retirement admission.
+- [ ] Each removal must fail its intended behavioral assertion; restore and run its positive before the next.
+- [ ] Re-run unchanged protected suites: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
+- [ ] Run unchanged `pnpm --filter @waitron/fiscal test` and affected boundary/operation/lifecycle/Cloud/restore/standby suites.
+- [ ] Compare protected paths against base/current main and Task 0’s boundary inventory; every other protected byte/assertion stays unchanged.
+- [ ] Audit the whole changed prose set, including READMEs/runbooks: no active seed/signature/head-tag/101/40-count or forged-sheet promises remain.
+- [ ] Historical docs receive dated pointers; old review/test receipts never qualify this revision.
+- [ ] Record A732’s now-unavailable signer mechanism and the separately owned unsigned Cloud contract without inventing queue items.
+- [ ] Keep A679 open until build acceptance; preserve A731/A732/A733 before-go-live requirements.
+- [ ] Run affected types/builds and focused checks; normal hook once, required current-head CI coverage/merge jobs.
+- [ ] Obtain the campaign’s two installed Claude run-it reviews on the complete candidate; inspect completed findings and fix test-first.
+- [ ] Reviews cover unsigned authority, every consumer, exact counts, original-byte retention, Cloud limits, V2 and protected boundaries.
+- [ ] Commit documentation with `git commit -s`; announce ready for `finish-branch`, or continue it when already authorised.
+- [ ] Report exact-head CI and acceptance results separately. Do not claim runtime evidence from reading.
+- [ ] End `needs-owner-review` while built-PDF/physical-typing acceptance or an actual protected-change permission remains outstanding.
+- [ ] Do not publish/merge automatically from this plan.
+
+## Coverage map and execution status
 
 | Requirement | Tasks |
 | --- | --- |
-| S/P/C/E scope, bounds, complete purposes and no reused names | 1, 4–5, 10–11 |
-| Lossless original PDF, explicit resave handling, local secrets | 2–4, 9–11 |
-| Short printed seed/position/key and conservative checkpoint | 1–3, 9–11 |
-| Independent trust/currentness and no invented original signatures | 1, 3–5, 8, 10 |
-| Consume/keep before activation; exact interrupted finish | 4, 8–9, 11 |
-| Existing Cloud protocol/capabilities/original-recipient limits | 5, 9–11 |
-| V2 password/retirement/workspace/pre-open boot | 6–9 |
-| Ordinary archive/bucket/managed restore and zero-activation reissue | 10–11 |
-| Forms/ENES/themes/widths/keyboard/axe | 2–3, 9–11 |
-| Protected assertions, two reviews, hook/current-head CI, owner gate | All; Task 12 |
+| Owner removal of paper signer and revision of built Task 1 | 0–2, 4, 9, 12 |
+| Exact 20/47/67 codes, grouping and reversible secret | 1, 3, 9–11 |
+| Lossless full history versus burned checkpoint | 2–6, 10–11 |
+| Consumption/retention before unchanged activation writer | 4–5, 8–11 |
+| Signed C receipts and unavailable unsigned import/report | 6, 9–12 |
+| Every fresh consumer and dormant promotion | 4–5, 11–12 |
+| V2 authority, retirement, pre-open entry and exact finish | 7–9, 11 |
+| Matching backup key and separate old/new secrets | 1, 5, 10–11 |
+| Real Chrome/resave/attachment refusal and owner typing | 3, 11 |
+| Protected checks, reviews, hook, CI and honest claims | 0, 12 |
 
-The typing revision permits conservative continuation under the existing current-original/isolation assumptions. It does not promise lossless recovery of absent signatures or Cloud admission of a checkpoint. Fresh review and implementation evidence remain required before acceptance.
+After driver application, fresh review and docs publication, resume revised Task 1 inline/TDD. Cloud unsigned-history integration and A732’s replacement authority remain separately owned dependencies; no new generic permission gate is introduced for the owner’s settled signer removal.

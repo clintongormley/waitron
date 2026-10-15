@@ -1,5 +1,11 @@
 # A679 First Live Fiscal Setup Implementation Plan
 
+**Owner update, 2026-10-15 at 21:30:** paper custody signing keys are withdrawn. Follow the
+[current redesign](../specs/2026-10-15-a679-two-route-redesign.md) and its
+[replacement plan](../plans/2026-10-15-a679-one-pdf-implementation.md) for unsigned paper history
+and case-insensitive codes in groups of three. This older document remains historical where
+superseded; it supplies no acceptance credit for the replacement.
+
 **Replacement implementation plan, 2026-10-15:** [one-PDF plan](2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign/source-review checkpoint. Continue the existing product branch through that plan; the old tool tasks remain historical and incomplete.
 
 **Redesign checkpoint, owner 2026-10-15 at 18:55:** the [two-route redesign](../specs/2026-10-15-a679-two-route-redesign.md) supersedes the withdrawn `N` proposal and preserves S/P paper, C Cloud, E emergency and approved repair-v2 authority. Do not resume this historical tool-based plan. Preserve reusable work; the revised design and its fresh requirements review precede a replacement plan.

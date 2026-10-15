@@ -1,5 +1,11 @@
 # A679: first Live fiscal setup
 
+**Owner update, 2026-10-15 at 21:30:** paper custody signing keys are withdrawn. Follow the
+[current redesign](../specs/2026-10-15-a679-two-route-redesign.md) and its
+[replacement plan](../plans/2026-10-15-a679-one-pdf-implementation.md) for unsigned paper history
+and case-insensitive codes in groups of three. This older document remains historical where
+superseded; it supplies no acceptance credit for the replacement.
+
 **Current direction, owner 2026-10-15 at 18:55:** the earlier `N` proposal is withdrawn. The [two-route redesign](2026-10-15-a679-two-route-redesign.md) keeps the approved allocation history and S/P/C/E spaces while replacing the tool and custody ceremony with one setup-page PDF. Product build remains paused. Earlier dated decisions below are historical where superseded; the old paper procedure remains cancelled.
 
 **Superseded design direction, 2026-10-15 at about 18:10–18:15:** the owner replaced the

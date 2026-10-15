@@ -234,6 +234,17 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## A venue without Cloud needs a usable paper-custodian route
 
+**Owner update, 2026-10-15 at 21:30:** remove the paper register’s custody signing key, including
+its seed and custodian reference. The current [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md)
+and [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) replace signature-based
+paper integrity with the current-record declaration, retained known facts and a typing-error check.
+Codes use a case-insensitive alphabet and groups of three. Original PDFs retain complete supplied
+history; typing preserves conservative S/P exclusion floors. Cloud receipts remain signed. Cloud’s
+existing signed-paper import does not admit the new unsigned record; a separately owned, reviewed
+admission contract and joint qualification remain required. Earlier custody, fingerprint and
+101/141-character proposals below are historical where superseded. This publication qualifies no
+new PDF, typed recovery or allocation behavior.
+
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
 [two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
 history, the existing C Cloud contract and emergency E, with one setup-page PDF. Currentness is

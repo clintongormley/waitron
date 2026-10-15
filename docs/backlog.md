@@ -336,8 +336,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A679. First Live setup: one page and one recovery PDF.** Implement the
   [two-route redesign](superpowers/specs/2026-10-15-a679-two-route-redesign.md) through the
   [replacement implementation plan](superpowers/plans/2026-10-15-a679-one-pdf-implementation.md):
-  one setup-page PDF, current paper S/P history or the built Cloud C protocol, emergency E and
-  repair-v2 rules. Preserve the existing branch work. Original-recipient paper imports remain
+  one setup-page PDF, unsigned paper S/P history or the built signed Cloud C protocol, emergency E
+  and repair-v2 rules. The owner’s 2026-10-15 21:30 change removes the paper custody signing key;
+  typed positions, checks and recovery keys use easy-to-type characters in groups of three.
+  Preserve the existing branch work. Original-recipient paper imports remain
   unavailable pending the verified Cloud admission contract described in the detail. The N
   proposal and old 44-step paper check/FOLLOW-UP are cancelled. Qualification opens the built
   PDF, re-uploads the original saved file, and checks continuation/recovery by typing from its printout. Scanning is not required.

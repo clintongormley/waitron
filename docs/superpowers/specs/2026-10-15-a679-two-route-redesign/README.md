@@ -1,5 +1,31 @@
 # A679 proposed delivery screens and register
 
+**Owner update, 2026-10-15 at 21:30:** the existing pictures below are historical proposals.
+Their signing seed, custodian reference, mixed-case typing and old character counts are withdrawn.
+The [current design](../2026-10-15-a679-two-route-redesign.md) and
+[implementation plan](../../plans/2026-10-15-a679-one-pdf-implementation.md) specify the unsigned
+paper register and case-insensitive codes grouped by three. No new product or physical-paper
+qualification is claimed by these older captures.
+
+## Current 21:30 typing proposal
+
+| Board | English | Spanish |
+| --- | --- | --- |
+| Desktop | [light](position-register-desktop-en.png), [dark](position-register-desktop-en-dark.png) | [light](position-register-desktop-es.png), [dark](position-register-desktop-es-dark.png) |
+| Phone | [light](position-register-phone-en.png), [dark](position-register-phone-en-dark.png) | [light](position-register-phone-es.png), [dark](position-register-phone-es-dark.png) |
+| Printout | [paper](position-register-paper-en.png) | [paper](position-register-paper-es.png) |
+
+Sources: [English screen](position-register.html), [Spanish screen](position-register-es.html),
+[English printout](position-register-paper.html), [Spanish printout](position-register-paper-es.html).
+The [synthetic reference calculation](position-reference.json) gives 20 register characters,
+47 for the generated named key, and 67 together; spaces raise these to 24, 61 and 85.
+These are static proposals with test data and inactive controls. They qualify neither a product
+codec, a generated PDF, a Chrome download/re-upload nor physical recovery.
+Ten real-Chromium captures showed no page errors or horizontal overflow; the driver inspected
+all ten in contact sheets. This qualifies only these static layouts.
+
+## Historical proposals before 21:30
+
 These pictures illustrate the redesign, not working product screens or a generated PDF. All names are synthetic; codes are unscannable placeholders with no secrets. The paper board records a genuinely new venue (Olivo Centro) in the same taxpayer-wide history; the first-setup story in the design starts at S000001. The Cloud board assumes an explicitly enabled service and a consumed C000042 receipt.
 
 Each English HTML source has a sibling `-es.html` Spanish source. `paper-setup` and `cloud-setup` are captured at 1280 and 390 pixels; `paper-register` is captured at 794×1123. The PNG filename names the width class, language and optional dark theme. The sources use the existing Waitron theme token values. They load no external resources.

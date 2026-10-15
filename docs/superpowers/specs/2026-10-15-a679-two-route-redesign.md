@@ -1,6 +1,12 @@
 # A679: keep invoice names distinct after recovery
 
-**Owner update, 2026-10-15 at 19:35:** use the original saved PDF or type the short recovery block from its printout. This appendix supersedes the earlier scanning and no-hand-typing proposals. Remove QR, image and camera recovery from A679. The PDF contains an embedded data attachment; uploading that file preserves complete supplied history. Typing restores the custody signer and a conservative allocation position, **not** the missing original signatures. It permanently excludes all earlier S/P names. The other six requirements and V2/A731–A733 authority boundaries stand. These are proposed changes; no PDF, Chrome round trip, typing journey or physical recovery was tested during this read-only revision.
+**Owner update, 2026-10-15 at 21:30:** the paper register has no custody signing key. Continue
+from its original PDF or type 20 position/check characters, grouped by three, from the printout.
+A generated named node recovery key takes 47 characters; together, 67. The
+[authoritative revision](#authoritative-revision-owner-decision-2026-10-15-at-2130) below replaces
+conflicting earlier signing, trust, head-reference and typing proposals. Checks detect some typing
+mistakes, not forged or edited records. Earlier source, test and picture receipts remain historical;
+none qualifies this new implementation.
 
 **Redesign under the owner’s existing requirements, 2026-10-15 at 18:55.** Product implementation stays paused. Behavior below is proposed; source observations are unverified at runtime except for the selected existing checks recorded in the qualification section. No Cloud, provider or physical-printer operation ran. The earlier `N` proposal is withdrawn.
 
@@ -420,176 +426,209 @@ Requirements 1–6 and the mandatory-source checks all passed that design review
 The [replacement implementation plan](../plans/2026-10-15-a679-one-pdf-implementation.md) follows this design and the completed six-requirement review. Its new source check identifies the original first-setup paper-recipient mismatch with Cloud’s UUID admission contract. The plan keeps that import unavailable until the separately owned Cloud contract admits the unchanged signed facts; no remapping, re-signing or release of consumed names is authorised. This is an implementation dependency, not a new allocation policy or a claim that the integration ran.
 
 
-## Manual entry revision, owner 2026-10-15 at 19:35
+## Historical manual-entry proposal, 2026-10-15 at 19:35
 
-## Keep the PDF, or keep its printout
+The [published 19:35 proposal](https://github.com/clintongormley/waitron/blob/bd0acb84fb2040c503eca0f91e1a927b580fa404/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md#manual-entry-revision-owner-2026-10-15-at-1935)
+and its drawings remain a receipt of that superseded design. They used a signing seed, custodian
+reference and short head tag. The 21:30 revision below replaces that active format; the old 101,
+79, 40, 141 and 119 counts do not describe the new flow.
 
-The page offers **Upload saved PDF** and **Type from printout**. You do not need a scanner.
+## Authoritative revision: owner decision, 2026-10-15 at 21:30
 
-The original PDF contains the readable register and one embedded attachment named `waitron-register-v1.json`. Your browser reads that attachment locally. It sends only checked public evidence to the box. The custody key and whole PDF never go to an upload endpoint.
+**Precedence:** this revision replaces the 19:35 manual-entry appendix and overrides conflicting statements in the earlier redesign. Those earlier statements and their qualification receipts remain historical evidence of their dated candidates. In particular, references to recovering a custody signer, signed new paper revisions, fingerprint enrolment for ordinary paper use, scanning, and the 101/79/40/141/119 character counts are superseded.
 
-Keep the original downloaded file. A PDF viewer may preserve the attachment when saving, or remove it when printing/exporting another PDF. If the attachment is missing, the page says:
+Authority: `/Users/clintongormley/waitron-campaign-e/questions.md:4565–4569`. The owner approved removing the paper signing key and accepted that forged or edited paper cannot be detected. The owner also required case-insensitive, easy-to-type codes grouped in threes.
 
-> **This copy no longer contains its register data. Choose the original downloaded PDF, or type the recovery block from your printout.**
+This is a design revision, not implementation qualification. Product head inspected: `aa6c1b957508570d60b3652c5c0ac79044556993`. No tests, services, PDF generation, browser journeys or physical typing ran during this revision.
 
-It does not infer allocations from visible PDF text or silently create an empty register. A preserved attachment must pass the same checks after resaving. Editing visible text cannot change the checked allocation facts.
+## What you keep and use
 
-## What typing restores
+You keep **one PDF**, downloaded, printed, or both. The setup page produces it. There is no separate tool, custody-key file, custody password, scanner, ink procedure, handover ceremony or loss drill.
 
-The printout has a short block for continuing the paper register and a separate block for each named node recovery key.
+To continue an existing paper register, choose:
 
-The register block restores:
+- **Upload saved PDF:** your browser reads its embedded attachment locally.
+- **Type from printout:** enter the S position, P position and check code.
 
-- The **same custody signing key**.
-- The taxpayer/software/environment scope, checked against the frozen setup or recovery context.
-- The highest reserved S and P numbers.
-- A short reference to the supplied paper’s history head.
-- A check code for transcription mistakes.
+For recovery, also supply the selected backup’s named node recovery key. An older document can supply that matching key while a newer document supplies the current allocation register.
 
-It does **not** reconstruct old signed blocks, consumption signatures, venue lists, Cloud receipts or import acknowledgements. The printed original remains historical evidence; keep it.
+The paper register has **no custody private key and creates no paper signatures**. No replacement persistent signing key is introduced in the browser, host, database or Cloud adapter.
 
-Typed continuation permanently excludes **every S number through the stated S position and every P number through the stated P position**, including previously reserved but unused entries. It allocates above those limits. Fresh module evidence checks for recovery, re-registration, standby and promotion enforce those same limits; an old signed reservation below the floor cannot bypass them with a new confirmation. Exact committed publication remains its separate no-new-activation path. This sacrifices unused reservations rather than risk reusing one.
+You still confirm:
 
-This is a distinct **checkpoint continuation**, visibly labelled in its successor PDF. It never describes itself as a lossless reconstruction. Uploaded complete history remains lossless and is never replaced with the typed minimum.
+> This is the current register for this taxpayer, software and environment. No other paper allocation is underway.
 
-### Worked example
+First setup also requires the appropriate initial-machine absence declaration. Recovery requires old-machine isolation and no parallel recovery. A matching check code does not make either declaration true.
 
-Olivo’s current printout says S position `000042` and P position `000007`.
+## Keep, change and drop
 
-You type its register block into another fresh setup. After currentness and custody checks, the page permanently excludes `S000001..S000042` and `P000001..P000007`. The next initial allocation is `S000043`; a recovery needs a fresh `P000008`.
+| Earlier requirement | Disposition under the 21:30 decision |
+| --- | --- |
+| Taxpayer-wide allocation history outside restored backups | **Keep.** One current paper register across all venues and nodes. |
+| Paper `S/P`, Cloud `C`, emergency `E128` | **Keep.** No new namespace. |
+| Complete configured bases and purposes | **Keep**, including multiple bases of a purpose and `FF/full`. |
+| Outside consumption before activation | **Keep**, with exact frozen event/source/target/operator/allocation bindings. |
+| Download/print retention confirmation | **Keep.** Neither event proves retention. |
+| Separate Ed25519 paper custodian and signed paper claims, Oct 4 §9.2/Oct 12 constraints | **Change by owner decision.** New paper history is explicitly owner-declared and unsigned. |
+| Seed, custodian reference and custody fingerprint in ordinary paper flow | **Drop.** No generation, recovery, enrolment, comparison or typing. |
+| Printed short history-head reference | **Drop.** Full heads remain in the attachment; no head tag is typed. |
+| Signature-based forged/edited-paper detection | **Drop by owner decision.** Unkeyed checks can catch accidental errors; they do not authenticate the record. |
+| Full saved-file history | **Keep losslessly.** Preserve every supplied public original and original signed receipt. |
+| Typed checkpoint | **Keep with changed representation.** Unsigned, conservative burn floors; missing history remains explicit. |
+| Existing signed paper originals | **Keep unchanged as historical evidence.** Never rewrite, re-sign or reinterpret them as new unsigned originals. |
+| Signed Cloud receipts, issuer trust and current outside authority | **Keep.** Removing paper signatures removes none of Cloud’s signature checks. |
+| Existing Cloud `import-paper` for newly unsigned history | **Unavailable.** Requires a separately owned, explicitly versioned Cloud contract. |
+| Additive paper-to-Cloud history preservation | **Keep as a requirement with an unavailable integration dependency.** Do not claim existing signed import satisfies it. |
+| V2 repair, retirement, exact finish and entry ordering | **Keep.** Paper signing removal grants no reset authority. |
+| Password-free empty-workspace exception | **Keep.** Absence of a signing key is no longer evidence that no register exists. Any existing or unknown register/authority history excludes this exception. |
+| A731 backup recovery from repair page | **Keep separately owned**, before go-live. |
+| A732 fresh-deployment authorisation | **Keep the independent authority requirement and separation.** Its former paper-signer mechanism is unavailable after this decision; a separately approved replacement is required. |
+| A732 actual-original fingerprint comparison | **Historical mechanism only for its signed-authority design.** Do not substitute a check code or unsigned PDF for that authority. |
+| A733 secure-connection recovery | **Keep separately owned**, before go-live. |
+| Protected writers, guards and existing protected fiscal assertions | **Keep protected.** The owner’s signer removal requires a distinct unsigned admission branch; it does not authorise changing protected writers or existing fiscal assertions. |
+| Task 1 completion at `aa6c1b9` | **Historical milestone.** Revise its active protocol, history and compact-code assumptions in the same eventual A679 product PR. |
 
-It does not recover an unused `P000006` reservation from the missing file. Nor does it invent its original signed block.
+## Allocation invariants
 
-If the box already knows S position 43, the typed position 42 refuses. If it recognises the short history reference as an older retained head, that also refuses. A disconnected replacement cannot discover an unseen newer printout. You still confirm:
+Scope remains `(taxpayerNif, softwareId, fiscalEnvironment, prefix)` across every venue, node and organisation of the taxpayer.
 
-> **This is the current register for this taxpayer, software and environment. No other paper allocation is underway.**
+- Initial paper: `S000001..S999999`.
+- Recovery paper: `P000001..P999999`.
+- Cloud: `C000001..C999999`, generated only by Cloud.
+- Emergency: `E` plus 26 Crockford symbols containing 128 random bits; first suffix symbol `0..7`.
+- The existing emergency CRC-16/CCITT-FALSE checksum remains four hexadecimal digits outside the filed identity. This revision does not change that protected protocol.
+- Zero is not an installation allocation. Exhaustion never wraps or fills a historical gap.
+- Installation maximum 27; base maximum 21 using `[A-Za-z0-9/_.-]`; invoice maximum 60; counter `1..9,999,999,999`.
+- NIF is canonical nine uppercase ASCII letters/digits; software ID is two.
+- Every allocation freezes the entire configured `{code,purpose}` set.
+- Cloud registration `test` maps to fiscal `preproduction`.
+- Demo, Preparation and readiness use their separate preproduction targets and throwaway identities.
+- Consumption, retirement, abandonment, uncertainty and subscription end never free names.
 
-Unknown currency cannot proceed with short allocation.
+Paper integrity now rests on structural checks, digest consistency, retained contradictory evidence, monotonic floors, exact bindings and the owner’s current-register declaration. These checks provide no protection against an editor who recomputes the digests and check code.
 
-## Exact printed fields and character counts
+No network request is added to a sale transaction. No allocation receipt establishes seller fencing or reconstructs missing invoices.
 
-The printed U (UUID) or T (text) reference label selects an explicit form option; that click adds no typed character. Never infer the reference kind from its length. Use case-sensitive unpadded base64url for secrets and UUID references. Spaces between printed groups are optional and are not data. Do not remove `-` or `_`; they are valid secret characters.
+## Exact typed format
 
-| Register field | Characters entered |
-| --- | ---: |
-| Custodian reference, when not already independently bound | 22 |
-| Custody seed | 43 |
-| S position | 6 |
-| P position | 6 |
-| History reference | 16 |
-| Register check | 8 |
-| **Fresh box continuing an existing printed register** | **101** |
-| **Same operation with independently bound custodian reference** | **79** |
+### Alphabet and normalisation
 
-The ordinary newly created custodian ID is a UUID. Its 16 bytes encode into the 22-character reference. Preserve an existing supplied custodian ID unchanged. For a non-UUID ID, print its canonical UTF-8 base64url reference and the actual count: **79 + reference length**. Never rename an existing custodian to shorten typing.
+New A679 typed recovery fields use `0123456789ABCDEFGHJKMNPQRSTVWXYZ`.
 
-The custody seed is the existing Ed25519 key’s 32-byte seed, encoded into 43 characters. Reconstruct the existing 48-byte PKCS8 value by adding its fixed 16-byte DER prefix. Derive the public key and compare its full fingerprint with independently established trust. This is key recovery, not custody rotation.
+Print uppercase, in groups of three from the left, with a shorter final group where necessary. Accept lowercase. Map `O/o` to `0` and `I/i/L/l` to `1`. Ignore ASCII spaces, hyphens, tabs and CR/LF in these typed fields. Reject other characters; do not guess further substitutions.
 
-| Named node-key field | Characters entered |
-| --- | ---: |
-| Existing node recovery secret | 32 |
-| Node-key check | 8 |
-| **Named key alone** | **40** |
-| **Register plus named key, fresh context** | **141** |
-| **Register plus named key, custodian independently bound** | **119** |
+S/P positions use the **decimal subset** of this alphabet: exactly six digits after normalisation. They are not base32 numbers. Thus `000 042` means decimal 42. The printed alphabet excludes competing letter forms; aliases tolerate their accidental entry.
 
-The 32-character count applies to keys generated by this Waitron flow. For another imported key, print/select the UTF-8 mode and encode its complete UTF-8 bytes in base64url; show its actual encoded character count plus the eight-character check. Never truncate or reject an otherwise supported key to fit the common count. The source generator uses 24 random bytes encoded as 32 base64url characters: `packages/provisioning/src/identifiers.ts:16`; `apps/server/src/break-glass.ts:24` uses that generator. Preserve those exact secret characters.
+Apply these transformations only to human-entered display codes. Never case-fold, strip separators from, or otherwise normalise an actual node secret, original attachment, signed object or Cloud packet.
 
-Node ID and key name come from the selected backup preview. NIF, software and environment come from the frozen validated context. They are shown for comparison, not retyped. Existing archive passwords and authority proofs remain separate; their variable lengths are outside these printed-block counts.
+### Register block R2
 
-A genuinely first register requires **zero** paper characters: setup generates it. These counts concern continuing an existing register or restoring a backup.
+| Field | Data characters | Display |
+| --- | ---: | --- |
+| S position | 6 | `000 042` |
+| P position | 6 | `000 007` |
+| Check | 8 | `xxx xxx xx` |
+| **Register total** | **20** | **24 characters including grouping spaces** |
 
-### Screen and paper layout
+Positions are the highest reserved/excluded values, `000000..999999`, not the next free candidates. Zero means no earlier allocation in that prefix.
 
-Proposed static mockups, for the driver to render:
+The check is the first five SHA-256 bytes, encoded as eight Crockford symbols, over canonical UTF-8 JSON:
 
-- `manual-register-desktop-en.png`
-- `manual-register-phone-en.png`
-- `manual-register-paper-en.png`
+`["waitron.paper-position-check",2,scope,sHighWater,pHighWater]`
 
-```text
-Reserve invoice series
+`scope` contains exactly `environment`, `softwareId`, `taxpayerNif`, with recursively lexical object keys. Arrays retain order. No custodian, secret, head tag or additional reference is required.
 
-[ Upload saved PDF ]  [ Type from printout ]
+### Named node key K2
 
-Taxpayer: …        Software: W1        Environment: Production
+Keep the existing generated secret: 24 random bytes represented internally as its original 32-character unpadded base64url string.
 
-Custodian reference  [ 22 characters ]  (omitted if independently bound)
-Custody seed         [ 43 characters ]
-S position           [ 000042 ]
-P position           [ 000007 ]
-History reference    [ 16 characters ]
-Register check       [ 8 characters ]
+For print/typing, decode those 24 bytes and encode them as **39 Crockford symbols**, using most-significant-bit-first byte-stream base32 with three zero padding bits at the end. Decode and re-encode to require canonical padding. The last symbol can therefore only be `0`, `8`, `G` or `R`.
 
-All S names through 000042 and P names through 000007
-will remain unavailable, including unused reservations.
+After typing, reconstruct the **exact original base64url secret** before checking its existing verifier. Do not replace it with the Crockford display value.
 
-[ ] This is the current register. No other paper allocation is underway.
-[ Check printed details ]
-```
+For other supported UTF-8 keys, encode the complete, unchanged UTF-8 bytes with the same byte-stream codec. If their byte length is `n`, the display payload has `ceil(8n/5)` symbols. The printed format selects `raw192` or `utf8`; selection is a click, not another typed reference. Never infer format from length.
 
-```text
-TYPE FROM THIS PRINTOUT — FORMAT C1
+The screen and printout label these choices **Standard key** (`raw192`) and **Text key** (`utf8`). The encoding identifiers are internal values, not user-facing labels.
 
-Custodian:  xxxxx xxxxx xxxxx xxxxx xx
-Custody:    xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxxxx xxx
-S position: 000042       P position: 000007
-History:    xxxx xxxx xxxx xxxx
-Check:      xxxx xxxx
+The eight-symbol node check covers:
 
-NODE RECOVERY KEY — <node ID> — <key name>
-Key:        xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
-Check:      xxxx xxxx
-```
+`["waitron.node-key-check",2,scope,nodeId,keyName,encoding,byteLength,actualSecret]`
 
-The `x` strings illustrate layout and lengths; they are not valid recovery fixtures or computed checks. Mockups use synthetic reference calculations of this format, not a claim that the product codec or recovery path has been implemented.
+The backup preview supplies `nodeId` and `keyName`; the frozen operation supplies scope. All are visible for comparison and are not retyped.
 
-With those exact groupings, the 101 data characters occupy 117 displayed characters including grouping spaces. The named-key block has 40 data characters, 48 with grouping spaces. Together: **141 data characters, 165 displayed characters**. Labels and line breaks are not typed.
+| Case | Data characters | With grouping spaces |
+| --- | ---: | ---: |
+| First register generated by setup | 0 | 0 |
+| Continue printed register | 20 | 24 |
+| Generated named key alone | 39 + 8 = **47** | **61** |
+| Register plus generated named key | 20 + 47 = **67** | **85** |
+| Imported UTF-8 key alone | `m + 8`, where `m=ceil(8n/5)` | `m + floor((m−1)/3) + 10` |
+| Register plus imported UTF-8 key | `m + 28` | `m + floor((m−1)/3) + 34` |
 
-## Check bytes, known staleness and authority
+Counts exclude labels, line breaks, clicks, existing passwords and separate authority inputs. Key and check are grouped as separate fields.
 
-For all three formulas, `scope` is exactly `{environment,softwareId,taxpayerNif}` in lexical key order. It excludes the custodian ID, which is a separate register-check argument; node-only Cloud documents need no custodian. Browser and Node must share exact vectors.
+No 40-character generated-key claim survives: 39 payload symbols plus eight check symbols is 47.
 
-Register check:
+### Updated screen and printout
 
-`first 40 bits of SHA-256(canonical UTF-8 JSON(["waitron.paper-compact-check",1,scope,custodianId,publicSpkiBase64url,sHighWater,pHighWater,sourceHeadTag]))`
+The [drawing index](2026-10-15-a679-two-route-redesign/README.md#current-2130-typing-proposal)
+shows the three register fields and a separately named recovery-key block in English and Spanish,
+at phone/desktop widths and in both themes. The printout uses the same groups of three.
+Its [synthetic values](2026-10-15-a679-two-route-redesign/position-reference.json) calculate the
+proposed check domains; they are not production credentials or product-codec qualification.
 
-Encode those 40 bits as eight Crockford characters. Obtain the public SPKI by deriving it from the entered seed. A changed seed, position or frozen scope normally changes the check.
+## Typed continuation and its limits
 
-History reference:
+Typing creates a new **owner-declared checkpoint**. It excludes every S/P identity through the entered positions, including unused reservations. It does not reconstruct old allocations, signatures, recipients, event bindings, Cloud receipts or the previous full head.
 
-`first 80 bits of SHA-256(canonical UTF-8 JSON(["waitron.paper-head-reference",1,head])))`
+Example: S position 42 and P position 7 exclude `S000001..S000042` and `P000001..P000007`. A new initial setup takes `S000043`; recovery needs `P000008`. An unused old `P000006` cannot bypass this floor.
 
-Encode as sixteen Crockford characters. The complete source head remains in the saved-file attachment. The typed reference is explicitly a truncated reference, not a predecessor digest.
+Known lower positions refuse. Uploaded full history also refuses known older or contradictory full heads. **Typed equal-floor history has no head reference and cannot distinguish two sheets with equal positions.** Do not claim otherwise. A replacement box cannot detect an unseen newer sheet.
 
-Node-key check:
+Keep all available original history when applying a checkpoint. A later old upload may add historical originals but cannot lower floors, erase subsequent facts or restore burned reservations. Checkpoint history never silently becomes complete. Preserve a displaced unsigned revision chain as a separately labelled public-history original, with exact public-only bytes and digest. It is not part of the new checkpoint’s ancestry; its retention never turns the missing interval into complete history. Node secrets remain outside that public carrier.
 
-`first 40 bits of SHA-256(canonical UTF-8 JSON(["waitron.node-paper-check",1,scope,nodeId,keyName,secret])))`
+Unknown currentness offers obtaining the current register, an authorised Cloud route, or the existing authenticated emergency recovery route where applicable. It cannot proceed with a guessed short name.
 
-Encode as eight Crockford characters. Never send a node secret to the public-evidence checker. Its appropriate recovery endpoint still checks the actual stored verifier.
+## PDF and original-file retention
 
-For an unrelated accidental change with uniformly distributed hash output, the check’s matching probability is `2^-40`; a truncated head reference can collide with probability `2^-80` for an unrelated pair. Neither is a guarantee against every typo. These unkeyed checks provide **no forgery resistance or freshness proof**. A malicious holder can recompute them.
+Use one version-2 document with exactly one embedded attachment, `waitron-register-v2.json`. It contains scope, complete supplied public history or the explicit checkpoint gap, subsequent revisions, original Cloud receipts and named node keys. It contains no custody signing material.
 
-The host verifies new public signatures with independent trust, rejects lower known positions and recognised stale/conflicting heads, and requires currentness and local authority separately. Losing independent trust does not permit self-enrolment from a seed or PDF. A732’s actual-original fingerprint comparison and fresh-deployment authority remain separately gated.
+The browser reads the attachment locally. The host receives only public evidence and, separately, the node secret needed by an appropriate authenticated HTTPS recovery request. Whole PDFs and raw keys are never persisted on the host.
 
-## Explicit history and Cloud limits
+The reader returns the original attachment bytes alongside its parsed representation. Successor documents retain every supplied public original byte-for-byte and all named keys required by retained backups. Structural acceptance is not authority.
 
-A typed checkpoint is signed anew by the recovered current signer. It records a burn floor and its declared evidence gap. It does not claim to be an old revision or invent a predecessor/signature.
+Require a real installed-Chrome download/re-upload test using the exact downloaded file. Also require an actually changed viewer resave whose PDF hash differs but attachment bytes remain identical, a no-change control, and an attachment-stripping Chrome print/export refusal.
 
-Preserve every available original signed object. A later uploaded old PDF can contribute historical evidence, but cannot lower the checkpoint’s floor or displace subsequent facts.
+Missing attachment wording:
 
-Checkpoint-only evidence cannot produce a complete original-paper import into Cloud. Neither can a printed short block reconstruct a consumed C receipt. Obtain the original saved evidence or use the existing authorised Cloud journey. Never synthesize receipts, rewrite signed recipients or transfer consumed identities.
+> This copy no longer contains its register data. Choose the original downloaded PDF, or type the recovery block from your printout.
 
-The already identified Cloud original-recipient/admission dependency remains unavailable until Lane D supplies its contract. This revision adds no Cloud code or service.
+Never recover allocation history from visible PDF text. Arbitrary visible-text edits are not detected; the page shows the attachment-derived summary for confirmation.
 
-The owner acceptance becomes: **open the built PDF, upload the Chrome-downloaded original successfully, and continue or recover by typing its printed blocks**. No scanner, transcription drill, ink procedure or separate tool is required.
+The preactivation document says **“Consumed; activation completion not yet confirmed.”** It contains no sales, administrator/archive passwords, provider credentials, Cloud cookies, machine signing credentials or TLS private keys.
 
+## Authority, interruption and reissue
 
-### Manual-entry drawing and reference-calculation receipt
+Freeze attempt, module/version, scope, bases, event, source, target, operator and allocation. Record consumption intent before producing the consumed successor. Require explicit kept-document confirmation before activation.
 
-The typing update’s [desktop](2026-10-15-a679-two-route-redesign/manual-register-desktop-en.png),
-[phone](2026-10-15-a679-two-route-redesign/manual-register-phone-en.png) and
-[printout](2026-10-15-a679-two-route-redesign/manual-register-paper-en.png) use synthetic values
-calculated from the proposed canonical hash/base64url formulas. They are static proposal pictures,
-not product-codec, PDF download or recovery acceptance. English/Spanish and both screen themes are
-in the [drawing index](2026-10-15-a679-two-route-redesign/README.md).
+Owner-bound grants remain one-use and bound to boot, revision, ownership generation, time, public-history digest, exact input, document digest and staged node-key verifier. A digest binds bytes; it proves neither retention nor authenticity.
+
+Only an exact checked local committed result plus fresh outside confirmation permits **Finish setup**, with zero activation calls. Typed positions alone cannot recreate a lost committed event.
+
+Reprint uses the same document/key material. Reissue after raw-key loss requires existing unfinished-password or manager authority, changes only the staged or installed named verifier, invalidates delivery grants and performs zero fiscal activations. Old backups retain their old named-key requirement.
+
+A stolen PDF contains a usable node recovery secret for its matching backup/verifier and existing permitted recovery checks. It creates no management session and resets no password. Losing the paper with the box requires a surviving usable backup and its matching keys; no new reset authority is inferred.
+
+## Cloud consequences and delivery boundary
+
+Signed consumed C receipts remain verified against independent configured trust and exact local authority. C-only documents create no paper signer.
+
+New unsigned paper histories and typed checkpoints cannot use existing `import-paper` or paper machine reporting. Show **“Paper history import is not available for this register format.”** Retain the history locally and in the PDF; do not silently discard it.
+
+A separately owned Cloud contract must distinguish declared unsigned facts and burn floors from legacy signed evidence, preserve original bytes, authenticate taxpayer/operator authority independently, retain omissions and uncertainty, resolve recipient attribution, and append through current outside continuity. Its implementation and enablement are not part of this Waitron PR.
+
+Legacy signed public originals may remain parseable without rewriting them. Their presence does not make subsequent unsigned history a legacy signed import. The existing `first-setup:<attempt>` versus Cloud UUID recipient mismatch also remains unresolved.
+
+**Implementation boundary:** the inspected activation chain still checks signed paper evidence. The owner’s explicit removal of paper signing authorises replacing that admission requirement with a distinct owner-declared branch. Keep the legacy signed branch strict and carry independent live operator authority through preparation. Source reading indicates the existing activation writer can remain unchanged; Task 4 must test that inference through the real path. H2 does not separately name these admission validators as protected. If implementation requires changing hashes, numbering, fiscal-record/activation writers, SQL, guards or an existing protected fiscal assertion, stop at that exact change and ask with its source lines. This documentation grants no such exception.
+
+Acceptance remains: the owner opens the built PDF, uploads the actual Chrome download, and physically continues or recovers by typing its printed fields. Automated extraction/typing does not complete that owner gate.
