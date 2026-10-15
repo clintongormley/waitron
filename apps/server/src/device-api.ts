@@ -726,6 +726,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
+        invoicePrinterId?: unknown;
         madeHereStationIds?: unknown;
         approvedProfileIds?: unknown;
       }>(c);
@@ -750,12 +751,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
         };
-        // Absent leaves the stored drawer choice alone.
+        // Absent leaves the stored drawer and invoice choices alone.
         if (body.cashDrawerPrinterId !== undefined) {
           chosen.cash_drawer = requireNullableBodyUuid(
             body.cashDrawerPrinterId,
             "cashDrawerPrinterId",
           );
+        }
+        if (body.invoicePrinterId !== undefined) {
+          chosen.invoice = requireNullableBodyUuid(body.invoicePrinterId, "invoicePrinterId");
         }
         // Absent leaves the stored stations alone: a kitchen screen's dialog does not show them.
         const madeHere = body.madeHereStationIds;
@@ -803,7 +807,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           cash_drawer: held.cashDrawerPrinterId,
           invoice: held.invoicePrinterId ?? held.invoicePagePrinterId,
         };
-        for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
+        for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
           const printerId = chosen[role];
           if (printerId === undefined || printerId === current[role]) continue;
           await selectDeviceEquipment(tx, {

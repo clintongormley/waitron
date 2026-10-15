@@ -53,7 +53,12 @@ import {
   sessions,
 } from "@waitron/identity";
 import { payments } from "@waitron/payments";
-import { deleteDeviceProfile, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
+import {
+  deleteDeviceProfile,
+  emptyPrinterLists,
+  readProfilePrinterLists,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import "./errors.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 
@@ -1808,6 +1813,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     profileId: string;
     receiptPrinterId: string | null;
     paymentSlipPrinterId: string | null;
+    invoicePrinterId?: string | null;
     madeHereStationIds: string[];
     kitchenScreens?: unknown;
   };
@@ -2092,6 +2098,90 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       deviceProfileId: t.profileId,
       receiptPrinterId: t.bar,
       paymentSlipPrinterId: t.bar,
+    });
+  });
+
+  async function invoiceChoice(deviceId: string) {
+    const [row] = await suite.db
+      .select({
+        invoicePrinterId: devices.invoicePrinterId,
+        invoicePagePrinterId: devices.invoicePagePrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return row!;
+  }
+
+  it("sets the invoice printer to an office printer or a receipt printer, and keeps it when absent", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const office = await seedPagePrinter(venue.cfg);
+    await withTransaction(suite.db, async (tx) =>
+      setProfilePrinterLists(tx, t.profileId, {
+        ...(await readProfilePrinterLists(tx, t.profileId)),
+        invoicePrinterIds: [office, t.counter],
+      }),
+    );
+
+    const toOffice = await edit(app, venue.managerCookie, t.deviceId, {
+      invoicePrinterId: office,
+    });
+    expect(toOffice.status).toBe(204);
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: null,
+      invoicePagePrinterId: office,
+    });
+
+    const toReceipt = await edit(app, venue.managerCookie, t.deviceId, {
+      invoicePrinterId: t.counter,
+    });
+    expect(toReceipt.status).toBe(204);
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: t.counter,
+      invoicePagePrinterId: null,
+    });
+
+    const absent = await edit(app, venue.managerCookie, t.deviceId, { name: "Barra 2" });
+    expect(absent.status).toBe(204);
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: t.counter,
+      invoicePagePrinterId: null,
+    });
+
+    const toDefault = await edit(app, venue.managerCookie, t.deviceId, {
+      invoicePrinterId: null,
+    });
+    expect(toDefault.status).toBe(204);
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: null,
+      invoicePagePrinterId: null,
+    });
+  });
+
+  it("refuses an invoice printer the profile does not list with device.binding_invalid, changing nothing", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const office = await seedPagePrinter(venue.cfg);
+    for (const unlisted of [office, t.bar]) {
+      const res = await edit(app, venue.managerCookie, t.deviceId, {
+        name: "Renamed",
+        invoicePrinterId: unlisted,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field: "invoicePrinterId" } },
+      });
+    }
+    const malformed = await edit(app, venue.managerCookie, t.deviceId, {
+      invoicePrinterId: "not-a-uuid",
+    });
+    expect(malformed.status).toBe(400);
+    expect(await labelOf(t.deviceId)).toBe("Caja");
+    expect(await invoiceChoice(t.deviceId)).toEqual({
+      invoicePrinterId: null,
+      invoicePagePrinterId: null,
     });
   });
 

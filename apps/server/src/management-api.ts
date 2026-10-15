@@ -25,6 +25,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   floorZones,
   fireControlMode,
+  pagePrinters,
   printers,
   readNodeMembership,
   withTransaction,
@@ -543,6 +544,7 @@ const PRINTER_DEFAULT_FIELDS = [
   "receiptPrinterDefaultId",
   "paymentSlipPrinterDefaultId",
   "cashDrawerPrinterDefaultId",
+  "invoicePrinterDefaultId",
 ] as const;
 
 /** The printer lists and defaults the body names; an absent one is left out, `null` is None. */
@@ -551,6 +553,7 @@ function parsePrinterLists(body: ProfileBody): Partial<ProfilePrinterLists> {
     "receiptPrinterIds",
     "paymentSlipPrinterIds",
     "cashDrawerPrinterIds",
+    "invoicePrinterIds",
   ]);
   for (const field of PRINTER_DEFAULT_FIELDS) {
     if (body[field] !== undefined) lists[field] = requireNullableBodyUuid(body[field], field);
@@ -594,6 +597,8 @@ type ProfileBody = {
   receiptPrinterDefaultId?: unknown;
   paymentSlipPrinterDefaultId?: unknown;
   cashDrawerPrinterDefaultId?: unknown;
+  invoicePrinterIds?: unknown;
+  invoicePrinterDefaultId?: unknown;
   kitchenScreens?: unknown;
   departmentId?: unknown;
   allowedZoneIds?: unknown;
@@ -677,31 +682,52 @@ async function withProfileAccess(
 
 /**
  * Refuses a listed or default printer that does not exist or is deleted, after the manager gate so
- * a session without `layout.configure` learns nothing about printer ids. The store's own writes
- * authorize again.
+ * a session without `layout.configure` learns nothing about printer ids. Only the invoice list and
+ * default may name a page printer. The store's own writes authorize again.
  */
 async function requireListedPrinters(
   tx: Transaction,
   sessionId: string,
   lists: Partial<ProfilePrinterLists>,
 ): Promise<void> {
+  const invoiceDefault = lists.invoicePrinterDefaultId;
+  const invoiceIds = [
+    ...new Set([
+      ...(lists.invoicePrinterIds ?? []),
+      ...(invoiceDefault == null ? [] : [invoiceDefault]),
+    ]),
+  ];
   const ids = [
     ...new Set([
       ...(lists.receiptPrinterIds ?? []),
       ...(lists.paymentSlipPrinterIds ?? []),
       ...(lists.cashDrawerPrinterIds ?? []),
-      ...PRINTER_DEFAULT_FIELDS.flatMap((field) => lists[field] ?? []),
+      ...PRINTER_DEFAULT_FIELDS.filter((field) => field !== "invoicePrinterDefaultId").flatMap(
+        (field) => lists[field] ?? [],
+      ),
     ]),
   ];
-  if (ids.length === 0) return;
+  if (ids.length === 0 && invoiceIds.length === 0) return;
   await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
+  const all = [...new Set([...ids, ...invoiceIds])];
   const found = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(inArray(printers.id, ids), isNull(printers.deletedAt)));
+    .where(and(inArray(printers.id, all), isNull(printers.deletedAt)));
   const known = new Set(found.map((row) => row.id));
   const missing = ids.find((id) => !known.has(id));
   if (missing !== undefined) throw new AppError("printer.not_found", { id: missing });
+  const unknownInvoice = invoiceIds.filter((id) => !known.has(id));
+  if (unknownInvoice.length === 0) return;
+  const pages = await tx
+    .select({ id: pagePrinters.id })
+    .from(pagePrinters)
+    .where(inArray(pagePrinters.id, unknownInvoice));
+  const knownPages = new Set(pages.map((row) => row.id));
+  const missingInvoice = unknownInvoice.find((id) => !knownPages.has(id));
+  if (missingInvoice !== undefined) {
+    throw new AppError("printer.not_found", { id: missingInvoice });
+  }
 }
 
 /** A malformed challenge handle would just miss in the `text` id column, so it is refused here. */
