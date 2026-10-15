@@ -339,6 +339,20 @@ forced-failure probe used the command-line flag and passed, which is how this wa
 that raises the limit belongs in the outer `test.browser` block, and a test of that change needs
 that block's failure as its control.
 
+## A disposable browser checkout keeps the lockfile's dependency versions
+
+On 2026-10-15, A10-4's disposable checkout installed with `pnpm install --lockfile=false` while
+its till manifest had a new workspace dependency. The install resolved Playwright 1.64.1; the
+feature checkout's `pnpm --filter @waitron/till exec playwright --version` returned 1.63.0.
+The candidate's baseline ran no tests because the newer browser executable was absent.
+
+For that candidate, `pnpm install --lockfile-only --offline --ignore-scripts` added exactly the
+new workspace link to its own lockfile. After checking that three-line diff, a frozen install
+and the baseline passed. Keep such candidate-only dependency changes explicit, check their diff,
+and preserve the feature checkout's lockfile when another lane reserves it. The candidate then
+caught thirteen separate guard omissions and passed after their restoration; the first failed
+baseline supplied no behavioral evidence.
+
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
 It is tempting to read a suite's two timeouts as one overriding the other. They do different things,

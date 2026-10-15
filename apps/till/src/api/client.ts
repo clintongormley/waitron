@@ -1,28 +1,21 @@
 import { readTransferEvents } from "./transfer-events.js";
 import type { ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-
-/**
- * The browser-side face of the till's HTTP API — one thin `fetch` wrapper per server route
- * (`apps/server/src/till-api.ts`), so the Lit views never touch `fetch`, URLs, cookies or
- * error-envelope shapes: they call a typed method and get back a typed payload, or a rejected
- * `{ code }`.
- *
- * Most response interfaces below are LOCAL copies of the server's JSON shapes, because a RUNTIME
- * import from a server package would drag its barrel — and through it `@waitron/db` — into the
- * browser bundle. The cost is that a mismatch with the server is not a compile break.
- *
- * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu`, `TillZoneMenu` and
- * `OfferedModifier` are `import type` aliases from catalogue's type-only leaves
- * `@waitron/catalogue/src/menu-types.js` and `menu-document-types.js`, which pull in no runtime, so
- * removing or retyping a field the till reads is a compile break here. `MenuState` and
- * `MenuUnavailable` come from the same leaf, and venue-service builds its `menuState` answer as that
- * `MenuState` and each zone-offers menu as `TillZoneMenu`'s `ServedMenu`, so adding a required field
- * to any of them, or dropping or retyping one, breaks the server's compile too; an optional one does
- * not.
- * `TillProduct` stays LOCAL: it is the till's own display model, built by
- * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
- */
+import type {
+  AttendanceCommand,
+  AttendanceCommandResult,
+  AttendanceDayView,
+  AttendanceInbox,
+} from "@waitron/workforce/attendance-contract";
+export type {
+  AttendanceChange,
+  AttendanceCommand,
+  AttendanceCommandResult,
+  AttendanceDayView,
+  AttendanceInbox,
+  AttendancePrompt,
+  CorrectionItem,
+} from "@waitron/workforce/attendance-contract";
 
 import type { CanvasDef, CapabilityFlag, NavigationScreen } from "../layout.js";
 import type {
@@ -2383,6 +2376,57 @@ export class TillApi {
 
   getClockState(options: ReadOptions = {}): Promise<TillClockState> {
     return this.#request("/api/clock/state", "GET", undefined, options.signal);
+  }
+
+  getAttendanceInbox(options: ReadOptions = {}): Promise<AttendanceInbox> {
+    return this.#request("/api/attendance/inbox", "GET", undefined, options.signal);
+  }
+
+  getAttendanceDay(
+    date: string,
+    locationId: string,
+    options: ReadOptions = {},
+  ): Promise<AttendanceDayView> {
+    const query = new URLSearchParams({ date, locationId });
+    return this.#request(`/api/attendance/day?${query}`, "GET", undefined, options.signal);
+  }
+
+  getAttendanceCommand(
+    commandId: string,
+    options: ReadOptions = {},
+  ): Promise<AttendanceCommandResult | null> {
+    return this.#request(
+      `/api/attendance/commands/${encodeURIComponent(commandId)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  listAttendanceApprovers(
+    itemId: string,
+    action: "approve" | "decline",
+    options: ReadOptions = {},
+  ): Promise<StaffMember[]> {
+    return this.#request(
+      `/api/attendance/items/${encodeURIComponent(itemId)}/approvers?action=${action}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  sendAttendanceCommand(
+    command: AttendanceCommand,
+    override?: { personId: string; pin: string },
+    options: ReadOptions = {},
+  ): Promise<AttendanceCommandResult> {
+    return this.#request(
+      "/api/attendance/commands",
+      "POST",
+      override === undefined ? command : { ...command, override },
+      options.signal,
+    );
   }
 
   clockIn(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {

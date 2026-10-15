@@ -2,6 +2,18 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "attendance.automatic_counted": "This automatic finish already counts towards your hours.",
+  "attendance.confirmed_by_worker": "Confirmed by the worker",
+  "attendance.waiting_manager": "Waiting for a manager",
+  "attendance.waiting_worker": "Waiting for the worker",
+  "attendance.self_approved": "Self-approved by an admin",
+  "attendance.disputed": "Disputed — both versions stay on record",
+  "attendance.overtaken": "A newer change replaced this request. Check its history.",
+  "attendance.uncertain":
+    "The answer was lost. Retry read to check whether your response was recorded before sending again.",
+  "attendance.stale": "Your hours changed. Read them again before responding.",
+  "attendance.fix_hours": "Fix my hours",
+  "attendance.retry_read": "Retry read",
   "clock.in": "Clock in",
   "clock.out": "Clock out",
   "clock.break_start": "Start break",
@@ -1312,6 +1324,19 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "attendance.automatic_counted": "Esta salida automática ya cuenta para tus horas.",
+  "attendance.confirmed_by_worker": "Confirmado por el trabajador",
+  "attendance.waiting_manager": "Pendiente de un responsable",
+  "attendance.waiting_worker": "Pendiente del trabajador",
+  "attendance.self_approved": "Aprobado por el propio administrador",
+  "attendance.disputed": "En desacuerdo — ambas versiones quedan registradas",
+  "attendance.overtaken":
+    "Un cambio posterior ha sustituido esta solicitud. Consulta su historial.",
+  "attendance.uncertain":
+    "Se ha perdido la respuesta. Vuelve a consultar si tu respuesta se ha registrado antes de enviarla otra vez.",
+  "attendance.stale": "Tus horas han cambiado. Vuelve a consultarlas antes de responder.",
+  "attendance.fix_hours": "Corregir mis horas",
+  "attendance.retry_read": "Volver a consultar",
   "clock.in": "Fichar entrada",
   "clock.out": "Fichar salida",
   "clock.break_start": "Iniciar descanso",
