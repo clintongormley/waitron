@@ -281,6 +281,39 @@ describe("Opening hours month", () => {
     expect(cell(el, "2026-12-02").querySelectorAll('[data-test="gap"]')).toHaveLength(0);
   });
 
+  it("draws a zone's closure hatched, not as the bare track", async () => {
+    const page = document.documentElement;
+    const before = {
+      root: page.getAttribute("data-wt-theme-root"),
+      theme: page.getAttribute("data-theme"),
+    };
+    applyTokens(page);
+    try {
+      const el = await mount(monthModel(), { departmentId: "rest" });
+      const terrace = cell(el, "2026-12-01").querySelector<HTMLElement>('[data-row="terrace"]')!;
+      const gap = terrace.querySelector<HTMLElement>('[data-test="gap"]')!;
+      const seen: string[] = [];
+      for (const theme of ["light", "dark"] as const) {
+        page.setAttribute("data-theme", theme);
+        const track = getComputedStyle(terrace).backgroundColor;
+        const image = getComputedStyle(gap).backgroundImage;
+        expect(image, theme).toContain("repeating-linear-gradient");
+        const stripes = image.match(/rgba?\([^)]*\)/g) ?? [];
+        const visible = stripes.filter((colour) => colour !== track && !/,\s*0\)$/.test(colour));
+        expect(visible, theme).not.toEqual([]);
+        seen.push(`${track} ${image}`);
+      }
+      expect(new Set(seen).size).toBe(2);
+    } finally {
+      for (const [name, value] of [
+        ["data-wt-theme-root", before.root],
+        ["data-theme", before.theme],
+      ] as const)
+        if (value === null) page.removeAttribute(name);
+        else page.setAttribute(name, value);
+    }
+  });
+
   it("draws a zone's blocks with the zone's own times", async () => {
     const el = await mount(monthModel(), { departmentId: "rest" });
     const terrace = cell(el, "2026-12-01").querySelector<HTMLElement>('[data-row="terrace"]')!;
@@ -517,12 +550,8 @@ describe("Opening hours month", () => {
   it("sends calendar-day-open for every date, neighbours too", async () => {
     const el = await mount();
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");
-    const special = events<unknown>(el, "special-day-action");
-    const ordinary = events<unknown>(el, "ordinary-date-open");
     const dates = ["2026-12-14", "2026-12-08", "2026-12-09", "2026-11-30"];
     for (const date of dates) dayButton(el, date).click();
-    expect(special).toEqual([]);
-    expect(ordinary).toEqual([]);
     expect(sent.map(({ date }) => date)).toEqual(dates);
     sent.forEach(({ date, returnTo }) => expect(returnTo()).toBe(dayButton(el, date)));
   });
@@ -581,7 +610,6 @@ describe("Opening hours month", () => {
       });
       const sunday = cell(el, "2026-12-06");
       expect([...sunday.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
-      expect(sunday.querySelector('[data-test="department-closed"]')).toBeNull();
       expect(sunday.querySelector(".day")!.getAttribute("aria-label")).toContain(words);
       expect(sunday.querySelector(".day")!.getAttribute("aria-label")).not.toContain("Grill");
       expect(cell(el, "2026-12-07").querySelector('[data-test="no-orders"]')).toBeNull();

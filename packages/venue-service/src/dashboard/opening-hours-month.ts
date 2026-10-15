@@ -217,7 +217,13 @@ export class OpeningHoursMonthView extends LitElement {
         inset-block: 0;
       }
       .gap {
-        background: var(--wt-color-border);
+        background: repeating-linear-gradient(
+          135deg,
+          var(--wt-color-surface),
+          var(--wt-color-surface) var(--wt-space-1),
+          var(--wt-color-border) var(--wt-space-1),
+          var(--wt-color-border) var(--wt-space-2)
+        );
       }
       .segment[data-colour="red"] {
         background: var(--wt-color-palette-red);
