@@ -2677,7 +2677,13 @@ get them wrong. An extras list's `maxPicks` accepts an explicit null, because th
 maxPicks, because there null is the value`. The seat-a-table
 route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
 the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
-guest count, absent or null` pins both inputs.
+guest count, absent or null` pins both inputs. `PUT /api/parties/:id/guests`'s `guestCount`, and
+Split a table's `guests.staying` and `guests.leaving`, take an explicit null as no count while an
+absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`): in
+`apps/server/src/till-api.parties.test.ts`, `clears the count with null` and `refuses the guest count
+%j as a bad field, changing nothing` pin the two halves, and in
+`apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
+null` and `refuses guests %j as a bad %s, changing nothing` do.
 
 An extras item's `maxQuantity` keeps an explicit null as no cap on that item, while an absent field
 defaults to one (`parseExtraListInput`, `packages/catalogue/src/extra-contract.ts`); the case
