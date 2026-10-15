@@ -19,7 +19,7 @@ beforeEach(async () => {
   below.textContent = "Next row";
   box = document.createElement("calendar-day-box");
   box.heading = "Fri, 16 Oct 2026";
-  host.append(anchor, below, box);
+  host.append(anchor, box, below);
   document.body.append(host);
   applyTokens(host);
   closes = 0;
@@ -107,6 +107,28 @@ describe("calendar-day-box", () => {
     expect(deepActive()).toBe(anchor);
   });
 
+  it("returns focus to its anchor when both live in a shadow root and a slotted button had focus", async () => {
+    const shadowHost = document.createElement("div");
+    host.append(shadowHost);
+    const root = shadowHost.attachShadow({ mode: "open" });
+    const inner = document.createElement("calendar-day-box");
+    inner.heading = "Fri, 16 Oct 2026";
+    const button = document.createElement("button");
+    button.textContent = "Edit special day";
+    inner.append(button);
+    const innerAnchor = document.createElement("button");
+    innerAnchor.textContent = "17";
+    root.append(innerAnchor, inner);
+    await inner.updateComplete;
+    inner.show(innerAnchor);
+    await expect.poll(() => button.checkVisibility()).toBe(true);
+    button.focus();
+    expect(deepActive()).toBe(button);
+    await userEvent.keyboard("{Escape}");
+    expect(inner.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+    expect(deepActive()).toBe(innerAnchor);
+  });
+
   it("closes on a click elsewhere and leaves focus where the click put it", async () => {
     const input = document.createElement("input");
     input.setAttribute("aria-label", "Elsewhere");
@@ -124,6 +146,7 @@ describe("calendar-day-box", () => {
     await expect.poll(() => closes).toBe(1);
     expect(isOpen()).toBe(false);
     box.hide();
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(closes).toBe(1);
   });
 
@@ -149,6 +172,11 @@ describe("calendar-day-box", () => {
     await box.updateComplete;
     box.show(anchor);
     insideViewport(popup().getBoundingClientRect());
+    // Too tall to fit below the anchor, so it is lifted to sit 8 px above the viewport's bottom.
+    expect(popup().getBoundingClientRect().top).toBeLessThan(anchor.getBoundingClientRect().bottom);
+    expect(
+      Math.abs(popup().getBoundingClientRect().bottom - (innerHeight - 8)),
+    ).toBeLessThanOrEqual(1);
     box.rows = Array.from({ length: 12 }, (_, i) => ({
       name: `Zone ${i}`,
       text: "Open 17:00–02:00",

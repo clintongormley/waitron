@@ -10,8 +10,9 @@ export interface DayBoxRow {
 }
 
 /** One day in words, floating below the day that opened it. Presentational: the host formats
- *  every word, and its buttons go in the default slot. Sends `calendar-day-box-close` whenever it
- *  closes, however it closed. */
+ *  every word, and its buttons go in the default slot. Sends `calendar-day-box-close` when it closes
+ *  (Escape, a click elsewhere, `hide()`); a click on another day whose handler calls `show()` closes
+ *  and reopens it within one task, which the browser reports as no change, so no event is sent. */
 @customElement("calendar-day-box")
 export class CalendarDayBox extends LitElement {
   static override styles = [
@@ -114,7 +115,8 @@ export class CalendarDayBox extends LitElement {
   #beforeToggle(event: ToggleEvent): void {
     if (event.newState !== "closed") return;
     this.#focusWasInside =
-      this.shadowRoot!.activeElement !== null || this.contains(document.activeElement);
+      this.shadowRoot!.activeElement !== null ||
+      this.contains((this.getRootNode() as Document | ShadowRoot).activeElement);
   }
 
   #toggle(event: ToggleEvent): void {
