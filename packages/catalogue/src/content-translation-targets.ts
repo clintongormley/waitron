@@ -96,6 +96,16 @@ const LIVE_CANDIDATE = sql`active = 1 and owner_active = 1 and child_active = 1 
 const POSITION = sql`case kind when 'product' then 0 when 'variant' then 1 when 'option_list' then 2
       when 'option_label' then 3 when 'extra_list' then 4 when 'menu' then 5 when 'section' then 6
       when 'included_menu' then 7 else 8 end`;
+// The listing's rule for a row blank in one language, `language` and `path` being SQL for the code
+// and its JSON path; listing one language and collecting every gap share it so they cannot drift.
+function blankIn(language: SQL, path: SQL, defaultLanguage: string): SQL {
+  return sql`(kind <> 'extra_list' or (names is not null and names <> '{}'))
+      and (kind <> 'included_menu' or names is not null)
+      and (kind = 'unit' or kind = 'included_menu' or names not in ('{}') or (${language} <> ${defaultLanguage} and names is null) or (${language} <> ${defaultLanguage} and names = '{}'))
+      and trim(coalesce(json_extract(case when kind = 'included_menu' then json_patch(inherited, names) else names end, ${path}), '')) = ''`;
+}
+const ABSENT = sql`kind in ('product', 'variant', 'option_list', 'option_label', 'menu', 'section')
+      and (names is null or names = '{}')`;
 async function configuration(tx: Transaction, language: string, context: TranslationContext) {
   if (typeof language !== "string" || contentLanguageCode(language) !== language) invalid();
   const saved = await tx.execute<{ default_language: string; languages: string }>(
@@ -368,10 +378,7 @@ export async function listTranslationTargets(
   const projection = sql`with candidates as (${namedRows()}), gaps as (
     select kind, id, ${POSITION} as position
     from candidates where ${LIVE_CANDIDATE}
-      and (kind <> 'extra_list' or (names is not null and names <> '{}'))
-      and (kind <> 'included_menu' or names is not null)
-      and (kind = 'unit' or kind = 'included_menu' or names not in ('{}') or (${language} <> ${state.config.defaultLanguage} and names is null) or (${language} <> ${state.config.defaultLanguage} and names = '{}'))
-      and trim(coalesce(json_extract(case when kind = 'included_menu' then json_patch(inherited, names) else names end, ${path}), '')) = ''
+      and ${blankIn(sql`${language}`, sql`${path}`, state.config.defaultLanguage)}
   )`;
   const count = await tx.execute<{ total: number }>(
     sql`${projection} select count(*) as total from gaps`,
@@ -406,9 +413,29 @@ export async function listAbsentTranslationRefs(tx: Transaction): Promise<Transl
   const result = await tx.execute<{ kind: TranslationGapKind; id: string }>(sql`
     with candidates as (${namedRows()})
     select kind, id from candidates
-    where ${LIVE_CANDIDATE}
-      and kind in ('product', 'variant', 'option_list', 'option_label', 'menu', 'section')
-      and (names is null or names = '{}')
+    where ${LIVE_CANDIDATE} and ${ABSENT}
+    order by ${POSITION}, id`);
+  return result.rows.map(({ kind, id }) => ({ kind, id }));
+}
+
+/**
+ * In one read, every ref {@link listTranslationTargets} lists under any of `config`'s languages,
+ * and every ref {@link listAbsentTranslationRefs} lists, in the dialog's order.
+ */
+export async function listTranslationGapRefs(
+  tx: Transaction,
+  config: ContentLanguages,
+): Promise<TranslationRef[]> {
+  const blank = blankIn(
+    sql`language.value`,
+    sql`'$."' || language.value || '"'`,
+    config.defaultLanguage,
+  );
+  const result = await tx.execute<{ kind: TranslationGapKind; id: string }>(sql`
+    with candidates as (${namedRows()})
+    select kind, id from candidates
+    where ${LIVE_CANDIDATE} and ((${ABSENT}) or exists (
+      select 1 from json_each(${JSON.stringify(config.languages)}) as language where ${blank}))
     order by ${POSITION}, id`);
   return result.rows.map(({ kind, id }) => ({ kind, id }));
 }

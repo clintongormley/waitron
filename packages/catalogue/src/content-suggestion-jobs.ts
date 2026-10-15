@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { buildSuggestionJob, pruneSuggestions } from "./content-suggestion-collect.js";
+import {
+  buildSuggestionJob,
+  pruneSuggestions,
+  readSuggestionGaps,
+} from "./content-suggestion-collect.js";
 import type { SuggestionRunState, SuggestionRunView } from "./content-suggestion-types.js";
 import type { TranslationContext } from "./content-translation-targets.js";
 import {
@@ -57,8 +61,9 @@ export async function startSuggestionRun(
   now: Date = new Date(),
 ): Promise<SuggestionRunView | null> {
   if (await readActiveSuggestionJob(tx)) throw new AppError("content.suggestion_job_running", {});
-  await pruneSuggestions(tx, context);
-  const draft = await buildSuggestionJob(tx, context, new Set());
+  const gaps = await readSuggestionGaps(tx, context);
+  await pruneSuggestions(tx, context, gaps);
+  const draft = await buildSuggestionJob(tx, context, new Set(), gaps);
   if (!draft) return null;
   await tx.delete(jobs);
   await tx.insert(jobs).values({

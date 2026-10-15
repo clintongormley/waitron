@@ -21,6 +21,8 @@ import {
 import { writeContentLanguages } from "./content-languages.js";
 import {
   listAbsentTranslationRefs,
+  listTranslationGapRefs,
+  listTranslationTargets,
   resolveTranslationTargets,
 } from "./content-translation-targets.js";
 import type { TranslationRef } from "./content-translation-types.js";
@@ -34,9 +36,11 @@ import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
+  buildSuggestionJob,
   collectSuggestionItems,
   isLiveTarget,
   parseSuggestionRef,
+  pruneSuggestions,
   readSuggestionGaps,
   suggestionRef,
   TEXT_LIMIT,
@@ -300,6 +304,148 @@ describe("what counts as still there", () => {
         { eligible: true, active: true, ownerActive: false },
         { eligible: false, active: true, ownerActive: true },
       ]);
+    });
+  });
+});
+
+describe("the gaps a run starts from", () => {
+  const missingByRef = async (tx: Transaction) =>
+    Object.fromEntries(
+      [...(await readSuggestionGaps(tx, context))].map(([ref, gap]) => [ref, [...gap.missing]]),
+    );
+
+  it("holds every live item blank in at least one enabled language, with the languages it is blank in", async () => {
+    await inVenue(THREE, async (tx, lunch) => {
+      const noEn = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", es: "CLIENT-ES Pan" });
+      const noDefault = await product(tx, lunch, "Oli", {
+        es: "CLIENT-ES Aceite",
+        en: "CLIENT-EN Oil",
+      });
+      const spaces = await product(tx, lunch, "Sal", {
+        ca: "CLIENT-CA Sal",
+        es: "  ",
+        en: "CLIENT-EN Salt",
+      });
+      // The listing's blank test is SQLite's trim, which removes spaces only.
+      await product(tx, lunch, "Mel", { ca: "CLIENT-CA Mel", es: "\t", en: "CLIENT-EN Honey" });
+      await product(tx, lunch, "Vi", {
+        ca: "CLIENT-CA Vi",
+        es: "CLIENT-ES Vino",
+        en: "CLIENT-EN Wine",
+      });
+      const nameless = await product(tx, lunch, "Coca", null);
+      const empty = await product(tx, lunch, "Formatge", {});
+      const gone = await product(tx, lunch, "Vermut", null);
+      await deactivateProduct(tx, gone);
+      const glass = await variant(tx, lunch, noEn, "Pa gran", { en: "CLIENT-EN Big bread" });
+      const doneness = await optionList(tx, "Punt", null);
+      const rare = await optionLabel(tx, doneness, "Poc", { ca: "CLIENT-CA Poc" });
+      await extraList(tx, "Salses", null);
+      const sides = await extraList(tx, "Guarnició", { ca: "CLIENT-CA Guarnició" });
+      const [portion] = await tx
+        .insert(units)
+        .values({
+          name: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
+          abbreviation: { ca: "r." },
+          precision: 0,
+        })
+        .returning({ id: units.id });
+      const drinks = await createCatalogue(tx, {
+        name: "STAFF Drinks",
+        names: { ca: "CLIENT-CA Begudes", es: "CLIENT-ES Bebidas" },
+      });
+      const drinksRoot = await rootOf(tx, drinks.id);
+      const include = await addMember(tx, lunch.rootId, { kind: "section", sectionId: drinksRoot });
+      await setIncludeFolder(
+        tx,
+        lunch.rootId,
+        include.id,
+        {
+          showAsFolder: false,
+          overrides: { names: { ca: "CLIENT-CA Begudes de la casa" }, color: null, image: null },
+        },
+        "ca",
+      );
+      const mains = await section(tx, lunch.menuId, "Plats", {});
+
+      expect(await missingByRef(tx)).toEqual({
+        [`product:${noEn}`]: ["en"],
+        [`product:${noDefault}`]: ["ca"],
+        [`product:${spaces}`]: ["es"],
+        [`product:${nameless}`]: ["ca", "es", "en"],
+        [`product:${empty}`]: ["ca", "es", "en"],
+        [`variant:${glass}`]: ["ca", "es"],
+        [`option_list:${doneness}`]: ["ca", "es", "en"],
+        [`option_label:${rare}`]: ["es", "en"],
+        [`extra_list:${sides}`]: ["es", "en"],
+        [`menu:${drinksRoot}`]: ["en"],
+        [`section:${mains}`]: ["ca", "es", "en"],
+        [`included_menu:${include.id}`]: ["en"],
+        [`unit:${portion!.id}`]: ["en"],
+      });
+      const listed = new Set<string>();
+      for (const language of THREE.languages) {
+        let after: string | null = null;
+        do {
+          const page = await listTranslationTargets(tx, language, after ? { after } : {}, context);
+          for (const row of page.rows) listed.add(suggestionRef(row));
+          after = page.next;
+        } while (after !== null);
+      }
+      for (const ref of await listAbsentTranslationRefs(tx)) listed.add(suggestionRef(ref));
+      expect((await listTranslationGapRefs(tx, THREE)).map(suggestionRef)).toEqual(
+        sortRefs([...listed]),
+      );
+    });
+  });
+
+  it("collects from, prunes against and builds a job from the gaps it is handed, leaving them as they were", async () => {
+    await inVenue(THREE, async (tx, lunch) => {
+      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
+      const oli = await product(tx, lunch, "Oli", { ca: "CLIENT-CA Oli" });
+      const gaps = await readSuggestionGaps(tx, context);
+      await tx
+        .update(products)
+        .set({ customerName: { ca: "CLIENT-CA Oli", es: "CLIENT-ES Aceite", en: "CLIENT-EN Oil" } })
+        .where(eq(products.id, oli));
+      await tx.insert(contentSuggestions).values([
+        { kind: "product", itemId: pa, language: "es", text: "CLIENT-ES Pan", expected: "{}" },
+        { kind: "product", itemId: oli, language: "es", text: "CLIENT-ES Oli", expected: "{}" },
+      ]);
+
+      await pruneSuggestions(tx, context, gaps);
+      expect(await tx.select().from(contentSuggestions)).toHaveLength(2);
+      const items = await collectSuggestionItems(tx, context, new Set(), gaps);
+      expect(items.map(({ ref, missing }) => ({ ref, missing }))).toEqual(
+        inListOrder([
+          { ref: `product:${pa}`, missing: ["en"] },
+          { ref: `product:${oli}`, missing: ["en"] },
+        ]),
+      );
+      const draft = await buildSuggestionJob(tx, context, new Set(), gaps);
+      expect(draft!.sent).toEqual({ [`product:${pa}`]: ["en"], [`product:${oli}`]: ["en"] });
+      for (const gap of gaps.values()) expect([...gap.missing]).toEqual(["es", "en"]);
+
+      await pruneSuggestions(tx, context);
+      expect(
+        (await tx.select({ itemId: contentSuggestions.itemId }).from(contentSuggestions)).map(
+          (row) => row.itemId,
+        ),
+      ).toEqual([pa]);
+    });
+  });
+
+  it("holds a one-language venue's names with no text at all, and its names blank in that language", async () => {
+    await inVenue(ONE, async (tx, lunch) => {
+      const nameless = await product(tx, lunch, "Coca", null);
+      const empty = await product(tx, lunch, "Formatge", {});
+      const blank = await product(tx, lunch, "Pa", { ca: " ", es: "CLIENT-ES Pan" });
+      await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
+      expect(await missingByRef(tx)).toEqual({
+        [`product:${nameless}`]: ["ca"],
+        [`product:${empty}`]: ["ca"],
+        [`product:${blank}`]: ["ca"],
+      });
     });
   });
 });

@@ -5,8 +5,7 @@ import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import {
-  listAbsentTranslationRefs,
-  listTranslationTargets,
+  listTranslationGapRefs,
   resolveTranslationTargets,
   type ResolvedTranslationTarget,
   type TranslationContext,
@@ -32,7 +31,12 @@ export const KIND_ORDER: readonly TranslationGapKind[] = [
 ];
 
 type LiveTarget = Extract<ResolvedTranslationTarget, { state: "present" }>;
-type Gap = { entry: LiveTarget; missing: Set<string> };
+export interface SuggestionGap {
+  entry: LiveTarget;
+  target: TranslationTarget;
+  missing: Set<string>;
+}
+export type SuggestionGaps = Map<string, SuggestionGap>;
 
 export function suggestionRef(ref: { kind: string; id: string }): string {
   return `${ref.kind}:${ref.id}`;
@@ -83,50 +87,24 @@ export async function resolveLive(
   return live;
 }
 
-async function readGaps(
-  tx: Transaction,
-  context: TranslationContext,
-  config: ContentLanguages,
-): Promise<Map<string, Gap>> {
-  const refs = new Map<string, TranslationRef>();
-  for (const language of config.languages) {
-    let after: string | null = null;
-    do {
-      const page = await listTranslationTargets(
-        tx,
-        language,
-        after === null ? {} : { after },
-        context,
-      );
-      for (const row of page.rows) refs.set(suggestionRef(row), { kind: row.kind, id: row.id });
-      after = page.next;
-    } while (after !== null);
-  }
-  for (const ref of await listAbsentTranslationRefs(tx)) refs.set(suggestionRef(ref), ref);
-  const gaps = new Map<string, Gap>();
-  // Every candidate is blank in at least one language: a page lists an item only where its text is
-  // blank, and an absent item is blank everywhere.
-  for (const entry of await resolveLive(tx, config.defaultLanguage, [...refs.values()], context)) {
-    const effective = effectiveNames(entry);
-    gaps.set(suggestionRef(entry.target), {
-      entry,
-      missing: new Set(config.languages.filter((language) => !(effective[language] ?? "").trim())),
-    });
-  }
-  return gaps;
-}
-
 /** Every live item and the enabled languages it has no customer-facing text in, before the
  * waiting suggestions and any exclusion are taken away. */
 export async function readSuggestionGaps(
   tx: Transaction,
   context: TranslationContext,
-): Promise<Map<string, { target: TranslationTarget; missing: Set<string> }>> {
+): Promise<SuggestionGaps> {
   const config = await readContentLanguages(tx, context.fallbackLanguage);
-  const gaps = await readGaps(tx, context, config);
-  return new Map(
-    [...gaps].map(([ref, gap]) => [ref, { target: gap.entry.target, missing: gap.missing }]),
-  );
+  const refs = await listTranslationGapRefs(tx, config);
+  const gaps: SuggestionGaps = new Map();
+  for (const entry of await resolveLive(tx, config.defaultLanguage, refs, context)) {
+    const effective = effectiveNames(entry);
+    gaps.set(suggestionRef(entry.target), {
+      entry,
+      target: entry.target,
+      missing: new Set(config.languages.filter((language) => !(effective[language] ?? "").trim())),
+    });
+  }
+  return gaps;
 }
 
 function productOf(target: TranslationTarget): string | null {
@@ -208,15 +186,22 @@ async function describeItems(
 
 /**
  * What a job may ask Cloud for: every missing name less the waiting suggestions and `exclude`, in
- * the dialog's kind order then id, so a family's head comes before its members.
+ * the dialog's kind order then id, so a family's head comes before its members. `read` is
+ * {@link readSuggestionGaps}'s answer when the caller already has it in this transaction.
  */
 export async function collectSuggestionItems(
   tx: Transaction,
   context: TranslationContext,
   exclude: ReadonlySet<string>,
+  read?: SuggestionGaps,
 ): Promise<SuggestionItem[]> {
   const config = await readContentLanguages(tx, context.fallbackLanguage);
-  const gaps = await readGaps(tx, context, config);
+  const gaps = new Map(
+    [...(read ?? (await readSuggestionGaps(tx, context)))].map(([ref, gap]) => [
+      ref,
+      { entry: gap.entry, missing: new Set(gap.missing) },
+    ]),
+  );
   const waiting = await tx
     .select({
       kind: contentSuggestions.kind,
@@ -367,8 +352,9 @@ export async function buildSuggestionJob(
   tx: Transaction,
   context: TranslationContext,
   exclude: ReadonlySet<string>,
+  gaps?: SuggestionGaps,
 ): Promise<SuggestionJobDraft | null> {
-  const items = await collectSuggestionItems(tx, context, exclude);
+  const items = await collectSuggestionItems(tx, context, exclude, gaps);
   if (items.length === 0) return null;
   const config = await readContentLanguages(tx, context.fallbackLanguage);
   const [tenant] = await tx
@@ -421,8 +407,9 @@ export async function buildSuggestionJob(
 export async function pruneSuggestions(
   tx: Transaction,
   context: TranslationContext,
+  read?: SuggestionGaps,
 ): Promise<void> {
-  const gaps = await readSuggestionGaps(tx, context);
+  const gaps = read ?? (await readSuggestionGaps(tx, context));
   const rows = await tx
     .select({
       id: contentSuggestions.id,
