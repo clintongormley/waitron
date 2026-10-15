@@ -273,6 +273,70 @@ describe("Translate all suggestions as drafts", () => {
     expect(field(el, "two")!.value).toBe("CLIENT-es two");
     expect(q(el, "[data-test=suggested-product-two]")).not.toBeNull();
   });
+  it("a Discard refused after another of the row's suggestions was deleted empties the row, shows the refusal, and Save leaves the row out", async () => {
+    const state = venue({
+      listed: [target("one", { defaultRequired: true }), target("two")],
+      suggestions: [
+        suggestion("s1", "one"),
+        suggestion("s2", "one", { language: "en", text: "CLIENT-en one" }),
+      ],
+    });
+    const { el, api } = await open(state);
+    api.discardContentSuggestion.mockImplementation(async (id: string) => {
+      if (id === "s2") throw { code: "server.internal" };
+      state.suggestions = state.suggestions.filter((view) => view.id !== id);
+      return { deleted: id };
+    });
+    await edit(el, "two", "Pan");
+    await click(el, "discard-product-one");
+    await vi.waitFor(() => expect(bottomMessage(el)).toBe(codeMessage("server.internal")));
+    await settle(el);
+    expect(api.discardContentSuggestion.mock.calls).toEqual([["s1"], ["s2"]]);
+    expect(field(el, "one")!.value).toBe("");
+    expect(q(el, "[data-test=suggested-product-one]")).toBeNull();
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
+    });
+  });
+  it("Discard takes the suggestion's untouched field out of a person's edit, so Save sends only what they typed", async () => {
+    for (const typed of ["text", "defaultText"] as const) {
+      const { el, api } = await open(
+        venue({
+          listed: [target("one", { defaultRequired: true })],
+          suggestions: [
+            suggestion("s1", "one"),
+            suggestion("s2", "one", { language: "en", text: "CLIENT-en one" }),
+          ],
+        }),
+      );
+      const other = typed === "text" ? "defaultText" : "text";
+      await edit(el, "one", "Mine", typed);
+      await click(el, "discard-product-one");
+      await vi.waitFor(() => expect(q(el, "[data-test=discard-product-one]")).toBeNull());
+      expect(field(el, "one", typed)!.value).toBe("Mine");
+      expect(field(el, "one", other)!.value).toBe("");
+      await click(el, "save");
+      expect(api.saveContentTranslations).not.toHaveBeenCalled();
+      expect(field(el, "one", other)!.error).toBe(t("translations.required"));
+      await edit(el, "one", "Also mine", other);
+      await click(el, "save");
+      await vi.waitFor(() => expect(el.open).toBe(false));
+      expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+        edits: [
+          {
+            kind: "product",
+            id: "one",
+            expected: "baseline-one",
+            text: typed === "text" ? "Mine" : "Also mine",
+            defaultText: typed === "text" ? "Also mine" : "Mine",
+          },
+        ],
+      });
+      cleanupWidgets();
+    }
+  });
   it("Discard sends once while its own request or a save is being sent", async () => {
     let answer!: () => void;
     const { el, api } = await open(
@@ -300,44 +364,126 @@ describe("Translate all suggestions as drafts", () => {
     await click(el, "discard-product-two");
     expect(api.discardContentSuggestion).toHaveBeenCalledTimes(1);
   });
-  it("a Discard answered after the dialog was closed and reopened leaves the new dialog and its own Discard alone", async () => {
-    for (const outcome of ["resolve", "reject"] as const) {
-      const answers: Array<() => void> = [];
-      const { el } = await open(
-        venue({ listed: [target("one")], suggestions: [suggestion("s1", "one")] }),
-        {
-          discardContentSuggestion: vi.fn(
-            () =>
-              new Promise((resolve, reject) =>
-                answers.push(() =>
-                  outcome === "resolve"
-                    ? resolve({ deleted: "s1" })
-                    : reject({ code: "server.internal" }),
-                ),
-              ),
-          ),
-        },
-      );
-      await click(el, "discard-product-one");
-      el.open = false;
-      await el.updateComplete;
-      el.open = true;
-      await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-es one"));
-      await click(el, "discard-product-one");
-      answers[0]!();
-      // A zero-delay timer runs after every step #discard has left, which are all microtasks.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      el.requestUpdate();
-      q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.requestUpdate();
-      await settle(el);
-      expect(field(el, "one")!.value).toBe("CLIENT-es one");
-      expect(q(el, "[data-test=suggested-product-one]")).not.toBeNull();
-      expect(bottomMessage(el)).toBe("");
+  it("a Discard unanswered across closing and reopening keeps the reopened row's Discard and Save waiting, and once it deletes the suggestion Save leaves it out", async () => {
+    const state = venue({
+      listed: [target("one"), target("two")],
+      suggestions: [suggestion("s1", "one")],
+    });
+    let answer!: () => void;
+    const { el, api } = await open(state, {
+      discardContentSuggestion: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = () => {
+              state.suggestions = [];
+              resolve({ deleted: "s1" });
+            };
+          }),
+      ),
+    });
+    await click(el, "discard-product-one");
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-es one"));
+    await edit(el, "two", "Pan");
+    expect(
+      q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")!.disabled,
+    ).toBe(true);
+    expect(save(el).disabled).toBe(true);
+    await click(el, "discard-product-one");
+    await click(el, "save");
+    expect(api.discardContentSuggestion).toHaveBeenCalledTimes(1);
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    answer();
+    await vi.waitFor(() => expect(field(el, "one")!.value).toBe(""));
+    expect(q(el, "[data-test=suggested-product-one]")).toBeNull();
+    expect(save(el).disabled).toBe(false);
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
+    });
+  });
+  it("a suggestion read begun before a Discard deleted that suggestion does not fill the reopened row", async () => {
+    const state = venue({
+      listed: [target("one"), target("two")],
+      suggestions: [suggestion("s1", "one")],
+    });
+    let answer!: () => void;
+    const { el, api } = await open(state, {
+      discardContentSuggestion: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = () => {
+              state.suggestions = [];
+              resolve({ deleted: "s1" });
+            };
+          }),
+      ),
+    });
+    await click(el, "discard-product-one");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const read = api.getContentSuggestions.getMockImplementation()!;
+    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
+      const value = await read(language, after);
+      await held;
+      return value;
+    });
+    const reads = api.getContentSuggestions.mock.calls.length;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await vi.waitFor(() =>
+      expect(api.getContentSuggestions.mock.calls.length).toBeGreaterThanOrEqual(reads + 2),
+    );
+    answer();
+    await api.discardContentSuggestion.mock.results[0]!.value;
+    release();
+    await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
+    await settle(el);
+    expect(field(el, "one")!.value).toBe("");
+    expect(q(el, "[data-test=suggested-product-one]")).toBeNull();
+    await edit(el, "two", "Pan");
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
+    });
+  });
+  it("a Discard refused after the dialog was closed and reopened leaves the reopened row's suggestion usable and shows no refusal there", async () => {
+    let refuse!: () => void;
+    const { el, api } = await open(
+      venue({ listed: [target("one")], suggestions: [suggestion("s1", "one")] }),
+      {
+        discardContentSuggestion: vi.fn(
+          () =>
+            new Promise((_resolve, reject) => {
+              refuse = () => reject({ code: "server.internal" });
+            }),
+        ),
+      },
+    );
+    await click(el, "discard-product-one");
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-es one"));
+    refuse();
+    await vi.waitFor(() =>
       expect(
         q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")!.disabled,
-      ).toBe(true);
-      cleanupWidgets();
-    }
+      ).toBe(false),
+    );
+    expect(field(el, "one")!.value).toBe("CLIENT-es one");
+    expect(q(el, "[data-test=suggested-product-one]")).not.toBeNull();
+    expect(bottomMessage(el)).toBe("");
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "CLIENT-es one" }],
+    });
   });
   it("Save waits while a Discard is being sent, so it never sends the suggestion being discarded", async () => {
     let answer!: () => void;
@@ -362,15 +508,25 @@ describe("Translate all suggestions as drafts", () => {
       edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
     });
   });
-  it("a Discard held when the dialog is detached does not keep its button disabled after reattaching", async () => {
-    const { el, api } = await open(
-      venue({ listed: [target("one")], suggestions: [suggestion("s1", "one")] }),
-      { discardContentSuggestion: vi.fn(() => new Promise(() => {})) },
-    );
+  it("a Discard unanswered while the dialog is taken out and put back keeps Save waiting, and once answered Save leaves the suggestion out", async () => {
+    const state = venue({
+      listed: [target("one"), target("two")],
+      suggestions: [suggestion("s1", "one")],
+    });
+    let answer!: () => void;
+    const { el, api } = await open(state, {
+      discardContentSuggestion: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = () => {
+              state.suggestions = [];
+              resolve({ deleted: "s1" });
+            };
+          }),
+      ),
+    });
+    await edit(el, "two", "Pan");
     await click(el, "discard-product-one");
-    const button = () =>
-      q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")!;
-    expect(button().disabled).toBe(true);
     const parent = el.parentElement!;
     el.remove();
     parent.appendChild(el);
@@ -378,10 +534,19 @@ describe("Translate all suggestions as drafts", () => {
     await vi.waitFor(() =>
       expect(api.getContentTranslationTargets.mock.calls.length).toBeGreaterThan(reads),
     );
-    await vi.waitFor(async () => {
-      q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.requestUpdate();
-      await settle(el);
-      expect(button().disabled).toBe(false);
+    await settle(el);
+    expect(
+      q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=discard-product-one]")!.disabled,
+    ).toBe(true);
+    expect(save(el).disabled).toBe(true);
+    await click(el, "save");
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    answer();
+    await vi.waitFor(() => expect(field(el, "one")!.value).toBe(""));
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Pan" }],
     });
   });
   it("a scan replaced while it reads suggestion pages stops reading them", async () => {

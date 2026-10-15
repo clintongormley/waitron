@@ -158,7 +158,11 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private refused: FieldFault[] = [];
   @state() private reviewing = false;
   @state() private reviewRows: TranslationTarget[] = [];
+  /** Rows whose Discard is unanswered. They outlive a close, reopen or detach, because Save must
+   * wait for every one: until it is answered, a read may still return the suggestion. */
   @state() private discarding: ReadonlySet<string> = new Set();
+  /** Suggestions this element deleted; a read that began before a deletion still lists it. */
+  readonly #deleted = new Set<string>();
   @state() private suggestionRun: SuggestionRunView | null = null;
   @state() private service: SuggestionService | null = null;
   @state() private cloudOrigin: string | null = null;
@@ -203,7 +207,6 @@ export class ContentTranslationsDialog extends LitElement {
     this.busy = false;
     this.suggestionBusy = false;
     this.reviewing = false;
-    this.discarding = new Set();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -224,7 +227,6 @@ export class ContentTranslationsDialog extends LitElement {
       this.nothingMissing = false;
       this.reviewing = false;
       this.reviewRows = [];
-      this.discarding = new Set();
       this.#suggestions = [];
       this.#choices.clear();
       this.#scope?.dispose();
@@ -314,11 +316,13 @@ export class ContentTranslationsDialog extends LitElement {
       check(value);
       retained.push(...value.rows);
     }
-    const suggestions = await this.#readSuggestions(
-      client,
-      language,
-      () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
-    );
+    const suggestions = (
+      await this.#readSuggestions(
+        client,
+        language,
+        () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
+      )
+    ).filter((view) => !this.#deleted.has(view.id));
     // Under the default language the page leaves out a name stored as null or `{}`
     // (`listTranslationTargets`, packages/catalogue/src/content-translation-targets.ts), so a
     // suggestion for one is read by reference and becomes a row of its own. Only a suggestion
@@ -529,8 +533,10 @@ export class ContentTranslationsDialog extends LitElement {
     );
   }
   #fill(suggestions: ContentSuggestionView[]): void {
-    this.#suggestions = suggestions;
-    this.model!.suggest(indexSuggestions(suggestions, this.language, this.model!.defaultLanguage));
+    this.#suggestions = suggestions.filter((view) => !this.#deleted.has(view.id));
+    this.model!.suggest(
+      indexSuggestions(this.#suggestions, this.language, this.model!.defaultLanguage),
+    );
   }
   #staged(row: TranslationTarget): boolean {
     return this.model!.isEdited(row) || this.model!.isSuggested(row);
@@ -552,14 +558,18 @@ export class ContentTranslationsDialog extends LitElement {
         } catch (error) {
           if (codeOf(error) !== "content.suggestion_not_found") throw error;
         }
+        this.#deleted.add(id);
       }
-      if (generation !== this.#generation) return;
-      this.model!.unsuggest(row);
     } catch (error) {
       if (generation === this.#generation) this.actionError = codeMessage(codeOf(error));
     } finally {
-      if (generation === this.#generation)
-        this.discarding = new Set([...this.discarding].filter((held) => held !== key));
+      // Once any of the row's suggestions is gone, the row takes none of them, whichever dialog
+      // opening holds it now.
+      if (this.model?.suggestionFor(row)?.ids.some((id) => this.#deleted.has(id))) {
+        this.model.unsuggest(row);
+        this.#scope?.changed();
+      }
+      this.discarding = new Set([...this.discarding].filter((held) => held !== key));
     }
   }
   #showEdited(): void {
