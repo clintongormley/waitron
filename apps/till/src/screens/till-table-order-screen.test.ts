@@ -4048,7 +4048,7 @@ describe("till-table-order-screen", () => {
         },
       );
 
-      it("keeps joining a table in the party's closed area available", async () => {
+      it("keeps joining in closed areas available, including when the source table is unread", async () => {
         const setUp = floor("table_tab");
         const { el } = await mount({
           ...setUp,
@@ -4058,6 +4058,9 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="join"]');
         await el.updateComplete;
         expect(targetIds(el)).toEqual(["t6", "t9"]);
+        el.tables = setUp.tables.filter((table) => table.id !== "t4");
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["t6", "t7", "t8", "t9"]);
       });
 
       it("keeps moving a presented bill into a closed area available", async () => {

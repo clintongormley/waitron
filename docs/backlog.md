@@ -2081,6 +2081,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free table still offered. Decide whether the picker waits for known policies or leaves unknown
   areas to the server, as the order screen does. No server refusal was exercised by that probe.
 
+- **Move this bill still offers a closed counter area (2026-10-15; open, A697 review).**
+  The table picker always offers The counter (`#tablePicker`,
+  `apps/till/src/screens/till-table-order-screen.ts`), and the app sends its counter area
+  (`#onMoveBill`, `apps/till/src/till-app.ts`). The real-route case "refuses a bill entering a
+  closed zone at a counter" in `apps/server/src/till-api.zone-closed.test.ts` returns
+  `service_zone.closed` for an open bill entering a different closed area. Give the screen the
+  counter area's identity and apply that rule, preserving same-area moves and presented bills.
+  A697 covers table destinations only; no screen-to-server counter probe was run.
+
 - **Held-order closed-area destinations need the order's source area (2026-10-15; open,
   A697 follow-up).** Move to table on a held-order card cannot distinguish a move within a closed
   area from a move into one: neither `HeldOrderSummary` nor `HeldOrder` includes the saved source
