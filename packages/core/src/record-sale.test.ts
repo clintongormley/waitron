@@ -1469,6 +1469,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       lineGross: index === 0 ? "12.10" : "2.31",
       classification: index === 0 ? cocktails : lemon,
       listGross: index === 0 ? "13.31" : undefined,
+      listUnitPriceGross: index === 0 ? "6.66" : undefined,
     }));
   }
 
@@ -1645,6 +1646,15 @@ describe("recordSale — what each line sold and how it was classified", () => {
       "parent_line_id",
       1,
     ]);
+
+    const listUnitPrices = async (saleId: string) =>
+      (
+        await rows<{ list_unit_price_gross: number | null }>(
+          sql`select list_unit_price_gross from sale_lines where sale_id = ${saleId} order by line_no`,
+        )
+      ).map((line) => line.list_unit_price_gross);
+    expect(await listUnitPrices(classified.saleId)).toEqual([666, null]);
+    expect(await listUnitPrices(plain.saleId)).toEqual([null, null]);
   });
 });
 
