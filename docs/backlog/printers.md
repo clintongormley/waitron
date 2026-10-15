@@ -372,7 +372,7 @@ just a green typecheck.
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
   receipt, rendered from the code on 2026-10-14.
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md)
-  — five pull requests; Part 1a buildable now; Parts 1b, 2 and 3 after A661; Part 4 after A661 and
+  — five pull requests; Parts 1a, 1b, 2 and 3 buildable now (A661 landed, #1745); Part 4 after
   owner questions Q1, Q3, Q6.
   1. **The simplified receipt.**
      - The QR code, «QR tributario:» and VERI\*FACTU stay first. AEAT's QR specification v0.5.0, §3,
