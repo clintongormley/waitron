@@ -411,6 +411,66 @@ test("the click that ends a resize does not open the block's menu", async () => 
   expect(menu(el).matches(":popover-open")).toBe(false);
 });
 
+for (const [what, refresh] of [
+  [
+    "the host replaces the block",
+    (el: StaffingGrid) => {
+      el.days = new Map([["mon", [{ ...headChef, headcount: 2 }]]]);
+    },
+  ],
+  [
+    "the target changes",
+    (el: StaffingGrid) => {
+      el.target = "other";
+    },
+  ],
+] as const) {
+  test(`a resize dropped because ${what} does not open the block's menu when released over it`, async () => {
+    const el = await grid({ mon: [headChef] }, { chosen: undefined });
+    const seen = changes(el);
+    let refreshed = false;
+    // Added once the press has begun the stroke, so it runs after the stroke has stretched.
+    const onMove = () => {
+      if (refreshed || el.shadowRoot!.querySelector(".preview") === null) return;
+      refreshed = true;
+      refresh(el);
+    };
+    const onDown = () => window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerdown", onDown);
+    const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
+    const body = block(el, "mon").getBoundingClientRect();
+    try {
+      await userEvent.dragAndDrop(edge(el, "mon", 0, "end"), block(el, "mon"), {
+        sourcePosition: { x: strip.width / 2, y: strip.height / 2 },
+        targetPosition: { x: body.width / 2, y: body.height / 2 },
+      });
+    } finally {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+    }
+    await el.updateComplete;
+    expect(refreshed).toBe(true);
+    expect(seen).toEqual([]);
+    expect(menu(el).matches(":popover-open")).toBe(false);
+    await userEvent.click(block(el, "mon"));
+    expect(menu(el).matches(":popover-open")).toBe(true);
+  });
+}
+
+test("a dropped resize whose pointer is cancelled leaves the next click on a block opening its menu", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  point(el, "mon", 720, "pointermove");
+  await el.updateComplete;
+  el.days = new Map([["mon", [{ ...headChef, headcount: 2 }]]]);
+  await el.updateComplete;
+  point(el, "mon", 720, "pointercancel");
+  point(el, "mon", 720, "pointerup");
+  block(el, "mon").click();
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
 test("clicking a block opens its staff roles, How many and Delete; a staff role changes it", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);

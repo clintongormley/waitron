@@ -238,6 +238,44 @@ export class StaffingGrid extends LitElement {
     },
   });
 
+  #droppedClick = false;
+  #awaitingRelease: AbortController | null = null;
+
+  /** Ends the stroke under way without keeping it. One that had stretched swallows the click its
+   *  release ends with, as a kept stroke's does, so letting go over a block opens no menu. */
+  #dropStroke(): void {
+    if (this.#stroke.preview !== null) {
+      this.#stopAwaitingRelease();
+      const awaiting = new AbortController();
+      this.#awaitingRelease = awaiting;
+      const done = (event: Event) => {
+        this.#stopAwaitingRelease();
+        if (event.type !== "pointerup") return;
+        this.#droppedClick = true;
+        setTimeout(() => {
+          this.#droppedClick = false;
+        });
+      };
+      for (const type of ["pointerup", "pointercancel"])
+        window.addEventListener(type, done, { capture: true, signal: awaiting.signal });
+    }
+    this.#stroke.stop();
+  }
+  #stopAwaitingRelease(): void {
+    this.#awaitingRelease?.abort();
+    this.#awaitingRelease = null;
+  }
+  #takeDroppedClick(): boolean {
+    const dropped = this.#droppedClick;
+    this.#droppedClick = false;
+    return dropped;
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#stopAwaitingRelease();
+  }
+
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (
       changes.has("days") &&
@@ -251,11 +289,11 @@ export class StaffingGrid extends LitElement {
       resizing !== null &&
       !sameBlock(this.#day(resizing.key)[resizing.index], resizing.block)
     ) {
-      this.#stroke.stop();
+      this.#dropStroke();
       this.#resizing = null;
     }
     if ((changes.has("readOnly") && this.readOnly) || (changes.has("target") && this.hasUpdated)) {
-      this.#stroke.stop();
+      this.#dropStroke();
       this.#closeMenu();
       this.#chooser.close(false);
     }
@@ -348,7 +386,7 @@ export class StaffingGrid extends LitElement {
   }
 
   async #select(key: string, index: number, trigger: HTMLElement): Promise<void> {
-    if (this.#stroke.takeDraggedClick()) return;
+    if (this.#stroke.takeDraggedClick() || this.#takeDroppedClick()) return;
     this.selected = { key, index, block: this.#day(key)[index]! };
     await this.updateComplete;
     placePopover(this.menu, trigger, false);
