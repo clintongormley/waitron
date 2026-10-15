@@ -314,9 +314,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A679. First Live fiscal setup without Cloud.** The owner approved the complete
   [design](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) on 2026-10-15 at about
   06:35: “A — Approve, plan and build”. The reviewed
-  [implementation plan](superpowers/plans/2026-10-15-a679-first-fiscal-setup.md) is ready for native
-  inline execution. Build both guided outside-kit and existing-custodian import routes, durable
-  setup ownership, and Live readiness using A680 in its separate preproduction database. A new kit
+  [implementation plan](superpowers/plans/2026-10-15-a679-first-fiscal-setup.md) is being
+  implemented inline. Finish the durable setup ownership,
+  server and wizard integration, and Live readiness using A680 in its separate preproduction
+  database. Keep both guided outside-kit and existing-custodian import routes. A new kit
   keeps one paper-original current master, a protected key file and separate secret recovery paper;
   actual saved-file reopen and actual-paper recovery remain required acceptance checks. W41s-6
   [#1717](https://github.com/clintongormley/waitron/pull/1717), A680

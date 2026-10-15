@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="__CSP__" />
+    <title>Waitron outside custody / Custodia externa</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      #custody-print {
+        display: none;
+      }
+      @media print {
+        @page {
+          size: A4;
+          margin: 12mm;
+        }
+        body > :not(#custody-print) {
+          display: none !important;
+        }
+        #custody-print {
+          display: block;
+          font: var(--wt-font-size-md) var(--wt-font-family);
+          color: var(--wt-color-text);
+          background: var(--wt-color-surface);
+        }
+        .custody-document {
+          overflow-wrap: anywhere;
+        }
+        .custody-document h1 {
+          font-size: var(--wt-font-size-xl);
+        }
+        .custody-document pre {
+          white-space: pre-wrap;
+          font: var(--wt-font-size-sm) var(--wt-font-family-mono);
+        }
+        .custody-document table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .custody-document td,
+        .custody-document th {
+          border: 1px solid currentColor;
+          padding: var(--wt-space-2);
+          text-align: start;
+        }
+        .custody-document tr {
+          break-inside: avoid;
+        }
+        .custody-document th {
+          overflow-wrap: normal;
+        }
+        .custody-document dd {
+          margin-inline-start: 0;
+        }
+        .custody-document dt {
+          font-weight: bold;
+        }
+        .secret-document {
+          break-inside: avoid;
+        }
+        .public-signature {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          font: var(--wt-font-size-sm) var(--wt-font-family-mono);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--__NOTICES__-->
+    <div id="custodian-tool"></div>
+    <script>
+      __BUNDLE__;
+    </script>
+  </body>
+</html>
