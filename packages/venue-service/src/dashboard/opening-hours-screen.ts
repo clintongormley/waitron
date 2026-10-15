@@ -538,12 +538,12 @@ export class OpeningHoursScreen extends LitElement {
       this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
     ).then(() => this.followUrl());
   }
-  private openYear(year: number | string) {
+  private openYear(year: string) {
     void Promise.resolve(
       this.url.write({
         dashboard: "opening-hours",
         view: "year",
-        year: String(year).padStart(4, "0"),
+        year: year.padStart(4, "0"),
         month: null,
         date: null,
       }),
