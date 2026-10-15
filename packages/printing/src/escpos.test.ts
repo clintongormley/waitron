@@ -487,4 +487,15 @@ describe("text drawn as images", () => {
       "GS v 0",
     ]);
   });
+
+  it("draws a bold line and a double line as text images of their own heights", () => {
+    const bytes = esc({ paperWidth: "80mm", resolution: "180dpi" })
+      .line("A", { bold: true })
+      .line("B", { double: true })
+      .bytes();
+    const heights = escPosCommands(bytes)
+      .filter((command) => command.name === "GS v 0")
+      .map((command) => command.heightDots);
+    expect(heights).toEqual([28, 56]);
+  });
 });
