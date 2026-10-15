@@ -28,7 +28,7 @@ import {
 } from "@waitron/identity";
 import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { orderedMigrationSets, selectTimeRecordExport } from "@waitron/module";
 import { PAYMENTS_ALERTS, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import {
@@ -40,7 +40,11 @@ import {
   STAFFING_ROUTES,
 } from "@waitron/staffing";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
-import { WORKFORCE_ES_MIGRATIONS, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
+import {
+  WORKFORCE_ES_MIGRATIONS,
+  WORKFORCE_ES_VOCABULARY,
+  WORKFORCE_ES_RECORD_EXPORT,
+} from "@waitron/workforce-es";
 import {
   VENUE_SERVICE,
   VENUE_SERVICE_ALERTS,
@@ -275,4 +279,14 @@ describe("ALL_MODULES alerts seat", () => {
   it("venue-service carries its route. claim, by reference", () => {
     expect(ALL_MODULES.find((m) => m.name === "venue-service")?.alerts).toBe(VENUE_SERVICE_ALERTS);
   });
+});
+
+it("selects the Spain time-record exporter only from enabled contributions", () => {
+  expect(selectTimeRecordExport(ALL_MODULES)).toBe(WORKFORCE_ES_RECORD_EXPORT);
+  expect(
+    selectTimeRecordExport(ALL_MODULES.filter((m) => m.name !== "workforce-es")),
+  ).toBeUndefined();
+  expect(ALL_MODULES.filter((m) => m.timeRecordExport !== undefined).map((m) => m.name)).toEqual([
+    "workforce-es",
+  ]);
 });

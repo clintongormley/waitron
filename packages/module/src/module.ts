@@ -1,3 +1,4 @@
+import type { ModuleTimeRecordExport } from "./record-export.js";
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
@@ -1297,6 +1298,7 @@ export interface WaitronModule {
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;
+  readonly timeRecordExport?: ModuleTimeRecordExport;
   readonly floorAnnotations?: FloorAnnotator;
   readonly tableRemoval?: TableRemoval;
   readonly venueService?: VenueServiceContribution;

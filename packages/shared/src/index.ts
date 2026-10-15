@@ -200,3 +200,12 @@ export type {
   DepartmentReceiptScope,
 } from "./receipt-text.js";
 export { STATION_COLOURS, isStationColour, type StationColour } from "./station-colours.js";
+
+export type {
+  RecordExportValue,
+  RecordExportAudience,
+  RecordExportFormat,
+  RecordExportInput,
+  RecordExportSection,
+  RecordExportDocument,
+} from "./record-export-types.js";
