@@ -6,7 +6,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } fro
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { parseGuestCount } from "./guest-count.js";
+import { parseGuestCount, sameGuestCount } from "./guest-count.js";
 import { t } from "../i18n/t.js";
 
 export interface SeatConfirmDetail {
@@ -53,13 +53,7 @@ export class TillSeatDialog extends LitElement {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => {
-        const canonical = (value: string) => {
-          const parsed = parseGuestCount(value);
-          return parsed === undefined ? `invalid:${value.trim()}` : String(parsed.guestCount);
-        };
-        return canonical(a) === canonical(b);
-      },
+      equal: sameGuestCount,
       restore: (value) => (this.value = value),
     });
     this.#scope?.commit(this.#baseline);
