@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getTableColumns, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { saleLines, withTransaction, type Database } from "@waitron/db";
+import { saleLines, sales, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -12,7 +12,7 @@ import {
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -28,8 +28,8 @@ import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
-// A663 Part 2c: a sale line's unit price before any discount (`list_unit_price_gross`) is printed
-// only, and reaches no fiscal record. The same sale is filed in two fresh databases provisioned
+// A663 Part 2c: a sale line's unit price before any discount (`list_unit_price_gross`) is
+// presentation data that no fiscal record reads. The same sale is filed in two fresh databases provisioned
 // identically, once without the stored price and once with it.
 
 const inject = vi.hoisted(() => ({ on: false }));
@@ -69,35 +69,30 @@ const fixedClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
+const columnsOf = (table: Parameters<typeof getTableColumns>[0], minted: readonly string[]) =>
+  Object.values(getTableColumns(table))
+    .map((column) => column.name)
+    .filter((name) => !minted.includes(name));
 /** Ids minted per database, so they differ between the two runs; a parent line is compared by its
  * `line_no` instead. */
 const MINTED_ID_COLUMNS = ["id", "sale_id", "parent_line_id"];
 /** Catalogue rows' ids, minted per database like the line ids. */
 const CATALOGUE_ID_COLUMNS = ["product_id", "parent_product_id", "menu_id", "menu_version_id"];
 /** Every other `sale_lines` column but the new one, so a column added later is compared too. */
-const OTHER_LINE_COLUMNS = Object.values(getTableColumns(saleLines))
-  .map((column) => column.name)
-  .filter((name) => name !== "list_unit_price_gross" && !MINTED_ID_COLUMNS.includes(name));
+const OTHER_LINE_COLUMNS = columnsOf(saleLines, [...MINTED_ID_COLUMNS, "list_unit_price_gross"]);
 
-/** The sale header's columns that name no row minted by provisioning. */
-const SALE_COLUMNS = [
-  "invoice_number",
-  "issued_at",
-  "issued_offset_minutes",
-  "total",
-  "vat_breakdown",
-  "locale",
-  "invoice_locales",
-  "fiscal_backend",
-  "fiscal_state",
-  "corrects_sale_id",
-  "counterparty_tax_id",
-  "counterparty_legal_name",
-  "counterparty_country_code",
-  "authorized_by",
-  "operator_id",
-  "working_order_id",
-];
+/** The sale header's columns but the ids minted per database. */
+const SALE_COLUMNS = columnsOf(sales, ["id", "node_id", "device_id", "series_id"]);
+/** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
+ * time of the insert rather than the fixed clock's. */
+const REGISTRO_COLUMNS = columnsOf(registrosFacturacion, [
+  "id",
+  "sale_id",
+  "node_id",
+  "device_id",
+  "sif_id",
+  "creado_en",
+]);
 
 async function fileOneSale(db: Database) {
   const venue = await applyVenue(
@@ -213,8 +208,7 @@ async function fileOneSale(db: Database) {
       order by l.line_no`),
   );
   const registros = db.all<Record<string, unknown>>(sql`
-    select huella, anterior_huella, importe_total, cuota_total, desglose, fecha_hora_huso_gen_registro
-    from registros_facturacion`);
+    select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from registros_facturacion`);
   return { header, lines, registros };
 }
 
