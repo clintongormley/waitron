@@ -188,6 +188,9 @@ export class ContentTranslationsDialog extends LitElement {
   /** The last suggestion list a scan read; a scan whose suggestion read fails keeps it, so a refused
    * read never stops the translations loading. */
   #suggestions: ContentSuggestionView[] = [];
+  /** Items a read by reference in this opening returned as not to be shown; they are not read again
+   * until the dialog reopens or changes language. */
+  readonly #dropped = new Set<string>();
   #snapshotRevision = 0;
   #generation = 0;
   readonly #queries = new QueryController(
@@ -240,6 +243,7 @@ export class ContentTranslationsDialog extends LitElement {
       this.reviewing = false;
       this.reviewRows = [];
       this.#suggestions = [];
+      this.#dropped.clear();
       this.#choices.clear();
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -336,11 +340,12 @@ export class ContentTranslationsDialog extends LitElement {
     const suggestions = suggestionRead.suggestions.filter((view) => !this.#deleted.has(view.id));
     // Under the default language the page leaves out a name stored as null or `{}`
     // (`listTranslationTargets`, packages/catalogue/src/content-translation-targets.ts), so a
-    // suggestion for one is read by reference and becomes a row of its own. Such an item has no
-    // name in any language, so text in this page's language, a placeholder or a staff-name fix
-    // can show on its row, and a fix to a name in some language cannot be for it. Another page
-    // lists every unnamed item a Translate all job can send, so there only text is read. Reading
-    // the rest every refresh would fetch items only to drop them.
+    // suggestion for one is read by reference and becomes a row of its own. Text in this page's
+    // language, a placeholder or a staff-name fix can show on such a row; a fix to a name in some
+    // language cannot be for an item with no name. Another page lists every unnamed item a
+    // Translate all job can send, so there only text is read. A placeholder or staff-name fix can
+    // also be for a named item, which the read drops, so an item it drops is not read again in this
+    // opening.
     const listed = new Set(rows.map(translationKey));
     const defaultPage = language === first!.config.defaultLanguage;
     const index = indexSuggestions(suggestions, language, first!.config.defaultLanguage);
@@ -352,7 +357,8 @@ export class ContentTranslationsDialog extends LitElement {
       const shows =
         entry.text !== null ||
         (defaultPage && (entry.placeholder || entry.fixes.some((fix) => fix.field === "internal")));
-      if (!listed.has(key) && !entry.stale && shows) omitted.set(key, ref);
+      if (!listed.has(key) && !entry.stale && shows && !this.#dropped.has(key))
+        omitted.set(key, ref);
     }
     const omittedRefs = [...omitted.values()];
     for (let offset = 0; offset < omittedRefs.length; offset += 50) {
@@ -365,9 +371,10 @@ export class ContentTranslationsDialog extends LitElement {
       )
         return undefined;
       check(value);
-      rows.push(
-        ...value.rows.filter((row) => row.eligible && !(row.effectiveSelectedText ?? "").trim()),
-      );
+      for (const row of value.rows) {
+        if (row.eligible && !(row.effectiveSelectedText ?? "").trim()) rows.push(row);
+        else this.#dropped.add(translationKey(row));
+      }
     }
     return {
       generation,

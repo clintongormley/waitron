@@ -943,6 +943,40 @@ describe("rows the page leaves out", () => {
     await vi.waitFor(() => expect(api.discardContentSuggestion).toHaveBeenCalledWith("s1"));
     await vi.waitFor(() => expect(q(el, "[data-test=placeholder-product-empty]")).toBeNull());
   });
+  it("reads a named item with a staff-name fix by reference once per opening on the default-language page", async () => {
+    const liveData = new LiveData();
+    const state = oneLanguage({
+      listed: [target("one"), target("two")],
+      omitted: [target("named", { selectedText: "Pa", effectiveSelectedText: "Pa" })],
+      suggestions: [
+        suggestion("s1", "named", {
+          language: null,
+          text: null,
+          fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" },
+        }),
+      ],
+    });
+    const { el, api } = await open(state, { liveData });
+    const namedReads = () =>
+      api.getContentTranslationTargets.mock.calls.filter(([, query]) =>
+        query.targets?.some((ref) => ref.id === "named"),
+      ).length;
+    expect(namedReads()).toBe(1);
+    for (const id of ["one", "two"]) {
+      state.suggestions = [
+        ...state.suggestions,
+        suggestion(`s-${id}`, id, { language: "ca", text: `CLIENT-ca ${id}` }),
+      ];
+      liveData.invalidate([{ type: "content_suggestions" }]);
+      await vi.waitFor(() => expect(field(el, id)!.value).toBe(`CLIENT-ca ${id}`));
+    }
+    expect(namedReads()).toBe(1);
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await vi.waitFor(() => expect(field(el, "two")?.value).toBe("CLIENT-ca two"));
+    expect(namedReads()).toBe(2);
+  });
   it("reads no item by reference on another language's page for suggestions that cannot fill it", async () => {
     const { el, api } = await open(
       venue({
