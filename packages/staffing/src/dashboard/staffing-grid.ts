@@ -29,7 +29,7 @@ import {
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
-import { t } from "./strings.js";
+import { peopleNeeded, t } from "./strings.js";
 
 export interface StaffingColumn {
   key: string;
@@ -53,21 +53,23 @@ function spanOf(
   return span.end > span.start ? span : { start: span.start, end: DAY };
 }
 
+function sameBlock(a: StaffingBlock | undefined, b: StaffingBlock | undefined): boolean {
+  return (
+    a !== undefined &&
+    b !== undefined &&
+    a.staffRoleId === b.staffRoleId &&
+    a.headcount === b.headcount &&
+    a.startsAt === b.startsAt &&
+    a.endsAt === b.endsAt
+  );
+}
+
 function sameBlocks(
   a: readonly StaffingBlock[] | null,
   b: readonly StaffingBlock[] | null,
 ): boolean {
   if (a === null || b === null) return a === b;
-  return (
-    a.length === b.length &&
-    a.every(
-      (block, i) =>
-        block.staffRoleId === b[i]!.staffRoleId &&
-        block.headcount === b[i]!.headcount &&
-        block.startsAt === b[i]!.startsAt &&
-        block.endsAt === b[i]!.endsAt,
-    )
-  );
+  return a.length === b.length && a.every((block, i) => sameBlock(block, b[i]));
 }
 
 /** One area's staffing over several days: a drag down a column adds a block of the chosen staff
@@ -122,10 +124,11 @@ export class StaffingGrid extends LitElement {
       .block .name {
         font-weight: var(--wt-font-weight-bold);
       }
+      /* At most a quarter of the block, so a short block keeps both edges and a body to click. */
       .edge {
         position: absolute;
         inset-inline: 0;
-        block-size: var(--wt-space-2);
+        block-size: min(var(--wt-space-2), 25%);
         cursor: ns-resize;
       }
       .edge[data-edge="start"] {
@@ -179,7 +182,7 @@ export class StaffingGrid extends LitElement {
   @property({ attribute: false }) staffRoles: readonly StaffRole[] = [];
   /** The staff role a drag adds; with none, a drag adds nothing. */
   @property({ attribute: false }) chosen: string | undefined = undefined;
-  /** How many people a drag's block needs, 1 to 50. */
+  /** How many people a drag's block needs, passed on as given: the grid does not bound it. */
   @property({ type: Number }) headcount = 1;
   @property() cutover = "06:00";
   /** Shows the days only: nothing paints, and no block or day offers a menu. */
@@ -192,15 +195,16 @@ export class StaffingGrid extends LitElement {
   /** Adds "Follow the season" to each column's ⋮. */
   @property({ type: Boolean }) followable = false;
 
-  @state() private selected: { key: string; index: number } | null = null;
+  /** The block the menu was opened on, as it was then, or as the menu last changed it. */
+  @state() private selected: { key: string; index: number; block: StaffingBlock } | null = null;
   @query(".menu") private menu!: HTMLElement;
   /** The block edge the current stroke moves, else null for a stroke that adds. */
   #resizing: { key: string; index: number; edge: "start" | "end"; anchor: number } | null = null;
   readonly #fade = new OverflowFade(this);
   readonly #stroke = new ColumnStroke(this, {
     cutover: () => this.cutover,
-    canStart: () => !this.readOnly && (this.#resizing !== null || this.chosen !== undefined),
-    canRelease: () => this.#resizing !== null || this.chosen !== undefined,
+    canStart: () => !this.readOnly,
+    canRelease: () => !this.readOnly && (this.#resizing !== null || this.chosen !== undefined),
     released: (stretch) => this.#released(stretch),
   });
   readonly #chooser = new CopyChooser(this, {
@@ -220,7 +224,7 @@ export class StaffingGrid extends LitElement {
     if (
       changes.has("days") &&
       this.selected !== null &&
-      this.#day(this.selected.key)[this.selected.index] === undefined
+      !sameBlock(this.#day(this.selected.key)[this.selected.index], this.selected.block)
     )
       this.#closeMenu();
     if ((changes.has("readOnly") && this.readOnly) || (changes.has("target") && this.hasUpdated)) {
@@ -249,7 +253,17 @@ export class StaffingGrid extends LitElement {
   #role(staffRoleId: string): StaffRole | undefined {
     return this.staffRoles.find(({ id }) => id === staffRoleId);
   }
+  /** A block in words, for a screen reader. */
   #describe(block: StaffingBlock): string {
+    return [
+      this.#role(block.staffRoleId)?.name,
+      peopleNeeded(block.headcount),
+      `${block.startsAt}–${block.endsAt}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+  #summary(block: StaffingBlock): string {
     return [
       this.#role(block.staffRoleId)?.name,
       `×${block.headcount}`,
@@ -268,15 +282,14 @@ export class StaffingGrid extends LitElement {
       );
     const block = this.#day(key)[Number(edge?.dataset.index)];
     if (edge === undefined || block === undefined) {
-      this.#resizing = null;
-      this.#stroke.start(event, key);
+      if (this.chosen !== undefined && this.#stroke.start(event, key)) this.#resizing = null;
       return;
     }
     const side = edge.dataset.edge === "start" ? "start" : "end";
     const span = spanOf(block, this.cutover);
-    const anchor = side === "start" ? span.end : span.start;
-    this.#resizing = { key, index: Number(edge.dataset.index), edge: side, anchor };
-    this.#stroke.start(event, key, anchor);
+    const [anchor, held] = side === "start" ? [span.end, span.start] : [span.start, span.end];
+    if (this.#stroke.start(event, key, anchor, held))
+      this.#resizing = { key, index: Number(edge.dataset.index), edge: side, anchor };
   }
   /** The blocks a stretch leaves in its column. */
   #stretched(stretch: Stretch): StaffingBlock[] | null {
@@ -303,12 +316,13 @@ export class StaffingGrid extends LitElement {
   #released(stretch: Stretch): void {
     const blocks = this.#stretched(stretch);
     this.#resizing = null;
-    if (blocks !== null) this.#emit(stretch.key, blocks);
+    if (blocks !== null && !sameBlocks(blocks, this.#day(stretch.key)))
+      this.#emit(stretch.key, blocks);
   }
 
   async #select(key: string, index: number, trigger: HTMLElement): Promise<void> {
     if (this.#stroke.takeDraggedClick()) return;
-    this.selected = { key, index };
+    this.selected = { key, index, block: this.#day(key)[index]! };
     await this.updateComplete;
     placePopover(this.menu, trigger, false);
     this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
@@ -317,7 +331,6 @@ export class StaffingGrid extends LitElement {
     if (this.menu?.matches(":popover-open")) this.menu.hidePopover();
     this.selected = null;
   }
-  /** Focuses the block at `index` once the host has redrawn, else the column. */
   async #focusAfter(key: string, index: number): Promise<void> {
     await this.updateComplete;
     const column = this.renderRoot.querySelector<HTMLElement>(`.day[data-column="${key}"]`);
@@ -350,6 +363,7 @@ export class StaffingGrid extends LitElement {
     const headcount = Number(value);
     if (selected === null || !/^\d+$/.test(value) || headcount < 1 || headcount > MAX_HEADCOUNT)
       return;
+    this.selected = { ...selected, block: { ...selected.block, headcount } };
     const day = this.#day(selected.key);
     if (day[selected.index]?.headcount === headcount) return;
     this.#emit(selected.key, changeBlock(day, selected.index, { headcount }));
@@ -447,7 +461,7 @@ export class StaffingGrid extends LitElement {
       data-colour=${this.#role(block.staffRoleId)?.colour ?? nothing}
       style=${this.#position(start, end)}
     >
-      ${this.#describe(block)}
+      ${this.#summary(block)}
     </div>`;
   }
   #menu() {

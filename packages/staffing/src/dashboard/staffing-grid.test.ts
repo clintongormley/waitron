@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
@@ -7,6 +7,7 @@ import type { StaffRole } from "../staffing-types.js";
 import type { StaffingChange, StaffingGrid } from "./staffing-grid.js";
 import "./staffing-grid.js";
 
+beforeEach(() => setLocale("en"));
 afterEach(() => {
   vi.restoreAllMocks();
   cleanup();
@@ -50,16 +51,34 @@ async function grid(
 function column(el: StaffingGrid, key: string) {
   return el.shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
 }
-function point(el: StaffingGrid, key: string, minute: number, type: string, target?: EventTarget) {
+function point(
+  el: StaffingGrid,
+  key: string,
+  minute: number,
+  type: string,
+  target?: EventTarget,
+  pointerId = 7,
+) {
+  const box = column(el, key).getBoundingClientRect();
+  pointAt(el, key, box.top + (minute / 1440) * box.height, type, target, pointerId);
+}
+function pointAt(
+  el: StaffingGrid,
+  key: string,
+  clientY: number,
+  type: string,
+  target?: EventTarget,
+  pointerId = 7,
+) {
   const box = column(el, key).getBoundingClientRect();
   (target ?? (type === "pointerdown" ? column(el, key) : window)).dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       composed: true,
-      pointerId: 7,
+      pointerId,
       button: 0,
       clientX: box.left + box.width / 2,
-      clientY: box.top + (minute / 1440) * box.height,
+      clientY,
     }),
   );
 }
@@ -124,7 +143,9 @@ test("a block is a button drawn at its times, named by its day, staff role, head
   const at = block(el, "tue").getBoundingClientRect();
   expect((at.top - box.top) / box.height).toBeCloseTo(3 / 24, 2);
   expect(at.height / box.height).toBeCloseTo(7.5 / 24, 2);
-  expect(block(el, "tue").getAttribute("aria-label")).toBe("Tuesday, Head chef ×3 09:00–16:30");
+  expect(block(el, "tue").getAttribute("aria-label")).toBe(
+    "Tuesday, Head chef, 3 people, 09:00–16:30",
+  );
   expect(block(el, "tue").textContent).toContain("Head chef");
   expect(block(el, "tue").textContent).toContain("×3");
   expect(block(el, "tue").getAttribute("data-colour")).toBe("purple");
@@ -263,10 +284,12 @@ test("clicking a block opens its staff roles, How many and Delete; a staff role 
   expect(stepper(el).value).toBe("2");
   expect(stepper(el).min).toBe(1);
   expect(stepper(el).max).toBe(50);
+  expect(menu(el).getAttribute("aria-label")).toBe("Sous chef, 2 people, 09:00–15:00");
   await userEvent.click(menuButton(el, "Dishwasher"));
   await el.updateComplete;
   expect(seen).toEqual([{ key: "mon", blocks: [headChef, { ...sous, staffRoleId: "dw" }] }]);
   expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
 });
 
 test("How many changes the block's headcount, within 1 to 50, and keeps the menu open", async () => {
@@ -492,7 +515,7 @@ test("a column named in columnErrors marks its heading and describes its day", a
 test("a block whose staff role is unknown draws uncoloured and nameless rather than failing", async () => {
   const el = await grid({ mon: [{ ...headChef, staffRoleId: "gone" }] });
   expect(block(el, "mon").hasAttribute("data-colour")).toBe(false);
-  expect(block(el, "mon").getAttribute("aria-label")).toBe("Monday, ×1 09:00–16:30");
+  expect(block(el, "mon").getAttribute("aria-label")).toBe("Monday, 1 person, 09:00–16:30");
 });
 
 test("the text is Spanish under the Spanish locale", async () => {
@@ -501,6 +524,13 @@ test("the text is Spanish under the Spanish locale", async () => {
   expect(column(el, "mon").querySelector(".follows")!.textContent).toContain("Sigue la temporada");
   await userEvent.click(columnMenu(el, "mon"));
   expect(columnAction(el, "mon", "Seguir la temporada")).toBeDefined();
+  const named = await grid({ tue: [headChef, sous] });
+  expect(block(named, "tue", 0).getAttribute("aria-label")).toBe(
+    "Tuesday, Head chef, 1 persona, 09:00–16:30",
+  );
+  expect(block(named, "tue", 1).getAttribute("aria-label")).toBe(
+    "Tuesday, Sous chef, 2 personas, 09:00–15:00",
+  );
 });
 
 test("a block that crosses the changeover is drawn down to the end of the day", async () => {
@@ -570,4 +600,154 @@ test("scrolling sideways fades the side that has columns hidden beyond it", asyn
   scroll.scrollLeft = scroll.scrollWidth;
   await scrolled;
   expect(el.dataset.overflow).toBe("start");
+});
+
+test("a one-step resize moves the edge a quarter hour wherever in the edge strip the press lands", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  const seen = changes(el);
+  const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
+  const row = column(el, "mon").getBoundingClientRect().height / 96;
+  const into = [0.5, 1, 2, 3, 4, 5, 6, 7, 7.5].map((px) => (px / 8) * strip.height);
+  for (const px of into) {
+    const at = strip.top + px;
+    pointAt(el, "mon", at, "pointerdown", edge(el, "mon", 0, "end"));
+    pointAt(el, "mon", at - row, "pointermove");
+    pointAt(el, "mon", at - row, "pointerup");
+    await el.updateComplete;
+  }
+  expect(seen.map((change) => change.blocks![0]!.endsAt)).toEqual(into.map(() => "16:15"));
+});
+
+test("a press anywhere in an edge strip released where it landed changes nothing", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  const seen = changes(el);
+  const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
+  for (const px of [0.5, 2, 4, 6, 7.5].map((n) => (n / 8) * strip.height)) {
+    pointAt(el, "mon", strip.top + px, "pointerdown", edge(el, "mon", 0, "end"));
+    pointAt(el, "mon", strip.top + px, "pointerup");
+    await el.updateComplete;
+  }
+  expect(seen).toEqual([]);
+});
+
+test("a second finger during a resize neither adds a block nor changes which edge moves", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  point(el, "mon", 720, "pointermove");
+  point(el, "mon", 840, "pointerdown", column(el, "mon"), 8);
+  point(el, "mon", 720, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }] }]);
+});
+
+test("a second finger on a block's edge during an add does not turn the add into a resize", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  point(el, "mon", 720, "pointerdown");
+  point(el, "mon", 840, "pointermove");
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"), 8);
+  point(el, "mon", 840, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "18:00", endsAt: "20:00" }],
+    },
+  ]);
+});
+
+test("after deleting the last block the focus goes to the one before", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  el.addEventListener("staffing-change", (event) => {
+    el.days = new Map([["mon", event.detail.blocks ?? []]]);
+  });
+  block(el, "mon", 1).focus();
+  await userEvent.keyboard("{Delete}");
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 0));
+  expect(block(el, "mon", 0).getAttribute("aria-label")).toContain("Head chef");
+});
+
+test("a resize that leaves the block as it was sends no change", async () => {
+  const short: StaffingBlock = { ...headChef, startsAt: "09:00", endsAt: "09:15" };
+  const el = await grid({ mon: [short] }, { chosen: undefined });
+  const seen = changes(el);
+  await drag(el, "mon", 180, 600, edge(el, "mon", 0, "start"));
+  expect(seen).toEqual([]);
+});
+
+test("a stroke under way when the grid turns read-only, even before it redraws, or its target changes, is dropped", async () => {
+  const el = await grid({ mon: [] }, { chosen: "hc" });
+  const seen = changes(el);
+  point(el, "mon", 120, "pointerdown");
+  point(el, "mon", 240, "pointermove");
+  el.readOnly = true;
+  await el.updateComplete;
+  point(el, "mon", 240, "pointerup");
+  el.readOnly = false;
+  await el.updateComplete;
+  point(el, "mon", 120, "pointerdown");
+  point(el, "mon", 240, "pointermove");
+  el.readOnly = true;
+  point(el, "mon", 240, "pointerup");
+  await el.updateComplete;
+  el.readOnly = false;
+  await el.updateComplete;
+  point(el, "mon", 120, "pointerdown");
+  point(el, "mon", 240, "pointermove");
+  el.target = "other";
+  await el.updateComplete;
+  point(el, "mon", 240, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+});
+
+test("the open menu closes when the host moves another block into its block's place", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  await userEvent.click(block(el, "mon", 1));
+  const early: StaffingBlock = { ...sous, startsAt: "07:00", endsAt: "08:00" };
+  el.days = new Map([["mon", [early, headChef, sous]]]);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+});
+
+test("the open menu stays open when its own headcount change comes back from the host", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  el.addEventListener("staffing-change", (event) => {
+    el.days = new Map([["mon", event.detail.blocks ?? []]]);
+  });
+  await userEvent.click(block(el, "mon", 1));
+  stepper(el).shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!.click();
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  el.days = new Map([["mon", [headChef, { ...sous, headcount: 3 }]]]);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+});
+
+test("a 30-minute block keeps both edges and a body to click", async () => {
+  const el = await grid({ mon: [{ ...headChef, endsAt: "09:30" }] }, { chosen: undefined });
+  const at = block(el, "mon").getBoundingClientRect();
+  const start = edge(el, "mon", 0, "start").getBoundingClientRect();
+  const end = edge(el, "mon", 0, "end").getBoundingClientRect();
+  const x = at.left + at.width / 2;
+  const hit = (y: number) => el.shadowRoot!.elementFromPoint(x, y) as HTMLElement;
+  expect(hit(start.top + start.height / 2).dataset.edge).toBe("start");
+  expect(hit(at.top + at.height / 2)).toBe(block(el, "mon"));
+  expect(hit(end.top + end.height / 2).dataset.edge).toBe("end");
+});
+
+test("a 15-minute block's edges leave a gap between them; a long block's are a fixed strip", async () => {
+  const el = await grid({ mon: [{ ...headChef, endsAt: "09:15" }], tue: [headChef] });
+  const start = edge(el, "mon", 0, "start").getBoundingClientRect();
+  const end = edge(el, "mon", 0, "end").getBoundingClientRect();
+  expect(start.height).toBeGreaterThan(0);
+  expect(end.top - start.bottom).toBeGreaterThan(0);
+  const long = edge(el, "tue", 0, "end").getBoundingClientRect().height;
+  const probe = document.createElement("div");
+  probe.style.blockSize = "var(--wt-space-2)";
+  host.append(probe);
+  expect(long).toBeCloseTo(probe.getBoundingClientRect().height, 1);
 });

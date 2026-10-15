@@ -80,6 +80,8 @@ const en = {
   "staffing.grid.staff_role": "Staff role",
   "staffing.grid.how_many": "How many",
   "staffing.grid.delete": "Delete",
+  "staffing.grid.people_one": "1 person",
+  "staffing.grid.people_other": "{count} people",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -153,6 +155,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.staff_role": "Rol de personal",
   "staffing.grid.how_many": "Cuántas personas",
   "staffing.grid.delete": "Eliminar",
+  "staffing.grid.people_one": "1 persona",
+  "staffing.grid.people_other": "{count} personas",
 };
 
 export const STAFFING_STRINGS = { en, es };
@@ -193,6 +197,12 @@ export function holderCount(count: number, locale?: string): string {
   if (count === 0) return t("staffing.role.holders_none", locale);
   if (count === 1) return t("staffing.role.holders_one", locale);
   return tf("staffing.role.holders_other", { count: String(count) }, locale);
+}
+
+/** How many people a staffing block needs, in words. */
+export function peopleNeeded(count: number, locale?: string): string {
+  if (count === 1) return t("staffing.grid.people_one", locale);
+  return tf("staffing.grid.people_other", { count: String(count) }, locale);
 }
 
 const COLOUR_NAMES: NameTable = {

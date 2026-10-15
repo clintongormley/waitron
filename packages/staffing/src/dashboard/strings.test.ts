@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { codeMessage } from "@waitron/dashboard-kit";
-import { colourName, holderCount, STAFFING_STRINGS, tf } from "./strings.js";
+import { colourName, holderCount, peopleNeeded, STAFFING_STRINGS, tf } from "./strings.js";
 
 describe("staffing strings", () => {
   it("names the page in both languages", () => {
@@ -20,6 +20,13 @@ describe("staffing strings", () => {
     expect(holderCount(0, "es")).toBe("Nadie");
     expect(holderCount(1, "es")).toBe("1 persona");
     expect(holderCount(3, "es")).toBe("3 personas");
+  });
+
+  it("says how many people a block needs in the singular and the plural", () => {
+    expect(peopleNeeded(1, "en")).toBe("1 person");
+    expect(peopleNeeded(3, "en")).toBe("3 people");
+    expect(peopleNeeded(1, "es")).toBe("1 persona");
+    expect(peopleNeeded(3, "es")).toBe("3 personas");
   });
 
   it("names each calendar colour", () => {
