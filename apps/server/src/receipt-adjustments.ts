@@ -60,7 +60,6 @@ export async function receiptLines(
         const row = byLineNo.get(priced.lines[i]!.lineNo)!;
         const display = { ...line };
         delete display.listGross;
-        delete display.listUnitPriceGross;
         return {
           ...display,
           ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),

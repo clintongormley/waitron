@@ -205,8 +205,8 @@ export const saleLines = table(
     // The line's VAT-inclusive total, beside `line_total`'s net base.
     lineGross: money("line_gross"),
     listGross: money("list_gross"),
-    // The unit price with VAT, per `price_quantity`, before any comp or discount; null wherever
-    // `list_gross` is. Presentation only: no fiscal record reads it.
+    // The unit price with VAT, per `price_quantity`, before any comp or discount. Presentation
+    // only: no fiscal record reads it.
     listUnitPriceGross: money("list_unit_price_gross"),
     classification: json<SaleLineClassification>("classification"),
     // On a corrective invoice's line, the line of the corrected invoice it reverses or adjusts;

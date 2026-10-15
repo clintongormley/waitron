@@ -65,7 +65,7 @@ export interface GroupDiscount {
   rate: string;
   /** What the row takes off at this rate, before VAT; never zero. */
   amount: Decimal;
-  /** Every line of the group at this rate has a filed base of zero. */
+  /** Every line of the family at this rate has a filed base of zero; always false on an end row. */
   comp: boolean;
   /** The adjustment whose words name the row, or null for plain «Descuento». */
   named: ReceiptAdjustment | null;

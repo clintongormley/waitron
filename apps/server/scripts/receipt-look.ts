@@ -253,7 +253,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.00",
     "1.00",
   ),
-  // A comped weighed line under one kilo, filed before Part 2c stored the price before discounts.
+  // A comped weighed line under one kilo with no stored unit price.
   "full-comped-weighed": fullInvoice(
     [
       BLOODY_MARY,

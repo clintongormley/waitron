@@ -1268,8 +1268,9 @@ figures.
 ### The rule this part builds
 
 > **Owner, 2026-10-15:** Q9 and Q10 were answered with the alternatives after this part was built.
-> Part 2 builds the defaults below as written; Part 2c replaces point 2's line under one priced unit
-> and the whole-bill discount's rows ("A discount on the whole bill" below).
+> Part 2 builds the defaults below as written; Part 2c replaces point 2's line under one priced unit,
+> "Discount rows" below (now one row per dish family, and a dish's own discount keeps its name when
+> the bill has one too), and the whole-bill discount's rows ("A discount on the whole bill" below).
 
 For a dish group whose every line has `net`, each line gets four cells, the figures all before VAT:
 
@@ -2588,7 +2589,7 @@ column for it), so this part does not try.
 
 ## The rule this part builds
 
-Replaces Part 2's points 1–3 and "A discount on the whole bill"; Part 2's points 4, its units, and
+Replaces Part 2's points 1–3, "Discount rows" and "A discount on the whole bill"; Part 2's points 4, its units, and
 its with-VAT fallback for a group without `net` are unchanged.
 
 **A line's figures** (`beforeVatFigures`, `apps/server/src/receipt-figures.ts:38-57`), all before
