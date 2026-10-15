@@ -8,6 +8,27 @@
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.
 
+## Walk-up invoice dates follow the server process time zone
+
+Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
+`transactional-series.test.ts` issued real walk-up invoices with the venue's stored
+`time_zone` fixed to `Europe/Madrid`. At `2026-10-14T23:30:00Z`, the stored
+`fecha_expedicion_factura` was `2026-10-14` under process `TZ=UTC` or
+`TZ=America/New_York`, and `2026-10-15` under `TZ=Europe/Madrid` or `TZ=Asia/Tokyo`.
+At noon UTC all four stored `2026-10-14`. The eight cases passed; a temporary probe
+wrote the invoice date, offset and configured venue zone beside each case.
+
+`apps/server/src/till-backend.ts`'s `systemClock` takes the offset from the process's
+`getTimezoneOffset()`; `git blame -L 14,25` attributes it to `d49e2e986` (2026-08-05).
+A693 changes no production code. Deployment's runtime ENV and compose app settings do not
+set `TZ` or mount a local-time file; a local `node:26.11.1-slim` process reported `UTC`.
+That probe does not measure an operator's configured appliance.
+
+Next: decide which zone dates an invoice, trace every issuing path and the record's
+explicit offset, then qualify the change with the protected fiscal checks before going
+live. The fake AEAT's UTC-midnight comparison caused A693's test refusal; these probes
+do not establish the real AEAT's issue-date rule. Do not alter recorded fiscal rows.
+
 ## No sale over €3,010 can be made at all
 
 - **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
