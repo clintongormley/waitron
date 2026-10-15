@@ -328,6 +328,7 @@ it("refuses a collect reply over its size limit, and stops reading it", () =>
       code: "cloud.unavailable",
     });
     expect(cancelled).toBe(true);
+    expect(sent).toBeGreaterThan(COLLECT_REPLY_BYTES);
   }));
 
 const JOB = "00000000-0000-4000-8000-000000000001";
@@ -461,7 +462,7 @@ it("a call its caller aborts is cloud.unavailable", () =>
     held.release();
   }));
 
-it("a call its caller aborts while it waits for the connection's lock is cloud.unavailable", () =>
+it("a call its caller aborts as it queues for the connection's lock is cloud.unavailable", () =>
   withFake(async (f) => {
     let answer: (r: Response) => void = () => {};
     let reached = () => {};
@@ -474,6 +475,34 @@ it("a call its caller aborts while it waits for the connection's lock is cloud.u
     await held;
     const abort = new AbortController();
     const call = f.client.translation.status(JOB, abort.signal);
+    abort.abort();
+    await expect(call).rejects.toMatchObject({ code: "cloud.unavailable" });
+    answer(new Response("{}", { status: 503 }));
+    await refresh.catch(() => {});
+  }));
+
+it("a call its caller aborts while it is parked behind the connection's lock is cloud.unavailable", () =>
+  withFake(async (f) => {
+    let answer: (r: Response) => void = () => {};
+    let reached = () => {};
+    const held = new Promise<void>((resolve) => (reached = resolve));
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => {
+      reached();
+      return new Promise<Response>((resolve) => (answer = resolve));
+    });
+    const refresh = f.client.refresh();
+    await held;
+    const abort = new AbortController();
+    // The call is parked once it listens for the abort while it waits for the lock.
+    let parked = () => {};
+    const waiting = new Promise<void>((resolve) => (parked = resolve));
+    const listen = abort.signal.addEventListener.bind(abort.signal);
+    vi.spyOn(abort.signal, "addEventListener").mockImplementation((type, listener, options) => {
+      listen(type, listener, options);
+      if (type === "abort") parked();
+    });
+    const call = f.client.translation.status(JOB, abort.signal);
+    await waiting;
     abort.abort();
     await expect(call).rejects.toMatchObject({ code: "cloud.unavailable" });
     answer(new Response("{}", { status: 503 }));

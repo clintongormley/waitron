@@ -77,7 +77,9 @@ const REASONS: Partial<Record<CloudJobState, readonly CloudReason[]>> = {
 // corrections of two texts, every text up to 500 characters. A character JSON can only send as
 // `\uXXXX` costs 6 bytes: (128 + 20 × 500 + 10 × 2 × 500) × 6 = 120,768 bytes an item, plus 1 KiB
 // an item for keys, language tags and punctuation, plus 1 KiB for the reply's own fields. A failed
-// item costs only its ref, less than a result.
+// item costs only its ref, less than a result. Assumes Cloud writes compact JSON, as
+// `JSON.stringify` does: no whitespace between tokens, and keys and language tags not escaped. The
+// contract does not say so.
 export const COLLECT_REPLY_BYTES = 1000 * ((128 + 20 * 500 + 10 * 2 * 500) * 6 + 1024) + 1024;
 const LIMITS: Record<TranslationAction, { reply: number; ms: number }> = {
   "translation-submit": { reply: 65536, ms: 60000 },
