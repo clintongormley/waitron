@@ -1124,7 +1124,8 @@ describe("Year view", () => {
       .toBe("Opening hours could not be loaded. It will be tried again.");
     await el.updateComplete;
     expect(view().model).toBeUndefined();
-    expect(view().shadowRoot!.querySelector("table, [data-test=year]")).toBeNull();
+    expect(view().shadowRoot!.querySelector("table")).toBeNull();
+    expect(view().shadowRoot!.querySelector("[data-test=year]")?.textContent?.trim()).toBe("2028");
   });
 
   it("applies only the newest special-day list when an older read answers last", async () => {
@@ -1247,10 +1248,32 @@ describe("Year view", () => {
     const alert = () => el.shadowRoot!.querySelector("[data-test=year-read-error]")?.textContent;
     await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
     expect(view()!.model).toBeUndefined();
-    expect(view()!.shadowRoot!.querySelector("table, [data-test=year]")).toBeNull();
+    expect(view()!.shadowRoot!.querySelector("table")).toBeNull();
+    expect(view()!.shadowRoot!.querySelector("[data-test=year]")?.textContent?.trim()).toBe("2026");
     el.api.rereadWithSpecialDays();
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(alert()).toBeUndefined();
+  });
+
+  it("keeps the Year / Month switch on screen when the year cannot be read, and Month opens", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year", false, Infinity);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=year-read-error]"))
+      .not.toBeNull();
+    await view()!.updateComplete;
+    const viewSwitch = el.shadowRoot!.querySelector<HTMLElement>("[data-test=view-switch]")!;
+    const slot = view()!.shadowRoot!.querySelector("slot[name=switch]");
+    expect(slot).not.toBeNull();
+    expect(viewSwitch.assignedSlot).toBe(slot);
+    const box = viewSwitch.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.height).toBeGreaterThan(0);
+    expect(view()!.shadowRoot!.querySelector("[data-test=year]")?.textContent?.trim()).toBe("2026");
+    await userEvent.click(viewSwitch.querySelector<HTMLInputElement>('input[value="month"]')!);
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/month/month/2026-10");
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
   });
 });
 

@@ -197,7 +197,8 @@ export class OpeningHoursYearView extends LitElement {
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
   /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
-   *  presses during the wait add up. 0 steps from `model`. */
+   *  presses during the wait add up, and with no `model` only the heading naming it, ‹ › and the
+   *  switch's slot are drawn. 0 steps from `model`. */
   @property({ type: Number }) year = 0;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
@@ -494,7 +495,23 @@ export class OpeningHoursYearView extends LitElement {
 
   override render() {
     const model = this.model;
-    if (!model) return nothing;
+    const shown = model?.year ?? this.year;
+    if (!shown) return nothing;
+    const step = (by: number, test: string, label: Key, glyph: string) =>
+      html`<wt-button
+        variant="secondary"
+        data-test=${test}
+        aria-label=${t(label)}
+        @click=${() => this.#emit("year-change", { year: (this.year || shown) + by })}
+        >${glyph}</wt-button
+      >`;
+    const head = html`<div class="head">
+      ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
+      <h2 data-test="year" aria-live="polite">${shown}</h2>
+      ${step(1, "next-year", "hours.calendar.next_year", "›")}
+      <slot name="switch"></slot>
+    </div>`;
+    if (!model) return head;
     const days = new Map(model.days.map((day) => [day.date, day]));
     const tints = seasonTints(model.seasons);
     const header = html`<tr>
@@ -510,20 +527,7 @@ export class OpeningHoursYearView extends LitElement {
       [this.focusDate, this.selected, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
-    const step = (by: number, test: string, label: Key, glyph: string) =>
-      html`<wt-button
-        variant="secondary"
-        data-test=${test}
-        aria-label=${t(label)}
-        @click=${() => this.#emit("year-change", { year: (this.year || model.year) + by })}
-        >${glyph}</wt-button
-      >`;
-    return html`<div class="head">
-        ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
-        <h2 data-test="year" aria-live="polite">${model.year}</h2>
-        ${step(1, "next-year", "hours.calendar.next_year", "›")}
-        <slot name="switch"></slot>
-      </div>
+    return html`${head}
       <season-chips
         .seasons=${model.seasons}
         .clockRevision=${model.clockRevision}

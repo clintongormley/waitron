@@ -282,6 +282,28 @@ describe("Opening hours year", () => {
     );
   });
 
+  it("draws only the year asked for, ‹ › and the switch's slot before any read, and steps from it", async () => {
+    const el = document.createElement("opening-hours-year");
+    el.year = 2028;
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    const years: number[] = [];
+    el.addEventListener("year-change", (event) =>
+      years.push((event as CustomEvent<{ year: number }>).detail.year),
+    );
+    expect(text(root(el).querySelector('[data-test="year"]'))).toBe("2028");
+    expect(root(el).querySelector("slot[name=switch]")).not.toBeNull();
+    expect(root(el).querySelector("table, season-chips, .note")).toBeNull();
+    root(el).querySelector<HTMLElement>('[data-test="previous-year"]')!.click();
+    root(el).querySelector<HTMLElement>('[data-test="next-year"]')!.click();
+    expect(years).toEqual([2027, 2029]);
+
+    el.year = 0;
+    await el.updateComplete;
+    expect(root(el).children).toHaveLength(0);
+  });
+
   it("asks for a month's first day when its name is chosen", async () => {
     const el = await mount();
     const opened: unknown[] = [];
