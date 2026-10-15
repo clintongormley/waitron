@@ -3525,6 +3525,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check its
   layout, which uses a different grid.
 
+- **Receipt test tidy-ups (left open by A663 Part 1b, #1756).** Six receipt test sites repeat the
+  same filter that skips dashed rule lines; give them one shared helper beside `printedLines`
+  (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
+  `nif()` can be plain constants.
+
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
