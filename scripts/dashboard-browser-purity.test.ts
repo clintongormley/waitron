@@ -30,11 +30,11 @@ import { mapComments } from "../packages/shared/src/source-comments.js";
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
 const SERVER_ENTRIES = ['from "../index.js"', 'from "../bookings.js"'];
-const SUBPATHS: Array<[string, string]> = [
-  ["@waitron/bookings", "packages/bookings/src/dashboard"],
-  ["@waitron/adjustments", "packages/adjustments/src/dashboard"],
-  ["@waitron/staffing", "packages/staffing/src/dashboard"],
-  ["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"],
+const SUBPATHS: string[] = [
+  "packages/bookings/src/dashboard",
+  "packages/adjustments/src/dashboard",
+  "packages/staffing/src/dashboard",
+  "packages/venue-service/src/dashboard/painter.ts",
 ];
 
 function tsFiles(path: string): string[] {
@@ -105,7 +105,7 @@ function reachableFrom(entryFiles: string[]): string[] {
 }
 
 describe("module dashboard sub-paths import no server-only specifier", () => {
-  for (const [, dir] of SUBPATHS) {
+  for (const dir of SUBPATHS) {
     const files = tsFiles(join(REPO, dir));
     const reached = reachableFrom(files);
 
