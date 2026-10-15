@@ -12989,7 +12989,7 @@ git commit -s -m "Tell the dashboard bell when Translate all suggestions are rea
 
 **Files:**
 - Modify: `docs/developers/cloud-connection.md` (a "Translate all" section)
-- Modify: `docs/developers/products.md` (under "Filling missing customer names together")
+- Modify: `docs/developers/products.md` (under "Filling missing customer names together"; also its Content languages paragraph, which still says **Edit translations** opens the Missing translations report in a read-only dialog)
 - Modify: `docs/content-and-images.md` (the **Edit translations** paragraph still says direct text entry is planned separately, and names no Translate all; added by A689 PR4's pre-merge review, 2026-10-15)
 - Modify: `docs/backlog.md` (the "A 'Translate all' service from Waitron Cloud" entry, about line 1026, and the side-by-side dialog entry, about line 1089)
 

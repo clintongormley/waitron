@@ -1141,6 +1141,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are
   edited"). Owner to choose the wording.
 
+- **Translate all: two limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
+  A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
+  dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
+  do, `packages/dashboard-kit/src/request.ts`). And on the default language's page, an item a read
+  by reference showed should not be listed is skipped for the rest of that opening, so an item that
+  becomes listable again while the dialog is open shows only from the next opening
+  (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`).
+
 - **The translations dialog capitalises a language name mid-sentence in Spanish in two older
   places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
   accessible label `content_gaps.table` ("Sin traducir al Inglés"): both go through the dialog's
