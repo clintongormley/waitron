@@ -1,4 +1,12 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -29,13 +37,16 @@ const SUBPATHS: Array<[string, string]> = [
   ["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"],
 ];
 
-function tsFiles(dir: string): string[] {
-  if (dir.endsWith(".ts")) return [dir];
+function tsFiles(path: string): string[] {
+  return statSync(path).isFile() ? [path] : walk(path);
+}
+
+function walk(dir: string): string[] {
   const out: string[] = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) out.push(...tsFiles(p));
-    else if (p.endsWith(".ts") && !p.endsWith(".test.ts")) out.push(p);
+    if (e.isDirectory()) out.push(...walk(p));
+    else if (e.isFile() && p.endsWith(".ts") && !p.endsWith(".test.ts")) out.push(p);
   }
   return out;
 }
@@ -142,6 +153,21 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   it("an entry naming a .ts file scans that file alone", () => {
     const file = join(REPO, "packages/venue-service/src/dashboard/painter.ts");
     expect(tsFiles(file)).toEqual([file]);
+  });
+
+  it("skips a directory named like a source file, as a failing browser test's screenshots are", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-purity-dirs-"));
+    try {
+      const source = join(root, "grid.ts");
+      writeFileSync(source, "export const x = 1;\n");
+      const shots = join(root, "__screenshots__", "grid.test.ts");
+      mkdirSync(shots, { recursive: true });
+      writeFileSync(join(shots, "shot.png"), "");
+      mkdirSync(join(root, "odd.ts"));
+      expect(tsFiles(root)).toEqual([source]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("detects a planted server import (positive control)", () => {
