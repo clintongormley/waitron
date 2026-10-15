@@ -41,7 +41,7 @@ export class RotaByArea extends LitElement {
       }
       th {
         background: var(--wt-color-surface);
-        font-weight: var(--wt-font-weight-semibold);
+        font-weight: var(--wt-font-weight-bold);
       }
       th[scope="row"],
       thead th:first-child {
@@ -57,7 +57,7 @@ export class RotaByArea extends LitElement {
         margin-block-end: var(--wt-space-1);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-alt);
+        background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
@@ -86,7 +86,7 @@ export class RotaByArea extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .note {
-        font-size: var(--wt-font-size-xs);
+        font-size: var(--wt-font-size-sm);
       }
       .swatch {
         display: inline-block;

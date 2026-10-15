@@ -5,6 +5,7 @@ import type { LitElement } from "lit";
 import { rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
+import { STAFFING_STRINGS } from "./strings.js";
 import { STAFFING_DASHBOARD } from "./index.js";
 void STAFFING_DASHBOARD;
 const frames: HTMLElement[] = [];
@@ -87,6 +88,6 @@ describe("the slot picker", () => {
     setLocale("es");
     const el = await mount();
     expect(el.shadowRoot!.textContent).toContain("Mostrar a todo el mundo");
-    expect(el.shadowRoot!.textContent).toContain("de permiso");
+    expect(el.shadowRoot!.textContent).toContain(STAFFING_STRINGS.es["staffing.rota.leave"]);
   });
 });

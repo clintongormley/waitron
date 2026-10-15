@@ -941,3 +941,46 @@ describe("the rota routes", () => {
     );
   });
 });
+
+describe("Rota body references", () => {
+  it("refuses an unknown area or staff role in a request body as a bad request", async () => {
+    const r = await routed();
+    const role = await r.create("Waiter");
+    const root = "/management-api/staffing/rota/shifts";
+    const input = {
+      week: "2026-11-30",
+      businessDay: "2026-12-01",
+      personId: r.ana,
+      area: { kind: "department", id: randomUUID() },
+      staffRoleId: role.id,
+      startsAt: "09:00",
+      endsAt: "15:00",
+    };
+    await answers(
+      await r.call("POST", root, r.manager, input),
+      400,
+      refusal("staffing_area.not_found", { area: `department:${input.area.id}` }),
+    );
+    const created = await r.call("POST", root, r.manager, {
+      ...input,
+      area: { kind: "department", id: r.departmentId },
+    });
+    expect(created.status).toBe(201);
+    const { shiftId } = (await created.json()) as { shiftId: string };
+    await answers(
+      await r.call("PATCH", `${root}/${shiftId}`, r.manager, { area: input.area }),
+      400,
+      refusal("staffing_area.not_found", { area: `department:${input.area.id}` }),
+    );
+    const badRole = randomUUID();
+    await answers(
+      await r.call("POST", root, r.manager, {
+        ...input,
+        area: { kind: "department", id: r.departmentId },
+        staffRoleId: badRole,
+      }),
+      400,
+      refusal("staff_role.not_found", { staffRoleId: badRole }),
+    );
+  });
+});

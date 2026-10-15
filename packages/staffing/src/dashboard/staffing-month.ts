@@ -193,7 +193,7 @@ export class StaffingMonthView extends LitElement {
         color: inherit;
       }
       .unfilled {
-        font-size: var(--wt-font-size-xs);
+        font-size: var(--wt-font-size-sm);
         overflow-wrap: anywhere;
       }
       .line {

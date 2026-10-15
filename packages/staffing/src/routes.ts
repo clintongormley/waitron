@@ -61,7 +61,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "staff_role.name_taken": 409,
   "staff_role.in_use": 409,
   "season.not_found": 404,
-  "staffing_area.not_found": 404,
   "shift.not_found": 404,
   "shift.invalid": 400,
   "roster.not_draft": 409,
@@ -191,7 +190,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       }),
     );
     app.post(`${ROOT}/rota/shifts`, (c) =>
-      run(c, log, async () => {
+      runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<unknown>(c);
         const shiftId = await gatedBy("schedule.manage", sessionId, (tx) =>
@@ -201,7 +200,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       }),
     );
     app.patch(`${ROOT}/rota/shifts/:shiftId`, (c) =>
-      run(c, log, async () => {
+      runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
         const body = await readJsonBody<unknown>(c);

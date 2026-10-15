@@ -84,7 +84,7 @@ export class RotaView extends LitElement {
       }
       li[data-over-contract] {
         color: var(--wt-color-warning);
-        font-weight: var(--wt-font-weight-semibold);
+        font-weight: var(--wt-font-weight-bold);
       }
       .error {
         color: var(--wt-color-danger);

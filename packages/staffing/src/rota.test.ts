@@ -334,3 +334,71 @@ describe("the rota writes", () => {
     expect((await read(v)).version).toBeNull();
   });
 });
+
+describe("reviewed Rota boundaries", () => {
+  it("refuses both an edit and deletion of an unattached shift in a published week", async () => {
+    const v = await venue();
+    const version = await tx((t) =>
+      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
+    );
+    await tx((t) => backend.publishRoster(t, { versionId: version }));
+    const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
+    expect((await read(v)).shifts.map((s) => s.shiftId)).toContain(id);
+    await expect(
+      tx((t) => api.updateRotaShift(t, v.cfg, id, { area: v.area, staffRoleId: v.staffRoleId })),
+    ).rejects.toMatchObject({ code: "roster.not_draft", params: { rosterVersionId: version } });
+    await expect(tx((t) => api.removeRotaShift(t, v.cfg, id))).rejects.toMatchObject({
+      code: "roster.not_draft",
+      params: { rosterVersionId: version },
+    });
+    expect((await read(v)).shifts.map((s) => s.shiftId)).toContain(id);
+  });
+  it("leaves an empty patch unchanged without creating a roster version", async () => {
+    const v = await venue();
+    const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
+    const before = await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)));
+    await tx((t) => api.updateRotaShift(t, v.cfg, id, {}));
+    expect((await read(v)).version).toBeNull();
+    expect(await tx((t) => t.select().from(shifts).where(eq(shifts.id, id)))).toEqual(before);
+    await tx((t) => api.removeRotaShift(t, v.cfg, id));
+    expect((await read(v)).shifts).toEqual([]);
+  });
+  it("marks a person outside the staff role, distinguishes a first draft and omits an ended contract", async () => {
+    const v = await venue();
+    const id = await add(v, { personId: v.marc });
+    await tx((t) =>
+      t.insert(employments).values({
+        personId: v.marc,
+        contractedMinutesPerWeek: 1200,
+        contractType: "temporary",
+        startDate: "2026-01-01",
+        endDate: "2026-11-29",
+        payRate: 0,
+      }),
+    );
+    const r = await read(v);
+    expect(r.days[6]!.areas[0]!.match.slots[0]!.status).toEqual({
+      kind: "filled",
+      shiftId: id,
+      outsideRole: true,
+    });
+    expect(r.version).toMatchObject({ status: "draft", changedSincePublished: false });
+    expect(r.people.find((p) => p.personId === v.marc)!.contractedMinutes).toBeNull();
+  });
+});
+
+describe("the approved calendar-week limit", () => {
+  it("keeps an edited unattached early-Monday shift visible as previous-week overflow in its calendar week", async () => {
+    const v = await venue();
+    const id = await rawShift(v, null, "2026-12-06T23:30:00Z", "2026-12-07T02:00:00Z");
+    await tx((t) =>
+      api.updateRotaShift(t, v.cfg, id, { area: v.area, staffRoleId: v.staffRoleId }),
+    );
+    const previous = await read(v);
+    expect(previous.shifts).toEqual([]);
+    expect(previous.days[6]!.areas[0]!.match.slots[0]!.status).toEqual({ kind: "unfilled" });
+    const next = await read(v, "2026-12-07");
+    expect(next.days[0]!.notInSlot).toEqual([{ shiftId: id, outsideWeek: true }]);
+    expect(next.shifts[0]!.businessDay).toBe("2026-12-06");
+  });
+});
