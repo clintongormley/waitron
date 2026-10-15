@@ -206,7 +206,9 @@ with no backward-compatibility implementation.
 does with an email or A4 choice (A555), obtain the asesor's manual-remedy approval and settle
 applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
-and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
+and foreign-recipient `IDOtro`/`IDType` remain separate decisions. What enabling it also changes
+after A741 (the till's `fullInvoices` flag, the over-limit wording, a saved F1 choice) is listed in
+the A1e/A231 entry in [the backlog](../backlog.md#fiscal-records-invoices-and-the-asesor). Follow the campaign's current
 queue order; this landing does not start another fiscal item.
 
 ## When the business e-invoicing regime starts
