@@ -722,6 +722,63 @@ describe("Translate all suggestions as drafts", () => {
     await vi.waitFor(() => expect(field(el, "two")!.value).toBe("CLIENT-es two"));
     expect(await barText()).not.toContain(codeMessage("cloud.unavailable"));
   });
+  it("Review latest tells a refused later suggestion page in the bar", async () => {
+    setLocale("en-GB");
+    const state = venue({
+      listed: [target("one"), target("two")],
+      suggestions: [suggestion("s1", "one"), suggestion("s2", "two")],
+      suggestionPage: 1,
+    });
+    const base = fakeApi(state);
+    let refuseLater = false;
+    const { el } = await open(state, {
+      getContentSuggestions: vi.fn(async (language: string, after?: string) => {
+        if (after !== undefined && refuseLater) throw { code: "cloud.unavailable" };
+        return base.getContentSuggestions(language, after);
+      }),
+    });
+    const bar = el.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-content-suggestions-bar"]
+    >("dashboard-content-suggestions-bar")!;
+    expect(bar.error).toBe("");
+    refuseLater = true;
+    await click(el, "review");
+    await vi.waitFor(() => expect(bar.error).toBe(codeMessage("cloud.unavailable")));
+    expect(field(el, "two")!.value).toBe("CLIENT-es two");
+  });
+  it("reopening forgets a refused later suggestion page while the new opening reads", async () => {
+    const state = venue({
+      listed: [target("one"), target("two")],
+      suggestions: [suggestion("s1", "one"), suggestion("s2", "two")],
+      suggestionPage: 1,
+    });
+    let laterPage: () => Promise<never> = async () => {
+      throw { code: "cloud.unavailable" };
+    };
+    const base = fakeApi(state);
+    const { el, api } = await open(state, {
+      getContentSuggestions: vi.fn(async (language: string, after?: string) =>
+        after === undefined ? base.getContentSuggestions(language) : laterPage(),
+      ),
+    });
+    const bar = el.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-content-suggestions-bar"]
+    >("dashboard-content-suggestions-bar")!;
+    await vi.waitFor(() => expect(bar.error).toBe(codeMessage("cloud.unavailable")));
+    laterPage = () => new Promise<never>(() => {});
+    const reads = api.getContentSuggestions.mock.calls.length;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await vi.waitFor(() =>
+      expect(
+        api.getContentSuggestions.mock.calls.slice(reads).some(([, after]) => after !== undefined),
+      ).toBe(true),
+    );
+    await el.updateComplete;
+    await bar.updateComplete;
+    expect(bar.error).toBe("");
+  });
   it("a suggestion page for another language, or one that repeats its cursor, fills nothing", async () => {
     for (const answer of [
       { language: "fr", next: null },
@@ -976,6 +1033,49 @@ describe("rows the page leaves out", () => {
     el.open = true;
     await vi.waitFor(() => expect(field(el, "two")?.value).toBe("CLIENT-ca two"));
     expect(namedReads()).toBe(2);
+  });
+  it("a suggestion read begun before a Discard does not bring back the left-out item it was for", async () => {
+    const liveData = new LiveData();
+    const { el, api } = await open(oneLanguage({ listed: [target("one")] }), { liveData });
+    expect(field(el, "empty")!.value).toBe("CLIENT-ca Croquetes");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const read = api.getContentSuggestions.getMockImplementation()!;
+    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
+      const value = await read(language, after);
+      await held;
+      return value;
+    });
+    const reads = api.getContentSuggestions.mock.calls.length;
+    liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(api.getContentSuggestions.mock.calls.length).toBeGreaterThan(reads),
+    );
+    await click(el, "discard-product-empty");
+    await vi.waitFor(() => expect(field(el, "empty")!.value).toBe(""));
+    release();
+    await vi.waitFor(() => expect(field(el, "empty")).toBeNull());
+    expect(field(el, "one")).not.toBeNull();
+  });
+  it("reads no left-out item by reference on the default-language page for a fix to a name in some language", async () => {
+    const { el, api } = await open(
+      oneLanguage({
+        config: { defaultLanguage: "ca", languages: ["ca", "es"] },
+        listed: [target("one")],
+        omitted: [target("named", { selectedText: "Pa", effectiveSelectedText: "Pa" })],
+        suggestions: [
+          suggestion("s1", "named", {
+            language: "es",
+            text: null,
+            fix: { field: "es", wrong: "Pann", right: "Pan" },
+          }),
+        ],
+      }),
+    );
+    expect(field(el, "one")).not.toBeNull();
+    expect(
+      api.getContentTranslationTargets.mock.calls.filter(([, query]) => query.targets),
+    ).toEqual([]);
   });
   it("reads no item by reference on another language's page for suggestions that cannot fill it", async () => {
     const { el, api } = await open(

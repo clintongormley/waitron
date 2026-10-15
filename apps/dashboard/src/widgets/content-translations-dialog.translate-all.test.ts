@@ -264,6 +264,29 @@ describe("Translate all in the translations dialog", () => {
     ).toBe("https://cloud.example.test/account");
   });
 
+  it("replaces the nothing-missing line with a run another tab started while the press was being sent", async () => {
+    const liveData = new LiveData();
+    const press = deferred<{ run: SuggestionRunView | null }>();
+    let current = read();
+    const getContentSuggestions = vi.fn(async () => current);
+    const { el } = await mount(
+      { getContentSuggestions, startContentSuggestions: vi.fn(() => press.promise) },
+      liveData,
+    );
+    await vi.waitFor(() => expect(bar(el).service).toBe("on"));
+    await drawn(el);
+    await userEvent.click(button(el));
+    current = read({ run: run() });
+    liveData.invalidate([{ type: "content_suggestion_jobs" }]);
+    await vi.waitFor(() => expect(bar(el).run?.state).toBe("running"));
+    press.resolve({ run: null });
+    await vi.waitFor(() => expect(bar(el).nothing).toBe(true));
+    current = read({ run: run({ progress: 200, done: 200 }) });
+    liveData.invalidate([{ type: "content_suggestion_jobs" }]);
+    await vi.waitFor(() => expect(bar(el).run?.progress).toBe(200));
+    expect(bar(el).nothing).toBe(false);
+  });
+
   it("tells a failed suggestion read in the bar, keeps the translations usable, and clears it once a read answers", async () => {
     const liveData = new LiveData();
     const getContentSuggestions = vi
