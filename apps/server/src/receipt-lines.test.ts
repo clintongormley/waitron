@@ -45,6 +45,24 @@ describe("withReceiptListPrices", () => {
     expect(unadjusted).not.toHaveProperty("listGross");
     expect(unadjusted).not.toHaveProperty("listUnitPriceGross");
   });
+  it("hands over both on a comped line charged nothing", () => {
+    const [comped] = withReceiptListPrices(
+      [filed("1.000", "0.00")],
+      [{ listUnitGross: decimal("12.00") }],
+    );
+
+    expect(comped).toMatchObject({ listGross: "12.00", listUnitPriceGross: "12.00" });
+  });
+
+  it("hands over the price per price unit on a line priced by portions, its total scaled by them", () => {
+    // 0.150 kg at €0.01 per 0.050 kg is €0.03 before the discount, charged €0.02.
+    const [portioned] = withReceiptListPrices(
+      [{ ...filed("0.150", "0.02"), priceQuantity: "0.050" }],
+      [{ listUnitGross: decimal("0.01") }],
+    );
+
+    expect(portioned).toMatchObject({ listGross: "0.03", listUnitPriceGross: "0.01" });
+  });
 });
 
 describe("ticketLinesFrom", () => {

@@ -463,7 +463,7 @@ function filedListPrices(workingOrderId: string) {
   );
 }
 
-/** Set an order line's price before any discount, as a comp or a discount would. */
+/** Store a price before any discount above the line's charged price. */
 function setListUnitPrice(workingOrderId: string, lineNo: number, cents: number): void {
   suite.db.run(
     sql`update working_order_lines set list_unit_price_gross = ${cents}
