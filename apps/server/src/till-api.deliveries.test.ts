@@ -27,7 +27,12 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { createPrinter, enqueuePrintJob } from "@waitron/printing";
+import {
+  MAX_DELIVERY_ATTEMPTS,
+  columnsFor,
+  createPrinter,
+  enqueuePrintJob,
+} from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -45,6 +50,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { createOpenOrder } from "./working-order.js";
+import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -807,6 +813,149 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
       ["unknown", "timeout", 1],
       ["queued", null, 2],
     ]);
+  });
+});
+
+/** A 58mm receipt printer listed on every till profile and chosen by every till for invoices. */
+async function invoiceReceiptPrinter(v: Venue): Promise<string> {
+  return withTransaction(suite.db, async (tx) => {
+    const printer = await createPrinter(
+      tx,
+      { locationId: v.cfg.locationId },
+      {
+        name: "Facturas mostrador",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        paperWidth: "58mm",
+      },
+    );
+    for (const { profileId } of await tx
+      .selectDistinct({ profileId: devices.deviceProfileId })
+      .from(devices)) {
+      await listInvoicePrinter(tx, { profileId, printerId: printer.id, isDefault: false });
+    }
+    await tx.update(devices).set({ invoicePrinterId: printer.id, invoicePagePrinterId: null });
+    return printer.id;
+  });
+}
+
+describe("a receipt printer as the till's invoice printer", () => {
+  it("is offered as a receipt printer", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter(v);
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      actions: {
+        print: {
+          printers: [{ id: counter, name: "Facturas mostrador", kind: "receipt" }],
+          designation: "original",
+        },
+      },
+    });
+  });
+
+  it("queues the full invoice as an original document job on that printer, never the receipt printer, opening no drawer", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter(v);
+    const answer = await printOnA4(v, orderId, randomUUID(), undefined, counter);
+    expect(answer.status).toBe(200);
+    const [job, ...moreJobs] = await jobsOf(saleId);
+    expect(moreJobs).toEqual([]);
+    expect(job).toMatchObject({ printerId: counter, kind: "document", receiptCopy: false });
+    const [row, ...moreRows] = await deliveryRows(saleId);
+    expect(moreRows).toEqual([]);
+    expect(row).toMatchObject({
+      medium: "receipt",
+      designation: "original",
+      status: "queued",
+      printJobId: job!.id,
+      personId: v.staffId,
+    });
+    expect(answer.body).toMatchObject({ id: row!.id, medium: "receipt", designation: "original" });
+    const lines = printedLines(job!.payload);
+    const printed = lines.join(" ").replace(/\s+/g, " ");
+    expect(printed).toContain("Factura completa");
+    expect(printed).toContain("Cliente");
+    expect(printed).toContain("NIF: 12345678Z");
+    expect(printed).toContain("Calle Cliente 9, Madrid");
+    expect(printed).not.toContain("DUPLICADO");
+    expect(lines.every((line) => line.length <= columnsFor("58mm"))).toBe(true);
+    expect(opensDrawer(job!.payload)).toBe(false);
+  });
+
+  it("queues a duplicate copy once the original has printed", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    await receiptOriginal(v, saleId, { status: "done", attempts: 1 });
+    const counter = await invoiceReceiptPrinter(v);
+    const answer = await printOnA4(v, orderId, randomUUID(), undefined, counter);
+    expect(answer.body).toMatchObject({ medium: "receipt", designation: "duplicate" });
+    const [, copy, ...more] = await jobsOf(saleId);
+    expect(more).toEqual([]);
+    expect(copy).toMatchObject({ printerId: counter, kind: "document", receiptCopy: true });
+    expect(decodeTicket(copy!.payload)).toContain("DUPLICADO");
+    expect(opensDrawer(copy!.payload)).toBe(false);
+    expect((await deliveryRows(saleId)).map((row) => row.printJobId)).toEqual([copy!.id]);
+  });
+
+  it("answers a replayed request key with the same attempt, queueing nothing more", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter(v);
+    const key = randomUUID();
+    const first = await printOnA4(v, orderId, key, undefined, counter);
+    expect(first.status).toBe(200);
+    expect(await printOnA4(v, orderId, key, undefined, counter)).toEqual(first);
+    expect(await jobsOf(saleId)).toHaveLength(1);
+    expect(await deliveryRows(saleId)).toHaveLength(1);
+  });
+
+  it("refuses the till's receipt printer, which is not its invoice printer", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    await invoiceReceiptPrinter(v);
+    expect(await printOnA4(v, orderId, randomUUID(), undefined, v.receiptPrinterId)).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+    expect(await jobsOf(saleId)).toEqual([]);
+  });
+
+  it("adds an original after an earlier one failed for good, and the status and the receipt retry agree it is the original", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const earlier = await receiptOriginal(v, saleId, {
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+    const counter = await invoiceReceiptPrinter(v);
+    const printed = await printOnA4(v, orderId, randomUUID(), undefined, counter);
+    expect(printed.body).toMatchObject({ medium: "receipt", designation: "original" });
+    const [, original] = await jobsOf(saleId);
+    expect(original).toMatchObject({ printerId: counter, receiptCopy: false });
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, original!.id));
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({
+        status: "failed",
+        failureCode: "transport_failed",
+        reportedAt: new Date().toISOString(),
+      })
+      .where(eq(invoiceDeliveries.printJobId, original!.id));
+    const status = await readStatus(v, orderId);
+    expect(status.body).toMatchObject({
+      current: { id: printed.body!.id, medium: "receipt", status: "failed" },
+      originalPrinterId: counter,
+      actions: { retryOriginal: { medium: "receipt" } },
+    });
+    const retried = await send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {});
+    expect(retried.status).toBe(200);
+    const resent = (await jobsOf(saleId)).find((job) => job.id === retried.body!.jobId);
+    expect(resent).toMatchObject({ resendOf: original!.id, printerId: counter });
+    expect(resent!.resendOf).not.toBe(earlier);
   });
 });
 

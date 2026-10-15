@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,11 +11,16 @@ import {
   locations,
   pagePrinters,
   printAgents,
+  printJobs,
+  printers,
+  receiptReprints,
   tenants,
 } from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { inTx, send } from "./testing/bill-venue.js";
+import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import {
   collect,
@@ -491,7 +496,7 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("offers the location's active A4 printer when nothing is active", async () => {
+  it("offers the location's active receipt and A4 printers when nothing is active", async () => {
     const { billId } = await fullInvoice();
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: {
@@ -500,7 +505,10 @@ describe("the order detail's delivery status", () => {
         originalPrinterId: null,
         actions: {
           print: {
-            printers: [{ id: officeId, name: "Oficina", kind: "a4" }],
+            printers: [
+              { id: venue.printerId, name: "Recibos", kind: "receipt" },
+              { id: officeId, name: "Oficina", kind: "a4" },
+            ],
             designation: "original",
           },
         },
@@ -510,7 +518,7 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("offers every active A4 printer at the sale's location by name, with the original's printer", async () => {
+  it("offers every active printer at the sale's location, receipt printers first, by name, with the original's printer", async () => {
     const { billId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(
@@ -529,6 +537,7 @@ describe("the order detail's delivery status", () => {
           actions: {
             print: {
               printers: [
+                { id: venue.printerId, name: "Recibos", kind: "receipt" },
                 { id: upstairs, name: "Arriba", kind: "a4" },
                 { id: officeId, name: "Oficina", kind: "a4" },
               ],
@@ -887,6 +896,183 @@ describe("dashboard email", () => {
     for (const haystack of [responses, logs]) {
       expect(haystack).not.toContain("cliente.privado");
       expect(haystack).not.toContain("otra@");
+    }
+  });
+});
+
+const jobsOfSale = (saleId: string) =>
+  inTx(venue, (tx) =>
+    tx
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.saleId, saleId))
+      .orderBy(sql`${printJobs}.rowid`),
+  );
+
+const reprintsOf = (saleId: string) =>
+  inTx(venue, (tx) => tx.select().from(receiptReprints).where(eq(receiptReprints.saleId, saleId)));
+
+/** The venue's receipt printer's original for `saleId` has printed, through the print endpoint. */
+async function receiptPrinted(saleId: string) {
+  await inTx(venue, async (tx) => {
+    await tx
+      .update(printJobs)
+      .set({ status: "done", attempts: 1 })
+      .where(eq(printJobs.saleId, saleId));
+    await tx
+      .update(invoiceDeliveries)
+      .set({ status: "sent", completedAt: new Date().toISOString() })
+      .where(eq(invoiceDeliveries.saleId, saleId));
+  });
+}
+
+describe("dashboard print on a receipt printer", () => {
+  it("lists the location's receipt printers before its A4 printers, and queues an original document job on the chosen one", async () => {
+    const { billId, saleId } = await fullInvoice();
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: {
+        actions: {
+          print: {
+            printers: [
+              { id: venue.printerId, name: "Recibos", kind: "receipt" },
+              { id: officeId, name: "Oficina", kind: "a4" },
+            ],
+          },
+        },
+      },
+    });
+    const answer = await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), venue.printerId));
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ medium: "receipt", designation: "original" });
+    const [job, ...more] = await jobsOfSale(saleId);
+    expect(more).toEqual([]);
+    expect(job).toMatchObject({ printerId: venue.printerId, kind: "document", receiptCopy: false });
+    expect(await deliveriesOf(saleId)).toEqual([
+      expect.objectContaining({ medium: "receipt", printJobId: job!.id, personId: venue.adminId }),
+    ]);
+    const printed = decodeTicket(job!.payload).replace(/\s+/g, " ");
+    expect(printed).toContain("Factura completa");
+    expect(printed).toContain("Cliente Mayorista SL");
+    expect(printed).toContain("NIF: 12345678Z");
+    expect(printed).toContain("Calle Cliente 9, Madrid");
+    expect(opensDrawer(job!.payload)).toBe(false);
+    expect(await reprintsOf(saleId)).toEqual([]);
+  });
+
+  it("records a receipt copy for a duplicate, once per request key, and the original's printer stays the original's", async () => {
+    const { billId, saleId } = await fullInvoice();
+    await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), venue.printerId));
+    await receiptPrinted(saleId);
+    const key = randomUUID();
+    const copy = await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId));
+    expect(copy.json).toMatchObject({ medium: "receipt", designation: "duplicate" });
+    expect(await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId))).toEqual(copy);
+    const [, copyJob, ...more] = await jobsOfSale(saleId);
+    expect(more).toEqual([]);
+    expect(copyJob).toMatchObject({ printerId: venue.printerId, receiptCopy: true });
+    expect(opensDrawer(copyJob!.payload)).toBe(false);
+    expect(await reprintsOf(saleId)).toEqual([
+      expect.objectContaining({ printJobId: copyJob!.id, personId: venue.adminId }),
+    ]);
+    await receiptPrinted(saleId);
+    expect((await printOnA4(venue.adminDashboard, billId, a4())).json).toMatchObject({
+      medium: "a4",
+      designation: "duplicate",
+    });
+    expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+      deliveries: { originalPrinterId: venue.printerId },
+    });
+    expect(await reprintsOf(saleId)).toHaveLength(1);
+  });
+
+  it("refuses a receipt printer switched off, deleted or at another location, writing nothing", async () => {
+    const { billId, saleId } = await fullInvoice();
+    const [terrace] = await inTx(venue, (tx) =>
+      tx
+        .insert(locations)
+        .values({
+          name: `Terrace ${randomUUID()}`,
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Restaurante",
+        })
+        .returning({ id: locations.id }),
+    );
+    const make = (name: string, locationId: string = venue.cfg.locationId) =>
+      inTx(venue, (tx) =>
+        createPrinter(
+          tx,
+          { locationId },
+          { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        ),
+      );
+    const off = (await make("Apagada")).id;
+    const deleted = (await make("Borrada")).id;
+    const elsewhere = (await make("Terraza", terrace!.id)).id;
+    await inTx(venue, async (tx) => {
+      await tx.update(printers).set({ active: false }).where(eq(printers.id, off));
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: new Date().toISOString() })
+        .where(eq(printers.id, deleted));
+    });
+    for (const printerId of [off, deleted, elsewhere]) {
+      expect(
+        await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), printerId)),
+      ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+    }
+    expect(await deliveriesOf(saleId)).toEqual([]);
+    expect(await jobsOfSale(saleId)).toEqual([]);
+  });
+
+  it("still offers email and the PDF with no printer anywhere", async () => {
+    email.transport = true;
+    const { billId } = await fullInvoice();
+    const activePrinters = await inTx(venue, (tx) =>
+      tx.select({ id: printers.id }).from(printers).where(eq(printers.active, true)),
+    );
+    const activeOffices = await inTx(venue, (tx) =>
+      tx.select({ id: pagePrinters.id }).from(pagePrinters).where(eq(pagePrinters.active, true)),
+    );
+    await inTx(venue, async (tx) => {
+      await tx.update(printers).set({ active: false });
+      await tx.update(pagePrinters).set({ active: false });
+    });
+    try {
+      expect(
+        (await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`))
+          .json,
+      ).toMatchObject({
+        deliveries: { actions: { print: null, email: { designation: "original" } } },
+      });
+      expect(
+        (
+          await venue.orders.request(`/management-api/orders/${billId}/invoice-pdf`, {
+            method: "POST",
+            headers: { cookie: venue.adminDashboard },
+          })
+        ).status,
+      ).toBe(200);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(printers)
+          .set({ active: true })
+          .where(
+            inArray(
+              printers.id,
+              activePrinters.map((row) => row.id),
+            ),
+          );
+        await tx
+          .update(pagePrinters)
+          .set({ active: true })
+          .where(
+            inArray(
+              pagePrinters.id,
+              activeOffices.map((row) => row.id),
+            ),
+          );
+      });
     }
   });
 });

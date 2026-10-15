@@ -2340,13 +2340,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     return sale.id;
   }
 
-  /** The one printer the till may print a full invoice on: its own invoice printer, when A4. */
+  /** The one printer the till may print a full invoice on: its own invoice printer. */
   async function tillInvoicePrinters(
     tx: Transaction,
     session: { deviceId: string },
   ): Promise<OfferedPrinter[]> {
     const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
-    return printer?.kind === "a4" ? [{ id: printer.id, name: printer.name, kind: "a4" }] : [];
+    return printer === undefined
+      ? []
+      : [{ id: printer.id, name: printer.name, kind: printer.kind }];
   }
 
   app.get("/api/sales/:id/deliveries", (c) =>
@@ -2386,7 +2388,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const attempt = await withTransaction(deps.db, async (tx) =>
           requestPrintDelivery(
             tx,
-            await zonedSale(tx, session, id),
+            { backend: deps.backend, cfg: requestCfg(deps.cfg, session) },
+            { id: await zonedSale(tx, session, id), workingOrderId: id },
             () => tillInvoicePrinters(tx, session),
             { ...request, printerId },
           ),

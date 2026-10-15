@@ -22,7 +22,11 @@ import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
-import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import {
+  expireInvoiceDeliveryClaims,
+  reserveInvoiceDelivery,
+  type InvoiceDelivery,
+} from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
@@ -337,6 +341,35 @@ export async function enqueueReceiptCopy(
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
   return job;
+}
+
+/**
+ * A full invoice printed on a receipt printer: an original or a duplicate as `designation` says,
+ * as a document job, so it never opens the drawer, linked to a receipt delivery for `request`.
+ */
+export async function enqueueInvoiceReceipt(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  ticket: TillSaleResult,
+  saleId: string,
+  printer: { id: string } & EscSetting,
+  designation: "original" | "duplicate",
+  request: { requestKey: string; personId: string },
+): Promise<InvoiceDelivery> {
+  const duplicate = designation === "duplicate";
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
+  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
+  /* v8 ignore stop */
+  const job = await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+    saleId,
+    receiptCopy: duplicate,
+  });
+  return reserveInvoiceDelivery(tx, saleId, {
+    ...request,
+    medium: "receipt",
+    printJobId: job.jobId,
+  });
 }
 
 async function enrollExplicitInvoiceReceipt(

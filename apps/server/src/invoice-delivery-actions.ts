@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { invoiceDeliveries, nodes, sales, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  nodes,
+  printJobs,
+  printers,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
@@ -16,8 +23,8 @@ import {
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
-import { enqueueOriginalReceipt } from "./receipt-print.js";
-import type { OriginConfig } from "./till-config.js";
+import { enqueueInvoiceReceipt, enqueueOriginalReceipt } from "./receipt-print.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { readSettledTicket } from "./till-sale.js";
 
 type Request = { requestKey: string; personId: string };
@@ -27,50 +34,82 @@ async function replayed(
   tx: Transaction,
   saleId: string,
   requestKey: string,
-  sameRequest: (row: InvoiceDelivery) => boolean,
+  sameRequest: (row: InvoiceDelivery) => boolean | Promise<boolean>,
 ) {
   const [row] = await tx
     .select()
     .from(invoiceDeliveries)
     .where(and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, requestKey)));
-  if (row !== undefined && !sameRequest(row)) {
+  if (row !== undefined && !(await sameRequest(row))) {
     throw new AppError("submission.id_reused", { submissionId: requestKey });
   }
   return row;
 }
 
-const isA4 = (row: InvoiceDelivery) => row.medium === "a4";
 const isReceipt = (row: InvoiceDelivery) => row.medium === "receipt";
 
 /**
- * Prints a full invoice on `request.printerId`, which must be one of the A4 printers `offer` gives
- * for the sale, as the delivery status offers it.
+ * Prints a full invoice on `request.printerId`, which must be one of the printers `offer` gives for
+ * the sale, as the delivery status offers it. A receipt printer gets a document job built for it;
+ * `onReceiptCopy` hears of a new duplicate one.
  */
 export async function requestPrintDelivery(
   tx: Transaction,
-  saleId: string,
+  deps: {
+    backend: FiscalBackend;
+    cfg: TillConfig;
+    onReceiptCopy?: (copy: { saleId: string; printJobId: string }) => Promise<void>;
+  },
+  sale: { id: string; workingOrderId: string },
   offer: PrinterOffer,
   request: Request & { printerId: string },
 ): Promise<InvoiceDeliveryAttempt> {
   const { printerId, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
-  const replay = await replayed(tx, saleId, request.requestKey, isA4);
+  const replay = await replayed(tx, sale.id, request.requestKey, async (row) => {
+    if (row.medium === "a4") return true;
+    if (row.medium !== "receipt") return false;
+    const [job] = await tx
+      .select({ printerId: printJobs.printerId })
+      .from(printJobs)
+      .where(eq(printJobs.id, row.printJobId!));
+    return job?.printerId === printerId;
+  });
   if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, saleId, {
+  const state = await readInvoiceDeliveryState(tx, sale.id, {
     emailAvailable: false,
     printers: offer,
   });
   if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const printer = state.printers.find(
-    (candidate) => candidate.id === printerId && candidate.kind === "a4",
-  );
+  const printer = state.printers.find((candidate) => candidate.id === printerId);
   if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
-  if (state.status.actions.print === null) throw new AppError("invoice_delivery.active", {});
-  const row = await reserveInvoiceDelivery(tx, saleId, {
-    ...reserved,
-    medium: "a4",
-    pagePrinterId: printer.id,
-  });
+  const print = state.status.actions.print;
+  if (print === null) throw new AppError("invoice_delivery.active", {});
+  if (printer.kind === "a4") {
+    const row = await reserveInvoiceDelivery(tx, sale.id, {
+      ...reserved,
+      medium: "a4",
+      pagePrinterId: printer.id,
+    });
+    return rowAttempt(row);
+  }
+  const [setting] = await tx
+    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .from(printers)
+    .where(eq(printers.id, printer.id));
+  const ticket = await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
+  const row = await enqueueInvoiceReceipt(
+    tx,
+    deps.cfg,
+    ticket,
+    sale.id,
+    { id: printer.id, ...setting! },
+    print.designation,
+    reserved,
+  );
+  if (row.designation === "duplicate" && deps.onReceiptCopy !== undefined) {
+    await deps.onReceiptCopy({ saleId: sale.id, printJobId: row.printJobId! });
+  }
   return rowAttempt(row);
 }
 

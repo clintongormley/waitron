@@ -3,7 +3,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq } from "drizzle-orm";
 import { AppError, isUuid, isValidEmail } from "@waitron/shared";
-import { printers, sales, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  printers,
+  receiptReprints,
+  sales,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { currentBusinessDay } from "@waitron/reporting";
 import { authorizeManager, resolveManagementSession, roleHasPermission } from "@waitron/identity";
@@ -316,11 +323,19 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
-        return requestPrintDelivery(tx, sale.id, orderInvoicePrinters(tx), {
-          requestKey,
-          personId,
-          printerId,
-        });
+        return requestPrintDelivery(
+          tx,
+          {
+            backend: deps.backend,
+            cfg: deps.till,
+            onReceiptCopy: async (copy) => {
+              await tx.insert(receiptReprints).values({ ...copy, personId });
+            },
+          },
+          { id: sale.id, workingOrderId: id },
+          orderInvoicePrinters(tx),
+          { requestKey, personId, printerId },
+        );
       });
       return c.json(attempt);
     }),
