@@ -67,7 +67,8 @@ If your venue is connected to Waitron Cloud and Translate all is switched on for
 **Translate all** at the top of the dialog asks Cloud to suggest every missing customer-facing
 name, in every language. Suggestions fill empty fields as drafts marked **Suggested**, up to 100
 at a time, and nothing reaches your diners until you save them; **Discard suggestion** removes one you do not
-want. When the suggestions are ready, the alerts bell tells you how many are waiting for review.
+want. When Cloud has finished, the alerts bell tells you how many are waiting for review. If Cloud
+fails or refuses part-way through, the bell says nothing; open the dialog to see what arrived.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.
