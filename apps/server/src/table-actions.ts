@@ -15,6 +15,7 @@ import {
   type OtherPartyRead,
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
+import type { SlipsLater } from "./moved-slips.js";
 import { moveDraftsToParty } from "./order-drafts.js";
 import {
   groupArrivingDishes,
@@ -45,11 +46,6 @@ import "./errors.js";
  * it, and that party's revision, before any table's or bill's own state (P27), so of two tills
  * acting from one read the second is refused `party.out_of_date`.
  */
-
-/** Set by a caller that tells the kitchen itself once its work is done: each bill merged away is recorded, by the bill it merged into. */
-export interface SlipsLater {
-  mergedInto: Map<string, string>;
-}
 
 export interface TableActionOptions extends OtherPartyRead {
   bills: "merge" | "separate";

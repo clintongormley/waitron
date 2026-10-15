@@ -155,7 +155,8 @@ import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
-import type { SlipsLater, TableActionOptions } from "./table-actions.js";
+import type { SlipsLater } from "./moved-slips.js";
+import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
