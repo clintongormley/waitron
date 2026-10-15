@@ -1,5 +1,10 @@
 # A493: Departments and zones, with dialog editors
 
+> **2026-10-15 — A685:** The missing-department case now answers `sale.department_missing`;
+> see `apps/server/src/sale-operation-description.ts` and its sibling tests. An existing
+> department without a description still answers `department.operation_description_required`.
+
+
 2026-10-12. Lane D, Codex driver. This is the implementation contract for the parent driver, not a plan-only deliverable. The owner has authorised unattended implementation, finish and landing; there is no further design confirmation gate. This delegate only read local sources and wrote the spec and plan. All implementation behavior below still requires execution evidence. The private canvas is **UNVERIFIED**: no website or computer access was used.
 
 ## Owner text, preserved verbatim
