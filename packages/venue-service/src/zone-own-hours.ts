@@ -18,9 +18,10 @@ type Piece = ClosedRange & Placed;
 
 const DAY = 1440;
 
-/** Places a range on the business day, which runs from its changeover to the next day's, `endMinute`
- *  long; a time at or before the start is on the clock's next day, and an end past the day's is cut
- *  to it. */
+/** Places a range on the business day, which runs `endMinute` minutes from its changeover. The start
+ *  is read within the first 24 hours, so on a 25-hour day a range written 06:00–07:00 lands at the
+ *  day's start, not its end; an end at or before the start falls a day later; and an end past the
+ *  day's is cut to it. */
 export function placeOnDay({ dayCutover, endMinute }: { dayCutover: string; endMinute: number }) {
   const clock = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
   const cutover = clock(dayCutover);

@@ -103,10 +103,10 @@ describe("zoneOwnHours", () => {
       endMinute: 1500,
     });
     expect(own.ranges).toEqual([
-      { ...range("dinner", "22:00", "05:00"), start: 960, end: 1380 },
-      { ...range("dinner", "06:00", "07:00"), start: 1440, end: 1500 },
+      at(range("dinner", "22:00", "05:00"), 960, 1380),
+      at(range("dinner", "06:00", "07:00"), 1440, 1500),
     ]);
-    expect(own.closed).toEqual([{ ...closure("05:00", "06:00"), start: 1380, end: 1440 }]);
+    expect(own.closed).toEqual([at(closure("05:00", "06:00"), 1380, 1440)]);
   });
 
   it("caps times at the end of a 23-hour day", () => {
