@@ -2914,11 +2914,35 @@ keyed by page, so at desktop width a result row pressed with Enter or Space keep
 full list comes back. A language switch keeps the term and searches the new
 language's labels, and signing out empties the box.
 
-A header's text starts at the same leading edge as its page labels; an optional group icon
-occupies the gutter before it. The trailing chevron uses `--wt-space-4` (16px), reserves its
+A header's text starts at the same leading edge as its page labels; its section's icon
+(`icon` on every `NAV_GROUPS` entry, small size) occupies the gutter before it, a `--wt-space-1`
+gap from the label. Every sidebar icon, here and in the folded strip, draws in `--wt-color-text`,
+never the headers' primary colour (owner, 2026-10-15, A654); `wt-icon` sets that colour on itself,
+so a colour on the header or button around it does not reach the icon. The trailing chevron uses `--wt-space-4` (16px), reserves its
 space while hidden, and centres on the label's first line. It appears under hover or keyboard
 focus, and stays visible on devices without hover. Search labels reserve that same trailing space.
 The sidebar is 34ch wide, capped at 85vw in the phone drawer, with a border and `--wt-shadow-1`.
+
+**Folding to a strip of icons (A654).** Wider than the drawer breakpoint, the banner's menu
+toggle folds the sidebar to a narrow strip and unfolds it again, and its `aria-expanded` says
+whether the full sidebar shows; on a phone it opens the drawer, which always shows the full
+sidebar. The choice is kept in this browser's `localStorage`
+(`waitron-dashboard-sidebar-folded`). With none kept, a window matching `(48rem < width <= 64rem)`
+opens folded and any other opens unfolded, read once when the app starts. The strip holds a
+magnifier first (not for staff), which unfolds the sidebar, keeps that choice and puts the cursor in
+the search box; then one icon button per section this person can open a page in, named by the
+section, with the shared icon tooltip shown beside it rather than below. The section holding the
+current page is marked by the highlight alone: a `--wt-color-primary` leading edge and a
+`--wt-color-surface-lifted` fill, the icon staying uncoloured. A section with one page opens it. A
+section with more opens a panel beside its icon, listing the section's name and its pages, and
+placed before its first paint, lifted to stay inside the layout when the icon is low; picking a page
+opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
+to its icon; so do a click outside it, focus leaving it, another section's icon, unfolding the
+sidebar, a page change and narrowing to a phone. Opened from the keyboard it focuses its first page.
+In a window under 40rem tall (a phone held sideways is wider than the drawer breakpoint) the strip
+scrolls and clips its tooltips; the panel still shows whole. Guards: the cases in
+`apps/dashboard/src/dashboard-app.sidebar-fold.test.ts`, axe in both themes included. Looked at
+2026-10-15 in Spanish, both themes, at 390, 1024 and 1280 px (screenshots, in a test page).
 
 `#toggleGroup` records the clicked header's position and corrects the sidebar's scroll offset
 after the DOM changes. The browser still bounds that offset to the available scroll range.

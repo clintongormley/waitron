@@ -1,8 +1,8 @@
 # A654 — the dashboard sidebar folds to a strip of icons (design, 2026-10-15)
 
-Status: building (lane B, 2026-10-15). The owner answered all four questions (a) on 2026-10-15, adding
+Status: built (lane B, 2026-10-15); the backlog entry is retired with the build. The owner answered all four questions (a) on 2026-10-15, adding
 that every sidebar icon is drawn without colour (below).
-Backlog: [A654](../../backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons).
+Backlog: A654 (retired when this landed; its detail sat in `docs/backlog/dashboard.md`).
 Drawings: [`docs/backlog/mockups/a654-sidebar-icons/`](../../backlog/mockups/a654-sidebar-icons/)
 (the HTML beside the pictures is their source; it is a drawing, not the product's CSS).
 

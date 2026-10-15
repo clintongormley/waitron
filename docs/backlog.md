@@ -3918,14 +3918,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
   [screenshots](backlog/mockups/a653-table-scrolling/)
 
-- **A654 — the sidebar folds to a strip of icons (owner, 2026-10-14; open).** A way to narrow the
-  dashboard's left sidebar to a thin column of icons, giving wide tables such as Products the room.
-  Each sidebar section (Overview, Reporting, Service, Products and menus, Venue operations, Team,
-  Purchasing, Settings) needs an icon; only Settings has one today. Phones keep today's drawer. Clicking a section header already folds
-  that section's links away, but nothing narrows the sidebar.
-  [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons). Design with four
-  owner questions: [plan](superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md),
-  [drawings](backlog/mockups/a654-sidebar-icons/) (2026-10-15).
+- **A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
+  (found building A654, 2026-10-15; open).** design-system.md → "Icon buttons with a tooltip" says a
+  pressed or open `.icon-button` draws a `--wt-color-primary-text` icon, but `wt-icon` sets its own
+  colour to `--wt-color-text` (`packages/ui-core/src/base-styles.ts`), so a colour on the button
+  around it does not reach it. Measured only on A654's sidebar strip, where removing the strip's own
+  colour rule left an `aria-expanded="true"` button's icon in the text colour. Look at the Filters,
+  Products Select and Structure Select buttons pressed, in both themes, and fix the doc or the style.
 
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
   dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes

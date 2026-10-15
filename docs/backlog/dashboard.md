@@ -1089,26 +1089,6 @@ minimised, especially for use on mobiles".
   keep it to one, for example a row that scrolls sideways. Live mode draws no strip, but a venue
   uses Preparation while being set up.
 
-## A654 — the sidebar folds to a strip of icons
-
-Owner, 2026-10-14, while looking at the Products table being wider than its box: "perhaps we need
-to add a way to shrink the left navbar down to a thin column with icons (we need icons for the
-navbar sections)".
-
-- **Today.** The sidebar's groups are `NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts`; a
-  group may carry an `icon` from `apps/dashboard/src/icons.ts`, and only Settings (`configuration`,
-  `gear`) does. Overview has no header at all, and modules add items to groups, so every group a
-  module can fill needs its icon whether or not core lists items in it. Clicking a group header
-  folds that group's links away; nothing narrows the sidebar itself.
-- **Phones.** At 48rem wide or less the sidebar is already a drawer behind the menu button, so the
-  strip is for wider screens; say in the plan whether a tablet-width window starts folded.
-- **To decide at the plan:** how the strip opens a group's pages (a flyout beside the icon, or
-  unfolding the sidebar), whether the folded state is remembered per browser, and the icon for each
-  group (Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing,
-  Settings). Icons follow design-system.md.
-- **Design (2026-10-15):** [the plan](../superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md)
-  and [its drawings](mockups/a654-sidebar-icons/); four questions to the owner, build after the answers.
-
 ## A657 — Cancel leaves without asking
 
 Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just
