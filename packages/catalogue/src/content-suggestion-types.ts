@@ -39,7 +39,7 @@ export interface SuggestionRunView {
   state: SuggestionRunState;
   /** Items with languages to write across the run; context heads are never counted. */
   total: number;
-  /** `done + failed`, so it reaches `total` when the run ends. */
+  /** `done + failed`, summed over the run's jobs. */
   progress: number;
   done: number;
   failed: number;
