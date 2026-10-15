@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { installChangeFeed, locations, printers, runMigrations } from "@waitron/db";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
@@ -45,16 +45,24 @@ it("upgrades populated printers without changing their settings, holder or devic
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
     .returning({ id: locations.id });
-  const device = await seedDevice(suite.db, { locationId: location!.id });
+  const profileId = randomUUID();
+  const deviceId = randomUUID();
+  await suite.db.execute(
+    sql`insert into device_profiles (id, name, form_factor, capabilities, created_at, updated_at) values (${profileId}, 'Bar', 'till', '[]', '2026-10-12T12:00:00.000Z', '2026-10-12T12:00:00.000Z')`,
+  );
+  // A drizzle insert names every column today's schema has, which this older schema may lack.
+  await suite.db.execute(
+    sql`insert into devices (id, location_id, device_profile_id, label, token_hash, enrolled_at, created_at) values (${deviceId}, ${location!.id}, ${profileId}, 'Bar till', 'seeded', '2026-10-12T12:00:00.000Z', '2026-10-12T12:00:00.000Z')`,
+  );
   const printerId = randomUUID();
   await suite.db.execute(
     sql`insert into printers (id, location_id, name, transport, host, portable, paper_width, resolution) values (${printerId}, ${location!.id}, 'Portable', 'network_tcp', '10.0.0.9', 1, '58mm', '203dpi')`,
   );
   await suite.db.execute(
-    sql`update devices set receipt_printer_id = ${printerId}, payment_slip_printer_id = ${printerId} where id = ${device.deviceId}`,
+    sql`update devices set receipt_printer_id = ${printerId}, payment_slip_printer_id = ${printerId} where id = ${deviceId}`,
   );
   await suite.db.execute(
-    sql`insert into printer_holders (printer_id, device_id, held_at) values (${printerId}, ${device.deviceId}, '2026-10-12T12:00:00.000Z')`,
+    sql`insert into printer_holders (printer_id, device_id, held_at) values (${printerId}, ${deviceId}, '2026-10-12T12:00:00.000Z')`,
   );
   const beforePrinters = suite.db.all<Record<string, unknown>>(
     sql`select * from printers order by id`,
@@ -73,7 +81,14 @@ it("upgrades populated printers without changing their settings, holder or devic
   expect(suite.db.all(sql`select * from printer_holders order by printer_id`)).toEqual(
     beforeHolders,
   );
-  expect(suite.db.all(sql`select * from devices order by id`)).toEqual(beforeDevices);
+  expect(
+    suite.db
+      .all<Record<string, unknown>>(sql`select * from devices order by id`)
+      .map(({ invoice_printer_id, invoice_page_printer_id, ...row }) => {
+        expect([invoice_printer_id, invoice_page_printer_id]).toEqual([null, null]);
+        return row;
+      }),
+  ).toEqual(beforeDevices);
   await installChangeFeed(suite.db, [{ table: "printers", type: "printer" }]);
   await suite.db
     .update(printers)
