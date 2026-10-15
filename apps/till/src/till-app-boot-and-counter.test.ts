@@ -2005,8 +2005,40 @@ describe("till-app simplified-invoice limit", () => {
     expect(said(el)).toContain("3,00 €");
   });
 
-  it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
+  it("with full invoices off, choosing Full invoice opens no dialog and the basket still refuses past the limit", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "2");
+    emit(c, "choose-invoice");
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
+
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    expect(c.store.total).toBe("3.00");
+    expect(said(el)).toContain("3,00 €");
+  });
+
+  it("with full invoices off, paying a loaded basket over the limit asks for no recipient and sends the sale", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.loadFrom("large", [{ product: c.products[0]!, quantity: "2001" }]);
+    await flush(el);
+    expect(c.store.total).toBe("3001.50");
+
+    emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.recordSale).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...limitedTill, fullInvoices: true }),
+    });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "2");
     emit(c, "choose-invoice");

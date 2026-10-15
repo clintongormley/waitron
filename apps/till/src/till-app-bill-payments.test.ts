@@ -340,6 +340,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
+const fullInvoicesOn = () => ({
+  getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
+});
+
 async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   api = stubApi(overrides);
   return mountWidget<TillApp>("till-app", { api }, theme);
@@ -428,6 +432,18 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 describe("till-app: the three ways to pay part of a bill", () => {
+  it("a bill's Full invoice choice opens no dialog while full invoices are off", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({ getPartyBills });
+    const order = await openTable(el);
+
+    emit(order, "choose-bill-invoice", { workingOrderId: "wo-4", revision: 7 });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
+  });
+
   it("saves a full-invoice recipient on a partly paid bill and shows the saved choice", async () => {
     const recipient = {
       taxId: "12345678Z",
@@ -449,7 +465,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       chosen = true;
       return { revision: 8 };
     });
-    const { el } = await mountApp({ getPartyBills, setOrderInvoiceChoice });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
 
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
@@ -473,7 +489,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .mockResolvedValueOnce([billOf({ revision: 7, outstanding: "80.00", hasPayments: true })])
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
-    const { el } = await mountApp({ getPartyBills, setOrderInvoiceChoice });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getPartyBills, setOrderInvoiceChoice });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -506,7 +522,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       .fn()
       .mockRejectedValueOnce(new Error("network unavailable"))
       .mockResolvedValueOnce({ revision: 1 });
-    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -562,7 +578,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       code: "invoice.recipient_invalid",
       field: "address",
     });
-    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -610,7 +626,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
           }),
       )
       .mockResolvedValue({ revision: 9 });
-    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const { el } = await mountApp({ ...fullInvoicesOn(), setOrderInvoiceChoice });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -673,7 +689,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
           }),
       );
       const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
-      const { el, host } = await mountApp({ setOrderInvoiceChoice, getPartyBills });
+      const { el, host } = await mountApp({
+        ...fullInvoicesOn(),
+        setOrderInvoiceChoice,
+        getPartyBills,
+      });
       const order = await openTable(el);
       order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
       await flush(el);
@@ -4160,6 +4180,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
     const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4197,7 +4218,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
         invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" },
       }),
     ]);
-    const { el } = await mountApp({ getInvoiceDeliveryOptions, getPartyBills });
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getInvoiceDeliveryOptions,
+      getPartyBills,
+    });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -4226,6 +4251,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       }),
     ]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4263,7 +4289,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
 
   it("offers paper only when the delivery options cannot be read", async () => {
     const getInvoiceDeliveryOptions = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -4280,6 +4306,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       .mockResolvedValueOnce({ revision: 8 });
     const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4319,7 +4346,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
           answer = resolve;
         }),
     );
-    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const order = await openTable(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
     await flush(el);
@@ -4375,6 +4402,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       }),
     ]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4402,6 +4430,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       .mockResolvedValueOnce({ revision: 8 });
     const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4441,6 +4470,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" });
     const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       getInvoiceDeliveryOptions,
       setOrderInvoiceChoice,
       getPartyBills,
@@ -4462,7 +4492,11 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       .mockResolvedValue([
         billOf({ invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" } }),
       ]);
-    const { el } = await mountApp({ getInvoiceDeliveryOptions, getPartyBills });
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getInvoiceDeliveryOptions,
+      getPartyBills,
+    });
     const order = await openTable(el);
     const button = () =>
       order.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(

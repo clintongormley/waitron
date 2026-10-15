@@ -2327,6 +2327,8 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages staff may choose, the location's own first. */
   @state() private receiptLanguages: string[] = [];
+  /** Off unless the server says so: a server too old to send it issues none. */
+  @state() private fullInvoices = false;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
    * order. `saved` is false while the server does not hold it yet. With none, or one naming another
    * order, the basket prints in the location's. */
@@ -2762,6 +2764,7 @@ export class TillApp extends LitElement {
       this.tipsEnabled = till.tipsEnabled;
       // A server too old to send it sets no limit.
       this.#store.simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
+      this.fullInvoices = till.fullInvoices === true;
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
       this.#applyProfileSetup(till);
@@ -4443,6 +4446,7 @@ export class TillApp extends LitElement {
 
   #askInvoiceRecipientForLargeBill(): boolean {
     if (
+      !this.fullInvoices ||
       compareDecimal(this.#store.total, decimal("3000")) <= 0 ||
       this.invoiceChoice?.orderId === this.#store.id
     )
@@ -4452,6 +4456,7 @@ export class TillApp extends LitElement {
   }
 
   #askInvoiceRecipientForOrder(): void {
+    if (!this.fullInvoices) return;
     const orderId = this.#store.id;
     const session = this.#operatorSession;
     this.invoiceRecipientOrderId = orderId;
@@ -9602,6 +9607,7 @@ export class TillApp extends LitElement {
   }
 
   #onChooseBillInvoice(event: Event): void {
+    if (!this.fullInvoices) return;
     const { workingOrderId, revision } = (
       event as CustomEvent<{
         workingOrderId: string;
