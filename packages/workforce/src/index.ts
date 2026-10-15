@@ -160,3 +160,15 @@ export type {
   AttendanceResponseReceipt,
   CorrectionItem,
 } from "./attendance-contract.js";
+
+export {
+  readAttendanceInbox,
+  readAttendanceDay,
+  readAttendanceManagerQueue,
+} from "./attendance-reads.js";
+export type {
+  AttendancePrompt,
+  AttendanceInbox,
+  AttendanceDayView,
+  AttendanceManagerQueue,
+} from "./attendance-contract.js";

@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./attendance-contract": "./src/attendance-contract.ts",
+    "./test/fixtures.js": "./test/fixtures.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

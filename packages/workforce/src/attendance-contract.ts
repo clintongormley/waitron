@@ -1,5 +1,6 @@
 import type { TimeEntryRecord } from "./projection.js";
-import type { ClockEntryKind } from "./record-types.js";
+import type { ClockEntryKind, TimeRecord } from "./record-types.js";
+import type { AttendanceDay } from "./attendance-types.js";
 
 export interface AttendanceChange {
   target: { entryId: string } | { missingKind: ClockEntryKind };
@@ -59,4 +60,40 @@ export interface CorrectionItem {
   requestedByPersonId: string;
   selfApproved: boolean;
   history: TimeEntryRecord[];
+}
+
+export interface AttendancePrompt {
+  id: string;
+  questionId: string | null;
+  itemId: string | null;
+  personId: string;
+  locationId: string;
+  locationName: string;
+  businessDay: string | null;
+  day: AttendanceDay | null;
+  kind: "automatic-out" | "missing-times" | "proposal";
+  automaticEntryId: string | null;
+  missingKinds: ClockEntryKind[];
+  timeZone: string;
+  history: TimeEntryRecord[];
+}
+export interface AttendanceInbox {
+  personId: string;
+  revision: string;
+  prompts: AttendancePrompt[];
+  items: CorrectionItem[];
+  locations: { id: string; name: string; timeZone: string }[];
+}
+export interface AttendanceDayView {
+  personId: string;
+  locationId: string;
+  date: string;
+  timeZone: string;
+  revision: string;
+  record: TimeRecord;
+  items: CorrectionItem[];
+}
+export interface AttendanceManagerQueue {
+  locationId: string;
+  items: CorrectionItem[];
 }

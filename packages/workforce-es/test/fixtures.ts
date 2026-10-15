@@ -2,8 +2,6 @@ import type { Database, Transaction } from "@waitron/db";
 import { convenioConfig } from "../src/schema/convenio-config.js";
 
 /**
- * `@waitron/workforce` has no `exports` map, so the deep `test/` path resolves.
- *
  * Fixture strings stay English: the data is regime-neutral; only the legal rendering is Spanish.
  */
 export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";
