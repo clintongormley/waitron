@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node", "@vitest/browser-playwright", "vite/client"]
   },
   "include": ["src", "test", "drizzle.config.ts"]
 }

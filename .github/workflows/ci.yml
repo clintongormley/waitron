@@ -959,7 +959,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
-      - run: pnpm --filter @waitron/fiscal-verifactu exec playwright install chromium
+      - name: Install fiscal custody Chromium
+        timeout-minutes: 7
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120 pnpm --filter @waitron/fiscal-verifactu exec playwright install chromium; then
+              exit 0
+            fi
+          done
+          exit 1
 
       # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
       # line on stdout, so a shard whose filter selects nothing reports success having run no tests.
