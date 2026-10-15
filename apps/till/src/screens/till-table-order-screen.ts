@@ -4327,18 +4327,23 @@ export class TillTableOrderScreen extends LitElement {
     return index < 0 ? undefined : this.#billName(index);
   }
 
-  /** Every table but the party's own; Move guests also offers the party's own tables while it holds
-   * more than one, since moving to one of them leaves the others. Join a table offers only the
-   * party's zone, as `joinTables` refuses any other while the party's zone is known. A free table in
-   * an area that does not seat guests is left out, as `refuseUnseatable` refuses it for Move guests,
-   * Join a table and Move this bill. */
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
-    const zoneId = this.actionVerb === "join" ? this.#partyZoneId() : null;
+    const sourceZoneId = this.#partyZoneId();
+    const zoneId = this.actionVerb === "join" ? sourceZoneId : null;
+    const takesOrders =
+      this.actionVerb === "move" ||
+      (this.actionVerb === "move-bill" && this.#billOpen(this.orderId));
     const tables = this.tables
       .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
+      .filter(
+        (table) =>
+          !takesOrders ||
+          table.zoneId === sourceZoneId ||
+          !this.zones.find((zone) => zone.id === table.zoneId)?.closed,
+      )
       .filter(
         (table) =>
           table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),

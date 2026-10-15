@@ -2081,13 +2081,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free table still offered. Decide whether the picker waits for known policies or leaves unknown
   areas to the server, as the order screen does. No server refusal was exercised by that probe.
 
-- **A697 — the order screen's table lists offer tables in a closed area (2026-10-15; open; left open
-  by A690, #1731).** Move guests to a table in another area is refused while that area takes no new
-  orders (`assertZoneTakesNewOrders` in `moveGuests`, `apps/server/src/table-actions.ts`), and so is
-  moving an open bill to another area (`adoptZone`, `apps/server/src/move-bill.ts`), whether the
-  table is free or another party holds it; `#tableTargets`
-  (`apps/till/src/screens/till-table-order-screen.ts`) does not read `zone.closed`, which the floor
-  does.
+- **Held-order closed-area destinations need the order's source area (2026-10-15; open,
+  A697 follow-up).** Move to table on a held-order card cannot distinguish a move within a closed
+  area from a move into one: neither `HeldOrderSummary` nor `HeldOrder` includes the saved source
+  area (`apps/till/src/api/client.ts`). The server permits the former and refuses the latter for
+  an open bill (`adoptZone`, `apps/server/src/move-bill.ts`). Include that context in the read
+  contract, then filter closed destinations while preserving same-area moves. A697's till-only
+  change covers the order screen; the held-order picker still leaves this decision to the server.
 
 - **A691 — the floor still offers joining two seated parties where the server can refuse it
   (2026-10-15; open, rare).** A party stands in an area that does not seat guests only if the area's
