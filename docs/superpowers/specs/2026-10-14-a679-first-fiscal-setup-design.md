@@ -21,6 +21,10 @@ The owner's 2026-10-14 Lane E decisions supersede the earlier scope and order:
   setup. Claim the attempt through the existing local wizard, durably bind its owner/event, refuse
   competing tabs/devices for that attempt, and reconfirm before using the number block and before
   activation. No physical-code step; adoption/restore authentication stays outside this change.
+- **2026-10-15 at 05:10, option A approved:** for a NEW guided kit, print one writable paper
+  original of the current master register and keep it with its named custodian. Record consumption
+  on that original; label every other copy as a snapshot. Existing-custodian import still uses
+  that custodian's current master. This settles the register format, not private-key retention.
 
 **2026-10-15 decision update:** per the owner's handoff, W41s6 has landed in PR #1717; A680 has
 not landed. A680 owns kit-free Demo/Preparation and the separate readiness work described below.
@@ -28,6 +32,12 @@ Build A679 after both land, before W41s7, subject to remaining retention choices
 approval. These are design requirements, not claims of implemented behavior. All first-publication
 reproduction and source-read receipts below remain historical evidence from 2026-10-14; this update
 does not rerun or replace them.
+
+**2026-10-15 at 05:35 dependency update:** A680 also landed in
+[PR #1718](https://github.com/clintongormley/waitron/pull/1718), commit
+`3248759ca1aff4561c8a0bc3c353d696df7e2ff3`. Both landing dependencies are satisfied.
+Private-key retention and full-design/build approval remain open; the readiness allocation gap
+below still belongs to A679. This update records the landing, not a new wizard qualification.
 
 **2026-10-15 pointer (A680):** A680 gives Demo and Preparation a throwaway allocation with no
 kit. It does not build the throwaway allocation for Live's separate preproduction readiness test
@@ -112,12 +122,14 @@ A second venue consults the same master and takes the next free entry.
 3. Ask whether this taxpayer/software/production scope already has a current master. Existing:
    use its custodian and import signed public files. None: name a custodian and guide creation of
    the outside kit. BOTH routes are approved. Never silently start another master or reset names.
-4. **Retention proposal:** keep one writable paper original with the named custodian. Use a
-   downloaded self-contained browser tool on their separate computer, disconnected while handling
+4. **Approved register format:** print one writable paper original and keep it with the named
+   custodian. Record consumption on that original; label every other copy as a snapshot. Include
+   scope, generation/block IDs and the full public-key fingerprint. Reserve exact serials in the
+   master before printing a block. **Private-key retention remains proposed:** use a downloaded
+   self-contained browser tool on the custodian's separate computer, disconnected while handling
    the key. Save an encrypted key file separately from the printed master and test reopening it
-   before releasing the in-memory key. Print/download scope, generation/block IDs and full public-key
-   fingerprint; label extra copies as snapshots. Paper versus digital master and secret-paper key
-   retention remain OWNER choices. Reserve exact serials in the master before printing a block.
+   before releasing the in-memory key. Whether to retain additional secret paper is the next
+   owner decision; approval of the paper register does not authorise printing the private key.
 5. Mark the entry consumed in that current master for the frozen event, source, node and Elena's
    planned ID. Record time, exact series and attempt history, then sign allocation/consumption
    receipts. Keep them with the master. Once consumed, the entry stays consumed.
@@ -188,19 +200,23 @@ ownership/trust representation would need a migration; do not edit shipped SQL o
 
 ## Remaining decisions and driver handoff
 
-**Next owner question, one at a time:** “Should the current writable master register be PAPER or
-DIGITAL? I recommend one current paper original so you can record offline consumption on paper.”
-This is a proposal, not approval; digital custody remains an option. W41s already requires one named
-custodian and one writable current master outside venue backups. Paper blocks and uploaded snapshots
-confer no current authority. After choosing the master format, ask separately about private-key
-retention (encrypted key file versus additional secret paper), then name the custodian. None of
-those choices is settled here. Ownership is settled and must not be asked again.
+**Next owner question, one at a time:** “For a NEW guided kit, should the custodian retain the
+private signing key as an encrypted file only, or also keep a secret paper recovery copy?”
+Recommend the encrypted file only, with an explicit save and successful reopen before proceeding.
+This avoids adding a second secret format to print, protect and restore. Additional secret paper
+would need its own checked export/import and custody instructions; it is not the public master
+register. These are proposed requirements, not implemented encryption or recovery guarantees.
+Keep the key outside the box and venue backups with either choice. After this answer, settle the
+custodian details and remaining design before seeking full-design/build approval. Ownership and
+the paper-original master are settled and must not be asked again. Paper blocks and uploaded
+snapshots confer no current authority.
 Cloud fetching/reconciliation remains W41sC3. Use the paper route for subscribers until then;
 that default creates no new owner question.
 
 The four [static EN/ES drawings](../../backlog/mockups/a679-first-fiscal-setup/) keep 1280/390 widths
-and show the Live/Production outside-kit checkpoint. BOTH routes are approved; retention details
-are proposed. Keep the shared form contract, semantic names, EN/ES inline and bottom errors,
+and show the Live/Production outside-kit checkpoint. BOTH routes and the paper-original master
+are approved; the drawings' encrypted-key retention remains proposed. Keep the shared form contract,
+semantic names, EN/ES inline and bottom errors,
 quiet unavailable actions, draft protection and 44px targets. No top error summary.
 The driver owns fresh-context builder review, XML/render/visual checks and later joint A679/A680
 wizard/restart/concurrency/refusal validation in both themes, signed commits and docs-only locked

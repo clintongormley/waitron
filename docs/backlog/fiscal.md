@@ -249,6 +249,14 @@ The owner approved current local-network ownership at 22:35 on 2026-10-14, witho
 physical-code step. Build A679 after A680 and the remaining retention decisions and full-design
 approval; W41s-6 no longer holds that dependency.
 
+**2026-10-15 at 05:10, owner decision:** a NEW guided kit has one writable paper original of
+the current master, kept by its named custodian. Record consumption on that original; every
+other copy is a labelled snapshot. Existing-custodian import retains its current master.
+Private-key retention is the next decision, separately from the register. A680 has also landed
+in [#1718](https://github.com/clintongormley/waitron/pull/1718), so neither it nor W41s-6 blocks
+the design. The Live-readiness allocation, joint qualification and full-design/build approval
+remain open. The paper-register decision does not approve printing a private signing key.
+
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
 **2026-10-15 W41s-C3 contract check:** Cloud D62 and local W41s-4/6 have landed. On Cloud
