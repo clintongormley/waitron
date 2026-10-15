@@ -1,3 +1,4 @@
+import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
@@ -95,7 +96,10 @@ export interface SetupDeps {
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
   devMode?: boolean;
   /** Plaintext admin secrets never reach it — the provision route hashes them at the boundary. */
-  provision?: (req: ProvisionRequest) => Promise<VenueResult>;
+  provision?: (
+    req: ProvisionRequest,
+    beforeTransaction?: () => Promise<void>,
+  ) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
   readOpeningHours?: (result: VenueResult) => Promise<{ departmentId: string } | undefined>;
@@ -127,6 +131,7 @@ export interface SetupDeps {
   setupAppDir?: string;
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
+  firstFiscal?: FirstFiscalHost;
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart.
    * `oldBoxGone` is the operator's answer to whether the server the backup came from is switched
@@ -603,6 +608,15 @@ function directError(
  */
 export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   const holds = new WeakMap<Request, FirstSetupHold>();
+  if (deps.firstFiscal !== undefined)
+    mountSetupFirstFiscalApi(
+      app,
+      deps.firstFiscal,
+      log,
+      parseVenue,
+      deps.devMode === true ? "preproduction" : "production",
+      deps,
+    );
   if (deps.firstSetup !== undefined) {
     const firstSetup = deps.firstSetup;
     const boundary = createErrorBoundary(

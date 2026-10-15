@@ -65,6 +65,7 @@ export interface ProvisionDeps {
   /** Echoed by `provisioning.foreign_tenant`, so it must never carry a secret. */
   readonly database: string;
   readonly stateDir: string;
+  readonly beforeTransaction?: () => Promise<void>;
   readonly beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
 }
 
@@ -207,10 +208,40 @@ export async function provisionVenue(
 
   await stampDeployment(deps.ownerDb, req.environment);
 
+  let remaining = modules.filter(
+    (module) =>
+      module.operations !== undefined &&
+      initial?.inputs.some((input) => input.module === module.name),
+  ).length;
+  const preparedModules =
+    deps.beforeTransaction === undefined
+      ? modules
+      : modules.map((module) => {
+          if (
+            module.operations === undefined ||
+            !initial?.inputs.some((input) => input.module === module.name)
+          )
+            return module;
+          const operations = module.operations;
+          return {
+            ...module,
+            operations: {
+              prepare: <T>(
+                operation: import("@waitron/module").ModuleOperationInput,
+                run: (prepared: import("@waitron/module").ModuleOperationInput) => Promise<T>,
+              ) =>
+                operations.prepare(operation, async (prepared) => {
+                  if (--remaining === 0) await deps.beforeTransaction!();
+                  return run(prepared);
+                }),
+            },
+          };
+        });
+  if (deps.beforeTransaction !== undefined && remaining === 0) await deps.beforeTransaction();
   const result = await applyVenue(plan, {
     ...(initial === undefined ? {} : initialVenueApplyInput(initial)),
     db: deps.ownerDb,
-    modules,
+    modules: preparedModules,
     ...throwaway,
     beforeCommit: deps.beforeCommit,
   });

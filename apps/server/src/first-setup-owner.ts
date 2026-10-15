@@ -46,6 +46,10 @@ export interface PublicFirstSetupState {
   ownerGeneration: number;
   status: FirstSetupState["status"];
   environment: FirstSetupFrozen["environment"];
+  venue: Omit<VenueRequest, "admin"> & {
+    admin: Omit<VenueRequest["admin"], "pinHash" | "passwordHash">;
+  };
+  modules: { module: string; version: string }[];
 }
 interface OwnerOptions {
   stateDir: string;
@@ -73,6 +77,9 @@ const dummyVerifier = hashPassword(token());
 const matches = (value: string, digest: string) =>
   timingSafeEqual(Buffer.from(hash(value), "hex"), Buffer.from(digest, "hex"));
 export function publicFirstSetupState(state: FirstSetupState): PublicFirstSetupState {
+  const { pinHash: _, passwordHash: __, ...admin } = state.frozen.request.admin;
+  void _;
+  void __;
   return {
     attemptId: state.frozen.attemptId,
     nodeId: state.frozen.nodeId,
@@ -81,6 +88,8 @@ export function publicFirstSetupState(state: FirstSetupState): PublicFirstSetupS
     ownerGeneration: state.ownerGeneration,
     status: state.status,
     environment: state.frozen.environment,
+    venue: structuredClone({ ...state.frozen.request, admin }),
+    modules: state.frozen.modules.map(({ module, version }) => ({ module, version })),
   };
 }
 async function assertNoOtherSetupInProgress(stateDir: string): Promise<void> {
@@ -141,6 +150,18 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   };
   return {
     authorize,
+    async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
+      const state = await store.read();
+      if (
+        state === null ||
+        !validToken(owner.capability) ||
+        state.frozen.attemptId !== owner.attemptId ||
+        state.ownerGeneration !== owner.ownerGeneration ||
+        !matches(owner.capability, state.capabilityHash)
+      )
+        refuse();
+      return state;
+    },
     invalidate,
     async claimFirstSetup(payload: FirstSetupClaimPayload, clientClaimNonce: string) {
       if (!validToken(clientClaimNonce)) refuse();
@@ -196,7 +217,9 @@ export function createFirstSetupOwner(options: OwnerOptions) {
     },
     resumeFirstSetup(clientClaimNonce: string, proof: { password: string }) {
       return inTurn(throttle, "resume", async () => {
-        const before = await store.read();
+        const resumable = await store.readResumable();
+        const before = resumable?.state ?? null;
+        if (before?.status === "complete" && resumable?.publicationComplete) refuse();
         if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024)
           refuse();
         const correct = await verifyPassword(
@@ -212,7 +235,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
           refuse();
         const capability = token();
         const state = await coordinator.run(async (hold) => {
-          const current = await store.read();
+          const current = (await store.readResumable())?.state ?? null;
           if (
             current?.revision !== before.revision ||
             current.frozen.attemptId !== before.frozen.attemptId ||
