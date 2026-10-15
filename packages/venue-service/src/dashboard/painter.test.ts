@@ -6,6 +6,18 @@ import { clockAt } from "../day-paint.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRowStyles } from "./paint-row.js";
 import { seasonLastDay } from "../season-rules.js";
+import {
+  ColumnStroke,
+  CopyChooser,
+  OverflowFade,
+  ROWS,
+  columnMenu,
+  hourLines,
+  hourMarks,
+  paintGridStyles,
+  placePopover,
+  timeRuler,
+} from "./paint-grid-parts.js";
 
 describe("@waitron/venue-service/painter", () => {
   it("exposes the painter frame and the helpers another module's painter draws with", () => {
@@ -17,6 +29,16 @@ describe("@waitron/venue-service/painter", () => {
       periodColourStyles,
       paintRowStyles,
       seasonLastDay,
+      ROWS,
+      hourMarks,
+      timeRuler,
+      hourLines,
+      paintGridStyles,
+      OverflowFade,
+      columnMenu,
+      placePopover,
+      ColumnStroke,
+      CopyChooser,
     });
   });
 

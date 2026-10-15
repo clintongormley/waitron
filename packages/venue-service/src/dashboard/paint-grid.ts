@@ -2,11 +2,19 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import {
+  ColumnStroke,
+  CopyChooser,
+  OverflowFade,
+  columnMenu,
+  hourLines,
+  paintGridStyles,
+  placePopover,
+  timeRuler,
+} from "./paint-grid-parts.js";
 import { clockAt, stepSpan } from "../day-paint.js";
 import type { CalendarColour } from "../hours-types.js";
 import {
@@ -15,7 +23,6 @@ import {
   deleteBlock,
   paintStretch,
   samePaint,
-  stepMinuteAt,
   type Paint,
 } from "../paint-model.js";
 
@@ -32,25 +39,8 @@ export interface PaintChange {
   key: string;
   day: Paint[];
 }
-interface Gesture {
-  pointerId: number;
-  key: string;
-  column: HTMLElement;
-  anchor: number;
-}
-interface Stretch {
-  key: string;
-  start: number;
-  end: number;
-}
 
 const DAY = 1440;
-const ROWS = 96;
-/** The most an autoscroll moves in one frame, in pixels. */
-const MAX_SCROLL_STEP = 12;
-/** How long a drag rests still inside an edge band before it scrolls, so a short or slow stroke
- *  near an edge paints only what was dragged. */
-const BAND_DWELL_MS = 350;
 
 /** Delete or Backspace with no Cmd, Ctrl or Alt held. */
 function isDeleteKey(event: KeyboardEvent): boolean {
@@ -61,136 +51,13 @@ function isDeleteKey(event: KeyboardEvent): boolean {
     !event.altKey
   );
 }
-function clockMinutes(time: string): number {
-  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-}
 
 @customElement("paint-grid")
 export class PaintGrid extends LitElement {
   static override styles = [
     periodColourStyles,
+    paintGridStyles,
     css`
-      :host {
-        display: block;
-        color: var(--wt-color-text);
-        font-family: var(--wt-font-family);
-      }
-      .scroll {
-        --times-width: calc(var(--wt-space-6) * 2);
-        /* The pinned time column, with the box's border before it, is never faded. */
-        --fade-from: calc(var(--times-width) + 1px);
-        --fade-start: 0px;
-        --fade-end: 0px;
-        box-sizing: border-box;
-        overflow: auto;
-        max-block-size: 100%;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-bg);
-      }
-      :host([data-overflow="start"]) .scroll,
-      :host([data-overflow="both"]) .scroll {
-        --fade-start: calc(var(--wt-space-6) * 2);
-      }
-      :host([data-overflow="end"]) .scroll,
-      :host([data-overflow="both"]) .scroll {
-        --fade-end: calc(var(--wt-space-6) * 2);
-      }
-      /* Fades the edge that has columns beyond it. A mask reads only alpha, and the background token
-         is opaque in every theme. */
-      :host([data-overflow]) .scroll {
-        mask-image: linear-gradient(
-          to right,
-          var(--wt-color-bg) var(--fade-from),
-          transparent var(--fade-from),
-          var(--wt-color-bg) calc(var(--fade-from) + var(--fade-start)),
-          var(--wt-color-bg) calc(100% - var(--fade-end)),
-          transparent 100%
-        );
-      }
-      .layout {
-        display: grid;
-        /* As wide as its columns, not the scroll box, so the pinned time column has room to stay. */
-        width: max-content;
-        min-width: 100%;
-        grid-template-columns: var(--times-width) var(--column-tracks);
-      }
-      .heading {
-        position: sticky;
-        top: 0;
-        z-index: 3;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        align-content: center;
-        column-gap: var(--wt-space-1);
-        white-space: nowrap;
-        min-block-size: var(--wt-tap-min);
-        background: var(--wt-color-surface);
-        padding: 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        border-block-end: 1px solid var(--wt-color-border);
-      }
-      .heading ::slotted([slot^="column-head-"]) {
-        grid-column: 1 / -1;
-        padding-block-end: var(--wt-space-1);
-        font-weight: var(--wt-font-weight-normal);
-        color: var(--wt-color-text);
-      }
-      .heading[data-error] {
-        color: var(--wt-color-danger);
-        border-block-end: var(--wt-field-line-width-active) solid var(--wt-color-danger);
-      }
-      .column-error {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-      }
-      .heading.corner {
-        left: 0;
-        z-index: 4;
-      }
-      .times,
-      .day {
-        position: relative;
-        /* A host may stretch the day to a taller --paint-grid-fill; it is never shorter than this. */
-        height: max(calc(var(--wt-space-1) * 1.25 * ${ROWS}), var(--paint-grid-fill, 0px));
-      }
-      .times {
-        position: sticky;
-        left: 0;
-        z-index: 2;
-        background: var(--wt-color-bg);
-        border-inline-end: 1px solid var(--wt-color-border);
-      }
-      /* Each label hangs just under its hour line, as a block's label does, so the changeover's
-         label at the very top is spaced like the rest. */
-      .hour {
-        position: absolute;
-        inset-inline-start: var(--wt-space-1);
-        padding-block-start: calc(var(--wt-space-1) / 2);
-        font-size: var(--wt-font-size-sm);
-        line-height: 1;
-        color: var(--wt-color-text-muted);
-      }
-      .day {
-        border-inline-start: 1px solid var(--wt-color-border);
-        touch-action: none;
-        user-select: none;
-      }
-      .day:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      .line {
-        position: absolute;
-        inset-inline: 0;
-        border-block-start: 1px solid var(--wt-color-border);
-      }
       .block,
       .all-closed,
       .preview {
@@ -285,51 +152,6 @@ export class PaintGrid extends LitElement {
       .preview span {
         display: block;
       }
-      .menu,
-      .chooser {
-        position: fixed;
-        margin: 0;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        box-shadow: var(--wt-shadow-2);
-      }
-      .menu:popover-open,
-      .chooser:popover-open {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-      .menu p {
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      .menu wt-button {
-        width: 100%;
-      }
-      .chooser h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .chooser label {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-      }
-      .chooser input[type="checkbox"] {
-        accent-color: var(--wt-color-primary);
-      }
-      .chooser .actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
@@ -354,55 +176,46 @@ export class PaintGrid extends LitElement {
    *  is dropped, or its release would land on the new ones. */
   @property() target = "";
 
-  @state() private preview: Stretch | null = null;
   @state() private selected: { key: string; startsAt: string } | null = null;
-  @state() private copying: { key: string; ticked: ReadonlySet<string> } | null = null;
   @query(".menu") private menu!: HTMLElement;
-  @query(".chooser") private chooser!: HTMLElement;
-  #gesture: Gesture | null = null;
-  #dragged = false;
-  #pointerY = 0;
-  #frame: number | null = null;
-  /** The edge band the pointer is in (-1 top, 1 bottom, 0 neither), where it last moved to and the
-   *  frame time it has rested there since; `-Infinity` once it has scrolled or been past that edge,
-   *  so moving on inside the band keeps scrolling. */
-  #edge: { side: number; since: number | null; y: number } = { side: 0, since: null, y: 0 };
+  readonly #fade = new OverflowFade(this);
+  readonly #stroke = new ColumnStroke(this, {
+    cutover: () => this.cutover,
+    canStart: (key) => !this.readOnly && this.chosen !== undefined && !this.closedAllDay.has(key),
+    canRelease: () => this.chosen !== undefined,
+    released: (stretch) =>
+      this.#emit(
+        stretch.key,
+        paintStretch(
+          this.#day(stretch.key),
+          {
+            periodId: this.chosen!,
+            startsAt: clockAt(stretch.start, this.cutover),
+            endsAt: clockAt(stretch.end, this.cutover),
+          },
+          this.cutover,
+          this.closedErases,
+        ),
+      ),
+  });
+  readonly #chooser = new CopyChooser(this, {
+    columns: () => this.columns,
+    trigger: (key) =>
+      this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
+    copy: (from, to) => {
+      const copied = copyDay(this.days, from, to);
+      for (const key of to)
+        if (!samePaint(copied.get(key)!, this.#day(key))) this.#emit(key, copied.get(key)!);
+    },
+  });
 
-  readonly #sizes = new ResizeObserver(() => this.#showOverflow());
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (this.hasUpdated) this.#observeSizes();
-  }
-  override disconnectedCallback(): void {
-    this.#stop();
-    this.#sizes.disconnect();
-    super.disconnectedCallback();
-  }
-  protected override firstUpdated(): void {
-    this.#observeSizes();
-  }
-  #observeSizes(): void {
-    for (const part of this.renderRoot.querySelectorAll(".scroll, .layout"))
-      this.#sizes.observe(part);
-  }
-  /** Marks the host with the sides that have columns scrolled out of sight. */
-  #showOverflow(): void {
-    const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
-    if (scroll === null) return;
-    const start = scroll.scrollLeft >= 1;
-    const end = scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft >= 1;
-    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
-    if (overflow === undefined) delete this.dataset.overflow;
-    else if (this.dataset.overflow !== overflow) this.dataset.overflow = overflow;
-  }
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("days") && this.selected !== null && this.#selectedIndex() < 0)
       this.#closeMenu();
     if ((changes.has("readOnly") && this.readOnly) || (changes.has("target") && this.hasUpdated)) {
-      this.#stop();
+      this.#stroke.stop();
       this.#closeMenu();
-      this.#closeChooser(false);
+      this.#chooser.close(false);
     }
   }
 
@@ -432,148 +245,12 @@ export class PaintGrid extends LitElement {
     return this.periods.find(({ id }) => id === periodId)?.colour;
   }
 
-  #minuteAtY(clientY: number, column: HTMLElement): number {
-    const box = column.getBoundingClientRect();
-    return stepMinuteAt(clientY - box.top, box.height / ROWS, this.cutover);
-  }
-
-  #start(event: PointerEvent, key: string): void {
-    this.#dragged = false;
-    if (
-      this.readOnly ||
-      event.button !== 0 ||
-      this.chosen === undefined ||
-      this.#gesture !== null ||
-      this.closedAllDay.has(key)
-    )
-      return;
-    const column = event.currentTarget as HTMLElement;
-    this.#gesture = {
-      pointerId: event.pointerId,
-      key,
-      column,
-      anchor: this.#minuteAtY(event.clientY, column),
-    };
-    window.addEventListener("pointermove", this.#move);
-    window.addEventListener("pointerup", this.#release);
-    window.addEventListener("pointercancel", this.#abort);
-  }
-  #move = (event: PointerEvent): void => {
-    const gesture = this.#gesture;
-    if (gesture === null || event.pointerId !== gesture.pointerId) return;
-    this.#pointerY = event.clientY;
-    this.#stretchTo(event.clientY);
-    const side = Math.sign(this.#edgeDepth().depth);
-    const edge = this.#edge;
-    if (side !== edge.side || (edge.since !== -Infinity && event.clientY !== edge.y))
-      this.#edge = { side, since: null, y: event.clientY };
-    if (side !== 0 && this.#frame === null) this.#frame = requestAnimationFrame(this.#autoscroll);
-  };
-  #stretchTo(clientY: number): void {
-    const gesture = this.#gesture!;
-    const minute = this.#minuteAtY(clientY, gesture.column);
-    // Captured only once it moves: a captured click lands on the column, not the block clicked.
-    if (minute !== gesture.anchor) capturePointer(gesture.column, gesture.pointerId);
-    const start = Math.min(gesture.anchor, minute);
-    const end = Math.max(gesture.anchor, minute);
-    const preview = this.preview;
-    if (minute === gesture.anchor) this.preview = null;
-    else if (preview?.key !== gesture.key || preview.start !== start || preview.end !== end)
-      this.preview = { key: gesture.key, start, end };
-  }
-  /** How far, in pixels, the pointer is past the inner line of an edge band: negative at the top
-   *  (below the column headings), positive at the bottom, 0 between. Each band is an hour of rows
-   *  deep, so a grid that runs to the edge of the screen can still scroll. */
-  #edgeDepth(): { depth: number; band: number } {
-    const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
-    const day = this.renderRoot.querySelector<HTMLElement>(".day");
-    if (scroll === null || day === null) return { depth: 0, band: 0 };
-    const band = day.getBoundingClientRect().height / 24;
-    const top =
-      (this.renderRoot.querySelector<HTMLElement>(".heading")?.getBoundingClientRect().bottom ??
-        scroll.getBoundingClientRect().top) + band;
-    const bottom = scroll.getBoundingClientRect().bottom - band;
-    const depth =
-      this.#pointerY < top ? this.#pointerY - top : Math.max(this.#pointerY - bottom, 0);
-    return { depth, band };
-  }
-  #autoscroll = (now: number): void => {
-    this.#frame = null;
-    if (this.#gesture === null) return;
-    const { depth, band } = this.#edgeDepth();
-    const side = Math.sign(depth);
-    if (side === 0) return;
-    const into = Math.abs(depth);
-    if (into > band) this.#edge.since = -Infinity;
-    this.#edge.since ??= now;
-    if (now - this.#edge.since >= BAND_DWELL_MS) {
-      this.#edge.since = -Infinity;
-      const step = Math.max(1, Math.round((MAX_SCROLL_STEP * Math.min(into, band)) / band));
-      this.renderRoot.querySelector<HTMLElement>(".scroll")!.scrollTop += side * step;
-      this.#stretchTo(this.#pointerY);
-    }
-    this.#frame = requestAnimationFrame(this.#autoscroll);
-  };
-  #release = (event: PointerEvent): void => {
-    const gesture = this.#gesture;
-    if (gesture === null || event.pointerId !== gesture.pointerId) return;
-    this.#move(event);
-    const stretch = this.preview;
-    this.#stop();
-    if (stretch === null || this.chosen === undefined) return;
-    // The click a drag ends with comes in the same task as its pointerup; a later one is a real click.
-    this.#dragged = true;
-    setTimeout(() => {
-      this.#dragged = false;
-    });
-    this.#emit(
-      stretch.key,
-      paintStretch(
-        this.#day(stretch.key),
-        {
-          periodId: this.chosen,
-          startsAt: clockAt(stretch.start, this.cutover),
-          endsAt: clockAt(stretch.end, this.cutover),
-        },
-        this.cutover,
-        this.closedErases,
-      ),
-    );
-  };
-  #abort = (event: PointerEvent): void => {
-    if (event.pointerId === this.#gesture?.pointerId) this.#stop();
-  };
-  #stop(): void {
-    window.removeEventListener("pointermove", this.#move);
-    window.removeEventListener("pointerup", this.#release);
-    window.removeEventListener("pointercancel", this.#abort);
-    if (this.#frame !== null) cancelAnimationFrame(this.#frame);
-    this.#frame = null;
-    this.#edge = { side: 0, since: null, y: 0 };
-    const gesture = this.#gesture;
-    this.#gesture = null;
-    this.preview = null;
-    if (gesture !== null) releasePointer(gesture.column, gesture.pointerId);
-  }
-
   async #select(key: string, startsAt: string, trigger: HTMLElement): Promise<void> {
-    if (this.#dragged) {
-      this.#dragged = false;
-      return;
-    }
+    if (this.#stroke.takeDraggedClick()) return;
     this.selected = { key, startsAt };
     await this.updateComplete;
-    this.#place(this.menu, trigger, false);
+    placePopover(this.menu, trigger, false);
     this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
-  }
-  /** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen. */
-  #place(popup: HTMLElement, trigger: HTMLElement, alignEnd: boolean): void {
-    if (!popup.matches(":popover-open")) popup.showPopover({ source: trigger });
-    const anchor = trigger.getBoundingClientRect();
-    const box = popup.getBoundingClientRect();
-    const left = alignEnd ? anchor.right - box.width : anchor.left;
-    popup.style.left = `${Math.max(8, Math.min(left, innerWidth - box.width - 8))}px`;
-    popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
   }
   #closeMenu(): void {
     if (this.menu?.matches(":popover-open")) this.menu.hidePopover();
@@ -648,49 +325,8 @@ export class PaintGrid extends LitElement {
     this.#deleteAt(key, index);
   }
 
-  #columnMenu(key: string): HTMLElement | null {
-    return this.renderRoot.querySelector<HTMLElement>(
-      `.heading[data-column="${key}"] wt-row-actions`,
-    );
-  }
-  async #openChooser(key: string): Promise<void> {
-    this.copying = { key, ticked: new Set() };
-    await this.updateComplete;
-    const trigger = this.#columnMenu(key)!;
-    this.#place(this.chooser, trigger, true);
-    this.chooser.querySelector<HTMLElement>('input[type="checkbox"]')?.focus();
-  }
-  #closeChooser(refocus: boolean): void {
-    const key = this.copying?.key;
-    if (this.chooser?.matches(":popover-open")) this.chooser.hidePopover();
-    this.copying = null;
-    if (refocus && key !== undefined) this.#columnMenu(key)?.focus();
-  }
-  #tick(key: string, checked: boolean): void {
-    const copying = this.copying;
-    if (copying === null) return;
-    const ticked = new Set(copying.ticked);
-    if (checked) ticked.add(key);
-    else ticked.delete(key);
-    this.copying = { key: copying.key, ticked };
-  }
-  #copy(): void {
-    const copying = this.copying;
-    if (copying === null || copying.ticked.size === 0) return;
-    const to = this.columns.map(({ key }) => key).filter((key) => copying.ticked.has(key));
-    const copied = copyDay(this.days, copying.key, to);
-    this.#closeChooser(true);
-    for (const key of to)
-      if (!samePaint(copied.get(key)!, this.#day(key))) this.#emit(key, copied.get(key)!);
-  }
   #clear(key: string): void {
     if (this.#day(key).length > 0) this.#emit(key, []);
-  }
-  #onChooserKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || this.copying === null) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.#closeChooser(true);
   }
 
   #position(start: number, end: number) {
@@ -742,7 +378,7 @@ export class PaintGrid extends LitElement {
     </div>`;
   }
   #preview(column: PaintColumn) {
-    const stretch = this.preview;
+    const stretch = this.#stroke.preview;
     if (stretch === null || stretch.key !== column.key || this.chosen === undefined) return nothing;
     const replaced = [
       ...new Set(
@@ -809,65 +445,14 @@ export class PaintGrid extends LitElement {
     </div>`;
   }
 
-  #chooser() {
-    const copying = this.copying;
-    const from = this.columns.find(({ key }) => key === copying?.key);
-    const heading = t("paint.copy_day_to").replace("{day}", from?.label ?? "");
-    const ready = (copying?.ticked.size ?? 0) > 0;
-    return html`<div
-      class="chooser"
-      id="copy-chooser"
-      popover
-      role="dialog"
-      aria-label=${heading}
-      @keydown=${(event: KeyboardEvent) => this.#onChooserKeydown(event)}
-      @toggle=${(event: ToggleEvent) => {
-        if (event.newState === "closed") this.copying = null;
-      }}
-    >
-      ${
-        copying === null || from === undefined
-          ? nothing
-          : html`<h2>${heading}</h2>
-              ${this.columns
-                .filter(({ key }) => key !== copying.key)
-                .map(
-                  ({ key, label }) =>
-                    html`<label
-                      ><input
-                        type="checkbox"
-                        name=${`copyTo-${key}`}
-                        .checked=${copying.ticked.has(key)}
-                        @change=${(event: Event) =>
-                          this.#tick(key, (event.target as HTMLInputElement).checked)}
-                      />${label}</label
-                    >`,
-                )}
-              <div class="actions">
-                <wt-button variant="secondary" @click=${() => this.#closeChooser(true)}
-                  >${t("hours.cancel")}</wt-button
-                >
-                <wt-button
-                  variant=${ready ? "primary" : "secondary"}
-                  ?disabled=${!ready}
-                  @click=${() => this.#copy()}
-                  >${t("paint.copy")}</wt-button
-                >
-              </div>`
-      }
-    </div>`;
-  }
-
   override render() {
-    const first = (60 - (clockMinutes(this.cutover) % 60)) % 60;
-    const hours = Array.from({ length: Math.ceil((DAY - first) / 60) }, (_, i) => first + i * 60);
     // With no button inside, a read-only grid's scrolling region takes the focus itself.
     return html`<div
         class="scroll"
         role="region"
         aria-label=${t("paint.grid")}
         tabindex=${ifDefined(this.readOnly ? "0" : undefined)}
-        @scroll=${() => this.#showOverflow()}
+        @scroll=${() => this.#fade.refresh()}
       >
         <div
           class="layout"
@@ -893,34 +478,15 @@ export class PaintGrid extends LitElement {
                   this.readOnly
                     ? nothing
                     : html`<slot name=${`column-menu-${column.key}`}
-                        ><wt-row-actions
-                          icon="kebab"
-                          align="end"
-                          label=${t("paint.day_options").replace("{day}", column.label)}
-                          ><wt-button
-                            variant="secondary"
-                            align="start"
-                            @click=${() => void this.#openChooser(column.key)}
-                            >${t("paint.copy_to")}</wt-button
-                          ><wt-button
-                            variant="secondary"
-                            align="start"
-                            @click=${() => this.#clear(column.key)}
-                            >${t("paint.clear")}</wt-button
-                          ></wt-row-actions
-                        ></slot
+                        >${columnMenu(column.label, {
+                          copy: () => void this.#chooser.open(column.key),
+                          clear: () => this.#clear(column.key),
+                        })}</slot
                       >`
                 }<slot name=${`column-head-${column.key}`}></slot>
               </div>`,
           )}
-          <div class="times" aria-hidden="true">
-            ${hours.map(
-              (minute) =>
-                html`<span class="hour" style=${styleMap({ top: `${(minute / DAY) * 100}%` })}
-                  >${clockAt(minute, this.cutover)}</span
-                >`,
-            )}
-          </div>
+          ${timeRuler(this.cutover)}
           ${this.columns.map((column) => {
             const shut = this.closedAllDay.has(column.key);
             const day = shut ? [] : this.#day(column.key);
@@ -933,19 +499,11 @@ export class PaintGrid extends LitElement {
               )}
               data-column=${column.key}
               tabindex="-1"
-              @lostpointercapture=${this.#abort}
-              @pointerdown=${(event: PointerEvent) => this.#start(event, column.key)}
-              @keydown=${() => {
-                this.#dragged = false;
-              }}
+              @lostpointercapture=${this.#stroke.abort}
+              @pointerdown=${(event: PointerEvent) => this.#stroke.start(event, column.key)}
+              @keydown=${() => this.#stroke.forgetDrag()}
             >
-              ${hours.map(
-                (minute) =>
-                  html`<div
-                    class="line"
-                    style=${styleMap({ top: `${(minute / DAY) * 100}%` })}
-                  ></div>`,
-              )}
+              ${hourLines(this.cutover)}
               ${shut ? nothing : (this.underlay.get(column.key) ?? []).map((paint) => this.#underlay(paint))}
               ${
                 shut || (this.closedErases && day.length === 0)
@@ -958,7 +516,7 @@ export class PaintGrid extends LitElement {
           })}
         </div>
       </div>
-      ${this.#menu()} ${this.#chooser()}`;
+      ${this.#menu()} ${this.#chooser.render()}`;
   }
 }
 
