@@ -1110,7 +1110,8 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
   extra?)` (extra items let staffing add "Follow the season"), `placePopover(popup, trigger,
   alignEnd)`, `ColumnStroke` (a controller for the drag stroke and autoscroll, calling back with the
   preview stretch and the released stretch in minutes), and `CopyChooser` (a controller plus its
-  template; it reports `from` and the ticked keys and leaves the copying to its host). `paint-grid.ts`
+  template; it reports `from` and the ticked keys and leaves the copying to its host). (2026-10-15,
+  as built: `isDeleteKey` is exported from `paint-grid-parts.ts` and `./painter` too.) `paint-grid.ts`
   then uses them, and `paint-grid.test.ts`/`paint-grid.a11y.test.ts` stay unchanged as the proof
   that its behaviour did not move. Nothing reachable from these imports a client or anything
   server-side: run on 2026-10-15 with a copy of the purity guard's scan
@@ -1121,11 +1122,13 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
 - **The purity guard takes a directory today** (`SUBPATHS` `:24-28`, read by `tsFiles(dir)` `:30-38`),
   and the whole `src/dashboard` of venue-service fails it: the same scan from every non-test file
   there reached `@waitron/db` or `drizzle-orm` in 28 files (`season-weeks.ts`, `schema/*.ts`, …). So
-  Task 4.1 lets an entry name a FILE (`tsFiles` returns `[path]` for a `.ts` path) and adds
+  Task 4.1 lets an entry name a FILE (`tsFiles` returns `[path]` for a `.ts` path; 2026-10-15, as
+  built: for a path `statSync().isFile()` calls a file, whatever its name) and adds
   `["@waitron/venue-service/painter", "packages/venue-service/src/dashboard/painter.ts"]`.
   A585-3's `./dashboard/season-tint` export has no entry; leave it.
 - **The server barrel** (`index.ts`) also gains `resolveDepartmentsDays` (`day-resolver.ts:110`, not
-  exported today; the special-day guides below need it).
+  exported today; the special-day guides below need it). (2026-10-15, as built: it gains
+  `readSpecialDayPlan` beside it, which the special-day staffing read uses.)
 - **Station guides: none, in both painters.** venue-service has no per-weekday station hours read:
   `stationServiceTimes` (`station-service-times.ts:70`, exported `index.ts:55-59`) works per DATE, at
   most 42 days (`:80-82`), and answers `always: "default"` for the default station. `readSeasonStaffing`
@@ -1141,7 +1144,8 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
   `SpecialDayStaffing.cutover`, `.name`, and `.guides: Record<areaKey, Record<dateId, { startsAt;
   endsAt }[]>>` (departments from `resolveDepartmentsDays` with `readLocationClock`; stations empty;
   a date closed all day gives `[]`). The painters read once when opened or stepped and after a save
-  (passive GET), and do not follow live changes while open; a save replaces only the pairs it sends
+  (passive GET), and do not follow live changes to the staffing while open (2026-10-15, as built:
+  the staff roles do follow live changes while open); a save replaces only the pairs it sends
   (`paint.ts:262-287`, `:321-342`).
 - **Staff role dialog** exists as named: `<staff-role-dialog .api .staffRole .open>`
   (`packages/staffing/src/dashboard/staff-role-dialog.ts:45,60-63`), emitting `staff-role-saved`
@@ -1176,7 +1180,9 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
   as `season-painter.ts:597-610` keeps them), `days: ReadonlyMap<string, readonly StaffingBlock[] |
   null>` (null: follows the season), `guides: ReadonlyMap<string, readonly { startsAt; endsAt }[]>`,
   `staffRoles`, `chosen` (a staff role id or `undefined`), `headcount` (1–50, the server's bound,
-  `paint-rules.ts:34-41`), `cutover`, `readOnly`, `target` (as `paint-grid.ts:353-355`),
+  `paint-rules.ts:34-41`; 2026-10-15, as built: the grid passes `headcount` on as given, the paint
+  row's How many keeps it within 1–50, and the block menu's How many ignores a value outside it),
+  `cutover`, `readOnly`, `target` (as `paint-grid.ts:353-355`),
   `columnErrors`, `followable` (adds "Follow the season" to each ⋮); event `staffing-change`
   `{ key, blocks: StaffingBlock[] | null }`, bubbling and composed. A column whose value is null shows
   a "Follows the season" note; painting on it starts from `[]`. Hours never stop painting: there is
@@ -1216,7 +1222,7 @@ Tasks 4.1–4.3 below, these win. Paths are under `packages/venue-service/src/` 
   ruler and the column heading menu (extract them into their own file if they are private today,
   keeping `paint-grid.ts` behaviour and tests unchanged);
   `scripts/dashboard-browser-purity.test.ts` (`SUBPATHS` gains `["@waitron/venue-service/painter", …]`).
-- [ ] Steps: failing purity case → export → run venue-service's browser tests and the root guard →
+- [x] Steps: failing purity case → export → run venue-service's browser tests and the root guard →
   commit `"A585-4: venue-service exports its painter frame"`.
 
 ### Task 4.2: The staffing block model and grid
@@ -1243,17 +1249,17 @@ export function laneLayout(day: readonly StaffingBlock[], cutover: string): { la
   `cutover`, `staffRoles: StaffRole[]`, `chosenStaffRoleId`, `headcount`; event
   `staffing-change` with `{ key, blocks }`.
 
-- [ ] **Step 1: Failing node tests** for the model: `laneLayout` of the mockup's Friday (head chef
+- [x] **Step 1: Failing node tests** for the model: `laneLayout` of the mockup's Friday (head chef
   09:00–16:30, sous 09:00–15:00, sous 11:00–17:00, dishwasher 13:00–16:30) gives four lanes for the
   first group; two blocks that only touch (one ends 15:00, one starts 15:00) share a lane; a resize
   never crosses the changeover nor makes start ≥ end; `copyDay` copies by value (editing the copy
   leaves the source unchanged).
-- [ ] **Step 2: Failing browser tests** for the grid: a drag down a column adds a block of the
+- [x] **Step 2: Failing browser tests** for the grid: a drag down a column adds a block of the
   chosen staff role and headcount; overlapping blocks sit side by side; dragging an edge resizes;
   clicking a block opens its staff role and headcount and Delete (Backspace too); each column's ⋮
   offers "Copy to…" and Clear; the guide ranges are drawn faintly behind; keyboard: arrow keys move
   between blocks, Enter opens one; a11y in both themes.
-- [ ] **Steps 3–5:** implement (the grid uses Task 4.1's ruler, step and menu helpers), run, PASS,
+- [x] **Steps 3–5:** implement (the grid uses Task 4.1's ruler, step and menu helpers), run, PASS,
   commit `"A585-4: the staffing block grid"`.
 
 ### Task 4.3: The season and special-day staffing painters
@@ -1265,7 +1271,7 @@ export function laneLayout(day: readonly StaffingBlock[], cutover: string): { la
 - Modify: `packages/staffing/src/dashboard/staffing-month.ts` (clicking a day or a season chip opens
   the painter), `client.ts`, `strings.ts`
 
-- [ ] **Step 1: Failing browser tests** (mockup 2, bottom): the frame's title is the season ("Winter
+- [x] **Step 1: Failing browser tests** (mockup 2, bottom): the frame's title is the season ("Winter
   week") with ‹ › stepping; the picker lists departments then prep stations, grouped; the chips are
   staff roles plus "+ New staff role" (opens Task 1.3's dialog) and a How many stepper; the guide
   behind an area is `SeasonStaffing.guides[areaKey][weekday]` (a station's guide is whatever Task
@@ -1274,7 +1280,7 @@ export function laneLayout(day: readonly StaffingBlock[], cutover: string): { la
   edited (area, weekday) pairs in one `PUT /seasons/:id`; a refusal keeps the draft and shows beside
   Save; Cancel with changes asks first. The special-day painter: one column per date, "Follow the
   season" per column (sends `blocks: null`) and Clear (sends `[]`).
-- [ ] **Steps 2–5:** implement, run, look at both painters in the dev stack in both themes and at
+- [x] **Steps 2–5:** implement, run, look at both painters in the dev stack in both themes and at
   390 px, commit `"A585-4: the staffing painters"`.
 
 ---

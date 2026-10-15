@@ -4608,12 +4608,14 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (#1686); part 3 (the Calendar with module views, the staffing month read and the Staffing view's
   month) landed (#1735); parts 4–8 are open, in the order of the
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
-- **A699. The Staffing month keeps its own copy of month stepping and date formatting.**
-  `stepMonth` and the first and last month in `packages/staffing/src/dashboard/staffing-month.ts`
-  are a third copy beside `add-dates-calendar.ts` and `opening-hours-month.ts` in
-  `packages/venue-service/src/dashboard/`, and its date formatting copies `hours-view.ts`'s (A585-3's
-  review; the season tints are already shared through `@waitron/venue-service/dashboard/season-tint`). Next:
-  move `stepMonth` and the limits into a browser-safe venue-service file and export it.
+- **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
+  formatting.** `stepMonth` and the first and last month in
+  `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
+  `add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
+  and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
+  both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
+  already shared through `@waitron/venue-service/dashboard/season-tint`). Next: move `stepMonth`
+  and the limits into a browser-safe venue-service file and export it.
 - **A700. A failed Opening hours read also hides the Calendar's other views.** A module view draws
   only once the page's own model loads (`render` in
   `packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
@@ -4649,6 +4651,36 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
   re-reads the list for nothing (found by reading, #1681's review). Next: drop `persons` from that
   query's list, keeping it on `staff-role-delete-impact`, which joins it for holders' names.
+- **A706. A prep station's column in the staffing painters draws no opening hours behind it.**
+  venue-service has no per-weekday station hours read: `stationServiceTimes`
+  (`packages/venue-service/src/station-service-times.ts`) works per date, at most 42 days. Left open
+  by A585-4.
+- **A707. On a phone, a paint grid's block or column menu can cover the block it belongs to.**
+  `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
+  does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
+  A585-4 moved the code there. Next: place it above or beside the block instead.
+- **A708. The special-day staffing painter draws every date on the location's baseline changeover,
+  while each date's opening hours and staffing slots use that date's own.** So when a changeover
+  change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
+  how one grid shows dates with different changeovers. Left open by A585-4.
+  [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
+- **A709. The special-day staffing read reads `seasons`, `department_days` and
+  `department_day_ranges` twice** — once in venue-service's `readSpecialDayPlan` and again in
+  `readDepartmentSeasonWeeks` (`readSpecialDayStaffing`, `packages/staffing/src/paint.ts`). Next:
+  let `readDepartmentSeasonWeeks` take what the plan already read. Left open by A585-4.
+- **A710. Staffing painter polish** — no "Drag down a day…" hint, + New staff role's dialog says
+  Save where Opening hours' period dialog says "Add and paint with it", short blocks show no text,
+  editable blocks have no tooltip, the two How many fields treat a number outside 1–50 differently,
+  and the month's focus ring looks like its today frame. Left open by A585-4.
+  [Detail](backlog/workforce.md#a710-staffing-painter-polish)
+- **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
+  parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
+  would remove the copies. Left open by A585-4.
+  [Detail](backlog/workforce.md#a711-shared-staffing-painter-code)
+- **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
+  that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
+  Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push
+  an address, not replace one.
 - **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
   (today one `convenio_config` per location); a running total of hours clocked and rostered against
   hours due, annual leave counted, with the yearly overtime cap. After A585; plan with A10
@@ -5724,9 +5756,14 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `wt-close` instead, keeping the timer for the stays-open tests. Left open by service Task 11
   (#916). [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
-- **`scripts/dashboard-browser-purity.test.ts` reads only bookings' and adjustments' dashboard
-  folders, so nothing checks that venue-service's dashboard code stays free of server imports** —
-  left open by the reviews of A261 step 5 (Hours, #1298).
+- **`scripts/dashboard-browser-purity.test.ts` checks only one file of venue-service's dashboard
+  code, `src/dashboard/painter.ts`**, beside bookings', adjustments' and staffing's dashboard
+  folders. Nothing checks the rest, including the `./dashboard/season-tint` export staffing uses,
+  because the whole folder fails the guard: the scan reached `@waitron/db` or `drizzle-orm` from
+  many of its files (receipt: the Task 4.0 corrections in
+  `docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md`). **Next action:** list each
+  browser-safe venue-service export as a file. Left open by the reviews of A261 step 5 (Hours,
+  #1298) and by A585-4.
 
 - **Task 2's review found no test that fails when `device_profile_admission_roles` or
   `device_profile_admission_persons` is left out of
