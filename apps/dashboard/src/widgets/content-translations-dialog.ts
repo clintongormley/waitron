@@ -20,7 +20,9 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
+  ContentSuggestionRead,
   DashboardApi,
+  SuggestionRunView,
   TranslationBatch,
   TranslationPage,
   TranslationTarget,
@@ -36,6 +38,7 @@ import {
   type FieldFault,
   type ReviewChoice,
 } from "./content-translations-model.js";
+import { runActive, type SuggestionService } from "./content-suggestions-bar.js";
 
 const KINDS: readonly TranslationGapKind[] = [
   "product",
@@ -72,6 +75,10 @@ function editorHref(row: TranslationTarget): string {
       return "/manage/units";
   }
 }
+
+type SuggestionRunRead = { sequence: number } & (
+  { value: ContentSuggestionRead } | { failed: string }
+);
 
 @customElement("dashboard-content-translations-dialog")
 export class ContentTranslationsDialog extends LitElement {
@@ -148,6 +155,16 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private refused: FieldFault[] = [];
   @state() private reviewing = false;
   @state() private reviewRows: TranslationTarget[] = [];
+  @state() private suggestionRun: SuggestionRunView | null = null;
+  @state() private service: SuggestionService | null = null;
+  @state() private cloudOrigin: string | null = null;
+  @state() private suggestionBusy = false;
+  @state() private suggestionError = "";
+  @state() private suggestionReadError = "";
+  @state() private nothingMissing = false;
+  #suggestionReads = 0;
+  /** Reads numbered at or below this began before the last press was answered. */
+  #runReplacedAt = 0;
   #choices = new Map<string, ReviewChoice>();
   #snapshotRevision = 0;
   #generation = 0;
@@ -177,6 +194,7 @@ export class ContentTranslationsDialog extends LitElement {
     this.#generation++;
     this.#snapshotRevision++;
     this.busy = false;
+    this.suggestionBusy = false;
     this.reviewing = false;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -188,6 +206,14 @@ export class ContentTranslationsDialog extends LitElement {
       this.#generation++;
       this.#snapshotRevision++;
       this.#queries.release("translations");
+      this.#queries.release("suggestion-run");
+      this.suggestionRun = null;
+      this.service = null;
+      this.cloudOrigin = null;
+      this.suggestionBusy = false;
+      this.suggestionError = "";
+      this.suggestionReadError = "";
+      this.nothingMissing = false;
       this.reviewing = false;
       this.reviewRows = [];
       this.#choices.clear();
@@ -280,9 +306,43 @@ export class ContentTranslationsDialog extends LitElement {
     }
     return { generation, revision, rows, retained, config: first!.config };
   }
+  /** The first suggestion page only: the bar needs its run, service and Cloud origin. A failed read
+   * is told in the bar, because the controller's error callback would put it over the translations. */
+  #watchSuggestionRun(generation: number): Promise<void> {
+    const language = this.language;
+    const client = this.api.background ?? this.api;
+    return this.#queries.watch(
+      "suggestion-run",
+      {
+        key: JSON.stringify(["suggestion-run", language, generation]),
+        dependencies: QUERY_DEPENDENCIES.getContentSuggestions.map((type) => ({ type })),
+        refreshMs: 60_000,
+        read: async (): Promise<SuggestionRunRead> => {
+          const sequence = ++this.#suggestionReads;
+          try {
+            return { sequence, value: await client.getContentSuggestions(language) };
+          } catch (error) {
+            return { sequence, failed: codeOf(error) };
+          }
+        },
+      },
+      (answer) => {
+        if (generation !== this.#generation || !this.open) return;
+        if ("failed" in answer) {
+          this.suggestionReadError = codeMessage(answer.failed);
+          return;
+        }
+        this.suggestionReadError = "";
+        this.service = answer.value.service;
+        this.cloudOrigin = answer.value.cloudOrigin;
+        if (answer.sequence > this.#runReplacedAt) this.suggestionRun = answer.value.run;
+      },
+    );
+  }
   async #load(): Promise<void> {
     const generation = this.#generation;
     this.loading = !this.model;
+    void this.#watchSuggestionRun(generation);
     try {
       await this.#queries.watch(
         "translations",
@@ -456,6 +516,7 @@ export class ContentTranslationsDialog extends LitElement {
       const result = await this.api.saveContentTranslations(this.language, submitted);
       if (generation !== this.#generation || !this.open) return;
       this.#queries.release("translations");
+      this.#queries.release("suggestion-run");
       this.#scope?.commit(submitted);
       this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
       this.open = false;
@@ -483,6 +544,29 @@ export class ContentTranslationsDialog extends LitElement {
       } else this.actionError = message;
     } finally {
       if (generation === this.#generation) this.busy = false;
+    }
+  }
+  #translateAll(event: Event): void {
+    event.stopPropagation();
+    void this.#startRun();
+  }
+  async #startRun(): Promise<void> {
+    if (this.suggestionBusy || this.service !== "on" || runActive(this.suggestionRun)) return;
+    const generation = this.#generation;
+    this.suggestionBusy = true;
+    this.suggestionError = "";
+    this.nothingMissing = false;
+    try {
+      const { run } = await this.api.startContentSuggestions();
+      if (generation !== this.#generation || !this.open) return;
+      this.#runReplacedAt = this.#suggestionReads;
+      this.nothingMissing = run === null;
+      if (run !== null) this.suggestionRun = run;
+    } catch (error) {
+      if (generation !== this.#generation || !this.open) return;
+      this.suggestionError = codeMessage(codeOf(error));
+    } finally {
+      if (generation === this.#generation) this.suggestionBusy = false;
     }
   }
   #closed(event: Event): void {
@@ -618,6 +702,15 @@ export class ContentTranslationsDialog extends LitElement {
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
     >
       <p class="help">${t("translations.help")}</p>
+      <dashboard-content-suggestions-bar
+        .service=${this.service}
+        .run=${this.suggestionRun}
+        .busy=${this.suggestionBusy}
+        .error=${this.suggestionError || this.suggestionReadError}
+        .nothing=${this.nothingMissing}
+        .cloudOrigin=${this.cloudOrigin}
+        @translate-all=${this.#translateAll}
+      ></dashboard-content-suggestions-bar>
       ${this.loading ? html`<p role="status" data-test="loading">${t("content_gaps.loading")}</p>` : nothing}
       ${
         this.readError

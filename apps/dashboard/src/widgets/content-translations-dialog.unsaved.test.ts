@@ -39,6 +39,14 @@ const result: TranslationPage = {
 class TranslationLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api = {
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn().mockResolvedValue(result),
     saveContentTranslations: vi.fn().mockResolvedValue({ saved: result.rows }),
   } as unknown as DashboardApi;

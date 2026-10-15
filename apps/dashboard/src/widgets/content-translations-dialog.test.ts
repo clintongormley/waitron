@@ -35,6 +35,14 @@ const result = (rows: TranslationTarget[], next: string | null = null): Translat
 });
 async function mount(rows = [target()], overrides: Record<string, unknown> = {}) {
   const api = {
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
     getContentTranslationTargets: vi.fn().mockResolvedValue(result(rows)),
     saveContentTranslations: vi.fn().mockResolvedValue({ saved: rows }),
     ...overrides,
@@ -85,6 +93,14 @@ describe("staged translation dialog", () => {
       setLocale(locale);
       const language = "ca-ES-valencia";
       const api = {
+        getContentSuggestions: vi.fn(async (language: string) => ({
+          language,
+          run: null,
+          suggestions: [],
+          next: null,
+          service: "not_connected" as const,
+          cloudOrigin: null,
+        })),
         getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
       } as unknown as DashboardApi;
       const { el } = await mountWidget<ContentTranslationsDialog>(
@@ -106,6 +122,14 @@ describe("staged translation dialog", () => {
     async (locale, language, sentence) => {
       setLocale(locale);
       const api = {
+        getContentSuggestions: vi.fn(async (language: string) => ({
+          language,
+          run: null,
+          suggestions: [],
+          next: null,
+          service: "not_connected" as const,
+          cloudOrigin: null,
+        })),
         getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
       } as unknown as DashboardApi;
       const { el } = await mountWidget<ContentTranslationsDialog>(
@@ -125,6 +149,14 @@ describe("staged translation dialog", () => {
     cleanupWidgets();
     const language = "x-$&";
     const api = {
+      getContentSuggestions: vi.fn(async (language: string) => ({
+        language,
+        run: null,
+        suggestions: [],
+        next: null,
+        service: "not_connected" as const,
+        cloudOrigin: null,
+      })),
       getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
     } as unknown as DashboardApi;
     const mounted = await mountWidget<ContentTranslationsDialog>(
@@ -140,6 +172,14 @@ describe("staged translation dialog", () => {
     const language = "x-$&";
     const defaultLanguage = "y-$&";
     const api = {
+      getContentSuggestions: vi.fn(async (language: string) => ({
+        language,
+        run: null,
+        suggestions: [],
+        next: null,
+        service: "not_connected" as const,
+        cloudOrigin: null,
+      })),
       getContentTranslationTargets: vi.fn().mockResolvedValue({
         ...result([target()]),
         language,
@@ -165,6 +205,14 @@ describe("staged translation dialog", () => {
   });
   it("reads every opening page through the passive client and saves through the active client", async () => {
     const passive = {
+      getContentSuggestions: vi.fn(async (language: string) => ({
+        language,
+        run: null,
+        suggestions: [],
+        next: null,
+        service: "not_connected" as const,
+        cloudOrigin: null,
+      })),
       getContentTranslationTargets: vi
         .fn()
         .mockResolvedValue(result([target("one", { defaultRequired: false })])),
@@ -875,7 +923,17 @@ it("a late opening GET and late review GET cannot overwrite a reopened draft", a
         }),
     )
     .mockResolvedValue(result([target("one", { defaultRequired: false })]));
-  const api = { getContentTranslationTargets: read } as unknown as DashboardApi;
+  const api = {
+    getContentTranslationTargets: read,
+    getContentSuggestions: vi.fn(async (language: string) => ({
+      language,
+      run: null,
+      suggestions: [],
+      next: null,
+      service: "not_connected" as const,
+      cloudOrigin: null,
+    })),
+  } as unknown as DashboardApi;
   const { el } = await mountWidget<ContentTranslationsDialog>(
     "dashboard-content-translations-dialog",
     { open: true, language: "es", api },

@@ -89,6 +89,14 @@ describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)
                     },
                   },
             ),
+            getContentSuggestions: vi.fn(async () => ({
+              language: "es",
+              run: null,
+              suggestions: [],
+              next: null,
+              service: "on" as const,
+              cloudOrigin: null,
+            })),
           } as unknown as DashboardApi;
           const { el, host } = await mountWidget<ContentTranslationsDialog>(
             "dashboard-content-translations-dialog",
