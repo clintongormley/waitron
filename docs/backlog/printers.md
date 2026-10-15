@@ -414,7 +414,6 @@ just a green typecheck.
      address always prints (2026-10-10, A366 slice 7, the note atop
      [fiscal.md](fiscal.md)); this point changes only the repetition and the label.
   4. **"17,50 € × 2", not "17,50 € / 2"**, wherever a unit price is printed with its quantity.
-  5. **VAT rates with significant digits only** — done in Part 1a's pull request.
   6. **Guests and the amount per person** when the table's guests were entered.
 
 ## The till's on-screen receipt is a second copy of the layout
