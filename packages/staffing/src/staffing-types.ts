@@ -28,3 +28,36 @@ export interface SpecialDayStaffing {
     dates: { dateId: string; date: string; blocks: StaffingBlock[] | null }[];
   }[];
 }
+
+export interface StaffingSeason {
+  id: string;
+  name: string;
+  /** MM-DD. */
+  startsOn: string;
+  /** The MM-DD before the next season starts. */
+  lastDay: string;
+}
+
+/** A staffing area's slots on one business day; `unfilled` is null until the rota counts it. */
+export interface StaffingMonthArea {
+  area: AreaRef;
+  needed: number;
+  unfilled: number | null;
+}
+
+/** The whole Monday-to-Sunday weeks covering `month`, as the opening-hours month lists them. */
+export interface StaffingMonth {
+  month: string;
+  today: string | null;
+  /** The seasons the listed days touch, in the order they are first touched. */
+  seasons: StaffingSeason[];
+  days: {
+    date: string;
+    inMonth: boolean;
+    seasonId: string | null;
+    specialDay: { id: string; name: string } | null;
+    closedAllDay: boolean;
+    /** Only areas with paint on the day, in `listStaffingAreas` order. */
+    areas: StaffingMonthArea[];
+  }[];
+}
