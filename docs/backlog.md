@@ -2080,6 +2080,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   free, already grouped, zone mismatch) only after the seats are typed.
   The request log is in #1699.
 
+- **Held-order destination policies while the first area read waits or fails (2026-10-15;
+  open).** On a counter-only till, opening Move to table starts the first floor-area read.
+  Before it answers, `seatsGuests(undefined)` keeps free tables offered; a failed read retains
+  that unknown state. A698's Chromium review probe held the area read pending and observed a
+  free table still offered. Decide whether the picker waits for known policies or leaves unknown
+  areas to the server, as the order screen does. No server refusal was exercised by that probe.
+
 - **A697 — the order screen's table lists offer tables in a closed area (2026-10-15; open; left open
   by A690, #1731).** Move guests to a table in another area is refused while that area takes no new
   orders (`assertZoneTakesNewOrders` in `moveGuests`, `apps/server/src/table-actions.ts`), and so is
