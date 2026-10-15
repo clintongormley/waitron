@@ -358,6 +358,7 @@ describe("Opening hours month", () => {
     expect(terrace!.querySelectorAll('[data-test="gap"]')).toHaveLength(0);
     const label = dayButton(el, "2026-12-02").getAttribute("aria-label")!;
     expect(label).toMatch(/Terrace closed(,|$)/);
+    expect(label).not.toMatch(/Terrace closed \d/);
   });
 
   it("says a zone's own hours to a screen reader", async () => {
@@ -781,6 +782,15 @@ describe("Opening hours month", () => {
     expect(sunday!.querySelector<HTMLElement>(".day")!.getBoundingClientRect().height).toBe(
       monday!.querySelector<HTMLElement>(".day")!.getBoundingClientRect().height,
     );
+    // Both boxes sit at their min-height, so the drawn content's own extent is what can differ.
+    const contentHeight = (td: HTMLElement) => {
+      const day = td.querySelector<HTMLElement>(".day")!;
+      return (
+        day.lastElementChild!.getBoundingClientRect().bottom -
+        day.firstElementChild!.getBoundingClientRect().top
+      );
+    };
+    expect(contentHeight(sunday!)).toBe(contentHeight(monday!));
   });
 
   it("draws a date closed all day with a bar per row, at a phone's width too", async () => {
