@@ -557,6 +557,105 @@ describe("PUT /api/parties/:id/name", () => {
   });
 });
 
+describe("PUT /api/parties/:id/guests", () => {
+  async function floorGuests(tableId: string): Promise<number | null> {
+    const res = await app(suite.db).request("/api/tables/state", {
+      headers: { cookie: await cookie() },
+    });
+    expect(res.status).toBe(200);
+    const tables = (await res.json()) as {
+      id: string;
+      party: { guestCount: number | null } | null;
+    }[];
+    return tables.find((t) => t.id === tableId)!.party!.guestCount;
+  }
+
+  it("changes the count and answers the party's revision and count", async () => {
+    const { partyId, revision, tableId } = await seat(2);
+    const res = await put(`/api/parties/${partyId}/guests`, {
+      guestCount: 4,
+      expectedPartyRevision: revision,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revision: revision + 1, guestCount: 4 });
+    expect(await partyRow(partyId)).toMatchObject({ guestCount: 4, revision: revision + 1 });
+    expect(await floorGuests(tableId)).toBe(4);
+  });
+
+  it("clears the count with null", async () => {
+    const { partyId, revision, tableId } = await seat(2);
+    const res = await put(`/api/parties/${partyId}/guests`, {
+      guestCount: null,
+      expectedPartyRevision: revision,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revision: revision + 1, guestCount: null });
+    expect(await floorGuests(tableId)).toBeNull();
+  });
+
+  it.each([undefined, 0, 1000, 2.5, "4"])(
+    "refuses the guest count %j as a bad field, changing nothing",
+    async (guestCount) => {
+      const { partyId, revision } = await seat(2);
+      const res = await put(`/api/parties/${partyId}/guests`, {
+        guestCount,
+        expectedPartyRevision: revision,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "guestCount" } },
+      });
+      expect(await partyRow(partyId)).toMatchObject({ guestCount: 2, revision });
+    },
+  );
+
+  it("answers 409 party.out_of_date for a stale revision, changing nothing", async () => {
+    const { partyId, revision } = await seat(2);
+    const res = await put(`/api/parties/${partyId}/guests`, {
+      guestCount: 4,
+      expectedPartyRevision: revision + 4,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "party.out_of_date", params: { partyId, revision } },
+    });
+    expect(await partyRow(partyId)).toMatchObject({ guestCount: 2, revision });
+  });
+
+  it("answers 409 party.not_open for a finished, a malformed or an unknown party", async () => {
+    const { partyId, revision } = await seat(2);
+    expect(
+      (await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: revision })).status,
+    ).toBe(200);
+    const finished = await partyRow(partyId);
+    for (const id of [partyId, "not-a-uuid", randomUUID()]) {
+      const res = await put(`/api/parties/${id}/guests`, {
+        guestCount: 4,
+        expectedPartyRevision: finished.revision,
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "party.not_open", params: { partyId: id } },
+      });
+    }
+    expect(await partyRow(partyId)).toMatchObject({
+      guestCount: 2,
+      revision: finished.revision,
+    });
+  });
+
+  it("401s without a session", async () => {
+    const { partyId, revision } = await seat(2);
+    const res = await put(
+      `/api/parties/${partyId}/guests`,
+      { guestCount: 4, expectedPartyRevision: revision },
+      false,
+    );
+    expect(res.status).toBe(401);
+    expect(await partyRow(partyId)).toMatchObject({ guestCount: 2, revision });
+  });
+});
+
 describe("POST /api/parties/:id/groups naming a bill", () => {
   it("answers 409 bill.other_party for another party's bill, writing nothing", async () => {
     const { partyId, revision } = await seat();

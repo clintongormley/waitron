@@ -137,6 +137,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |
+ * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |
  * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
  * | GET  /api/parties/:id/bills|groups|current-orders|print-problems|drafts | party  | refuses GET /api/parties/:id/<read>                  |
@@ -884,6 +885,13 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/name`,
     () => ({ name: "Renamed", expectedPartyRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "PUT /api/parties/:id/guests",
+    "PUT",
+    (x) => `/api/parties/${x.deliParty}/guests`,
+    () => ({ guestCount: 4, expectedPartyRevision: 0 }),
     deliTableZone,
   ],
   ...(["move", "join"] as const).flatMap((verb): Row[] => [

@@ -221,6 +221,16 @@ export async function setPartyName(
   return { revision, name };
 }
 
+/** Set the party's guest count, or with null clear it; a party command guarded by its revision. */
+export async function setPartyGuests(
+  tx: Transaction,
+  args: { partyId: string; guestCount: number | null; expectedPartyRevision: number },
+): Promise<{ revision: number; guestCount: number | null }> {
+  const revision = await checkAndBumpParty(tx, args.partyId, args.expectedPartyRevision, "open");
+  await tx.update(parties).set({ guestCount: args.guestCount }).where(eq(parties.id, args.partyId));
+  return { revision, guestCount: args.guestCount };
+}
+
 /**
  * Refuse an order sent to a bill that is not an open bill of the party, in this order: a
  * bill of another party (or of none) first, then a paid, an abandoned and a presented one. An id

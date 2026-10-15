@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
 import { mergeCheckedBills } from "./bill-actions.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import {
@@ -204,6 +204,13 @@ async function combineAt(
   });
 }
 
+/** Both counts added, or none when either is unknown or the sum is more than a count can be. */
+function combinedGuests(from: number | null, into: number | null): number | null {
+  if (from === null || into === null) return null;
+  const sum = from + into;
+  return sum <= MAX_GUEST_COUNT ? sum : null;
+}
+
 /**
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
  * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
@@ -229,12 +236,12 @@ export async function combineParties(
 ): Promise<CombineResult> {
   const { from, into } = args;
   const mains = await tx
-    .select({ id: parties.id, mainBillId: parties.mainBillId })
+    .select({ id: parties.id, mainBillId: parties.mainBillId, guestCount: parties.guestCount })
     .from(parties)
     .where(inArray(parties.id, [from, into]));
-  const mainOf = (partyId: string) => mains.find((party) => party.id === partyId)!.mainBillId;
-  const fromMain = mainOf(from);
-  const intoMain = mainOf(into);
+  const partyOf = (partyId: string) => mains.find((party) => party.id === partyId)!;
+  const fromMain = partyOf(from).mainBillId;
+  const intoMain = partyOf(into).mainBillId;
   await moveGroupsToParty(tx, from, into);
   await moveDraftsToParty(
     tx,
@@ -284,6 +291,10 @@ export async function combineParties(
       .insert(partyTables)
       .values(tables.map((tableId, i) => ({ partyId: into, tableId, joinedAt: joinedAt(i) })));
   }
+  await tx
+    .update(parties)
+    .set({ guestCount: combinedGuests(partyOf(from).guestCount, partyOf(into).guestCount) })
+    .where(eq(parties.id, into));
   // Only after `from`'s memberships have ended: closing a party clears the manual status of every
   // table it still holds (`parties_clear_table_status`), which a joining table keeps.
   await tx

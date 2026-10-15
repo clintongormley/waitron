@@ -148,6 +148,7 @@ import {
   readPartyBills,
   seatTable,
   setPartyName,
+  setPartyGuests,
   partyRevision,
   partyRevisionOfOrder,
   partyZone,
@@ -769,6 +770,14 @@ function requireGuestCount(value: unknown): number | null {
     throw new AppError("management.request_invalid", { field: "guestCount" });
   }
   return value;
+}
+
+/** A guest count the wire must carry: null clears it, an absent key is refused. */
+function requireGuestCountOrNull(value: unknown): number | null {
+  if (value === undefined) {
+    throw new AppError("management.request_invalid", { field: "guestCount" });
+  }
+  return requireGuestCount(value);
 }
 
 /**
@@ -2827,6 +2836,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return setPartyName(tx, { partyId, name: body.name, expectedPartyRevision });
       });
       return c.json(named);
+    }),
+  );
+
+  app.put("/api/parties/:id/guests", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
+      );
+      const guestCount = requireGuestCountOrNull(body.guestCount);
+      const counted = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision });
+      });
+      return c.json(counted);
     }),
   );
 
