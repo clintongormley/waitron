@@ -10,6 +10,9 @@ export type MenuUse =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "kitchen_note.invalid": { field: "note" | "scope" | "revision" };
+    "kitchen_note.too_long": { length: number; limit: number };
+    "kitchen_note.out_of_date": { revision: number };
     "hours.clock_change_pending": { effectiveBusinessDay: string };
     "hours.clock_changed": Record<string, never>;
     "venue.business_day_hours_conflict": {

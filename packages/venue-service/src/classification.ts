@@ -34,6 +34,7 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("working_line_contexts", "state", STATE),
   classify("service_settings", "state", STATE),
   classify("kitchen_notices", "state", STATE),
+  classify("order_kitchen_notes", "state", STATE),
   classify("holiday_geographies", "state", STATE),
   classify("seasons", "state", STATE),
   classify("special_days", "state", STATE),

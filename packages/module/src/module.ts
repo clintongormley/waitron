@@ -524,6 +524,17 @@ export interface ResolvedKitchenScreen {
   readonly zones: readonly ScreenSlot[] | null;
 }
 
+export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
+export interface KitchenNote {
+  note: string | null;
+  revision: number;
+}
+export type KitchenNoteSnapshot = KitchenNote & { scope: KitchenNoteScope; ownerRevision: number };
+export interface KitchenNoteChange {
+  before: string | null;
+  after: string | null;
+}
+
 export interface StationNotice {
   id: string;
   stationId: string;
