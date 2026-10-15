@@ -468,19 +468,19 @@ describe("Print invoice and Download PDF", () => {
     expect(find(el, "print-invoice")).not.toBeNull();
   });
 
-  it("asks for the printer list with the bill's id and row, and sends nothing itself", async () => {
+  it("asks for the printer list with the bill's row, and sends nothing itself", async () => {
     setLocale("en-GB");
     const detail = offered();
     const api = stubApi(detail);
     const el = await open(api);
     const asked = vi.fn();
     el.addEventListener("order-invoice-print", (event) =>
-      asked((event as CustomEvent<{ id: string }>).detail),
+      asked((event as CustomEvent<{ row: OrderDetailDto["row"] }>).detail),
     );
     const reprint = vi.fn();
     el.addEventListener("order-reprint", reprint);
     find(el, "print-invoice")!.click();
-    expect(asked).toHaveBeenCalledWith({ id: "bill-1", row: detail.row });
+    expect(asked).toHaveBeenCalledWith({ row: detail.row });
     expect(reprint).not.toHaveBeenCalled();
     expect(api.downloadOrderInvoicePdf).not.toHaveBeenCalled();
     expect(api.requestOrderEmailDelivery).not.toHaveBeenCalled();

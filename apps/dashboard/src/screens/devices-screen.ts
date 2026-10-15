@@ -44,7 +44,7 @@ import {
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
-import { printerLabel } from "../i18n/domain.js";
+import { a4Choices, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
   DashboardApi,
@@ -1434,10 +1434,8 @@ export class DevicesScreen extends LitElement {
     if (role.field !== "invoice") return this.printers;
     return [
       ...this.printers,
-      ...this.pagePrinters.map(({ id, name, active }) => ({
-        id,
-        name: fill("device_profiles.a4_choice", { name }),
-        active,
+      ...a4Choices(this.pagePrinters).map((choice) => ({
+        ...choice,
         portable: false,
         holder: null,
       })),

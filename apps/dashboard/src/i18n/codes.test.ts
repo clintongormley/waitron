@@ -654,9 +654,9 @@ it("says what to check when invoice email is unavailable, in English and Spanish
   );
 });
 
-// The order detail's Print on A4 and Download PDF routes (`STATUS` in apps/server/src/orders-api.ts,
-// and the codes `requestA4Delivery` and `readInvoiceDocument` throw).
-it("has English and Spanish copy for every refusal of Print on A4 and Download PDF", () => {
+// The order detail's Print invoice and Download PDF routes (`STATUS` in apps/server/src/orders-api.ts,
+// and the codes `requestPrintDelivery` and `readInvoiceDocument` throw).
+it("has English and Spanish copy for every refusal of Print invoice and Download PDF", () => {
   for (const code of [
     "device.forbidden_action",
     "invoice_delivery.active",

@@ -1,6 +1,6 @@
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type { AllergenDeclaration, PersonRole, Printer } from "../api/client.js";
-import { t } from "./t.js";
+import { fill, t } from "./t.js";
 
 // Each table is a local, `string`-keyed copy of a server token set; api/client.ts says why the
 // dashboard does not import `@waitron/catalogue`'s main entry.
@@ -215,6 +215,18 @@ export function regimeName(value: string, locale: string = currentLocale()): str
 
 export function vatKindName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PURCHASE_VAT_KIND_NAMES, value, locale);
+}
+
+/** An A4 printer's name, marked as one where it is listed among receipt printers. */
+export function a4PrinterName(name: string): string {
+  return fill("device_profiles.a4_choice", { name });
+}
+
+/** A4 printers as entries of a list that also holds receipt printers. */
+export function a4Choices(
+  printers: readonly { id: string; name: string; active: boolean }[],
+): { id: string; name: string; active: boolean }[] {
+  return printers.map(({ id, name, active }) => ({ id, name: a4PrinterName(name), active }));
 }
 
 /** A printer's name, marked when it is switched off. */

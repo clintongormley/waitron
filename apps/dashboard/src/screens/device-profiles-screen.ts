@@ -28,7 +28,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
-import { ROLES, printerLabel, roleName } from "../i18n/domain.js";
+import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
 // `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
@@ -1798,13 +1798,7 @@ export class DeviceProfilesScreen extends LitElement {
       ...this.printers
         .filter((printer) => !drawers || printer.hasCashDrawer || listed.includes(printer.id))
         .map((printer) => ({ ...printer, drawerless: drawers && !printer.hasCashDrawer })),
-      ...(key === "invoicePrinterIds"
-        ? this.pagePrinters.map(({ id, name, active }) => ({
-            id,
-            name: fill("device_profiles.a4_choice", { name }),
-            active,
-          }))
-        : []),
+      ...(key === "invoicePrinterIds" ? a4Choices(this.pagePrinters) : []),
     ];
     const label = (printer: (typeof pool)[number]) =>
       printer.drawerless

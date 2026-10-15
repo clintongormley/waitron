@@ -272,7 +272,7 @@ export class OrderDetailDialog extends LitElement {
     if (this.orderId === null) return;
     this.dispatchEvent(
       new CustomEvent(name, {
-        detail: { id: this.orderId, row },
+        detail: { row },
         bubbles: true,
         composed: true,
       }),

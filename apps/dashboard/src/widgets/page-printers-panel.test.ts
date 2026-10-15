@@ -125,7 +125,7 @@ async function typeName(el: PagePrintersPanel, value: string) {
   await flush(el);
 }
 
-it("lists each office printer under the invoice printers heading, with its agent, address and paper", async () => {
+it("lists each office printer under the A4 printers heading, with its agent, address and paper", async () => {
   const { el } = await mount();
   expect(text(el, "h2")).toBe(t("printers.invoice_printers_title"));
   // The heading names the kind; no row repeats it.

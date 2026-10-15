@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, OfferedPrinter, OrderDetailDto, OrderRowDto } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { a4PrinterName } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-order-reprint-dialog")
@@ -40,6 +41,8 @@ export class OrderReprintDialog extends LitElement {
   @state() private sentTo: string | null = null;
   #sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
   @state() private printerError: string | null = null;
+  /** Counts openings, so a print sent from an earlier one never updates this one. */
+  #opening = 0;
   @state() private error: string | null = null;
   /** Whether `error` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
@@ -69,6 +72,8 @@ export class OrderReprintDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("row") && !changed.has("mode")) return;
+    this.#opening += 1;
+    this.printing = false;
     this.sentTo = null;
     this.printerError = null;
     this.#showError(null);
@@ -158,10 +163,7 @@ export class OrderReprintDialog extends LitElement {
       label=${t("orders.reprint.printer")}
       .options=${printers.map((printer) => ({
         value: printer.id,
-        label:
-          printer.kind === "a4"
-            ? fill("orders.reprint.a4_choice", { name: printer.name })
-            : printer.name,
+        label: printer.kind === "a4" ? a4PrinterName(printer.name) : printer.name,
       }))}
       .value=${this.printerId}
       .error=${this.printerError ?? ""}
@@ -174,28 +176,36 @@ export class OrderReprintDialog extends LitElement {
 
   async #print(): Promise<void> {
     if (this.row === null || this.printerId === "" || this.printing) return;
+    const opening = this.#opening;
+    const billId = this.row.id;
+    const printerId = this.printerId;
+    const printerName = this.printers?.find((printer) => printer.id === printerId)?.name ?? "";
     this.printing = true;
     this.printerError = null;
     this.#showError(null);
-    const invoice = this.mode === "invoice";
     try {
-      if (invoice) {
-        await this.api.requestOrderPrintDelivery(this.row.id, this.printerId, crypto.randomUUID());
+      let sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
+      if (this.mode === "invoice") {
+        const attempt = await this.api.requestOrderPrintDelivery(
+          billId,
+          printerId,
+          crypto.randomUUID(),
+        );
         this.api.liveData.invalidate([{ type: "invoice_deliveries" }]);
-      } else await this.api.reprintOrder(this.row.id, this.printerId);
-      this.#sentKey =
-        invoice && this.designation === "original"
-          ? "orders.print_invoice.sent"
-          : "orders.reprint.sent";
-      this.sentTo = this.printers?.find((printer) => printer.id === this.printerId)?.name ?? "";
+        if (attempt.designation === "original") sentKey = "orders.print_invoice.sent";
+      } else await this.api.reprintOrder(billId, printerId);
+      if (opening !== this.#opening) return;
+      this.#sentKey = sentKey;
+      this.sentTo = printerName;
     } catch (error) {
+      if (opening !== this.#opening) return;
       const code = codeOf(error);
       const message = codeMessage(code);
       if (code === "printer.not_found" || code === "invoice_delivery.printer_invalid")
         this.printerError = message;
       else this.#showError(message);
     } finally {
-      this.printing = false;
+      if (opening === this.#opening) this.printing = false;
     }
   }
 
