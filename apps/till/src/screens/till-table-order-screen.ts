@@ -60,6 +60,7 @@ import {
   partyScope,
   partyTablesLabel,
   seatedRead,
+  tablesLabel,
   tableTarget,
   tableTargetStyles,
   type SeatedRead,
@@ -79,6 +80,7 @@ import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
+import "../widgets/split-guests-dialog.js";
 import "../widgets/table-status.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
@@ -1307,6 +1309,8 @@ export class TillTableOrderScreen extends LitElement {
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
+  /** Split a table's choice, while its guests window is open. */
+  @state() private splitGuests: { tableId: string; billId: string | null } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
   @state() private transferLineNos = new Set<number>();
@@ -2626,6 +2630,7 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#previewDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
         ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
         ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
+        ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -4622,9 +4627,35 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #splitTable(tableId: string, billId: string | null): void {
-    this.#retireActions();
-    this.#dispatch("split-table", { tableId, billId });
     this.#closeActions();
+    this.splitGuests = { tableId, billId };
+  }
+
+  #splitGuestsDialog(): TemplateResult | typeof nothing {
+    const splitting = this.splitGuests;
+    const party = this.party;
+    if (splitting === null || party === null) return nothing;
+    const leaving = this.tables.find((row) => row.id === splitting.tableId);
+    return html`<till-split-guests-dialog
+      .stayingLabel=${tablesLabel(
+        party.tableIds.filter((id) => id !== splitting.tableId),
+        this.tables,
+      )}
+      .leavingLabel=${leaving === undefined ? "" : tableShownName(leaving)}
+      .staying=${party.guestCount === null ? "" : String(party.guestCount)}
+      @split-guests-confirm=${(event: Event) => {
+        event.stopPropagation();
+        this.splitGuests = null;
+        this.#dispatch("split-table", {
+          ...splitting,
+          guests: (event as CustomEvent<SplitGuestsDetail>).detail,
+        } satisfies SplitTableDetail);
+      }}
+      @split-guests-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.splitGuests = null;
+      }}
+    ></till-split-guests-dialog>`;
   }
 
   #pickBill(bill: PartyBill): void {
