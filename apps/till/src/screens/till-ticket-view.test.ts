@@ -1838,7 +1838,7 @@ describe("till-ticket-view: the sale's own language", () => {
 describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   const noActions: InvoiceDeliveryStatus["actions"] = {
     retryOriginal: null,
-    printOnA4: null,
+    print: null,
     receiptInstead: null,
     email: null,
   };
@@ -1861,10 +1861,14 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   ): InvoiceDeliveryStatus => ({
     current,
     originalCompleted: current?.status === "sent",
+    originalPrinterId: null,
     actions: { ...noActions, ...actions },
     history: current === null ? [] : [current],
   });
-  const a4Offer = { printer: { id: "p1", name: "Office" }, designation: "original" as const };
+  const a4Offer = {
+    printers: [{ id: "p1", name: "Office", kind: "a4" as const }],
+    designation: "original" as const,
+  };
   const mountF1 = (props: Record<string, unknown>, over: Partial<TillSaleResult> = {}) =>
     mountWidget<TillTicketView>("till-ticket-view", {
       issuer,
@@ -1927,7 +1931,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         deliveries: statusOf(attempt({ status: "sending", printerHold: hold })),
       });
       expect(line(el)).toBe(`Waiting at the office printer: ${en}.`);
-      for (const name of ["print-a4", "receipt-instead", "retry-receipt", "print-receipt"])
+      for (const name of ["print-invoice", "receipt-instead", "retry-receipt", "print-receipt"])
         expect(button(el, name)).toBeNull();
       setLocale("es-ES");
       el.requestUpdate();
@@ -1965,16 +1969,16 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
 
   it("offers Print on A4 only when the status does, and asks for it", async () => {
     const { el } = await mountF1({ deliveries: statusOf(null) });
-    expect(button(el, "print-a4")).toBeNull();
-    el.deliveries = statusOf(null, { printOnA4: a4Offer });
+    expect(button(el, "print-invoice")).toBeNull();
+    el.deliveries = statusOf(null, { print: a4Offer });
     await el.updateComplete;
-    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Print on A4");
-    expect(button(el, "print-a4")!.getAttribute("variant")).toBe("secondary");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on A4");
+    expect(button(el, "print-invoice")!.getAttribute("variant")).toBe("secondary");
     let event: Event | undefined;
-    el.addEventListener("print-a4", (e) => {
+    el.addEventListener("print-invoice", (e) => {
       event = e;
     });
-    button(el, "print-a4")!.click();
+    button(el, "print-invoice")!.click();
     expect(event?.bubbles).toBe(true);
     expect(event?.composed).toBe(true);
   });
@@ -1985,16 +1989,16 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ status }), {
           retryOriginal: { medium: "a4" },
-          printOnA4: a4Offer,
+          print: a4Offer,
         }),
       });
-      const buttons = el.shadowRoot!.querySelectorAll("[data-test=print-a4]");
+      const buttons = el.shadowRoot!.querySelectorAll("[data-test=print-invoice]");
       expect(buttons).toHaveLength(1);
       expect(buttons[0]!.textContent!.trim()).toBe("Send to the office printer again");
       setLocale("es-ES");
       el.requestUpdate();
       await el.updateComplete;
-      expect(button(el, "print-a4")!.textContent!.trim()).toBe(
+      expect(button(el, "print-invoice")!.textContent!.trim()).toBe(
         "Volver a enviar a la impresora de oficina",
       );
     },
@@ -2007,7 +2011,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       }),
     });
     expect(line(el)).toBe("Not delivered.");
-    for (const name of ["print-a4", "receipt-instead"]) expect(button(el, name)).toBeNull();
+    for (const name of ["print-invoice", "receipt-instead"]) expect(button(el, name)).toBeNull();
   });
 
   it("offers the receipt printer instead only while the status does, naming the waiting A4", async () => {
@@ -2040,12 +2044,12 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     const { el } = await mountF1({
       canPrintReceipt: false,
       deliveries: statusOf(attempt({ status: "queued" }), {
-        printOnA4: a4Offer,
+        print: a4Offer,
         receiptInstead: { deliveryId: "d1" },
       }),
     });
     expect(line(el)).toBe("Waiting for the office printer.");
-    for (const name of ["print-a4", "receipt-instead"]) expect(button(el, name)).toBeNull();
+    for (const name of ["print-invoice", "receipt-instead"]) expect(button(el, name)).toBeNull();
   });
 
   it.each(["deliveryBusy", "originalReceiptBusy"] as const)(
@@ -2053,15 +2057,15 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     async (busy) => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ status: "queued" }), {
-          printOnA4: a4Offer,
+          print: a4Offer,
           receiptInstead: { deliveryId: "d1" },
         }),
       });
-      for (const name of ["print-a4", "receipt-instead"])
+      for (const name of ["print-invoice", "receipt-instead"])
         expect(button(el, name)!.hasAttribute("disabled")).toBe(false);
       el[busy] = true;
       await el.updateComplete;
-      for (const name of ["print-a4", "receipt-instead"]) {
+      for (const name of ["print-invoice", "receipt-instead"]) {
         expect(button(el, name)!.hasAttribute("disabled")).toBe(true);
         expect(button(el, name)!.getAttribute("variant")).toBe("secondary");
       }
@@ -2146,6 +2150,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         deliveries: {
           current: email,
           originalCompleted: true,
+          originalPrinterId: null,
           actions: noActions,
           history: [email, attempt({ id: null, medium: "receipt", status: "failed" })],
         },
@@ -2179,6 +2184,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         deliveries: {
           current,
           originalCompleted: false,
+          originalPrinterId: null,
           actions: { ...noActions, ...actions },
           history: [current, attempt({ id: null, medium: "receipt", status: "failed" })],
         },
@@ -2248,17 +2254,46 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   it("labels the A4 action a copy when the status offers a duplicate", async () => {
     const { el } = await mountF1({
       deliveries: statusOf(attempt({ status: "sent" }), {
-        printOnA4: { ...a4Offer, designation: "duplicate" },
+        print: { ...a4Offer, designation: "duplicate" },
       }),
     });
-    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Print a copy on A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print a copy on A4");
     setLocale("es-ES");
     el.requestUpdate();
     await el.updateComplete;
-    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Imprimir una copia en A4");
-    el.deliveries = statusOf(null, { printOnA4: a4Offer });
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir una copia en A4");
+    el.deliveries = statusOf(null, { print: a4Offer });
     await el.updateComplete;
-    expect(button(el, "print-a4")!.textContent!.trim()).toBe("Imprimir en A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en A4");
+  });
+
+  it("names a receipt invoice printer on its print action, a copy included, in English and Spanish", async () => {
+    const receiptOffer = {
+      printers: [{ id: "r1", name: "Bar printer", kind: "receipt" as const }],
+      designation: "original" as const,
+    };
+    const { el } = await mountF1({ deliveries: statusOf(null, { print: receiptOffer }) });
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Bar printer");
+    el.deliveries = statusOf(attempt({ medium: "receipt", status: "sent" }), {
+      print: { ...receiptOffer, designation: "duplicate" },
+    });
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print a copy on Bar printer");
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe(
+      "Imprimir una copia en Bar printer",
+    );
+    el.deliveries = statusOf(null, { print: receiptOffer });
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en Bar printer");
+  });
+
+  it("keeps the A4 words for an A4 invoice printer, never its name", async () => {
+    const { el } = await mountF1({ deliveries: statusOf(null, { print: a4Offer }) });
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on A4");
+    expect(button(el, "print-invoice")!.textContent).not.toContain("Office");
   });
 
   it("says why a delivery action was refused inside the section, apart from a failed read", async () => {
@@ -2291,7 +2326,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       originalReceiptAvailable: true,
       deliveries: statusOf(attempt({ status: "failed" }), {
         retryOriginal: { medium: "a4" },
-        printOnA4: a4Offer,
+        print: a4Offer,
         receiptInstead: { deliveryId: "d1" },
       }),
       deliveriesReadFailed: true,
@@ -2301,7 +2336,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       "delivery-status",
       "delivery-read-failed",
       "delivery-refused",
-      "print-a4",
+      "print-invoice",
       "receipt-instead",
       "original-delivery",
     ])
@@ -2393,7 +2428,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ status: "failed" }), {
           retryOriginal: { medium: "a4" },
-          printOnA4: a4Offer,
+          print: a4Offer,
         }),
       });
       for (const name of ["email-again", "email-invoice"]) expect(button(el, name)).toBeNull();

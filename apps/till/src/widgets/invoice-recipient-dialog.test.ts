@@ -212,7 +212,7 @@ const anaGarcia = {
 } as const;
 
 describe("till-invoice-recipient-dialog delivery choice", () => {
-  it("offers no delivery choice and sends none when the location has no invoice printer", async () => {
+  it("offers no delivery choice and sends none when the device has no A4 invoice printer", async () => {
     const el = await mountDialog();
     const sent = confirmations(el);
     expect(deliveryField(el)).toBeNull();

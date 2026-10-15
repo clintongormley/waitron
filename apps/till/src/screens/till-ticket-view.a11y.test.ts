@@ -40,7 +40,10 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-const a4Offer = { printer: { id: "p1", name: "Office" }, designation: "original" as const };
+const a4Offer = {
+  printers: [{ id: "p1", name: "Office", kind: "a4" as const }],
+  designation: "original" as const,
+};
 const attempt = (over: Partial<InvoiceDeliveryAttempt>): InvoiceDeliveryAttempt => ({
   id: "d1",
   medium: "a4",
@@ -54,7 +57,7 @@ const attempt = (over: Partial<InvoiceDeliveryAttempt>): InvoiceDeliveryAttempt 
   lateSuccess: false,
   ...over,
 });
-const none = { retryOriginal: null, printOnA4: null, receiptInstead: null, email: null };
+const none = { retryOriginal: null, print: null, receiptInstead: null, email: null };
 /** One of each delivery state the sale view words, with the actions B1 offers beside it. */
 const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
   [
@@ -62,7 +65,25 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: null,
       originalCompleted: false,
-      actions: { ...none, printOnA4: a4Offer },
+      originalPrinterId: null,
+      actions: { ...none, print: a4Offer },
+      history: [],
+    },
+    false,
+  ],
+  [
+    "no attempt, Print on a receipt printer offered",
+    {
+      current: null,
+      originalCompleted: false,
+      originalPrinterId: null,
+      actions: {
+        ...none,
+        print: {
+          printers: [{ id: "r1", name: "Bar printer", kind: "receipt" }],
+          designation: "original",
+        },
+      },
       history: [],
     },
     false,
@@ -72,6 +93,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({}),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: { ...none, receiptInstead: { deliveryId: "d1" } },
       history: [],
     },
@@ -82,6 +104,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ status: "sending" }),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: none,
       history: [],
     },
@@ -92,6 +115,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ status: "sending", printerHold: "paper_out" }),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: none,
       history: [],
     },
@@ -102,7 +126,8 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ status: "sent" }),
       originalCompleted: true,
-      actions: { ...none, printOnA4: { ...a4Offer, designation: "duplicate" } },
+      originalPrinterId: null,
+      actions: { ...none, print: { ...a4Offer, designation: "duplicate" } },
       history: [],
     },
     false,
@@ -112,7 +137,8 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ status: "failed" }),
       originalCompleted: false,
-      actions: { ...none, retryOriginal: { medium: "a4" }, printOnA4: a4Offer },
+      originalPrinterId: null,
+      actions: { ...none, retryOriginal: { medium: "a4" }, print: a4Offer },
       history: [],
     },
     false,
@@ -122,7 +148,8 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ status: "unknown", printerHold: "paper_jam" }),
       originalCompleted: false,
-      actions: { ...none, retryOriginal: { medium: "a4" }, printOnA4: a4Offer },
+      originalPrinterId: null,
+      actions: { ...none, retryOriginal: { medium: "a4" }, print: a4Offer },
       history: [],
     },
     false,
@@ -132,6 +159,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ medium: "email", status: "sent" }),
       originalCompleted: true,
+      originalPrinterId: null,
       actions: none,
       history: [],
     },
@@ -142,7 +170,8 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: null,
       originalCompleted: false,
-      actions: { ...none, printOnA4: a4Offer, email: { designation: "original" } },
+      originalPrinterId: null,
+      actions: { ...none, print: a4Offer, email: { designation: "original" } },
       history: [],
     },
     false,
@@ -152,6 +181,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ medium: "email" }),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: { ...none, receiptInstead: { deliveryId: "d1" } },
       history: [],
     },
@@ -162,6 +192,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ medium: "email", status: "failed" }),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: { ...none, retryOriginal: { medium: "email" }, email: { designation: "original" } },
       history: [],
     },
@@ -172,6 +203,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ medium: "email", status: "sent" }),
       originalCompleted: true,
+      originalPrinterId: null,
       actions: { ...none, email: { designation: "duplicate" } },
       history: [],
     },
@@ -182,6 +214,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     {
       current: attempt({ medium: "email", status: "unknown" }),
       originalCompleted: false,
+      originalPrinterId: null,
       actions: none,
       history: [],
     },

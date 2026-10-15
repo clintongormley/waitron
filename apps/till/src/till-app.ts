@@ -5853,10 +5853,13 @@ export class TillApp extends LitElement {
     this.#deliveryReread = undefined;
   }
 
-  async #onPrintA4(): Promise<void> {
+  async #onPrintInvoice(): Promise<void> {
     const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.invoiceDeliveries?.actions.printOnA4 == null) return;
-    await this.#deliveryAction(id, (requestKey) => this.api.requestA4Delivery(id, requestKey));
+    const printer = this.invoiceDeliveries?.actions.print?.printers[0];
+    if (id === undefined || printer === undefined) return;
+    await this.#deliveryAction(id, (requestKey) =>
+      this.api.requestPrintDelivery(id, printer.id, requestKey),
+    );
   }
 
   async #onReceiptInstead(): Promise<void> {
@@ -10767,7 +10770,7 @@ export class TillApp extends LitElement {
         @retry-receipt=${() => void this.#onPrintReceipt(true)}
         @refresh-receipt=${() => void this.#refreshReceiptPrint()}
         @confirm-handover=${() => void this.#confirmReceiptHandover()}
-        @print-a4=${() => void this.#onPrintA4()}
+        @print-invoice=${() => void this.#onPrintInvoice()}
         @receipt-instead=${() => void this.#onReceiptInstead()}
         @email-invoice=${() => this.#onEmailInvoice()}
         @retry-email=${() => void this.#onRetryEmail()}

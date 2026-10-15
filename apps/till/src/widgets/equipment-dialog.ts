@@ -34,14 +34,20 @@ function nfcReader(): (new () => NfcReader) | undefined {
   return (window as Window & { NDEFReader?: new () => NfcReader }).NDEFReader;
 }
 
-type Field = "receiptPrinterId" | "paymentSlipPrinterId" | "cardReaderId" | "cashDrawerPrinterId";
+type Field =
+  | "receiptPrinterId"
+  | "paymentSlipPrinterId"
+  | "cardReaderId"
+  | "cashDrawerPrinterId"
+  | "invoicePrinterId";
 
-/** The rows in the order staff use them; the cash drawer has no label to scan. */
+/** The rows in the order staff use them; the cash drawer and the invoice printer are not scanned. */
 const ROWS: { role: EquipmentRole; field: Field; scan: "printer" | "reader" | null }[] = [
   { role: "receipt", field: "receiptPrinterId", scan: "printer" },
   { role: "payment_slip", field: "paymentSlipPrinterId", scan: "printer" },
   { role: "card_terminal", field: "cardReaderId", scan: "reader" },
   { role: "cash_drawer", field: "cashDrawerPrinterId", scan: null },
+  { role: "invoice", field: "invoicePrinterId", scan: null },
 ];
 
 const fill = (text: string, values: Record<string, string>) =>
@@ -52,7 +58,7 @@ function optionLabel(item: EquipmentItem): string {
   if (item.heldBy !== null)
     return fill(t("equipment.option_held"), { item: item.name, device: item.heldBy.deviceName });
   if (!item.available) return fill(t("equipment.switched_off"), { item: item.name });
-  return item.name;
+  return item.kind === "a4" ? fill(t("equipment.option_a4"), { item: item.name }) : item.name;
 }
 
 function canScan(): boolean {
@@ -60,9 +66,10 @@ function canScan(): boolean {
 }
 
 /**
- * Shows what the device prints receipts and payment slips on, pays cards on and opens as its cash
- * drawer, and lets staff choose each from a list or by scanning its label. Choosing an item another
- * device carries asks first. The dialog only reports a choice; the app owns the request.
+ * Shows what the device prints receipts, payment slips and full invoices on, pays cards on and opens
+ * as its cash drawer, and lets staff choose each from a list, or the rows `ROWS` marks by scanning
+ * a label. Choosing an item another device carries asks first. The dialog only reports a choice;
+ * the app owns the request.
  */
 @customElement("till-equipment-dialog")
 export class TillEquipmentDialog extends LitElement {

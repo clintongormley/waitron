@@ -1442,7 +1442,8 @@ describe("TillApi", () => {
     const status = {
       current: null,
       originalCompleted: false,
-      actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+      originalPrinterId: null,
+      actions: { retryOriginal: null, print: null, receiptInstead: null },
       history: [],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(status));
@@ -1453,15 +1454,17 @@ describe("TillApi", () => {
     });
   });
 
-  it("asks for an A4 print under the request key it is given", async () => {
+  it("asks for a print on the printer it is given, under the request key it is given", async () => {
     const attempt = { id: "d1", medium: "a4", status: "queued" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));
-    expect(await new TillApi("", fetchStub).requestA4Delivery("wo1", "key-1")).toEqual(attempt);
+    expect(
+      await new TillApi("", fetchStub).requestPrintDelivery("wo1", "pp-office", "key-1"),
+    ).toEqual(attempt);
     expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ medium: "a4", requestKey: "key-1" }),
+      body: JSON.stringify({ medium: "print", printerId: "pp-office", requestKey: "key-1" }),
     });
   });
 
@@ -1521,13 +1524,15 @@ describe("TillApi", () => {
     ).rejects.toEqual({ code: "management.request_invalid", status: 400, field: "recipient" });
   });
 
-  it("passes on a refused A4 request with its code", async () => {
+  it("passes on a refused print request with its code", async () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
         jsonResponse({ error: { code: "invoice_delivery.active", params: {} } }, 409),
       );
-    await expect(new TillApi("", fetchStub).requestA4Delivery("wo1", "key-1")).rejects.toEqual({
+    await expect(
+      new TillApi("", fetchStub).requestPrintDelivery("wo1", "pp-office", "key-1"),
+    ).rejects.toEqual({
       code: "invoice_delivery.active",
       status: 409,
     });

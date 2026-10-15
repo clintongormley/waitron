@@ -111,6 +111,31 @@ describe("equipment dialog NFC", () => {
       { role: "payment_slip", selection: { id: OTHER }, via: "scan", takeOver: false },
     ]);
   });
+  it("a scanned printer label never chooses the invoice printer", async () => {
+    installNfc();
+    const INVOICE_ONLY = "c45f83b1-4444-4444-8444-444444444444";
+    const equipment = {
+      roles: [
+        ...NFC_EQUIPMENT.roles,
+        {
+          ...NFC_EQUIPMENT.roles[0]!,
+          role: "invoice" as const,
+          choices: [{ ...NFC_EQUIPMENT.roles[0]!.choices[0]!, id: INVOICE_ONLY, name: "Office" }],
+        },
+      ],
+    };
+    const el = await mount({ equipment });
+    const seen = changes(el);
+    expect(
+      el.shadowRoot!.querySelector('[data-equipment-row="invoice"] [data-equipment-scan]'),
+    ).toBeNull();
+    (await reader()).read(code("printer", INVOICE_ONLY));
+    await el.updateComplete;
+    expect(seen).toEqual([]);
+    expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent).toContain(
+      "not available to this device",
+    );
+  });
   it("invalid UTF-8 bytes in a text label make no selection", async () => {
     installNfc();
     const el = await mount();

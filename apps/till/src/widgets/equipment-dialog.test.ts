@@ -30,6 +30,7 @@ const PP = item("PP", "Portable printer", { portable: true });
 const R1 = item("R1", "Reader one", { portable: true });
 const R2 = item("R2", "Reader two", { portable: true });
 const D1 = item("D1", "Counter drawer");
+const A4 = item("A4", "Office HP", { kind: "a4" });
 const BAR = { deviceId: "dev-bar", deviceName: "Bar till", personName: "Ana" };
 
 /** A role following its profile's default, resolving to the default unless told otherwise. */
@@ -74,12 +75,13 @@ function resolvedOf(
   return role === null ? null : { id: role.id, name: role.name, available: role.available };
 }
 
-/** The four roles in the server's order: receipt, slip, drawer, reader. */
+/** The five roles in the server's order: receipt, slip, drawer, invoice, reader. */
 function equipment(roles: Partial<Record<EquipmentRole, RoleEquipment>> = {}): DeviceEquipment {
   const all: RoleEquipment[] = [
     roles.receipt ?? onItem("receipt", P1, [P1, P2], P1),
     roles.payment_slip ?? onDefault("payment_slip", PP, [PP]),
     roles.cash_drawer ?? onDefault("cash_drawer", D1, [D1]),
+    roles.invoice ?? onDefault("invoice", A4, [A4, { ...P1, kind: "receipt" }]),
     roles.card_terminal ?? onDefault("card_terminal", R1, [R1, R2]),
   ];
   return { roles: all.map((role) => ({ ...role, resolved: resolvedOf(role.resolved) })) };
@@ -128,6 +130,7 @@ describe("till-equipment-dialog", () => {
       "payment_slip",
       "card_terminal",
       "cash_drawer",
+      "invoice",
     ]);
     expect(
       rows.map((each) => each.querySelector("[data-equipment-label]")!.textContent!.trim()),
@@ -136,6 +139,7 @@ describe("till-equipment-dialog", () => {
       t("equipment.payment_slip"),
       t("equipment.card_terminal"),
       t("equipment.cash_drawer"),
+      t("equipment.invoice"),
     ]);
     expect(resolvedText(el, "receipt")).toBe("Counter printer");
     expect(resolvedText(el, "payment_slip")).toBe("Portable printer");
@@ -145,6 +149,45 @@ describe("till-equipment-dialog", () => {
     expect(combobox(el, "paymentSlipPrinterId")).not.toBeNull();
     expect(combobox(el, "cardReaderId")).not.toBeNull();
     expect(combobox(el, "cashDrawerPrinterId")).not.toBeNull();
+    expect(resolvedText(el, "invoice")).toBe("Office HP");
+    expect(combobox(el, "invoicePrinterId")).not.toBeNull();
+  });
+
+  it("names the invoice printer row, and marks its A4 printers, in English and Spanish", async () => {
+    const el = await mountDialog();
+
+    expect(row(el, "invoice")!.querySelector("[data-equipment-label]")!.textContent!.trim()).toBe(
+      "Invoice printer",
+    );
+    expect(optionLabels(combobox(el, "invoicePrinterId")!)).toEqual([
+      "Use default: Office HP",
+      "Office HP · A4",
+      "Counter printer",
+    ]);
+    setLocale("es-ES");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(row(el, "invoice")!.querySelector("[data-equipment-label]")!.textContent!.trim()).toBe(
+      "Impresora de facturas",
+    );
+    expect(optionLabels(combobox(el, "invoicePrinterId")!).slice(1)).toEqual([
+      "Office HP · A4",
+      "Counter printer",
+    ]);
+  });
+
+  it("picking an invoice printer sends it for the invoice role, and a refusal naming it shows under that row", async () => {
+    const el = await mountDialog();
+    const seen = changes(el);
+
+    await chooseOption(combobox(el, "invoicePrinterId")!, "P1");
+    expect(seen).toEqual([
+      { role: "invoice", selection: { id: "P1" }, via: "list", takeOver: false },
+    ]);
+    el.error = { code: "device.binding_invalid", field: "invoicePrinterId" };
+    await el.updateComplete;
+    expect(combobox(el, "invoicePrinterId")!.invalid).toBe(true);
+    expect(bottom(el)).toBe(t("form.fix_fields"));
   });
 
   it("says where each role's equipment comes from", async () => {
@@ -372,6 +415,7 @@ describe("till-equipment-dialog", () => {
     ["paymentSlipPrinterId", "device.equipment_held"],
     ["cashDrawerPrinterId", "device.binding_invalid"],
     ["cardReaderId", "device.binding_invalid"],
+    ["invoicePrinterId", "device.binding_invalid"],
   ])(
     "shows a refusal naming %s under that field, and the generic sentence at the bottom",
     async (field, code) => {
@@ -534,7 +578,7 @@ describe("till-equipment-dialog", () => {
     expect(seen).toEqual([]);
   });
 
-  it("offers Scan on the receipt, slip and reader rows, not the cash drawer", async () => {
+  it("offers Scan on the receipt, slip and reader rows, not the cash drawer or the invoice printer", async () => {
     const el = await mountDialog();
 
     const scans = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-equipment-scan]")];

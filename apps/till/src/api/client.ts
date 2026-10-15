@@ -1482,8 +1482,9 @@ export interface DeviceProfileSwitched {
   activeProfileId: string;
 }
 
-/** The four things a device prints, opens and pays on, in the order the server lists them. */
-export type EquipmentRole = "receipt" | "payment_slip" | "cash_drawer" | "card_terminal";
+/** The five things a device prints, opens and pays on, in the order the server lists them. */
+export type EquipmentRole =
+  "receipt" | "payment_slip" | "cash_drawer" | "invoice" | "card_terminal";
 
 /** Another device holding a portable item, and who is signed in on it, if anyone. */
 export interface EquipmentHolder {
@@ -1495,12 +1496,14 @@ export interface EquipmentHolder {
 export interface EquipmentItem {
   id: string;
   name: string;
+  /** A printer's kind, `a4` for an A4 printer; a reader has none. */
+  kind?: "receipt" | "a4";
   portable: boolean;
   /** Switched on; a reader also still paired. */
   available: boolean;
   /** A reader another device has a payment in progress on. */
   busy: boolean;
-  /** Another device holding it; never this one. */
+  /** Another device holding it; never this one, and never for a cash drawer or an invoice printer. */
   heldBy: EquipmentHolder | null;
   /** A reader's provider as the venue stores it (`sumup`, `stripe`); a printer has none. */
   provider?: string;
@@ -1520,7 +1523,7 @@ export interface RoleEquipment {
   choices: EquipmentItem[];
 }
 
-/** `GET` and `PUT /api/device/equipment` success: always the four roles. */
+/** `GET` and `PUT /api/device/equipment` success: always the five roles. */
 export interface DeviceEquipment {
   roles: RoleEquipment[];
 }
@@ -2119,8 +2122,8 @@ export type A4HoldCode = (typeof a4HoldCodes)[number];
 
 export type InvoiceDeliveryMedium = "email" | "a4" | "receipt";
 
-/** The location's current invoice printer (`readInvoicePrinter`, `apps/server/src/page-printers.ts`),
- * and whether the server has a mail transport to send an invoice by email. */
+/** The device's invoice printer when it is an A4 printer, else null (`/api/invoice-delivery-options`,
+ * `apps/server/src/till-api.ts`), and whether the server has a mail transport to send an invoice by email. */
 export interface InvoiceDeliveryOptions {
   invoicePrinter: { id: string; name: string } | null;
   emailAvailable: boolean;
@@ -2146,13 +2149,22 @@ export interface InvoiceDeliveryAttempt {
   lateSuccess: boolean;
 }
 
+/** A printer the status offers to print the full invoice on (`OfferedPrinter`, `apps/server/src/invoice-delivery-status.ts`). */
+export interface InvoiceOfferedPrinter {
+  id: string;
+  name: string;
+  kind: "a4" | "receipt";
+}
+
 export interface InvoiceDeliveryStatus {
   current: InvoiceDeliveryAttempt | null;
   originalCompleted: boolean;
+  /** The printer of the original that was sent, else of the newest original attempt; null for an email or none. */
+  originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: InvoiceDeliveryMedium } | null;
-    printOnA4: {
-      printer: { id: string; name: string };
+    print: {
+      printers: InvoiceOfferedPrinter[];
       designation: "original" | "duplicate";
     } | null;
     receiptInstead: { deliveryId: string } | null;
@@ -2631,14 +2643,16 @@ export class TillApi {
     );
   }
 
-  requestA4Delivery(workingOrderId: string, requestKey: string): Promise<InvoiceDeliveryAttempt> {
+  /** Prints the full invoice on `printerId`, which must be the device's invoice printer. */
+  requestPrintDelivery(
+    workingOrderId: string,
+    printerId: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
     return this.#request<InvoiceDeliveryAttempt>(
       `/api/sales/${workingOrderId}/deliveries`,
       "POST",
-      {
-        medium: "a4",
-        requestKey,
-      },
+      { medium: "print", printerId, requestKey },
     );
   }
 

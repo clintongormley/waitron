@@ -23,6 +23,7 @@ const OFF = item("P2", "Impresora de barra", { available: false });
 const R1 = item("R1", "Lector uno", { portable: true });
 const R2 = item("R2", "Lector dos", { portable: true, busy: true });
 const D1 = item("D1", "Cajón de mostrador");
+const A4 = item("A4", "HP Oficina", { kind: "a4" });
 
 function role(
   name: RoleEquipment["role"],
@@ -50,6 +51,7 @@ const EVERY_ROW: DeviceEquipment = {
     role("receipt", OFF, P1, [P1]),
     role("payment_slip", null, PP, [P1, PP]),
     role("cash_drawer", null, null, [D1]),
+    role("invoice", null, A4, [A4, P1]),
     role("card_terminal", null, R1, [R1, R2]),
   ],
 };
