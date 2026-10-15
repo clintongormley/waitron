@@ -1138,6 +1138,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Task 19's review with a temporary case: job 1 done with 3 suggestions, job 2 failed → notice `[]`.
   Owner question filed; the alternative is a notice for any run that is neither sending nor running
   with `waiting > 0`.
+
 - **Translate all: the notice's count can be higher than what the dialog shows.** `waiting`
   (`readSuggestionRun`, `packages/catalogue/src/content-suggestion-jobs.ts`) counts every stored
   suggestion with text, including out-of-date ones, ones for deleted items or switched-off languages,

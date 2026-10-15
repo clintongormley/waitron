@@ -100,9 +100,9 @@ instead.
 ## Translate all
 
 Translate all asks Waitron Cloud to suggest the customer-facing names a venue is missing, so
-nobody has to type every translation by hand. The box sends Cloud each item that has no name in
-some enabled language, with its staff name, its category, the names it already has and the
-languages it lacks. It adds up to 300 items whose names someone has saved, as examples of the
+nobody has to type every translation by hand. The box sends Cloud items that have, in some
+enabled language, neither a name nor a suggestion waiting for review, each with its staff name,
+its category, the names it already has and the languages it lacks. It adds up to 300 items whose names someone has saved, as examples of the
 venue's style, and the venue's languages and country. It sends no prices, no people and no sales.
 
 A runner on the primary (`apps/server/src/content-suggestion-runner.ts`) makes every call to
@@ -112,7 +112,7 @@ progress again five seconds after each answer. Once Cloud has finished, the runn
 results and stores them as suggestions. Then it releases the job, so Cloud deletes its copy at
 once; it releases a job Cloud reports as failed too. A job holds at most 1,000 items, context
 items included, and 1 MiB, so a venue missing more names than that is sent as several jobs in turn: storing one job's results
-records the next.
+records the next, unless Cloud stopped that job at the venue's monthly spending cap.
 
 A lost reply or a restart resumes from the job's row. The row keeps the job's body until Cloud
 accepts it, and the row's own id is the operation ID, so a retried submit signs the same

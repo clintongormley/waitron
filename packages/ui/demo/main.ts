@@ -78,6 +78,7 @@ const panel = (theme: "light" | "dark") => `
       <wt-count-badge count="3"></wt-count-badge>
       <wt-count-badge count="12" tone="warning"></wt-count-badge>
       <wt-count-badge count="120" tone="error"></wt-count-badge>
+      <wt-count-badge count="5" tone="notice"></wt-count-badge>
     </div>
     <div>
       <wt-choice-row heading="Demo">A practice server. Nothing is filed to AEAT.</wt-choice-row>

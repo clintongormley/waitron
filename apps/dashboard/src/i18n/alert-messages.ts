@@ -300,8 +300,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Waitron no ha podido comprobar el lector de tarjetas «{reader}». Revísalo en la página de Pagos.",
   },
   "content.suggestions_ready": {
-    en: "Translations ready: {count} suggestions are waiting for review",
-    es: "Traducciones listas: {count} sugerencias pendientes de revisar",
+    en: "Translations ready: {count} suggestions are waiting for review.",
+    es: "Traducciones listas: {count} sugerencias pendientes de revisar.",
   },
   "content.suggestions_ready_partly": {
     en: "Translations ready: {count} suggestions are waiting for review. {failed} couldn't be done this time.",

@@ -54,9 +54,9 @@ not the new default, it holds the change up too, and **Missing translations** li
 **Included menu folder**. This holds while the include shows its sections directly too; turn
 **Show as a folder** on to see the names.
 
-**Edit translations** opens a dialog containing **Missing translations** for your content
+**Edit translations** opens a dialog listing the missing translations for your content
 languages. The language you chose opens; languages marked **Required** come first and have a note
-saying how many names still need translating into them. The report keeps its Kind and Why filters
+saying how many names still need translating into them. It has Kind and Why filters
 and links to each existing editor. A name
 filled in for some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
@@ -65,8 +65,8 @@ receipt. Archived products, disabled lists and switched-off menus are not listed
 
 If your venue is connected to Waitron Cloud and Translate all is switched on for it there,
 **Translate all** at the top of the dialog asks Cloud to suggest every missing customer-facing
-name, in every language. Each suggestion fills its empty field as a draft marked **Suggested**,
-and nothing reaches your diners until you save it; **Discard suggestion** removes one you do not
+name, in every language. Suggestions fill empty fields as drafts marked **Suggested**, up to 100
+at a time, and nothing reaches your diners until you save them; **Discard suggestion** removes one you do not
 want. When the suggestions are ready, the alerts bell tells you how many are waiting for review.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
