@@ -188,10 +188,13 @@ describe("Opening hours year", () => {
       "0100-01-01",
     );
     const opened = opens(el);
+    dayButton(el, "0100-03-02").click();
     el.model = { ...el.model!, days: [...days] };
     await el.updateComplete;
-    dayButton(el, "0100-03-02").click();
     expect(opened.map(({ date }) => date)).toEqual(["0100-03-02"]);
+    expect(root(el).querySelector("[tabindex='0']")?.closest("td")?.dataset.date).toBe(
+      "0100-03-02",
+    );
   });
 
   it("tints each day by its season's place in start order, cycling past the fourth", async () => {
@@ -400,7 +403,7 @@ describe("Opening hours year", () => {
     expect(text(dayButton(el, "2027-12-08"))).toBe("8");
   });
 
-  it("sends nothing and offers no actions when read-only", async () => {
+  it("gives a viewer read-only chips, and a date still sends calendar-day-open and no special-day-action", async () => {
     const el = await mount(yearModel(), { readOnly: true });
     const sent = actions(el);
     const opened = opens(el);

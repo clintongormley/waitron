@@ -758,7 +758,7 @@ async function makeFromYear(el: Screen, date: string) {
   await expect.poll(() => boxButton(el, "special-add")).not.toBeNull();
   boxButton(el, "special-add")!.click();
 }
-it("pre-fills the holiday's name when the sender names only the date's own holidays", async () => {
+it("Make over the Year pre-fills a holiday the year read names when the month read holds no row for the date", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
@@ -983,20 +983,23 @@ describe("Year view", () => {
     expect(listReads()).toEqual([{ passive: true }]);
   });
 
-  async function heldMount(address: string, hold: (path: string) => boolean) {
+  async function heldMount(address: string, hold: (path: string) => boolean, readOnly = false) {
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     history.replaceState(null, "", address);
     const held: { path: string; release: (value: unknown) => void }[] = [];
-    const el = await mount((async (path: string) => {
-      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
-      const answer = asked
-        ? yearModel(Number(asked[1]))
-        : path.endsWith("/special-days")
-          ? []
-          : model();
-      if (!hold(path)) return answer;
-      return new Promise<unknown>((release) => held.push({ path, release }));
-    }) as DashboardRequest);
+    const el = await mount(
+      (async (path: string) => {
+        const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+        const answer = asked
+          ? yearModel(Number(asked[1]))
+          : path.endsWith("/special-days")
+            ? []
+            : model();
+        if (!hold(path)) return answer;
+        return new Promise<unknown>((release) => held.push({ path, release }));
+      }) as DashboardRequest,
+      readOnly,
+    );
     const view = () => el.shadowRoot!.querySelector("opening-hours-year")!;
     return { el, view, held };
   }
@@ -1066,6 +1069,85 @@ describe("Year view", () => {
     await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
     expect(dayBox(el)!.message).toBe("");
     expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+  });
+
+  function watchLog(el: Screen) {
+    const log: string[] = [];
+    const watch = el.api.watchMonth.bind(el.api);
+    vi.spyOn(el.api, "watchMonth").mockImplementation((month, ...rest) => {
+      log.push(`+${month}`);
+      const detach = watch(month, ...rest);
+      return () => {
+        log.push(`-${month}`);
+        detach();
+      };
+    });
+    return log;
+  }
+  const redated = async (month: string) => {
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    return JSON.parse(JSON.stringify(monthModel()).replaceAll("2026-12", month));
+  };
+
+  it("closing the box releases its month's read", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    const year = await shownYear(view);
+    const log = watchLog(el);
+    await userEvent.click(yearDate(year, "2026-12-10"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(log).toEqual(["+2026-12"]);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => dayBox(el)).toBeNull();
+    expect(log).toEqual(["+2026-12", "-2026-12"]);
+  });
+
+  it("a read that answers after the box moved to another month does not fill the new box", async () => {
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.includes("/opening-hours/month?"),
+    );
+    const year = await shownYear(view);
+    yearDate(year, "2026-12-10").click();
+    await expect.poll(() => held.length).toBe(1);
+    yearDate(year, "2026-11-04").click();
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-11-04"));
+    await expect.poll(() => held.length).toBe(2);
+    // December's answer carries November's dates, so it would fill the November box if applied.
+    held[0]!.release(await redated("2026-11"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
+    expect(dayBox(el)!.line).toBe("");
+    expect(dayBox(el)!.message).toBe(t("day.loading"));
+    held[1]!.release(await redated("2026-11"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+  });
+
+  it("removing the screen releases the box's month read", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    const year = await shownYear(view);
+    const log = watchLog(el);
+    yearDate(year, "2026-12-10").click();
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    el.remove();
+    expect(log).toContain("-2026-12");
+  });
+
+  it("a viewer's box over the Year offers only the season's week, from the year read while its month loads", async () => {
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.endsWith("/opening-hours/month?month=2026-10"),
+      true,
+    );
+    yearDate(await shownYear(view), "2026-10-13").click();
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.message).toBe(t("day.loading"));
+    expect(boxButtons(el)).toEqual(["Show All year's standard week"]);
+    await expect.poll(() => held.length).toBe(1);
+    held[0]!.release(await redated("2026-10"));
+    await expect.poll(() => dayBox(el)?.line).not.toBe("");
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButton(el, "special-edit")).toBeNull();
+    expect(boxButton(el, "special-add")).toBeNull();
   });
 
   it.each(["slow", "instant"])(

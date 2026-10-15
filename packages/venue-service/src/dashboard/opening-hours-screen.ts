@@ -142,7 +142,7 @@ export class OpeningHoursScreen extends LitElement {
   private watchedMonth = "";
   /** The Year's or the Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
-  /** The month read behind the Year's day box, kept while the Year shows that month's year. */
+  /** The month read behind the Year's day box, held while that box is open. */
   @state() private boxMonth?: OpeningHoursMonth;
   private boxMonthDetach?: () => void;
   private watchedBoxMonth = "";
@@ -587,10 +587,8 @@ export class OpeningHoursScreen extends LitElement {
     );
   }
   private boxMonthNeeded() {
-    if (this.view !== "year" || this.moduleView) return "";
-    if (this.dayBox) return this.dayBox.date.slice(0, 7);
-    const year = `${String(this.shownYear()).padStart(4, "0")}-`;
-    return this.watchedBoxMonth.startsWith(year) ? this.watchedBoxMonth : "";
+    if (this.view !== "year" || this.moduleView || !this.dayBox) return "";
+    return this.dayBox.date.slice(0, 7);
   }
   private watchBoxMonth() {
     const month = this.boxMonthNeeded();
@@ -1039,7 +1037,7 @@ export class OpeningHoursScreen extends LitElement {
   private dayBoxContent(date: LocalDate) {
     const year = this.view === "year" ? this.yearModel : undefined;
     const read = year ? this.boxMonth : this.monthModel;
-    const day = read?.days?.find((row) => row.date === date);
+    const day = read?.days.find((row) => row.date === date);
     const yearHolidays = year?.days.flatMap((row) => row.holidays) ?? [];
     if (day && read) {
       const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
