@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { TranslationTarget } from "../api/client.js";
-import { TranslationDrafts } from "./content-translations-model.js";
+import type { ContentSuggestionView, TranslationTarget } from "../api/client.js";
+import {
+  TranslationDrafts,
+  indexSuggestions,
+  type RowSuggestion,
+} from "./content-translations-model.js";
 
 const target = (id = "one", overrides: Partial<TranslationTarget> = {}): TranslationTarget => ({
   kind: "product",
@@ -293,4 +297,304 @@ it("keeping a draft whose companion was filled elsewhere never stages that obsol
   expect(drafts.count).toBe(0);
   expect(drafts.value(row, "defaultText")).toBe("");
   expect(drafts.submission()).toEqual({ edits: [] });
+});
+
+const found = (overrides: Partial<RowSuggestion> = {}): RowSuggestion => ({
+  ids: ["s"],
+  text: null,
+  defaultText: null,
+  stale: false,
+  placeholder: false,
+  fixes: [],
+  ...overrides,
+});
+
+describe("suggested drafts", () => {
+  it("fills untouched eligible rows that have no text, and leaves a person's edit alone", () => {
+    const one = target("one", { defaultRequired: false });
+    const two = target("two", { defaultRequired: false });
+    const off = target("off", {
+      defaultRequired: false,
+      eligible: false,
+      unavailableReason: "inactive",
+    });
+    const named = target("named", { defaultRequired: false, effectiveSelectedText: "Pan" });
+    const drafts = new TranslationDrafts("es", "en", [one, two, off, named]);
+    drafts.edit(two, "text", "Mine");
+    drafts.suggest(
+      new Map([
+        ["product:one", found({ ids: ["s1"], text: "CLIENT-es one" })],
+        ["product:two", found({ ids: ["s2"], text: "CLIENT-es two" })],
+        ["product:off", found({ ids: ["s3"], text: "CLIENT-es off" })],
+        ["product:named", found({ ids: ["s4"], text: "CLIENT-es named" })],
+      ]),
+    );
+    expect(drafts.value(one, "text")).toBe("CLIENT-es one");
+    expect(drafts.isSuggested(one)).toBe(true);
+    expect(drafts.isEdited(one)).toBe(false);
+    expect(drafts.value(two, "text")).toBe("Mine");
+    expect(drafts.isSuggested(two)).toBe(false);
+    expect(drafts.value(off, "text")).toBe("");
+    expect(drafts.value(named, "text")).toBe("");
+    expect(drafts.suggestedCount).toBe(1);
+    expect(drafts.count).toBe(2);
+    expect(drafts.submission()).toEqual({
+      edits: [
+        { kind: "product", id: "one", expected: "baseline-one", text: "CLIENT-es one" },
+        { kind: "product", id: "two", expected: "baseline-two", text: "Mine" },
+      ],
+    });
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [{ kind: "product", id: "two", expected: "baseline-two", text: "Mine" }],
+    });
+  });
+  it("skips a stale suggestion, a placeholder, and a missing default with no suggestion of its own", () => {
+    const stale = target("stale", { defaultRequired: false });
+    const placeholder = target("placeholder", { defaultRequired: false });
+    const alone = target("alone");
+    const both = target("both");
+    const drafts = new TranslationDrafts("es", "en", [stale, placeholder, alone, both]);
+    drafts.suggest(
+      new Map([
+        ["product:stale", found({ text: "CLIENT-es stale", stale: true })],
+        ["product:placeholder", found({ placeholder: true })],
+        ["product:alone", found({ text: "CLIENT-es alone" })],
+        ["product:both", found({ text: "CLIENT-es both", defaultText: "CLIENT-en both" })],
+      ]),
+    );
+    expect(drafts.suggestedCount).toBe(1);
+    expect(drafts.value(alone, "text")).toBe("");
+    expect(drafts.value(both, "defaultText")).toBe("CLIENT-en both");
+    expect(drafts.submission()).toEqual({
+      edits: [
+        {
+          kind: "product",
+          id: "both",
+          expected: "baseline-both",
+          text: "CLIENT-es both",
+          defaultText: "CLIENT-en both",
+        },
+      ],
+    });
+  });
+  it("stops at 100 drafts counting a person's edits, and a freed place goes to the next row", () => {
+    const rows = Array.from({ length: 102 }, (_, n) =>
+      target(String(n), { defaultRequired: false }),
+    );
+    const drafts = new TranslationDrafts("es", "en", rows);
+    drafts.edit(rows[101]!, "text", "Mine");
+    drafts.suggest(
+      new Map(
+        rows.map((row) => [
+          `product:${row.id}`,
+          found({ ids: [`s${row.id}`], text: `CLIENT-es ${row.id}` }),
+        ]),
+      ),
+    );
+    expect(drafts.count).toBe(100);
+    expect(drafts.suggestedCount).toBe(99);
+    expect(drafts.isSuggested(rows[98]!)).toBe(true);
+    expect(drafts.isSuggested(rows[99]!)).toBe(false);
+    expect(drafts.unfilledCount).toBe(2);
+    drafts.edit(rows[99]!, "text", "Other");
+    expect(drafts.value(rows[99]!, "text")).toBe("");
+    drafts.edit(rows[0]!, "text", "Changed");
+    expect(drafts.value(rows[0]!, "text")).toBe("Changed");
+    expect(drafts.count).toBe(100);
+    drafts.unsuggest(rows[1]!);
+    expect(drafts.isSuggested(rows[99]!)).toBe(true);
+    expect(drafts.isSuggested(rows[100]!)).toBe(false);
+    expect(drafts.unfilledCount).toBe(1);
+  });
+  it("an edited suggestion is the person's edit until it matches the suggestion again, and reset restores it", () => {
+    const one = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one]);
+    drafts.suggest(new Map([["product:one", found({ text: "CLIENT-es one" })]]));
+    drafts.edit(one, "text", "Croqueta casera");
+    expect(drafts.isSuggested(one)).toBe(false);
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Croqueta casera" }],
+    });
+    drafts.edit(one, "text", "CLIENT-es one");
+    expect(drafts.isSuggested(one)).toBe(true);
+    expect(drafts.personalSubmission()).toEqual({ edits: [] });
+    drafts.edit(one, "text", "  ");
+    expect(drafts.isSuggested(one)).toBe(false);
+    expect(drafts.submission()).toEqual({ edits: [] });
+    drafts.reset();
+    expect(drafts.value(one, "text")).toBe("CLIENT-es one");
+    expect(drafts.isSuggested(one)).toBe(true);
+  });
+  it("typing back to the suggestion after a refresh makes it a suggestion again", () => {
+    const one = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one]);
+    drafts.suggest(new Map([["product:one", found({ text: "CLIENT-es one" })]]));
+    drafts.edit(one, "text", "Mine");
+    drafts.snapshot([one], []);
+    drafts.edit(one, "text", "CLIENT-es one");
+    expect(drafts.isSuggested(one)).toBe(true);
+    expect(drafts.personalSubmission()).toEqual({ edits: [] });
+  });
+  it("a person's companion beside a suggested name keeps the suggested name", () => {
+    const row = target("one");
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.suggest(
+      new Map([["product:one", found({ text: "CLIENT-es one", defaultText: "CLIENT-en one" })]]),
+    );
+    drafts.edit(row, "defaultText", "Ham croquette");
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          expected: "baseline-one",
+          text: "CLIENT-es one",
+          defaultText: "Ham croquette",
+        },
+      ],
+    });
+  });
+  it("unsuggest empties the row and ignores that suggestion when read again, but not a new one", () => {
+    const one = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one]);
+    const first = new Map([["product:one", found({ ids: ["s1"], text: "CLIENT-es one" })]]);
+    drafts.suggest(first);
+    drafts.unsuggest(one);
+    expect(drafts.value(one, "text")).toBe("");
+    expect(drafts.suggestionFor(one)).toBeUndefined();
+    drafts.suggest(first);
+    expect(drafts.value(one, "text")).toBe("");
+    drafts.suggest(new Map([["product:one", found({ ids: ["s9"], text: "CLIENT-es again" })]]));
+    expect(drafts.value(one, "text")).toBe("CLIENT-es again");
+  });
+  it("unsuggest and markStale on a row with no suggestion leave the other rows filled", () => {
+    const one = target("one", { defaultRequired: false });
+    const bare = target("bare", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one, bare]);
+    drafts.suggest(new Map([["product:one", found({ text: "CLIENT-es one" })]]));
+    drafts.unsuggest(bare);
+    drafts.markStale(bare);
+    expect(drafts.isSuggested(one)).toBe(true);
+    expect(drafts.suggestionFor(bare)).toBeUndefined();
+  });
+  it("markStale keeps the suggestion as out of date and fills nothing from it", () => {
+    const one = target("one", { defaultRequired: false });
+    const two = target("two", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one, two]);
+    const index = new Map([
+      ["product:one", found({ ids: ["s1"], text: "CLIENT-es one" })],
+      ["product:two", found({ ids: ["s2"], text: "CLIENT-es two" })],
+    ]);
+    drafts.suggest(index);
+    drafts.markStale(one);
+    expect(drafts.value(one, "text")).toBe("");
+    expect(drafts.suggestionFor(one)?.stale).toBe(true);
+    expect(drafts.isSuggested(two)).toBe(true);
+    drafts.suggest(index);
+    expect(drafts.value(one, "text")).toBe("");
+  });
+  it("a suggested row in the scan is refreshed; one the scan stops listing goes, fill and all", () => {
+    const listed = target("listed", { defaultRequired: false });
+    const absent = target("absent", { defaultRequired: false });
+    const drafts = new TranslationDrafts("ca", "ca", [listed, absent]);
+    drafts.suggest(
+      new Map([
+        ["product:listed", found({ ids: ["s1"], text: "CLIENT-ca listed" })],
+        ["product:absent", found({ ids: ["s2"], text: "CLIENT-ca absent" })],
+      ]),
+    );
+    drafts.snapshot([listed, { ...absent, expected: "refreshed-absent" }], []);
+    expect(drafts.rows.map((row) => row.id)).toEqual(["listed", "absent"]);
+    expect(drafts.isSuggested(absent)).toBe(true);
+    expect(drafts.submission().edits.map((edit) => edit.expected)).toEqual([
+      "baseline-listed",
+      "refreshed-absent",
+    ]);
+    drafts.snapshot([listed], []);
+    expect(drafts.rows.map((row) => row.id)).toEqual(["listed"]);
+    expect(drafts.count).toBe(1);
+    drafts.snapshot([listed, absent], []);
+    expect(drafts.arrivals).toBe(1);
+    expect(drafts.isSuggested(absent)).toBe(false);
+    drafts.review([listed, absent], new Map());
+    expect(drafts.value(absent, "text")).toBe("CLIENT-ca absent");
+  });
+  it("a new default language is taken up while only suggestions are filled", () => {
+    const row = target("one");
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.suggest(
+      new Map([["product:one", found({ text: "CLIENT-es one", defaultText: "CLIENT-en one" })]]),
+    );
+    drafts.snapshot([{ ...row, expected: "new-default" }], [], "fr");
+    expect(drafts.defaultLanguage).toBe("fr");
+  });
+  it("checks a suggested name's UTF-8 bytes like a typed one", () => {
+    const one = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one]);
+    drafts.suggest(new Map([["product:one", found({ text: "é".repeat(2049) })]]));
+    expect(drafts.validate()).toEqual([
+      { target: { kind: "product", id: "one" }, field: "text", message: "name_bytes" },
+    ]);
+  });
+});
+
+it("indexes each item's suggestions for the page language, its default and its notes", () => {
+  const view = (overrides: Partial<ContentSuggestionView>): ContentSuggestionView => ({
+    id: "s",
+    kind: "product",
+    itemId: "one",
+    language: null,
+    text: null,
+    placeholder: false,
+    fix: null,
+    stale: false,
+    ...overrides,
+  });
+  const views = [
+    view({ id: "s1", language: "es", text: "CLIENT-es one" }),
+    view({ id: "s2", language: "en", text: "CLIENT-en one", stale: true }),
+    view({ id: "s3", fix: { field: "internal", wrong: "ZURRITO", right: "ZURITO" } }),
+    view({ id: "s4", kind: "variant", placeholder: true }),
+    view({
+      id: "s5",
+      itemId: "two",
+      language: "ca",
+      fix: { field: "ca", wrong: "Crocretes", right: "Croquetes" },
+    }),
+  ];
+  expect(indexSuggestions(views, "es", "en")).toEqual(
+    new Map([
+      [
+        "product:one",
+        {
+          ids: ["s1", "s2", "s3"],
+          text: "CLIENT-es one",
+          defaultText: "CLIENT-en one",
+          stale: true,
+          placeholder: false,
+          fixes: [{ field: "internal", wrong: "ZURRITO", right: "ZURITO" }],
+        },
+      ],
+      [
+        "variant:one",
+        { ids: ["s4"], text: null, defaultText: null, stale: false, placeholder: true, fixes: [] },
+      ],
+      [
+        "product:two",
+        {
+          ids: ["s5"],
+          text: null,
+          defaultText: null,
+          stale: false,
+          placeholder: false,
+          fixes: [{ field: "ca", wrong: "Crocretes", right: "Croquetes" }],
+        },
+      ],
+    ]),
+  );
+  expect(indexSuggestions([views[1]!], "en", "en").get("product:one")).toMatchObject({
+    text: "CLIENT-en one",
+    defaultText: null,
+    stale: true,
+  });
 });

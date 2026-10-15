@@ -94,6 +94,7 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "units",
   ],
+  getContentSuggestions: ["content_suggestions", "content_suggestion_jobs"],
   getContentTranslationTargets: [
     "content_languages",
     "products",
@@ -527,7 +528,7 @@ export const QUERY_DEPENDENCIES = {
   getStreamSettings: ["backup_status"],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
-  listAlerts: ["incidents"],
+  listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
 

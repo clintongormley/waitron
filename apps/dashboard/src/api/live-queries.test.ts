@@ -107,6 +107,10 @@ it.each([
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
   ["getPlannedVsActual", ["location", "2026-09-01", "2026-09-11"], "roster_versions"],
   ["listAlerts", [], "incidents"],
+  ["listAlerts", [], "content_suggestion_jobs"],
+  ["listAlerts", [], "content_suggestions"],
+  ["getContentSuggestions", ["es"], "content_suggestions"],
+  ["getContentSuggestions", ["es"], "content_suggestion_jobs"],
   ["listHandledAlerts", [], "incidents"],
   ["listHandledAlerts", [], "persons"],
   ["listStuckPayments", [], "payments"],
@@ -162,7 +166,11 @@ it("refreshes the open alerts passively and when incidents change", async () => 
   );
   const api = new DashboardApi("", fetchImpl);
   const query = dashboardQuery(api, "listAlerts", []);
-  expect(query.dependencies).toEqual([{ type: "incidents" }]);
+  expect(query.dependencies).toEqual([
+    { type: "incidents" },
+    { type: "content_suggestion_jobs" },
+    { type: "content_suggestions" },
+  ]);
   expect(query.refreshMs).toBe(60_000);
   await query.read();
   await query.read();

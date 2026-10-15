@@ -206,6 +206,12 @@ import type {
   TranslationTarget,
 } from "@waitron/catalogue/src/content-translation-types.js";
 export type { TranslationBatch, TranslationPage, TranslationRef, TranslationTarget };
+import type {
+  ContentSuggestionRead,
+  ContentSuggestionView,
+  SuggestionRunView,
+} from "@waitron/catalogue/src/content-suggestion-types.js";
+export type { ContentSuggestionRead, ContentSuggestionView, SuggestionRunView };
 export interface TranslationQuery {
   after?: string;
   targets?: TranslationRef[];
@@ -2389,6 +2395,20 @@ export class DashboardApi {
       `/management-api/content-translations/${encodeURIComponent(language)}${suffix}`,
       "GET",
     );
+  }
+
+  startContentSuggestions(): Promise<{ run: SuggestionRunView | null }> {
+    return this.#request("/management-api/content-suggestions/jobs", "POST", {});
+  }
+
+  getContentSuggestions(language: string, after?: string): Promise<ContentSuggestionRead> {
+    const params = new URLSearchParams({ language });
+    if (after !== undefined) params.append("after", after);
+    return this.#request(`/management-api/content-suggestions?${params}`, "GET");
+  }
+
+  discardContentSuggestion(id: string): Promise<{ deleted: string }> {
+    return this.#request(`/management-api/content-suggestions/${encodeURIComponent(id)}`, "DELETE");
   }
 
   saveContentTranslations(
