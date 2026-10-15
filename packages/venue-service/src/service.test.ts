@@ -57,6 +57,7 @@ describe("VENUE_SERVICE", () => {
       "narrowDeviceKitchenScreens",
       "openStationForToday",
       "orderInZones",
+      "orderZoneIdSql",
       "readClearingWorkflow",
       "readDepartmentLogoRasters",
       "readDepartmentReceipt",

@@ -1068,6 +1068,7 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, ServiceMode>>;
+  orderZoneIdSql(cfg: { locationId: LocationId }, orderId: SQL): SQL;
   /** A condition, for a query's WHERE, that holds for an order whose recorded zone is one of
    *  `zoneIds` or that has no recorded zone. `orderId` is the outer query's order id, written
    *  table-qualified. */

@@ -3015,6 +3015,50 @@ describe("findOrderServiceZones", () => {
   });
 });
 
+describe("orderZoneIdSql", () => {
+  it("reads distinct recorded zones with orders as a base and a join", async () => {
+    const venue = await seedSellingVenue();
+    const elsewhere = {
+      locationId: brandLocationId(await seedLocation("Elsewhere zone expression")),
+    };
+    await scoped(async (tx) => {
+      const dining = await openOrder(tx, venue, 1);
+      const bar = await openOrder(tx, venue, 2);
+      const none = await openOrder(tx, venue, 3);
+      await recordOrderServiceContext(tx, venue.cfg, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, venue.cfg, bar, venue.barZone);
+      const ids = [dining, bar, none];
+      const expression = settingsOperations.orderZoneIdSql(venue.cfg, sql`"working_orders"."id"`);
+      const query = tx
+        .select({ id: workingOrders.id, zoneId: expression })
+        .from(workingOrders)
+        .where(inArray(workingOrders.id, ids));
+      expect(query.toSQL().sql).toContain('osc.working_order_id = "working_orders"."id"');
+      expect(query.toSQL().params).toContain(venue.cfg.locationId);
+      const expected = [
+        { id: dining, zoneId: venue.diningZone },
+        { id: bar, zoneId: venue.barZone },
+        { id: none, zoneId: null },
+      ].sort((a, b) => a.id.localeCompare(b.id));
+      expect((await query).sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);
+      const joined = await tx
+        .select({ id: workingOrders.id, zoneId: expression })
+        .from(locations)
+        .innerJoin(workingOrders, eq(workingOrders.locationId, locations.id))
+        .where(inArray(workingOrders.id, ids));
+      expect(joined.sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);
+      expect(
+        await tx
+          .select({
+            zoneId: settingsOperations.orderZoneIdSql(elsewhere, sql`"working_orders"."id"`),
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, dining)),
+      ).toEqual([{ zoneId: null }]);
+    });
+  });
+});
+
 describe("orderInZones", () => {
   it("keeps orders in the named zones and orders with no zone, and leaves out the rest", async () => {
     const venue = await seedSellingVenue();

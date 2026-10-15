@@ -1148,6 +1148,12 @@ export async function findOrderServiceContext(
   return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
 }
 
+/** `orderId` must be table-qualified so a base-table query correlates to its outer order. */
+export function orderZoneIdSql(cfg: VenueScope, orderId: SQL): SQL {
+  return sql`(select osc.zone_id from order_service_contexts osc
+    where osc.working_order_id = ${orderId} and osc.location_id = ${cfg.locationId})`;
+}
+
 /**
  * A WHERE condition that holds for an order whose recorded zone is one of `zoneIds`, or that has no
  * recorded zone at this location. `orderId` is the outer query's order id, table-qualified.
