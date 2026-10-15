@@ -207,7 +207,12 @@ describe("saved F1 operation date", () => {
         }),
       );
       expect(lines.join("\n")).not.toContain("Fecha de operación");
-      expect(lines.some((line) => line.startsWith("Fecha "))).toBe(true);
+      // A simplified receipt prints its issue date beside the order line, with no "Fecha" caption.
+      expect(
+        lines.some((line) =>
+          invoiceType === "F1" ? line.startsWith("Fecha ") : line.includes("17 ago 2026"),
+        ),
+      ).toBe(true);
     },
   );
 
@@ -928,7 +933,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       for (const line of lines.filter((line) => line !== legend))
         expect(line.length).toBeLessThanOrEqual(columns);
       for (const line of legal(printer)) expect(lines).toContain(line);
-      expect(lines).toContain("Mesa 6 · Pedido 41");
+      expect(lines.some((line) => line.startsWith("Mesa 6 · Pedido 41"))).toBe(true);
       expect(lines.at(-1)).toBe(centred(printer, TRIM.footerMessage!));
     },
   );
@@ -951,8 +956,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // Serie + número (7.1.a).
       expect(s).toContain(FILED_SALE.invoiceNumber);
 
-      // Fecha de expedición (7.1.b): the label plus a year robust across ICU date formats / time zones.
-      expect(s).toContain("Fecha");
+      // Fecha de expedición (7.1.b): printed beside the order line with no caption, so the day itself.
+      expect(s).toContain("17 ago 2026");
       expect(s).toContain("2026");
 
       // Identification of the goods (7.1.e): one row per filed line, resolved in the invoice locale.
@@ -1016,11 +1021,11 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       TRIM.headerSubtitle!,
       ISSUER.venueName,
       `NIF: ${ISSUER.nif}`,
+      "17 ago 2026",
       FILED_SALE.invoiceNumber,
-      "Fecha",
       lineName(FILED_SALE.lines[0]!),
-      "Base 21%",
       "TOTAL",
+      "Base 21%",
       "Efectivo",
       TRIM.footerMessage!,
     ];
@@ -1756,9 +1761,9 @@ describe("formatReceipt — printer layout", () => {
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 4)).toEqual([
       "1  Tostada con tomate y jamón",
-      "   ibérico de bellota  12,50 €",
+      "   ibérico de bellota    12,50",
       "  Aceite de oliva virgen extra",
-      `  de la casa${" ".repeat(12)}0,50 €`,
+      `  de la casa${" ".repeat(14)}0,50`,
     ]);
   });
 
@@ -1929,7 +1934,7 @@ describe("formatReceipt — printer layout", () => {
 
 /** Cents from a printed amount such as `-1.234,50 €`. */
 function printedCents(line: string): number {
-  const amount = /(-?[\d.]+,\d{2}) €$/.exec(line)?.[1];
+  const amount = /(-?[\d.]+,\d{2})(?: €)?$/.exec(line)?.[1];
   if (amount === undefined) throw new Error(`no amount on "${line}"`);
   return Number(amount.replace(/[.,]/g, ""));
 }
@@ -1985,6 +1990,10 @@ describe("a bill paid in parts before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+      "Base 21% 10,00 €",
+      "IVA 21% 2,10 €",
+      "Base 10% 8,00 €",
+      "IVA 10% 0,80 €",
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
@@ -2033,6 +2042,10 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+      "Base 21% 10,00 €",
+      "IVA 21% 2,10 €",
+      "Base 10% 8,00 €",
+      "IVA 10% 0,80 €",
       "Efectivo 50,00 €",
       "Devolución -6,00 €",
       "Devolución -4,00 €",
@@ -2069,6 +2082,10 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
+      "Base 21% 10,00 €",
+      "IVA 21% 2,10 €",
+      "Base 10% 8,00 €",
+      "IVA 10% 0,80 €",
       "Tarjeta 20,00 €",
       "Ref. OP-3",
       "Devolución -5,00 €",
@@ -2176,20 +2193,20 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
 
   it("prints each dish at its list price, with its comp or discount on its own line beneath", () => {
     const lines = printed80(ADJUSTED);
-    const first = lines.indexOf(at80("1  Hamburguesa", "12,00 €"));
+    const first = lines.indexOf(at80("1  Hamburguesa", "12,00"));
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 11)).toEqual([
-      at80("1  Hamburguesa", "12,00 €"),
-      at80("  Invitación", "-12,00 €"),
-      at80("1  Tabla de quesos", "12,00 €"),
-      at80("  Descuento 20%", "-2,40 €"),
-      at80("2  Agua mineral", "4,00 €"),
-      at80("1  Pizza margarita", "9,00 €"),
+      at80("1  Hamburguesa", "12,00"),
+      at80("  Invitación", "-12,00"),
+      at80("1  Tabla de quesos", "12,00"),
+      at80("  Descuento 20%", "-2,40"),
+      at80("2  Agua mineral", "4,00"),
+      at80("1  Pizza margarita", "9,00"),
       // The comp covers the dish and its extras, so it prints after them.
-      at80("  Aceitunas", "1,50 €"),
-      at80("  Invitación", "-10,50 €"),
-      at80("3  Croquetas", "9,99 €"),
-      at80("  Descuento", "-0,99 €"),
+      at80("  Aceitunas", "1,50"),
+      at80("  Invitación", "-10,50"),
+      at80("3  Croquetas", "9,99"),
+      at80("  Descuento", "-0,99"),
       rule(PRINTER_80),
     ]);
     expect(lines).toContain(`TOTAL${" ".repeat(9)}22,60 €`);
@@ -2197,14 +2214,15 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
 
   it("prints a whole-bill discount once, after the goods and before the VAT breakdown", () => {
     const lines = printed80(BILL_DISCOUNT);
-    const first = lines.indexOf(at80("2  Agua mineral", "4,00 €"));
+    const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 5)).toEqual([
-      at80("2  Agua mineral", "4,00 €"),
-      at80("1  Pan de pueblo", "2,50 €"),
-      at80("Descuento 12,5%", "-0,81 €"),
+    expect(lines.slice(first, first + 6)).toEqual([
+      at80("2  Agua mineral", "4,00"),
+      at80("1  Pan de pueblo", "2,50"),
+      at80("Descuento 12,5%", "-0,81"),
       rule(PRINTER_80),
-      at80("Base 10%", "5,17 €"),
+      `TOTAL${" ".repeat(10)}5,69 €`,
+      at80("IVA 10% incluido", "0,52 €"),
     ]);
     expect(lines.filter((line) => line.startsWith("Descuento"))).toHaveLength(1);
   });
@@ -2215,7 +2233,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
   ] as const)("writes no arrow, and its %s amounts add up to the TOTAL", (_, result) => {
     const lines = printed80(result);
     expect(lines.filter((line) => line.includes("->"))).toEqual([]);
-    const start = lines.findIndex((line) => line.startsWith("Fecha")) + 2;
+    const start = lines.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
     const end = lines.indexOf(rule(PRINTER_80), start);
     const goods = lines.slice(start, end).map((line) => printedCents(line.trimEnd()));
     const total = lines.find((line) => line.startsWith("TOTAL"))!;
@@ -2265,8 +2283,8 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 3)).toEqual([
       "1  Tostada con tomate y jamón",
-      `   ibérico de bellota${" ".repeat(2)}12,50 €`,
-      `  Invitación${" ".repeat(10)}-12,50 €`,
+      `   ibérico de bellota${" ".repeat(4)}12,50`,
+      `  Invitación${" ".repeat(12)}-12,50`,
     ]);
   });
 
@@ -2301,9 +2319,9 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     );
     const columns = columnsFor(printer.paperWidth);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
-    expect(lines.filter((line) => line.endsWith("1234,56 €"))).toHaveLength(1);
-    expect(lines.filter((line) => line.endsWith("-123,45 €"))).toHaveLength(1);
-    expect(lines.filter((line) => line.endsWith("-1000,00 €"))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("1234,56"))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("-123,45"))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("-1000,00"))).toHaveLength(1);
   });
 });
 
@@ -2377,10 +2395,10 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
         order: "Mesa 6 · Comanda 41",
-        invoice: "Factura A/1",
+        invoice: "Factura simplificada A/1",
         date: "Data ",
-        comp: "Invitació -12,00 €",
-        discount: "Descompte 12,5% -1,50 €",
+        comp: "Invitació -12,00",
+        discount: "Descompte 12,5% -1,50",
         base: "Base 21% 10,00 €",
         vat: "IVA 21% 2,10 €",
         total: "TOTAL 20,90 €",
@@ -2407,10 +2425,10 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "NIF: B12345678",
         order: "Mesa 6 · Pedido 41",
-        invoice: "Factura A/1",
+        invoice: "Factura simplificada A/1",
         date: "Data ",
-        comp: "Invitación -12,00 €",
-        discount: "Desconto 12,5% -1,50 €",
+        comp: "Invitación -12,00",
+        discount: "Desconto 12,5% -1,50",
         base: "Base 21% 10,00 €",
         vat: "IVE 21% 2,10 €",
         total: "TOTAL 20,90 €",
@@ -2437,10 +2455,10 @@ describe("the receipt's fixed words follow its language", () => {
         name: "Charcutería La Buena",
         nif: "IFZ: B12345678",
         order: "Mesa 6 · Eskaera 41",
-        invoice: "Faktura A/1",
+        invoice: "Faktura erraztua A/1",
         date: "Data ",
-        comp: "Gonbidapena -12,00 €",
-        discount: "Deskontua 12,5% -1,50 €",
+        comp: "Gonbidapena -12,00",
+        discount: "Deskontua 12,5% -1,50",
         base: "Oinarria 21% 10,00 €",
         vat: "BEZ 21% 2,10 €",
         total: "GUZTIRA 20,90 €",
@@ -2463,10 +2481,13 @@ describe("the receipt's fixed words follow its language", () => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
     const cash = printed(FILED_SALE, locale);
-    const { charged, date, practice, ...rows } = words;
+    const { charged, date, order, practice, ...rows } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
-    expect(sale.some((line) => line.startsWith(date))).toBe(true);
+    // The issue date shares the order line on a simplified receipt; only a full invoice captions it.
+    expect(sale.some((line) => line.startsWith(order))).toBe(true);
+    const full = printed({ ...LABELLED_SALE, invoiceType: "F1" }, locale);
+    expect(full.some((line) => line.startsWith(date))).toBe(true);
     expect(card).toContain(charged);
     expect(card).toContain(single.card);
     expect(card).toContain(single.reference);
@@ -2574,11 +2595,12 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toContain("Data ");
+    // A simplified receipt captions no date, so its one-rate VAT line stands in for "Data".
+    expect(text).toContain("IVA 10% inclòs 0,36 €");
     expect(text).toContain("Efectiu 4,00 €");
-    expect(text).toMatch(/2 ud Pan con tomate 3,50 €/u);
+    expect(text).toMatch(/2 ud Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
-    expect(text).toContain("Jamón extra 0,50 €");
+    expect(text).toMatch(/^Jamón extra 0,50$/mu);
     for (const other of [
       "Pa amb tomàquet",
       "unit.",
@@ -2605,9 +2627,9 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toMatch(/2 unit\. Pa amb tomàquet 3,50 €/u);
+    expect(text).toMatch(/2 unit\. Pa amb tomàquet 3,50$/mu);
     expect(text).toContain("Tipus de pa: Sègol sencer");
-    expect(text).toContain("Pernil extra 0,50 €");
+    expect(text).toMatch(/^Pernil extra 0,50$/mu);
   });
 });
 
@@ -2669,8 +2691,11 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
         centred(printer, "hola@labuena.es"),
         centred(printer, "DUPLICADO"),
         rule(printer),
-        "Mesa 6 · Pedido 41",
-        expect.stringMatching(/^Factura +A\/1$/u),
+        // The issue date shares the order line where it fits, and takes the next line where not.
+        ...(printer === PRINTER_80
+          ? [expect.stringMatching(/^Mesa 6 · Pedido 41 +17 ago 2026, \d+:34$/u)]
+          : ["Mesa 6 · Pedido 41", expect.stringMatching(/^ +17 ago 2026, \d+:34$/u)]),
+        expect.stringMatching(/^Factura simplificada +A\/1$/u),
       ];
       expect(lines.slice(0, block.length)).toEqual(block);
     },
@@ -2701,7 +2726,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
       expect([...lastAlignBeforeLogo!.bytes]).toEqual([0x1b, 0x61, 1]);
       expect(Buffer.from(commands[logoAt]!.bytes)).toEqual(Buffer.from(esc().bitmap(logo).bytes()));
       const nifAt = commands.findIndex((c) => c.text?.trim().endsWith("NIF: B12345678"));
-      const orderAt = commands.findIndex((c) => c.text === "Mesa 6 · Pedido 41");
+      const orderAt = commands.findIndex((c) => c.text?.startsWith("Mesa 6 · Pedido 41"));
       const aligns = commands.slice(nifAt, orderAt).filter((c) => c.name === "ESC a");
       expect(aligns.map((c) => [...c.bytes])).toEqual([[0x1b, 0x61, 0]]);
     },
@@ -2769,7 +2794,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
         rule(PRINTER_80),
         ...block,
         rule(PRINTER_80),
-        "Mesa 6 · Pedido 41",
+        expect.stringMatching(/^Mesa 6 · Pedido 41 +17 ago 2026, \d+:34$/u),
       ]);
     },
   );
@@ -2924,7 +2949,7 @@ describe("the roll's spacing and rule (A497)", () => {
       const { columns } = textGrid(printer.paperWidth, printer.resolution);
       const total = lines.findIndex((line) => line.startsWith("TOTAL"));
       expect(lines[total - 1]).toBe("-".repeat(columns));
-      expect(lines[total - 2]).toMatch(/^IVA 10%/u);
+      expect(lines[total - 2]).toMatch(/^2 {2}Agua mineral +8,80$/u);
     },
   );
 
@@ -3059,7 +3084,7 @@ describe("the top block on a narrow roll (A497)", () => {
     );
     const at = lines.indexOf("Terraza · Mesa del fondo 6 ·");
     expect(at).toBeGreaterThan(-1);
-    expect(lines[at + 1]).toBe("Pedido 41");
+    expect(lines[at + 1]).toMatch(/^Pedido 41 +17 ago 2026, \d+:34$/u);
   });
 });
 
@@ -3160,5 +3185,172 @@ describe("a long name in the business block wraps in bold (A663)", () => {
     }
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(lines.join(" ")).toBe(c.name);
+  });
+});
+
+describe("the simplified receipt's own layout (A663)", () => {
+  const ONE_RATE: TillSaleResult = {
+    locale: "es-ES",
+    orderLabel: "Mesa 12",
+    orderNumber: 112,
+    invoiceNumber: "T-2026/000112",
+    issuedAt: "2026-10-13T16:53:00.000Z",
+    total: "39.00",
+    vatBreakdown: [{ rate: "10.00", base: "35.45", tax: "3.55" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Bloody Mary" },
+        unitName: { es: "ud" },
+        quantity: "1",
+        gross: "15.00",
+      },
+      {
+        descriptions: { "es-ES": "Agua, pan y aceite" },
+        unitName: { es: "ud" },
+        quantity: "4",
+        gross: "24.00",
+      },
+    ],
+    tender: { method: "cash", change: "11.00" },
+    qr: "https://example.invalid/qr",
+    qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+  };
+
+  const squeezed = (result: TillSaleResult, printer: EscSetting): string[] =>
+    printedLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES", printer }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "lays out a one-rate simplified receipt as approved ($paperWidth)",
+    (printer) => {
+      const lines = squeezed(ONE_RATE, printer);
+      const at = (prefix: string) => lines.findIndex((line) => line.startsWith(prefix));
+      if (printer === PRINTER_80) {
+        expect(lines).toContain("Factura simplificada T-2026/000112");
+      } else {
+        // 34 characters do not fit 30 columns: the number moves to its own right-aligned line.
+        expect(lines[at("Factura simplificada") + 1]).toBe("T-2026/000112");
+      }
+      const heading = at("Mesa 12 · Pedido 112");
+      expect(
+        [lines[heading], `${lines[heading]} ${lines[heading + 1]}`].some((line) =>
+          /^Mesa 12 · Pedido 112 13 oct 2026, \d+:53$/.test(line),
+        ),
+      ).toBe(true);
+      expect(lines).toContain("1 ud Bloody Mary 15,00");
+      expect(lines).toContain("4 ud Agua, pan y aceite 24,00");
+      expect(lines).toContain("TOTAL 39,00 €");
+      expect(lines).toContain("IVA 10% incluido 3,55 €");
+      expect(lines.some((line) => line.startsWith("Base"))).toBe(false);
+      expect(lines).not.toContain("Factura T-2026/000112");
+      expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
+      expect(heading).toBeLessThan(at("Factura simplificada"));
+      expect(at("Factura simplificada")).toBeLessThan(at("1 ud Bloody Mary"));
+      expect(at("1 ud Bloody Mary")).toBeLessThan(at("TOTAL"));
+      expect(at("TOTAL")).toBeLessThan(at("IVA 10% incluido"));
+      expect(at("IVA 10% incluido")).toBeLessThan(at("Efectivo"));
+      expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
+      expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
+    },
+  );
+
+  it("draws TOTAL double size and rules off the items before it", () => {
+    const commands = printedCommands(
+      formatReceipt({
+        result: ONE_RATE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).filter((command) => command.text !== undefined && command.text.trim() !== "");
+    const total = commands.findIndex((command) => command.text!.trim().startsWith("TOTAL"));
+    expect(commands[total - 1]!.text!.trim()).toMatch(/^-+$/);
+    expect(commands[total - 2]!.text!.trim().replace(/\s+/g, " ")).toBe(
+      "4 ud Agua, pan y aceite 24,00",
+    );
+    const grid = esc(PRINTER_80).grid;
+    expect(commands[total]!.bytes.subarray(8)).not.toEqual(
+      drawTextBand(commands[total]!.text!, grid),
+    );
+  });
+
+  it("keeps a base and a VAT line per rate when there are several", () => {
+    const lines = squeezed(FILED_WITHOUT_TEXT, PRINTER_80);
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        "Base 21% 10,00 €",
+        "IVA 21% 2,10 €",
+        "Base 10% 8,00 €",
+        "IVA 10% 0,80 €",
+      ]),
+    );
+    expect(lines.some((line) => line.includes("incluido"))).toBe(false);
+    expect(lines.findIndex((l) => l.startsWith("TOTAL"))).toBeLessThan(
+      lines.findIndex((l) => l.startsWith("Base 21%")),
+    );
+    expect(lines.findIndex((l) => l.startsWith("IVA 10%"))).toBeLessThan(
+      lines.findIndex((l) => l.startsWith("Efectivo")),
+    );
+  });
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints neither VAT line on a zero-total sale ($paperWidth)",
+    (printer) => {
+      const lines = squeezed(
+        {
+          ...ONE_RATE,
+          total: "0.00",
+          vatBreakdown: [],
+          lines: [{ ...ONE_RATE.lines[0]!, gross: "0.00" }],
+          tender: { method: "cash", change: "0.00" },
+        },
+        printer,
+      );
+      expect(lines).toContain("TOTAL 0,00 €");
+      expect(lines.some((line) => /^(Base|IVA)/.test(line))).toBe(false);
+    },
+  );
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints a bill-wide discount without € after the items and before the rule ($paperWidth)",
+    (printer) => {
+      const lines = squeezed(
+        {
+          ...ONE_RATE,
+          total: "35.10",
+          vatBreakdown: [{ rate: "10.00", base: "31.91", tax: "3.19" }],
+          billAdjustments: [{ kind: "discount", percentBp: 1000, amount: "3.90" }],
+          tender: { method: "cash", change: "14.90" },
+        },
+        printer,
+      );
+      const discount = lines.indexOf("Descuento 10% -3,90");
+      expect(discount).toBeGreaterThan(lines.indexOf("4 ud Agua, pan y aceite 24,00"));
+      expect(lines[discount + 1]).toMatch(/^-+$/);
+      expect(lines[discount + 2]).toBe("TOTAL 35,10 €");
+    },
+  );
+
+  it("prints a weighed line whole on 58 mm", () => {
+    const lines = squeezed(
+      {
+        ...ONE_RATE,
+        total: "8.40",
+        vatBreakdown: [{ rate: "10.00", base: "7.64", tax: "0.76" }],
+        lines: [
+          {
+            descriptions: { "es-ES": "Jamón ibérico" },
+            unitName: { es: "kg" },
+            quantity: "0.35",
+            gross: "8.40",
+          },
+        ],
+        tender: { method: "cash", change: "1.60" },
+      },
+      PRINTER_58,
+    );
+    expect(lines).toContain("0.35 kg Jamón ibérico 8,40");
   });
 });

@@ -305,3 +305,73 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
     expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "PRUEBA - SIN COBRO REAL"]);
   });
 });
+
+describe("the simplified receipt's own layout (A663)", () => {
+  const SIMPLIFIED = {
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" as const },
+  };
+  const rows = (input: Parameters<typeof buildReceiptDocument>[0]) =>
+    buildReceiptDocument(input).elements.flatMap((e): unknown[] =>
+      e.kind === "amount" ? [[e.caption, e.amount, e.style]] : e.kind === "rule" ? ["rule"] : [],
+    );
+
+  it("heads with the order and date, then the number, and prints TOTAL before each rate's base and VAT", () => {
+    expect(rows(SIMPLIFIED)).toEqual([
+      "rule",
+      "rule",
+      ["Mesa 6 · Pedido 41", expect.stringMatching(/^1[78] ago 2026, \d+:34$/u), undefined],
+      ["Factura simplificada", "FF/1", undefined],
+      "rule",
+      ["1  Menú del día con un nombre especialmente largo", "12,10", undefined],
+      ["  Descuento 10%", "-1,21", undefined],
+      ["2  Agua mineral", "8,80", undefined],
+      "rule",
+      ["TOTAL", "19,69 €", { double: true }],
+      ["Base 21%", "9,00 €", undefined],
+      ["IVA 21%", "1,89 €", undefined],
+      ["Base 10%", "8,00 €", undefined],
+      ["IVA 10%", "0,80 €", undefined],
+      "rule",
+      ["Efectivo", "20,00 €", undefined],
+      ["Cambio", "0,31 €", undefined],
+      "rule",
+    ]);
+  });
+
+  it("prints one VAT-included line for a single rate, in the receipt's language", () => {
+    const oneRate = (invoiceLocale: string) =>
+      rows({
+        ...SIMPLIFIED,
+        invoiceLocale,
+        result: {
+          ...SIMPLIFIED.result,
+          vatBreakdown: [{ rate: "10.00", base: "17.90", tax: "1.79" }],
+        },
+      });
+    const es = oneRate("es-ES");
+    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 4)).toEqual([
+      ["TOTAL", "19,69 €", { double: true }],
+      ["IVA 10% incluido", "1,79 €", undefined],
+      "rule",
+    ]);
+    expect(oneRate("ca-ES")).toContainEqual(["IVA 10% inclòs", "1,79 €", undefined]);
+  });
+
+  it("never draws two rules in a row, or a rule first or last, on a simplified receipt", () => {
+    for (const vatBreakdown of [[], SIMPLIFIED.result.vatBreakdown.slice(0, 1)])
+      for (const lines of [[], SIMPLIFIED.result.lines])
+        for (const tender of [{ method: "unpaid" as const }, SIMPLIFIED.result.tender]) {
+          const kinds = buildReceiptDocument({
+            ...SIMPLIFIED,
+            receipt: { ...SIMPLIFIED.receipt, footerMessage: undefined },
+            result: { ...SIMPLIFIED.result, vatBreakdown, lines, tender },
+          }).elements.flatMap((e) => (e.kind === "align" ? [] : [e.kind]));
+          const input = JSON.stringify({ vat: vatBreakdown.length, lines: lines.length, tender });
+          expect(kinds[0], input).not.toBe("rule");
+          expect(kinds.at(-1), input).not.toBe("rule");
+          for (const [at, kind] of kinds.entries())
+            if (kind === "rule") expect(kinds[at + 1], `${input} at ${at}`).not.toBe("rule");
+        }
+  });
+});

@@ -11,7 +11,7 @@ import {
   type ReceiptPresentation,
 } from "@waitron/shared";
 import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
-import { formatMoney, formatVatRate } from "./receipt-money.js";
+import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -111,6 +111,10 @@ export function buildReceiptDocument({
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
+  const simplified = result.invoiceType !== "F1";
+  // A simplified receipt's item amounts drop the €: the TOTAL and the payment rows carry it.
+  const itemAmount = (value: string): string =>
+    simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
   const text = (text: string, indent: ReceiptIndent = 0, style?: ReceiptStyle): void => {
     elements.push({ kind: "text", text, indent, ...(style ? { style } : {}) });
@@ -153,7 +157,7 @@ export function buildReceiptDocument({
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
     const included = result.invoiceType === "F1" ? ` (${label.vatIncluded})` : "";
     const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
-    row(name, `-${formatMoney(adjustment.amount, locale)}`, indent);
+    row(name, `-${itemAmount(adjustment.amount)}`, indent);
   };
   if (simulated) {
     text(label.practice);
@@ -192,16 +196,17 @@ export function buildReceiptDocument({
   rule();
   align("left");
 
-  text([result.orderLabel, `${label.order} ${result.orderNumber}`].filter(Boolean).join(" · "));
-  row(label.invoice, result.invoiceNumber);
-  row(
-    label.date,
-    issueDate(
-      result.issuedAt,
-      locale,
-      result.invoiceType === "F1" ? result.issuedOffsetMinutes : undefined,
-    ),
-  );
+  const orderText = [result.orderLabel, `${label.order} ${result.orderNumber}`]
+    .filter(Boolean)
+    .join(" · ");
+  if (simplified) {
+    row(orderText, issueDate(result.issuedAt, locale));
+    row(label.simplifiedInvoice, result.invoiceNumber);
+  } else {
+    text(orderText);
+    row(label.invoice, result.invoiceNumber);
+    row(label.date, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes));
+  }
   if (result.invoiceType === "F1" && result.operationDate !== undefined) {
     row(
       label.operationDate,
@@ -230,7 +235,7 @@ export function buildReceiptDocument({
     } else {
       row(
         `${quantity}${lineName(dish.descriptions, namesLocale)}`,
-        formatMoney(dish.listGross ?? dish.gross, locale),
+        itemAmount(dish.listGross ?? dish.gross),
         nameIndent,
       );
     }
@@ -262,7 +267,7 @@ export function buildReceiptDocument({
           2,
         );
       } else {
-        row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
+        row(caption, itemAmount(option.listGross ?? option.gross), 2);
       }
     }
     for (const line of [dish, ...options]) {
@@ -271,12 +276,32 @@ export function buildReceiptDocument({
   }
   for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
   rule();
-  for (const v of result.vatBreakdown) {
-    row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
-    row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
+  const vatRows = (): void => {
+    const [only] = result.vatBreakdown;
+    // Art. 7.1.f: one rate needs only the rate; several need each rate's base as well.
+    if (simplified && only !== undefined && result.vatBreakdown.length === 1) {
+      row(
+        label.vatIncludedAtRate.replace("{rate}", formatVatRate(only.rate, locale)),
+        formatMoney(only.tax, locale),
+      );
+      return;
+    }
+    for (const v of result.vatBreakdown) {
+      row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
+      row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
+    }
+  };
+  const total = (): void => {
+    row(label.total, formatMoney(result.total, locale), 0, { double: true });
+  };
+  if (simplified) {
+    total();
+    vatRows();
+  } else {
+    vatRows();
+    rule();
+    total();
   }
-  rule();
-  row(label.total, formatMoney(result.total, locale), 0, { double: true });
   rule();
   const t = result.tender;
   if (result.payments !== undefined && result.payments.length > 0) {
