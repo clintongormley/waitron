@@ -58,3 +58,13 @@ describe("CARD_PROVIDER_PANELS honesty", () => {
     expect(CARD_PROVIDER_PANELS.map((p) => p.providerId).sort()).toEqual(["stripe", "sumup"]);
   });
 });
+
+it("registers Time corrections in Team for workforce correction authority", () => {
+  const workforce = DASHBOARD_MODULES.find((contribution) => contribution.module === "workforce");
+  expect(workforce?.screen).toEqual({
+    id: "time-corrections",
+    navLabelKey: "nav.time_corrections",
+    group: "team",
+    requiresPermission: "workforce.correct",
+  });
+});

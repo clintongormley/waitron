@@ -3,6 +3,7 @@ import { BOOKINGS_DASHBOARD } from "@waitron/bookings/dashboard";
 import { VENUE_SERVICE_DASHBOARD } from "@waitron/venue-service/dashboard";
 import { ADJUSTMENTS_DASHBOARD } from "@waitron/adjustments/dashboard";
 import { STAFFING_DASHBOARD } from "@waitron/staffing/dashboard";
+import { WORKFORCE_DASHBOARD } from "@waitron/workforce/dashboard";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 
 // The dashboard's module registry: every module that contributes a dashboard screen names itself here,
@@ -15,6 +16,20 @@ export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
   VENUE_SERVICE_DASHBOARD,
   ADJUSTMENTS_DASHBOARD,
   STAFFING_DASHBOARD,
+  WORKFORCE_DASHBOARD,
 ];
 
 export { CARD_PROVIDER_PANELS } from "./card-providers.js";
+
+export { ATTENDANCE_QUERY_DEPENDENCIES } from "@waitron/workforce/dashboard";
+export type {
+  AttendanceCommand,
+  AttendanceCommandPayload,
+  AttendanceCommandResult,
+  AttendanceChange,
+  AttendanceInbox,
+  AttendanceDayView,
+  AttendanceManagerQueue,
+  AttendanceLookups,
+  CorrectionItem,
+} from "@waitron/workforce/attendance-contract";

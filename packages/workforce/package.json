@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./attendance-contract": "./src/attendance-contract.ts",
-    "./test/fixtures.js": "./test/fixtures.ts"
+    "./test/fixtures.js": "./test/fixtures.ts",
+    "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -19,11 +20,13 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
+    "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "drizzle-orm": "^0.45.3"
+    "drizzle-orm": "^0.45.3",
+    "lit": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
