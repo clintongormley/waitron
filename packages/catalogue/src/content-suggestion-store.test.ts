@@ -561,3 +561,66 @@ it("puts a placeholder and an internal fix on one row, and drops a placeholder f
   );
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, failed: 0, done: 3 });
 });
+
+type Answer = (bread: string) => SuggestionResults["results"][number];
+
+/** Stores `first` for bread in one run, releases it, then stores `second` in a fresh run. */
+async function storeInTwoRuns(first: Answer, second: Answer) {
+  const venue = await seedSuggestionVenue(suite.db);
+  const unanswered = [ref(venue.wine), ref(venue.cheese)];
+  const one = await runningJob(suite.db);
+  await store(one.id, done([first(venue.bread)], unanswered));
+  await app((tx) => recordSuggestionJobReleased(tx, one.id));
+  const two = await runningJob(suite.db);
+  expect(sortedSent(two.sent)[ref(venue.bread)]).toEqual(["en", "es"]);
+  await store(two.id, done([second(venue.bread)], unanswered));
+  const rows = await app((tx) =>
+    tx.select().from(contentSuggestions).where(eq(contentSuggestions.itemId, venue.bread)),
+  );
+  return { two, rows };
+}
+
+it("a later run replaces the item's own row rather than adding a second one", async () => {
+  const { two, rows } = await storeInTwoRuns(
+    (bread) =>
+      result(
+        ref(bread),
+        {},
+        { corrections: [{ field: "internal", wrong: "Bread", right: "Bred" }] },
+      ),
+    (bread) =>
+      result(
+        ref(bread),
+        {},
+        { placeholder: true, corrections: [{ field: "internal", wrong: "STAFF", right: "Staff" }] },
+      ),
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    jobId: two.id,
+    language: null,
+    text: null,
+    placeholder: true,
+    fixField: "internal",
+    fixWrong: "STAFF",
+    fixRight: "Staff",
+  });
+});
+
+it("a later run replaces a fix to an entered name rather than adding a second one", async () => {
+  const { two, rows } = await storeInTwoRuns(
+    (bread) => result(ref(bread), {}, { corrections: [{ field: "ca", wrong: "Pa", right: "Pà" }] }),
+    (bread) =>
+      result(ref(bread), {}, { corrections: [{ field: "ca", wrong: "CLIENT", right: "Client" }] }),
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    jobId: two.id,
+    language: "ca",
+    text: null,
+    placeholder: false,
+    fixField: "ca",
+    fixWrong: "CLIENT",
+    fixRight: "Client",
+  });
+});
