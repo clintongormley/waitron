@@ -327,6 +327,12 @@ test("reflects its height and re-sizes an open modal when the height changes", a
   expect(dialog.getBoundingClientRect().height).toBeCloseTo(852, 0);
 });
 
+test("keeps the height its size gives for a height value other than medium", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(undefined, 'size="standard" height="tall"');
+  expect(dialogOf(modal).getBoundingClientRect().height).toBeCloseTo(852, 0);
+});
+
 const EVERY_SIZE = ['size="compact"', 'size="standard"', 'size="wide"', "", 'size="full"'];
 
 test.each(EVERY_SIZE)(
