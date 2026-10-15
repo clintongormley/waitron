@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { asc } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
@@ -11,8 +17,13 @@ import {
   recordSuggestionJobSubmitted,
   startSuggestionRun,
 } from "../src/content-suggestion-jobs.js";
+import type { SuggestionResult } from "../src/content-suggestion-types.js";
 import type { TranslationContext } from "../src/content-translation-targets.js";
-import { contentSuggestionJobs, type SuggestionJobRow } from "../src/schema/suggestions.js";
+import {
+  contentSuggestionJobs,
+  contentSuggestions,
+  type SuggestionJobRow,
+} from "../src/schema/suggestions.js";
 
 export const context: TranslationContext = { fallbackLanguage: "ca", required: [] };
 
@@ -108,4 +119,68 @@ export async function submitJob(db: Database, job: SuggestionJobRow): Promise<Su
 
 export async function runningJob(db: Database, now?: Date): Promise<SuggestionJobRow> {
   return submitJob(db, await startedJob(db, now));
+}
+
+export function result(
+  ref: string,
+  names: Record<string, string>,
+  extra: Partial<Pick<SuggestionResult, "placeholder" | "corrections">> = {},
+): SuggestionResult {
+  return { ref, names, placeholder: false, corrections: [], ...extra };
+}
+
+/** A result naming every language the job asked for. */
+export function translateAll(sent: Record<string, string[]>): SuggestionResult[] {
+  return Object.entries(sent).map(([key, missing]) =>
+    result(
+      key,
+      Object.fromEntries(missing.map((language) => [language, `${language.toUpperCase()} ${key}`])),
+    ),
+  );
+}
+
+export function inOrder<T extends { itemId: string; language: string | null }>(
+  rows: readonly T[],
+): T[] {
+  const key = (row: T) => `${row.itemId} ${row.language ?? ""}`;
+  return [...rows].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+}
+
+export async function suggestionRows(tx: Transaction) {
+  const rows = await tx.select().from(contentSuggestions);
+  return inOrder(
+    rows.map(({ itemId, language, text, placeholder, fixField, fixWrong, fixRight }) => ({
+      itemId,
+      language,
+      text,
+      placeholder,
+      fix: fixField === null ? null : { field: fixField, wrong: fixWrong, right: fixRight },
+    })),
+  );
+}
+
+/** `count` products named in ca and es, so each is missing en; inserted directly for speed. */
+export async function addPlainProducts(
+  tx: Transaction,
+  menuId: string,
+  count: number,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (let start = 0; start < count; start += 100) {
+    const rows = Array.from({ length: Math.min(100, count - start) }, (_, offset) => {
+      const n = start + offset;
+      return {
+        catalogueId: menuId,
+        name: `STAFF Tapa ${n}`,
+        kitchenName: `KITCHEN Tapa ${n}`,
+        customerName: { ca: `CLIENT-CA Tapa ${n}`, es: `CLIENT-ES Tapa ${n}` },
+        pricingUnit: "each" as const,
+        unitPrice: 300,
+        vatClass: "reduced" as const,
+      };
+    });
+    const inserted = await tx.insert(products).values(rows).returning({ id: products.id });
+    ids.push(...inserted.map((row) => row.id));
+  }
+  return ids;
 }
