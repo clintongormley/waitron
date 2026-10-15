@@ -32,7 +32,7 @@ function deferred<T>() {
 const controllers: HoursController[] = [];
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] }));
 afterEach(() => {
-  for (const controller of controllers.splice(0)) controller.stop();
+  for (const controller of controllers.splice(0)) controller?.stop();
   vi.useRealTimers();
 });
 async function fixture() {
