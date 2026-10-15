@@ -89,9 +89,11 @@ const LIVE_CANDIDATE = sql`active = 1 and owner_active = 1 and child_active = 1 
         (kind = 'product' and role = 'product') or (kind = 'variant' and role = 'variant') or
         (kind = 'menu' and role = 'menu_root') or (kind = 'section' and role = 'section') or
         (kind = 'included_menu' and role = 'menu_root' and parent_role in ('menu_root', 'section')))`;
-const POSITION = sql`case kind when 'product' then 0 when 'variant' then 1 when 'option_list' then 2
-      when 'option_label' then 3 when 'extra_list' then 4 when 'menu' then 5 when 'section' then 6
-      when 'included_menu' then 7 else 8 end`;
+// The paging cursor compares a row's position with `KINDS.indexOf`, so both read the one list.
+const POSITION = sql`case kind ${sql.join(
+  KINDS.map((kind, index) => sql`when ${kind} then ${index}`),
+  sql` `,
+)} end`;
 // The listing's rule for a row blank in one language, `language` and `path` being SQL for the code
 // and its JSON path; listing one language and collecting every gap share it so they cannot drift.
 function blankIn(language: SQL, path: SQL, defaultLanguage: string): SQL {
