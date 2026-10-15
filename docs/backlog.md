@@ -3490,7 +3490,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
   base and VAT on a one-rate simplified receipt (Part 2b), each line's price before any discount
-  and the whole-bill discount once per rate (Part 2c), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+  and the whole-bill discount once per rate (Part 2c; it also settles how a part portion of an extra prints, owner
+  question of 2026-10-15, default «1.5» portions), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - **A661's six wording and behaviour choices were built on the recommended defaults (left open by
