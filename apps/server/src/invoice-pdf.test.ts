@@ -66,13 +66,13 @@ describe("A4 invoice PDF", () => {
       "Cliente de nombre largo y completo Sociedad Limitada",
       "B11223344",
       "Avenida del cliente original número 123, edificio de la estación, tercera planta, Madrid 28002",
-      "Factura FF/1",
-      "Fecha 18 ago 2026, 0:34",
+      "FACTURA FF/1",
+      "Mesa 6 · Pedido 41 18 ago 2026, 0:34",
       "Fecha de operación 17 ago 2026",
       "Menú del día con un nombre especialmente largo",
-      "Precio sin IVA 10,00 € / 1",
-      "Descuento 10% (IVA incluido) -1,21 €",
-      "Base 21% 9,00 € IVA 21% 1,89 € Base 10% 8,00 € IVA 10% 0,80 €",
+      "1 Menú del día con un nombre especialmente largo 10,00 10,00 21%",
+      "Descuento 10% -1,00 21%",
+      "Base imponible 21% 9,00 € IVA 21% 1,89 € Base imponible 10% 8,00 € IVA 10% 0,80 €",
       "TOTAL 19,69 €",
       "Efectivo 20,00 €",
       "Cambio 0,31 €",
@@ -310,9 +310,8 @@ describe("A4 line above the total and space around the logo", () => {
   };
 
   /**
-   * The receipt trim with 0 to 3 of its one-line header facts. An item adds four or five lines, so
-   * without these one-line steps a range of counts can step over the narrow band where the rule
-   * fits at a page foot and TOTAL does not.
+   * The receipt trim with 0 to 3 of its one-line header facts, so that the counts step over the
+   * narrow band where the rule fits at a page foot and TOTAL does not.
    */
   const headerLines = (count: number) => {
     const { headerSubtitle, phone, email, ...rest } = fixture.receipt;
@@ -335,7 +334,7 @@ describe("A4 line above the total and space around the logo", () => {
     });
 
     expect(
-      totalPlacement(layoutInvoicePages(longInvoice(20, false, fixture.result.qr))),
+      totalPlacement(layoutInvoicePages(longInvoice(100, false, fixture.result.qr))),
     ).toMatchObject({ page: 2, before: "rule" });
     for (const [simulated, qr] of [
       [false, ""],
@@ -344,7 +343,7 @@ describe("A4 line above the total and space around the logo", () => {
     ] as const) {
       const shape = `simulated ${simulated}, QR ${qr !== ""}`;
       let carried = 0;
-      for (let count = 1; count <= 12; count++)
+      for (let count = 1; count <= 40; count++)
         for (let extra = 0; extra <= 3; extra++) {
           const placement = totalPlacement(
             layoutInvoicePages(longInvoice(count, simulated, qr, extra)),
@@ -449,17 +448,18 @@ describe("A4 line above the total and space around the logo", () => {
   });
 
   it("leaves half a line above and below a drawn logo, and no extra space without one", () => {
-    const withLogo = layoutInvoicePages({ ...fixture, logo })[0]!.elements;
+    // Without a QR nothing sits above the logo: nothing of the invoice prints before it.
+    const input = { ...fixture, result: { ...fixture.result, qr: "" } };
+    const withLogo = layoutInvoicePages({ ...input, logo })[0]!.elements;
     const index = withLogo.findIndex((element) => element.kind === "logo");
     const drawn = withLogo[index]!;
     if (drawn.kind !== "logo") throw new Error("Missing logo");
-    const before = withLogo[index - 1]!;
-    expect(before.kind === "text" && before.text).toBe("Factura completa");
-    expect(drawn.y - (before.y + LINE)).toBeCloseTo(LINE / 2, 5);
+    expect(index).toBe(0);
+    const without = layoutInvoicePages(input)[0]!.elements;
+    expect(drawn.y - without[0]!.y).toBeCloseTo(LINE / 2, 5);
     const after = withLogo[index + 1]!;
     expect(after.y - (drawn.y + drawn.height)).toBeCloseTo(LINE / 2, 5);
 
-    const without = layoutInvoicePages(fixture)[0]!.elements;
     const name = "Charcutería La Buena SL";
     expect(textAt(withLogo, name)!.y - textAt(without, name)!.y).toBeCloseTo(
       drawn.height + LINE,

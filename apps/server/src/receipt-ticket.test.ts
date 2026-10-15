@@ -141,8 +141,9 @@ describe("saved F1 issue offset", () => {
           duplicate,
         }),
       );
-      const at = lines.findIndex((line) => line.startsWith("Fecha "));
+      const at = lines.findIndex((line) => line.startsWith("Mesa 6 · Pedido 41"));
       expect(at).toBeGreaterThanOrEqual(0);
+      expect(lines[at - 1]).toMatch(/^FACTURA +A\/1$/u);
       expect(lines.slice(at, at + 2).join(" ")).toContain(want);
     },
   );
@@ -208,12 +209,10 @@ describe("saved F1 operation date", () => {
         }),
       );
       expect(lines.join("\n")).not.toContain("Fecha de operación");
-      // A simplified receipt prints its issue date with no "Fecha" caption.
-      expect(
-        lines.some((line) =>
-          invoiceType === "F1" ? line.startsWith("Fecha ") : line.includes("17 ago 2026"),
-        ),
-      ).toBe(true);
+      // Both documents print the issue date with the order, with no "Fecha" caption.
+      const at = lines.findIndex((line) => line.startsWith("Mesa 6 · Pedido 41"));
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(lines.slice(at, at + 2).join(" ")).toContain("17 ago 2026, 14:34");
     },
   );
 
@@ -235,16 +234,22 @@ describe("saved F1 operation date", () => {
 it.each(
   [PRINTER_58, PRINTER_80].flatMap((printer) =>
     [
-      ["es-ES", "IVA incluido"],
-      ["ca-ES", "IVA inclòs"],
-      ["gl-ES", "IVE incluído"],
-      ["eu-ES", "BEZa barne"],
-      ["en-GB", "IVA incluido"],
-    ].map(([locale, included]) => ({ printer, locale: locale!, included: included! })),
+      ["es-ES", "IVA incluido", "Descuento", "Invitación"],
+      ["ca-ES", "IVA inclòs", "Descompte", "Invitació"],
+      ["gl-ES", "IVE incluído", "Desconto", "Invitación"],
+      ["eu-ES", "BEZa barne", "Deskontua", "Gonbidapena"],
+      ["en-GB", "IVA incluido", "Descuento", "Invitación"],
+    ].map(([locale, included, discount, comp]) => ({
+      printer,
+      locale: locale!,
+      included: included!,
+      discount: discount!,
+      comp: comp!,
+    })),
   ),
 )(
-  "identifies VAT-inclusive F1 reductions on $printer.paperWidth in $locale",
-  ({ printer, locale, included }) => {
+  "prints F1 reductions before VAT, at their rate, on $printer.paperWidth in $locale",
+  ({ printer, locale, included, discount, comp }) => {
     const invoice = {
       ...FILED_SALE,
       total: "10.30",
@@ -295,19 +300,22 @@ it.each(
         .join(" ")
         .replace(/\s+/g, " ");
     const full = render("F1");
-    expect(full.split(`(${included})`)).toHaveLength(4);
+    // Before VAT (owner, Q5): the dish's list price 12,00 at 21% is 9,92; its own 10% and the
+    // bill's 0,50 come to one row down to the filed base 8,51; the comped extra's 1,10 at 10% is
+    // 1,00, taken off in full.
+    const figure = (value: string) => (locale === "en-GB" ? value : value.replace(".", ","));
+    expect(full).not.toContain(`(${included})`);
+    expect(full).toContain(`1 Plato ${figure("9.92")} ${figure("9.92")} 21%`);
+    expect(full).toContain(`1 Extra ${figure("1.00")} ${figure("1.00")} 10%`);
+    expect(full).toContain(`${discount} -${figure("1.41")} 21%`);
+    expect(full).toContain(`${comp} -${figure("1.00")} 10%`);
     expect(full).toMatch(/10[,.]?0?%/);
-    const fallbackLocale = locale === "en-GB" ? "en-GB" : locale;
-    const money = new Intl.NumberFormat(fallbackLocale, { style: "currency", currency: "EUR" });
-    for (const amount of [1.2, 1.1, 0.5]) {
-      expect(full).toContain(`-${money.format(amount).replace(/\s+/g, " ")}`);
-    }
     expect(render("F2")).not.toContain(`(${included})`);
   },
 );
 
 it.each([PRINTER_58, PRINTER_80])(
-  "prints VAT beside each F1 dish and extra on $paperWidth",
+  "prints each F1 dish's and extra's VAT rate in its row, and the VAT per rate, on $paperWidth",
   (printer) => {
     const content = drawn(
       formatReceipt({
@@ -350,11 +358,12 @@ it.each([PRINTER_58, PRINTER_80])(
     )
       .join(" ")
       .replace(/\s+/g, " ");
-    const dish = content.slice(content.indexOf("Plato"), content.indexOf("Extra"));
-    const extraStart = content.indexOf("Extra");
-    const extra = content.slice(extraStart, content.indexOf("Base 21%", extraStart));
-    expect(dish).toContain("IVA 21% 2,10 €");
-    expect(extra).toContain("IVA 10% 0,80 €");
+    const table = content.slice(content.indexOf("Plato") - 2, content.indexOf("Precios sin IVA"));
+    expect(table).toContain("1 Plato 10,00 10,00 21%");
+    expect(table).toContain("2 Extra 4,00 8,00 10%");
+    const totals = content.slice(content.indexOf("Precios sin IVA"), content.indexOf("TOTAL"));
+    expect(totals).toContain("Base imponible 21% 10,00 € IVA 21% 2,10 €");
+    expect(totals).toContain("Base imponible 10% 8,00 € IVA 10% 0,80 €");
   },
 );
 
@@ -383,10 +392,10 @@ it("keeps the F2 gross layout even when net facts are present", () => {
 });
 
 it.each([
-  ["es-ES", "Factura completa", "Precio sin IVA"],
-  ["ca-ES", "Factura completa", "Preu sense IVA"],
-  ["gl-ES", "Factura completa", "Prezo sen IVE"],
-  ["eu-ES", "Faktura osoa", "BEZik gabeko prezioa"],
+  ["es-ES", "FACTURA A/1", "Precios sin IVA"],
+  ["ca-ES", "FACTURA A/1", "Preus sense IVA"],
+  ["gl-ES", "FACTURA A/1", "Prezos sen IVE"],
+  ["eu-ES", "FAKTURA A/1", "Prezioak BEZik gabe"],
 ])(
   "labels F1 net lines in %s without changing a sub-unit price quantity",
   (locale, title, priceLabel) => {
@@ -415,7 +424,11 @@ it.each([
       .replace(/\s+/g, " ");
     expect(lines).toContain(title);
     expect(lines).toContain(priceLabel);
-    expect(lines).toContain("2,50 € / 0.1 kg");
+    // 0.32 kg is 3.2 portions of 0.100 kg, not whole, so the row keeps the quantity and unit and
+    // prints the price alone (owner, Q4).
+    expect(lines).toContain("0.32 kg Jamón 2,50 8,00");
+    expect(lines).not.toContain("/ 0.1");
+    expect(lines).not.toContain(" / ");
     expect(lines).toContain("8,00");
   },
 );
@@ -451,8 +464,8 @@ it("prints the filed combined quantity for an F1 extra rather than its per-dish 
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
-  expect(lines).toContain("Extra 4");
-  expect(lines).toContain("Precio sin IVA 2,00 € / 1");
+  expect(lines).toContain("4 Extra 2,00 8,00 10%");
+  expect(lines).not.toContain(" / ");
   expect(lines).not.toContain("Extra x2");
 });
 
@@ -483,16 +496,17 @@ it.each([PRINTER_58, PRINTER_80])(
         formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale, printer }),
       );
       const content = lines.join(" ").replace(/\s+/g, " ").trim();
-      expect(content).toContain("Factura completa");
-      const price = invoiceLocale === "es-ES" ? "25,00 €" : "€25.00";
-      expect(content).toContain(`Precio sin IVA ${price} / 1 kg`);
-      const hamStart = content.indexOf(invoiceLocale === "es-ES" ? "Jamón" : "Ham");
-      const hamEnd = content.indexOf("Base 21%", hamStart);
+      expect(content).toContain("FACTURA A/1");
+      const spanish = invoiceLocale === "es-ES";
+      expect(content).toContain(spanish ? "1 Plato 10,00 10,00 21%" : "1 Dish 10.00 10.00 21%");
+      expect(content).toContain(
+        spanish ? "0.32 kg Jamón 25,00 8,00 10%" : "0.32 kg Ham 25.00 8.00 10%",
+      );
+      const hamStart = content.indexOf(spanish ? "Jamón" : "Ham");
+      const hamEnd = content.indexOf("Base imponible 21%", hamStart);
       expect(hamStart).toBeGreaterThan(-1);
       expect(hamEnd).toBeGreaterThan(hamStart);
-      expect(content.slice(hamStart, hamEnd)).toContain(
-        `Base 10% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`,
-      );
+      expect(content.slice(hamEnd)).toContain(`Base imponible 10% ${spanish ? "8,00 €" : "€8.00"}`);
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
     }
@@ -2398,7 +2412,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Comanda 41",
         day: "17 d’ag. 2026",
         invoice: "Factura simplificada A/1",
-        date: "Data ",
+        heading: "FACTURA A/1",
         comp: "Invitació -12,00",
         discount: "Descompte 12,5% -1,50",
         base: "Base 21% 10,00 €",
@@ -2429,7 +2443,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Pedido 41",
         day: "17 de ago. de 2026",
         invoice: "Factura simplificada A/1",
-        date: "Data ",
+        heading: "FACTURA A/1",
         comp: "Invitación -12,00",
         discount: "Desconto 12,5% -1,50",
         base: "Base 21% 10,00 €",
@@ -2460,7 +2474,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Eskaera 41",
         day: "2026(e)ko abu. 17(a)",
         invoice: "Faktura erraztua A/1",
-        date: "Data ",
+        heading: "FAKTURA A/1",
         comp: "Gonbidapena -12,00",
         discount: "Deskontua 12,5% -1,50",
         base: "Oinarria 21% 10,00 €",
@@ -2485,15 +2499,17 @@ describe("the receipt's fixed words follow its language", () => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
     const cash = printed(FILED_SALE, locale);
-    const { charged, date, day, order, practice, ...rows } = words;
+    const { charged, heading, day, order, practice, ...rows } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
-    // The issue date shares the order line on a simplified receipt; only a full invoice captions it.
+    // Both documents print the issue date with the order, uncaptioned.
     const orderAt = sale.findIndex((line) => line.startsWith(order));
     expect(orderAt).toBeGreaterThanOrEqual(0);
     expect(sale.slice(orderAt, orderAt + 2).join(" ")).toContain(day);
     const full = printed({ ...LABELLED_SALE, invoiceType: "F1" }, locale);
-    expect(full.some((line) => line.startsWith(date))).toBe(true);
+    const fullOrderAt = full.findIndex((line) => line.startsWith(order));
+    expect(full[fullOrderAt - 1]).toBe(heading);
+    expect(full.slice(fullOrderAt, fullOrderAt + 2).join(" ")).toContain(day);
     expect(card).toContain(charged);
     expect(card).toContain(single.card);
     expect(card).toContain(single.reference);
@@ -2967,7 +2983,7 @@ describe("the roll's spacing and rule (A497)", () => {
     {
       name: "a full invoice",
       result: { ...NO_QR_SALE, invoiceType: "F1" as const },
-      before: ["Factura completa"],
+      before: [] as string[],
     },
   ])("puts one blank line above and below the logo on $name", ({ result, before }) => {
     const lines = images(
@@ -2987,6 +3003,7 @@ describe("the roll's spacing and rule (A497)", () => {
       "",
       legal(PRINTER_80)[0],
     ]);
+    expect(lines.some((line) => /^FACTURA +A\/1$/u.test(line))).toBe(result.invoiceType === "F1");
   });
 
   it("keeps the rule, and adds no blank line, between the QR legend and the logo", () => {
