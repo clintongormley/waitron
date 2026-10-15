@@ -104,6 +104,16 @@ function issueDate(iso: string, locale: string, offsetMinutes?: number): string 
   }).format(date);
 }
 
+// Accents are not folded: a near-match prints twice rather than dropping the filed address.
+function sameAddress(lines: readonly string[], domicile: string): boolean {
+  const fold = (value: string): string =>
+    value
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  return fold(lines.join(", ")) === fold(domicile);
+}
+
 export function buildReceiptDocument({
   result,
   issuer: currentIssuer,
@@ -179,12 +189,16 @@ export function buildReceiptDocument({
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
   text(issuer.venueName, 0, printsTradingName ? undefined : { bold: true });
   text(`${label.nif}: ${issuer.nif}`);
-  if (surface === "thermal") {
-    for (const line of venueAddress) text(line);
-  }
+  const venueLines = surface === "thermal" ? venueAddress : [];
+  for (const line of venueLines) text(line);
   if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
   if (receipt.email) text(receipt.email);
-  if (!simplified && issuer.domicile) text(issuer.domicile);
+  if (!simplified && issuer.domicile) {
+    if (venueLines.length === 0) text(issuer.domicile);
+    else if (!sameAddress(venueLines, issuer.domicile)) {
+      text(`${label.registeredAddress} ${issuer.domicile}`);
+    }
+  }
   if (duplicate) text(label.duplicate);
   rule();
   align("left");

@@ -541,7 +541,7 @@ it.each([PRINTER_58, PRINTER_80])(
           ).join(" ");
           expect(printed.includes("Location Street 45")).toBe(showLocation);
           expect(printed.includes("28001 Madrid")).toBe(showLocation);
-          expect(printed.includes("Calle Fiscal 27")).toBe(
+          expect(printed.replace(/\s+/g, " ").includes("Calle Fiscal 27")).toBe(
             invoiceType === "F1" && domicile !== undefined,
           );
           expect(printed).not.toContain("Current Fiscal 99");

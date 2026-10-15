@@ -135,7 +135,7 @@ it.each(["thermal", "a4"] as const)(
       });
       const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
       expect(text.includes("Current address")).toBe(surface === "thermal");
-      expect(text.includes("Filed domicile")).toBe(domicile !== undefined);
+      expect(text.some((line) => line.endsWith("Filed domicile"))).toBe(domicile !== undefined);
       expect(text[text.indexOf("Filed issuer") + 1]).toBe("NIF: B12345678");
       expect(text).not.toContain("Current mutable issuer");
       expect(text).not.toContain("Current mutable domicile");
@@ -200,7 +200,7 @@ describe("the top block (A497)", () => {
       t("03001 Alicante, Alicante/Alacant"),
       t("Tel. 912 345 678"),
       t("hola@labuena.es"),
-      t("Filed domicile"),
+      t("Domicilio fiscal: Filed domicile"),
       t("DUPLICADO"),
     ]);
   });
@@ -328,6 +328,40 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
       result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
     });
     expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "PRUEBA - SIN COBRO REAL"]);
+  });
+
+  const withAddresses = (venueAddress: string[], domicile: string) =>
+    buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      surface: "thermal",
+      venueAddress,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        issuer: { venueName: "Santet SL", nif: "B00000000", domicile },
+      },
+    }).elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
+
+  it("prints a matching address once, ignoring case, commas and spacing", () => {
+    const text = withAddresses(
+      ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
+      "AVINGUDA D'ICÀRIA 215 BAJOS,  08005 Barcelona",
+    );
+    expect(text.filter((t) => /Icària/i.test(t))).toEqual(["Avinguda d'Icària 215, Bajos"]);
+    expect(text.some((t) => t.startsWith("Domicilio fiscal:"))).toBe(false);
+  });
+
+  it("prints both, the registered one labelled, when they differ by one real character", () => {
+    const text = withAddresses(
+      ["Avinguda d'Icària 215, Bajos", "08005 Barcelona"],
+      "Avinguda d'Icària 217, Bajos, 08005 Barcelona",
+    );
+    expect(text).toContain("Avinguda d'Icària 215, Bajos");
+    expect(text).toContain("Domicilio fiscal: Avinguda d'Icària 217, Bajos, 08005 Barcelona");
+  });
+
+  it("prints the registered address unlabelled when it is the only one", () => {
+    const text = withAddresses([], "Avinguda d'Icària 215, Bajos, 08005 Barcelona");
+    expect(text).toContain("Avinguda d'Icària 215, Bajos, 08005 Barcelona");
   });
 });
 
