@@ -3672,7 +3672,10 @@ flags are drawn, while refusals are, and so is a disabled station's warning, for
 with one addition: a cell those rules leave blank is named, muted and in italics, when its station
 for the period differs from its row's Every zone's saved station for the period.
 
-A search field before the Period field and Expand all ("Search categories and products") lists All categories, each
+Search ("Search categories and products") fills the space beside one Expand/Collapse button,
+which reads Collapse all while every category is open and Expand all otherwise. Period stays
+after Search; on a narrow screen it occupies the next row so Search and the button fit together.
+The search lists All categories, each
 category or product whose own name matches, and every category above a match. Matching ignores case
 and accents and follows `textSearch` (`packages/shared/src/text-search.ts`): every word must match,
 as a whole word except the one still being typed, which may be part of one. Each matched word is
@@ -3685,8 +3688,10 @@ opening and closing categories, Expand all and Collapse all change only the sear
 query starts again from its own opening, and clearing the field brings back the tree as it was open
 (the "search" cases in `routing-grid.test.ts`).
 
-A cell's button opens the routing cell editor (`routing-cell-editor.ts`): "Any other time" holds the cell's own station,
-and "+ Add route" adds a line of periods with a station. A zone column offers only its
+A cell's button opens the routing cell editor (`routing-cell-editor.ts`): the cell's own station is
+labelled "Station" while there are no period routes, and "Any other time" while there is at least
+one. Each route splits Periods and Station evenly beside Remove, and the fallback field ends
+where the route's Station field ends. "+ Add route" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
 menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not

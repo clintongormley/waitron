@@ -152,37 +152,13 @@ list does not exist.
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
 
-## A656 — tidy the Routes tab and its cell editor
-
-Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on a phone
-([mockups/a656-routes-tab/](mockups/a656-routes-tab/)).
-
-1. **The fallback field's label.** The cell editor (`routing-cell-editor.ts`, the `target`
-   combobox labelled `routing.any_other_time`) always says "Any other time", which "doesn't make
-   sense if you haven't already added a period routing". With no period route it reads "Station"
-   (Spanish needs the owner's wording beside "Estación"); once a route is added it reads "Any other
-   time" / "El resto del tiempo". The tests that pin the label (`routing-cell-editor.test.ts`, the
-   `[name=target]` case; `routing-grid.test.ts`, the labels the editor offers) follow.
-2. **Line the station fields up.** In screenshot 2 the fallback field runs past the right edge of
-   the route's Station field, and a route's Station is narrower than its Periods. Both choose a
-   station, so their right edges meet, and Periods and Station split a route row evenly beside its
-   Remove.
-3. **No empty band under a one-line row.** Every cell is `vertical-align: top`, and the label and
-   the station button each hold `min-block-size: var(--wt-tap-min)` with padding as well, so a
-   one-line row is taller than its text and the spare height sits below it (read in
-   `routing-grid.ts`, not measured). Keep a row a tap target tall, but either centre a one-line row
-   or stop the padding adding to the minimum. A cell with period lines (screenshot 4, "Kitchen /
-   Open: Bar / Lunch: Front bar") is the case that must still read from the top. The open entry "A
-   long word in a routing-grid row name still splits at 390 px" works on the same label cell.
-4. **One Expand/Collapse button, right of a full-width search.** Today `.toolbar` wraps and
-   `.toolbar wt-input` carries a `max-inline-size`, so on a desktop the search stops short and on a
-   phone the two buttons drop to a second row. One button, "Collapse all" while every category is
-   open and "Expand all" otherwise (`wt-data-table`'s `expandAllLabel` and `collapseAllLabel`
-   behave this way; the grid is drawn by hand, so it copies the behaviour rather than switching it
-   on), stays to the right of the search box at every width, and the search box takes the rest of
-   the row. A584's Period field already sits after the search box; the tidy keeps it there.
-
 ## Decisions and deliberate limits
+
+- **Routes keeps one Expand/Collapse control beside Search (A656, owner 2026-10-14).**
+  It reads Collapse all while every category is open, and Expand all otherwise. On a phone,
+  Period follows on its own row so Search keeps room. The editor calls its fallback Station
+  (Estación) until it holds a period route, then Any other time (El resto del tiempo).
+  Its two route fields share the row evenly, and both station fields end together.
 
 - **A counter order moved to a table sends its unsent dishes to the kitchen at the move (A660,
   owner 2026-10-15: (C), keep the rule).** A bill entering table service from another service mode

@@ -118,6 +118,128 @@ type Editor = HTMLElementTagNameMap["routing-cell-editor"];
 /** The cell's button; `null` where the cell draws none. */
 const combo = (el: RoutingGrid, row: string, zone: string) =>
   cell(el, row, zone).querySelector<HTMLButtonElement>('button[data-test="routing-cell"]');
+
+describe("the single tree control", () => {
+  const controls = (el: RoutingGrid) => [
+    ...root(el).querySelectorAll<HTMLElement>(".toolbar wt-button"),
+  ];
+  const label = (el: RoutingGrid) => controls(el).map((button) => button.textContent!.trim());
+
+  it("keeps the search-count status rendered before the first query", async () => {
+    const { el } = await mount();
+    const status = root(el).querySelector<HTMLElement>('[role="status"]')!;
+    expect(status.textContent).toBe("");
+    expect(getComputedStyle(status).display).not.toBe("none");
+    const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await field.updateComplete;
+    await userEvent.fill(field.shadowRoot!.querySelector<HTMLInputElement>("input")!, "moj");
+    await el.updateComplete;
+    expect(root(el).querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent).toBe("1 match");
+    expect(getComputedStyle(status).display).not.toBe("none");
+  });
+
+  it("changes from Expand to Collapse only while every category is open", async () => {
+    const { el } = await mount();
+    expect(label(el)).toEqual(["Expand all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(label(el)).toEqual(["Collapse all"]);
+    await userEvent.click(root(el).querySelector('button[data-category="cocktails"]')!);
+    await el.updateComplete;
+    expect(label(el)).toEqual(["Expand all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(label(el)).toEqual(["Collapse all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(label(el)).toEqual(["Expand all"]);
+    expect(rowLabels(el)[1]).toBe("▸ Drinks");
+  });
+
+  it("has no open categories when the model has none", async () => {
+    const { el } = await mount(routing({ categories: [], products: [], cells: [] }));
+    expect(label(el)).toEqual(["Expand all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(label(el)).toEqual(["Expand all"]);
+  });
+
+  it("offers Collapse when the search's categories are already open, leaving the ordinary tree alone", async () => {
+    const { el } = await mount();
+    const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await input.updateComplete;
+    const native = input.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(native, "moj");
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+    expect(label(el)).toEqual(["Collapse all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
+    expect(label(el)).toEqual(["Expand all"]);
+    await userEvent.fill(native, "");
+    await el.updateComplete;
+    expect(rowLabels(el)[1]).toBe("▸ Drinks");
+  });
+
+  it.each([390, 1280])(
+    "keeps search and the one button on one full row at %i px",
+    async (width) => {
+      await page.viewport(width, 800);
+      const { el } = await mount();
+      const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+      await input.updateComplete;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const buttons = controls(el);
+      expect(buttons).toHaveLength(1);
+      const search = input.getBoundingClientRect();
+      const button = buttons[0]!.getBoundingClientRect();
+      const toolbar = root(el).querySelector(".toolbar")!.getBoundingClientRect();
+      expect(search.width).toBeGreaterThan(0);
+      expect(search.left).toBeCloseTo(toolbar.left, 0);
+      expect(button.right).toBeCloseTo(toolbar.right, 0);
+      expect(Math.abs(search.top - button.top)).toBeLessThanOrEqual(1);
+      expect(button.left).toBeGreaterThan(search.right);
+    },
+  );
+
+  it.each(["en", "es"] as const)(
+    "keeps the phone search usable beside %s controls when periods exist",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 800);
+      const { el } = await mount(
+        routing({
+          periods: [
+            {
+              id: "lunch",
+              name: "Lunch",
+              departmentId: "dining",
+              departmentName: "Dining",
+              colour: "blue",
+              productIds: ["mojito"],
+            },
+          ],
+        }),
+      );
+      const field = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+      await field.updateComplete;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(window.innerWidth).toBe(390);
+      const search = field.getBoundingClientRect();
+      const period = root(el).querySelector("[name=period]")!.getBoundingClientRect();
+      const button = controls(el)[0]!.getBoundingClientRect();
+      expect(search.width).toBeGreaterThan(
+        2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min")),
+      );
+      expect(Math.abs(search.top - button.top)).toBeLessThanOrEqual(1);
+      expect(period.top).toBeGreaterThanOrEqual(search.bottom);
+      expect(period.left).toBeCloseTo(search.left, 0);
+      expect(period.right).toBeCloseTo(button.right, 0);
+    },
+  );
+});
 const trigger = (box: HTMLButtonElement) => box;
 /** The station the cell's button draws, and whether it is drawn as inherited. */
 const shown = (box: HTMLButtonElement) => {
@@ -136,7 +258,7 @@ const field = (editor: Editor, name: string) =>
   editor.shadowRoot!.querySelector<Combo>(`wt-combobox[name="${name}"]`)!;
 const editorButton = (editor: Editor, test: string) =>
   editor.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`);
-/** The labels "Any other time" offers in the editor the cell opens. */
+/** The station choices offered by the editor the cell opens. */
 const optionLabels = (box: Combo) => box.options.map((option) => option.label);
 
 async function openEditor(el: RoutingGrid, box: HTMLButtonElement): Promise<Editor> {
@@ -1702,6 +1824,8 @@ describe("venue-routing-grid", () => {
     it("Collapse all during search closes every category of the search", async () => {
       const { el } = await mount();
       await search(el, "coc");
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
       await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!);
       await el.updateComplete;
       expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);

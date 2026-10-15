@@ -125,21 +125,36 @@ export class RoutingGrid extends LitElement {
         }
       }
       .toolbar {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-3);
       }
       .toolbar wt-input {
-        flex: 1 1 calc(var(--wt-space-6) * 8);
-        max-inline-size: calc(var(--wt-space-6) * 12);
-      }
-      .toolbar wt-combobox {
-        flex: 0 1 calc(var(--wt-space-6) * 6);
         min-inline-size: 0;
       }
+      .toolbar:has(wt-combobox) {
+        grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--wt-space-6) * 6)) auto;
+      }
+      .toolbar wt-combobox {
+        min-inline-size: 0;
+      }
+      @container (max-width: 40rem) {
+        .toolbar:has(wt-combobox) {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .toolbar wt-combobox {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .toolbar wt-button {
+          grid-column: 2;
+          grid-row: 1;
+        }
+      }
       .count {
+        display: block;
         color: var(--wt-color-text-muted);
       }
       mark {
@@ -1024,6 +1039,14 @@ export class RoutingGrid extends LitElement {
     const model = this.model;
     if (model === null) return nothing;
     const search = this.#search();
+    const open = search?.open ?? this.expanded;
+    const categories =
+      search === undefined
+        ? model.categories.map(({ id }) => id)
+        : search.rows.flatMap(({ entry: { row } }) =>
+            row.kind === "category" ? [row.categoryId] : [],
+          );
+    const allOpen = categories.length > 0 && categories.every((id) => open.has(id));
     const rows: readonly { entry: GridRow; found?: SearchRow }[] =
       search === undefined
         ? visibleRoutingRows(model, this.expanded).map((entry) => ({ entry }))
@@ -1049,18 +1072,14 @@ export class RoutingGrid extends LitElement {
         ></wt-input
         >${this.#periodField(model)}<wt-button
           variant="secondary"
-          data-test="expand-all"
-          @click=${() => this.#setOpen(search, expandAll(model))}
-          >${t("routing.expand_all")}</wt-button
-        ><wt-button
-          variant="secondary"
-          data-test="collapse-all"
-          @click=${() => this.#setOpen(search, collapseAll())}
-          >${t("routing.collapse_all")}</wt-button
-        ><span class="count" role="status"
-          >${search === undefined ? "" : matchCount(search.count)}</span
+          data-test=${allOpen ? "collapse-all" : "expand-all"}
+          @click=${() => this.#setOpen(search, allOpen ? collapseAll() : expandAll(model))}
+          >${t(allOpen ? "routing.collapse_all" : "routing.expand_all")}</wt-button
         >
       </div>
+      <span class="count" role="status"
+        >${search === undefined ? "" : matchCount(search.count)}</span
+      >
       <div class="scroll" data-test="grid-scroll">
         <table
           aria-label=${t("routing.grid")}

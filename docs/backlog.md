@@ -1803,21 +1803,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   just after midnight before the changeover on the 1st the two can show different months — left
   open by A506-12.
 
-- **A656 — tidy the Routes tab and its cell editor (owner, 2026-10-14; open).** In
-  `packages/venue-service/src/dashboard/`: (1) the editor's fallback station field
-  (`routing-cell-editor.ts`, `routing.any_other_time`, Spanish "El resto del tiempo") reads
-  "Station" while the cell has no period route and "Any other time" once it has one; (2) that field
-  ends where a route's Station field ends, and a route's Periods and Station share the row evenly;
-  (3) a one-line grid row (`routing-grid.ts`) is no taller than it needs, with no empty band under
-  its text, while a cell with period lines ("Kitchen / Open: Bar") still reads from the top; (4)
-  Expand all and Collapse all become one button, "Collapse all" while every category is open and
-  "Expand all" otherwise, as `wt-data-table`'s own does, always to the right of the search box,
-  which fills the rest of the row as on Products (today it is capped and the toolbar wraps on a
-  phone). A584's Period field already sits after the search box; the tidy keeps it there. The
-  editor's height is the full-height dialog entry under "Users, sign-in and the dashboard shell".
-  [Detail](backlog/kitchen.md#a656--tidy-the-routes-tab-and-its-cell-editor),
-  [screenshots](backlog/mockups/a656-routes-tab/)
-
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so

@@ -110,6 +110,41 @@ it("offers a zone column its department's periods that meet the row, ungrouped",
   expect(periods!.options.every((option) => option.group === undefined)).toBe(true);
 });
 
+it.each([
+  ["en", "Station", "Any other time"],
+  ["es", "Estación", "El resto del tiempo"],
+] as const)("names the fallback for the current routes in %s", async (locale, station, other) => {
+  setLocale(locale);
+  const el = await mount();
+  const label = () => one<Combobox>(el, "[name=target]")!.label;
+  expect(label()).toBe(station);
+  await click(el, "add-line");
+  expect(label()).toBe(other);
+  await click(el, "remove-line");
+  expect(label()).toBe(station);
+});
+
+it.each([390, 1280])(
+  "aligns both station fields and shares a route evenly at %i px",
+  async (width) => {
+    await page.viewport(width, 800);
+    try {
+      const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
+      await Promise.all(all(el, "wt-combobox").map((field) => field.updateComplete));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const periods = linePeriods(el)[0]!.getBoundingClientRect();
+      const station = lineTargets(el)[0]!.getBoundingClientRect();
+      const fallback = one<Combobox>(el, "[name=target]")!.getBoundingClientRect();
+      expect(periods.width).toBeGreaterThan(0);
+      expect(Math.abs(periods.width - station.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(periods.top - station.top)).toBeLessThanOrEqual(1);
+      expect(Math.abs(fallback.right - station.right)).toBeLessThanOrEqual(1);
+    } finally {
+      await page.viewport(1280, 800);
+    }
+  },
+);
+
 it("offers Every zone every active department's periods that meet the row, grouped by department", async () => {
   const el = await mount();
   await click(el, "add-line");
@@ -479,7 +514,7 @@ it("shows no left-out line when every inherited period is kept", async () => {
 it("speaks Spanish", async () => {
   setLocale("es");
   const el = await mount({ inheritedFrom: "Todas las zonas" });
-  expect(one<Combobox>(el, "[name=target]")!.label).toBe("El resto del tiempo");
+  expect(one<Combobox>(el, "[name=target]")!.label).toBe("Estación");
   expect(button(el, "add-line")!.textContent!.trim()).toBe("+ Añadir ruta");
   expect(one(el, "[data-test=inherited-from]")!.textContent!.trim()).toBe("De Todas las zonas");
 });
