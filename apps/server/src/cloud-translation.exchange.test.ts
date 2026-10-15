@@ -310,7 +310,8 @@ it("a collect reply as large as the contract allows fits under its size limit", 
 it("refuses a collect reply over its size limit, and stops reading it", () =>
   withFake(async (f) => {
     await f.client.refresh();
-    const chunk = new Uint8Array(1048576).fill(0x20);
+    // Small chunks keep how far the reader can run past the limit under the arithmetic test's margin.
+    const chunk = new Uint8Array(65536).fill(0x20);
     let sent = 0;
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
@@ -324,10 +325,12 @@ it("refuses a collect reply over its size limit, and stops reading it", () =>
       },
     });
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(stream, { status: 200 }));
+    const concat = vi.spyOn(Buffer, "concat");
     await expect(f.client.translation.collect(JOB)).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
     expect(cancelled).toBe(true);
+    expect(concat).not.toHaveBeenCalled();
     expect(sent).toBeGreaterThan(COLLECT_REPLY_BYTES);
   }));
 
@@ -502,7 +505,13 @@ it("a call its caller aborts while it is parked behind the connection's lock is 
       if (type === "abort") parked();
     });
     const call = f.client.translation.status(JOB, abort.signal);
-    await waiting;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      waiting,
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("the call never waited for the lock")), 5000);
+      }),
+    ]).finally(() => clearTimeout(timer));
     abort.abort();
     await expect(call).rejects.toMatchObject({ code: "cloud.unavailable" });
     answer(new Response("{}", { status: 503 }));
