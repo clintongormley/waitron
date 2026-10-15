@@ -267,6 +267,45 @@ describe("the house style", () => {
     });
   });
 
+  it("fills the limit from one group alone", async () => {
+    await inVenue(async (tx, lunch) => {
+      const ids = [
+        await product(tx, lunch, "Pa", { fr: "CLIENT-FR Pain" }),
+        await product(tx, lunch, "Vi", { fr: "CLIENT-FR Vin" }),
+        await product(tx, lunch, "Sal", { fr: "CLIENT-FR Sel" }),
+      ];
+      const [first, second] = (await tx.select().from(products))
+        .filter((row) => ids.includes(row.id))
+        .sort((a, b) => (a.id < b.id ? -1 : 1));
+      expect((await readHouseStyle(tx, ["fr"], 2)).map((example) => example.staffName)).toEqual([
+        first!.name,
+        second!.name,
+      ]);
+    });
+  });
+
+  it("counts only an example it keeps toward a group's share of the limit", async () => {
+    await inVenue(async (tx, lunch) => {
+      const a = await product(tx, lunch, "A", { fr: "CLIENT-FR A" });
+      const b = await product(tx, lunch, "B", { fr: "CLIENT-FR B" });
+      const [earlier, kept] = a < b ? [a, "B"] : [b, "A"];
+      // Too long by JavaScript's length, which TEXT_LIMIT counts, though SQLite counts 251 characters.
+      await tx
+        .update(products)
+        .set({ customerName: { fr: "😀".repeat(TEXT_LIMIT / 2 + 1) } })
+        .where(eq(products.id, earlier));
+      const expected = [
+        { kind: "product", staffName: `STAFF ${kept}`, names: { fr: `CLIENT-FR ${kept}` } },
+      ];
+      expect(await readHouseStyle(tx, ["fr"], 1)).toEqual(expected);
+      await tx
+        .update(products)
+        .set({ name: "😀".repeat(TEXT_LIMIT / 2 + 1), customerName: { fr: "CLIENT-FR" } })
+        .where(eq(products.id, earlier));
+      expect(await readHouseStyle(tx, ["fr"], 1)).toEqual(expected);
+    });
+  });
+
   it("takes a live menu's section with a saved name", async () => {
     await inVenue(async (tx, lunch) => {
       await section(tx, lunch.menuId, "Postres", { ca: "CLIENT-CA Postres" });

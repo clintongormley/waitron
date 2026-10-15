@@ -286,7 +286,10 @@ export async function readHouseStyle(
     order by kind, category, id`);
   const groups = new Map<string, HouseStyleExample[]>();
   for (const row of result.rows) {
-    if (!fits(row.staff_name)) continue;
+    const key = `${row.kind}:${row.category ?? ""}`;
+    const group = groups.get(key) ?? [];
+    // Handed out one per group in turn, a group's example past `limit` is never among the first `limit`.
+    if (group.length >= limit || !fits(row.staff_name)) continue;
     const saved = JSON.parse(row.names) as Record<string, string>;
     const names = Object.fromEntries(
       languages
@@ -294,8 +297,6 @@ export async function readHouseStyle(
         .map((language) => [language, saved[language]!]),
     );
     if (Object.keys(names).length === 0) continue;
-    const key = `${row.kind}:${row.category ?? ""}`;
-    const group = groups.get(key) ?? [];
     group.push({ kind: row.kind, staffName: row.staff_name, names });
     groups.set(key, group);
   }
