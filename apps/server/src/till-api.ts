@@ -74,6 +74,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { mountTillClockApi } from "./till-clock-api.js";
+import { mountTillAttendanceApi } from "./till-attendance-api.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
@@ -276,6 +277,7 @@ export interface TillApiDeps {
   pinThrottle?: PinThrottle;
   invoiceEmailAvailable?: () => Promise<boolean>;
   workforceEnabled?: boolean;
+  attendanceResponsesEnabled?: boolean;
 }
 
 async function resolveHttpOrderZone(
@@ -1132,6 +1134,7 @@ async function movingRooms<T extends object>(
 
 /** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+  const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.cfg, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
@@ -1139,6 +1142,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     mountTillClockApi(
       app,
       { db: deps.db, cfg: deps.cfg, now: () => deps.clock.now().instant },
+      log,
+    );
+  if (deps.workforceEnabled === true && deps.attendanceResponsesEnabled !== false)
+    mountTillAttendanceApi(
+      app,
+      {
+        db: deps.db,
+        cfg: deps.cfg,
+        now: () => deps.clock.now().instant,
+        attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
+      },
       log,
     );
   const simulator = deps.cardProvider;
@@ -1200,8 +1214,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }),
     );
   }
-  // Built once per mount so its in-memory state persists across requests.
-  const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);

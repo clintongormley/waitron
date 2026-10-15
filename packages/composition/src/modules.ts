@@ -64,6 +64,7 @@ import {
   WORKFORCE_CLASSIFICATION,
   WORKFORCE_CONFIGURATION_TRANSFER,
   WORKFORCE_CHANGE_SOURCES,
+  WORKFORCE_PERMISSIONS,
 } from "@waitron/workforce";
 import {
   VENUE_SERVICE,
@@ -171,6 +172,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     },
     classification: WORKFORCE_CLASSIFICATION,
     changes: WORKFORCE_CHANGE_SOURCES,
+    permissions: WORKFORCE_PERMISSIONS,
     configurationTransfer: WORKFORCE_CONFIGURATION_TRANSFER,
   },
   {

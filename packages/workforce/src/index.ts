@@ -171,4 +171,6 @@ export type {
   AttendanceInbox,
   AttendanceDayView,
   AttendanceManagerQueue,
+  AttendanceLookups,
 } from "./attendance-contract.js";
+export { WORKFORCE_PERMISSIONS } from "./permissions.js";

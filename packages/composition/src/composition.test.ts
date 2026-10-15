@@ -21,7 +21,11 @@ import {
   FISCAL_VOCABULARY,
   FISCAL_ALERTS,
 } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  registerModulePermissions,
+  roleHasPermission,
+} from "@waitron/identity";
 import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
@@ -46,6 +50,22 @@ import {
   VENUE_SERVICE_ROUTES,
 } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
+
+it("only workforce grants correction decisions to supervisors and higher", () => {
+  const workforce = ALL_MODULES.find((m) => m.name === "workforce")!;
+  expect(workforce.permissions).toEqual([
+    { permission: "workforce.correct", grantedFrom: "supervisor" },
+  ]);
+  expect(
+    ALL_MODULES.filter((m) => m.permissions?.some((p) => p.permission === "workforce.correct")),
+  ).toEqual([workforce]);
+  registerModulePermissions(workforce.permissions!);
+  expect(
+    ["staff", "supervisor", "manager", "admin"].map((role) =>
+      roleHasPermission(role as "staff" | "supervisor" | "manager" | "admin", "workforce.correct"),
+    ),
+  ).toEqual([false, true, true, true]);
+});
 
 describe("ALL_MODULES is the migration source of truth", () => {
   it("derives exactly the manifest's sets, in order", () => {

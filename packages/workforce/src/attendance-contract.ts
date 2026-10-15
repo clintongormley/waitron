@@ -97,3 +97,9 @@ export interface AttendanceManagerQueue {
   locationId: string;
   items: CorrectionItem[];
 }
+
+export interface AttendanceLookups {
+  viewer: { personId: string; canSelfApprove: boolean };
+  locations: { id: string; name: string; timeZone: string }[];
+  people: { personId: string; displayName: string }[];
+}

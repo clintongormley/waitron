@@ -10,6 +10,7 @@ describe("the public surface", () => {
         "WORKFORCE_CLASSIFICATION",
         "WORKFORCE_CONFIGURATION_TRANSFER",
         "WORKFORCE_MIGRATIONS",
+        "WORKFORCE_PERMISSIONS",
         "attendanceDayWork",
         "attendanceSourceState",
         "attendanceOperationFacts",
