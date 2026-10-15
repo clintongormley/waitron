@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navMatches } from "./nav-search.js";
+import { navMatches, destinationMatches } from "./nav-search.js";
 
 const pages = ["Users", "Teamwork board", "Shifts", "Team rota"].map((label) => ({ label }));
 const labels = (query: string, heading = "Team") =>
@@ -47,5 +47,60 @@ describe("navMatches", () => {
 
   it("matches the label alone for a group with no heading", () => {
     expect(labels("team", "")).toEqual(["Team rota", "Teamwork board"]);
+  });
+});
+
+describe("destinationMatches", () => {
+  const destinations = [
+    {
+      id: "staffing",
+      screen: "opening-hours",
+      label: "Staffing",
+      pageLabel: "Calendar",
+      heading: "Operations",
+      href: "/manage/opening-hours/view/staffing",
+    },
+    {
+      id: "rota",
+      screen: "opening-hours",
+      label: "Rota",
+      pageLabel: "Calendar",
+      heading: "Operations",
+      href: "/manage/opening-hours/view/rota",
+    },
+    {
+      id: "routes",
+      screen: "prep-stations",
+      label: "Routes",
+      pageLabel: "Prep stations",
+      heading: "Operations",
+      href: "/manage/prep-stations/view/routing",
+    },
+  ];
+  it("finds inner labels and words split with their containing page", () => {
+    expect(destinationMatches("staff", destinations).map((x) => x.id)).toEqual(["staffing"]);
+    expect(destinationMatches("calendar rota", destinations).map((x) => x.id)).toEqual(["rota"]);
+    expect(destinationMatches("operations routes", destinations).map((x) => x.id)).toEqual([
+      "routes",
+    ]);
+    expect(
+      destinationMatches("rutas preparacion", [
+        { ...destinations[2]!, label: "Rutas", pageLabel: "Estaciones de preparación" },
+      ]).map((x) => x.id),
+    ).toEqual(["routes"]);
+  });
+  it("returns no inner destinations for a blank or punctuation-only search", () => {
+    expect(destinationMatches("  ", destinations)).toEqual([]);
+    expect(destinationMatches("&", destinations)).toEqual([]);
+  });
+  it("keeps trailing-space word semantics and ranks the own label before a parent-only match", () => {
+    expect(destinationMatches("staff ", destinations)).toEqual([]);
+    expect(destinationMatches("rota ", destinations).map((x) => x.id)).toEqual(["rota"]);
+    expect(
+      destinationMatches("routes", [
+        { ...destinations[0]!, pageLabel: "Routes" },
+        destinations[2]!,
+      ]).map((x) => x.id),
+    ).toEqual(["routes", "staffing"]);
   });
 });

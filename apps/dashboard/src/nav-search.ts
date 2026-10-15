@@ -28,3 +28,28 @@ export function navMatches<Page extends { label: string }>(
     );
   return [...own, ...withHeading.map(({ page }) => page)];
 }
+
+export interface NavSearchDestination {
+  id: string;
+  screen: string;
+  label: string;
+  pageLabel: string;
+  heading: string;
+  href: string;
+}
+
+export function destinationMatches(
+  query: string,
+  items: readonly NavSearchDestination[],
+): NavSearchDestination[] {
+  if (query.trim() === "") return [];
+  const own = navMatches(query, items, "");
+  const found = new Set(own.map((item) => item.id));
+  const combined = items.map((item) => ({
+    ...item,
+    label: `${item.label} ${item.pageLabel} ${item.heading}`,
+  }));
+  const remaining = navMatches(query, combined, "").filter((item) => !found.has(item.id));
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return [...own, ...remaining.map((item) => byId.get(item.id)!)];
+}
