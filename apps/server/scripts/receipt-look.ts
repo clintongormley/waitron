@@ -10,7 +10,7 @@ import { renderInvoicePdf } from "../src/invoice-pdf.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../src/testing/full-invoice-fixture.js";
 import type { ReceiptDocumentInput } from "../src/receipt-document.js";
 
-const { default: sharp } = await import("sharp"); // as invoice-raster.ts:16 loads it
+const { default: sharp } = await import("sharp");
 const out = process.argv[2] ?? "/tmp/a663-look";
 mkdirSync(out, { recursive: true });
 
@@ -20,14 +20,27 @@ const PRINTERS: Record<string, EscSetting> = {
 };
 
 async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
-  const images = escPosCommands(bytes)
-    .filter((c) => c.name === "GS v 0")
-    .map((c) => ({
-      width: c.widthDots!,
-      height: c.heightDots!,
-      bits: bytes.subarray(c.offset + 8, c.offset + c.length),
-    }));
-  const width = Math.max(...images.map((i) => i.width));
+  let leftMargin = 0;
+  let areaDots: number | undefined;
+  let alignment = 0;
+  const images: { x: number; width: number; height: number; bits: Uint8Array }[] = [];
+  for (const c of escPosCommands(bytes)) {
+    const argument = (index: number) => bytes[c.offset + 2 + index]!;
+    if (c.name === "GS L") leftMargin = argument(0) | (argument(1) << 8);
+    else if (c.name === "GS W") areaDots = argument(0) | (argument(1) << 8);
+    else if (c.name === "ESC a") alignment = argument(0) % 48;
+    else if (c.name === "GS v 0") {
+      const width = c.widthDots!;
+      const spare = (areaDots ?? width) - width;
+      images.push({
+        x: leftMargin + (alignment === 1 ? Math.floor(spare / 2) : alignment === 2 ? spare : 0),
+        width,
+        height: c.heightDots!,
+        bits: bytes.subarray(c.offset + 8, c.offset + c.length),
+      });
+    }
+  }
+  const width = Math.max(leftMargin + (areaDots ?? 0), ...images.map((i) => i.x + i.width));
   const height = images.reduce((sum, i) => sum + i.height, 0);
   const pixels = Buffer.alloc(width * height, 255);
   let top = 0;
@@ -36,7 +49,7 @@ async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
     for (let y = 0; y < image.height; y++)
       for (let x = 0; x < image.width; x++)
         if (image.bits[y * stride + (x >> 3)]! & (0x80 >> (x & 7)))
-          pixels[(top + y) * width + x] = 0;
+          pixels[(top + y) * width + image.x + x] = 0;
     top += image.height;
   }
   await sharp(pixels, { raw: { width, height, channels: 1 } })
