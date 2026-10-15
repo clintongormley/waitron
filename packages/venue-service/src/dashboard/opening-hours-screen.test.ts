@@ -1659,6 +1659,35 @@ describe("Month view", () => {
     },
   );
 
+  it.each([
+    ["Edit Winter's standard week", "edit-week"],
+    ["Make a special day", "special-add"],
+  ])(
+    "does nothing with %s when the screen has gone before the box's button acts, under the dashboard's navigation guard",
+    async (_, test) => {
+      const { el, view, writes } = await monthMount(
+        "/manage/opening-hours/view/month/month/2026-12",
+      );
+      const guard = new NavigationGuard(window, {
+        isDirty: () => false,
+        request: async () => "proceeded",
+      });
+      onTestFinished(() => guard.dispose());
+      const box = await ordinary(el, await shown(view));
+      const closed = new Promise((resolve) =>
+        box.addEventListener("calendar-day-box-close", resolve, { once: true }),
+      );
+      boxButton(el, test)!.click();
+      el.remove();
+      await closed;
+      await el.updateComplete;
+      expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+      expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
+      expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
+      expect(writes).toEqual([]);
+    },
+  );
+
   const withWinter = (data: OpeningHoursModel) => {
     data.seasons = [
       { id: "autumn", name: "Autumn", startsOn: "09-01" },

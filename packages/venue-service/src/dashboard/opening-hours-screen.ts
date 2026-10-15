@@ -481,6 +481,7 @@ export class OpeningHoursScreen extends LitElement {
     this.watchedHolidayMonth = "";
     this.boxMonthDetach?.();
     this.watchedBoxMonth = "";
+    this.afterDayBox = undefined;
     this.generation = {};
     super.disconnectedCallback();
   }
@@ -962,7 +963,7 @@ export class OpeningHoursScreen extends LitElement {
     this.dayBoxPlaced = undefined;
     const act = this.afterDayBox;
     this.afterDayBox = undefined;
-    act?.();
+    if (this.isConnected) act?.();
   }
   /** What the day box says of `date`: from the month read holding its row, else, over the Year
    *  while that read is pending, from the year read alone. */
