@@ -1150,7 +1150,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`). And after a Discard
   that deleted some of a row's suggestions before one was refused, that language's row takes no
   suggestion including any of them, and shows no Discard, for the rest of the opening the refusal
-  lands in (or, if the dialog was closed then, the next opening when it is on the same language);
+  lands in (or, if the dialog was closed then, the very next opening, when that is on the same language);
   the refused suggestion is still stored and fills the row again at that language's opening after
   that.
 
