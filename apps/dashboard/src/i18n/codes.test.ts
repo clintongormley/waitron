@@ -680,7 +680,7 @@ it("says a box holds no recovery key rather than asking for one to be entered, s
   );
 });
 
-it("words the six Translate all codes in both languages", () => {
+it("words each Translate all code in both languages", () => {
   for (const code of [
     "content.suggestion_job_running",
     "content.suggestion_consent_required",

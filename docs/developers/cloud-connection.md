@@ -47,8 +47,7 @@ to Cloud's production environment; development and preproduction map to test.
 Browser input cannot select the destination, installation key or local venue.
 
 `cloud-connection.json` lives under `WAITRON_STATE_DIR` and contains the installation's
-private key. Run one server process per node state directory. Requests within that
-process share a write gate. Writes use a fresh mode-0600 temporary file, sync it,
+private key. Run one server process per node state directory. Writes use a fresh mode-0600 temporary file, sync it,
 rename it and sync the directory before sending the first request to Cloud. Restart
 and lost-reply tests exercise reuse of the saved key and request. These tests do not
 simulate a power loss.
@@ -88,8 +87,8 @@ answers it with a fourth service, `content_translation`, beside the original thr
 reports still answer three. Services are matched by name, in any order. The box keeps the last
 fourth entry it was given when a renewal or report answers three. A Cloud that predates version 2
 refuses any `configuration` body other than `{}` as an invalid proof (401) (Cloud's
-`packages/registration/src/installations.ts:28`), and the box answers that by dropping its lease
-(`apps/server/src/cloud-installation.ts:295-303`). Cloud must therefore support version 2 before
+`packages/registration/src/installations.ts:28` at `eea0aa5`), and the box answers that by dropping its lease
+(the `invalid_proof` branch of `exchange` in `apps/server/src/cloud-installation.ts`). Cloud must therefore support version 2 before
 any box running this code talks to it, including a box paired before it was upgraded to this version. Stopping access permanently retires the key. A stop
 request waits for the local worker, rechecks your permission, and saves the stop intent before
 contacting Cloud. Do not delete the state file to reconnect: pairing again with a new key does
@@ -260,7 +259,8 @@ month retained as monthly. The transport methods remain callable separately. Man
 refuses production installations; the local proof has not established production storage behavior.
 
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
-installed checkout. It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable
+installed checkout. It needs a Cloud that supports `servicesVersion` 2 (see
+[Run the integration proof](#run-the-integration-proof)). It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable
 roots and exercises actual signatures, temporary storage access and Waitron restore hooks.
 The fixture is not an operator command for a real venue.
 

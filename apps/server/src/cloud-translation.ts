@@ -72,7 +72,7 @@ const REASONS: Partial<Record<CloudJobState, readonly CloudReason[]>> = {
   partly_done: ["limit_reached", "provider_failed"],
   failed: ["provider_unavailable", "consent_required", "limit_reached"],
 };
-// Contract "Translate all, version 1" (waitron-integration-contract.md:461-464, 568-572): at most
+// Contract "Translate all, version 1", "Submit" and "Status, collect and release": at most
 // 1,000 items, each with a ref of up to 128 characters, names in up to 20 languages and up to 10
 // corrections of two texts, every text up to 500 characters. A character JSON can only send as
 // `\uXXXX` costs 6 bytes: (128 + 20 × 500 + 10 × 2 × 500) × 6 = 120,768 bytes an item, plus 1 KiB

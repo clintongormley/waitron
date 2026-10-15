@@ -174,7 +174,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
   return view;
 }
 const activePaths = new Map<string, Promise<void>>();
-/** One server process owns a node state directory. Calls within that process share this write gate. */
+/** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), "cloud-connection.json");
   async function read(): Promise<SavedCloudState | undefined> {

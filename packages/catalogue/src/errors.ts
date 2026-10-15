@@ -48,7 +48,7 @@ declare module "@waitron/shared" {
     "content.suggestion_limit_reached": { fits: number };
     /** Cloud accepted the job but the translation provider failed for all of it. */
     "content.suggestion_service_unavailable": Record<string, never>;
-    /** Cloud deleted the job's results before the box collected them, or no longer knows the job. */
+    /** Cloud no longer holds the job's results, or does not know the job. */
     "content.suggestion_expired": Record<string, never>;
     /** The suggestion being discarded is gone. */
     "content.suggestion_not_found": { suggestionId: string };
