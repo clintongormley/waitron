@@ -14,6 +14,7 @@ import {
   columnMenu,
   hourLines,
   hourMarks,
+  isDeleteKey,
   paintGridStyles,
   placePopover,
   timeRuler,
@@ -39,6 +40,7 @@ describe("@waitron/venue-service/painter", () => {
       placePopover,
       ColumnStroke,
       CopyChooser,
+      isDeleteKey,
     });
   });
 

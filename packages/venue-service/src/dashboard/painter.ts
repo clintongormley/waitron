@@ -15,6 +15,7 @@ export {
   placePopover,
   ColumnStroke,
   CopyChooser,
+  isDeleteKey,
   type ColumnMenuItem,
   type ColumnStrokeOptions,
   type CopyChooserOptions,

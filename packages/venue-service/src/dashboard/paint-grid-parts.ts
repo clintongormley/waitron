@@ -61,6 +61,16 @@ export function hourLines(cutover: string) {
   );
 }
 
+/** Delete or Backspace with no Cmd, Ctrl or Alt held. */
+export function isDeleteKey(event: KeyboardEvent): boolean {
+  return (
+    (event.key === "Delete" || event.key === "Backspace") &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  );
+}
+
 export interface ColumnMenuItem {
   label: string;
   select: () => void;
@@ -148,7 +158,10 @@ interface Gesture {
   pointerId: number;
   key: string;
   column: HTMLElement;
+  /** The fixed end of the stretch. */
   anchor: number;
+  /** The minute the press landed on; the stroke covers nothing while the pointer is back on it. */
+  origin: number;
 }
 
 /** A pointer stroke down a `.day` column, scrolling the `.scroll` box when it rests in an hour-deep
@@ -202,16 +215,14 @@ export class ColumnStroke implements ReactiveController {
     return stepMinuteAt(clientY - box.top, box.height / ROWS, this.#options.cutover());
   }
 
-  start(event: PointerEvent, key: string): void {
+  /** Begins a stroke from `anchor`, in minutes from the changeover — a block's far edge, to resize
+   *  it from the near one — or from the minute under the pointer. */
+  start(event: PointerEvent, key: string, anchor?: number): void {
     this.#dragged = false;
     if (event.button !== 0 || this.#gesture !== null || !this.#options.canStart(key)) return;
     const column = event.currentTarget as HTMLElement;
-    this.#gesture = {
-      pointerId: event.pointerId,
-      key,
-      column,
-      anchor: this.#minuteAtY(event.clientY, column),
-    };
+    const origin = this.#minuteAtY(event.clientY, column);
+    this.#gesture = { pointerId: event.pointerId, key, column, anchor: anchor ?? origin, origin };
     window.addEventListener("pointermove", this.#move);
     window.addEventListener("pointerup", this.#release);
     window.addEventListener("pointercancel", this.abort);
@@ -231,11 +242,11 @@ export class ColumnStroke implements ReactiveController {
     const gesture = this.#gesture!;
     const minute = this.#minuteAtY(clientY, gesture.column);
     // Captured only once it moves: a captured click lands on the column, not the block clicked.
-    if (minute !== gesture.anchor) capturePointer(gesture.column, gesture.pointerId);
+    if (minute !== gesture.origin) capturePointer(gesture.column, gesture.pointerId);
     const start = Math.min(gesture.anchor, minute);
     const end = Math.max(gesture.anchor, minute);
     const preview = this.#preview;
-    if (minute === gesture.anchor) this.#setPreview(null);
+    if (minute === gesture.origin || minute === gesture.anchor) this.#setPreview(null);
     else if (preview?.key !== gesture.key || preview.start !== start || preview.end !== end)
       this.#setPreview({ key: gesture.key, start, end });
   }
@@ -330,6 +341,7 @@ export class CopyChooser {
     return this.#copying?.key;
   }
   #set(copying: { key: string; ticked: ReadonlySet<string> } | null): void {
+    if (copying === null && this.#copying === null) return;
     this.#copying = copying;
     this.#host.requestUpdate();
   }

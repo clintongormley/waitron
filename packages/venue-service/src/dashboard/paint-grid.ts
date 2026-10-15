@@ -11,6 +11,7 @@ import {
   OverflowFade,
   columnMenu,
   hourLines,
+  isDeleteKey,
   paintGridStyles,
   placePopover,
   timeRuler,
@@ -41,16 +42,6 @@ export interface PaintChange {
 }
 
 const DAY = 1440;
-
-/** Delete or Backspace with no Cmd, Ctrl or Alt held. */
-function isDeleteKey(event: KeyboardEvent): boolean {
-  return (
-    (event.key === "Delete" || event.key === "Backspace") &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    !event.altKey
-  );
-}
 
 @customElement("paint-grid")
 export class PaintGrid extends LitElement {

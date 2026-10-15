@@ -94,11 +94,11 @@ function reachableFrom(entryFiles: string[]): string[] {
 }
 
 describe("module dashboard sub-paths import no server-only specifier", () => {
-  for (const [pkg, dir] of SUBPATHS) {
+  for (const [, dir] of SUBPATHS) {
     const files = tsFiles(join(REPO, dir));
     const reached = reachableFrom(files);
 
-    it(`${pkg}/dashboard scans files (not vacuous)`, () => {
+    it(`${dir} scans files (not vacuous)`, () => {
       expect(files.length).toBeGreaterThan(0);
     });
 
@@ -118,7 +118,7 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       },
     );
 
-    it(`${pkg}/dashboard imports no sibling server entry`, () => {
+    it(`${dir} imports no sibling server entry`, () => {
       for (const f of files) {
         const text = readFileSync(f, "utf8");
         expect(text.includes('from "../index.js"'), f).toBe(false);
