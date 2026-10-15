@@ -3,6 +3,7 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
+import { invoiceFont } from "./invoice-font.js";
 import {
   INVOICE_PAGE_HEIGHT,
   INVOICE_PAGE_WIDTH,
@@ -536,5 +537,254 @@ describe("A4 TOTAL size", () => {
       (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
     );
     expect(total).toMatchObject({ kind: "text", size: 20 });
+  });
+});
+
+/** The same measure invoice-page.ts's width() takes, at a given size. */
+const measuredWidth = (text: string, size: number) =>
+  (invoiceFont.layout(text).advanceWidth * size) / invoiceFont.unitsPerEm;
+const right = (element: InvoicePageElement | undefined) => {
+  if (element?.kind !== "text") throw new Error(`expected a text element, got ${element?.kind}`);
+  return element.x + measuredWidth(element.text, element.size);
+};
+const CONTENT_RIGHT = INVOICE_PAGE_WIDTH - 36;
+
+describe("A4 columns and right-aligned amounts", () => {
+  const texts = (elements: InvoicePageElement[]) =>
+    elements.filter(
+      (element): element is Extract<InvoicePageElement, { kind: "text" }> =>
+        element.kind === "text",
+    );
+  const named = (elements: InvoicePageElement[], value: string) => {
+    const found = texts(elements).filter((element) => element.text === value);
+    if (found.length !== 1) throw new Error(`${found.length} text elements read «${value}»`);
+    return found[0]!;
+  };
+
+  /** Lays out a document of exactly these elements. */
+  const layoutOf = async (elements: unknown[]) => {
+    vi.resetModules();
+    vi.doMock("./receipt-document.js", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("./receipt-document.js")>()),
+      buildReceiptDocument: () => ({ duplicate: false, practice: false, elements }),
+    }));
+    try {
+      const { layoutInvoicePages: layout } = await import("./invoice-page.js");
+      return layout(fixture);
+    } finally {
+      vi.doUnmock("./receipt-document.js");
+      vi.resetModules();
+    }
+  };
+
+  const header = { units: "Uds.", item: "Artículo", price: "Precio", amount: "Importe" };
+  const row = { units: "12", item: "Croquetas", price: "1,50", amount: "18,00" };
+
+  it("right-aligns every amount to the content's right edge", () => {
+    const elements = layoutInvoicePages(fixture)[0]!.elements;
+    const total = named(elements, "19,69 €");
+    expect(total.size).toBe(20);
+    expect(right(total)).toBeCloseTo(CONTENT_RIGHT, 1);
+    expect(named(elements, "TOTAL").y).toBe(total.y);
+    expect(right(named(elements, "0,31 €"))).toBeCloseTo(CONTENT_RIGHT, 1);
+  });
+
+  it("draws the item table's amounts, the discount's included, in one column", () => {
+    const elements = layoutInvoicePages(fixture)[0]!.elements;
+    const rights = ["-1,00", "8,00"].map((value) => right(named(elements, value)));
+    expect(rights[0]).toBeCloseTo(rights[1]!, 1);
+  });
+
+  it("draws the header bold, an empty cell as nothing, and each column at one edge", async () => {
+    const [page, ...rest] = await layoutOf([
+      {
+        kind: "table",
+        table: {
+          header: { ...header, rate: "IVA" },
+          rows: [
+            { ...row, rate: "21%" },
+            { units: "", item: "Sin gluten", itemIndent: 2, price: "", amount: "" },
+          ],
+          withRate: true,
+        },
+      },
+    ]);
+    expect(rest).toEqual([]);
+    const elements = page!.elements;
+    expect(texts(elements).map((element) => [element.text, element.bold])).toEqual([
+      ["Uds.", true],
+      ["Artículo", true],
+      ["Precio", true],
+      ["Importe", true],
+      ["IVA", true],
+      ["12", false],
+      ["Croquetas", false],
+      ["1,50", false],
+      ["18,00", false],
+      ["21%", false],
+      ["Sin gluten", false],
+    ]);
+    const at = (value: string) => named(elements, value);
+    expect(right(at("IVA"))).toBeCloseTo(CONTENT_RIGHT, 5);
+    expect(right(at("21%"))).toBeCloseTo(CONTENT_RIGHT, 5);
+    expect(right(at("Importe"))).toBeCloseTo(right(at("18,00")), 5);
+    expect(right(at("Importe"))).toBeLessThan(at("IVA").x);
+    expect(right(at("Precio"))).toBeCloseTo(right(at("1,50")), 5);
+    expect(right(at("Precio"))).toBeLessThan(at("Importe").x);
+    expect(right(at("Uds."))).toBeCloseTo(right(at("12")), 5);
+    expect(at("Uds.").x).toBe(36);
+    expect(at("Artículo").x).toBe(at("Croquetas").x);
+    expect(at("Artículo").x).toBeGreaterThan(right(at("Uds.")));
+    expect(at("Sin gluten").x).toBeGreaterThan(at("Croquetas").x);
+    expect(at("Croquetas").y).toBe(at("21%").y);
+    expect(at("Sin gluten").y).toBeGreaterThan(at("Croquetas").y);
+  });
+
+  it("puts the amount column at the right edge when there is no rate column", async () => {
+    const [page] = await layoutOf([
+      { kind: "table", table: { header, rows: [row], withRate: false } },
+    ]);
+    expect(right(named(page!.elements, "Importe"))).toBeCloseTo(CONTENT_RIGHT, 5);
+    expect(right(named(page!.elements, "18,00"))).toBeCloseTo(CONTENT_RIGHT, 5);
+  });
+
+  it("lines up a table continuing after a line printed outside it", async () => {
+    const [page] = await layoutOf([
+      { kind: "table", table: { header, rows: [row], withRate: false } },
+      { kind: "text", text: "Nota", indent: 0 },
+      {
+        kind: "table",
+        table: {
+          rows: [{ units: "1.000", item: "Pan", price: "0,50", amount: "500,00" }],
+          withRate: false,
+        },
+      },
+    ]);
+    const at = (value: string) => named(page!.elements, value);
+    expect(right(at("12"))).toBeCloseTo(right(at("1.000")), 5);
+    expect(at("Croquetas").x).toBe(at("Pan").x);
+    expect(right(at("1,50"))).toBeCloseTo(right(at("0,50")), 5);
+    expect(right(at("1,50"))).toBeLessThan(at("500,00").x);
+  });
+
+  it("wraps a long item name inside its column, the figures on its first line", async () => {
+    const name = Array.from({ length: 40 }, (_, index) => `palabra${index}`).join(" ");
+    const [page] = await layoutOf([
+      { kind: "table", table: { header, rows: [{ ...row, item: name }], withRate: false } },
+    ]);
+    const elements = texts(page!.elements);
+    const itemX = named(page!.elements, "Artículo").x;
+    const lines = elements.filter((element) => element.text.startsWith("palabra"));
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines.map((line) => line.text).join(" ")).toBe(name);
+    const priceLeft = named(page!.elements, "1,50").x;
+    for (const line of lines) {
+      expect(line.x).toBe(itemX);
+      expect(right(line)).toBeLessThan(priceLeft);
+    }
+    expect(named(page!.elements, "18,00").y).toBe(lines[0]!.y);
+    for (const [index, line] of lines.slice(1).entries())
+      expect(line.y).toBeCloseTo(lines[index]!.y + 14, 5);
+  });
+
+  it("moves a row that does not fit at the page foot onto the next page whole", async () => {
+    const name = Array.from({ length: 60 }, () => "tres").join(" ");
+    let moved = 0;
+    for (let count = 40; count <= 60; count++) {
+      const pages = await layoutOf([
+        ...Array.from({ length: count }, (_, index) => ({
+          kind: "text",
+          text: `Line ${index}`,
+          indent: 0,
+        })),
+        { kind: "table", table: { rows: [{ ...row, item: name }], withRate: false } },
+      ]);
+      const holding = pages.filter((page) =>
+        page.elements.some((element) => element.kind === "text" && element.text.startsWith("tres")),
+      );
+      expect(holding, `${count} lines`).toHaveLength(1);
+      const page = holding[0]!;
+      for (const element of texts(page.elements))
+        expect(element.y + 14, `${count} lines`).toBeLessThanOrEqual(INVOICE_PAGE_HEIGHT - 36);
+      if (
+        pages.indexOf(page) === 1 &&
+        page.elements[0]?.kind === "text" &&
+        page.elements[0].text === "12"
+      )
+        moved++;
+    }
+    expect(moved).toBeGreaterThan(0);
+  });
+
+  it("breaks a row taller than a whole page line by line, its figures beside its first line", async () => {
+    const name = "ABCDEFGHIJ".repeat(600);
+    const pages = await layoutOf([
+      { kind: "table", table: { header, rows: [{ ...row, item: name }], withRate: false } },
+    ]);
+    expect(pages.length).toBeGreaterThan(1);
+    const first = texts(pages[0]!.elements);
+    const start = first.find((element) => element.text.startsWith("ABCDEFGHIJ"))!;
+    expect(named(pages[0]!.elements, "18,00").y).toBe(start.y);
+    expect(named(pages[0]!.elements, "1,50").y).toBe(start.y);
+    expect(
+      pages
+        .flatMap((page) => texts(page.elements))
+        .filter((element) => element.x === start.x && element.text !== "Artículo")
+        .map((element) => element.text)
+        .join(""),
+    ).toBe(name);
+    for (const page of pages)
+      for (const element of texts(page.elements))
+        expect(element.y + 14).toBeLessThanOrEqual(INVOICE_PAGE_HEIGHT - 36);
+  });
+
+  it("gives a row with no item name a line of its own, and an amount with no caption one too", async () => {
+    const [page] = await layoutOf([
+      {
+        kind: "table",
+        table: {
+          rows: [
+            { units: "", item: "", price: "", amount: "5,00" },
+            { units: "", item: "", price: "", amount: "6,00" },
+          ],
+          withRate: false,
+        },
+      },
+      { kind: "text", text: "Antes", indent: 0 },
+      { kind: "amount", caption: "", amount: "7,00 €", indent: 0 },
+    ]);
+    const at = (value: string) => named(page!.elements, value);
+    expect(at("6,00").y).toBeCloseTo(at("5,00").y + 14, 5);
+    expect(at("7,00 €").y).toBeCloseTo(at("Antes").y + 14, 5);
+    expect(texts(page!.elements)).toHaveLength(4);
+  });
+
+  it("draws an amount beside the last line of a caption that wraps, or below it when it cannot fit", async () => {
+    const caption = Array.from({ length: 30 }, (_, index) => `concepto${index}`).join(" ");
+    const [page] = await layoutOf([
+      { kind: "amount", caption, amount: "1,00 €", indent: 0 },
+      {
+        kind: "amount",
+        caption: "TOTAL ".repeat(8).trim(),
+        amount: "12.345,67 €",
+        indent: 0,
+        style: { double: true },
+      },
+    ]);
+    const elements = texts(page!.elements);
+    const beside = named(page!.elements, "1,00 €");
+    const captionLines = elements.filter((element) => element.text.startsWith("concepto"));
+    expect(captionLines.length).toBeGreaterThan(1);
+    expect(beside.y).toBe(captionLines.at(-1)!.y);
+    expect(right(beside)).toBeCloseTo(CONTENT_RIGHT, 5);
+    expect(right(captionLines.at(-1))).toBeLessThan(beside.x);
+
+    const below = named(page!.elements, "12.345,67 €");
+    const totals = elements.filter((element) => element.text.startsWith("TOTAL"));
+    expect(below.size).toBe(20);
+    expect(right(below)).toBeCloseTo(CONTENT_RIGHT, 5);
+    expect(below.y).toBeCloseTo(totals.at(-1)!.y + 28, 5);
+    for (const element of elements)
+      expect(right(element)).toBeLessThanOrEqual(CONTENT_RIGHT + 1e-6);
   });
 });

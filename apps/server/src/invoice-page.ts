@@ -2,7 +2,7 @@ import type { ReceiptLogoRaster } from "@waitron/shared";
 import { invoiceFont } from "./invoice-font.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { qrModules } from "./qr-matrix.js";
-import { tableLines } from "./receipt-table.js";
+import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 
 export const INVOICE_PAGE_WIDTH = 595.28;
 export const INVOICE_PAGE_HEIGHT = 841.89;
@@ -11,6 +11,8 @@ const BODY_SIZE = 10;
 const LINE_HEIGHT = 14;
 const QR_SIZE = (35 * 72) / 25.4;
 const RULE_THICKNESS = 0.75;
+const COLUMN_GAP = 10;
+const INDENT_WIDTH = 5;
 
 type PageText = {
   kind: "text";
@@ -68,7 +70,34 @@ function wrap(text: string, available: number, size: number): string[] {
   return lines;
 }
 
+interface Columns {
+  unitsRight: number;
+  itemLeft: number;
+  itemWidth: number;
+  priceRight: number;
+  amountRight: number;
+}
+
+/** Measured over every table in the document, so a table continuing after a line lines up with the first. */
+function columnsFor(tables: readonly ReceiptTable[]): Columns {
+  const rows = tables.flatMap((table) => (table.header ? [table.header] : []).concat(table.rows));
+  const widest = (cell: (row: ReceiptTableRow) => string): number =>
+    Math.max(0, ...rows.map((row) => width(cell(row), BODY_SIZE)));
+  const contentRight = INVOICE_PAGE_WIDTH - MARGIN;
+  const rateWidth = tables.some((table) => table.withRate) ? widest((row) => row.rate ?? "") : 0;
+  const amountRight = rateWidth > 0 ? contentRight - rateWidth - COLUMN_GAP : contentRight;
+  const priceRight = amountRight - widest((row) => row.amount) - COLUMN_GAP;
+  const unitsRight = MARGIN + widest((row) => row.units);
+  const itemLeft = unitsRight + COLUMN_GAP;
+  const itemWidth = priceRight - widest((row) => row.price) - COLUMN_GAP - itemLeft;
+  return { unitsRight, itemLeft, itemWidth, priceRight, amountRight };
+}
+
 export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
+  const document = buildReceiptDocument({ ...input, surface: "a4" });
+  const columns = columnsFor(
+    document.elements.flatMap((element) => (element.kind === "table" ? [element.table] : [])),
+  );
   const pages: InvoicePage[] = [{ elements: [] }];
   let y = MARGIN;
   let alignment: "left" | "center" = "left";
@@ -115,7 +144,44 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
       y += height;
     }
   };
-  for (const element of buildReceiptDocument({ ...input, surface: "a4" }).elements) {
+  const place = (
+    page: InvoicePage,
+    at: number,
+    value: string,
+    x: number,
+    size: number,
+    bold: boolean,
+  ): void => {
+    if (value !== "") page.elements.push({ kind: "text", text: value, x, y: at, size, bold });
+  };
+  const placeRight = (
+    page: InvoicePage,
+    at: number,
+    value: string,
+    right: number,
+    size: number,
+    bold: boolean,
+  ): void => place(page, at, value, right - width(value, size), size, bold);
+  const linesPerPage = Math.floor((INVOICE_PAGE_HEIGHT - 2 * MARGIN) / LINE_HEIGHT);
+  const tableRow = (row: ReceiptTableRow, bold: boolean): void => {
+    const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
+    const itemLines = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
+    if (itemLines.length === 0) itemLines.push("");
+    // A row no page could hold starts where it is and breaks line by line.
+    room((itemLines.length <= linesPerPage ? itemLines.length : 1) * LINE_HEIGHT);
+    const page = pages.at(-1)!;
+    const top = y;
+    placeRight(page, top, row.units, columns.unitsRight, BODY_SIZE, bold);
+    for (const line of itemLines) {
+      room(LINE_HEIGHT);
+      place(pages.at(-1)!, y, line, columns.itemLeft + indent, BODY_SIZE, bold);
+      y += LINE_HEIGHT;
+    }
+    placeRight(page, top, row.price, columns.priceRight, BODY_SIZE, bold);
+    placeRight(page, top, row.amount, columns.amountRight, BODY_SIZE, bold);
+    placeRight(page, top, row.rate ?? "", INVOICE_PAGE_WIDTH - MARGIN, BODY_SIZE, bold);
+  };
+  for (const element of document.elements) {
     const previousWasRule = afterRule;
     if (element.kind !== "align") afterRule = element.kind === "rule";
     switch (element.kind) {
@@ -162,26 +228,30 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         break;
       }
       case "table":
-        for (const line of tableLines(element.table, 90)) {
-          text(line.text, MARGIN, INVOICE_PAGE_WIDTH - 2 * MARGIN, {
-            size: BODY_SIZE,
-            bold: line.header,
-            centered: false,
-          });
-        }
+        if (element.table.header) tableRow(element.table.header, true);
+        for (const row of element.table.rows) tableRow(row, false);
         break;
       case "text":
       case "amount": {
-        const indent = typeof element.indent === "number" ? element.indent * 5 : 0;
+        const indent = typeof element.indent === "number" ? element.indent * INDENT_WIDTH : 0;
         const x = MARGIN + indent;
         const available = INVOICE_PAGE_WIDTH - MARGIN - x;
-        const value =
-          element.kind === "text" ? element.text : `${element.caption} ${element.amount}`;
-        text(value, x, available, {
-          size: element.style?.double === true ? BODY_SIZE * 2 : BODY_SIZE,
-          bold: element.style?.bold === true,
-          centered: alignment === "center",
-        });
+        const size = element.style?.double === true ? BODY_SIZE * 2 : BODY_SIZE;
+        const bold = element.style?.bold === true;
+        if (element.kind === "text") {
+          text(element.text, x, available, { size, bold, centered: alignment === "center" });
+          break;
+        }
+        const captionLines = wrap(element.caption, available, size);
+        const besideLast =
+          captionLines.length > 0 &&
+          width(captionLines.at(-1)!, size) + size + width(element.amount, size) <= available;
+        text(element.caption, x, available, { size, bold, centered: false });
+        const height = (LINE_HEIGHT * size) / BODY_SIZE;
+        if (besideLast) y -= height;
+        else room(height);
+        placeRight(pages.at(-1)!, y, element.amount, INVOICE_PAGE_WIDTH - MARGIN, size, bold);
+        y += height;
         break;
       }
     }
