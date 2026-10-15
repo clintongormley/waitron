@@ -387,8 +387,8 @@ it("keeps the F2 gross layout even when net facts are present", () => {
     }),
   ).join(" ");
   expect(lines).toContain("12,10");
-  expect(lines).not.toContain("Factura completa");
-  expect(lines).not.toContain("Precio sin IVA");
+  expect(lines).not.toContain("FACTURA");
+  expect(lines).not.toContain("Precios sin IVA");
 });
 
 it.each([
@@ -397,7 +397,7 @@ it.each([
   ["gl-ES", "FACTURA A/1", "Prezos sen IVE"],
   ["eu-ES", "FAKTURA A/1", "Prezioak BEZik gabe"],
 ])(
-  "labels F1 net lines in %s without changing a sub-unit price quantity",
+  "labels F1 net lines in %s and prints a sub-unit price with no quantity after it",
   (locale, title, priceLabel) => {
     const lines = drawn(
       formatReceipt({
@@ -470,7 +470,7 @@ it("prints the filed combined quantity for an F1 extra rather than its per-dish 
 });
 
 it.each([PRINTER_58, PRINTER_80])(
-  "prints distinct F1 net prices and weighted price quantities on $paperWidth",
+  "prints distinct F1 net prices and a weighed quantity on $paperWidth",
   (printer) => {
     const result: TillSaleResult = {
       ...FILED_SALE,
@@ -2396,12 +2396,41 @@ describe("the receipt's fixed words follow its language", () => {
     ...FILED_SALE,
     tender: { method: "card", charged: "21.90", tip: "1.00", reference: "4471" },
   };
+  // The same sale as a full invoice with its lines' before-VAT figures, so it prints the item
+  // table's header; a customer; and a filed domicile unlike the venue's address below.
+  const FULL_SALE: TillSaleResult = {
+    ...LABELLED_SALE,
+    invoiceType: "F1",
+    issuer: { ...ISSUER, domicile: "Calle Fiscal 27, Madrid" },
+    recipient: {
+      legalName: "Buyer Company SL",
+      taxId: "B11223344",
+      address: "Avenida 123, Madrid",
+      countryCode: "ES",
+    },
+    lines: [
+      {
+        ...LABELLED_SALE.lines[0]!,
+        net: { unitPrice: "0.00", priceQuantity: "1.000", base: "0.00", rate: "21.00" },
+      },
+      {
+        ...LABELLED_SALE.lines[1]!,
+        net: { unitPrice: "8.68", priceQuantity: "1.000", base: "8.68", rate: "21.00" },
+      },
+    ],
+  };
+  const VENUE_ADDRESS = ["Calle Mayor 1", "28001 Madrid"];
 
-  function printed(result: TillSaleResult, invoiceLocale: string): string[] {
+  function printed(
+    result: TillSaleResult,
+    invoiceLocale: string,
+    venueAddress?: readonly string[],
+  ): string[] {
     return printedLines(
       formatReceipt({
         result,
         issuer: ISSUER,
+        ...(venueAddress === undefined ? {} : { venueAddress }),
         receipt: TRIM,
         invoiceLocale,
         printer: PRINTER_80,
@@ -2424,6 +2453,9 @@ describe("the receipt's fixed words follow its language", () => {
         invoice: "Factura simplificada A/1",
         fullBase: "Base imposable 21% 10,00 €",
         heading: "FACTURA A/1",
+        customer: "Client",
+        header: "Uts. Concepte Preu Import",
+        registeredAddress: "Domicili fiscal: Calle Fiscal 27, Madrid",
         comp: "Invitació -12,00",
         discount: "Descompte 12,5% -1,50",
         base: "Base 21% 10,00 €",
@@ -2456,6 +2488,9 @@ describe("the receipt's fixed words follow its language", () => {
         invoice: "Factura simplificada A/1",
         fullBase: "Base impoñible 21% 10,00 €",
         heading: "FACTURA A/1",
+        customer: "Cliente",
+        header: "Uds. Concepto Prezo Importe",
+        registeredAddress: "Domicilio fiscal: Calle Fiscal 27, Madrid",
         comp: "Invitación -12,00",
         discount: "Desconto 12,5% -1,50",
         base: "Base 21% 10,00 €",
@@ -2488,6 +2523,9 @@ describe("the receipt's fixed words follow its language", () => {
         invoice: "Faktura erraztua A/1",
         fullBase: "Zerga-oinarria 21% 10,00 €",
         heading: "FAKTURA A/1",
+        customer: "Bezeroa",
+        header: "Kop. Kontzeptua Prezioa Zenbatekoa",
+        registeredAddress: "Helbide fiskala: Calle Fiscal 27, Madrid",
         comp: "Gonbidapena -12,00",
         discount: "Deskontua 12,5% -1,50",
         base: "Oinarria 21% 10,00 €",
@@ -2512,18 +2550,32 @@ describe("the receipt's fixed words follow its language", () => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
     const cash = printed(FILED_SALE, locale);
-    const { charged, heading, day, order, practice, fullBase, ...rows } = words;
+    const {
+      charged,
+      heading,
+      day,
+      order,
+      practice,
+      fullBase,
+      customer,
+      header,
+      registeredAddress,
+      ...rows
+    } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
     // Both documents print the issue date with the order, uncaptioned.
     const orderAt = sale.findIndex((line) => line.startsWith(order));
     expect(orderAt).toBeGreaterThanOrEqual(0);
     expect(sale.slice(orderAt, orderAt + 2).join(" ")).toContain(day);
-    const full = printed({ ...LABELLED_SALE, invoiceType: "F1" }, locale);
+    const full = printed(FULL_SALE, locale, VENUE_ADDRESS);
     const fullOrderAt = full.findIndex((line) => line.startsWith(order));
     expect(full[fullOrderAt - 1]).toBe(heading);
     expect(full.slice(fullOrderAt, fullOrderAt + 2).join(" ")).toContain(day);
     expect(full).toContain(fullBase);
+    expect(full).toContain(customer);
+    expect(full).toContain(header);
+    expect(full).toContain(registeredAddress);
     expect(card).toContain(charged);
     expect(card).toContain(single.card);
     expect(card).toContain(single.reference);
@@ -2533,7 +2585,7 @@ describe("the receipt's fixed words follow its language", () => {
     for (const spanish of ["Descuento", "Tarjeta", "PRUEBA"]) {
       expect(spanishSale).toContain(spanish);
     }
-    for (const [name, ticket] of Object.entries({ sale, card, cash })) {
+    for (const [name, ticket] of Object.entries({ sale, card, cash, full })) {
       for (const spanish of ["Descuento", "Tarjeta", "PRUEBA"]) {
         expect(ticket.join("\n"), `${name}: ${spanish}`).not.toContain(spanish);
       }
