@@ -227,7 +227,8 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
    periods grouped by department — colour, name, customer menu, staff-only menus, "Painted in" and a
    bin — with "+ Add period". A row opens the existing period dialog on top: a period has too many
    fields to edit inside its row, unlike a season (A721).
-2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar's Year view; the
+2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar's Year view (A721
+   adds "Seasons…"; if A719 lands first it adds "Periods…" alone); the
    painters' "Periods" link (`periodsLink`, `period-editing.ts`), which today navigates away and now
    opens the window on top of the painter so unsaved paint stays; and the Departments warning "Set up
    periods" (`departments-list.ts:219`), which opens the Calendar with the window open. The window
@@ -284,7 +285,8 @@ Season colours come from A721; until it lands the views keep today's tints.
 `packages/venue-service/src/dashboard/season-chips.ts`, the season dialog, `season-tint.ts`, and
 the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
 
-1. **A "Seasons…" window**, opened from the Calendar (A720), lists every season in the order it
+1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row
+   (A720 left it to A721), lists every season in the order it
    starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the

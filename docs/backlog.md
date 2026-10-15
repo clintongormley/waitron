@@ -1526,10 +1526,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   column and field go until A504. After A720. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
-  (owner, 2026-10-15).** A Year/Month/Week switch replaces the tab row and most of the text above the
-  months goes; clicking a day opens a floating box with its hours instead of a panel that makes the
-  page jump; drag or shift-click picks days and double-click opens the special-day editor; closed
-  rows are grey tracks; a zone's bar shows its own hours. Points 1–2 landed (A720 Part 1); 3–7
+  (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
+  makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
+  closed rows are grey tracks; a zone's bar shows its own hours; the Staffing month follows. Points
+  1–2 landed (A720 Part 1); the Week button is A722's, "Seasons…" and the chips' ✎ A721's; 3–7
   remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season

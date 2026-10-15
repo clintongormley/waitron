@@ -3590,8 +3590,8 @@ commit with Save, bind it to that Save even when its preview updates as you type
 Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
-`opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
-+ Special day. A station one department or none feeds draws one bar per date of the times it
+`opening-hours-month.ts`): ‹ › step months, and there is no Year / Month switch and no
+department picker. A station one department or none feeds draws one bar per date of the times it
 gets orders, worked out from routed products and the zones that can order them, and a date it gets
 none reads "No orders". When more than one department sends the station orders in the weeks
 shown, each date draws one track per department in department order, a Rows key names them, a
@@ -3886,9 +3886,11 @@ Opening hours' Year.
   page re-reads its hours after every season change.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. Above its months
-  the Year says only what is wrong with the shown year's official holidays: not available yet,
-  the province not recognised, none for the country, a holiday area still to choose, or coverage
-  that could not be read. A complete list adds no sentence. Choose a holiday area here when the
+  the Year gives a coverage sentence only when the shown year's official list is not complete:
+  not available yet, the province not recognised, none for the country, a holiday area still to
+  choose, or coverage that could not be read. It still says when the address cannot pick a holiday
+  area, names a repeating special day the year has no holiday for, and shows a viewer the chosen
+  holiday area. Choose a holiday area here when the
   official list needs it. `opening-hours-year.ts` renders the area control and coverage, and
   `packages/venue-service/src/holidays.ts` reads the country calendar.
 

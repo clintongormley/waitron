@@ -1,6 +1,6 @@
 # Public holidays
 
-You plan holidays in the Calendar's Year tab (`/manage/opening-hours/view/year`). Public
+You plan holidays in the Calendar's Year (`/manage/opening-hours/view/year`). Public
 holidays come only from the country's shipped calendar: its national and regional dates. The venue
 is not a holiday source. To change the venue's hours on a day, your town's holiday included, make
 that day a special day (see "Special days" in [conventions-data.md](conventions-data.md)). A
@@ -61,10 +61,10 @@ Unicode, trims and collapses spaces, and lowercases; accents and punctuation sti
 Special days are not filtered by that identity, and you can add them without a recognized holiday
 address or country calendar.
 
-Each read supplies coverage for every year it spans. The Year reports the shown year's official
-coverage, and says the town's holidays are not in the official lists whenever that year has a
-coverage entry, since every `local` value below means the list carries none
-(`opening-hours-year.ts`).
+Each read supplies coverage for every year it spans. When public holidays are available, the
+Year draws a coverage sentence only when the shown year's `nationalRegional` is not `complete` or
+the year has no coverage entry (`#notes`, `opening-hours-year.ts`). No `local` value below means
+the list carries the town's holidays, and the Year does not mention them.
 
 | `nationalRegional` | Meaning |
 | --- | --- |
