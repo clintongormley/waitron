@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { sql, type SQL } from "drizzle-orm";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
+import { readLocationClock } from "@waitron/reporting";
 import { findBillsRelation, readFindBill, readFindBills } from "./find-bill-bills.js";
 import { findTransactionsRelation, readFindTransactions } from "./find-bill-transactions.js";
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
@@ -36,7 +37,8 @@ export async function readFindBillOptions(
     sql`select distinct operator_id as id,coalesce(staff_name,operator_id) as name
     from transactions where operator_id is not null order by name,id`,
   );
-  return { zones, billStaff, transactionStaff };
+  const { timeZone } = await readLocationClock(tx, cfg.locationId);
+  return { timeZone, zones, billStaff, transactionStaff };
 }
 
 export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {

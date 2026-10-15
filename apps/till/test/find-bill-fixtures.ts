@@ -40,6 +40,7 @@ export const transactionRow = (patch: Partial<TransactionRow> = {}): Transaction
   ...patch,
 });
 export const billOptions = {
+  timeZone: "Europe/Madrid",
   zones: [{ id: "zone-1", name: "Terrace" }],
   billStaff: [{ id: "staff-1", name: "Alex" }],
   transactionStaff: [{ id: "staff-2", name: "Former worker" }],

@@ -5,6 +5,7 @@ import {
   deviceProfiles,
   devices,
   floorZones,
+  locations,
   sales,
   workingOrders,
   workingOrderLines,
@@ -63,6 +64,18 @@ type Options = {
 };
 
 describe("Find a bill list routes", () => {
+  it("returns the venue time zone for formatting both lists", async () => {
+    await inTx(venue, (tx) =>
+      tx
+        .update(locations)
+        .set({ timeZone: "Pacific/Honolulu" })
+        .where(eq(locations.id, venue.cfg.locationId)),
+    );
+    expect(await get("/api/find-bill/options")).toMatchObject({
+      status: 200,
+      json: { timeZone: "Pacific/Honolulu" },
+    });
+  });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
     const id = await parked(venue, "Caña");
     const result = await get("/api/bills");

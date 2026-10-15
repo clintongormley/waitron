@@ -9,6 +9,9 @@ import {
   billPayments,
   billPaymentRefunds,
   floorZones,
+  sales,
+  tenders,
+  saleSettlements,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -62,6 +65,56 @@ async function contribute(id: string, amount: string, tip = "0.00") {
 }
 
 describe("Find Bills SQL paging", () => {
+  it("an issued but unsettled projection retains received bill payments until settlement", async () => {
+    const id = await parked(venue, "Croquetas");
+    await contribute(id, "4.00");
+    const saleId = randomUUID();
+    const at = "2026-10-15T12:00:00.000Z";
+    await inTx(venue, (tx) =>
+      tx.insert(sales).values({
+        id: saleId,
+        workingOrderId: id,
+        source: "device",
+        deviceId: venue.deviceId,
+        seriesId: venue.seriesId,
+        nodeId: venue.cfg.nodeId,
+        invoiceNumber: 900001,
+        issuedAt: at,
+        issuedOffsetMinutes: 120,
+        total: 1000,
+        vatBreakdown: [],
+        locale: venue.cfg.locale,
+        invoiceLocales: [venue.cfg.locale],
+        fiscalBackend: "verifactu",
+        fiscalState: "not_applicable",
+        operatorId: venue.operatorId,
+      }),
+    );
+    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+      paid: "4.00",
+      stillOwed: "6.00",
+      state: "part-paid",
+      collectionStatus: null,
+    });
+    await inTx(venue, async (tx) => {
+      await tx.insert(tenders).values({ saleId, method: "cash", amount: 1000, settledAt: at });
+      await tx.insert(saleSettlements).values({ saleId, settledAt: at });
+    });
+    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+      paid: "10.00",
+      stillOwed: "0.00",
+    });
+  });
+  it("a settled counter bill counts the applied tender without counting its tip as paid", async () => {
+    const id = await parked(venue, "Croquetas");
+    await contribute(id, "10.00", "2.00");
+    expect(await inTx(venue, (tx) => readFindBill(tx, venue.cfg, id))).toMatchObject({
+      total: "10.00",
+      paid: "10.00",
+      stillOwed: "0.00",
+      state: "paid-not-handed-over",
+    });
+  });
   it("pages 101 equal-time orders without loading their whole set into JavaScript", async () => {
     const ids: string[] = [];
     for (let i = 0; i < 101; i++) ids.push(await named("Paginación"));

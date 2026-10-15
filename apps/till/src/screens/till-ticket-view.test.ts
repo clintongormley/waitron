@@ -65,6 +65,16 @@ afterEach(() => {
 });
 
 describe("till-ticket-view", () => {
+  it("hides drawer opening on a historical cash receipt even when the device can open it", async () => {
+    const { el } = await mount();
+    el.canOpenDrawer = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).not.toBeNull();
+    el.historical = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+  });
   it("retains F2 date rendering even when the payload carries an issue offset", async () => {
     const baseline = await mount({ invoiceType: "F2" });
     const want = baseline.el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent;

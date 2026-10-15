@@ -44,7 +44,7 @@ export function findBillsRelation(cfg: TillConfig, inZones?: OrderZoneCondition)
       (select count(*) from working_order_lines l where l.working_order_id = wo.id) as item_count,
       coalesce(s.total, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
       coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id),0) as corrections,
-      case when s.id is not null then
+      case when exists(select 1 from sale_settlements settled where settled.sale_id = s.id) then
         (select coalesce(sum(t.amount - t.tip_amount),0) from tenders t where t.sale_id = s.id)
       else (select coalesce(sum(bp.applied - coalesce((select sum(br.applied_amount) from bill_payment_refunds br
         where br.bill_payment_id = bp.id and br.state = 'completed'),0)),0)

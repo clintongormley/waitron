@@ -58,6 +58,46 @@ async function switchTab(el: Screen, tab: string) {
       .shadowRoot!.querySelector<HTMLElement>(`[data-key="${tab}"]`)!,
   );
 }
+it("formats both lists in the venue time zone even when the browser uses another day", async () => {
+  const at = "2026-10-15T09:30:00.000Z";
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? { ...billOptions, timeZone: "Pacific/Honolulu" }
+        : url.pathname === "/api/bills"
+          ? listPage([billRow({ openedAt: at })])
+          : { ...listPage([transactionRow({ issuedAt: at })]), dates: resolvedDates },
+    ),
+  );
+  const { el } = await mount(source);
+  const bills = await ready(el);
+  expect(bills.shadowRoot!.textContent).toContain("14/10/2026, 23:30:00");
+  await switchTab(el, "transactions");
+  const transactions = await ready(el, "transactions");
+  expect(transactions.shadowRoot!.textContent).toContain("14/10/2026, 23:30:00");
+});
+it("a declined Back leaves the page active and able to search again", async () => {
+  const { el, fetcher } = await mount();
+  await ready(el);
+  const backs = vi.fn();
+  el.addEventListener("find-bill-back", backs);
+  await userEvent.click(el.shadowRoot!.querySelector("header wt-button")!);
+  expect(backs).toHaveBeenCalledTimes(1);
+  expect(el.active).toBe(true);
+  table(el).dispatchEvent(
+    new CustomEvent("wt-query-change", {
+      detail: {
+        search: "after Stay",
+        sortKey: "openedAt",
+        sortDirection: "descending",
+        filters: {},
+      },
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(requests(fetcher).at(-1)?.searchParams.get("q")).toBe("after Stay"),
+  );
+});
 it("opens Bills newest first using the shared table and renders all original server values without local sorting", async () => {
   const source = findBillApi(async (url) =>
     json(
@@ -427,7 +467,9 @@ it("row activation emits the exact selected bill or transaction once, and Back c
     transactions.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"]')!,
   );
   expect(opened).toEqual([{ row: transactionRow() }]);
-  const back = vi.fn();
+  const back = vi.fn(() => {
+    el.active = false;
+  });
   host.addEventListener("find-bill-back", back);
   await userEvent.click(
     el.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,

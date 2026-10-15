@@ -273,3 +273,22 @@ it("a changed selected bill asks before replacing edited collection details", as
   expect(unload()).toBe(false);
   expect(app.submitted).toEqual([]);
 });
+
+it("an obsolete selection cannot replace the cash draft when the bill changes as Discard is answered", async () => {
+  const { app, form } = await mount();
+  await fill(form, "cash-received", "40.00");
+  app.bill = { ...debt, workingOrderId: "collection-2", stillOwed: "12.00" };
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  app.bill = debt;
+  app.requestUpdate();
+  await form.updateComplete;
+  await expect.poll(() => q.open).toBe(false);
+  expect(field(form, "cash-received").value).toBe("30.00");
+  expect(app.selections).toBe(1);
+  expect(app.submitted).toEqual([]);
+});

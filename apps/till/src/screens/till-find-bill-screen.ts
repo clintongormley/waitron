@@ -339,7 +339,7 @@ export class TillFindBillScreen extends LitElement {
           "openedAt",
           cell(
             (row) =>
-              html`${new Date(row.openedAt).toLocaleString(currentLocale())}${row.earlierDay ? html`<span part="earlier">${label("earlier")}</span>` : nothing}`,
+              html`${new Date(row.openedAt).toLocaleString(currentLocale(), { timeZone: options.timeZone })}${row.earlierDay ? html`<span part="earlier">${label("earlier")}</span>` : nothing}`,
           ),
         ),
         column(
@@ -402,7 +402,9 @@ export class TillFindBillScreen extends LitElement {
     return [
       column(
         "when",
-        cell((row) => new Date(row.issuedAt).toLocaleString(currentLocale())),
+        cell((row) =>
+          new Date(row.issuedAt).toLocaleString(currentLocale(), { timeZone: options.timeZone }),
+        ),
       ),
       column(
         "invoice",
@@ -570,7 +572,6 @@ export class TillFindBillScreen extends LitElement {
         <wt-button
           variant="secondary"
           @click=${() => {
-            this.active = false;
             this.#cancel();
             this.#emit("find-bill-back");
           }}

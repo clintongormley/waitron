@@ -118,6 +118,19 @@ async function saleOf(orderId: string) {
 }
 
 describe("Find Transactions SQL paging", () => {
+  it("shows one method per captured last-four even when tenders and attempts repeat it", async () => {
+    const order = await parked(venue, "Tarta");
+    const id = await invoice({ workingOrderId: order }, false);
+    await tender(id, "card", { amount: 600 });
+    await tender(id, "card", { amount: 610 });
+    await settle(id);
+    await attempt(order, id, "0091");
+    await attempt(order, id, "0091");
+    expect(await list({ q: "0091" })).toMatchObject({
+      total: 1,
+      rows: [{ saleId: id, amount: "12.10", methods: [{ method: "card", last4: "0091" }] }],
+    });
+  });
   it("includes paid sales, unpaid full invoices and signed corrections but excludes voids and attempts", async () => {
     const paidOrder = await placedIssuedBill(venue, "Caña");
     expect((await collect(venue, paidOrder, "3.00")).status).toBe(200);

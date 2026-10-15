@@ -22,6 +22,7 @@ export type FindBillPage<Row> = {
 };
 export type DateWindow = { startAt: string; endAt: string; from: string; to: string } | null;
 export type FindBillOptions = {
+  timeZone: string;
   zones: { id: string; name: string }[];
   billStaff: { id: string; name: string }[];
   transactionStaff: { id: string; name: string }[];

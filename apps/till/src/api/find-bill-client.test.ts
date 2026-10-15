@@ -136,6 +136,7 @@ describe("Find a bill client", () => {
     };
     const choices = {
       zones: [{ id: "zone-1", name: "Counter" }],
+      timeZone: "Europe/Madrid",
       billStaff: [{ id: "staff-1", name: "Ana" }],
       transactionStaff: [],
     };
