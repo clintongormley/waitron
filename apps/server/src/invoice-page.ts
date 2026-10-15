@@ -72,11 +72,24 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   let y = MARGIN;
   let alignment: "left" | "center" = "left";
   let afterBreak = false;
+  const rule = (): void => {
+    pages.at(-1)!.elements.push({
+      kind: "rule",
+      x: MARGIN,
+      y: y + (LINE_HEIGHT / 2 - RULE_THICKNESS) / 2,
+      width: INVOICE_PAGE_WIDTH - 2 * MARGIN,
+      thickness: RULE_THICKNESS,
+    });
+    y += LINE_HEIGHT / 2;
+  };
   const room = (height: number): void => {
-    if (y + height > INVOICE_PAGE_HEIGHT - MARGIN) {
-      pages.push({ elements: [] });
-      y = MARGIN;
-    }
+    if (y + height <= INVOICE_PAGE_HEIGHT - MARGIN) return;
+    const previous = pages.at(-1)!.elements;
+    const strandedRule = previous.at(-1)?.kind === "rule";
+    if (strandedRule) previous.pop();
+    pages.push({ elements: [] });
+    y = MARGIN;
+    if (strandedRule) rule();
   };
   const text = (
     value: string,
@@ -129,15 +142,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         y += LINE_HEIGHT / 2;
         break;
       case "rule":
-        room(LINE_HEIGHT / 2 + LINE_HEIGHT);
-        pages.at(-1)!.elements.push({
-          kind: "rule",
-          x: MARGIN,
-          y: y + (LINE_HEIGHT / 2 - RULE_THICKNESS) / 2,
-          width: INVOICE_PAGE_WIDTH - 2 * MARGIN,
-          thickness: RULE_THICKNESS,
-        });
-        y += LINE_HEIGHT / 2;
+        room(LINE_HEIGHT / 2);
+        rule();
         break;
       case "qr": {
         const modules = qrModules(element.text);

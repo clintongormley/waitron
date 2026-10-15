@@ -313,6 +313,39 @@ describe("A4 line above the total and space around the logo", () => {
       ).toBe("rule");
   });
 
+  it("moves the rule onto the next page with a double-size TOTAL that does not fit below it", () => {
+    const repeated = (count: number) => ({
+      ...fixture,
+      result: {
+        ...fixture.result,
+        lines: Array.from({ length: count }, () => fixture.result.lines[0]!),
+      },
+    });
+    const pages = layoutInvoicePages(repeated(37));
+    expect(pages.length).toBeGreaterThan(1);
+    for (const [index, page] of pages.slice(0, -1).entries())
+      expect(page.elements.at(-1)?.kind, `page ${index + 1} ends with`).not.toBe("rule");
+    const page = pages.find((candidate) => candidate.elements.some((e) => e.kind === "rule"))!;
+    const total = page.elements.findIndex(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    const rule = page.elements[total - 1]!;
+    expect(rule.kind).toBe("rule");
+    expect(page.elements[total]!.y).toBeCloseTo(rule.y + (LINE / 2 + 0.75) / 2, 5);
+
+    const ordinary = layoutInvoicePages(fixture);
+    expect(ordinary).toHaveLength(1);
+    const elements = ordinary[0]!.elements;
+    const ordinaryTotal = elements.findIndex(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    expect(elements[ordinaryTotal - 1]!.kind).toBe("rule");
+    expect(elements[ordinaryTotal - 1]!.y).toBeCloseTo(
+      elements[ordinaryTotal - 2]!.y + LINE + (LINE / 2 - 0.75) / 2,
+      5,
+    );
+  });
+
   it("draws the rule as a dark line in the PDF and never as a QR", async () => {
     const input = { ...fixture, result: { ...fixture.result, qr: "" } };
     const rule = layoutInvoicePages(input)[0]!.elements.find((element) => element.kind === "rule");
