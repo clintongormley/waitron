@@ -9,7 +9,8 @@ export const MAX_BLOCK_MINUTES = DAY_MINUTES - STEP_MINUTES;
 
 const copyBlocks = (day: readonly StaffingBlock[]) => day.map((b) => ({ ...b }));
 
-function clockAt(minute: number, cutover: string): string {
+/** The clock time `minute` minutes after the changeover. */
+export function clockAt(minute: number, cutover: string): string {
   const total =
     (Number(cutover.slice(0, 2)) * 60 + Number(cutover.slice(3, 5)) + minute) % DAY_MINUTES;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
@@ -22,9 +23,9 @@ function lastStep(cutover: string): number {
   return first + Math.floor((DAY_MINUTES - first) / STEP_MINUTES) * STEP_MINUTES;
 }
 
-/** A block saved before a changeover change can cross the new changeover; it ends at the day's
- *  last quarter hour. */
-function span(block: StaffingBlock, cutover: string): { start: number; end: number } {
+/** A block's span as a resize reads it. A block saved before a changeover change can cross the
+ *  new changeover; it ends at the day's last quarter hour. */
+export function span(block: StaffingBlock, cutover: string): { start: number; end: number } {
   const s = blockSpan(block, cutover);
   return s.end > s.start ? s : { start: s.start, end: lastStep(cutover) };
 }
@@ -35,7 +36,8 @@ export function addBlock(day: readonly StaffingBlock[], block: StaffingBlock): S
 
 /** Moves one edge to `time`, held inside the business day, at least one quarter hour from the
  *  other edge and at most `MAX_BLOCK_MINUTES` from it. An end at the changeover is the day's last
- *  quarter hour. */
+ *  quarter hour. A kept block starting on the day's last quarter hour has no room for its end, so
+ *  its start moves back one quarter hour instead. */
 export function resizeBlock(
   day: readonly StaffingBlock[],
   index: number,
@@ -60,7 +62,7 @@ export function resizeBlock(
             Math.min(start + MAX_BLOCK_MINUTES, lastStep(cutover)),
           ),
         ];
-  target.startsAt = clockAt(from, cutover);
+  target.startsAt = clockAt(Math.min(from, to - STEP_MINUTES), cutover);
   target.endsAt = clockAt(to, cutover);
   return blocks;
 }

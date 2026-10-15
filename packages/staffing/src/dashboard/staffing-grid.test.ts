@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
+import { parseBlocks } from "../paint-rules.js";
 import type { StaffingBlock } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
 import type { StaffingChange, StaffingGrid } from "./staffing-grid.js";
@@ -891,4 +892,23 @@ test("a 15-minute block's edges leave a gap between them; a long block's are a f
   probe.style.blockSize = "var(--wt-space-2)";
   host.append(probe);
   expect(long).toBeCloseTo(probe.getBoundingClientRect().height, 1);
+});
+
+const ROLE_ID = "7d4c1a52-0b8e-4f4e-9a57-3c2f1e6b9d10";
+
+test("an end resize of a block kept on the day's last quarter hour sends a block the server accepts", async () => {
+  const el = await grid({
+    mon: [{ staffRoleId: ROLE_ID, headcount: 1, startsAt: "06:00", endsAt: "08:00" }],
+  });
+  el.cutover = "06:10";
+  await el.updateComplete;
+  const seen = changes(el);
+  await drag(el, "mon", 1440, 1380, edge(el, "mon", 0, "end"));
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [{ staffRoleId: ROLE_ID, headcount: 1, startsAt: "05:45", endsAt: "06:00" }],
+    },
+  ]);
+  expect(() => parseBlocks(seen[0]!.blocks, "blocks", "06:10")).not.toThrow();
 });

@@ -176,6 +176,42 @@ describe("resizeBlock", () => {
     accepted(atChangeover, "05:10");
   });
 
+  it("moves the start of a kept block on the day's last quarter hour back, as its end has no room", () => {
+    // Saved as 06:00–08:00 before the changeover moved to 06:10: 06:00 is the day's last quarter
+    // hour, so no end after it is inside the day.
+    const kept = [block(ROLE, "06:00", "08:00")];
+    const moved = resizeBlock(kept, 0, "end", "05:00", "06:10");
+    expect(moved).toEqual([block(ROLE, "05:45", "06:00")]);
+    accepted(moved, "06:10");
+    expect(resizeBlock(kept, 0, "end", "06:00", "06:10")).toEqual(moved);
+  });
+
+  it("answers a block the server accepts for any block and any quarter hour, kept ones included", () => {
+    const quarters = Array.from(
+      { length: 96 },
+      (_, n) =>
+        `${String(Math.floor(n / 4)).padStart(2, "0")}:${String((n % 4) * 15).padStart(2, "0")}`,
+    );
+    for (const cutover of ["06:00", "06:10"]) {
+      const refused: string[] = [];
+      for (const startsAt of quarters)
+        for (const endsAt of quarters) {
+          if (startsAt === endsAt) continue;
+          const day = [block(ROLE, startsAt, endsAt)];
+          for (const edge of ["start", "end"] as const)
+            for (const time of edge === "end" ? [...quarters, cutover] : quarters) {
+              const resized = resizeBlock(day, 0, edge, time, cutover);
+              try {
+                parseBlocks(resized, "blocks", cutover);
+              } catch {
+                refused.push(`${startsAt}–${endsAt} ${edge} to ${time}`);
+              }
+            }
+        }
+      expect(refused, cutover).toEqual([]);
+    }
+  });
+
   it("leaves the day unchanged for an index it does not hold, and never edits its input", () => {
     const before = structuredClone(day);
     expect(resizeBlock(day, 5, "end", "20:00", "06:00")).toEqual(day);
