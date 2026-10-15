@@ -277,6 +277,62 @@ describe("Opening hours month", () => {
     expect(cell(el, "2026-12-02").querySelectorAll('[data-test="gap"]')).toHaveLength(0);
   });
 
+  it("draws a zone's blocks with the zone's own times", async () => {
+    const el = await mount(monthModel(), { departmentId: "rest" });
+    const terrace = cell(el, "2026-12-01").querySelector<HTMLElement>('[data-row="terrace"]')!;
+    const segments = [...terrace.querySelectorAll<HTMLElement>(".segment")];
+    expect(segments.map((segment) => segment.title)).toEqual([
+      "Breakfast 08:00–11:00",
+      "Lunch 13:00–16:00",
+      "Dinner 22:00–23:00",
+    ]);
+    expect(percent(segments[2]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
+  });
+
+  /** The Terrace on 2 December is closed 22:00–03:00, past the Restaurant's 23:00 close. */
+  function lateClosureModel(): OpeningHoursMonth {
+    const model = monthModel();
+    return {
+      ...model,
+      days: model.days.map((day) =>
+        day.date === "2026-12-02"
+          ? {
+              ...day,
+              departments: day.departments.map((d) =>
+                d.departmentId === "rest"
+                  ? {
+                      ...d,
+                      zones: [
+                        { zoneId: "terrace", closed: [{ startsAt: "22:00", endsAt: "03:00" }] },
+                      ],
+                    }
+                  : d,
+              ),
+            }
+          : day,
+      ),
+    };
+  }
+
+  it("draws a closure only where the department is open", async () => {
+    const el = await mount(lateClosureModel(), { departmentId: "rest" });
+    const terrace = cell(el, "2026-12-02").querySelector<HTMLElement>('[data-row="terrace"]')!;
+    const gaps = [...terrace.querySelectorAll<HTMLElement>('[data-test="gap"]')];
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]!.title).toBe("Terrace closed 22:00–23:00");
+    expect(percent(gaps[0]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
+    expect(percent(gaps[0]!.style.width)).toBeCloseTo((1 / 24) * 100, 3);
+    const dinner = [...terrace.querySelectorAll<HTMLElement>(".segment")][2]!;
+    expect(dinner.title).toBe("Dinner 20:00–22:00");
+  });
+
+  it("says a zone's own hours to a screen reader", async () => {
+    const el = await mount(lateClosureModel(), { departmentId: "rest" });
+    expect(dayButton(el, "2026-12-02").getAttribute("aria-label")).toContain(
+      "Terrace: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–22:00, Terrace closed 22:00–23:00",
+    );
+  });
+
   it("offers All departments and each department, and sends the choice", async () => {
     const el = await mount(monthModel(), { departmentId: "rest" });
     const picker = root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(

@@ -9,6 +9,7 @@ import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
+import { zoneOwnHours } from "../zone-own-hours.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -57,7 +58,7 @@ interface Row {
   key: string;
   name: string;
   ranges: readonly ServiceRange[];
-  /** A zone's closed times, drawn as cuts across its department's ranges. */
+  /** A zone's closed times, cut to where its department is open. */
   gaps: readonly ClosedRange[];
 }
 
@@ -354,12 +355,10 @@ export class OpeningHoursMonthView extends LitElement {
     const department = day.departments.find((d) => d.departmentId === chosen)!;
     return [
       { key: chosen, name: name(chosen), ranges: department.ranges, gaps: [] },
-      ...department.zones.map((zone) => ({
-        key: zone.zoneId,
-        name: name(zone.zoneId),
-        ranges: department.ranges,
-        gaps: zone.closed,
-      })),
+      ...department.zones.map((zone) => {
+        const own = zoneOwnHours(department.ranges, zone.closed, day);
+        return { key: zone.zoneId, name: name(zone.zoneId), ranges: own.ranges, gaps: own.closed };
+      }),
     ];
   }
 
