@@ -926,3 +926,30 @@ test("a press on the end edge of a block that crosses the changeover, released w
   const box = column(el, "mon").getBoundingClientRect();
   expect(block(el, "mon").getBoundingClientRect().bottom).toBeCloseTo(box.bottom, 0);
 });
+
+test("a resize whose block the host replaces with another mid-drag changes nothing on release", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "dw" });
+  const seen = changes(el);
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  point(el, "mon", 720, "pointermove");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).not.toBeNull();
+  el.days = new Map([["mon", [sous]]]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".preview")).toBeNull();
+  point(el, "mon", 720, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+});
+
+test("a resize released after the host replaced its block, before the grid redrew, changes nothing", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "dw" });
+  const seen = changes(el);
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  point(el, "mon", 720, "pointermove");
+  await el.updateComplete;
+  el.days = new Map([["mon", [sous]]]);
+  point(el, "mon", 720, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+});

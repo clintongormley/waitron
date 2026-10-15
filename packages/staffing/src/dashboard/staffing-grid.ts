@@ -226,8 +226,15 @@ export class StaffingGrid extends LitElement {
   /** The block the menu was opened on, as it was then, or as the menu last changed it. */
   @state() private selected: { key: string; index: number; block: StaffingBlock } | null = null;
   @query(".menu") private menu!: HTMLElement;
-  /** The block edge the current stroke moves, else null for a stroke that adds. */
-  #resizing: { key: string; index: number; edge: "start" | "end"; anchor: number } | null = null;
+  /** The block edge the current stroke moves, and the block as the stroke found it, else null for
+   *  a stroke that adds. A refresh that puts another block at its index ends the stroke. */
+  #resizing: {
+    key: string;
+    index: number;
+    block: StaffingBlock;
+    edge: "start" | "end";
+    anchor: number;
+  } | null = null;
   readonly #fade = new OverflowFade(this);
   readonly #stroke = new ColumnStroke(this, {
     cutover: () => this.cutover,
@@ -255,6 +262,15 @@ export class StaffingGrid extends LitElement {
       !sameBlock(this.#day(this.selected.key)[this.selected.index], this.selected.block)
     )
       this.#closeMenu();
+    const resizing = this.#resizing;
+    if (
+      changes.has("days") &&
+      resizing !== null &&
+      !sameBlock(this.#day(resizing.key)[resizing.index], resizing.block)
+    ) {
+      this.#stroke.stop();
+      this.#resizing = null;
+    }
     if ((changes.has("readOnly") && this.readOnly) || (changes.has("target") && this.hasUpdated)) {
       this.#stroke.stop();
       this.#closeMenu();
@@ -317,14 +333,14 @@ export class StaffingGrid extends LitElement {
     const { start, end } = span(block, this.cutover);
     const [anchor, held] = side === "start" ? [end, start] : [start, end];
     if (this.#stroke.start(event, key, anchor, held))
-      this.#resizing = { key, index: Number(edge.dataset.index), edge: side, anchor };
+      this.#resizing = { key, index: Number(edge.dataset.index), block, edge: side, anchor };
   }
   /** The blocks a stretch leaves in its column. */
   #stretched(stretch: Stretch): StaffingBlock[] | null {
     const day = this.#day(stretch.key);
     const resizing = this.#resizing;
     if (resizing !== null) {
-      if (day[resizing.index] === undefined) return null;
+      if (!sameBlock(day[resizing.index], resizing.block)) return null;
       const moved = stretch.start === resizing.anchor ? stretch.end : stretch.start;
       return resizeBlock(
         day,
