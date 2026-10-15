@@ -1,3 +1,6 @@
+import { writeModuleConfig } from "./module-config.js";
+import { isDeepStrictEqual } from "node:util";
+import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import {
   configureModuleOperations,
@@ -5,6 +8,7 @@ import {
   type ModuleOperationHost,
   type OperationBinding,
   type WaitronModule,
+  type ModuleConfig,
 } from "@waitron/module";
 import {
   createFirstSetupCoordinator,
@@ -29,6 +33,8 @@ export function createFirstSetupModuleHost(options: {
   stateDir: string;
   venueDir: string;
   modules: readonly WaitronModule[];
+  moduleConfig?: ModuleConfig;
+  assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
 }) {
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...options, coordinator });
@@ -39,7 +45,11 @@ export function createFirstSetupModuleHost(options: {
     coordinator,
     bootId,
     freeze: async (request, environment, ids) => {
-      const selection = venueFiscalSelection(options.modules, request.location.fiscalTerritory);
+      const selection = venueFiscalSelection(
+        options.modules,
+        request.location.fiscalTerritory,
+        options.moduleConfig,
+      );
       const selected = enabledModules(options.modules, selection.config);
       planVenue(request, selected);
       return {
@@ -63,6 +73,33 @@ export function createFirstSetupModuleHost(options: {
     store,
     owner,
     evidence,
+    publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
+      return writeModuleConfig(
+        options.stateDir,
+        venueFiscalSelection(
+          options.modules,
+          state.frozen.request.location.fiscalTerritory,
+          options.moduleConfig,
+        ).config,
+      );
+    },
+    assertSelection(state: import("@waitron/provisioning").FirstSetupState) {
+      const selected = enabledModules(
+        options.modules,
+        venueFiscalSelection(
+          options.modules,
+          state.frozen.request.location.fiscalTerritory,
+          options.moduleConfig,
+        ).config,
+      );
+      if (
+        !isDeepStrictEqual(
+          selected.map((module) => ({ module: module.name, version: module.version })),
+          state.frozen.modules.map(({ module, version }) => ({ module, version })),
+        )
+      )
+        throw new AppError("setup.attempt_conflict", {});
+    },
     modules: configureModuleOperations(options.modules, host),
   };
 }

@@ -553,3 +553,132 @@ it("retains the module's declared release version rather than a migration counte
   input.modules[0]!.version = "0.1.0";
   expect((await f.claim(input)).frozen.modules[0]?.version).toBe("0.1.0");
 });
+
+it("freezes a validated public request before consumption and admits only its first later public import", async () => {
+  const f = await fixture();
+  const initial = frozen();
+  initial.modules[0]!.request = null;
+  let state = await f.claim(initial);
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "candidates",
+    module: "probe",
+    request: { candidateDigest: "public-digest" },
+  });
+  expect(state.frozen.modules[0]!.request).toEqual({ candidateDigest: "public-digest" });
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "consumption-intent",
+  });
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "import",
+    module: "probe",
+    input: { allocationId: "outside-1" },
+  });
+  expect(state.inputs.probe).toEqual({ allocationId: "outside-1" });
+  for (const change of [
+    { kind: "candidates", module: "probe", request: { candidateDigest: "edited" } },
+    { kind: "import", module: "probe", input: { allocationId: "outside-2" } },
+  ] as const)
+    await expect(
+      f.store.update(state.frozen.attemptId, state.revision, change),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect((await f.store.read())!.inputs.probe).toEqual({ allocationId: "outside-1" });
+});
+it("keeps an interrupted completion out of trading while allowing a credential resume to recheck publication", async () => {
+  const f = await fixture();
+  let state = await f.claim();
+  for (const change of [
+    { kind: "consumption-intent" },
+    { kind: "activation-started" },
+    { kind: "committed", result: {} },
+    { kind: "publication" },
+  ] as const)
+    state = await f.store.update(state.frozen.attemptId, state.revision, change);
+  const original = (
+    await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
+  ).writeDurableHostJson;
+  let calls = 0;
+  vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
+    if (++calls === 2) throw new Error("completion-marker-fault");
+    return original(...args);
+  });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, { kind: "complete" }),
+  ).rejects.toThrow("completion-marker-fault");
+  vi.restoreAllMocks();
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  const pending = await f.store.readResumable();
+  expect(pending?.publicationComplete).toBe(false);
+  expect(pending?.state.status).toBe("complete");
+  state = await f.store.update(state.frozen.attemptId, pending!.state.revision, {
+    kind: "resume",
+    capabilityHash: digest("fresh"),
+  });
+  expect(state.status).toBe("publication");
+  expect(state.ownerGeneration).toBe(2);
+  expect((await f.store.read())?.status).toBe("publication");
+  expect(() => assertOtherSetupAllowed(state)).toThrowError(
+    expect.objectContaining({ code: "setup.attempt_uncertain" }),
+  );
+});
+it("locks the public publication binding after consumption and never replaces it on retry", async () => {
+  const f = await fixture();
+  let state = await f.claim();
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "publication-binding",
+      digest: "a".repeat(64),
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "consumption-intent",
+  });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "publication-binding",
+      digest: "short",
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  const before = state;
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "publication-binding",
+    digest: "a".repeat(64),
+  });
+  expect(state.inputs.$publication).toEqual({ digest: "a".repeat(64) });
+  expect(state.revision).toBe(before.revision + 1);
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "publication-binding",
+      digest: "b".repeat(64),
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await f.store.read()).toEqual(state);
+});
+it("refuses candidate and post-consumption imports for modules outside the frozen request", async () => {
+  const f = await fixture();
+  let state = await f.claim();
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "candidates",
+      module: "unknown",
+      request: {},
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "candidates",
+      module: "probe",
+      request: {},
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "consumption-intent",
+  });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, {
+      kind: "import",
+      module: "unknown",
+      input: {},
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await f.store.read()).toEqual(state);
+});

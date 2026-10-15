@@ -227,9 +227,9 @@ A679 design: **“A — Approve, plan and build”**. This supersedes the histor
 approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
 keeps real candidate validation on the host before public request export, custody secrets in the
 offline tool, and readiness separate from production. It specifies durable claim discovery and
-resume, whole-operation exclusion and restart reconciliation before trading. Both custody routes,
-file and actual-paper recovery, handover/loss checks and real wizard qualification remain to build
-and verify. There is no new approval gate or claim of product completion.
+resume, whole-operation exclusion and restart reconciliation before trading. Finish wizard integration and packaged tool delivery, then jointly qualify both custody routes,
+file and actual-paper recovery, handover and loss. Server ownership, activation and interruption
+checks do not replace the real wizard and physical-paper checks. There is no new approval gate or claim of product completion.
 
 You can use fiscal allocations without a Cloud subscription. The current paper route asks your
 custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,

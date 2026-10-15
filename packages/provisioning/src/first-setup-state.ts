@@ -57,6 +57,9 @@ export type FirstSetupStatus =
   | "uncertain";
 export type FirstSetupChange =
   | { kind: "input"; module: string; input: unknown }
+  | { kind: "import"; module: string; input: unknown }
+  | { kind: "candidates"; module: string; request: unknown }
+  | { kind: "publication-binding"; digest: string }
   | { kind: "checked"; module: string }
   | { kind: "resume"; capabilityHash: string }
   | { kind: "committed"; result: unknown }
@@ -98,6 +101,7 @@ export interface FirstSetupMarker {
 }
 export interface FirstSetupStore {
   read(): Promise<FirstSetupState | null>;
+  readResumable(): Promise<{ state: FirstSetupState; publicationComplete: boolean } | null>;
   claim(
     frozen: FirstSetupFrozen,
     ownerVerifier: string,
@@ -323,6 +327,9 @@ function validateAttempt(value: unknown): asserts value is Attempt {
       ![
         "claim",
         "input",
+        "import",
+        "candidates",
+        "publication-binding",
         "checked",
         "resume",
         "consumption-intent",
@@ -383,6 +390,7 @@ async function canonicalDirectory(path: string): Promise<string> {
 async function readPair(
   venueDir: string,
   expectedStateDir?: string,
+  allowInterruptedCompletion = false,
 ): Promise<{ marker: FirstSetupMarker; state: FirstSetupState } | null> {
   let venueExists: boolean;
   try {
@@ -427,7 +435,12 @@ async function readPair(
     venueDir,
     value.stateDir,
   );
-  if (state.frozen.attemptId !== value.attemptId || markerStatus(state) !== value.status) invalid();
+  if (
+    state.frozen.attemptId !== value.attemptId ||
+    (markerStatus(state) !== value.status &&
+      !(allowInterruptedCompletion && state.status === "complete" && value.status === "active"))
+  )
+    invalid();
   return { marker: value as unknown as FirstSetupMarker, state };
 }
 export async function inspectFirstSetupMarker(
@@ -467,14 +480,21 @@ export function createFirstSetupStore(options: {
   let statePath = join(stateDir, "first-setup.json");
   let markerPath = join(venueDir, "first-setup-claim.json");
   let roots: Promise<void> | undefined;
-  const read = async () => {
+  const readPairAtRoots = async (resumable = false) => {
     await (roots ??= (async () => {
       venueDir = await canonicalDirectory(options.venueDir);
       stateDir = await canonicalDirectory(options.stateDir);
       statePath = join(stateDir, "first-setup.json");
       markerPath = join(venueDir, "first-setup-claim.json");
     })());
-    return (await readPair(venueDir, stateDir))?.state ?? null;
+    return readPair(venueDir, stateDir, resumable);
+  };
+  const read = async () => (await readPairAtRoots())?.state ?? null;
+  const readResumable = async () => {
+    const pair = await readPairAtRoots(true);
+    return pair === null
+      ? null
+      : { state: pair.state, publicationComplete: pair.marker.status === "complete" };
   };
   const inside = <T>(hold: FirstSetupHold | undefined, body: () => Promise<T>) =>
     hold === undefined ? options.coordinator.run(body) : options.coordinator.held(hold, body);
@@ -493,6 +513,7 @@ export function createFirstSetupStore(options: {
   };
   return {
     read,
+    readResumable,
     claim(frozen, ownerVerifier, capabilityHash, claimNonceHash, hold) {
       return inside(hold, async () => {
         validateFrozen(frozen);
@@ -557,23 +578,65 @@ export function createFirstSetupStore(options: {
     },
     update(attemptId, revision, change, hold) {
       return inside(hold, async () => {
-        const state = await read();
+        const pair = change.kind === "resume" ? await readResumable() : null;
+        const state = change.kind === "resume" ? (pair?.state ?? null) : await read();
         if (state === null || state.frozen.attemptId !== attemptId || state.revision !== revision)
           conflict();
         const allowed =
-          change.kind === "input"
+          change.kind === "input" || change.kind === "import"
             ? ["kind", "module", "input"]
-            : change.kind === "checked"
-              ? ["kind", "module"]
-              : change.kind === "resume"
-                ? ["kind", "capabilityHash"]
-                : change.kind === "committed"
-                  ? ["kind", "result"]
-                  : ["kind"];
+            : change.kind === "candidates"
+              ? ["kind", "module", "request"]
+              : change.kind === "publication-binding"
+                ? ["kind", "digest"]
+                : change.kind === "checked"
+                  ? ["kind", "module"]
+                  : change.kind === "resume"
+                    ? ["kind", "capabilityHash"]
+                    : change.kind === "committed"
+                      ? ["kind", "result"]
+                      : ["kind"];
         if (!keys(change, allowed)) invalid();
-        if (state.status === "complete" || state.status === "abandoned") conflict();
+        if (
+          (state.status === "complete" &&
+            !(change.kind === "resume" && pair?.publicationComplete === false)) ||
+          state.status === "abandoned"
+        )
+          conflict();
         switch (change.kind) {
+          case "publication-binding":
+            if (
+              state.status !== "consumption-intent" ||
+              Object.hasOwn(state.inputs, "$publication")
+            )
+              conflict();
+            if (!HASH.test(change.digest)) invalid();
+            state.inputs["$publication"] = { digest: change.digest };
+            break;
+          case "candidates": {
+            if (state.status !== "claimed") conflict();
+            const selected = state.frozen.modules.find((module) => module.module === change.module);
+            if (selected === undefined) invalid();
+            if (selected.request !== null) conflict();
+            publicValue(change.request);
+            selected.request = structuredClone(change.request);
+            state.frozenDigest = frozenDigest(state.frozen);
+            break;
+          }
+          case "import":
+            if (state.status !== "consumption-intent" || Object.hasOwn(state.inputs, change.module))
+              conflict();
+            if (
+              !state.frozen.modules.some(
+                (module) => module.module === change.module && module.request !== null,
+              )
+            )
+              invalid();
+            publicValue(change.input);
+            state.inputs[change.module] = structuredClone(change.input);
+            break;
           case "resume":
+            if (state.status === "complete") state.status = "publication";
             if (!HASH.test(change.capabilityHash)) invalid();
             state.ownerGeneration++;
             state.capabilityHash = change.capabilityHash;

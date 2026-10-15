@@ -1,9 +1,6 @@
+import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import {
-  assertOtherSetupAllowed,
-  assertVenueFirstSetupAllowed,
-  inspectFirstSetupMarker,
-} from "@waitron/provisioning";
+import { assertOtherSetupAllowed, readTenantIdentities } from "@waitron/provisioning";
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
@@ -767,11 +764,20 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  const moduleConfig = await readModuleConfig(config.stateDir);
   const firstSetupHost = createFirstSetupModuleHost({
     environment: env,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
+    moduleConfig,
+    assertClaimAllowed: async () => {
+      if (
+        (await readTenantIdentities(db)).length > 0 ||
+        (await readOperationalVenueIds(db)).length > 0
+      )
+        throw new AppError("setup.attempt_conflict", {});
+    },
   });
   const availableModules = firstSetupHost.modules;
   const cloudOrigin = loadCloudOrigin(env);
@@ -827,9 +833,7 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
-    const marker = await inspectFirstSetupMarker(config.venueDir, config.stateDir);
-    if (config.till !== undefined && marker !== null)
-      await assertVenueFirstSetupAllowed(config.venueDir);
+    await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
       config.environment,
@@ -842,7 +846,6 @@ async function bootServer(
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
   // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
   // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
-  const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
   const migrationOptions = migrationOptionsFor(
@@ -976,6 +979,7 @@ async function bootServer(
       {
         environment: config.environment,
         firstSetup,
+        firstFiscal: firstSetupHost,
         devMode: config.devMode,
         operations: createSetupOperationStore(config.stateDir, undefined, {
           coordinator: firstSetupCoordinator,
@@ -1130,7 +1134,7 @@ async function bootServer(
         },
         // The fiscal slot comes from the REQUEST's territory: the box's `moduleConfig` base is
         // default-on, which with two fiscal-slot members would be ambiguous.
-        provision: async (req) => {
+        provision: async (req, beforeTransaction) => {
           const resolvedConfig = venueModuleConfig(
             moduleConfig,
             req.venue.location.fiscalTerritory,
@@ -1156,6 +1160,7 @@ async function bootServer(
           const result = await provisionVenue(
             {
               ownerDb: db,
+              beforeTransaction,
               moduleConfig: resolvedConfig,
               database: ownerDatabaseName,
               stateDir: config.stateDir,
