@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, type Transaction, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  locationDayCutoverChanges,
+  type Transaction,
+  withTransaction,
+} from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
@@ -63,6 +69,55 @@ beforeEach(async () => {
 });
 
 describe("transactional attendance operation capture", () => {
+  it("accepts activity after tomorrow's cutover changes before discovery refreshes the current day", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-05T17:00:00Z"));
+    try {
+      await capture(fact());
+      const [before] = await suite.db.select().from(attendanceDayWork);
+      await suite.db
+        .insert(locationDayCutoverChanges)
+        .values({ locationId, effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
+      await expect(
+        capture({ ...fact(), key: "after-cutover-setting", at: "2026-01-05T16:42:00Z" }),
+      ).resolves.toBeUndefined();
+      expect(
+        (await suite.db.select().from(attendanceOperationFacts)).map((f) => [f.key, f.at]),
+      ).toEqual([
+        ["attempt:one", "2026-01-05T16:40:23.000Z"],
+        ["after-cutover-setting", "2026-01-05T16:42:00.000Z"],
+      ]);
+      const [dirtied] = await suite.db.select().from(attendanceDayWork);
+      expect(dirtied).toEqual({ ...before, dirtyRevision: 2 });
+      const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
+        await import("./attendance-discovery.js");
+      await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "after-settings" }));
+      for (let n = 0; n < 15; n++) {
+        const { more } = await run((tx) =>
+          discoverAttendanceDays(tx, { locationId, now: new Date(), batchSize: 100 }),
+        );
+        if (!more) break;
+        if (n === 14) throw new Error("cutover discovery did not settle");
+      }
+      expect(
+        await run((tx) =>
+          nextAttendanceDay(tx, { locationId, now: new Date("2026-01-06T03:00:00Z") }),
+        ),
+      ).toBeNull();
+      expect(await suite.db.select().from(attendanceDayWork)).toEqual([
+        expect.objectContaining({
+          id: before!.id,
+          businessDay: "2026-01-05",
+          evaluatedRevision: 0,
+          startAt: "2026-01-05T03:00:00.000Z",
+          endAt: "2026-01-06T05:00:00.000Z",
+          nextDueAt: "2026-01-06T05:00:00.000Z",
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("records the admitted human instant at whole seconds, using the venue-zone offset", async () => {
     await capture(fact());
     expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([

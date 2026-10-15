@@ -121,9 +121,26 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
     businessDay,
     outcome,
   });
-  await enqueueAttendanceDay(tx, {
-    locationId: fact.locationId,
-    businessDay,
-    ...businessDayBounds(clock, businessDay),
-  });
+  const [savedDay] = await tx
+    .select({
+      locationId: attendanceDayWork.locationId,
+      businessDay: attendanceDayWork.businessDay,
+      startAt: attendanceDayWork.startAt,
+      endAt: attendanceDayWork.endAt,
+    })
+    .from(attendanceDayWork)
+    .where(
+      and(
+        eq(attendanceDayWork.locationId, fact.locationId),
+        eq(attendanceDayWork.businessDay, businessDay),
+      ),
+    );
+  await enqueueAttendanceDay(
+    tx,
+    savedDay ?? {
+      locationId: fact.locationId,
+      businessDay,
+      ...businessDayBounds(clock, businessDay),
+    },
+  );
 };

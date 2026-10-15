@@ -567,8 +567,20 @@ export async function nextAttendanceDay(
     .limit(1);
   if (work) {
     const bounds = businessDayBounds(clock, work.businessDay);
-    if (work.startAt !== bounds.startAt || work.endAt !== bounds.endAt)
-      throw new AppError("attendance.invalid", { reason: "saved attendance bounds changed" });
+    if (work.startAt !== bounds.startAt || work.endAt !== bounds.endAt) {
+      if (work.evaluatedRevision !== 0)
+        throw new AppError("attendance.invalid", { reason: "saved attendance bounds changed" });
+      const nextDueAt =
+        work.nextDueAt === work.endAt || work.nextDueAt < bounds.endAt
+          ? bounds.endAt
+          : work.nextDueAt;
+      await tx
+        .update(attendanceDayWork)
+        .set({ ...bounds, nextDueAt })
+        .where(eq(attendanceDayWork.id, work.id));
+      Object.assign(work, bounds, { nextDueAt });
+      if (work.endAt > scope.now.toISOString()) return null;
+    }
   }
   if (!work) return null;
   const day = {

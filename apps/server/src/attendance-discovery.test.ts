@@ -623,6 +623,44 @@ it("refreshes unprocessed future bounds after a scheduled cutover change", async
   expect(await next(new Date("2026-01-11T03:00:00Z"))).toBeNull();
   expect((await next(new Date("2026-01-11T05:00:00Z")))?.businessDay).toBe("2026-01-10");
 });
+it.each([
+  {
+    cutover: "06:00:00",
+    now: "2026-01-11T03:00:00Z",
+    endAt: "2026-01-11T05:00:00.000Z",
+    due: false,
+  },
+  {
+    cutover: "06:00:00",
+    now: "2026-01-11T06:00:00Z",
+    endAt: "2026-01-11T05:00:00.000Z",
+    due: true,
+  },
+  {
+    cutover: "02:00:00",
+    now: "2026-01-11T01:00:00Z",
+    endAt: "2026-01-11T01:00:00.000Z",
+    due: true,
+  },
+])(
+  "refreshes an unevaluated day when resuming at $now after moving cutover to $cutover",
+  async ({ cutover, now: instant, endAt, due }) => {
+    await signIn("2026-01-10T12:00:00Z");
+    await begin();
+    await drain();
+    const [before] = await rows();
+    await suite.db
+      .insert(locationDayCutoverChanges)
+      .values({ locationId, effectiveBusinessDay: "2026-01-11", dayCutover: cutover });
+    const answer = next(new Date(instant));
+    await expect(answer).resolves.toEqual(
+      due
+        ? { locationId, businessDay: "2026-01-10", startAt: "2026-01-10T03:00:00.000Z", endAt }
+        : null,
+    );
+    expect(await rows()).toEqual([{ ...before, endAt, nextDueAt: endAt }]);
+  },
+);
 it("refuses a changed historical bound rather than relabeling an evaluated day", async () => {
   await signIn("2026-01-05T12:00:00Z");
   await begin();

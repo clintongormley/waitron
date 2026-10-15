@@ -153,6 +153,37 @@ describe("completed attendance day", () => {
       { openEntryId: open, kind: "missing-times", missingKinds: ["out"] },
     ]);
   });
+  it("retains a question when a next-day live break was corrected into the completed day", async () => {
+    const open = await f.open();
+    await f.run((tx) => f.backend.breakStart(tx, f.event("2026-01-06T09:00:00Z")));
+    const breakId = (await f.entries()).at(-1)!.id;
+    const request = await f.run((tx) =>
+      f.backend.requestCorrection(tx, {
+        nodeId: f.nodeId,
+        correctsEntryId: breakId,
+        at: "2026-01-05T16:00:00Z",
+        offsetMinutes: 0,
+        reason: "Break began the previous day",
+        actorPersonId: f.personId,
+        origin: f.event("").origin,
+      }),
+    );
+    await f.run((tx) =>
+      f.backend.approveCorrection(tx, {
+        nodeId: f.nodeId,
+        correctionId: request,
+        approverPersonId: f.manager,
+      }),
+    );
+    const before = await f.state();
+    await expect(f.process()).resolves.toMatchObject({ automaticEntryIds: [] });
+    const after = await f.state();
+    expect(after.entries).toEqual(before.entries);
+    expect(after.chains).toEqual(before.chains);
+    expect(await f.questions()).toMatchObject([
+      { openEntryId: open, kind: "missing-times", missingKinds: ["out"] },
+    ]);
+  });
   it("preserves a next-day same-person break rather than appending an old finish behind it", async () => {
     await f.open();
     await f.run((tx) => f.backend.breakStart(tx, f.event("2026-01-06T09:00:00Z")));
