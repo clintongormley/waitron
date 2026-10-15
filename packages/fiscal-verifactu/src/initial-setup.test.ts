@@ -438,3 +438,72 @@ describe("first fiscal setup public contribution", () => {
     });
   });
 });
+
+it("the launch-configured collector activates a setup from independently bound host evidence", async () => {
+  const { withOperationAuthority } = await import("@waitron/module");
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const { activatePreparedModuleAllocation } = await import("./allocation-preparation.js");
+  const f = fixture();
+  const operations = FISCAL_OPERATIONS.configure!({
+    environment: {},
+    readPublicEvidence: async () => ({ trust, current: f.current }),
+  });
+  const result = await withOperationAuthority(
+    context.binding,
+    context.administratorId,
+    (authority) =>
+      operations.prepare({ binding: context.binding, authority, input: f.input }, (prepared) =>
+        withTransaction(suite.db, (tx) =>
+          activatePreparedModuleAllocation(
+            tx,
+            { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) },
+            prepared,
+          ),
+        ),
+      ),
+  );
+  expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+    { code: "A-S000001", purpose: "standard" },
+    { code: "FF-S000001", purpose: "full" },
+    { code: "R-S000001", purpose: "rectificative" },
+  ]);
+  expect((await suite.db.select().from(fiscalAllocations))[0]?.allocation).toEqual(
+    f.input.allocation,
+  );
+});
+it("a claimed setup with no live host grant cannot fall back to valid configured paper files", async () => {
+  const { withOperationAuthority } = await import("@waitron/module");
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "claimed-no-fallback-"));
+  try {
+    const f = fixture();
+    const publicFile = join(dir, "public.json"),
+      currentFile = join(dir, "current.json");
+    await writeFile(publicFile, JSON.stringify(trust));
+    await writeFile(currentFile, JSON.stringify(f.current));
+    const operations = FISCAL_OPERATIONS.configure!({
+      environment: {
+        WAITRON_FISCAL_CUSTODIAN_FILE: publicFile,
+        WAITRON_FISCAL_CONFIRMATION_FILE: currentFile,
+        WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: fingerprint,
+      },
+      readPublicEvidence: async () => undefined,
+    });
+    await expect(
+      withOperationAuthority(context.binding, context.administratorId, (authority) =>
+        operations.prepare(
+          { binding: context.binding, authority, input: f.input },
+          async () => "admitted",
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -155,14 +155,15 @@ export async function recoverProvisionedVenue(
 export async function provisionVenue(
   deps: ProvisionDeps,
   req: ProvisionRequest,
+  availableModules: readonly WaitronModule[] = ALL_MODULES,
 ): Promise<VenueResult> {
-  const blocked = disabledProvisionOnly(ALL_MODULES, deps.moduleConfig);
+  const blocked = disabledProvisionOnly(availableModules, deps.moduleConfig);
   if (blocked.length > 0) {
     throw new AppError("module.provision_only_disabled", { module: blocked[0]! });
   }
   // The plan and the apply are built from this SAME list, so no seed can be named that the runner
   // does not hold.
-  const modules = enabledModules(ALL_MODULES, deps.moduleConfig);
+  const modules = enabledModules(availableModules, deps.moduleConfig);
   const initial =
     req.initialOperations === undefined ? undefined : parseInitialVenueInput(req.initialOperations);
   if (

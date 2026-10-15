@@ -12,7 +12,11 @@ import {
   setVenueHolderIdentity,
   stampDeployment,
 } from "@waitron/db";
-import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
+import {
+  configureModuleOperations,
+  serializeModuleConfig,
+  type ModuleConfig,
+} from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
 import { readTenantIdentities } from "./tenant-guard.js";
@@ -39,7 +43,10 @@ async function main(): Promise<number> {
       env: process.env,
       openVenue: (directory) => openVenueDatabase(directory),
       applyVenue,
-      modules: ALL_MODULES,
+      modules: configureModuleOperations(ALL_MODULES, {
+        environment: Object.freeze({ ...process.env }),
+        readPublicEvidence: async () => undefined,
+      }),
       // The same variable `apps/server` reads; unset, no `modules.json` is written.
       writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),
       readEnvironment: readDeploymentEnvironment,
