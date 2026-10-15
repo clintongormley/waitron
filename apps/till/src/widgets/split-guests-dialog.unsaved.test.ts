@@ -66,6 +66,20 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+async function storeWhileDetached(
+  app: SplitGuestsLeaveApp,
+  form: TillSplitGuestsDialog,
+  count: string,
+) {
+  form.remove();
+  app.savedStaying = count;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.savedStaying).toBe(count);
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+}
 it("opening and closing untouched asks nothing", async () => {
   const { app, form } = await mount();
   expect(unload()).toBe(false);
@@ -224,4 +238,36 @@ it("a staying count typed before the stored one changes elsewhere stays, unsaved
   expect(unload()).toBe(true);
   await fill(form, "stayingGuests", "6");
   expect(unload()).toBe(false);
+});
+it("a count stored elsewhere while an untouched window is taken out moves the staying side with it once it is put back", async () => {
+  const { app, form } = await mount();
+  await storeWhileDetached(app, form, "6");
+  expect(field(form, "stayingGuests").value).toBe("6");
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a typed staying count stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "stayingGuests", "3");
+  await storeWhileDetached(app, form, "3");
+  expect(input.value).toBe("3");
+  expect(unload()).toBe(false);
+  await fill(form, "stayingGuests", "5");
+  expect(unload()).toBe(true);
+});
+it("a split the window stays open after keeps its counts when the window is taken out and put back while the stored count is unchanged", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "stayingGuests", "3");
+  await fill(form, "leavingGuests", "2");
+  split(form);
+  expect(app.submitted).toEqual([{ staying: 3, leaving: 2 }]);
+  form.remove();
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+  expect(input.value).toBe("3");
+  expect(unload()).toBe(false);
+  await fill(form, "stayingGuests", "5");
+  expect(unload()).toBe(true);
 });

@@ -53,6 +53,7 @@ export class TillSplitGuestsDialog extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #baseline?: Draft;
+  #storedChanged = false;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
@@ -62,9 +63,10 @@ export class TillSplitGuestsDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("savedStaying")) this.#storedChanged = true;
     if (!this.isConnected || !this.active) return;
     if (!this.#scope) this.#track();
-    if (changed.has("savedStaying")) this.#followStored();
+    if (this.#storedChanged) this.#followStored();
   }
 
   #track(): void {
@@ -85,6 +87,7 @@ export class TillSplitGuestsDialog extends LitElement {
   }
 
   #followStored(): void {
+    this.#storedChanged = false;
     const stored = this.savedStaying;
     const baseline = this.#baseline!;
     if (stored === undefined || sameGuestCount(stored, baseline.staying)) return;

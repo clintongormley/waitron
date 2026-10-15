@@ -47,6 +47,7 @@ export class TillPartyGuestsDialog extends LitElement {
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   #baseline?: string;
+  #storedChanged = false;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
@@ -56,9 +57,10 @@ export class TillPartyGuestsDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("savedValue")) this.#storedChanged = true;
     if (!this.isConnected || !this.active) return;
     if (!this.#scope) this.#track();
-    if (changed.has("savedValue")) this.#followStored();
+    if (this.#storedChanged) this.#followStored();
   }
 
   #track(): void {
@@ -78,6 +80,7 @@ export class TillPartyGuestsDialog extends LitElement {
   /** A count stored elsewhere while the window is open becomes what Save compares against, and
    * replaces the field only while the field still reads the previous stored count. */
   #followStored(): void {
+    this.#storedChanged = false;
     const stored = this.savedValue;
     if (stored === undefined || sameGuestCount(stored, this.#baseline!)) return;
     if (sameGuestCount(this.value, this.#baseline!)) this.value = stored;

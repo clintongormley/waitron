@@ -2183,13 +2183,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
   the server's refusal is the backstop.
 
-- **A717 — The till's Name window keeps comparing against the name stored when it opened, after
-  the name is changed on another till while it is open (2026-10-15; open, left open by A714, #1754; found by
-  reading in A713's review, not probed).** A713 fixed the same shape for the Guests window, which now follows a count
-  stored elsewhere (`#followStored`, `apps/till/src/widgets/party-guests-dialog.ts`); the Name window
-  (`apps/till/src/widgets/party-name-dialog.ts`) sets its baseline once. **Next action:** probe it in
-  real Chromium; if Save compares against the old name, follow the stored name as the Guests window
-  does.
+- **A729 — Ask the owner whether A715's "the last count saved wins" also holds for the party Name window
+  (2026-10-15; owner to decide, left open by A717).** A715's decision (`docs/backlog/till.md`,
+  _Decisions and deliberate limits_) names only a guest count in the Guests or Split a table window.
+  The Name window behaves the same way: a name typed there replaces a name another till saved while
+  the window was open, once this till has received that change, with no warning: the save sends the
+  party revision this till holds (`#onNameParty`, `apps/till/src/till-app.ts`). A717 made the window show and compare against that other
+  name, but did not change what Save does. **Next action:** ask the owner; if the answer is the same,
+  widen the A715 decision to name the Name window.
+
+- **A730 — The floor's Rename window may keep comparing against the name it opened with after the
+  name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**
+  `apps/till/src/widgets/today-name-dialog.ts` takes its baseline from `value` when it opens, and
+  after a send through `commit()`, and has no `savedValue` to follow, unlike the order screen's Name window since A717. **Next action:** probe it
+  in real Chromium; if Save compares against the old name, follow the stored name as
+  `party-name-dialog.ts` does.
 
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at

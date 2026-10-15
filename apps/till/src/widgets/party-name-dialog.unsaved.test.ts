@@ -59,6 +59,20 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+async function storeWhileDetached(app: PartyNameLeaveApp, form: TillPartyNameDialog, name: string) {
+  form.remove();
+  app.savedValue = name;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.savedValue).toBe(name);
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+}
+function saveState(form: TillPartyNameDialog) {
+  const save = form.shadowRoot!.querySelector<HTMLElement>("[data-name-save]")!;
+  return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
+}
 for (const action of ["Cancel", "Escape"]) {
   it(`party name ${action} keeps the typed name, then discards without naming`, async () => {
     const { app, form } = await mount();
@@ -217,4 +231,48 @@ it("a refused submitted name starts dirty against the stored party name", async 
   expect(form.value).toBe("Luis");
   await fill(form, " Ana ");
   expect(unload()).toBe(false);
+});
+it("a stored name changed elsewhere moves an untouched window with it, which then closes without a warning", async () => {
+  const { app, form } = await mount();
+  app.savedValue = "Luis";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.value).toBe("Luis");
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a name typed before the stored one changes elsewhere stays unsaved against the new stored name", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Eva");
+  app.savedValue = "Luis";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(input.value).toBe("Eva");
+  expect(unload()).toBe(true);
+  await fill(form, "Luis");
+  expect(unload()).toBe(false);
+});
+it("a name stored elsewhere while an untouched window is taken out moves the window with it once it is put back", async () => {
+  const { app, form } = await mount();
+  await storeWhileDetached(app, form, "Luis");
+  expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Luis");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a typed name stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Eva");
+  await storeWhileDetached(app, form, "Eva");
+  expect(input.value).toBe("Eva");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  await fill(form, "Ana");
+  expect(unload()).toBe(true);
 });

@@ -59,6 +59,24 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+async function storeWhileDetached(
+  app: PartyGuestsLeaveApp,
+  form: TillPartyGuestsDialog,
+  count: string,
+) {
+  form.remove();
+  app.savedValue = count;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.savedValue).toBe(count);
+  app.shadowRoot!.appendChild(form);
+  await form.updateComplete;
+}
+function saveState(form: TillPartyGuestsDialog) {
+  const save = form.shadowRoot!.querySelector<HTMLElement>("[data-guests-save]")!;
+  return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
+}
 for (const action of ["Cancel", "Escape"]) {
   it(`party guests ${action} keeps the typed count, then discards without sending`, async () => {
     const { app, form } = await mount();
@@ -214,7 +232,7 @@ it("a refused submitted count starts dirty against the stored count", async () =
   await fill(form, " 2 ");
   expect(unload()).toBe(false);
 });
-it("a stored count changed elsewhere moves an untouched window with it, and leaves a typed one unsaved", async () => {
+it("a stored count changed elsewhere moves an untouched window with it, which then closes without a warning", async () => {
   const { app, form } = await mount();
   app.savedValue = "6";
   app.requestUpdate();
@@ -237,4 +255,24 @@ it("a count typed before the stored one changes elsewhere stays unsaved against 
   expect(unload()).toBe(true);
   await fill(form, "6");
   expect(unload()).toBe(false);
+});
+it("a count stored elsewhere while an untouched window is taken out moves the window with it once it is put back", async () => {
+  const { app, form } = await mount();
+  await storeWhileDetached(app, form, "6");
+  expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("6");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a typed count stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "4");
+  await storeWhileDetached(app, form, "4");
+  expect(input.value).toBe("4");
+  expect(unload()).toBe(false);
+  expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
+  await fill(form, "2");
+  expect(unload()).toBe(true);
 });

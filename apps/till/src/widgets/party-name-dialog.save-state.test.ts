@@ -103,3 +103,29 @@ it("after a save that leaves the dialog open, Save is quiet again", async () => 
   saveButton(el).click();
   expect(await saveState(el)).toEqual(quiet);
 });
+
+it("when the stored name changes elsewhere, an untouched field follows it and Save compares against it", async () => {
+  const el = await mount({ value: "Ana", savedValue: "Ana" });
+  el.savedValue = "Luis";
+  expect(await saveState(el)).toEqual(quiet);
+  const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  expect(el.value).toBe("Luis");
+  expect(input.value).toBe("Luis");
+  await type(el, "Eva");
+  expect(await saveState(el)).toEqual(ready);
+  await type(el, "Ana");
+  expect(await saveState(el)).toEqual(ready);
+  await type(el, "Luis");
+  expect(await saveState(el)).toEqual(quiet);
+});
+
+it("when the stored name changes elsewhere, a name the waiter typed stays and Save compares against the new one", async () => {
+  const el = await mount({ value: "Ana", savedValue: "Ana" });
+  await type(el, "Eva");
+  el.savedValue = "Luis";
+  expect(await saveState(el)).toEqual(ready);
+  expect(el.value).toBe("Eva");
+  el.savedValue = "Eva";
+  expect(await saveState(el)).toEqual(quiet);
+  expect(el.value).toBe("Eva");
+});
