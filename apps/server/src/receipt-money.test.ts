@@ -34,6 +34,7 @@ describe("formatAmount", () => {
     ["1234.56", "es-ES", "1234,56"],
     ["10000.00", "es-ES", "10.000,00"],
     ["-1.21", "eu-ES", "-1,21"],
+    ["10000.00", "fr-FR", "10 000,00"],
   ])("writes %s in %s as %s", (value, locale, expected) => {
     expect(formatAmount(value, locale)).toBe(expected);
   });

@@ -479,7 +479,13 @@ it.each([PRINTER_58, PRINTER_80])(
       expect(content).toContain("Factura completa");
       const price = invoiceLocale === "es-ES" ? "25,00 €" : "€25.00";
       expect(content).toContain(`Precio sin IVA ${price} / 1 kg`);
-      expect(content).toContain(`Base 10% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`);
+      const hamStart = content.indexOf(invoiceLocale === "es-ES" ? "Jamón" : "Ham");
+      const hamEnd = content.indexOf("Base 21%", hamStart);
+      expect(hamStart).toBeGreaterThan(-1);
+      expect(hamEnd).toBeGreaterThan(hamStart);
+      expect(content.slice(hamStart, hamEnd)).toContain(
+        `Base 10% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`,
+      );
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
     }
