@@ -53,7 +53,7 @@ const full: ProductEditorDraft = {
     { kind: "extras", id: "sauces" },
     { kind: "options", id: "cooked" },
   ],
-  allergens: { milk: { presence: "may_contain" } },
+  allergens: { milk: {} },
   dietaryDeclarations: ["vegan", "halal"],
   courseId: "starters",
 };
@@ -70,7 +70,7 @@ const variantPage: ProductEditorDraft = {
     unitId: "each",
     primaryCategoryId: "drinks",
     courseId: "starters",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryDeclarations: ["vegan"],
   },
   name: "Glass",
@@ -269,4 +269,57 @@ it("Archive then Keep on a saved variant returns Save to quiet without submittin
   expect(await saveState(el)).toEqual(quiet);
   await press(el);
   expect(submit).not.toHaveBeenCalled();
+});
+
+it("keeps Save quiet when the same cereal and nut choices return in another order", async () => {
+  const el = await mount({
+    ...full,
+    allergens: { gluten: { kinds: ["rye", "wheat"] }, nuts: { kinds: ["walnuts", "almonds"] } },
+  });
+  expect(await saveState(el)).toEqual(quiet);
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", {
+      bubbles: true,
+      composed: true,
+      detail: {
+        value: {
+          allergens: ["gluten:wheat", "nuts:almonds", "gluten:rye", "nuts:walnuts"],
+          dietary: full.dietaryDeclarations,
+        },
+      },
+    }),
+  );
+  await el.updateComplete;
+  expect(await saveState(el)).toEqual(quiet);
+});
+
+it("leaves variant Open available when only allergen kind order changes", async () => {
+  const el = await mount({ ...full, allergens: { gluten: { kinds: ["rye", "wheat"] } } });
+  const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+  expect(table.openBlocked).toBe(false);
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", {
+      bubbles: true,
+      composed: true,
+      detail: {
+        value: { allergens: ["gluten:wheat", "gluten:rye"], dietary: full.dietaryDeclarations },
+      },
+    }),
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.openBlocked).toBe(false);
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", {
+      bubbles: true,
+      composed: true,
+      detail: { value: { allergens: ["gluten:wheat"], dietary: full.dietaryDeclarations } },
+    }),
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(table.openBlocked).toBe(true);
+  expect(await saveState(el)).toEqual(ready);
 });

@@ -1439,7 +1439,7 @@ describe("DashboardApi — purchase invoices", () => {
 describe("DashboardApi — ingredients + product recipe", () => {
   it("listIngredients GETs /management-api/ingredients with credentials", async () => {
     const rows = [
-      { id: "i1", name: "alioli", allergens: { eggs: { presence: "contains" } }, active: true },
+      { id: "i1", name: "alioli", allergens: { eggs: {} }, active: true },
       { id: "i2", name: "pan", allergens: null, active: true },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -1468,7 +1468,7 @@ describe("DashboardApi — ingredients + product recipe", () => {
   });
 
   it("createIngredient carries an allergens map when supplied", async () => {
-    const input = { name: "mahonesa", allergens: { eggs: { presence: "contains" as const } } };
+    const input = { name: "mahonesa", allergens: { eggs: {} } };
     const created = { id: "i3", ...input, active: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -1496,9 +1496,7 @@ describe("DashboardApi — ingredients + product recipe", () => {
   });
 
   it("getProductRecipe GETs /management-api/products/:id/recipe with credentials", async () => {
-    const lines = [
-      { id: "i1", name: "alioli", allergens: { eggs: { presence: "contains" } }, active: true },
-    ];
+    const lines = [{ id: "i1", name: "alioli", allergens: { eggs: {} }, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(lines));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getProductRecipe("p1")).toEqual(lines);

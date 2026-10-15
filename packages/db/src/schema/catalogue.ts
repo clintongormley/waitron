@@ -7,7 +7,22 @@ import { kitchenCourses } from "./kitchen-courses.js";
  * The db-layer copy of `@waitron/catalogue`'s `ProductAllergens`, local because `@waitron/catalogue`
  * depends on THIS package, so the exact `AllergenCode`-keyed type cannot be imported without a cycle.
  */
-export type AllergenMap = Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+type AllergenKind =
+  | "wheat"
+  | "rye"
+  | "barley"
+  | "oats"
+  | "spelt"
+  | "kamut"
+  | "almonds"
+  | "hazelnuts"
+  | "walnuts"
+  | "cashews"
+  | "pecans"
+  | "brazil_nuts"
+  | "pistachios"
+  | "macadamia";
+export type AllergenMap = Record<string, { kinds?: AllergenKind[] }>;
 
 /** A named, shareable menu. Many locations may point at one catalogue. */
 export const catalogues = table("catalogues", {
@@ -90,8 +105,7 @@ export const products = table(
     // ignored: it reads its parent's.
     color: label("color"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
-    // till surfaces distinctly); {} = reviewed, contains none; else per-code presence + optional
-    // specific-substance source.
+    // till surfaces distinctly); {} = reviewed, contains none.
     allergens: json<AllergenMap>("allergens"),
     // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
     // `allergens` (published) is the computed union of this and `recipe_derivation`; the recipe

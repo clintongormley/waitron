@@ -14,7 +14,7 @@ const ingredients: Ingredient[] = [
   {
     id: "i3",
     name: "Leche entera",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryOrigin: "dairy",
     active: false,
   },

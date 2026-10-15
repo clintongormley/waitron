@@ -2,7 +2,7 @@ import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
-import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
+import { ALLERGEN_CHOICES, allergenChoiceName } from "./allergen-choices.js";
 import { DIETARY_SUITABILITY, type DietaryLabel } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
@@ -63,7 +63,7 @@ export class AllergenDietaryPicker extends LitElement {
   }
 
   #allergenOptions() {
-    return ALLERGEN_CODES.map((code) => ({ value: code, label: allergenName(code) }));
+    return ALLERGEN_CHOICES.map((code) => ({ value: code, label: allergenChoiceName(code) }));
   }
 
   #dietaryOptions() {
@@ -155,7 +155,7 @@ export class AllergenDietaryPicker extends LitElement {
           : this.#line(
               "allergens",
               allergens,
-              this.#summary(this.value.allergens, (code) => allergenName(code)),
+              this.#summary(this.value.allergens, (code) => allergenChoiceName(code)),
             )
       }
       ${

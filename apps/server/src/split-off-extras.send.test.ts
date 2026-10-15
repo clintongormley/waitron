@@ -205,7 +205,7 @@ describe("sending split-off extras", () => {
         expect(row?.kitchenName).toBe(kitchen);
         expect(new Set([row!.name, customer, row!.kitchenName]).size).toBe(3);
         if (key === "chips")
-          expect(row?.allergens).toMatchObject({ gluten: { presence: "contains" } });
+          expect(row?.allergens).toMatchObject({ gluten: { kinds: ["wheat" as const] } });
       }
       for (const station of ["grill", "fryer", "kitchen", "bar"] as const) {
         const attached = await tx

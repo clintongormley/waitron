@@ -1,5 +1,6 @@
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
+import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -386,10 +387,7 @@ export class TillBasket extends LitElement {
     productId: string,
   ):
     | {
-        addAllergens: Record<
-          string,
-          { presence: "contains" | "may_contain"; source?: string }
-        > | null;
+        addAllergens: ProductAllergens | null;
         suitableFor: readonly string[];
       }
     | undefined {

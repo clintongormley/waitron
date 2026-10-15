@@ -22,7 +22,7 @@ describe("ingredient-list", () => {
   it("renders one wt-card row per ingredient", async () => {
     const ingredients = [
       ingredient({ id: "a", allergens: null }),
-      ingredient({ id: "b", allergens: { eggs: { presence: "contains" } } }),
+      ingredient({ id: "b", allergens: { eggs: {} } }),
     ];
     const { el } = await mountWidget<IngredientList>("dashboard-ingredient-list", { ingredients });
     const rows = el.shadowRoot!.querySelectorAll("wt-card[data-test=row]");
@@ -59,7 +59,7 @@ describe("ingredient-list", () => {
 
   it("renders a 'declared' allergen pill when allergens has entries", async () => {
     const { el } = await mountWidget<IngredientList>("dashboard-ingredient-list", {
-      ingredients: [ingredient({ allergens: { eggs: { presence: "contains" } } })],
+      ingredients: [ingredient({ allergens: { eggs: {} } })],
     });
     const pill = el.shadowRoot!.querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("declared");
@@ -70,7 +70,7 @@ describe("ingredient-list", () => {
       ingredients: [
         ingredient({ id: "p", allergens: null }),
         ingredient({ id: "n", allergens: {} }),
-        ingredient({ id: "d", allergens: { milk: { presence: "contains" } } }),
+        ingredient({ id: "d", allergens: { milk: {} } }),
       ],
     });
     const pills = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=allergen-state]");

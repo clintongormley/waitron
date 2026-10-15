@@ -92,14 +92,14 @@ const products: Product[] = [
     available: true,
     ordering: "public",
     allergens: {
-      gluten: { presence: "contains", source: "trigo" },
-      milk: { presence: "contains" },
+      gluten: { kinds: ["wheat" as const] },
+      milk: {},
     },
     dietOverride: null,
     dietDerivation: null,
     manualAllergens: {
-      gluten: { presence: "contains", source: "trigo" },
-      milk: { presence: "contains" },
+      gluten: { kinds: ["wheat" as const] },
+      milk: {},
     },
     image: null,
     color: null,

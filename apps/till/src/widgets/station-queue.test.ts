@@ -509,11 +509,11 @@ describe("till-station-queue", () => {
           {
             ...withModifiers.items[0]!,
             // The DISH declares its own gluten; the EXTRA declares its own milk + halal.
-            asServed: { allergens: { gluten: { presence: "contains" } }, pending: false },
+            asServed: { allergens: { gluten: { kinds: ["wheat" as const] } }, pending: false },
             modifiers: [
               {
                 descriptions: { "es-ES": "Bacon" },
-                addAllergens: { milk: { presence: "contains" } },
+                addAllergens: { milk: {} },
                 suitableFor: ["halal"],
               },
             ],
@@ -639,7 +639,7 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
-          asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
+          asServed: { allergens: { milk: {} }, pending: false },
         },
       ],
     };
@@ -1967,7 +1967,7 @@ describe("cross-station extra references", () => {
           name: "CHIPS",
           perDish: 2,
           stationName: "Fryer",
-          addAllergens: { gluten: { presence: "contains" as const } },
+          addAllergens: { gluten: { kinds: ["wheat" as const] } },
           suitableFor: [],
         },
       ],

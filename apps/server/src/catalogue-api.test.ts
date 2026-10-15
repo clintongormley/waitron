@@ -1820,7 +1820,7 @@ describe("mountCatalogueApi — products", () => {
         pricingUnit: "each",
         unitPrice: "1.20",
         vatClass: "general",
-        allergens: { milk: { presence: "may_contain", source: "leche" } },
+        allergens: { milk: {} },
         image: "abc.png",
       },
     });
@@ -1849,7 +1849,7 @@ describe("mountCatalogueApi — products", () => {
       vatClass: "general",
       pricingUnit: "each",
       active: true,
-      allergens: { milk: { presence: "may_contain", source: "leche" } },
+      allergens: { milk: {} },
       image: "abc.png",
     });
 
@@ -2212,7 +2212,7 @@ describe("mountCatalogueApi — products", () => {
           unitPrice: "2.00",
           vatClass: "reduced",
           primaryCategoryId: categoryId,
-          allergens: { milk: { presence: "contains" } },
+          allergens: { milk: {} },
           dietaryDeclarations: ["vegan"],
           variants: [
             {
@@ -2284,7 +2284,7 @@ describe("mountCatalogueApi — products", () => {
         unitPrice: "2.00",
         vatClass: "reduced",
         primaryCategoryId: categoryId,
-        allergens: { milk: { presence: "contains" } },
+        allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
       },
     });
@@ -2328,7 +2328,7 @@ describe("mountCatalogueApi — products", () => {
         ...value,
         vatClass: "general",
         unitPrice: "2.60",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
         courseId,
       },
     });
@@ -2336,14 +2336,14 @@ describe("mountCatalogueApi — products", () => {
     expect(await overridden.json()).toMatchObject({
       vatClass: "general",
       unitPrice: "2.60",
-      allergens: { eggs: { presence: "contains" } },
+      allergens: { eggs: {} },
       courseId,
     });
     expect(await stored()).toEqual({
       vat_class: "general",
       unit_price: 260,
       category_id: null,
-      manual_allergens: JSON.stringify({ eggs: { presence: "contains" } }),
+      manual_allergens: JSON.stringify({ eggs: {} }),
     });
 
     const cleared = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -3128,8 +3128,8 @@ describe("mountCatalogueApi — products", () => {
 
   it.each([
     ["invalid_code", { notacode: { presence: "contains" } }, "allergen.invalid_code"],
-    ["invalid_presence", { gluten: { presence: "sometimes" } }, "allergen.invalid_presence"],
-    ["invalid_source", { gluten: { presence: "contains", source: 7 } }, "allergen.invalid_source"],
+    ["kinds_required", { gluten: {} }, "allergen.kinds_required"],
+    ["invalid_kind", { nuts: { kinds: ["wheat"] } }, "allergen.invalid_kind"],
   ])(
     "POST /management-api/products with a bad allergen (%s) → %s 400",
     async (_label, allergens, code) => {

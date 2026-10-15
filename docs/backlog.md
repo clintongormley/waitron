@@ -755,14 +755,19 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
   spec approved 2026-10-15).** A "Contains none of the 14" choice, so a dish stops
-  reading "not reviewed" for ever; "may contain" dropped; Gluten and Nuts say which cereals and nuts;
+  reading "not reviewed" for ever;
   one wording per state, a variant's inherited values in italic, implied diets shown, the Products
   list reading a variant's allergens; unreviewed dishes warned about (never blocked) when a menu is
   published now or scheduled, each linking to its product. On the till the Allergens screen is
-  deleted; product buttons carry an "i" with a long-press info window, the order list shows allergen
+  deleted; product buttons carry an `allergies` mark with a long-press info window, the order list shows allergen
   icons after the name, and the kitchen's "not reviewed" warning goes. Erudus icons. Fixes a defect
   read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. Uses
   the product editor's existing sections. [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)
+
+- **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
+  `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
+  repeats. A668-1's Claude probe recorded that result. Decide whether direct declarations should
+  be refused or normalised, then check both ingredient and product requests with repeated kinds.
 
 - **A670 — printed menus (owner, 2026-10-14; open, not designed).** Waitron prints no menu today.
   A printed menu carries each dish's allergen icons after its name and a key on the page naming

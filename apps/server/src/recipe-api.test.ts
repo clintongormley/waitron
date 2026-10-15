@@ -101,7 +101,7 @@ describe("mountRecipeApi", () => {
   it("creates and lists an ingredient under a manager session", async () => {
     const app = mountApp();
     const created = await send(app, "POST", "/management-api/ingredients", {
-      body: { name: "alioli", allergens: { eggs: { presence: "contains" } } },
+      body: { name: "alioli", allergens: { eggs: {} } },
       cookie: managerCookie,
     });
     expect(created.status).toBe(201);
@@ -114,7 +114,7 @@ describe("mountRecipeApi", () => {
     const app = mountApp();
     const ing = (await (
       await send(app, "POST", "/management-api/ingredients", {
-        body: { name: "bread", allergens: { gluten: { presence: "contains" } } },
+        body: { name: "bread", allergens: { gluten: { kinds: ["wheat" as const] } } },
         cookie: managerCookie,
       })
     ).json()) as { id: string };
@@ -221,7 +221,7 @@ describe("mountRecipeApi", () => {
     const app = mountApp();
     const id = await createIngredient(app, "leche");
     const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
-      body: { active: false, allergens: { milk: { presence: "contains" } } },
+      body: { active: false, allergens: { milk: {} } },
       cookie: managerCookie,
     });
     expect(patched.status).toBe(204);
@@ -230,7 +230,7 @@ describe("mountRecipeApi", () => {
     ).json()) as { id: string; active: boolean; allergens: unknown }[];
     const row = list.find((i) => i.id === id);
     expect(row?.active).toBe(false);
-    expect(row?.allergens).toEqual({ milk: { presence: "contains" } });
+    expect(row?.allergens).toEqual({ milk: {} });
   });
 
   it("creates an ingredient with a dietary origin and reads it back", async () => {
@@ -524,3 +524,27 @@ it("refuses replacing an archived product recipe with 409 product.archived and p
   });
   expect(await (await send(app, "GET", path)).json()).toEqual(before);
 });
+
+it.each([
+  [{ gluten: {} }, "allergen.kinds_required", "gluten"],
+  [{ nuts: { kinds: ["wheat"] } }, "allergen.invalid_kind", "nuts"],
+] as const)(
+  "refuses ingredient declarations %j with HTTP 400 %s",
+  async (allergens, code, allergen) => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/ingredients", {
+      body: { name: "kind refusal", allergens },
+    });
+    expect(created.status).toBe(400);
+    expect(await created.json()).toEqual({ error: { code, params: { code: allergen } } });
+    const valid = await send(app, "POST", "/management-api/ingredients", {
+      body: { name: `valid ${code}` },
+    });
+    const ingredient = (await valid.json()) as { id: string };
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${ingredient.id}`, {
+      body: { allergens },
+    });
+    expect(patched.status).toBe(400);
+    expect(await patched.json()).toEqual({ error: { code, params: { code: allergen } } });
+  },
+);

@@ -26,9 +26,7 @@ it("shows an extra's suitability badges alone when it declares no allergens", ()
 });
 
 it("shows an extra's allergens alone when it declares no suitability", () => {
-  const host = draw(
-    extraNutrition({ addAllergens: { milk: { presence: "contains" } } }, "allergens-x", "diet-x"),
-  );
+  const host = draw(extraNutrition({ addAllergens: { milk: {} } }, "allergens-x", "diet-x"));
   expect(host.querySelector('[data-test="diet-x"]')).toBeNull();
   expect(host.querySelector('[data-test="allergens-x"]')!.textContent).toContain(
     allergenName("milk", currentLocale()),

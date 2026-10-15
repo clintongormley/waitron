@@ -352,7 +352,7 @@ describe("navigateMenuChanges", () => {
     [
       "allergens",
       (o: FrozenOffer) => {
-        o.allergens = { milk: { presence: "contains", source: "cream" } };
+        o.allergens = { milk: {} };
       },
       [{ kind: "allergens" }],
     ],

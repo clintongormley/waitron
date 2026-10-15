@@ -18,8 +18,6 @@ const coffee: TillProduct = {
   allergens: null,
 };
 
-// A reviewed product carrying both strengths: gluten CONTAINS (with a source) and milk MAY CONTAIN
-// (no source) — so a test can tell the two cells and the two detail rows apart.
 const sandwich: TillProduct = {
   id: "sandwich",
   name: "Bocadillo",
@@ -29,8 +27,8 @@ const sandwich: TillProduct = {
   vatClass: "reduced",
   category: null,
   allergens: {
-    gluten: { presence: "contains", source: "wheat" },
-    milk: { presence: "may_contain" },
+    gluten: { kinds: ["wheat" as const] },
+    milk: {},
   },
 };
 
@@ -92,7 +90,7 @@ describe("till-allergen-screen", () => {
     expect(rowFor(el, "Agua")).toBeDefined();
   });
 
-  it("marks a 'contains' cell distinctly from a 'may contain' cell", async () => {
+  it("marks declared cells as contains and leaves undeclared cells blank", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
       locale: "en",
@@ -101,16 +99,16 @@ describe("till-allergen-screen", () => {
     const gluten = row.querySelector('[data-code="gluten"]')!;
     const milk = row.querySelector('[data-code="milk"]')!;
     expect(gluten.classList.contains("contains")).toBe(true);
-    expect(milk.classList.contains("may-contain")).toBe(true);
-    // The two are genuinely distinct, not the same treatment reused.
-    expect(gluten.className).not.toEqual(milk.className);
-    // An undeclared allergen is a blank cell — neither strength.
+    expect(milk.classList.contains("contains")).toBe(true);
+    expect(gluten.querySelector(".marker")!.textContent).toBe("●");
+    expect(milk.querySelector(".marker")!.textContent).toBe("●");
+    // An undeclared allergen remains a blank cell.
     const eggs = row.querySelector('[data-code="eggs"]')!;
     expect(eggs.classList.contains("contains")).toBe(false);
     expect(eggs.classList.contains("may-contain")).toBe(false);
   });
 
-  it("shows the per-allergen source in the row detail dialog, e.g. 'gluten (wheat)'", async () => {
+  it("shows specific cereal kinds in the row detail dialog", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
       locale: "en",
@@ -119,12 +117,10 @@ describe("till-allergen-screen", () => {
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
-    // "Cereals containing gluten (wheat)" — name resolved via allergenName, source in parentheses.
-    expect(dialog.textContent).toContain(`${allergenName("gluten", "en")} (wheat)`);
-    // milk is may-contain with no source: its name shows, tagged, without a "(…)".
+    expect(dialog.textContent).toContain(`${allergenName("gluten", "en")} (Wheat)`);
     expect(dialog.textContent).toContain(allergenName("milk", "en"));
     expect(dialog.textContent).toContain(t("allergens.contains", "en"));
-    expect(dialog.textContent).toContain(t("allergens.may_contain", "en"));
+    expect(dialog.textContent).not.toContain("May contain");
   });
 
   it("lists a product's declarations in ALLERGEN_DISPLAY_ORDER, not server key order", async () => {
@@ -138,8 +134,8 @@ describe("till-allergen-screen", () => {
       vatClass: "reduced",
       category: null,
       allergens: {
-        milk: { presence: "contains" },
-        gluten: { presence: "may_contain", source: "barley" },
+        milk: {},
+        gluten: { kinds: ["barley" as const] },
       },
     };
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
@@ -151,7 +147,7 @@ describe("till-allergen-screen", () => {
     const names = [...el.shadowRoot!.querySelectorAll("wt-dialog .detail-item .detail-name")].map(
       (n) => n.textContent!.trim(),
     );
-    expect(names).toEqual([`${allergenName("gluten", "en")} (barley)`, allergenName("milk", "en")]);
+    expect(names).toEqual([`${allergenName("gluten", "en")} (Barley)`, allergenName("milk", "en")]);
   });
 
   it("renders allergens === null as the pending state, NOT an all-clear row", async () => {

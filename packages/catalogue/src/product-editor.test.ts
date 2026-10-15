@@ -78,6 +78,30 @@ beforeEach(async () => {
   };
 });
 
+it("round-trips cereal and nut kinds through the editor and stored published declaration", async () => {
+  const allergens = {
+    gluten: { kinds: ["wheat", "barley"] },
+    nuts: { kinds: ["almonds"] },
+    eggs: {},
+  };
+  const result = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, allergens }, "en"),
+  );
+  expect(result.allergens).toEqual({
+    gluten: { kinds: ["wheat", "barley"] },
+    nuts: { kinds: ["almonds"] },
+    eggs: {},
+  });
+  const [stored] = await fx.db
+    .select({ allergens: products.allergens, manualAllergens: products.manualAllergens })
+    .from(products)
+    .where(eq(products.id, result.id));
+  expect(stored).toEqual({
+    allergens: { gluten: { kinds: ["barley", "wheat"] }, nuts: { kinds: ["almonds"] }, eggs: {} },
+    manualAllergens: allergens,
+  });
+});
+
 /** `tx`, counting the `select … from content_languages` queries built on it. */
 function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
   let reads = 0;
@@ -378,7 +402,7 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, input, "en"),
   );
-  const staleRecipe = { allergens: { milk: { presence: "contains" } }, source: "old" };
+  const staleRecipe = { allergens: { milk: {} }, source: "old" };
   const staleDiet = { origins: ["dairy"], pending: false };
   await withTransaction(fx.db, async (tx) => {
     // Through the table on both sides: a `json()` column stores JSON TEXT, so the write needs the
@@ -559,7 +583,7 @@ it("names the missing language, and nothing else, when a customer name skips the
 
 it.each([
   [{ allergens: { peanut: { presence: "contains" } } }, "allergen.invalid_code"],
-  [{ allergens: { milk: { presence: "traces" } } }, "allergen.invalid_presence"],
+  [{ allergens: { milk: { kinds: ["wheat"] } } }, "allergen.invalid_kind"],
   [{ dietaryDeclarations: ["carnivore"] }, "diet.declaration_invalid"],
 ])("refuses nutrition input without naming any field (%#)", async (patch, code) => {
   const { code: thrown, params } = await refusal({ ...input, ...patch });
@@ -606,7 +630,7 @@ describe("a variant's own page", () => {
           active: true,
           unitId: kg.id,
           primaryCategoryId: parentCategory.id,
-          allergens: { milk: { presence: "contains" } },
+          allergens: { milk: {} },
           variants: [
             {
               name: "Small",
@@ -686,7 +710,7 @@ describe("a variant's own page", () => {
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
         courseId: routing.courseId,
-        allergens: { milk: { presence: "contains" } },
+        allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
       },
     });
@@ -702,12 +726,12 @@ describe("a variant's own page", () => {
   });
 
   it("offers the parent's PUBLISHED allergens as inherited, never only its manual overlay", async () => {
-    const eggs = { eggs: { presence: "contains" as const } };
+    const eggs = { eggs: {} };
     await withTransaction(fx.db, (tx) =>
       applyRecipeDerivation(tx, parentId, { allergens: eggs, pending: false }),
     );
     const union = await read(variantId);
-    expect(union.inherited?.allergens).toEqual({ milk: { presence: "contains" }, ...eggs });
+    expect(union.inherited?.allergens).toEqual({ milk: {}, ...eggs });
     expect(union.allergens).toBeNull();
 
     await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { allergens: null }));
@@ -735,13 +759,13 @@ describe("a variant's own page", () => {
       ...value,
       unitPrice: "2.50",
       vatClass: "general",
-      allergens: { eggs: { presence: "may_contain" } },
+      allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
     });
     expect(overridden).toMatchObject({
       unitPrice: "2.50",
       vatClass: "general",
-      allergens: { eggs: { presence: "may_contain" } },
+      allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
     });

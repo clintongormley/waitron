@@ -3,16 +3,8 @@
 // unreviewed ingredient makes the whole product PENDING. Each step's published `products.allergens`
 // is checked, and a mismatch throws.
 //
-// The story (design D4 — floor ∪ manual, add-only, with PENDING contagion):
-//   3. setProductRecipe(bocadillo, [alioli, pan])            → {eggs, gluten}         (inherited floor)
-//   4. updateProduct(bocadillo, { may_contain nuts })        → {eggs, gluten, nuts}   (floor ∪ manual)
-//   5. setProductRecipe(bocadillo, [alioli, pan, misterio])  → null                   (PENDING contagion)
-//   6. updateIngredient(misterio, { contains fish })         → not null, republished  (propagation)
-//
-// `apps/*` is out of the english-only guard's scope, so the Spanish names (alioli, pan, misterio,
-// bocadillo) are fine here.
-//
 // Run it: pnpm --filter @waitron/server demo:recipes
+import { deepStrictEqual } from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,24 +30,15 @@ function format(a: ProductAllergens | null): string {
   if (a === null) return "PENDING (null)";
   const parts = Object.entries(a)
     .sort(([x], [y]) => x.localeCompare(y))
-    .map(([code, d]) => `${code}: ${d.presence}${d.source === undefined ? "" : ` (${d.source})`}`);
+    .map(([code, d]) => `${code}${d.kinds === undefined ? "" : ` (${d.kinds.join(", ")})`}`);
   return `{ ${parts.join(", ")} }`;
 }
 
-function codes(a: ProductAllergens | null): string[] {
-  return a === null ? ["<pending>"] : Object.keys(a).sort((x, y) => x.localeCompare(y));
-}
-
-function expect(actual: ProductAllergens | null, expected: string[]): void {
+function expect(actual: ProductAllergens | null, expected: ProductAllergens | null): void {
   console.log(`  products.allergens = ${format(actual)}`);
-  console.log(`  expected codes     = { ${expected.join(", ")} }`);
-  const got = codes(actual);
-  const want = [...expected].sort((x, y) => x.localeCompare(y));
-  const ok = got.length === want.length && got.every((c, i) => c === want[i]);
-  console.log(`  ${ok ? "OK" : "MISMATCH"}`);
-  if (!ok) {
-    throw new Error(`recipes-demo: expected { ${want.join(", ")} }, got { ${got.join(", ")} }`);
-  }
+  console.log(`  expected           = ${format(expected)}`);
+  deepStrictEqual(actual, expected);
+  console.log("  OK");
 }
 
 async function main(): Promise<void> {
@@ -71,11 +54,11 @@ async function main(): Promise<void> {
       // Step 1 — two reviewed ingredients and one unreviewed, which makes the product PENDING in step 5.
       const alioli = await createIngredient(tx, {
         name: "alioli",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       const pan = await createIngredient(tx, {
         name: "pan",
-        allergens: { gluten: { presence: "contains", source: "wheat" } },
+        allergens: { gluten: { kinds: ["wheat"] } },
       });
       const misterio = await createIngredient(tx, { name: "misterio" }); // allergens omitted → null
 
@@ -102,17 +85,21 @@ async function main(): Promise<void> {
       // Step 3 — a recipe of the two reviewed ingredients: the derived floor.
       console.log("Step 3 — setProductRecipe(bocadillo, [alioli, pan])  → inherited floor");
       await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id]);
-      expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten"]);
+      expect(await readPublished(tx, bocadillo.id), { eggs: {}, gluten: { kinds: ["wheat"] } });
       console.log("");
 
       // Step 4 — a manual declaration unions with the derived floor; it never subtracts.
       console.log(
-        'Step 4 — updateProduct(bocadillo, { allergens: "may_contain nuts (shared slicer)" })',
+        'Step 4 — updateProduct(bocadillo, { allergens: "nuts (almonds) (shared slicer)" })',
       );
       await updateProduct(tx, bocadillo.id, {
-        allergens: { nuts: { presence: "may_contain", source: "shared slicer" } },
+        allergens: { nuts: { kinds: ["almonds"] } },
       });
-      expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten", "nuts"]);
+      expect(await readPublished(tx, bocadillo.id), {
+        eggs: {},
+        gluten: { kinds: ["wheat"] },
+        nuts: { kinds: ["almonds"] },
+      });
       console.log("");
 
       // Step 5 — one unreviewed ingredient makes the product PENDING; the manual `nuts` does not
@@ -121,17 +108,20 @@ async function main(): Promise<void> {
         "Step 5 — setProductRecipe(bocadillo, [alioli, pan, misterio])  → PENDING contagion",
       );
       await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id, misterio.id]);
-      expect(await readPublished(tx, bocadillo.id), ["<pending>"]);
+      expect(await readPublished(tx, bocadillo.id), null);
       console.log("");
 
       // Step 6 — reviewing the ingredient republishes every product whose recipe uses it.
-      console.log(
-        "Step 6 — updateIngredient(misterio, { allergens: { contains fish } })  → propagation",
-      );
+      console.log("Step 6 — updateIngredient(misterio, { allergens: { fish } })  → propagation");
       await updateIngredient(tx, misterio.id, {
-        allergens: { fish: { presence: "contains" } },
+        allergens: { fish: {} },
       });
-      expect(await readPublished(tx, bocadillo.id), ["eggs", "fish", "gluten", "nuts"]);
+      expect(await readPublished(tx, bocadillo.id), {
+        eggs: {},
+        fish: {},
+        gluten: { kinds: ["wheat"] },
+        nuts: { kinds: ["almonds"] },
+      });
       console.log("");
 
       console.log(

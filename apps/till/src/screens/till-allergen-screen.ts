@@ -7,7 +7,7 @@ import { baseStyles } from "@waitron/ui";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { catalogues } from "../i18n/strings.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { allergenName, allergenLabel } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { screenCardStyles } from "../widgets/screen-card-styles.js";
 import { customerProductName, productName } from "../widgets/product-name.js";
@@ -39,9 +39,9 @@ export const ALLERGEN_DISPLAY_ORDER: readonly AllergenCode[] = [
   "molluscs",
 ] as const;
 
-type AllergenPresence = NonNullable<TillProduct["allergens"]>[string];
+type AllergenEntry = NonNullable<TillProduct["allergens"]>[string];
 
-type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "print" | "close";
+type Chrome = "title" | "notice" | "pending" | "contains" | "print" | "close";
 
 /**
  * The ALLERGEN SCREEN: a product × allergen matrix, a per-product detail dialog and a print path.
@@ -149,10 +149,6 @@ export class TillAllergenScreen extends LitElement {
         color: var(--wt-color-danger);
       }
 
-      .cell.may-contain .marker {
-        color: var(--wt-color-text-muted);
-      }
-
       .detail-list {
         margin: 0;
         padding: 0;
@@ -171,10 +167,6 @@ export class TillAllergenScreen extends LitElement {
       .detail-presence {
         flex-shrink: 0;
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .detail-item.may-contain .detail-presence {
-        color: var(--wt-color-text-muted);
       }
 
       .detail-pending,
@@ -244,14 +236,12 @@ export class TillAllergenScreen extends LitElement {
     }
   }
 
-  #cell(code: string, entry: AllergenPresence | undefined) {
+  #cell(code: string, entry: AllergenEntry | undefined) {
     if (!entry) {
       return html`<td class="cell" data-code=${code}></td>`;
     }
-    const contains = entry.presence === "contains";
-    const label = contains ? this.#t("contains") : this.#t("may_contain");
-    return html`<td class="cell ${contains ? "contains" : "may-contain"}" data-code=${code}>
-      <span class="marker" role="img" aria-label=${label}>${contains ? "●" : "○"}</span>
+    return html`<td class="cell contains" data-code=${code}>
+      <span class="marker" role="img" aria-label=${this.#t("contains")}>●</span>
     </td>`;
   }
 
@@ -277,14 +267,10 @@ export class TillAllergenScreen extends LitElement {
     </tr>`;
   }
 
-  #detailItem(code: string, entry: AllergenPresence) {
-    const contains = entry.presence === "contains";
-    const label = contains ? this.#t("contains") : this.#t("may_contain");
-    const name = allergenName(code, this.#activeLocale());
-    const text = entry.source ? `${name} (${entry.source})` : name;
-    return html`<li class="detail-item ${contains ? "contains" : "may-contain"}">
-      <span class="detail-presence">${label}</span>
-      <span class="detail-name">${text}</span>
+  #detailItem(code: string, entry: AllergenEntry) {
+    return html`<li class="detail-item contains">
+      <span class="detail-presence">${this.#t("contains")}</span>
+      <span class="detail-name">${allergenLabel(code, entry, this.#activeLocale())}</span>
     </li>`;
   }
 

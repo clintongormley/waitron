@@ -48,13 +48,13 @@ import { plantStoredUnit, seedVenue } from "../test/fixtures.js";
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-const PARENT_ALLERGENS = { sulphites: { presence: "contains" as const } };
+const PARENT_ALLERGENS = { sulphites: {} };
 const PARENT_DIET_DERIVATION = { origins: ["plant"], pending: false };
 const PARENT_RECIPE_DERIVATION = { allergens: PARENT_ALLERGENS, pending: false };
 // 175 ml's own value for every inherited field, each different from the parent's, so a read that
 // takes the parent's where the variant has its own fails.
-const W175_PUBLISHED_ALLERGENS = { milk: { presence: "contains" as const } };
-const W175_MANUAL_ALLERGENS = { eggs: { presence: "may_contain" as const } };
+const W175_PUBLISHED_ALLERGENS = { milk: {} };
+const W175_MANUAL_ALLERGENS = { eggs: {} };
 const W175_RECIPE_DERIVATION = { allergens: W175_MANUAL_ALLERGENS, pending: true };
 const W175_DIET_DERIVATION = { origins: ["dairy"], pending: true };
 const W175_DIET_OVERRIDE = { vegetarian: "yes" as const };

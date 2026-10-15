@@ -10,7 +10,7 @@ import type { CategorySummary, ProductEditorValue } from "../api/client.js";
 import type { ModifierListChoice, UnitChoice } from "./product-editor-model.js";
 import { modifierListName, modifierListNames } from "./product-editor-model.js";
 import { priceText } from "./form-fields.js";
-import { allergenName, vatClassName } from "../i18n/domain.js";
+import { allergenLabel, vatClassName } from "../i18n/domain.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-product-details")
@@ -143,7 +143,7 @@ export class ProductDetails extends LitElement {
           ? null
           : Object.keys(allergens).length
             ? html`<ul>
-                ${Object.entries(allergens).map(([code, declaration]) => html`<li>${allergenName(code)} · ${t(declaration.presence === "contains" ? "allergen.contains" : "allergen.may_contain")}</li>`)}
+                ${Object.entries(allergens).map(([code, declaration]) => html`<li>${allergenLabel(code, declaration)} · ${t("allergen.contains")}</li>`)}
               </ul>`
             : t("editor.allergens_none"),
       )}

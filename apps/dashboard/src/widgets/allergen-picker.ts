@@ -1,34 +1,20 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
 import { searchBy } from "@waitron/shared";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
-import { allergenName } from "../i18n/domain.js";
-import type { AllergenDeclaration, AllergenPresence } from "../api/client.js";
-
-const ALLERGEN_DISPLAY_ORDER = [
-  "gluten",
-  "crustaceans",
-  "eggs",
-  "fish",
-  "peanuts",
-  "soybeans",
-  "milk",
-  "nuts",
-  "celery",
-  "mustard",
-  "sesame",
-  "sulphites",
-  "lupin",
-  "molluscs",
-] as const;
+import {
+  ALLERGEN_CHOICES,
+  allergenChoices,
+  allergensFromChoices,
+  allergenChoiceName,
+} from "./allergen-choices.js";
+import type { AllergenDeclaration } from "../api/client.js";
 
 /** Review is explicit: null is unreviewed, while {} is reviewed with none declared. */
 @customElement("dashboard-allergen-picker")
@@ -55,12 +41,6 @@ export class AllergenPicker extends LitElement {
         flex: 1;
         font-size: var(--wt-font-size-sm);
       }
-      /* One width for every row, with room to spare for "Puede contener", the longest choice in either
-         language. */
-      .row wt-combobox {
-        flex: none;
-        width: calc(var(--wt-space-6) * 5 + var(--wt-space-4));
-      }
       .reviewed,
       .grid {
         margin-bottom: var(--wt-space-4);
@@ -70,7 +50,7 @@ export class AllergenPicker extends LitElement {
 
   @property({ attribute: false }) declaration: AllergenDeclaration = null;
   @state() private reviewed = false;
-  @state() private entries: Record<string, { presence: AllergenPresence }> = {};
+  @state() private choices: string[] = [];
   @state() private picking = false;
   @state() private search = "";
   private pickerGeneration = 0;
@@ -78,24 +58,14 @@ export class AllergenPicker extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("declaration")) return;
     this.reviewed = this.declaration !== null;
-    this.entries = Object.fromEntries(
-      Object.entries(this.declaration ?? {}).map(([code, entry]) => [
-        code,
-        { presence: entry.presence },
-      ]),
-    );
+    this.choices = allergenChoices(this.declaration);
     this.picking = false;
     this.search = "";
   }
 
   get value(): AllergenDeclaration {
     if (!this.reviewed) return null;
-    return Object.fromEntries(
-      ALLERGEN_DISPLAY_ORDER.filter((code) => this.entries[code]).map((code) => [
-        code,
-        { presence: this.entries[code]!.presence },
-      ]),
-    );
+    return allergensFromChoices(this.choices);
   }
 
   #emit(): void {
@@ -114,20 +84,10 @@ export class AllergenPicker extends LitElement {
     this.#emit();
   }
 
-  #onPresence(event: CustomEvent<{ value: string }>, code: string): void {
-    event.stopPropagation();
-    if (!this.reviewed) return;
-    const presence = event.detail.value as AllergenPresence;
-    this.entries = { ...this.entries, [code]: { presence } };
-    this.#emit();
-  }
-
   #remove(event: Event, code: string): void {
     event.stopPropagation();
     if (!this.reviewed) return;
-    const entries = { ...this.entries };
-    delete entries[code];
-    this.entries = entries;
+    this.choices = this.choices.filter((choice) => choice !== code);
     this.#emit();
   }
 
@@ -156,17 +116,17 @@ export class AllergenPicker extends LitElement {
 
   #add(event: Event, code: string): void {
     event.stopPropagation();
-    if (!this.reviewed || this.entries[code]) return;
-    this.entries = { ...this.entries, [code]: { presence: "contains" } };
+    if (!this.reviewed || this.choices.includes(code)) return;
+    this.choices = [...this.choices, code];
     this.#emit();
     this.#closePicker(event);
   }
 
   override render() {
     const generation = this.pickerGeneration;
-    const selected = ALLERGEN_DISPLAY_ORDER.filter((code) => this.entries[code]);
-    const unchosen = ALLERGEN_DISPLAY_ORDER.filter((code) => !this.entries[code]);
-    const choices = searchBy(this.search, unchosen, (code) => allergenName(code));
+    const selected = ALLERGEN_CHOICES.filter((choice) => this.choices.includes(choice));
+    const unchosen = ALLERGEN_CHOICES.filter((choice) => !this.choices.includes(choice));
+    const choices = searchBy(this.search, unchosen, (code) => allergenChoiceName(code));
     return html`
       <wt-switch
         class="reviewed"
@@ -179,28 +139,12 @@ export class AllergenPicker extends LitElement {
       <div class="grid">
         ${selected.map(
           (code) => html`
-            <div class="row" role="group" aria-label=${allergenName(code)}>
-              <span class="name" id=${`name-${code}`}>${allergenName(code)}</span>
-              <wt-combobox
-                name=${`allergen-${code}-presence`}
-                data-test=${`presence-${code}`}
-                label=${allergenName(code)}
-                hide-label
-                search="auto"
-                searchPlaceholder=${t("categories.combobox_search")}
-                noResultsLabel=${t("categories.combobox_no_results")}
-                .options=${[
-                  { value: "contains", label: t("allergen.contains") },
-                  { value: "may_contain", label: t("allergen.may_contain") },
-                ]}
-                .value=${live(this.entries[code]!.presence)}
-                ?disabled=${!this.reviewed}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onPresence(event, code)}
-              ></wt-combobox>
+            <div class="row" role="group" aria-label=${allergenChoiceName(code)}>
+              <span class="name" id=${`name-${code}`}>${allergenChoiceName(code)}</span>
               <wt-button
                 variant="secondary"
                 data-test=${`remove-${code}`}
-                aria-label=${`${t("action.remove")}: ${allergenName(code)}`}
+                aria-label=${`${t("action.remove")}: ${allergenChoiceName(code)}`}
                 ?disabled=${!this.reviewed}
                 @click=${(event: Event) => this.#remove(event, code)}
               >
@@ -213,7 +157,7 @@ export class AllergenPicker extends LitElement {
       <wt-button
         variant="secondary"
         data-test="add-allergen"
-        ?disabled=${!this.reviewed || selected.length === ALLERGEN_DISPLAY_ORDER.length}
+        ?disabled=${!this.reviewed || selected.length === ALLERGEN_CHOICES.length}
         @click=${(event: Event) => {
           event.stopPropagation();
           if (!this.reviewed) return;
@@ -253,7 +197,7 @@ export class AllergenPicker extends LitElement {
                           variant="secondary"
                           data-test=${`choose-${code}`}
                           @click=${(event: Event) => this.#add(event, code)}
-                          >${allergenName(code)}</wt-button
+                          >${allergenChoiceName(code)}</wt-button
                         >
                       `,
                     )}

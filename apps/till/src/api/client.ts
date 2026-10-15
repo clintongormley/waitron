@@ -1,3 +1,4 @@
+import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { readTransferEvents } from "./transfer-events.js";
 import type { ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
@@ -308,7 +309,7 @@ export interface TillProduct {
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
   /** EU-14 allergen declaration keyed by allergen code; null = not reviewed. */
-  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  allergens: ProductAllergens | null;
   /** The product's DEFAULT kitchen course, which the per-line course picker pre-selects; absent or null
    * means no default course. */
   courseId?: string | null;
@@ -1242,7 +1243,7 @@ export interface QueueModifier {
   descriptions: Record<string, string>;
   /** The extra's OWN allergens, shown beside the dish's own — never folded. Absent/null when it
    *  declares none. */
-  addAllergens?: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  addAllergens?: ProductAllergens | null;
   /** The extra's OWN positive dietary suitability, shown beside the dish's own. Absent/empty when it
    *  declares none. */
   suitableFor?: string[] | null;
@@ -1264,7 +1265,7 @@ export interface QueueCrossRef {
  * never a fiscal value.
  */
 export interface AsServedAllergens {
-  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+  allergens: ProductAllergens;
   pending: boolean;
 }
 

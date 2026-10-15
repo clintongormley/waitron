@@ -63,6 +63,30 @@ afterEach(() => vi.restoreAllMocks());
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const build = async (menuId: string) => (await app((tx) => buildMenuDocument(tx, menuId))).document;
 
+it("freezes different allergen sets for a dish, its variant and its extra, retaining kinds", async () => {
+  const f = await menusFixture(fx.db);
+  await app(async (tx) => {
+    await updateProduct(tx, f.lemonade, {
+      allergens: { gluten: { kinds: ["wheat", "oats"] }, milk: {} },
+    });
+    await updateProduct(tx, f.large, { allergens: { nuts: { kinds: ["walnuts"] } } });
+    await updateProduct(tx, f.extraLemon, {
+      allergens: { gluten: { kinds: ["barley"] }, sesame: {} },
+    });
+  });
+  const document = await build(f.dinner);
+  const offer = document.offers[await app((tx) => offerOf(tx, f.dinner, f.lemonade))]!;
+  expect(offer.allergens).toEqual({ gluten: { kinds: ["oats", "wheat"] }, milk: {} });
+  expect(offer.variants.find((variant) => variant.id === f.large)!.allergens).toEqual({
+    nuts: { kinds: ["walnuts"] },
+  });
+  const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
+  expect(extras.items.find((extra) => extra.productId === f.extraLemon)!.addAllergens).toEqual({
+    gluten: { kinds: ["barley"] },
+    sesame: {},
+  });
+});
+
 /** The same value with every object's keys in reverse order, all the way down. */
 function reversedKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(reversedKeys);
@@ -532,8 +556,7 @@ describe("menuDocumentHash", () => {
     ],
     [
       "the dish's allergens",
-      (tx, f) =>
-        updateProduct(tx, f.lemonade, { allergens: { sulphites: { presence: "contains" } } }),
+      (tx, f) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }),
     ],
     [
       "the dish's diet",
@@ -544,7 +567,7 @@ describe("menuDocumentHash", () => {
     ["the variant's image", (tx, f) => updateProduct(tx, f.large, { image: "huge.jpg" })],
     [
       "the variant's allergens",
-      (tx, f) => updateProduct(tx, f.large, { allergens: { sulphites: { presence: "contains" } } }),
+      (tx, f) => updateProduct(tx, f.large, { allergens: { sulphites: {} } }),
     ],
     [
       "the variant's diet",
@@ -570,8 +593,7 @@ describe("menuDocumentHash", () => {
     ],
     [
       "the extra's allergens",
-      (tx, f) =>
-        updateProduct(tx, f.extraLemon, { allergens: { sulphites: { presence: "contains" } } }),
+      (tx, f) => updateProduct(tx, f.extraLemon, { allergens: { sulphites: {} } }),
     ],
     [
       "the extra's diet",
@@ -1074,7 +1096,7 @@ describe("diffMenuDocuments", () => {
     });
     const live = await build(f.lunch);
     await app(async (tx) => {
-      await updateProduct(tx, f.extraLemon, { allergens: { sulphites: { presence: "contains" } } });
+      await updateProduct(tx, f.extraLemon, { allergens: { sulphites: {} } });
       await tx.insert(extraListItems).values({ listId: f.extrasList, productId: f.lager, sort: 1 });
     });
     expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
@@ -1319,7 +1341,7 @@ describe("diffMenuDocuments", () => {
         customerName: { en: "Cloudy lemonade" },
         description: { en: "Freshly squeezed" },
         image: "cloudy.jpg",
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         dietOverride: { vegan: "yes" },
       });
       await setMenuVariants(tx, await offerOf(tx, f.dinner, f.lemonade), [
@@ -1415,7 +1437,7 @@ describe("diffMenuDocuments", () => {
       updateProduct(tx, f.large, {
         name: "Huge",
         image: "huge.jpg",
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         dietOverride: { vegan: "no" },
       }),
     );
@@ -1435,7 +1457,7 @@ describe("diffMenuDocuments", () => {
     const live = await build(f.dinner);
     await app(async (tx) => {
       await updateProduct(tx, f.extraLemon, {
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         dietaryDeclarations: ["vegan"],
       });
       await tx

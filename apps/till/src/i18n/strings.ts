@@ -584,7 +584,6 @@ export const en = {
   "allergens.notice": "Allergen information is available — please ask staff.",
   "allergens.pending": "Allergen info pending",
   "allergens.contains": "Contains",
-  "allergens.may_contain": "May contain",
   "allergens.print": "Print",
   "allergens.close": "Close",
   // `not_reviewed` must read as "review pending": `widgets/basket.test.ts` pins /review|pendiente/i.
@@ -1960,7 +1959,6 @@ export const es: Record<StringKey, string> = {
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",
   "allergens.pending": "Información de alérgenos pendiente",
   "allergens.contains": "Contiene",
-  "allergens.may_contain": "Puede contener",
   "allergens.print": "Imprimir",
   "allergens.close": "Cerrar",
   "allergens.as_served": "Tal como se sirve",

@@ -26,8 +26,8 @@ const products: TillProduct[] = [
     vatClass: "reduced",
     category: null,
     allergens: {
-      gluten: { presence: "contains", source: "wheat" },
-      milk: { presence: "may_contain" },
+      gluten: { kinds: ["wheat" as const] },
+      milk: {},
     },
     // A published diet so the detail dialog's diet badges are under axe too.
     diet: { vegan: "no", vegetarian: "yes", contains: ["meat"] },

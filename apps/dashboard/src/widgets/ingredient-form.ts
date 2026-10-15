@@ -9,6 +9,7 @@ import {
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { sameValue } from "./product-editor-model.js";
+import { allergensForComparison } from "./allergen-choices.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -17,7 +18,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "./allergen-picker.js";
 import "./dietary-origin-picker.js";
 import { t } from "../i18n/t.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
+import { codeMessage, codeOf, allergenRefusalText } from "../i18n/codes.js";
 import type {
   AllergenDeclaration,
   DietaryOrigin,
@@ -39,12 +40,14 @@ export interface UpdateIngredientDetail {
 }
 
 /** `name` marks the name field; `_form` is shown in the bottom message alone. */
-export type IngredientFormErrors = Partial<Record<"name" | "_form", string>>;
+export type IngredientFormErrors = Partial<Record<"name" | "allergens" | "_form", string>>;
 
 /** A refused ingredient write, keyed by this form's fields. */
 export function ingredientRefusalErrors(error: unknown): IngredientFormErrors {
   const code = codeOf(error);
   const params = (error as { params?: { field?: unknown } }).params ?? {};
+  if (code === "allergen.kinds_required" || code === "allergen.invalid_kind")
+    return { allergens: allergenRefusalText(error) };
   if (code === "management.request_invalid" && params.field === "name")
     return { name: codeMessage(code) };
   return { _form: codeMessage(code) };
@@ -57,6 +60,9 @@ export class IngredientForm extends LitElement {
     css`
       :host {
         display: block;
+      }
+      .field-error {
+        color: var(--wt-color-danger);
       }
       .field {
         display: block;
@@ -169,7 +175,11 @@ export class IngredientForm extends LitElement {
         id: this,
         current: () => this.#current(),
         snapshot: (value) => structuredClone(value),
-        equal: sameValue,
+        equal: (a, b) =>
+          sameValue(
+            { ...a, allergens: allergensForComparison(a.allergens ?? null) },
+            { ...b, allergens: allergensForComparison(b.allergens ?? null) },
+          ),
         restore: (value) => this.#restore(value),
       });
       this.#leave = coordinator;
@@ -202,6 +212,7 @@ export class IngredientForm extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy) return;
     this.allergens = event.detail.value;
+    this.dismissed = new Set([...this.dismissed, "allergens"]);
     this.#scope?.changed();
   }
 
@@ -268,7 +279,10 @@ export class IngredientForm extends LitElement {
     const invalidName = this.attempted ? this.#nameError() : "";
     const saveAction = saveActionState(this.#scope);
     const nameError = invalidName || this.#refused("name");
-    const bottom = [this.#refused("_form"), nameError === "" ? "" : t("form.fix_fields")]
+    const bottom = [
+      this.#refused("_form"),
+      nameError === "" && !this.#refused("allergens") ? "" : t("form.fix_fields"),
+    ]
       .filter((message) => message !== "")
       .join(" ");
     return html`
@@ -311,10 +325,12 @@ export class IngredientForm extends LitElement {
         ></dashboard-dietary-origin-picker>
         <dashboard-allergen-picker
           data-test="allergens"
+          aria-describedby="allergen-error"
           .declaration=${this.seedAllergens}
           @wt-allergens-change=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
             this.#onAllergensChanged(e)}
         ></dashboard-allergen-picker>
+        ${this.#refused("allergens") ? html`<p id="allergen-error" data-test="allergen-error" class="field-error" role="alert">${this.#refused("allergens")}</p>` : nothing}
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             variant=${saveAction.variant}

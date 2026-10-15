@@ -763,11 +763,11 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "1.20",
         vatClass: "general",
-        allergens: { gluten: { presence: "contains", source: "wheat" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
       });
-      expect(p.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
+      expect(p.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
       const [listed] = await listProducts(tx, cat.id);
-      expect(listed!.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
+      expect(listed!.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
     });
   });
 
@@ -813,7 +813,7 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
       });
       // An invalid code on update is rejected before the write.
       await expect(
@@ -822,9 +822,9 @@ describe("catalogue operations", () => {
         }),
       ).rejects.toMatchObject({ code: "allergen.invalid_code" });
       // A valid update is written back.
-      await updateProduct(tx, p.id, { allergens: { milk: { presence: "may_contain" } } });
+      await updateProduct(tx, p.id, { allergens: { milk: {} } });
       const [afterSet] = await listProducts(tx, cat.id);
-      expect(afterSet!.allergens).toEqual({ milk: { presence: "may_contain" } });
+      expect(afterSet!.allergens).toEqual({ milk: {} });
       // `null` clears the declaration back to unreviewed.
       await updateProduct(tx, p.id, { allergens: null });
       const [afterClear] = await listProducts(tx, cat.id);
@@ -842,11 +842,11 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
-        allergens: { milk: { presence: "contains" } },
+        allergens: { milk: {} },
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = (await listAvailableProducts(tx, locationId)).products;
-      expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
+      expect(available!.allergens).toEqual({ milk: {} });
     });
   });
 
@@ -883,11 +883,11 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       return p;
     });
-    expect(result.allergens).toEqual({ gluten: { presence: "contains" } });
+    expect(result.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
   });
 
   // applyRecipeDerivation unions the floor over the manual overlay (add-only).
@@ -901,16 +901,16 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
-        allergens: { nuts: { presence: "may_contain" } },
+        allergens: { nuts: { kinds: ["almonds" as const] } },
       });
       await applyRecipeDerivation(tx, p.id, {
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
         pending: false,
       });
       const [row] = await listProducts(tx, cat.id);
       return row!.allergens;
     });
-    expect(seen).toEqual({ eggs: { presence: "contains" }, nuts: { presence: "may_contain" } });
+    expect(seen).toEqual({ eggs: {}, nuts: { kinds: ["almonds" as const] } });
   });
 
   // The read exposes the MANUAL overlay distinctly from the published union, so a later dashboard
@@ -925,21 +925,21 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "3.00",
         vatClass: "general",
-        allergens: { gluten: { presence: "contains" } }, // → manual_allergens
+        allergens: { gluten: { kinds: ["wheat" as const] } }, // → manual_allergens
       });
       // A recipe contributes a derived floor of eggs; published becomes eggs ∪ gluten.
       await applyRecipeDerivation(tx, p.id, {
-        allergens: { eggs: { presence: "contains" } },
+        allergens: { eggs: {} },
         pending: false,
       });
       const [row] = await listProducts(tx, cat.id);
       return row!;
     });
     expect(seen.allergens).toEqual({
-      eggs: { presence: "contains" },
-      gluten: { presence: "contains" },
+      eggs: {},
+      gluten: { kinds: ["wheat" as const] },
     });
-    expect(seen.manualAllergens).toEqual({ gluten: { presence: "contains" } });
+    expect(seen.manualAllergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
   });
 
   // The management read exposes the staff diet OVERRIDE distinctly from the published `diet`, so
@@ -982,7 +982,7 @@ describe("catalogue operations", () => {
         unitId: eachUnitId,
         unitPrice: "1.00",
         vatClass: "general",
-        allergens: { nuts: { presence: "contains" } },
+        allergens: { nuts: { kinds: ["almonds" as const] } },
       });
       await applyRecipeDerivation(tx, p.id, { allergens: {}, pending: true });
       const [row] = await listProducts(tx, cat.id);
@@ -997,7 +997,7 @@ describe("catalogue operations", () => {
       const cat = await createCatalogue(tx, { name: "C" });
       const missing = "00000000-0000-0000-0000-0000000000ff";
       await expect(
-        updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
+        updateProduct(tx, missing, { allergens: { eggs: {} } }),
       ).resolves.toBeUndefined();
       // No row was created or altered: the catalogue stays empty.
       expect(await listProducts(tx, cat.id)).toEqual([]);
@@ -1141,14 +1141,14 @@ describe("catalogue operations", () => {
       // reviewed all-plant recipe derivation → derived is vegan
       await applyDietDerivation(tx, p.id, { origins: ["plant"], pending: false });
       await updateProduct(tx, p.id, {
-        allergens: { milk: { presence: "contains" } },
+        allergens: { milk: {} },
         dietOverride: { vegan: "no" },
       });
       const [product] = await listProducts(tx, cat.id);
       const [diet] = await readDiet(tx, p.id);
       return { allergens: product!.allergens, diet: diet! };
     });
-    expect(result.allergens).toEqual({ milk: { presence: "contains" } });
+    expect(result.allergens).toEqual({ milk: {} });
     expect(result.diet.override).toEqual({ vegan: "no" });
     // override wins for vegan; vegetarian still follows the all-plant derivation.
     expect(result.diet.diet).toMatchObject({ vegan: "no", vegetarian: "yes" });
@@ -1930,8 +1930,8 @@ describe("a variant's published allergens and diet", () => {
   // The parent's four overlays each carry a value a variant's own could never produce by accident:
   // its manual map (nuts) and its recipe floor (eggs) are different allergens, and its diet
   // override (halal) and derivation (dairy) set different parts of the profile.
-  const PARENT_MANUAL = { nuts: { presence: "may_contain" as const } };
-  const PARENT_RECIPE = { allergens: { eggs: { presence: "contains" as const } }, pending: false };
+  const PARENT_MANUAL = { nuts: { kinds: ["almonds" as const] } };
+  const PARENT_RECIPE = { allergens: { eggs: {} }, pending: false };
   const PARENT_DIET_DERIVATION = { origins: ["plant" as const, "dairy" as const], pending: false };
   const PARENT_DIET_OVERRIDE = { halal: "yes" as const };
   let parentId: string;
@@ -2003,17 +2003,15 @@ describe("a variant's published allergens and diet", () => {
       effectiveDiet: parent.diet,
     });
     expect(parent.allergens).toEqual({
-      eggs: { presence: "contains" },
-      nuts: { presence: "may_contain" },
+      eggs: {},
+      nuts: { kinds: ["almonds" as const] },
     });
   });
 
   it("unions a variant's own manual allergens with its PARENT's recipe floor", async () => {
-    await run((tx) =>
-      updateProduct(tx, variantId, { allergens: { milk: { presence: "contains" } } }),
-    );
+    await run((tx) => updateProduct(tx, variantId, { allergens: { milk: {} } }));
     expect(await published(variantId)).toMatchObject({
-      allergens: { eggs: { presence: "contains" }, milk: { presence: "contains" } },
+      allergens: { eggs: {}, milk: {} },
       diet: null,
     });
   });
@@ -2033,17 +2031,17 @@ describe("a variant's published allergens and diet", () => {
   it("republishes each variant with an override of its own when its parent's recipe changes", async () => {
     await run(async (tx) => {
       await updateProduct(tx, variantId, {
-        allergens: { milk: { presence: "contains" } },
+        allergens: { milk: {} },
         dietOverride: { kosher: "yes" },
       });
       await applyRecipeDerivation(tx, parentId, {
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
         pending: false,
       });
       await applyDietDerivation(tx, parentId, { origins: ["plant"], pending: false });
     });
     expect(await published(variantId)).toMatchObject({
-      allergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] }, milk: {} },
       diet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
     });
     // A variant with nothing of its own is left blank, still reading the parent's.
@@ -2058,20 +2056,20 @@ describe("a variant's published allergens and diet", () => {
 
   it("republishes a variant with only its own allergens, or only its own diet override, on the column it overrides", async () => {
     await run(async (tx) => {
-      await updateProduct(tx, variantId, { allergens: { milk: { presence: "contains" } } });
+      await updateProduct(tx, variantId, { allergens: { milk: {} } });
       await updateProduct(tx, bareVariantId, { dietOverride: { kosher: "yes" } });
-      await updateProduct(tx, parentId, { allergens: { sesame: { presence: "contains" } } });
+      await updateProduct(tx, parentId, { allergens: { sesame: {} } });
       await applyRecipeDerivation(tx, parentId, {
-        allergens: { gluten: { presence: "contains" } },
+        allergens: { gluten: { kinds: ["wheat" as const] } },
         pending: false,
       });
       await applyDietDerivation(tx, parentId, { origins: ["plant"], pending: false });
     });
     const parent = await published(parentId);
     expect(await published(variantId)).toEqual({
-      allergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat" as const] }, milk: {} },
       diet: null,
-      effectiveAllergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      effectiveAllergens: { gluten: { kinds: ["wheat" as const] }, milk: {} },
       effectiveDiet: parent.diet,
     });
     expect(await published(bareVariantId)).toEqual({

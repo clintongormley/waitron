@@ -1,3 +1,4 @@
+import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { type TemplateResult, css, html, nothing } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -21,7 +22,7 @@ function dietBadge(key: string, label: string): TemplateResult {
  */
 export function extraNutrition(
   extra: {
-    addAllergens?: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+    addAllergens?: ProductAllergens | null;
     suitableFor?: readonly string[] | null;
   },
   allergensTest: string,

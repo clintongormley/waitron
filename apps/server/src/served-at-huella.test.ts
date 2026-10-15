@@ -453,7 +453,7 @@ const EXTRA_PRODUCT_NAME = "Panecillo";
 const EXTRA_PRICE = "0.50";
 const EXTRA_VAT_CLASS = "general" as const;
 
-type OverlayAllergens = Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+type OverlayAllergens = import("@waitron/catalogue/src/allergens.js").ProductAllergens;
 
 async function attachExtra(
   shop: Shop,
@@ -568,7 +568,7 @@ describe("an extra's allergen declaration is not part of the huella", () => {
 
     // Only the catalogue allergen declaration differs; the child sale lines are identical.
     const overlayExtra = await attachExtra(shopOverlay, {
-      allergens: { gluten: { presence: "contains" } },
+      allergens: { gluten: { kinds: ["wheat"] } },
     });
     const plainExtra = await attachExtra(shopPlain, { allergens: null });
 
@@ -584,7 +584,7 @@ describe("an extra's allergen declaration is not part of the huella", () => {
     // Self-check: the two extras GENUINELY differ in declaration, or this test compares nothing.
     const overlayAdd = await overlayOf(shopOverlay, overlayExtra.productId);
     const plainAdd = await overlayOf(shopPlain, plainExtra.productId);
-    expect(overlayAdd).toEqual({ gluten: { presence: "contains" } });
+    expect(overlayAdd).toEqual({ gluten: { kinds: ["wheat"] } });
     expect(plainAdd).toBeNull();
 
     // Second self-check: the extra was GENUINELY filed as a child `sale_lines` row on both sales,

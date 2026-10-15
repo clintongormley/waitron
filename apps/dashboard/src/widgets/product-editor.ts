@@ -37,6 +37,11 @@ import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-dietary-picker.js";
+import {
+  allergenChoices,
+  allergensFromChoices,
+  allergensForComparison,
+} from "./allergen-choices.js";
 import "./image-upload.js";
 import "./product-appearance.js";
 import "./variant-form.js";
@@ -77,7 +82,7 @@ import {
 } from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
-import { allergenName, vatClassName } from "../i18n/domain.js";
+import { allergenLabel, vatClassName } from "../i18n/domain.js";
 
 const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
 
@@ -102,6 +107,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
   kitchen: ["kitchen-name", "product-course"],
+  nutrition: ["allergens"],
   descriptors: ["customer-name-", "description-"],
   price: ["tax", "unit", "unit-price"],
   selling: ["ordering", "available"],
@@ -638,6 +644,7 @@ export class ProductEditor extends LitElement {
       "tax",
       "unit-price",
       "product-course",
+      "allergens",
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
@@ -931,6 +938,7 @@ export class ProductEditor extends LitElement {
 
   private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = this.submissionValue(draft);
+    value.allergens = allergensForComparison(value.allergens);
     value.unitPrice = comparablePrice(value.unitPrice);
     value.variants = value.variants.map((variant) => ({
       ...variant,
@@ -1329,8 +1337,8 @@ export class ProductEditor extends LitElement {
               `${t("modifiers.allergens")}: ${
                 parent.allergens === null
                   ? t("editor.allergens_unreviewed")
-                  : Object.keys(parent.allergens)
-                      .map((code) => allergenName(code))
+                  : Object.entries(parent.allergens)
+                      .map(([code, entry]) => allergenLabel(code, entry))
                       .join(", ") || t("editor.allergens_none")
               }`,
             )
@@ -1351,9 +1359,9 @@ export class ProductEditor extends LitElement {
 
   private renderNutrition() {
     const none = t("modifiers.none_specified");
-    const allergens = (value: Record<string, unknown>) =>
-      Object.keys(value)
-        .map((code) => allergenName(code))
+    const allergens = (value: NonNullable<ProductEditorDraft["allergens"]>) =>
+      Object.entries(value)
+        .map(([code, entry]) => allergenLabel(code, entry))
         .join(", ") || none;
     const dietary = (labels: readonly DietaryLabel[]) =>
       labels.map((label) => t(`editor.diet.${label}`)).join(", ") || none;
@@ -1379,13 +1387,17 @@ export class ProductEditor extends LitElement {
       ruled
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
+      ?has-error=${this.sectionHasError("nutrition")}
       .summaryFields=${summary}
     >
       <dashboard-allergen-dietary-picker
+        name="allergens"
+        tabindex="-1"
+        aria-describedby="allergen-error"
         .busy=${this.suspended}
         .dietaryOptions=${dietaryLabels}
         .value=${{
-          allergens: Object.keys(this.draft.allergens ?? {}),
+          allergens: allergenChoices(this.draft.allergens),
           dietary: this.draft.dietaryDeclarations ?? [],
         }}
         @wt-change=${(
@@ -1395,13 +1407,10 @@ export class ProductEditor extends LitElement {
         ) => {
           event.stopPropagation();
           const { allergens: codes, dietary } = event.detail.value;
-          const allergens = Object.fromEntries(
-            codes.map((code) => [
-              code,
-              this.draft.allergens?.[code] ??
-                this.value?.allergens?.[code] ?? { presence: "contains" as const },
-            ]),
-          );
+          const previous = allergenChoices(this.draft.allergens);
+          if (codes.length !== previous.length || codes.some((code) => !previous.includes(code)))
+            this.dismiss("allergens");
+          const allergens = allergensFromChoices(codes);
           // On a variant an empty choice is blank, which reads the parent's: saved as an empty
           // overlay it would declare the variant free of every allergen its parent contains.
           const variantPage = this.inherited !== null;
@@ -1413,6 +1422,7 @@ export class ProductEditor extends LitElement {
           this.#draftScope?.changed();
         }}
       ></dashboard-allergen-dietary-picker>
+      ${this.error("allergens") ? html`<p id="allergen-error" data-test="allergen-error" class="field-error" role="alert">${this.error("allergens")}</p>` : nothing}
       ${this.nutritionHints()}
     </wt-disclosure>`;
   }
@@ -1646,7 +1656,12 @@ export class ProductEditor extends LitElement {
 
   private renderVariants() {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
-    const unsaved = this.value !== null && !sameValue(this.draft, this.value);
+    const unsaved =
+      this.value !== null &&
+      !sameValue(
+        { ...this.draft, allergens: allergensForComparison(this.draft.allergens) },
+        { ...this.value, allergens: allergensForComparison(this.value.allergens) },
+      );
     const { variants } = this.draft;
     return keyed(
       this.generation,

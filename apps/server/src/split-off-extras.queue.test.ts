@@ -53,7 +53,7 @@ describe("split extra queues", () => {
           name: "CHIPS",
           perDish: 2,
           stationName: "Fryer",
-          addAllergens: { gluten: { presence: "contains", source: "wheat" } },
+          addAllergens: { gluten: { kinds: ["wheat" as const] } },
           suitableFor: [],
         },
       ]);
@@ -61,7 +61,7 @@ describe("split extra queues", () => {
       expect(fryer[0]!.items[0]!.name).toBe("CHIPS");
       expect(fryer[0]!.items[0]!.quantity).toBe("2.000");
       expect(fryer[0]!.items[0]!.asServed.allergens).toEqual({
-        gluten: { presence: "contains", source: "wheat" },
+        gluten: { kinds: ["wheat" as const] },
       });
       expect(fryer[0]!.items[0]!.crossRefs).toEqual([
         { kind: "for", name: "BURG", stationName: "Grill" },

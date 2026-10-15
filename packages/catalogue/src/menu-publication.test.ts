@@ -1236,9 +1236,7 @@ describe("menuStatus", () => {
 
     it("flags both for Lemonade's allergens, each naming the shared product", async () => {
       const f = await published();
-      await app((tx) =>
-        updateProduct(tx, f.lemonade, { allergens: { sulphites: { presence: "contains" } } }),
-      );
+      await app((tx) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }));
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
       for (const [menuId, other] of [
         [f.lunch, "Dinner Menu"],
@@ -1619,12 +1617,12 @@ describe("previewMenu", () => {
     await publish(f.dinner);
     await app(async (tx) => {
       await updateProduct(tx, f.lemonade, {
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         vatClass: "general",
         available: false,
       });
       await updateProduct(tx, f.extraLemon, {
-        allergens: { sulphites: { presence: "contains" } },
+        allergens: { sulphites: {} },
         vatClass: "general",
       });
     });
@@ -1800,9 +1798,7 @@ describe("previewMenu", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
-    await app((tx) =>
-      updateProduct(tx, f.lemonade, { allergens: { sulphites: { presence: "contains" } } }),
-    );
+    await app((tx) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }));
     const graphs = vi.spyOn(sectionGraph, "loadSectionGraph");
     const offers = vi.spyOn(operations, "listMenuOffers");
     const preview = await app((tx) => previewMenu(tx, f.lunch));

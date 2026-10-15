@@ -348,8 +348,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The product editor refuses a course this venue does not have.
   "course.not_found": 404,
   "allergen.invalid_code": 400,
-  "allergen.invalid_presence": 400,
-  "allergen.invalid_source": 400,
+  "allergen.kinds_required": 400,
+  "allergen.invalid_kind": 400,
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,

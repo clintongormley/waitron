@@ -21,7 +21,7 @@ const ingredients: Ingredient[] = [
   {
     id: "i1",
     name: "Harina de trigo",
-    allergens: { gluten: { presence: "contains" } },
+    allergens: { gluten: { kinds: ["wheat" as const] } },
     dietaryOrigin: null,
     active: true,
   },

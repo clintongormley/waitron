@@ -44,8 +44,8 @@ function deepActiveElement(): Element | null {
 
 const realChoice = {
   allergens: {
-    label: () => allergenName("gluten"),
-    expected: { allergens: ["gluten"], dietary: [] },
+    label: () => `${allergenName("gluten")} (Trigo)`,
+    expected: { allergens: ["gluten:wheat"], dietary: [] },
   },
   dietary: {
     label: () => t("editor.diet.vegan"),

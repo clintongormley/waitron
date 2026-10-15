@@ -93,14 +93,14 @@ describe("ingredient-form", () => {
   it("emits create-ingredient with the name and the reviewed allergen map", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Harina de trigo");
-    await emitAllergens(el, { gluten: { presence: "contains", source: "trigo" } });
+    await emitAllergens(el, { gluten: { kinds: ["wheat" as const] } });
 
     const created = nextEvent<{ [k: string]: unknown }>(el, "create-ingredient");
     confirm(el);
     const body = (await created).detail;
     expect(body).toEqual({
       name: "Harina de trigo",
-      allergens: { gluten: { presence: "contains", source: "trigo" } },
+      allergens: { gluten: { kinds: ["wheat" as const] } },
     });
   });
 
@@ -256,7 +256,7 @@ describe("ingredient-form", () => {
   const EDIT_INGREDIENT: Ingredient = {
     id: "ing-1",
     name: "Leche entera",
-    allergens: { milk: { presence: "contains" } },
+    allergens: { milk: {} },
     dietaryOrigin: "dairy",
     active: false,
   };
@@ -308,7 +308,7 @@ describe("ingredient-form", () => {
     expect(detail.patch).toEqual({
       name: "Leche desnatada",
       active: false,
-      allergens: { milk: { presence: "contains" } },
+      allergens: { milk: {} },
       dietaryOrigin: "dairy",
     });
   });
@@ -519,4 +519,36 @@ describe("ingredient-form — a server refusal", () => {
       `${codeMessage("server.internal")} ${t("form.fix_fields")}`,
     );
   });
+});
+
+it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
+  "places %s beside the picker and allows a retry",
+  async (code) => {
+    const error = Object.assign(new Error(code), { code, params: { code: "gluten" } });
+    expect(ingredientRefusalErrors(error)).toEqual({ allergens: codeMessage(code) });
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Flour");
+    el.fieldErrors = ingredientRefusalErrors(error);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")!.textContent).toBe(
+      codeMessage(code),
+    );
+    expect((await bottomOf(el))!.textContent).toBe(t("form.fix_fields"));
+    expect((confirmOf(el) as HTMLElementTagNameMap["wt-button"]).disabled).toBe(false);
+    await emitAllergens(el, { gluten: { kinds: ["wheat"] } });
+    expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")).toBeNull();
+  },
+);
+
+it("asks for nuts by the allergen named in the refusal", () => {
+  const before = currentLocale();
+  setLocale("es-ES");
+  try {
+    expect(
+      ingredientRefusalErrors({ code: "allergen.kinds_required", params: { code: "nuts" } }),
+    ).toEqual({ allergens: "Elige los frutos de cáscara" });
+    expect(codeMessage("allergen.invalid_kind")).toBe("Elige un cereal o fruto de cáscara válido");
+  } finally {
+    setLocale(before);
+  }
 });

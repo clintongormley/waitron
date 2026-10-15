@@ -7,7 +7,7 @@ import type { AllergenPicker } from "./allergen-picker.js";
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("allergen-picker a11y (%s theme)", (theme) => {
-  it.each<AllergenDeclaration>([null, {}, { milk: { presence: "contains" } }])(
+  it.each<AllergenDeclaration>([null, {}, { milk: {} }])(
     "renders declaration %j accessibly",
     async (declaration) => {
       const { host } = await mountWidget<AllergenPicker>(

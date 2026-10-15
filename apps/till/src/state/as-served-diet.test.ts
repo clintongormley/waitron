@@ -167,7 +167,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
 
 it("shows the dish's own allergens, ignoring a selected extra that used to add one", () => {
   const prod = product({ origins: ["plant"], pending: false }, []);
-  prod.allergens = { gluten: { presence: "contains" } };
+  prod.allergens = { gluten: { kinds: ["wheat" as const] } };
   prod.offeredModifiers = [
     {
       kind: "extras",
@@ -177,7 +177,7 @@ it("shows the dish's own allergens, ignoring a selected extra that used to add o
       kitchenName: "Extras KDS",
       minPicks: 0,
       maxPicks: null,
-      items: [{ ...item("cheese"), addAllergens: { milk: { presence: "contains" } } }],
+      items: [{ ...item("cheese"), addAllergens: { milk: {} } }],
     },
   ];
   expect(Object.keys(asServedAllergens(line(prod, "cheese")).allergens).sort()).toEqual(["gluten"]);
@@ -195,7 +195,7 @@ it("the dish's own allergens and diet ignore a canonical extras selection", () =
       kitchenName: "Extras KDS",
       minPicks: 0,
       maxPicks: null,
-      items: [{ ...item("bacon"), addAllergens: { milk: { presence: "contains" } } }],
+      items: [{ ...item("bacon"), addAllergens: { milk: {} } }],
     },
   ];
   const selected = line(prod, "bacon");
@@ -209,7 +209,7 @@ it.each(["answered here", "frozen by the server"] as const)(
   "the dish's own allergens and diet ignore an options answer (%s)",
   (source) => {
     const prod = product({ origins: ["plant", "dairy"], pending: false }, []);
-    prod.allergens = { milk: { presence: "contains" } };
+    prod.allergens = { milk: {} };
     prod.offeredModifiers = [
       {
         kind: "options",
@@ -249,7 +249,7 @@ it.each(["answered here", "frozen by the server"] as const)(
     };
     // The oat answer does not strip the dish's OWN milk allergen or {plant,dairy} diet.
     expect(asServedAllergens(selected)).toEqual({
-      allergens: { milk: { presence: "contains" } },
+      allergens: { milk: {} },
       pending: false,
     });
     expect(asServedDiet(selected)).toEqual({ vegan: "no", vegetarian: "yes", contains: [] });
