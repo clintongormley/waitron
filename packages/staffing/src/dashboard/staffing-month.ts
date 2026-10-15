@@ -449,7 +449,9 @@ export class StaffingMonthView extends LitElement {
     const weeks = Array.from({ length: month.days.length / 7 }, (_, row) =>
       month.days.slice(row * 7, row * 7 + 7),
     );
-    const opens = (day: Day) => this.canWrite && (day.specialDay !== null || day.seasonId !== null);
+    // A reader reaches a season through its chip; a special day has no chip, so its date opens it.
+    const opens = (day: Day) =>
+      day.specialDay !== null || (this.canWrite && day.seasonId !== null);
     const stop =
       [this.focusDate, month.today].find((date) =>
         month.days.some((day) => day.date === date && opens(day)),

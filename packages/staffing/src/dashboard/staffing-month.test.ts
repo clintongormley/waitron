@@ -121,7 +121,11 @@ describe("the Staffing view's month", () => {
     });
     expect(cell(el, "2026-11-30").dataset.tint).toBe("1");
     expect(cell(el, "2026-12-01").dataset.tint).toBe("2");
-    expect(root(el).querySelector("td button")).toBeNull();
+    expect(
+      [...root(el).querySelectorAll("td button")].map(
+        (button) => button.closest("td")!.dataset.date,
+      ),
+    ).toEqual(["2026-12-24"]);
   });
 
   it("filters the days to one area, kept in the address, and back to every area", async () => {
@@ -346,9 +350,10 @@ describe("the Staffing view's month", () => {
     };
     const before = drawn();
     expect(before.cells.some(({ current }) => current === "date")).toBe(true);
+    expect(cell(el, "2026-12-02").querySelector("button.day")).toBeNull();
     el.canWrite = true;
     await settled(el);
-    expect(root(el).querySelector("td button.day")).not.toBeNull();
+    expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
     expect(drawn()).toEqual(before);
   });
 
@@ -575,9 +580,29 @@ describe("the Staffing view's month", () => {
       });
     });
 
-    it("draws no day button for a person who may only look", async () => {
+    it("draws a day button for a person who may only look only on a special day", async () => {
       const { el } = await mount();
-      expect(root(el).querySelector("td button")).toBeNull();
+      expect(
+        [...root(el).querySelectorAll("td button")].map(
+          (button) => button.closest("td")!.dataset.date,
+        ),
+      ).toEqual(["2026-12-24"]);
+    });
+
+    it("opens a special day's staffing from its date for a person who may only look", async () => {
+      const { el, open } = await mount({
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      const day = dayButton(el, "2026-12-24")!;
+      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
+      expect(day.tabIndex).toBe(0);
+      day.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
     });
 
     it("opens a season from its chip, keeping the month and area", async () => {
