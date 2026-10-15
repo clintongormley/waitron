@@ -2167,6 +2167,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Name window itself was not probed. **Next action:** close it on a party change, as A713 does.
   [Detail](backlog/till.md#the-party-name-window-stays-open-and-saves-to-the-new-party-when-the-order-screen-switches-party-under-it)
 
+- **A716 — A refused guest count might reopen its window when a handheld's Order card is drawn
+  again (2026-10-15; open, A713 review, found by reading only, not run).** The till keeps a refused
+  Guests or Split count (`guestsRefusal`, `apps/till/src/till-app.ts`) after the window has used it,
+  so a later redraw of the card grid's Order card (`apps/till/src/widgets/card-grid.ts`) may hand it
+  back and reopen the window. The Name window keeps its refusal the same way (since #881). **Next
+  action:** probe it on a handheld layout; if it reopens, clear each refusal once the window takes it.
+
 - **A715 — A guest count typed in the till's Guests or Split window replaces a count changed on
   another till while the window was open (2026-10-15; owner to decide, A713 review).** Both windows
   follow a count stored elsewhere while the field still reads the previous stored count; once the
