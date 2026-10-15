@@ -302,20 +302,292 @@ it("a one-page section's icon opens its page and the strip stays folded", async 
   });
 });
 
-it("a section with several pages unfolds the sidebar with that section open, storing nothing", async () => {
-  await atSize(1280, 800, async () => {
-    localStorage.setItem(FOLDED_KEY, "true");
-    const { el } = await mountApp();
-    stripButton(el, "team").click();
-    await el.updateComplete;
-    expectFolded(el, false);
-    expect(
-      sidebar(el).querySelector("[data-test=nav-group-team]")!.getAttribute("aria-expanded"),
-    ).toBe("true");
-    expect(
-      sidebar(el).querySelector("[data-test=nav-group-menu]")!.getAttribute("aria-expanded"),
-    ).toBe("false");
-    expect(localStorage.getItem(FOLDED_KEY)).toBe("true");
+const panel = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]");
+const panelPages = (el: DashboardApp) => [
+  ...panel(el)!.querySelectorAll<HTMLButtonElement>("button.nav-item"),
+];
+const layout = (el: DashboardApp) => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+
+/** Mounts unfolded, reads a section's pages as the full sidebar lists them, then folds. */
+async function mountFoldedReading(group: string, me: Record<string, unknown> = {}) {
+  const mounted = await mountApp(me);
+  const pages = [
+    ...sidebar(mounted.el).querySelectorAll<HTMLButtonElement>(
+      `#nav-group-panel-${group} .nav-item`,
+    ),
+  ].map((item) => ({
+    test: item.dataset.test!.replace(/^nav-/, ""),
+    label: item.textContent!.trim(),
+  }));
+  toggle(mounted.el).click();
+  await mounted.el.updateComplete;
+  expectFolded(mounted.el, true);
+  return { ...mounted, pages };
+}
+
+describe("a section with several pages opens a panel beside its icon", () => {
+  it("listing the section's name and its pages in order, the strip staying folded and nothing stored", async () => {
+    await atSize(1280, 800, async () => {
+      const { el, pages } = await mountFoldedReading("team");
+      expect(pages.length).toBeGreaterThan(1);
+      const team = stripButton(el, "team");
+      expect(team.getAttribute("aria-expanded")).toBe("false");
+      expect(panel(el)).toBeNull();
+      localStorage.removeItem(FOLDED_KEY);
+
+      await userEvent.click(team);
+      await el.updateComplete;
+      expect(panel(el)).not.toBeNull();
+      expect(team.getAttribute("aria-expanded")).toBe("true");
+      expect(team.getAttribute("aria-controls")).toBe(panel(el)!.id);
+      expect(panel(el)!.id).not.toBe("");
+      expect(panel(el)!.querySelector(".strip-panel-label")!.textContent!.trim()).toBe(
+        t("nav.group.team"),
+      );
+      expect(
+        panelPages(el).map((item) => ({
+          test: item.dataset.test!.replace(/^strip-panel-/, ""),
+          label: item.textContent!.trim(),
+        })),
+      ).toEqual(pages);
+      expect(el.shadowRoot!.activeElement).toBe(team);
+      expectFolded(el, true);
+      expect(localStorage.getItem(FOLDED_KEY)).toBeNull();
+      // A one-page section's icon is a plain button, not a disclosure.
+      expect(stripButton(el, "purchasing").hasAttribute("aria-expanded")).toBe(false);
+      expect(stripButton(el, "purchasing").hasAttribute("aria-controls")).toBe(false);
+    });
+  });
+
+  it("with the section name styled as a sidebar header and the current page marked as in the sidebar", async () => {
+    await atSize(1280, 800, async () => {
+      const { el, host } = await mountFoldedReading("reports");
+      host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+      await userEvent.click(stripButton(el, "reports"));
+      await el.updateComplete;
+      const label = panel(el)!.querySelector<HTMLElement>(".strip-panel-label")!;
+      expect(getComputedStyle(label).textTransform).toBe("uppercase");
+      expect(getComputedStyle(label).color).toBe("rgb(4, 5, 6)");
+      panelPages(el)[0]!.click();
+      await el.updateComplete;
+      await userEvent.click(stripButton(el, "reports"));
+      await el.updateComplete;
+      const [current, other] = panelPages(el);
+      expect(current!.getAttribute("aria-current")).toBe("page");
+      expect(getComputedStyle(current!).borderInlineStartColor).toBe("rgb(7, 8, 9)");
+      expect(getComputedStyle(current!).color).toBe("rgb(4, 5, 6)");
+      expect(other!.hasAttribute("aria-current")).toBe(false);
+    });
+  });
+
+  it("with its top at the icon's top and past the strip's edge, on its first frame", async () => {
+    await atSize(1280, 800, async () => {
+      // High in the strip, so nothing lifts its panel to keep it inside the layout.
+      const { el } = await mountFoldedReading("reports");
+      const reports = stripButton(el, "reports");
+      reports.click();
+      await el.updateComplete;
+      const measure = () => {
+        const box = panel(el)!.getBoundingClientRect();
+        expect(box.bottom).toBeLessThan(layout(el).getBoundingClientRect().bottom);
+        expect(Math.abs(box.top - reports.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+        expect(box.left).toBeGreaterThanOrEqual(sidebar(el).getBoundingClientRect().right);
+        expect(box.width).toBeGreaterThan(0);
+        const hit = el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + 4);
+        expect(panel(el)!.contains(hit)).toBe(true);
+      };
+      measure();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      measure();
+    });
+  });
+
+  it("kept within the layout when its icon is low in the window", async () => {
+    await atSize(1280, 600, async () => {
+      const { el } = await mountFoldedReading("configuration");
+      const settings = stripButton(el, "configuration");
+      const bottom = layout(el).getBoundingClientRect().bottom;
+      expect(settings.getBoundingClientRect().bottom).toBeLessThanOrEqual(bottom);
+      settings.click();
+      await el.updateComplete;
+      const box = panel(el)!.getBoundingClientRect();
+      expect(panelPages(el).length).toBeGreaterThan(4);
+      // It would run past the layout if it hung from the icon.
+      expect(settings.getBoundingClientRect().top + box.height).toBeGreaterThan(bottom);
+      expect(box.bottom).toBeLessThanOrEqual(bottom + 0.5);
+      expect(box.top).toBeGreaterThanOrEqual(layout(el).getBoundingClientRect().top - 0.5);
+    });
+  });
+
+  it("picking a page opens it and closes the panel, the strip staying folded and nothing stored", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      localStorage.removeItem(FOLDED_KEY);
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      await userEvent.click(
+        panel(el)!.querySelector<HTMLButtonElement>("[data-test=strip-panel-approvals]")!,
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("dashboard-approvals-screen"))
+        .not.toBeNull();
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(stripButton(el, "team").getAttribute("aria-expanded")).toBe("false");
+      expect(stripButton(el, "team").getAttribute("aria-current")).toBe("true");
+      expectFolded(el, true);
+      expect(localStorage.getItem(FOLDED_KEY)).toBeNull();
+    });
+  });
+
+  it("Escape closes it from a page and from its icon, putting focus on the icon and nothing else", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      const team = stripButton(el, "team");
+      team.focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      expect(el.shadowRoot!.activeElement).toBe(panelPages(el)[0]);
+      let reachedLayout = false;
+      const watch = (event: KeyboardEvent) => {
+        if (event.key === "Escape") reachedLayout = true;
+      };
+      el.shadowRoot!.querySelector(".shell")!.addEventListener("keydown", watch as EventListener);
+      await userEvent.keyboard("{Escape}");
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(team);
+      expect(reachedLayout).toBe(false);
+
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      team.focus();
+      expect(panel(el)).not.toBeNull();
+      await userEvent.keyboard("{Escape}");
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(team);
+      expect(reachedLayout).toBe(false);
+    });
+  });
+
+  it("Enter on its icon opens it with focus on the first page, and Tab past the last page closes it", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      stripButton(el, "team").focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      const pages = panelPages(el);
+      expect(el.shadowRoot!.activeElement).toBe(pages[0]);
+      pages.at(-1)!.focus();
+      await userEvent.tab();
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      expect(stripButton(el, "team").getAttribute("aria-expanded")).toBe("false");
+    });
+  });
+
+  it("Space on its icon opens it too, and clicking the icon again closes it", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      stripButton(el, "team").focus();
+      await userEvent.keyboard(" ");
+      await el.updateComplete;
+      expect(panel(el)).not.toBeNull();
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+    });
+  });
+
+  it("a click on the main content closes it; a click inside it does not", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      await userEvent.click(panel(el)!.querySelector<HTMLElement>(".strip-panel-label")!);
+      await el.updateComplete;
+      expect(panel(el)).not.toBeNull();
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".main")!, {
+        position: { x: 700, y: 300 },
+      });
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+    });
+  });
+
+  it("opening another section's panel leaves only that one", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      await userEvent.click(stripButton(el, "configuration"));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll("[data-test=strip-panel]").length).toBe(1);
+      expect(stripButton(el, "configuration").getAttribute("aria-controls")).toBe(panel(el)!.id);
+      expect(stripButton(el, "team").getAttribute("aria-expanded")).toBe("false");
+      expect(stripButton(el, "configuration").getAttribute("aria-expanded")).toBe("true");
+    });
+  });
+
+  it("narrowing to a phone closes it, and it does not come back in the drawer or on widening", async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountFoldedReading("team");
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      expect(panel(el)).not.toBeNull();
+      await page.viewport(390, 844);
+      await expect.poll(() => panel(el)).toBeNull();
+      toggle(el).click();
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      toggle(el).click();
+      await page.viewport(1280, 800);
+      await expect.poll(() => sidebar(el).classList.contains("folded")).toBe(true);
+      expect(panel(el)).toBeNull();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
+  it("unfolding the sidebar closes it", async () => {
+    await atSize(1280, 800, async () => {
+      const { el } = await mountFoldedReading("team");
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      // A scripted click, so no pointerdown outside the panel closes it first.
+      toggle(el).click();
+      await el.updateComplete;
+      expect(panel(el)).toBeNull();
+      toggle(el).click();
+      await el.updateComplete;
+      expectFolded(el, true);
+      expect(panel(el)).toBeNull();
+    });
+  });
+
+  it("for staff, the Overview icon opens a panel of their two pages", async () => {
+    await atSize(1280, 800, async () => {
+      localStorage.setItem(FOLDED_KEY, "true");
+      const { el } = await mountApp({
+        role: "staff",
+        permissions: ["sale.take_payment"],
+        modules: [],
+      });
+      await userEvent.click(stripButton(el, "overview"));
+      await el.updateComplete;
+      expect(panelPages(el).map((item) => item.dataset.test)).toEqual([
+        "strip-panel-my-schedule",
+        "strip-panel-orders",
+      ]);
+      expect(panel(el)!.querySelector(".strip-panel-label")!.textContent!.trim()).toBe(
+        t("nav.overview"),
+      );
+    });
   });
 });
 
@@ -374,6 +646,17 @@ describe.each(["light", "dark"] as const)("the folded strip (%s theme)", (theme)
       localStorage.setItem(FOLDED_KEY, "true");
       const { el, host } = await mountApp({}, theme);
       expectFolded(el, true);
+      await expectNoA11yViolations(host);
+    });
+  });
+
+  it("has no accessibility violations with a section's panel open", async () => {
+    await atSize(1280, 800, async () => {
+      localStorage.setItem(FOLDED_KEY, "true");
+      const { el, host } = await mountApp({}, theme);
+      await userEvent.click(stripButton(el, "team"));
+      await el.updateComplete;
+      expect(panel(el)).not.toBeNull();
       await expectNoA11yViolations(host);
     });
   });

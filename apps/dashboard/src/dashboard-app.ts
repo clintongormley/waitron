@@ -360,6 +360,7 @@ export class DashboardApp extends LitElement {
         display: block;
         height: 100%;
         --dashboard-sidebar-width: 34ch;
+        --dashboard-strip-panel-width: 24ch;
       }
 
       /* The banner owns the first full-width row; navigation and content share the row below it.
@@ -413,7 +414,6 @@ export class DashboardApp extends LitElement {
         border-inline-start: 3px solid transparent;
         border-radius: 0;
         background: transparent;
-        color: var(--wt-color-text);
       }
 
       .icon-button.strip-button:hover {
@@ -429,6 +429,33 @@ export class DashboardApp extends LitElement {
         inset-block-start: 50%;
         inset-inline-start: calc(100% + var(--wt-space-1));
         transform: translateY(-50%);
+      }
+
+      .strip-button[aria-expanded="true"] > .icon-tooltip {
+        display: none;
+      }
+
+      /* Over the content column, under the phone drawer's layers, which never show with the strip. */
+      .strip-panel {
+        position: absolute;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        min-width: var(--dashboard-strip-panel-width);
+        padding: var(--wt-space-2) 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-bg);
+        box-shadow: var(--wt-shadow-1);
+      }
+
+      .strip-panel-label {
+        padding: var(--wt-space-1) var(--wt-space-3);
+        color: var(--wt-color-primary-text);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
 
       .strip-button > .icon-tooltip::before {
@@ -836,6 +863,9 @@ export class DashboardApp extends LitElement {
   /** Ignored on a phone, whose drawer always holds the full sidebar. */
   @state() private sidebarFolded = false;
 
+  /** The section whose panel is open beside its strip icon. */
+  @state() private stripPanel: NavGroupId | null = null;
+
   #setFolded(folded: boolean): void {
     this.sidebarFolded = folded;
     storeFold(folded);
@@ -980,6 +1010,7 @@ export class DashboardApp extends LitElement {
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     window.removeEventListener("storage", this.#onSessionStorage);
     document.removeEventListener("visibilitychange", this.#onVisibilityChange);
+    document.removeEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
     super.disconnectedCallback();
@@ -1206,6 +1237,8 @@ export class DashboardApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("screen")) this.#openGroupOf(this.screen);
+    if (this.stripPanel !== null && (changed.has("screen") || !this.#folded()))
+      this.stripPanel = null;
   }
 
   #openGroupOf(screen: ScreenId): void {
@@ -1219,6 +1252,12 @@ export class DashboardApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    if (changed.has("stripPanel")) {
+      if (this.stripPanel === null)
+        document.removeEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
+      else document.addEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
+    }
+    this.#placeStripPanel();
     // An open pop-up whose new text equals the old changes no toast property, so its countdown
     // would not restart on its own.
     if (changed.has("alertToast") && this.alertToast !== null)
@@ -1979,27 +2018,72 @@ export class DashboardApp extends LitElement {
     search?.focus();
   }
 
-  /** Until a section's own panel exists, a section of several pages unfolds the sidebar with it
-   * open; that is not stored, so the next visit opens folded again. */
-  #openSectionFromStrip(group: NavGroup, pages: NavPage[]): void {
+  #openSectionFromStrip(group: NavGroup, pages: NavPage[], event: MouseEvent): void {
     if (pages.length === 1) {
       this.#openFromNav(pages[0]!.screen);
       return;
     }
-    this.collapsedGroups = new Set(
-      NAV_GROUPS.filter((entry) => entry.headerKey && entry.id !== group.id).map(
-        (entry) => entry.id,
-      ),
-    );
-    this.sidebarFolded = false;
+    if (this.stripPanel === group.id) {
+      this.stripPanel = null;
+      return;
+    }
+    this.stripPanel = group.id;
+    // A click a key made reports no pointer clicks.
+    if (event.detail === 0)
+      void this.updateComplete.then(() =>
+        this.renderRoot.querySelector<HTMLElement>("[data-test=strip-panel] .nav-item")?.focus(),
+      );
+  }
+
+  #stripPanelParts(): { panel: HTMLElement; icon: HTMLElement } | null {
+    const panel = this.renderRoot.querySelector<HTMLElement>("[data-test=strip-panel]");
+    const icon = this.renderRoot.querySelector<HTMLElement>(`[aria-controls="${panel?.id}"]`);
+    return panel && icon ? { panel, icon } : null;
+  }
+
+  readonly #onPointerDownOutsidePanel = (event: PointerEvent): void => {
+    const parts = this.#stripPanelParts();
+    const path = event.composedPath();
+    if (parts && !path.includes(parts.panel) && !path.includes(parts.icon)) this.stripPanel = null;
+  };
+
+  /** Only focus moving to somewhere else closes it: a click on the panel's text moves it nowhere. */
+  #onStripPanelFocusOut(event: FocusEvent): void {
+    const parts = this.#stripPanelParts();
+    const next = event.relatedTarget as Node | null;
+    if (parts && next && !parts.panel.contains(next) && !parts.icon.contains(next))
+      this.stripPanel = null;
+  }
+
+  #onStripPanelKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || event.isComposing || this.stripPanel === null) return;
+    event.stopPropagation();
+    const icon = this.#stripPanelParts()?.icon;
+    this.stripPanel = null;
+    icon?.focus();
+  }
+
+  /** Placed before its first paint: `updated` runs before the frame is drawn. The folded strip does
+   * not scroll, so the panel hangs from its icon's top and is lifted only to stay inside the layout. */
+  #placeStripPanel(): void {
+    const parts = this.#stripPanelParts();
+    if (parts === null) return;
+    const layout = this.renderRoot.querySelector<HTMLElement>(".layout")!;
+    const area = layout.getBoundingClientRect();
+    const icon = parts.icon.getBoundingClientRect();
+    const strip = this.renderRoot.querySelector<HTMLElement>("aside.sidebar")!;
+    const top = Math.min(icon.top - area.top, area.height - parts.panel.offsetHeight);
+    parts.panel.style.top = `${Math.max(0, top)}px`;
+    parts.panel.style.left = `${strip.getBoundingClientRect().right - area.left}px`;
   }
 
   #stripButton(
     test: string,
     label: string,
     icon: string,
-    onClick: () => void,
+    onClick: (event: MouseEvent) => void,
     current = false,
+    controls?: { id: string; open: boolean },
   ): TemplateResult {
     return html`<button
       type="button"
@@ -2007,7 +2091,11 @@ export class DashboardApp extends LitElement {
       data-test="strip-${test}"
       aria-label=${label}
       aria-current=${current ? "true" : nothing}
+      aria-expanded=${controls ? String(controls.open) : nothing}
+      aria-controls=${controls ? controls.id : nothing}
       @click=${onClick}
+      @keydown=${controls ? (e: KeyboardEvent) => this.#onStripPanelKeydown(e) : nothing}
+      @focusout=${controls?.open ? (e: FocusEvent) => this.#onStripPanelFocusOut(e) : nothing}
       @pointerenter=${trackIconTooltip}
       @pointerleave=${trackIconTooltip}
       @focus=${trackIconTooltip}
@@ -2017,8 +2105,34 @@ export class DashboardApp extends LitElement {
     </button>`;
   }
 
+  #stripPanel(id: string, label: string, pages: NavPage[]): TemplateResult {
+    return html`<div
+      class="strip-panel"
+      id=${id}
+      role="group"
+      aria-labelledby="${id}-label"
+      data-test="strip-panel"
+      @keydown=${(e: KeyboardEvent) => this.#onStripPanelKeydown(e)}
+      @focusout=${(e: FocusEvent) => this.#onStripPanelFocusOut(e)}
+    >
+      <div class="strip-panel-label" id="${id}-label">${label}</div>
+      ${pages.map(
+        (page) =>
+          html`<button
+            type="button"
+            class="nav-item"
+            aria-current=${this.screen === page.screen ? "page" : nothing}
+            data-test="strip-panel-${page.screen}"
+            @click=${() => this.#openFromNav(page.screen)}
+          >
+            ${page.label}
+          </button>`,
+      )}
+    </div>`;
+  }
+
   /** The folded sidebar: one icon per section with a page this person may open. The search does
-   * not narrow it. */
+   * not narrow it. A section's panel follows its icon, so Tab moves from the icon into it. */
   #strip(): TemplateResult {
     const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
     return html`<nav class="strip" aria-label=${t("nav.sections")}>
@@ -2032,15 +2146,19 @@ export class DashboardApp extends LitElement {
               () => void this.#searchFromStrip(),
             )
       }
-      ${sections.map(({ group, pages }) =>
-        this.#stripButton(
+      ${sections.map(({ group, pages }) => {
+        const label = group.headerKey === undefined ? t("nav.overview") : t(group.headerKey);
+        const id = `strip-panel-${group.id}`;
+        const open = this.stripPanel === group.id;
+        return html`${this.#stripButton(
           group.id,
-          group.headerKey === undefined ? t("nav.overview") : t(group.headerKey),
+          label,
           group.icon,
-          () => this.#openSectionFromStrip(group, pages),
+          (e) => this.#openSectionFromStrip(group, pages, e),
           pages.some((page) => page.screen === this.screen),
-        ),
-      )}
+          pages.length > 1 ? { id, open } : undefined,
+        )}${open ? this.#stripPanel(id, label, pages) : nothing}`;
+      })}
     </nav>`;
   }
 
