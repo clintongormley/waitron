@@ -9,16 +9,23 @@ import {
   type LeaveCoordinator,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-number-stepper.js";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { paintRowStyles, periodColourStyles, seasonLastDay } from "@waitron/venue-service/painter";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit, StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import {
+  NOTHING_BY_KEY,
+  areaPicker,
+  droppedNotice,
+  paintRow,
+  painterStyles,
+  refusedEdit,
+  sameDay,
+  staffRoleDialog,
+} from "./painter-parts.js";
 import type { StaffingChange, StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
-import "./staff-role-dialog.js";
 import "./staffing-grid.js";
 
 /** Blocks per weekday key ("1" Monday … "0" Sunday). */
@@ -36,22 +43,11 @@ const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0] as const;
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = Date.UTC(2024, 0, 1);
 const DAY_MS = 86_400_000;
-const MAX_HEADCOUNT = 50;
-const NOTHING_BY_KEY: ReadonlyMap<string, never> = new Map<string, never>();
 
 const copyWeek = (week: ReadonlyMap<string, readonly StaffingBlock[]>): Week =>
   new Map([...week].map(([key, day]) => [key, day.map((block) => ({ ...block }))]));
 const copyDraft = (draft: Draft): Draft =>
   new Map([...draft].map(([key, week]) => [key, copyWeek(week)]));
-const sameDay = (a: readonly StaffingBlock[] = [], b: readonly StaffingBlock[] = []) =>
-  a.length === b.length &&
-  a.every(
-    (block, index) =>
-      block.staffRoleId === b[index]!.staffRoleId &&
-      block.headcount === b[index]!.headcount &&
-      block.startsAt === b[index]!.startsAt &&
-      block.endsAt === b[index]!.endsAt,
-  );
 const sameWeek = (a: Week, b?: Week) =>
   WEEKDAYS.every((weekday) => sameDay(a.get(String(weekday)), b?.get(String(weekday))));
 const sameDraft = (a: Draft, b: Draft) =>
@@ -69,15 +65,6 @@ function seed(read: SeasonStaffing): Draft {
       ),
     ]),
   );
-}
-
-function droppedNotice(names: readonly string[]): string {
-  const list = new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    type: "conjunction",
-  }).format(names);
-  return tf(names.length === 1 ? "staffing.painter.removed_one" : "staffing.painter.removed_many", {
-    names: list,
-  });
 }
 
 function weekdayFormat(): Intl.DateTimeFormat {
@@ -105,10 +92,8 @@ export class StaffingSeasonPainter extends LitElement {
     seasonTintStyles,
     periodColourStyles,
     paintRowStyles,
+    painterStyles,
     css`
-      :host {
-        display: contents;
-      }
       .season {
         display: inline-flex;
         align-items: center;
@@ -124,20 +109,6 @@ export class StaffingSeasonPainter extends LitElement {
         background: var(--season-tint);
         color: var(--season-on-tint);
         border-color: var(--season-tint-line);
-      }
-      .how-many {
-        display: inline-flex;
-        align-items: center;
-      }
-      .message {
-        margin: var(--wt-space-3) 0;
-        color: var(--wt-color-text-muted);
-      }
-      .message[role="alert"] {
-        color: var(--wt-color-danger);
-      }
-      staffing-grid {
-        container-type: size;
       }
     `,
   ];
@@ -375,11 +346,7 @@ export class StaffingSeasonPainter extends LitElement {
 
   /** `staffing.invalid` naming `edits.<i>` shows the i-th sent edit's area and marks its day. */
   private refuse(error: unknown, edits: SeasonStaffingEdit[], read: SeasonStaffing): void {
-    const code = codeOf(error);
-    const message = codeMessage(code);
-    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    const match = /^edits\.(\d+)(?=\.|$)/.exec(typeof field === "string" ? field : "");
-    const edit = code === "staffing.invalid" && match ? edits[Number(match[1])] : undefined;
+    const { message, edit } = refusedEdit(error, edits);
     if (!edit) {
       this.refused = { message };
       return;
@@ -454,89 +421,6 @@ export class StaffingSeasonPainter extends LitElement {
     </span>`;
   }
 
-  private picker(read: SeasonStaffing, shown: string) {
-    const group = (kind: string) =>
-      kind === "department" ? t("staffing.painter.departments") : t("staffing.painter.stations");
-    const options = [...read.areas]
-      .sort((a, b) => Number(a.area.kind === "station") - Number(b.area.kind === "station"))
-      .map(({ area, name }) => ({ value: areaKey(area), label: name, group: group(area.kind) }));
-    return html`<wt-combobox
-      slot="picker"
-      name="area"
-      label=${t("staffing.painter.area")}
-      hide-label
-      search="never"
-      ?disabled=${this.saving}
-      .value=${shown}
-      .options=${options}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        this.pick(event.detail.value);
-      }}
-    ></wt-combobox>`;
-  }
-
-  private paintRow(chosen: string | undefined) {
-    return html`<div slot="row" class="paint" data-test="paint-row">
-      <div class="pots">
-        <span class="label">${t("staffing.painter.paint")}</span>
-        ${this.staffRoles.map(
-          (staffRole) =>
-            html`<span class="pot">
-              <button
-                type="button"
-                data-test=${`staff-role-${staffRole.id}`}
-                aria-pressed=${chosen === staffRole.id ? "true" : "false"}
-                @click=${() => {
-                  this.chosen = staffRole.id;
-                }}
-              >
-                <span class="swatch" data-colour=${staffRole.colour}></span>${staffRole.name}
-              </button>
-            </span>`,
-        )}
-        <button
-          type="button"
-          class="new"
-          data-test="new-staff-role"
-          @click=${() => {
-            this.dialogOpen = true;
-          }}
-        >
-          ${t("staffing.painter.new_staff_role")}
-        </button>
-      </div>
-      <wt-number-stepper
-        class="how-many"
-        name="headcount"
-        label=${t("staffing.grid.how_many")}
-        min="1"
-        max=${MAX_HEADCOUNT}
-        .value=${String(this.headcount)}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          // A blank waits for the field to be left, so it can be cleared and typed again.
-          if (event.detail.value === "") return;
-          const value = Number(event.detail.value);
-          if (Number.isInteger(value)) this.headcount = Math.min(Math.max(value, 1), MAX_HEADCOUNT);
-          (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value = String(
-            this.headcount,
-          );
-        }}
-        @focusout=${(event: FocusEvent) => {
-          (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value = String(
-            this.headcount,
-          );
-        }}
-      ></wt-number-stepper>
-      ${
-        this.rolesError
-          ? html`<p class="message" role="alert" data-test="roles-error">${this.rolesError}</p>`
-          : nothing
-      }
-    </div>`;
-  }
-
   private content(read: SeasonStaffing | undefined, shown: string, chosen: string | undefined) {
     if (!read)
       return this.loadError
@@ -587,28 +471,43 @@ export class StaffingSeasonPainter extends LitElement {
         @painter-close=${() => this.open("staffing", this.addressParams())}
       >
         ${read ? this.seasonChip(read) : nothing}
-        ${read?.areas.length ? this.picker(read, shown) : nothing}
-        ${read?.areas.length && !this.readOnly ? this.paintRow(chosen) : nothing}
+        ${read?.areas.length ? areaPicker(read.areas, shown, this.saving, (value) => this.pick(value)) : nothing}
+        ${
+          read?.areas.length && !this.readOnly
+            ? paintRow({
+                staffRoles: this.staffRoles,
+                chosen,
+                headcount: this.headcount,
+                rolesError: this.rolesError,
+                choose: (staffRoleId) => {
+                  this.chosen = staffRoleId;
+                },
+                setHeadcount: (headcount) => {
+                  this.headcount = headcount;
+                },
+                newStaffRole: () => {
+                  this.dialogOpen = true;
+                },
+              })
+            : nothing
+        }
         ${this.content(read, shown, chosen)}
       </painter-frame>
       ${
         this.readOnly
           ? nothing
-          : html`<staff-role-dialog
-              .api=${this.api}
-              .open=${this.dialogOpen}
-              @staff-role-saved=${(event: CustomEvent<StaffRole>) => {
-                event.stopPropagation();
-                const saved = event.detail;
+          : staffRoleDialog(
+              this.api,
+              this.dialogOpen,
+              (saved) => {
                 if (!this.staffRoles.some(({ id }) => id === saved.id))
                   this.staffRoles = [...this.staffRoles, saved];
                 this.chosen = saved.id;
-              }}
-              @staff-role-close=${(event: Event) => {
-                event.stopPropagation();
+              },
+              () => {
                 this.dialogOpen = false;
-              }}
-            ></staff-role-dialog>`
+              },
+            )
       }`;
   }
 }

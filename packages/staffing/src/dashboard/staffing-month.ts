@@ -327,14 +327,20 @@ export class StaffingMonthView extends LitElement {
     this.open("staffing", rest);
   }
 
-  #openSeason(seasonId: string): void {
+  #openPainter(painter: { season: string } | { "special-day": string }): void {
     const area = this.params.area;
     this.open("staffing", {
       month: this.month,
       ...(area ? { area } : {}),
-      painter: "season",
-      season: seasonId,
+      painter: "season" in painter ? "season" : "special-day",
+      ...painter,
     });
+  }
+
+  #openDay(day: Day): void {
+    this.#openPainter(
+      day.specialDay ? { "special-day": day.specialDay.id } : { season: day.seasonId! },
+    );
   }
 
   #dayButton(date: string): HTMLElement | null {
@@ -443,7 +449,7 @@ export class StaffingMonthView extends LitElement {
     const weeks = Array.from({ length: month.days.length / 7 }, (_, row) =>
       month.days.slice(row * 7, row * 7 + 7),
     );
-    const opens = (day: Day) => this.canWrite && day.seasonId !== null && day.specialDay === null;
+    const opens = (day: Day) => this.canWrite && (day.specialDay !== null || day.seasonId !== null);
     const stop =
       [this.focusDate, month.today].find((date) =>
         month.days.some((day) => day.date === date && opens(day)),
@@ -454,7 +460,7 @@ export class StaffingMonthView extends LitElement {
           ${month.seasons.map(
             (season) =>
               html`<li class="chip" data-test="season" data-tint=${tints.get(season.id)!}>
-                <button type="button" @click=${() => this.#openSeason(season.id)}>
+                <button type="button" @click=${() => this.#openPainter({ season: season.id })}>
                   ${this.#seasonLabel(season)}
                 </button>
               </li>`,
@@ -516,7 +522,7 @@ export class StaffingMonthView extends LitElement {
               tabindex=${stop ? 0 : -1}
               aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
-              @click=${() => this.#openSeason(day.seasonId!)}
+              @click=${() => this.#openDay(day)}
               @focus=${() => {
                 this.focusDate = day.date;
               }}

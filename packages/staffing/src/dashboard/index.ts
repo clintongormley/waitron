@@ -5,6 +5,7 @@ import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 import "./staffing-month.js";
 import "./staffing-season-painter.js";
+import "./staffing-special-day-painter.js";
 
 export const STAFFING_DASHBOARD: DashboardContribution = {
   module: "staffing",
@@ -44,7 +45,16 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
                       .readOnly=${!host.canWrite}
                       .open=${host.open}
                     ></staffing-season-painter>`
-                  : nothing
+                  : host.params.painter === "special-day" && host.params["special-day"]
+                    ? html`<staffing-special-day-painter
+                        .api=${api}
+                        .specialDayId=${host.params["special-day"]}
+                        .area=${host.params.area ?? ""}
+                        .month=${host.month}
+                        .readOnly=${!host.canWrite}
+                        .open=${host.open}
+                      ></staffing-special-day-painter>`
+                    : nothing
               }`,
         };
       },

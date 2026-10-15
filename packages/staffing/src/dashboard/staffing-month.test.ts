@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { StaffingMonth } from "../staffing-types.js";
@@ -8,6 +8,7 @@ import "./staffing-month.js";
 import { fakeApi, staffingMonth } from "../testing/staffing-month-fixture.js";
 
 const frames: HTMLElement[] = [];
+beforeEach(() => setLocale("en"));
 afterEach(() => {
   for (const frame of frames.splice(0)) frame.remove();
   setLocale("en");
@@ -492,17 +493,52 @@ describe("the Staffing view's month", () => {
       });
     });
 
-    it("keeps a special day, and a day no season holds, as plain days", async () => {
+    it("keeps a day no season holds as a plain day", async () => {
       const { api } = fakeApi(async (month) => {
         const read = staffingMonth(month);
         read.days[1] = { ...read.days[1]!, seasonId: null };
         return read;
       });
       const { el } = await mount({ api, canWrite: true });
-      expect(dayButton(el, "2026-12-24")).toBeNull();
-      expect(cell(el, "2026-12-24").querySelector(".day[role=group]")).not.toBeNull();
+      expect(dayButton(el, "2026-12-24")).not.toBeNull();
+      expect(cell(el, "2026-12-24").querySelector(".day[role=group]")).toBeNull();
       expect(dayButton(el, "2026-12-01")).toBeNull();
+      expect(cell(el, "2026-12-01").querySelector(".day[role=group]")).not.toBeNull();
       expect(dayButton(el, "2026-12-02")).not.toBeNull();
+    });
+
+    it("makes a special day a button for a person who may write, opening its special day, whatever season holds it", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const eve = read.days.findIndex(({ date }) => date === "2026-12-24");
+        read.days[eve] = { ...read.days[eve]!, seasonId: null };
+        return read;
+      });
+      const { el, open } = await mount({
+        api,
+        canWrite: true,
+        params: { month: "2026-12", area: "department:dep-bar" },
+      });
+      const day = dayButton(el, "2026-12-24")!;
+      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December");
+      expect(day.querySelector("[data-test=special]")!.textContent).toBe("Christmas Eve");
+      day.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        area: "department:dep-bar",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
+    });
+
+    it("opens a special day without an area when the month shows every area", async () => {
+      const { el, open } = await mount({ canWrite: true });
+      dayButton(el, "2026-12-24")!.click();
+      expect(open).toHaveBeenCalledWith("staffing", {
+        month: "2026-12",
+        painter: "special-day",
+        "special-day": "sd-eve",
+      });
     });
 
     it("draws no day button for a person who may only look", async () => {
@@ -540,7 +576,13 @@ describe("the Staffing view's month", () => {
     });
 
     it("gives the days one Tab stop, today, and moves it with the arrow keys past plain days", async () => {
-      const { el } = await mount({ canWrite: true });
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const day = read.days.findIndex(({ date }) => date === "2026-12-25");
+        read.days[day] = { ...read.days[day]!, seasonId: null };
+        return read;
+      });
+      const { el } = await mount({ api, canWrite: true });
       const stops = [...root(el).querySelectorAll<HTMLButtonElement>("button.day")].filter(
         (button) => button.tabIndex === 0,
       );
@@ -559,8 +601,10 @@ describe("the Staffing view's month", () => {
       expect(await press("2026-12-03", "ArrowLeft")).toBe("2026-12-02");
       expect(await press("2026-12-02", "ArrowDown")).toBe("2026-12-09");
       expect(await press("2026-12-09", "ArrowUp")).toBe("2026-12-02");
-      expect(await press("2026-12-23", "ArrowRight")).toBe("2026-12-25");
-      expect(await press("2026-12-17", "ArrowDown")).toBe("2026-12-31");
+      expect(await press("2026-12-23", "ArrowRight")).toBe("2026-12-24");
+      expect(await press("2026-12-24", "ArrowRight")).toBe("2026-12-26");
+      expect(await press("2026-12-17", "ArrowDown")).toBe("2026-12-24");
+      expect(await press("2026-12-18", "ArrowDown")).toBe("2027-01-01");
       expect(await press("2027-01-03", "ArrowRight")).toBe("2027-01-03");
       expect(await press("2026-11-30", "ArrowUp")).toBe("2026-11-30");
       expect(await press("2026-12-02", "Enter")).toBe("2026-12-02");
