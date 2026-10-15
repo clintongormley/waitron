@@ -7,6 +7,7 @@ import {
   diningTables,
   kitchenPrintJobLines,
   kitchenPrintJobs,
+  kitchenStations,
   nowIso,
   orderGroups,
   parties,
@@ -63,15 +64,22 @@ import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ti
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import {
   billRow,
+  counterOrder,
   inTx,
   join,
   nameParty,
+  nextMillisecond,
+  order,
   orderForParty,
+  pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   split,
   tableAt,
+  type PartyVenue,
 } from "./testing/party-venue.js";
+import { moveGuests } from "./table-actions.js";
 import "./errors.js";
 import {
   setupVenue,
@@ -2223,5 +2231,120 @@ describe("a station printer that was deleted", () => {
       return ordersWithPrintProblem(tx, cocina.id, [orderId], new Date());
     });
     expect(problems).toEqual(new Set());
+  });
+});
+
+describe("the party's name on a kitchen ticket", () => {
+  /** A printer on the venue's default station; returns its id. */
+  async function kitchenPrinter(v: PartyVenue): Promise<string> {
+    return inTx(v, async (tx) => {
+      const [station] = await tx
+        .select({ id: kitchenStations.id })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+      const id = await makePrinter(tx, v.cfg, "Cocina");
+      await attachPrinterToStation(tx, {
+        locationId: v.cfg.locationId,
+        stationId: station!.id,
+        printerId: id,
+      });
+      return id;
+    });
+  }
+
+  /** The printed lines of each job the printer was sent since `from` jobs, oldest first. */
+  async function ticketsSince(printerId: string, from = 0): Promise<string[][]> {
+    const jobs = await db
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId))
+      .orderBy(sql`rowid`);
+    return jobs.slice(from).map((job) => printedLines(job.payload));
+  }
+
+  it("prints the order line as Pedido N · name for a named party's order", async () => {
+    const v = await setupPartyVenue(db);
+    const printer = await kitchenPrinter(v);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 71"));
+    await nameParty(v, partyId, "Ana");
+    await order(v, tabId, "Burger");
+    const { orderNumber } = await billRow(v, tabId);
+    const tickets = await ticketsSince(printer);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]!.slice(0, 3)).toEqual(["Cocina", "Mesa 71", `Pedido ${orderNumber} · Ana`]);
+  });
+
+  it("prints the name of the party a bill's party was merged into", async () => {
+    const v = await setupPartyVenue(db);
+    const printer = await kitchenPrinter(v);
+    const mesa72 = await v.table("Mesa 72");
+    const ana = await seat(v, await v.table("Mesa 73"));
+    await nameParty(v, ana.partyId, "Ana");
+    await nextMillisecond();
+    const luis = await seat(v, mesa72);
+    await nameParty(v, luis.partyId, "Luis");
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const expectedPartyRevision = await revisionOf(v, ana.partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, luis.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, ana.partyId, mesa72, {
+        bills: "merge",
+        expectedPartyRevision,
+        otherPartyId: luis.partyId,
+        expectedOtherPartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+    const before = (await ticketsSince(printer)).length;
+
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, ana.tabId));
+
+    const { orderNumber } = await billRow(v, ana.tabId);
+    const tickets = await ticketsSince(printer, before);
+    expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
+      ["*** REPRINT ***", "Cocina", "Mesa 72", `Pedido ${orderNumber} · Luis`],
+    ]);
+  });
+
+  it("prints the bare order number for an unnamed party's order and a counter order", async () => {
+    const v = await setupPartyVenue(db);
+    const printer = await kitchenPrinter(v);
+    const { tabId } = await seat(v, await v.table("Mesa 74"));
+    await order(v, tabId, "Burger");
+    const counter = await counterOrder(v, "Burger");
+    await inTx(v, async (tx) =>
+      fireLines(
+        tx,
+        v.cfg,
+        counter,
+        await tx
+          .select({
+            id: workingOrderLines.id,
+            productId: workingOrderLines.productId,
+            courseId: workingOrderLines.courseId,
+            parentLineId: workingOrderLines.parentLineId,
+            note: workingOrderLines.note,
+            quantity: workingOrderLines.quantity,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, counter)),
+      ),
+    );
+    const tickets = await ticketsSince(printer);
+    expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
+      [
+        "Cocina",
+        "Mesa 74",
+        String((await billRow(v, tabId)).orderNumber),
+        expect.stringMatching(/^\d\d:\d\d$/),
+      ],
+      [
+        "Cocina",
+        "",
+        String((await billRow(v, counter)).orderNumber),
+        expect.stringMatching(/^\d\d:\d\d$/),
+      ],
+    ]);
   });
 });

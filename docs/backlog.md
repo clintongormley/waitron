@@ -1999,10 +1999,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   object across `packages/module/src/module.ts`, `packages/venue-service/src/kitchen-notices.ts`
   and the callers in `apps/server/src/kitchen-print.ts`. Left open by A650 Part 1.
 
-- **A683 — The party's name prints on every kitchen ticket, as on MOVED slips (owner, 2026-10-14;
-  open).** The owner wants "Order 5 · Ana" on ordinary kitchen tickets too, not only
-  on MOVED slips, so the cook meets the name on the first ticket. Reference: picture 5 in
-  [the A650 mockups](backlog/mockups/a650-moved-slips/).
+- **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
+  Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
+  slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
+  taken off) — still print the bare order number (`formatCorrectionSlip`,
+  `apps/server/src/kitchen-ticket.ts`). Decide: should they carry the name too? Left open by A683.
 
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
   (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its

@@ -41,12 +41,14 @@ export interface OtherStationItem {
 
 /**
  * `firedAt` prints as local HH:MM. A `reprint` opens with `*** REPRINT ***`; a `mark` opens with
- * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released).
+ * `*** HOLD ***` (held work printed in advance) or `*** FIRE ***` (that work released). With a
+ * `party`, the order number prints as a MOVED slip's order line does; without, it prints alone.
  */
 export type KitchenTicket = {
   reprint?: boolean;
   mark?: "HOLD" | "FIRE";
   from?: { stationName: string; locale: string };
+  party?: { name: string; locale: string };
 } & (
   | {
       scope: "station";
@@ -187,6 +189,19 @@ function emitGrouped(
   }
 }
 
+/** `order`, then ` · ` and the party's name, wrapping the name under itself. */
+function emitOrderLine(
+  b: ReturnType<typeof esc>,
+  order: string,
+  partyName: string | undefined,
+  columns: number,
+): void {
+  const label = `${order} · `;
+  const [line, indent] =
+    partyName === undefined ? [order, 0] : [`${label}${partyName}`, prepareText(label).length];
+  for (const part of wrapText(prepareText(line), columns, indent)) b.line(part);
+}
+
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
   const m = String(at.getMinutes()).padStart(2, "0");
@@ -218,7 +233,11 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
       : ticket.stations.map((station) => station.stationName).join(" · "),
   );
   text(ticket.tableLabel);
-  text(ticket.orderNumber);
+  if (ticket.party === undefined) text(ticket.orderNumber);
+  else {
+    const { order } = MOVED_WORDS[ticketLanguage(ticket.party.locale)];
+    emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party.name, columns);
+  }
   b.line(hhmm(ticket.firedAt));
   if (ticket.from !== undefined)
     text(`${kitchenWords(ticket.from.locale).from} ${ticket.from.stationName}`);
@@ -419,9 +438,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   text(slip.stationName);
   const numbers =
     slip.toNumber === undefined ? slip.fromNumber : `${slip.fromNumber} -> ${slip.toNumber}`;
-  const order = `${words.order} ${numbers}`;
-  if (slip.partyName === undefined) text(order);
-  else labelled(`${order} · `, slip.partyName);
+  emitOrderLine(b, `${words.order} ${numbers}`, slip.partyName, columns);
   labelled(words.from, slip.fromText);
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));

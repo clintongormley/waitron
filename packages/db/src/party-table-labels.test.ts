@@ -7,6 +7,7 @@ import {
   billParties,
   billPartyTableLabels,
   orderTableLabels,
+  partySurvivorNames,
   partySurvivors,
   partyTableLabels,
   billPartyTables,
@@ -81,6 +82,10 @@ describe("party table labels", () => {
       }
       return row!.id;
     });
+  }
+
+  async function nameParty(id: string, name: string | null): Promise<void> {
+    await inTx((tx) => tx.update(parties).set({ name }).where(eq(parties.id, id)));
   }
 
   async function merge(from: string, into: string): Promise<void> {
@@ -211,6 +216,52 @@ describe("party table labels", () => {
     );
   });
 
+  describe("partySurvivorNames", () => {
+    it("answers each party with the end of its chain of merges and that end's name", async () => {
+      const survivor = await party();
+      const middle = await party();
+      const first = await party();
+      await nameParty(survivor, "Ana");
+      await nameParty(middle, "Middle");
+      await nameParty(first, "First");
+      await merge(middle, survivor);
+      await merge(first, middle);
+      expect(await inTx((tx) => partySurvivorNames(tx, [first, middle, survivor]))).toEqual(
+        new Map([
+          [first, { id: survivor, name: "Ana" }],
+          [middle, { id: survivor, name: "Ana" }],
+          [survivor, { id: survivor, name: "Ana" }],
+        ]),
+      );
+    });
+
+    it("gives a null name when the chain ends at an unnamed party, and none for a cycle or a missing party", async () => {
+      const end = await party();
+      const merged = await party();
+      await nameParty(merged, "Merged");
+      await merge(merged, end);
+      const unmerged = await party();
+      await nameParty(unmerged, "Luis");
+      const first = await party();
+      const second = await party();
+      await merge(first, second);
+      await merge(second, first);
+      const missing = "cccccccc-9999-4000-8000-000000000002";
+      expect(
+        await inTx((tx) => partySurvivorNames(tx, [merged, unmerged, first, second, missing])),
+      ).toEqual(
+        new Map([
+          [merged, { id: end, name: null }],
+          [unmerged, { id: unmerged, name: "Luis" }],
+        ]),
+      );
+    });
+
+    it("answers no party with an empty map, without reading the database", async () => {
+      expect(await partySurvivorNames({} as Transaction, [])).toEqual(new Map());
+    });
+  });
+
   describe("billPartyTables", () => {
     const names = (tables: Map<string, { name: string }[]>) =>
       new Map([...tables].map(([id, list]) => [id, list.map((table) => table.name)]));
@@ -277,10 +328,6 @@ describe("party table labels", () => {
   });
 
   describe("billParties", () => {
-    async function nameParty(id: string, name: string): Promise<void> {
-      await inTx((tx) => tx.update(parties).set({ name }).where(eq(parties.id, id)));
-    }
-
     it("gives each party the tables and labels of billPartyTables and billPartyTableLabels, and the party at the end of its merges", async () => {
       const survivor = await party([
         { label: "Bp 7", joinedAt: "2026-09-29T20:20:00.000Z" },

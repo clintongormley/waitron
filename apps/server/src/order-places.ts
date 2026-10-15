@@ -1,5 +1,12 @@
 import { eq, inArray } from "drizzle-orm";
-import { billParties, parties, tableNames, workingOrders, type Transaction } from "@waitron/db";
+import {
+  billParties,
+  parties,
+  partySurvivorNames,
+  tableNames,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 
 /** Where an order is, as its kitchen tickets name it. */
 export interface OrderPlaces {
@@ -22,6 +29,43 @@ export interface PlacedOrder {
    * The name of the party at the end of its party's merges, else its own party's; null for none.
    */
   sittingWith: string | null;
+}
+
+/**
+ * The name of the party at the end of the order's party's merges, else its own party's; null for none.
+ */
+export function partyNameOnPaper(
+  ownName: string | null,
+  survivor: { name: string | null } | undefined,
+): string | null {
+  return survivor === undefined ? ownName : survivor.name;
+}
+
+/**
+ * Each order's {@link partyNameOnPaper}, keyed by order; an id that names no order has no entry.
+ */
+export async function readPartyNames(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (orderIds.length === 0) return new Map();
+  const orders = await tx
+    .select({ id: workingOrders.id, partyId: workingOrders.partyId, partyName: parties.name })
+    .from(workingOrders)
+    .leftJoin(parties, eq(parties.id, workingOrders.partyId))
+    .where(inArray(workingOrders.id, [...orderIds]));
+  const survivors = await partySurvivorNames(tx, [
+    ...new Set(orders.flatMap((order) => order.partyId ?? [])),
+  ]);
+  return new Map(
+    orders.map((order) => [
+      order.id,
+      partyNameOnPaper(
+        order.partyName,
+        order.partyId === null ? undefined : survivors.get(order.partyId),
+      ),
+    ]),
+  );
 }
 
 /**
@@ -80,8 +124,11 @@ export async function readPlacedOrders(
         names: [table.shown],
       };
     }
-    const sittingWith = party?.survivor === undefined ? order.partyName : party.survivor.name;
-    placed.set(order.id, { places, partyId: order.partyId, sittingWith });
+    placed.set(order.id, {
+      places,
+      partyId: order.partyId,
+      sittingWith: partyNameOnPaper(order.partyName, party?.survivor),
+    });
   }
   return placed;
 }

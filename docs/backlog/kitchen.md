@@ -21,10 +21,11 @@ list does not exist.
     decision.
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
-    `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip is the one kind
-    whose header word and cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
+    `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
+    cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
     when unset), so by default a held slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and
-    `QUITAR:`, mixed on one slip.
+    `QUITAR:`, mixed on one slip. Since A683 a ticket for a named party also prints its order
+    line in that locale, so a held ticket reads `*** HOLD ***` above `Pedido 5 · Ana`.
   - A switched-off printer's printing problem keeps showing until the printer is switched on
     and a Reprint prints there; there is no way to dismiss one.
   - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
@@ -182,6 +183,12 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
    the row. A584's Period field already sits after the search box; the tidy keeps it there.
 
 ## Decisions and deliberate limits
+
+- **The party's name prints on every kitchen ticket, as on MOVED slips (A683, owner 2026-10-14).**
+  A named party's tickets read `Order 5 · Ana` / `Pedido 5 · Ana`, so the cook meets the name on
+  the first ticket; a merged party's read the name of the party it ended up in, and an unnamed
+  party's or a counter order's print the bare number. Picture 5 in
+  [the A650 mockups](mockups/a650-moved-slips/).
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").

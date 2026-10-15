@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorTodayJoins, floorTodayJoinTables, workingOrders } from "@waitron/db";
-import { readOrderPlaces } from "./order-places.js";
+import {
+  partyNameOnPaper,
+  readOrderPlaces,
+  readPartyNames,
+  readPlacedOrders,
+} from "./order-places.js";
 import { finishTable } from "./parties.js";
 import { joinTables } from "./table-actions.js";
 import {
@@ -189,5 +194,69 @@ describe("readOrderPlaces", () => {
 
   it("answers an empty map for no orders", async () => {
     expect(await inTx(v, (tx) => readOrderPlaces(tx, []))).toEqual(new Map());
+  });
+});
+
+describe("partyNameOnPaper", () => {
+  it("gives the name of the party at the end of the merges when there is one, else the order's own party's", () => {
+    expect(partyNameOnPaper("Bea", { name: "Ana" })).toBe("Ana");
+    expect(partyNameOnPaper("Bea", { name: null })).toBeNull();
+    expect(partyNameOnPaper("Bea", undefined)).toBe("Bea");
+    expect(partyNameOnPaper(null, undefined)).toBeNull();
+  });
+});
+
+describe("readPartyNames", () => {
+  it("names an order by its own party's name, and an unnamed party's and a counter order's by null", async () => {
+    const named = await seat(v, await v.table("Mesa 61"));
+    await nameParty(v, named.partyId, "Ana");
+    const unnamed = await seat(v, await v.table("Mesa 62"));
+    const counter = await counterOrder(v, "Burger");
+    const ids = [named.tabId, unnamed.tabId, counter];
+    expect(await inTx(v, (tx) => readPartyNames(tx, ids))).toEqual(
+      new Map([
+        [named.tabId, "Ana"],
+        [unnamed.tabId, null],
+        [counter, null],
+      ]),
+    );
+    const placed = await inTx(v, (tx) => readPlacedOrders(tx, ids));
+    expect(ids.map((id) => placed.get(id)!.sittingWith)).toEqual(["Ana", null, null]);
+  });
+
+  it("names the order of a party merged into another by the surviving party's name, as a MOVED slip does", async () => {
+    const t1 = await v.table("Mesa 63");
+    const t2 = await v.table("Mesa 64");
+    const a = await seat(v, t1);
+    const b = await seat(v, t2);
+    await nameParty(v, a.partyId, "Ana");
+    await nameParty(v, b.partyId, "Bea");
+    await order(v, b.tabId, "Burger");
+    await pay(v, b.tabId, "12.00");
+    const sent = await commandFor(v, a.partyId);
+    const bRevision = (await commandFor(v, b.partyId)).expectedPartyRevision;
+    await inTx(v, (tx) =>
+      joinTables(tx, v.cfg, a.partyId, t2, {
+        ...sent,
+        bills: "separate",
+        otherPartyId: b.partyId,
+        expectedOtherPartyRevision: bRevision,
+      }),
+    );
+    const ids = [a.tabId, b.tabId];
+    expect(await inTx(v, (tx) => readPartyNames(tx, ids))).toEqual(
+      new Map([
+        [a.tabId, "Ana"],
+        [b.tabId, "Ana"],
+      ]),
+    );
+    const placed = await inTx(v, (tx) => readPlacedOrders(tx, ids));
+    expect(placed.get(b.tabId)!.sittingWith).toBe("Ana");
+  });
+
+  it("answers an empty map for no orders, and leaves out an id that names no order", async () => {
+    expect(await inTx(v, (tx) => readPartyNames(tx, []))).toEqual(new Map());
+    const unknown = "cccccccc-9999-4000-8000-0000000000c2";
+    expect(await inTx(v, (tx) => readPartyNames(tx, [unknown]))).toEqual(new Map());
   });
 });

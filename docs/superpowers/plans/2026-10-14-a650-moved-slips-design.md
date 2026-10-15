@@ -92,7 +92,7 @@ How an order's place is decided today:
 - The kitchen ticket's header is: station, place name, order number, time fired, then `GROUP n`
   (`formatKitchenTicket`, `apps/server/src/kitchen-ticket.ts:178-235`). The order number is per
   bill. **The party's own name ("Name the party") never prints on kitchen paper**; a group's name for
-  today does, as the place name.
+  today does, as the place name. (2026-10-15: A683 prints it on every kitchen ticket.)
 - A slip prints **one per sent line per printer**: three sent lines on two bills make three slips,
   and two burgers on one line make one `2.000 x BURG` slip. A station with no active printer and a
   dish made at the till get none (`printCorrectionSlips`, `apps/server/src/kitchen-print.ts:939-990`).
@@ -115,7 +115,7 @@ How an order's place is decided today:
 | 14 | **Move this bill**, a counter order into a party | the order goes to the party's table | `- -> Mesa 101` |
 | 15 | **Rename** a table or group for today | nothing moves; the name on the kitchen's paper is gone from the floor | nothing |
 | 16 | **Merge bills**, **Transfer items**, **Split the bill** (one party) | nothing moves; sent dishes change order number | nothing |
-| 17 | **Reset to saved plan**, **Reset table**, **Name the party** | nothing moves or no name the kitchen sees changes | nothing (Reset table read, not run) |
+| 17 | **Reset to saved plan**, **Reset table**, **Name the party** | nothing moves or no name the kitchen sees changes (2026-10-15: since A683 a rename changes the name later kitchen tickets print) | nothing (Reset table read, not run) |
 
 Two more things the probe showed, outside the design's rule:
 
@@ -224,7 +224,8 @@ GROUP 2                                GROUP 2
   printer's glyph table (`packages/printing/src/glyphs.ts:136`, code point `0x00b7`), so
   `prepareText` keeps it (`packages/printing/src/text.ts:33-46`); read, not printed.
 - **Superseded:** "The party's own name is not printed (question 3)" — ruling 3 reversed it. The
-  party's name still does **not** print on ordinary kitchen tickets; §8 question B.
+  party's name still does **not** print on ordinary kitchen tickets; §8 question B. (2026-10-15:
+  A683 now prints it on every kitchen ticket.)
 - **From**: the place names before the action, as tickets print them. **To**: the place names a
   ticket printed now would carry. When the two read the same but the tables differ (the Terraza
   case), each side adds its tables in brackets: `From: Terraza (Mesa 77)`, `To: Terraza (Mesa 78)`.
@@ -773,7 +774,7 @@ Drawings: picture 6 for A, picture 5 for B, picture 7 for C.
 - **B. The party's name on ordinary kitchen tickets.** Ruling 3 puts "· Ana" on the MOVED slip; the
   first ticket for the order still prints no party name, so the cook meets the name first on a
   slip. Print it on every kitchen ticket too? **Default: slip only in this build**; a ticket change
-  would be its own backlog entry.
+  would be its own backlog entry. (2026-10-15: A683 prints it on every kitchen ticket.)
 - **C. A station set not to print MOVED slips: its kitchen screen.** **Default: the moved notice
   still shows on that station's screen**, because the setting is about paper; say if "off" should
   silence the screen too.

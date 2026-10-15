@@ -51,6 +51,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import {
   readOrderPlaces,
+  readPartyNames,
   readPlacedOrders,
   type OrderPlaces,
   type PlacedOrder,
@@ -522,6 +523,7 @@ async function planKitchenTickets(
       ? await readStations(tx, stationIds)
       : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
   const order = await readOrderHeader(tx, cfg, orderId);
+  const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
@@ -586,6 +588,7 @@ async function planKitchenTickets(
     reprint,
     mark,
     from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
+    party: partyName === null ? undefined : { name: partyName, locale: cfg.locale },
     tableLabel: order.tableLabel ?? "",
     orderNumber: order.orderNumber,
     firedAt: new Date(),
