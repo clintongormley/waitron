@@ -1,4 +1,6 @@
 import "./modifier-picker.js";
+import "./order-kitchen-note.js";
+import type { SaveKitchenNoteDetail } from "./order-kitchen-note.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { ContentLanguageController } from "@waitron/ui";
@@ -414,10 +416,32 @@ export class TillBasket extends LitElement {
     this.#listedTotal = billGross(rows);
   }
 
+  @property({ type: Boolean }) hideKitchenNote = false;
+
+  #kitchenHeading() {
+    if (this.hideKitchenNote) return nothing;
+    const store = this.store;
+    return html`<till-order-kitchen-note
+      .scopeKey=${store.kitchenNoteScopeKey}
+      .note=${store.kitchenNote}
+      .revision=${store.kitchenNoteRevision}
+      .visit=${store.loadGeneration}
+      .busy=${store.sending || store.editsLocked || this.orderInFlight}
+      @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => {
+        if (store.persisted) return;
+        event.stopPropagation();
+        const detail = event.detail;
+        if (detail.scopeKey === store.kitchenNoteScopeKey && detail.visit === store.loadGeneration)
+          store.kitchenNote = detail.note;
+      }}
+    ></till-order-kitchen-note>`;
+  }
+
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
-      return html`<p class="empty">${t("basket.empty")}</p>`;
+      return html`${this.#kitchenHeading()}
+        <p class="empty">${t("basket.empty")}</p>`;
     }
     // The owner of `lineIndexes` hears of a change after this basket does, so a place the store no
     // longer has is skipped until it catches up.
@@ -428,6 +452,7 @@ export class TillBasket extends LitElement {
     const listing = storedListing(this.store, this.storedLines);
     const adjustable = adjustableListing(this.store, listing, this.orderInFlight);
     return html`
+      ${this.#kitchenHeading()}
       ${shown.map(([line, index]) => {
         const listed = this.#listed(line, listing);
         const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);

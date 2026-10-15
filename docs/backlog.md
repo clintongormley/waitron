@@ -1844,7 +1844,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Today a note
+- **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Plan:
+  [whole-order kitchen notes](superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
+  The implementation is in progress; server persistence and kitchen output remain open. Today a note
   belongs to one line (`orders.note`, `packages/db/src/schema/orders.ts`); nothing holds a note
   for the order ("all together, they have a train at 14:30"). Add one: a row at the top of the order
   on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at

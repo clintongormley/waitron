@@ -1234,3 +1234,55 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
     expect(refusals).toEqual([]);
   });
 });
+
+describe("whole-order kitchen note", () => {
+  it("tracks note edits separately from saved lines and their locked prices", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("order-a", [{ product: cafe, quantity: "2", note: "Dish only" }], "Label", 3);
+    expect(store.kitchenNote).toBeNull();
+    store.kitchenNote = "  Train at 14:30  ";
+    expect(store.kitchenNote).toBe("Train at 14:30");
+    expect(store.kitchenNoteDirty).toBe(true);
+    expect(store.dirty).toBe(false);
+    expect(store.lines).toEqual([{ product: cafe, quantity: "2", note: "Dish only" }]);
+    expect(store.total).toBe("3.00");
+    store.kitchenNote = null;
+    expect(store.kitchenNoteDirty).toBe(false);
+  });
+
+  it("loads and resets note ownership explicitly, including a reload of the same order", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("order-a", [], undefined, 3, {
+      note: "Table note",
+      revision: 8,
+      scopeKey: "party:a",
+    });
+    expect(store.kitchenNote).toBe("Table note");
+    expect(store.kitchenNoteScopeKey).toBe("party:a");
+    expect(store.kitchenNoteRevision).toBe(8);
+    store.kitchenNote = "Draft edit";
+    store.loadFrom("order-a", [], undefined, 3);
+    expect(store.kitchenNote).toBeNull();
+    expect(store.kitchenNoteDirty).toBe(false);
+    expect(store.kitchenNoteScopeKey).toBe("order:order-a");
+    store.kitchenNote = "Another note";
+    store.clear();
+    expect(store.kitchenNote).toBeNull();
+    expect(store.kitchenNoteScopeKey).toBe(`order:${store.id}`);
+  });
+});
+
+it("refuses kitchen-note edits while sending or reloading without changing lines", () => {
+  const store = new WorkingOrderStore();
+  store.kitchenNote = "Keep";
+  store.sending = true;
+  store.kitchenNote = "Sending edit";
+  expect(store.kitchenNote).toBe("Keep");
+  store.sending = false;
+  const release = store.lockEdits();
+  store.kitchenNote = "Locked edit";
+  expect(store.kitchenNote).toBe("Keep");
+  release();
+  store.kitchenNote = "Allowed";
+  expect(store.kitchenNote).toBe("Allowed");
+});

@@ -1,3 +1,5 @@
+import "../widgets/order-kitchen-note.js";
+import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
@@ -1186,6 +1188,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) now?: number;
   @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
+  @property() kitchenNote: string | null = null;
+  @property({ type: Number }) kitchenNoteRevision = 0;
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
   /** `false` hides the pay section. */
@@ -2665,6 +2669,18 @@ export class TillTableOrderScreen extends LitElement {
           }
         </div>
         ${this.#printProblem()}
+        <till-order-kitchen-note
+          .scopeKey=${this.party === null ? `order:${this.orderId ?? draft?.id ?? ""}` : `party:${this.party.id}`}
+          .note=${this.party === null ? (draft?.kitchenNote ?? null) : this.kitchenNote}
+          .revision=${this.party === null ? (draft?.kitchenNoteRevision ?? 0) : this.kitchenNoteRevision}
+          .visit=${draft?.loadGeneration ?? 0}
+          .busy=${this.busy}
+          @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => {
+            if (this.party !== null || draft === null) return;
+            event.stopPropagation();
+            draft.kitchenNote = event.detail.note;
+          }}
+        ></till-order-kitchen-note>
         <div class="layout">
           ${draft === null ? nothing : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
@@ -2972,7 +2988,7 @@ export class TillTableOrderScreen extends LitElement {
           ${keyed(
             this.orderId,
             draft.lineCount === 0
-              ? html`<till-basket .store=${draft}></till-basket>`
+              ? html`<till-basket .hideKitchenNote=${true} .store=${draft}></till-basket>`
               : this.#draftSections(draft, entries),
           )}
           ${this.#draftBar(draft)}
@@ -3039,7 +3055,12 @@ export class TillTableOrderScreen extends LitElement {
                 ? nothing
                 : html`<h3 class="draft-section-name">${section.course.name}</h3>`
             }
-            <till-basket stacked .store=${store} .lineIndexes=${section.lineIndexes}>
+            <till-basket
+              .hideKitchenNote=${true}
+              stacked
+              .store=${store}
+              .lineIndexes=${section.lineIndexes}
+            >
               ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
             </till-basket>
           </section>`,

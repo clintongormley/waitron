@@ -2,6 +2,14 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "kitchen_note.add": "+ Note for the kitchen",
+  "kitchen_note.heading": "For the kitchen",
+  "kitchen_note.title": "Note for the kitchen",
+  "kitchen_note.placeholder": "All together, they have a train at 14:30",
+  "kitchen_note.too_long": "Use no more than 2,000 characters.",
+  "kitchen_note.clear": "Clear",
+  "kitchen_note.save": "Save",
+  "kitchen_note.cancel": "Cancel",
   "hours.back": "Back",
   "hours.mine": "My hours",
   "hours.refresh": "Refresh",
@@ -1474,6 +1482,14 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "kitchen_note.add": "+ Nota para cocina",
+  "kitchen_note.heading": "Para cocina",
+  "kitchen_note.title": "Nota para cocina",
+  "kitchen_note.placeholder": "Todo junto, tienen un tren a las 14:30",
+  "kitchen_note.too_long": "Usa un máximo de 2000 caracteres.",
+  "kitchen_note.clear": "Borrar",
+  "kitchen_note.save": "Guardar",
+  "kitchen_note.cancel": "Cancelar",
   "hours.back": "Volver",
   "hours.mine": "Mis horas",
   "hours.refresh": "Actualizar",

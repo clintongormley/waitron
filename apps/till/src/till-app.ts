@@ -1723,7 +1723,7 @@ export class TillApp extends LitElement {
 
   readonly #basketOwner = {};
   #basketScope?: DraftScope<string>;
-  #basketBaseline = JSON.stringify([null, []]);
+  #basketBaseline = JSON.stringify([null, [], null]);
   #basketGeneration = 0;
   #basketObserved?: string;
 
@@ -1746,6 +1746,7 @@ export class TillApp extends LitElement {
           .map((answer) => JSON.stringify([answer.listId, answer.labelId]))
           .sort(),
       ]),
+      store.kitchenNote,
     ]);
   }
 
@@ -2091,7 +2092,7 @@ export class TillApp extends LitElement {
         // A refused table read must keep the draft; the accepted replacement performs its reset.
         restore: () => undefined,
       });
-      this.#partylessScope.commit(JSON.stringify([JSON.stringify([null, []]), []]));
+      this.#partylessScope.commit(JSON.stringify([JSON.stringify([null, [], null]), []]));
       this.#partylessObserved = this.#partylessPayload();
     }
     const payload = this.#partylessPayload();

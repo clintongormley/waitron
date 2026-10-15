@@ -19809,6 +19809,22 @@ describe("basket unsaved replacement", () => {
     q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
     await expect.poll(() => q.open).toBe(false);
   }
+  it("protects a note-only counter basket from unload and replacement, including a revert", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    expect(unloadCancelled()).toBe(false);
+    c.store.kitchenNote = "Train at 14:30";
+    expect(c.store.lines).toHaveLength(0);
+    expect(unloadCancelled()).toBe(true);
+    c.store.kitchenNote = null;
+    expect(unloadCancelled()).toBe(false);
+    c.store.kitchenNote = "Serve together";
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "keep");
+    expect(c.store.kitchenNote).toBe("Serve together");
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+  });
   it("registers memory-only lines and label for unload, including reverts", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
