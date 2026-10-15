@@ -96,3 +96,12 @@ export type { ModuleTimeRecordExport } from "./record-export.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "./module.js";
+
+export type {
+  InitialSetupContext,
+  InitialSetupImport,
+  InitialSetupContribution,
+} from "./initial-setup.js";
+export { initialSetupFor } from "./initial-setup-selection.js";
+export type { ModuleOperationHost } from "./operation-preparation.js";
+export { configureModuleOperations } from "./operation-preparation.js";

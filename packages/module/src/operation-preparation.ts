@@ -1,3 +1,4 @@
+import type { OperationBinding } from "./operation-authority.js";
 import type { WaitronModule } from "./module.js";
 import { AppError } from "@waitron/shared";
 import {
@@ -7,7 +8,26 @@ import {
   type ModuleOperations,
 } from "./operation-input.js";
 
+export interface ModuleOperationHost {
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  readPublicEvidence(
+    binding: OperationBinding,
+  ): Promise<{ trust: unknown; current: unknown } | undefined>;
+}
+
+export function configureModuleOperations(
+  modules: readonly WaitronModule[],
+  host: ModuleOperationHost,
+): readonly WaitronModule[] {
+  return modules.map((module) =>
+    module.operations?.configure === undefined
+      ? module
+      : { ...module, operations: module.operations.configure(host) },
+  );
+}
+
 export interface ModuleOperationPreparation {
+  configure?(host: ModuleOperationHost): ModuleOperationPreparation;
   prepare<T>(
     operation: ModuleOperationInput,
     run: (prepared: ModuleOperationInput) => Promise<T>,

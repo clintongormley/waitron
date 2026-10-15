@@ -1,5 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { LocationId, NodeId } from "@waitron/shared";
+import type { InitialSetupContribution } from "./initial-setup.js";
 import type { ModuleOperationInput } from "./operation-input.js";
 import type { ModuleOperationPreparation } from "./operation-preparation.js";
 
@@ -94,6 +95,7 @@ export interface ThrowawayAllocation {
 }
 
 export interface ModuleProvisioning {
+  readonly initialSetup?: InitialSetupContribution;
   readonly seed?: NodeSeed;
   readonly standby?: StandbyProvisioning;
   readonly throwawayAllocation?: ThrowawayAllocation;
