@@ -12,10 +12,12 @@ import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
+import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
+import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -2028,6 +2030,32 @@ async function bootServer(
     },
     log,
   );
+  // Must match the context `mountCatalogueApi` gives the translations routes.
+  const translationContext = {
+    fallbackLanguage: venueLocale,
+    required: contentLanguageRules.required,
+  };
+  const suggestionRunner = cloudConnection
+    ? createContentSuggestionRunner({
+        db,
+        connection: cloudConnection,
+        context: translationContext,
+        isPrimary: cloudPrimary,
+      })
+    : undefined;
+  mountContentSuggestionsApi(
+    app,
+    {
+      db,
+      connection: cloudConnection,
+      cloudOrigin,
+      context: translationContext,
+      managementOrigin: config.managementOrigin,
+      isPrimary: cloudPrimary,
+      wake: () => suggestionRunner?.wake(),
+    },
+    log,
+  );
 
   const backupTurns = createTurns();
   mountBackupApi(
@@ -2377,9 +2405,14 @@ async function bootServer(
         }),
       })
     : undefined;
-  // The unwind runs newest first: abort before awaiting either duty, even if one rejects.
+  const suggestionLoop = suggestionRunner?.run(cloudController.signal, {
+    onError: (error) =>
+      log("error", "content.suggestion_runner_failed", { errorCode: codeOf(error) }),
+  });
+  // The unwind runs newest first: abort before awaiting any of the three duties, even if one rejects.
   undoOnFailure.push(async () => cloudSnapshots);
   undoOnFailure.push(async () => cloudWorker);
+  undoOnFailure.push(async () => suggestionLoop);
   undoOnFailure.push(async () => cloudController.abort());
   return makeStartedServer(
     server,
@@ -2397,6 +2430,7 @@ async function bootServer(
           () => invoiceEmailLoop,
           () => cloudWorker,
           () => cloudSnapshots,
+          () => suggestionLoop,
           unsubscribeFromChanges,
           () => menuActivation.stop(),
           () => appendOnlyWatch.stop(),
