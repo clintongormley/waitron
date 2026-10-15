@@ -4702,6 +4702,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
+- **Staffing paint in calendar delete confirmations.** Decide whether a shared deletion-impact
+  seam should count staffing paint when you delete a season or special-day date. The approved
+  A585 scope leaves that count out. [Detail](backlog/workforce.md#staffing-paint-in-calendar-delete-confirmations)
 - **Copy rota assignments in one read.** `changeRotaWeek` reads an assignment per copied shift.
   Measure a large week under the venue write queue, then batch that read while preserving the
   shift-id map and rollback checks. Query cost is unmeasured; A585-7 review finding.

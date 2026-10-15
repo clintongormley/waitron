@@ -1114,6 +1114,10 @@ The dialog now resolves each saved endpoint in the selected location's time zone
 day when the end is at or before the start. The overnight storage case in
 `apps/server/src/workforce-api.test.ts` reads back distinct offsets across the spring clock change.
 
+**Update, 2026-10-15 (A585 part 8).** The core roster screen and its shift dialog are retired.
+The references above describe those historical screens; Calendar → Rota and staffing's shift
+editor replace them. The storage convention and overnight route case remain.
+
 **The siblings, swept 2026-10-03 at `575aff691`.** Every `ts`, `tsString` and `timeOfDay` column
 was listed with `grep -rn --include='*.ts' -E '\b(ts|tsString|timeOfDay)\("' packages apps`, then
 each column's name was searched across `packages/` and `apps/` for a text comparison (drizzle's
