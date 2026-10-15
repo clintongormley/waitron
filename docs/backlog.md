@@ -5234,6 +5234,14 @@ the tree. What remains, largest first:
   recovery remain open. Cloud owns route placement and fencing in its backlog. Left open by the
   Cloud connection integration (2026-09-24; #638, #808).
 
+- **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
+  the field into text before checking it, so `["ready"]` passes as `"ready"`:
+  `apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
+  `cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
+  `cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
+  `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
+  (2026-10-15), not measured against a real Cloud.
+
 - **A stop made while `cloud-replacement.json` is unreadable is not recorded in it.** Owner to
   choose: refuse Stop access while the replacement file is unreadable, or record the stop somewhere
   that survives the repair. Left open by the Cloud connection integration (2026-09-24; #638, #808).
