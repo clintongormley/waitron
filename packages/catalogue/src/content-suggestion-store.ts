@@ -4,6 +4,7 @@ import { AppError } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   buildSuggestionJob,
+  effectiveNames,
   parseSuggestionRef,
   resolveLive,
   suggestionRef,
@@ -112,9 +113,7 @@ export async function storeSuggestionResults(
       rows.set(language, { ...emptyRow(language), text: trimmed });
       named.set(language, [...(named.get(language) ?? []), ref]);
     }
-    const effective: Record<string, string> = entry
-      ? { ...entry.inheritedNames, ...entry.names }
-      : {};
+    const effective: Record<string, string> = entry ? effectiveNames(entry) : {};
     for (const fix of result.corrections) {
       if (!validFix(fix, missing, languages)) {
         dropped += 1;
@@ -137,8 +136,9 @@ export async function storeSuggestionResults(
     else failed.add(key);
   }
   for (const [language, refs] of named) {
-    // Liveness never reads the language (`content-translation-targets.ts:224-239`), so every ref
-    // live above resolves live here.
+    // Liveness never reads the language: whether the row is found (`content-translation-targets.ts`
+    // :316-329, `namedRows` takes no language) and its eligibility and activity flags (:226-249)
+    // come from the row alone. So every ref live above resolves live here.
     const targets = await liveByRef(tx, language, refs, context);
     for (const ref of refs) {
       const key = suggestionRef(ref);

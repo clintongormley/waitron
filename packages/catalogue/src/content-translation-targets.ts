@@ -2,6 +2,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
 import { sql, type SQL } from "drizzle-orm";
 import { contentLanguagesOr } from "./content-languages.js";
+import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import type {
   TranslationOwners,
@@ -39,17 +40,6 @@ export interface TranslationResolution {
   required: string[];
   targets: ResolvedTranslationTarget[];
 }
-const KINDS: readonly TranslationGapKind[] = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-];
 type NamedRow = {
   kind: TranslationGapKind;
   id: string;

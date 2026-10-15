@@ -14,19 +14,8 @@ import {
   table,
   tsString,
 } from "@waitron/db";
-import type { TranslationGapKind } from "../content-translation-report-types.js";
+import { TRANSLATION_GAP_KINDS } from "../content-translation-kinds.js";
 
-export const SUGGESTION_KINDS = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-] as const satisfies readonly TranslationGapKind[];
 export const SUGGESTION_JOB_STATES = [
   "submitting",
   "running",
@@ -46,7 +35,7 @@ export const SUGGESTION_FAILURES = [
   "limit",
 ] as const;
 
-const kind = enumType(SUGGESTION_KINDS);
+const kind = enumType(TRANSLATION_GAP_KINDS);
 const jobState = enumType(SUGGESTION_JOB_STATES);
 const refusal = enumType(SUGGESTION_REFUSALS);
 const failure = enumType(SUGGESTION_FAILURES);

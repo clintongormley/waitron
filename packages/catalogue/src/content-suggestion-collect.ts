@@ -3,6 +3,7 @@ import type { ContentLanguages } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
+import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import {
   listTranslationGapRefs,
@@ -17,18 +18,6 @@ import { contentSuggestions } from "./schema/suggestions.js";
 
 /** Cloud's bound on every text field, counted as JavaScript string length (contract, "Submit"). */
 export const TEXT_LIMIT = 500;
-
-export const KIND_ORDER: readonly TranslationGapKind[] = [
-  "product",
-  "variant",
-  "option_list",
-  "option_label",
-  "extra_list",
-  "menu",
-  "section",
-  "included_menu",
-  "unit",
-];
 
 type LiveTarget = Extract<ResolvedTranslationTarget, { state: "present" }>;
 export interface SuggestionGap {
@@ -67,7 +56,7 @@ function fits(text: string): boolean {
   return text.trim() !== "" && text.length <= TEXT_LIMIT;
 }
 
-function effectiveNames(entry: LiveTarget): Record<string, string> {
+export function effectiveNames(entry: LiveTarget): Record<string, string> {
   return { ...entry.inheritedNames, ...entry.names };
 }
 
