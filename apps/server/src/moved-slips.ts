@@ -8,8 +8,8 @@ import {
 } from "./kitchen-print.js";
 import type { TillConfig } from "./till-config.js";
 
-// Function declarations and types only: this module sits in an import loop with
-// floor-today-merges and table-actions, so top-level code calling an import could run first.
+// Function declarations and types only: this module sits in import loops, so top-level code
+// calling an import could run first.
 
 /** Set by a caller that tells the kitchen itself once its work is done: each bill merged away is recorded, by the bill it merged into. */
 export interface SlipsLater {

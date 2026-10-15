@@ -26,7 +26,7 @@ useVenueDb({
 const suffixed = (name: string) => `${name} ${randomUUID().slice(0, 6)}`;
 
 /** The kitchen notices recorded against the bills, oldest first. */
-async function noticesOf(billIds: string[]) {
+async function noticesOn(billIds: string[]) {
   return inTx(v, (tx) =>
     tx
       .select({
@@ -67,7 +67,7 @@ describe("withMovedSlips", () => {
 
     await renameUnder({ parties: [partyId] }, tableId, name);
 
-    expect(await noticesOf([tabId])).toEqual([
+    expect(await noticesOn([tabId])).toEqual([
       { workingOrderId: tabId, kind: "moved", movedTo: name },
     ]);
   });
@@ -78,7 +78,7 @@ describe("withMovedSlips", () => {
 
     await renameUnder({ tables: [tableId] }, tableId, name);
 
-    expect(await noticesOf([tabId])).toEqual([
+    expect(await noticesOn([tabId])).toEqual([
       { workingOrderId: tabId, kind: "moved", movedTo: name },
     ]);
   });
@@ -90,7 +90,7 @@ describe("withMovedSlips", () => {
     await renameUnder(null, tableId, name);
 
     expect((await todayRow(v, tableId))!.name).toBe(name);
-    expect(await noticesOf([tabId])).toEqual([]);
+    expect(await noticesOn([tabId])).toEqual([]);
   });
 
   it("an inner call given the outer's slips writes into them and leaves the telling to the outer, once", async () => {
@@ -114,7 +114,7 @@ describe("withMovedSlips", () => {
 
     expect(answer).toBe("inner's answer");
     expect(outer!.mergedInto.get(notABill)).toBe(into);
-    expect(await noticesOf([tabId])).toEqual([
+    expect(await noticesOn([tabId])).toEqual([
       { workingOrderId: tabId, kind: "moved", movedTo: name },
     ]);
   });
@@ -154,7 +154,7 @@ describe("withMovedSlips", () => {
         ),
       );
 
-      expect(await noticesOf([tabId])).toEqual([
+      expect(await noticesOn([tabId])).toEqual([
         { workingOrderId: tabId, kind: "moved", movedTo: name },
       ]);
     });
@@ -168,7 +168,7 @@ describe("withMovedSlips", () => {
         ),
       );
 
-      expect(await noticesOf([tabId])).toEqual([]);
+      expect(await noticesOn([tabId])).toEqual([]);
     });
   });
 });
