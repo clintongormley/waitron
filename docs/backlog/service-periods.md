@@ -266,14 +266,6 @@ Its button goes on the Year view's season row.
    dates, or the special day already there. No hint line (owner: discoverable enough). Keyboard: the
    arrows move, Shift with an arrow extends, Enter opens. The special-day editor's date picker uses
    the same code (A723 point 7).
-5. **A closed department or zone is an empty grey track**, not a line of text ("Santet Deli Co
-   closed", "Front Bar closed"…), so every day is the same height.
-6. **A zone's track shows its own hours.** Today a zone row is its department's blocks with the
-   zone's closures laid over them, and each block's label — and the spoken description — gives the
-   department's times: Terrace's evening reads "Open 18:15–02:00" although Terrace closes at 23:00
-   (`#title`, `#describe` and `#cell` in `opening-hours-month.ts`). Work out the zone's own blocks (the department's less its
-   closures) before drawing and labelling them, and show a closure only inside the department's
-   hours.
 7. **The Staffing view's month follows**: no seasons or special-days row, and the same day box,
    offering "Edit {special day} staffing" or "Edit {season}'s standard week" (A724).
 
@@ -305,8 +297,8 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
    week — for the department chosen in Show and its zones, or one row per department for All
    departments. Time runs left to right from the day's changeover to the next morning, one row per
    department or zone; the department's blocks carry their period and times, and a zone row is drawn
-   faded where it only follows the department and labelled where it differs. A zone's own hours as
-   A720 point 6.
+   faded where it only follows the department and labelled where it differs. A zone's own hours
+   from `zoneOwnHours` (`packages/venue-service/src/zone-own-hours.ts`).
 2. **A block too short for its label shows the whole label** — department or zone, period, times —
    when it is pointed at or tapped (Lunch 16:00–17:00 is a sliver).
 3. **Which week the Week button opens:** the week of the day last clicked; otherwise this week, when
