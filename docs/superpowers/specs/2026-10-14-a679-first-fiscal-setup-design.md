@@ -1,5 +1,7 @@
 # A679: first Live fiscal setup
 
+**Approval update, 2026-10-15 at about 06:35:** the owner selected **“A — Approve, plan and build”** for the complete design at `4ce402b2eebec957091c218610fb5d991ea91d35`, including custody, restoration, handover and loss checks. The earlier proposal and pending-approval statements below are historical and superseded by this answer. W41s-6, A680 and C3 have landed. The [implementation plan](../plans/2026-10-15-a679-first-fiscal-setup.md) records the driver’s fresh-context review corrections; native inline implementation is next. This documentation publication does not qualify product, encryption or physical-paper behavior.
+
 **Proposal for owner review, decision update 2026-10-15. No full-design or build approval.**
 You must be able to finish Live fiscal setup without a repository checkout, shell commands or
 Cloud subscription. An allocation is a signed assignment of an installation identity and its

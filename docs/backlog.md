@@ -316,25 +316,19 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
-- **A679. First Live fiscal setup without Cloud.** The owner approved both a guided first
-  outside paper kit and import from an existing custodian on 2026-10-14. The
-  [Live proposal](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) has EN/ES
-  phone and desktop drawings. The owner approved current local-network ownership at 22:35;
-  on 2026-10-15 at 05:10, one paper original was approved for a new kit's current master, with
-  consumption recorded there and every other copy labelled a snapshot. At about 05:50 the owner
-  chose B: a passphrase-protected key file PLUS secret recovery paper for the same signing key,
-  outside the box and venue backups, with a successful saved-file reopen and a checked paper
-  restoration path. Whoever holds the secret paper can sign; keep it apart from the public master.
-  W41s-6 landed in [#1717](https://github.com/clintongormley/waitron/pull/1717)
-  and A680 in [#1718](https://github.com/clintongormley/waitron/pull/1718).
-  Build A679 on A680 before W41s-7. A680 gives Demo and Preparation a throwaway allocation with
-  no kit; a throwaway allocation for Live's separate preproduction readiness test is not built yet
-  (the setup route's fiscal test accepts only a production Live request, which never asks for one).
-  W41sC3 landed in [#1725](https://github.com/clintongormley/waitron/pull/1725); its adapter does
-  not build wizard fetching. Keep public import until that route is separately designed. Next seek
-  whole-design/build approval, including the proposed custody checks; the retention answer does
-  not grant it. Joint qualification remains open. No implementation plan yet. Detail:
-  [backlog/fiscal.md](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
+- **A679. First Live fiscal setup without Cloud.** The owner approved the complete
+  [design](superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) on 2026-10-15 at about
+  06:35: “A — Approve, plan and build”. The reviewed
+  [implementation plan](superpowers/plans/2026-10-15-a679-first-fiscal-setup.md) is ready for native
+  inline execution. Build both guided outside-kit and existing-custodian import routes, durable
+  setup ownership, and Live readiness using A680 in its separate preproduction database. A new kit
+  keeps one paper-original current master, a protected key file and separate secret recovery paper;
+  actual saved-file reopen and actual-paper recovery remain required acceptance checks. W41s-6
+  [#1717](https://github.com/clintongormley/waitron/pull/1717), A680
+  [#1718](https://github.com/clintongormley/waitron/pull/1718) and C3
+  [#1725](https://github.com/clintongormley/waitron/pull/1725) landed. Keep public import for Cloud
+  subscribers; wizard fetching is separate. No product implementation or joint qualification is
+  claimed by the plan publication. Build this before W41s-7. [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
