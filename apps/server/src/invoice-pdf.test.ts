@@ -409,3 +409,12 @@ describe("A4 QR black square", () => {
     expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
   });
 });
+
+describe("A4 TOTAL size", () => {
+  it("draws TOTAL at twice the body size", () => {
+    const total = layoutInvoicePages(fixture)[0]!.elements.find(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    expect(total).toMatchObject({ kind: "text", size: 20 });
+  });
+});

@@ -24,13 +24,14 @@ export async function renderInvoiceRaster(
       if (element.kind === "text") {
         const run = invoiceFont.layout(element.text);
         const size = element.size / invoiceFont.unitsPerEm;
+        const stroke = element.bold ? ` stroke="black" stroke-width="${0.35 / size}"` : "";
         let x = element.x;
         let y = element.y + invoiceFont.ascent * size;
         for (let index = 0; index < run.glyphs.length; index++) {
           const position = run.positions[index]!;
           const path = run.glyphs[index]!.path.toSVG();
           paths.push(
-            `<path transform="translate(${x + position.xOffset * size} ${y - position.yOffset * size}) scale(${size} ${-size})" d="${path}"/>`,
+            `<path transform="translate(${x + position.xOffset * size} ${y - position.yOffset * size}) scale(${size} ${-size})" d="${path}"${stroke}/>`,
           );
           x += position.xAdvance * size;
           y -= position.yAdvance * size;

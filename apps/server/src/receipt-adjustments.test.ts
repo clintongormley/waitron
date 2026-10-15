@@ -489,7 +489,7 @@ describe("receiptLines", () => {
       at80("1 ud  Pan de pueblo", "2,50 €"),
       at80("Descuento 10%", "-2,65 €"),
     ]);
-    expect(printed).toContain(at80("TOTAL", "23,85 €"));
+    expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {

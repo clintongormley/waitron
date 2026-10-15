@@ -10,6 +10,7 @@ import {
   wrapText,
   type EscSetting,
   type MonoRaster,
+  type TextStyle,
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import {
@@ -17,12 +18,17 @@ import {
   buildReceiptDocument,
   type ReceiptDocumentInput,
   type ReceiptIndent,
+  type ReceiptStyle,
 } from "./receipt-document.js";
 export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
 
 export interface FormatReceiptInput extends ReceiptDocumentInput {
   printer: EscSetting;
   logo?: MonoRaster | null;
+}
+
+function toTextStyle(style: ReceiptStyle | undefined): TextStyle {
+  return { bold: style?.bold === true, double: style?.double === true };
 }
 
 export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptInput): Uint8Array {
@@ -39,6 +45,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     text: string,
     parts: readonly string[] | undefined,
     indent: number,
+    columns: number,
   ): string[] => {
     const whole = wrapText(prepareText(text), columns, indent);
     if (whole.length === 1 || parts === undefined) return whole;
@@ -63,21 +70,43 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
   for (const element of document.elements) {
     if (element.kind !== "align" && element.kind !== "logo") lastBlank = false;
     switch (element.kind) {
-      case "text":
-        for (const line of textLines(element.text, element.parts, indentation(element.indent))) {
-          b.line(line);
-        }
-        break;
-      case "amount":
-        for (const line of labelAmountLines(
-          prepareText(element.caption),
-          prepareText(element.amount),
-          columns,
+      case "text": {
+        const style = toTextStyle(element.style);
+        const width = style.double ? Math.floor(columns / 2) : columns;
+        for (const line of textLines(
+          element.text,
+          element.parts,
           indentation(element.indent),
+          width,
         )) {
-          b.line(line);
+          b.line(line, style);
         }
         break;
+      }
+      case "amount": {
+        const caption = prepareText(element.caption);
+        const amount = prepareText(element.amount);
+        const indent = indentation(element.indent);
+        const style = toTextStyle(element.style);
+        if (style.double) {
+          const half = Math.floor(columns / 2);
+          const double = labelAmountLines(caption, amount, half, indent);
+          if (double.length === 1) {
+            b.line(double[0], style);
+            break;
+          }
+          const captionLines = wrapText(caption, half, indent);
+          if (captionLines.length === 1 && amount.length <= half) {
+            b.line(captionLines[0], style);
+            b.line(amount.padStart(half), style);
+            break;
+          }
+        }
+        for (const line of labelAmountLines(caption, amount, columns, indent)) {
+          b.line(line, { bold: style.bold });
+        }
+        break;
+      }
       case "break":
         blank();
         break;

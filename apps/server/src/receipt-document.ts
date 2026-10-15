@@ -44,10 +44,23 @@ export interface ReceiptDocumentInput {
 // The roll renderer resolves an indent after this prefix against its own column count.
 export type ReceiptIndent = number | { after: string };
 export const PART_SEPARATOR = " · ";
+export type ReceiptStyle = { bold?: true; double?: true };
 export type ReceiptElement =
   // `parts` is set only on a line the document itself joined from them with PART_SEPARATOR.
-  | { kind: "text"; text: string; indent: ReceiptIndent; parts?: readonly string[] }
-  | { kind: "amount"; caption: string; amount: string; indent: ReceiptIndent }
+  | {
+      kind: "text";
+      text: string;
+      indent: ReceiptIndent;
+      parts?: readonly string[];
+      style?: ReceiptStyle;
+    }
+  | {
+      kind: "amount";
+      caption: string;
+      amount: string;
+      indent: ReceiptIndent;
+      style?: ReceiptStyle;
+    }
   | { kind: "break" }
   | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
@@ -108,8 +121,8 @@ export function buildReceiptDocument({
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
   const elements: ReceiptElement[] = [];
-  const text = (text: string, indent: ReceiptIndent = 0): void => {
-    elements.push({ kind: "text", text, indent });
+  const text = (text: string, indent: ReceiptIndent = 0, style?: ReceiptStyle): void => {
+    elements.push({ kind: "text", text, indent, ...(style ? { style } : {}) });
   };
   const joined = (parts: string[]): void => {
     if (parts.length === 1) text(parts[0]!);
@@ -117,8 +130,13 @@ export function buildReceiptDocument({
       elements.push({ kind: "text", text: parts.join(PART_SEPARATOR), indent: 0, parts });
     }
   };
-  const row = (caption: string, amount: string, indent: ReceiptIndent = 0): void => {
-    elements.push({ kind: "amount", caption, amount, indent });
+  const row = (
+    caption: string,
+    amount: string,
+    indent: ReceiptIndent = 0,
+    style?: ReceiptStyle,
+  ): void => {
+    elements.push({ kind: "amount", caption, amount, indent, ...(style ? { style } : {}) });
   };
   const line = (): void => {
     elements.push({ kind: "break" });
@@ -270,7 +288,7 @@ export function buildReceiptDocument({
     row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
   }
   elements.push({ kind: "rule" });
-  row(label.total, formatMoney(result.total, locale));
+  row(label.total, formatMoney(result.total, locale), 0, { double: true });
   line();
   const t = result.tender;
   if (result.payments !== undefined && result.payments.length > 0) {
