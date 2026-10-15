@@ -522,6 +522,30 @@ describe("suggested drafts", () => {
       edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Mine" }],
     });
   });
+  it("unsuggest ignores the row's suggestion once one of the discarded group is deleted, even after a read regrouped the row, but not a new one", () => {
+    const row = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.suggest(new Map([["product:one", found({ ids: ["s0", "s1"], text: "CLIENT-es one" })]]));
+    const regrouped = new Map([
+      ["product:one", found({ ids: ["s1", "s5"], text: "CLIENT-es one" })],
+    ]);
+    drafts.suggest(regrouped);
+    drafts.unsuggest(row, ["s0"], ["s0", "s1"]);
+    expect(drafts.value(row, "text")).toBe("");
+    expect(drafts.suggestionFor(row)).toBeUndefined();
+    drafts.suggest(regrouped);
+    expect(drafts.value(row, "text")).toBe("");
+    drafts.suggest(new Map([["product:one", found({ ids: ["s9"], text: "CLIENT-es again" })]]));
+    expect(drafts.value(row, "text")).toBe("CLIENT-es again");
+  });
+  it("unsuggest keeps every suggestion of the discarded group out of the row when no read had listed them yet", () => {
+    const row = target("one", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [row]);
+    drafts.unsuggest(row, ["s0"], ["s0", "s1"]);
+    drafts.suggest(new Map([["product:one", found({ ids: ["s1"], text: "CLIENT-es one" })]]));
+    expect(drafts.value(row, "text")).toBe("");
+    expect(drafts.suggestionFor(row)).toBeUndefined();
+  });
   it("unsuggest leaves a row unedited when only the suggestion's text was left in it", () => {
     const row = target("one", { selectedText: "Croqueta" });
     const drafts = new TranslationDrafts("es", "en", [row]);

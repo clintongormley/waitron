@@ -201,12 +201,16 @@ export class TranslationDrafts {
     this.#suggestions = new Map(found);
     this.#refill();
   }
-  /** `deleted` defaults to every id of the row's current suggestion. */
-  unsuggest(ref: TranslationRef, deleted?: readonly string[]): void {
+  /** `deleted` defaults to every id of the row's current suggestion. `discarded` is the row's
+   * suggestion ids when its discard began: none of them fills the row again, nor does the row's
+   * current suggestion while it shares one of them. */
+  unsuggest(ref: TranslationRef, deleted?: readonly string[], discarded?: readonly string[]): void {
     const key = translationKey(ref);
     const current = this.#suggestions.get(key)?.ids ?? [];
     const gone = new Set(deleted ?? current);
-    if (current.some((id) => gone.has(id))) for (const id of current) this.#dismissed.add(id);
+    const group = new Set([...(discarded ?? []), ...gone]);
+    for (const id of group) this.#dismissed.add(id);
+    if (current.some((id) => group.has(id))) for (const id of current) this.#dismissed.add(id);
     const values = this.#values.get(key);
     const borrowed = this.#borrowed.get(key);
     if (borrowed && [...current, ...borrowed.ids].some((id) => gone.has(id))) {

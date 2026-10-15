@@ -170,6 +170,9 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private discarding: ReadonlySet<string> = new Set();
   /** Suggestions this element deleted; a read that began before a deletion still lists it. */
   readonly #deleted = new Set<string>();
+  /** Discards that deleted any of a row's suggestions while no opening had read its rows; the read
+   * that next builds the rows applies them. */
+  readonly #unsuggestLater: Parameters<TranslationDrafts["unsuggest"]>[] = [];
   @state() private suggestionRun: SuggestionRunView | null = null;
   @state() private service: SuggestionService | null = null;
   @state() private cloudOrigin: string | null = null;
@@ -480,6 +483,7 @@ export class ContentTranslationsDialog extends LitElement {
               value.rows,
             );
           this.#fill(value.suggestions);
+          for (const args of this.#unsuggestLater.splice(0)) this.model.unsuggest(...args);
           this.suggestionScanError = value.suggestionsFailed
             ? codeMessage(value.suggestionsFailed)
             : "";
@@ -604,13 +608,13 @@ export class ContentTranslationsDialog extends LitElement {
     } catch (error) {
       if (generation === this.#generation) this.actionError = codeMessage(codeOf(error));
     } finally {
-      // Once any of the row's suggestions is gone, the row takes none of them, whichever dialog
-      // opening holds it now and whether or not a read since still lists them.
+      // Once any of the row's suggestions is gone, the row takes none of the ones Discard was
+      // pressed on, whichever dialog opening holds it now and however a read since groups them.
       const deleted = found.ids.filter((id) => this.#deleted.has(id));
       if (this.model && deleted.length) {
-        this.model.unsuggest(row, deleted);
+        this.model.unsuggest(row, deleted, found.ids);
         this.#scope?.changed();
-      }
+      } else if (deleted.length) this.#unsuggestLater.push([row, deleted, found.ids]);
       this.discarding = new Set([...this.discarding].filter((held) => held !== key));
     }
   }
