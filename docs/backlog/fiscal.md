@@ -40,10 +40,14 @@ Old records stay unchanged. See the [recorded decision](#decisions-and-deliberat
 the [spec's dated answer](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
 This does not approve the full design, implementation plan or build.
 
-Next: settle the still-unresolved owner-usable repair path for a genuinely invalid or missing
-saved zone discovered after card capture, then seek full-design, plan and separate FULL fiscal
-PR build approval. No repair policy, new permission or tested repair tool is approved.
-Strict issuance-zone validation is unbuilt; the audit does not reproduce that proposed fault.
+**Direction update, owner 17:20:** include restricted guided repair for a genuinely invalid or
+missing saved zone, with a manager confirming the correct named zone. Recovery retains the
+capture and uses the later issuance instant; settled replay keeps its saved facts. Valid-to-valid
+zone changes keep their normal settings locks. The
+[exact permission, workflow and validation proposal](../superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
+is ready for owner review. Full design, implementation plan and separate FULL fiscal build still
+need approval. No repair tool or strict issuance-zone validation is built; the audit does not
+reproduce that proposed fault.
 A444's operation/service-date decision stays separate. The audit also found a
 source-only F2 presentation gap: `readReceiptIssuer` supplies the stored offset only for a named
 recipient, leaving ordinary receipt views to their runtime zone. The approved behavior includes
@@ -831,9 +835,16 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   of the process zone. Old records, including their dates, offsets and hashes, stay unchanged.
   Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 2026-10-15 ~05:12**, “OWNER ANSWER
   to A696 question 1”; [spec decision](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
-  Full design, implementation plan and build remain unapproved. Malformed-zone repair after
-  card capture is unresolved; the answer grants no repair policy or permissions. A696 stays open
-  and A444 stays separate.
+  That answer alone grants no repair permission or build approval; the later 17:20 scope
+  decision is recorded below. A696 stays open and A444 stays separate.
+- **A696, owner decision 2026-10-15 17:20: include restricted guided zone repair.** Only an
+  invalid or missing saved zone is eligible. A manager confirms the named zone, the captured
+  payment resumes without another charge, and new issuance uses the recovery instant and its
+  venue offset. Keep the capture instant and settled replay facts; valid-to-valid settings locks
+  stay in force. Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 17:20**, answer to
+  A696 question 2. The [exact design](../superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
+  awaits owner approval before planning or building; the scope answer does not approve its
+  proposed permission or repair mechanism.
 - **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is
   refused and holds nothing; a cancellation of a refused original is set aside (`retenido`) with a
   filing case of its own and holds nothing; a record accepted with errors opens a filing case

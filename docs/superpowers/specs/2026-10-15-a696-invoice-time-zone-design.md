@@ -1,7 +1,19 @@
 # A696: invoice dates and record offsets in the location's time zone
 
-**Status, updated 2026-10-15: venue-zone behavior approved; full design, implementation plan
-and build unapproved. Post-capture malformed-zone repair remains UNRESOLVED.**
+**Current status, 2026-10-15:** the saved venue zone and inclusion of restricted guided repair
+are approved directions. The [guided repair proposal](2026-10-15-a696-guided-zone-repair-design.md)
+now supplies the exact permission, workflow and validation for owner review. Full design,
+implementation plan and build remain unapproved.
+
+**Dated update, owner 17:20:** include repair only for an invalid or missing saved zone. A manager
+confirms the correct named zone; recovery retains the capture and uses the later issuance instant.
+Already-settled replay retains its saved facts; valid-to-valid changes keep their normal locks.
+This supersedes the references below to the repair *scope* being unresolved. The original audit,
+measurements and proposals below remain historical; no repair or stricter issuance validation has
+been built by this documentation change.
+
+**Historical status at the 05:12 decision:** venue-zone behavior approved; full design,
+implementation plan and build unapproved. Post-capture repair scope was unresolved.
 Audit baseline supplied by the driver: main `d0d2447d239062f21086e46a6cec3e8a9f311fa6`.
 Written 2026-10-15. This is an audit and a behavior contract, not an implementation plan.
 The later build is a separate FULL fiscal PR. Golden huella and `inmutabilidad` checks stay
