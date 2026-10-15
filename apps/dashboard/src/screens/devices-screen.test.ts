@@ -3324,6 +3324,19 @@ describe("add a device", () => {
     expect(width("pair-modal")).toBeCloseTo(672, 0);
   });
 
+  it("opens Pair at the medium height on both steps, and Add a device without it", async () => {
+    const el = await openAdd(stubApi());
+    expect(q(el, "[data-test=add-device-modal]")!.hasAttribute("height")).toBe(false);
+    await openPair(el);
+    expect(q(el, "[data-test=pair-modal]")!.getAttribute("size")).toBe("standard");
+    expect(q(el, "[data-test=pair-modal]")!.getAttribute("height")).toBe("medium");
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+    await flush(el);
+    expect(q(el, "[data-test=pair-modal]")!.getAttribute("height")).toBe("medium");
+  });
+
   it("offers Add a device only in the heading beside an empty table", async () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });

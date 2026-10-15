@@ -2246,6 +2246,7 @@ export class PrintersScreen extends LitElement {
     if (!this.addingAgent) return nothing;
     return html`<wt-modal
       size="standard"
+      height="medium"
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
@@ -3431,6 +3432,7 @@ export class PrintersScreen extends LitElement {
     );
     return html`<wt-modal
       size="standard"
+      height="medium"
       data-test="edit-printer-modal"
       heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}

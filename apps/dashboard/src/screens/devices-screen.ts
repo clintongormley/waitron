@@ -2643,6 +2643,7 @@ export class DevicesScreen extends LitElement {
     const blocked = Object.values(own).some((error) => error !== "");
     return html`<wt-modal
       size="standard"
+      height="medium"
       data-test="pair-modal"
       heading=${pairTitle(request)}
       .open=${true}

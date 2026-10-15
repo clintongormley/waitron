@@ -708,6 +708,21 @@ describe("your profile", () => {
     expect(signalAll).not.toHaveBeenCalled();
     expect(signalDetails).not.toHaveBeenCalled();
   });
+  it("takes the medium height only for the password step of setting up an authenticator", async () => {
+    const { el } = await mount();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await editDetails(el);
+    expect(modal.hasAttribute("height")).toBe(false);
+    await click(el, "cancel");
+    await click(el, "setup-authenticator");
+    expect(modal.getAttribute("size")).toBe("standard");
+    expect(modal.getAttribute("height")).toBe("medium");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(el.shadowRoot!.querySelector("[data-test=authenticator-qr]")).not.toBeNull();
+    expect(modal.getAttribute("size")).toBe("standard");
+    expect(modal.hasAttribute("height")).toBe(false);
+  });
   it("sets up an authenticator and shows recovery codes once", async () => {
     const { el, api } = await mount();
     await click(el, "setup-authenticator");

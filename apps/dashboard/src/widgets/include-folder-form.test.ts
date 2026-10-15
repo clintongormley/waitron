@@ -71,6 +71,12 @@ it("puts a menu name holding a replacement pattern into its heading as written",
   );
 });
 
+it("opens a standard-width modal at the medium height", async () => {
+  const modal = (await includeForm()).shadowRoot!.querySelector("wt-modal")!;
+  expect(modal.getAttribute("size")).toBe("standard");
+  expect(modal.getAttribute("height")).toBe("medium");
+});
+
 it("opens with the switch on and every field filled with the folder's current values", async () => {
   const el = await includeForm();
   expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(

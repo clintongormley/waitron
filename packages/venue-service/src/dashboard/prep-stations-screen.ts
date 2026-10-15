@@ -1427,6 +1427,7 @@ export class PrepStationsScreen extends LitElement {
     const unavailable = !this.#addressShown(pending.change.address);
     return html`<wt-modal
       size="wide"
+      height="medium"
       open
       .dismissible=${!this.busy}
       data-test="routing-preview"

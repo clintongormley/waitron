@@ -1089,6 +1089,7 @@ export class ProfileScreen extends LitElement {
     return html`
       <wt-modal
         size=${this.mode === "details" || this.mode === "totp" ? "standard" : "compact"}
+        height=${this.mode === "totp" && this.totpSetup === null ? "medium" : nothing}
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         .dismissible=${!this.busy}

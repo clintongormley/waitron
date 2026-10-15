@@ -121,6 +121,12 @@ it.each(dialogs)("$kind orders Cancel before its action", async (dialog) => {
     ["cancel-editor", "save-editor"],
   );
 });
+it.each(dialogs)("$kind opens a standard-width modal at the medium height", async (dialog) => {
+  const { el } = await mount(dialog);
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  expect(modal.getAttribute("size")).toBe("standard");
+  expect(modal.getAttribute("height")).toBe("medium");
+});
 it("creates a department with name only and emits the saved id", async () => {
   const { el, request } = await mount(dialogs[0]!);
   const saved = vi.fn();

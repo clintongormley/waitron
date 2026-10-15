@@ -127,6 +127,12 @@ it("offers the tables off the plan and in no joined table, in number order, each
   expect(madeOf(el).countLabel(3)).toBe("3 tables");
 });
 
+it("opens a standard-width modal at the medium height", async () => {
+  const el = await openAdd();
+  expect(dialog(el).getAttribute("size")).toBe("standard");
+  expect(dialog(el).getAttribute("height")).toBe("medium");
+});
+
 it("gives a table with no seat count no seats line", async () => {
   const el = await openAdd({ draft: { tables: [table("c3", "Counter 3", null)] } });
   expect(madeOf(el).options).toEqual([{ value: "c3", label: "Counter 3" }]);

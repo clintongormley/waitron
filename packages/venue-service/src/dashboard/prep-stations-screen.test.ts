@@ -3315,6 +3315,14 @@ describe("Routing grid", () => {
       expect(routing.querySelector(old)).toBeNull();
   });
 
+  it("the route-change notice opens a wide modal at the medium height", async () => {
+    const { el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:drinks", "terrace", "Kitchen");
+    const preview = q(el, '[data-test="routing-preview"]')!;
+    expect(preview.getAttribute("size")).toBe("wide");
+    expect(preview.getAttribute("height")).toBe("medium");
+  });
+
   it("choosing a cell value previews the moves and saves only after confirmation", async () => {
     const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
     const loads = vi.mocked(a.load).mock.calls.length;
