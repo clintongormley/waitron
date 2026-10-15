@@ -160,8 +160,10 @@ interface Gesture {
   column: HTMLElement;
   /** The fixed end of the stretch. */
   anchor: number;
-  /** The minute the press landed on; the stroke covers nothing while the pointer is back on it. */
+  /** The minute the press holds; the stroke covers nothing while the pointer is back on it. */
   origin: number;
+  /** Pixels added to the pointer's height, so the press point reads as `origin`. */
+  shift: number;
 }
 
 /** A pointer stroke down a `.day` column, scrolling the `.scroll` box when it rests in an hour-deep
@@ -216,16 +218,28 @@ export class ColumnStroke implements ReactiveController {
   }
 
   /** Begins a stroke from `anchor`, in minutes from the changeover — a block's far edge, to resize
-   *  it from the near one — or from the minute under the pointer. */
-  start(event: PointerEvent, key: string, anchor?: number): void {
+   *  it from the near one — or from the minute under the pointer. With `held`, the press holds that
+   *  minute — the near edge — and moves it by as far as the pointer moves. False when no stroke
+   *  began. */
+  start(event: PointerEvent, key: string, anchor?: number, held?: number): boolean {
     this.#dragged = false;
-    if (event.button !== 0 || this.#gesture !== null || !this.#options.canStart(key)) return;
+    if (event.button !== 0 || this.#gesture !== null || !this.#options.canStart(key)) return false;
     const column = event.currentTarget as HTMLElement;
-    const origin = this.#minuteAtY(event.clientY, column);
-    this.#gesture = { pointerId: event.pointerId, key, column, anchor: anchor ?? origin, origin };
+    const box = column.getBoundingClientRect();
+    const shift = held === undefined ? 0 : (held / DAY) * box.height + box.top - event.clientY;
+    const origin = held ?? this.#minuteAtY(event.clientY, column);
+    this.#gesture = {
+      pointerId: event.pointerId,
+      key,
+      column,
+      anchor: anchor ?? origin,
+      origin,
+      shift,
+    };
     window.addEventListener("pointermove", this.#move);
     window.addEventListener("pointerup", this.#release);
     window.addEventListener("pointercancel", this.abort);
+    return true;
   }
   #move = (event: PointerEvent): void => {
     const gesture = this.#gesture;
@@ -240,7 +254,7 @@ export class ColumnStroke implements ReactiveController {
   };
   #stretchTo(clientY: number): void {
     const gesture = this.#gesture!;
-    const minute = this.#minuteAtY(clientY, gesture.column);
+    const minute = this.#minuteAtY(clientY + gesture.shift, gesture.column);
     // Captured only once it moves: a captured click lands on the column, not the block clicked.
     if (minute !== gesture.origin) capturePointer(gesture.column, gesture.pointerId);
     const start = Math.min(gesture.anchor, minute);

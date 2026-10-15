@@ -144,6 +144,9 @@ class StrokeHost extends LitElement {
   released: Stretch[] = [];
   /** Minutes from the changeover a press starts from; the pointer's own minute when unset. */
   anchor: number | undefined = undefined;
+  /** The minute a press holds, whatever minute is under the pointer; the pointer's own when unset. */
+  held: number | undefined = undefined;
+  began: boolean[] = [];
   readonly stroke = new ColumnStroke(this, {
     cutover: () => "06:00",
     canStart: () => true,
@@ -157,7 +160,8 @@ class StrokeHost extends LitElement {
         class="day"
         data-column="mon"
         style="position: relative; height: 480px"
-        @pointerdown=${(event: PointerEvent) => this.stroke.start(event, "mon", this.anchor)}
+        @pointerdown=${(event: PointerEvent) =>
+          this.began.push(this.stroke.start(event, "mon", this.anchor, this.held))}
         @keydown=${() => this.stroke.forgetDrag()}
       ></div>
     </div>`;
@@ -165,14 +169,14 @@ class StrokeHost extends LitElement {
 }
 customElements.define("paint-grid-parts-stroke-host", StrokeHost);
 
-function point(el: StrokeHost, minute: number, type: string) {
+function point(el: StrokeHost, minute: number, type: string, pointerId = 7) {
   const day = el.shadowRoot!.querySelector<HTMLElement>(".day")!;
   const box = day.getBoundingClientRect();
   (type === "pointerdown" ? day : window).dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       composed: true,
-      pointerId: 7,
+      pointerId,
       button: 0,
       clientX: box.left + box.width / 2,
       clientY: box.top + (minute / 1440) * box.height,
@@ -229,4 +233,33 @@ test("a key press on the column right after a stroke lets the next click through
   point(el, 840, "pointerdown");
   point(el, 960, "pointerup");
   expect(el.stroke.takeDraggedClick()).toBe(true);
+});
+
+test("a press that holds a minute moves it by as far as the pointer moves, not to the pointer", async () => {
+  const el = (await mount(
+    "<paint-grid-parts-stroke-host></paint-grid-parts-stroke-host>",
+  )) as StrokeHost;
+  el.anchor = 600;
+  el.held = 960;
+  point(el, 975, "pointerdown");
+  point(el, 975, "pointermove");
+  expect(el.stroke.preview).toBeNull();
+  point(el, 960, "pointermove");
+  expect(el.stroke.preview).toEqual({ key: "mon", start: 600, end: 945 });
+  point(el, 1035, "pointermove");
+  expect(el.stroke.preview).toEqual({ key: "mon", start: 600, end: 1020 });
+  point(el, 975, "pointerup");
+  expect(el.released).toEqual([]);
+  expect(el.stroke.takeDraggedClick()).toBe(false);
+});
+
+test("a press during another pointer's stroke does not start one, and says so", async () => {
+  const el = (await mount(
+    "<paint-grid-parts-stroke-host></paint-grid-parts-stroke-host>",
+  )) as StrokeHost;
+  point(el, 840, "pointerdown");
+  point(el, 300, "pointerdown", 8);
+  point(el, 960, "pointerup");
+  expect(el.began).toEqual([true, false]);
+  expect(el.released).toEqual([{ key: "mon", start: 840, end: 960 }]);
 });
