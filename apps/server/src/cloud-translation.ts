@@ -91,6 +91,8 @@ const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const uuid = (v: unknown): v is string =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
+const jobState = (v: unknown): v is CloudJobState =>
+  typeof v === "string" && JOB_STATES.includes(v);
 const whole = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
@@ -153,7 +155,9 @@ async function exchange(
     }
     let value: unknown;
     try {
-      value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
+      value = JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
+      );
     } catch {
       if (response.ok) unavailable();
     }
@@ -182,8 +186,8 @@ export async function submitTranslation(
     { body },
     signal,
   );
-  if (!uuid(v.jobId) || !JOB_STATES.includes(String(v.state)) || !whole(v.total)) unavailable();
-  return { jobId: v.jobId, state: v.state as CloudJobState, total: v.total };
+  if (!uuid(v.jobId) || !jobState(v.state) || !whole(v.total)) unavailable();
+  return { jobId: v.jobId, state: v.state, total: v.total };
 }
 
 export async function translationStatus(
@@ -194,19 +198,18 @@ export async function translationStatus(
   const v = await exchange(state, "translation-status", randomUUID(), jobBody(jobId), {}, signal);
   if (
     v.jobId !== jobId ||
-    !JOB_STATES.includes(String(v.state)) ||
+    !jobState(v.state) ||
     !whole(v.total) ||
     !whole(v.done) ||
     !whole(v.failed)
   )
     unavailable();
-  const jobState = v.state as CloudJobState;
-  const allowed = REASONS[jobState];
+  const allowed = REASONS[v.state];
   if (allowed ? !allowed.includes(v.reason as CloudReason) : Object.hasOwn(v, "reason"))
     unavailable();
   return {
     jobId,
-    state: jobState,
+    state: v.state,
     total: v.total,
     done: v.done,
     failed: v.failed,

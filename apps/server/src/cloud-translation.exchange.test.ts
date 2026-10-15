@@ -360,6 +360,18 @@ it.each([
     "cloud.unavailable",
   ],
   [
+    "a submit reply whose state is a list",
+    submit,
+    reply({ version: 1, jobId: JOB, state: ["running"], total: 1 }),
+    "cloud.unavailable",
+  ],
+  [
+    "a status reply whose state is a list",
+    status,
+    reply({ version: 1, jobId: JOB, state: ["running"], total: 1, done: 0, failed: 0 }),
+    "cloud.unavailable",
+  ],
+  [
     "a reply of another version",
     status,
     reply({ version: 2, jobId: JOB, state: "running", total: 1, done: 0, failed: 0 }),

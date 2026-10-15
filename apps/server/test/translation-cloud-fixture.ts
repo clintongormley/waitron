@@ -59,6 +59,7 @@ const KINDS = new Set([
   "included_menu",
   "unit",
 ]);
+const kind = (v: unknown) => typeof v === "string" && KINDS.has(v);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const JOB_BYTES = 1_048_576;
 const JOB_ITEMS = 1000;
@@ -157,7 +158,7 @@ function readJob(body: string): FakeJobBody | null {
       !keysAre(item, ["ref", "kind", "family", "category", "staffName", "existing", "missing"]) ||
       !text(item.ref, 128) ||
       position.has(item.ref) ||
-      !KINDS.has(String(item.kind)) ||
+      !kind(item.kind) ||
       !text(item.family, 128) ||
       !(
         item.category === null ||
@@ -190,7 +191,7 @@ function readJob(body: string): FakeJobBody | null {
     !v.houseStyle.every(
       (h) =>
         keysAre(h, ["kind", "staffName", "names"]) &&
-        KINDS.has(String(h.kind)) &&
+        kind(h.kind) &&
         text(h.staffName) &&
         namesIn(h.names, enabled),
     )
@@ -247,7 +248,6 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
   let override: Record<string, unknown> = {};
   let translate: (item: FakeItem) => Omit<FakeResult, "ref"> = defaultTranslator;
 
-  /** Any unexpired lease this fake issued: the fake's own choice, listed above. */
   function leaseIssued(lease: unknown): boolean {
     for (const reply of base.replies.values()) {
       const issued = (reply as { lease?: { payload: string } }).lease;
@@ -291,6 +291,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     const registration = (saved.view as { registration?: { installationId?: unknown } } | undefined)
       ?.registration;
     const issuedAt = values[5];
+    const signedBody = values[7];
     const submitting = action === "translation-submit";
     if (
       !ACTIONS.includes(action) ||
@@ -301,12 +302,13 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
       typeof issuedAt !== "number" ||
       Math.abs(Date.now() - issuedAt) > PROOF_WINDOW_MS ||
       !leaseIssued(values[6]) ||
+      typeof signedBody !== "string" ||
+      signedBody.length > 4096 ||
       !keysAre(sent, submitting ? ["payload", "signature", "body"] : ["payload", "signature"]) ||
       (submitting && typeof sent.body !== "string")
     )
       return answer(401, { error: "invalid_proof" });
     if (base.isRevoked()) return answer(403, { error: "revoked" });
-    const signedBody = String(values[7]);
     if (submitting) return submit(String(sent.body), signedBody, operationId, answer);
     const jobId = jobIdIn(signedBody);
     if (!jobId) return answer(400, { error: "invalid_request" });

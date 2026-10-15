@@ -13,10 +13,11 @@ interface Pending {
   lease: string;
   body: string;
 }
-type Service = "continuous_backup" | "remote_access" | "retained_snapshots" | "content_translation";
 const ORIGINAL_SERVICES = ["continuous_backup", "remote_access", "retained_snapshots"] as const;
+const SERVICES = [...ORIGINAL_SERVICES, "content_translation"] as const;
+type Service = (typeof SERVICES)[number];
 /** Asks Cloud for the fourth service, `content_translation` (contract, "Translate all, version 1"). */
-export const CONFIGURATION_BODY = JSON.stringify({ servicesVersion: 2 });
+const CONFIGURATION_BODY = JSON.stringify({ servicesVersion: 2 });
 export interface CloudObservation {
   service: Service;
   health: "unknown" | "healthy" | "degraded" | "failed";
@@ -79,7 +80,7 @@ function readView(value: unknown, state: SavedCloudState): View {
   for (const s of value.services) {
     if (
       !object(s) ||
-      ![...ORIGINAL_SERVICES, "content_translation"].includes(String(s.service)) ||
+      !(SERVICES as readonly string[]).includes(String(s.service)) ||
       services.some((v) => v.service === s.service) ||
       !["unconfigured", "provisioning", "ready", "failed"].includes(String(s.state)) ||
       !["unknown", "healthy", "degraded", "failed"].includes(String(s.health)) ||
@@ -241,7 +242,11 @@ export function machinePayload(
     ]),
   );
 }
-export function pendingRequest(action: Action, lease?: Envelope, body = "{}"): Pending {
+export function pendingRequest(
+  action: Action,
+  lease?: Envelope,
+  body = action === "configuration" ? CONFIGURATION_BODY : "{}",
+): Pending {
   return {
     action,
     operationId: randomUUID(),
@@ -336,7 +341,7 @@ export function installationClient(
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function prepare(action: Action, body = "{}") {
+  async function prepare(action: Action, body?: string) {
     c.pending = pendingRequest(action, c.lease, body);
     await save(state);
   }
@@ -346,10 +351,9 @@ export function installationClient(
       if (c.pending) await exchange(signal);
       if (c.revoked) return;
       const needsRenew = leaseExpiry(c.lease) <= Date.now() + 600000;
-      await prepare(needsRenew ? "renew" : "configuration", needsRenew ? "{}" : CONFIGURATION_BODY);
+      await prepare(needsRenew ? "renew" : "configuration");
       await exchange(signal);
     },
-    /** Leaves the state holding a live control lease, renewing with ten minutes or less left. */
     async ensureLease(signal?: AbortSignal) {
       if (c.pending) await exchange(signal);
       if (!c.revoked && (!c.lease || leaseExpiry(c.lease) <= Date.now() + 600000)) {

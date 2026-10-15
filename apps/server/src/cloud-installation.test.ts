@@ -24,6 +24,21 @@ it("persists renewal intent, resumes a lost response after restart, and keeps cr
     await f.close();
   }
 });
+it("signs {} as the body of renew and revoke, and the version-2 body of configuration", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh();
+    await f.client.refresh();
+    await f.client.revoke(async () => {});
+    expect(f.requests.map((v) => [v[2], v[7]])).toEqual([
+      ["renew", "{}"],
+      ["configuration", '{"servicesVersion":2}'],
+      ["revoke", "{}"],
+    ]);
+  } finally {
+    await f.close();
+  }
+});
 it("refuses cross-installation replies and preserves the last configuration on outage", async () => {
   const f = await installationFixture();
   try {

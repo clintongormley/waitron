@@ -206,6 +206,22 @@ it("a lease the fake did not issue, or a proof time over 60 seconds away, is an 
     );
   }));
 
+it("a signed body over 4,096 characters is an invalid proof, and one of exactly 4,096 is not", () =>
+  withCloud(async (f) => {
+    // JSON allows whitespace after the value, so padding keeps the fingerprint readable.
+    const padded = (length: number) => {
+      const signed = submitSignedBody(two);
+      return signed + " ".repeat(length - signed.length);
+    };
+    expect(
+      await f.signedRequest("translation-submit", { signedBody: padded(4097), body: two }),
+    ).toEqual(refused(401, "invalid_proof"));
+    expect(f.jobs.size).toBe(0);
+    expect(
+      await f.signedRequest("translation-submit", { signedBody: padded(4096), body: two }),
+    ).toMatchObject({ status: 200, json: { state: "queued" } });
+  }));
+
 it("checks the size before the fingerprint, and the fingerprint before reading the job", () =>
   withCloud(async (f) => {
     const oversized = JSON.stringify({
@@ -236,6 +252,7 @@ it("checks the size before the fingerprint, and the fingerprint before reading t
 
 it.each([
   ["a kind outside the nine", job([{ ...item("product:1", "PINTA", ["ca"]), kind: "telepathy" }])],
+  ["a kind that is a list", job([{ ...item("product:1", "PINTA", ["ca"]), kind: ["product"] }])],
   ["a staff name over 500 characters", job([item("product:1", "P".repeat(501), ["ca"])])],
   [
     "an empty missing on an item that heads no other",
@@ -285,6 +302,10 @@ it.each([
   [
     "a house-style entry with a kind outside the nine",
     job(pinta, { houseStyle: [{ ...house, kind: "telepathy" }] }),
+  ],
+  [
+    "a house-style entry with a kind that is a list",
+    job(pinta, { houseStyle: [{ ...house, kind: ["product"] }] }),
   ],
   [
     "a house-style entry with a staff name over 500 characters",
