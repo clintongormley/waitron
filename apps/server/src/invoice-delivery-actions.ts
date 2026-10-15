@@ -12,6 +12,7 @@ import {
   readInvoiceDeliveryState,
   rowAttempt,
   type InvoiceDeliveryAttempt,
+  type PrinterOffer,
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
@@ -41,28 +42,34 @@ async function replayed(
 const isA4 = (row: InvoiceDelivery) => row.medium === "a4";
 const isReceipt = (row: InvoiceDelivery) => row.medium === "receipt";
 
-/** Prints a full invoice on its location's invoice printer, as the delivery status offers it. */
-export async function requestA4Delivery(
+/**
+ * Prints a full invoice on `request.printerId`, which must be one of the A4 printers `offer` gives
+ * for the sale, as the delivery status offers it.
+ */
+export async function requestPrintDelivery(
   tx: Transaction,
   saleId: string,
-  request: Request,
+  offer: PrinterOffer,
+  request: Request & { printerId: string },
 ): Promise<InvoiceDeliveryAttempt> {
+  const { printerId, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, saleId, request.requestKey, isA4);
   if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, saleId, { emailAvailable: false });
+  const state = await readInvoiceDeliveryState(tx, saleId, {
+    emailAvailable: false,
+    printers: offer,
+  });
   if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const offer = state.status.actions.printOnA4;
-  if (offer === null) {
-    throw new AppError(
-      state.printer === null ? "invoice_delivery.printer_invalid" : "invoice_delivery.active",
-      {},
-    );
-  }
+  const printer = state.printers.find(
+    (candidate) => candidate.id === printerId && candidate.kind === "a4",
+  );
+  if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
+  if (state.status.actions.print === null) throw new AppError("invoice_delivery.active", {});
   const row = await reserveInvoiceDelivery(tx, saleId, {
-    ...request,
+    ...reserved,
     medium: "a4",
-    pagePrinterId: offer.printer.id,
+    pagePrinterId: printer.id,
   });
   return rowAttempt(row);
 }

@@ -95,6 +95,7 @@ import {
   confirmReceiptHandover,
   readOriginalReceiptPrint,
   resolveDrawerPrinter,
+  resolveInvoicePrinter,
 } from "./receipt-print.js";
 import { listServiceStatuses, listTables, listZones, setTableStatus } from "./tables.js";
 import {
@@ -222,9 +223,9 @@ import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { readInvoicePrinter } from "./page-printers.js";
-import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
+import { readInvoiceDeliveries, type OfferedPrinter } from "./invoice-delivery-status.js";
 import {
-  requestA4Delivery,
+  requestPrintDelivery,
   requestEmailDelivery,
   retryEmailDelivery,
   switchToReceipt,
@@ -2339,6 +2340,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     return sale.id;
   }
 
+  /** The one printer the till may print a full invoice on: its own invoice printer, when A4. */
+  async function tillInvoicePrinters(
+    tx: Transaction,
+    session: { deviceId: string },
+  ): Promise<OfferedPrinter[]> {
+    const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
+    return printer?.kind === "a4" ? [{ id: printer.id, name: printer.name, kind: "a4" }] : [];
+  }
+
   app.get("/api/sales/:id/deliveries", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -2349,6 +2359,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await expireInvoiceDeliveryClaims(tx);
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) => canEmailInvoice(tx, sale, transport),
+          printers: () => tillInvoicePrinters(tx, session),
         });
       });
       return c.json(status);
@@ -2363,15 +2374,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         medium?: unknown;
         requestKey?: unknown;
+        printerId?: unknown;
         recipient?: unknown;
       }>(c);
-      if (body.medium !== "a4" && body.medium !== "email")
+      if (body.medium !== "print" && body.medium !== "email")
         throw new AppError("management.request_invalid", { field: "medium" });
       const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       const request = { requestKey, personId: session.personId };
-      if (body.medium === "a4") {
+      if (body.medium === "print") {
+        const printerId = requireBodyUuid(body.printerId, "printerId");
         const attempt = await withTransaction(deps.db, async (tx) =>
-          requestA4Delivery(tx, await zonedSale(tx, session, id), request),
+          requestPrintDelivery(
+            tx,
+            await zonedSale(tx, session, id),
+            () => tillInvoicePrinters(tx, session),
+            { ...request, printerId },
+          ),
         );
         return c.json(attempt);
       }

@@ -389,7 +389,7 @@ describe("invoiceDeliveryAlertSource", () => {
       printerHold: null,
       lateSuccess: false,
     };
-    const actions = { retryOriginal: null, printOnA4: null, receiptInstead: null, email: null };
+    const actions = { retryOriginal: null, print: null, receiptInstead: null, email: null };
     const read = (status: Parameters<typeof undeliveredInvoice>[0]) =>
       undeliveredInvoice(status, LATER, {
         officePrinters: new Map(),
@@ -399,12 +399,32 @@ describe("invoiceDeliveryAlertSource", () => {
       });
 
     expect(
-      read({ current: failed, originalCompleted: true, actions, history: [failed] }),
+      read({
+        current: failed,
+        originalCompleted: true,
+        originalPrinterId: null,
+        actions,
+        history: [failed],
+      }),
     ).toBeNull();
-    expect(read({ current: null, originalCompleted: false, actions, history: [] })).toBeNull();
-    expect(read({ current: failed, originalCompleted: false, actions, history: [failed] })).toEqual(
-      { kind: "failed", since: REPORTED.toISOString() },
-    );
+    expect(
+      read({
+        current: null,
+        originalCompleted: false,
+        originalPrinterId: null,
+        actions,
+        history: [],
+      }),
+    ).toBeNull();
+    expect(
+      read({
+        current: failed,
+        originalCompleted: false,
+        originalPrinterId: null,
+        actions,
+        history: [failed],
+      }),
+    ).toEqual({ kind: "failed", since: REPORTED.toISOString() });
   });
 });
 

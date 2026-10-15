@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -37,7 +37,12 @@ import {
   type InvoiceDeliveryClaim,
   type InvoiceDeliveryOutcome,
 } from "./invoice-delivery.js";
-import { readInvoiceDeliveries, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
+import {
+  readInvoiceDeliveries,
+  readInvoiceDeliveriesFor,
+  type InvoiceDeliverySale,
+  type OfferedPrinter,
+} from "./invoice-delivery-status.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 import { renewInvoicePagePrint } from "./invoice-page-print.js";
 import { readOriginalReceiptPrint } from "./receipt-print.js";
@@ -272,8 +277,29 @@ async function attempt(
   )[0]!;
 }
 
-function read(saleId: string, emailAvailable = true) {
-  return withTransaction(suite.db, (tx) => readInvoiceDeliveries(tx, saleId, { emailAvailable }));
+type Offer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
+
+const a4 = (id: string, name = "Back office"): OfferedPrinter => ({ id, name, kind: "a4" });
+
+/** Offers every active page printer at the sale's location, by name, as the Orders detail does. */
+const locationOffices: Offer = async (sale) =>
+  (
+    await suite.db
+      .select({ id: pagePrinters.id, name: pagePrinters.name })
+      .from(pagePrinters)
+      .where(and(eq(pagePrinters.locationId, sale.locationId), eq(pagePrinters.active, true)))
+      .orderBy(pagePrinters.name)
+  ).map((row) => a4(row.id, row.name));
+
+function read(saleId: string, emailAvailable = true, printers: Offer = locationOffices) {
+  return withTransaction(suite.db, (tx) =>
+    readInvoiceDeliveries(tx, saleId, { emailAvailable, printers }),
+  );
+}
+
+async function jobPrinter(jobId: string): Promise<string> {
+  const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+  return job!.printerId;
 }
 
 const statusTime: Record<Status, string> = {
@@ -317,18 +343,24 @@ describe("readInvoiceDeliveries", () => {
       printerHold: null,
       lateSuccess: false,
     };
-    const printer = { id: office, name: "Back office" };
+    const printers = [a4(office)];
     const ended = status === "failed" || status === "unknown";
     expect(result).toEqual({
       current,
       originalCompleted: status === "sent",
+      originalPrinterId:
+        medium === "a4"
+          ? office
+          : medium === "receipt"
+            ? await jobPrinter(delivery.printJobId!)
+            : null,
       actions: {
         retryOriginal: ended ? { medium } : null,
-        printOnA4:
+        print:
           status === "sent"
-            ? { printer, designation: "duplicate" }
+            ? { printers, designation: "duplicate" }
             : ended
-              ? { printer, designation: "original" }
+              ? { printers, designation: "original" }
               : null,
         receiptInstead:
           medium !== "receipt" && status === "queued" ? { deliveryId: delivery.id } : null,
@@ -415,7 +447,7 @@ describe("readInvoiceDeliveries", () => {
       expect(result!.current).toMatchObject({ status: "sending", printerHold: "paper_out" });
       expect(result!.actions).toEqual({
         retryOriginal: null,
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: null,
       });
@@ -468,9 +500,10 @@ describe("readInvoiceDeliveries", () => {
     expect(await read(saleId)).toEqual({
       current: null,
       originalCompleted: false,
+      originalPrinterId: null,
       actions: {
         retryOriginal: null,
-        printOnA4: { printer: { id: office, name: "Back office" }, designation: "original" },
+        print: { printers: [a4(office)], designation: "original" },
         receiptInstead: null,
         email: { designation: "original" },
       },
@@ -478,28 +511,119 @@ describe("readInvoiceDeliveries", () => {
     });
   });
 
-  it.each(["none", "disabled", "not the invoice printer", "another location's"] as const)(
-    "offers no A4 when the location's invoice printer is %s",
-    async (kind) => {
+  it("offers exactly the printers its caller offers, in their order", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    await pagePrinter(v.locationId, { name: "Not offered" });
+    const offered: OfferedPrinter[] = [
+      { id: randomUUID(), name: "Bar receipts", kind: "receipt" },
+      a4(randomUUID(), "Upstairs office"),
+    ];
+
+    expect((await read(saleId, true, async () => offered))!.actions.print).toEqual({
+      printers: offered,
+      designation: "original",
+    });
+  });
+
+  it("offers no print, and no A4 retry, when its caller offers no printer", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const used = await pagePrinter(v.locationId, { name: "Old office" });
+    await attempt(v, saleId, "a4", "failed", used);
+
+    const result = await read(saleId, true, async () => []);
+
+    expect(result!.current).toMatchObject({ medium: "a4", status: "failed" });
+    expect(result!.actions).toEqual({
+      retryOriginal: null,
+      print: null,
+      receiptInstead: null,
+      email: { designation: "original" },
+    });
+  });
+
+  it("offers an A4 retry only when an A4 printer is among the offered printers", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const office = await pagePrinter(v.locationId);
+    await attempt(v, saleId, "a4", "failed", office);
+    const receipts: OfferedPrinter = { id: randomUUID(), name: "Bar receipts", kind: "receipt" };
+
+    expect((await read(saleId, true, async () => [receipts]))!.actions).toMatchObject({
+      retryOriginal: null,
+      print: { printers: [receipts], designation: "original" },
+    });
+    expect((await read(saleId, true, async () => [receipts, a4(office)]))!.actions).toMatchObject({
+      retryOriginal: { medium: "a4" },
+    });
+  });
+
+  it("offers nothing to print while an attempt is active, whatever is offered", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const office = await pagePrinter(v.locationId);
+    await attempt(v, saleId, "a4", "queued", office);
+
+    expect((await read(saleId, true, async () => [a4(office)]))!.actions.print).toBeNull();
+  });
+
+  describe("the original's printer", () => {
+    it("is the printer of the original that was sent, not of a newer duplicate on another printer", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      // The failed attempt went to a printer that is no longer the invoice printer.
-      const used = await pagePrinter(v.locationId, { invoiceDefault: false, name: "Old office" });
-      await attempt(v, saleId, "a4", "failed", used);
-      if (kind === "disabled") await pagePrinter(v.locationId, { active: false });
-      if (kind === "another location's") await pagePrinter(await location("Terrace"));
+      const office = await pagePrinter(v.locationId);
+      const upstairs = await pagePrinter(v.locationId, {
+        invoiceDefault: false,
+        name: "Upstairs",
+      });
+      await attempt(v, saleId, "a4", "sent", office);
+      const duplicate = await attempt(v, saleId, "a4", "sent", upstairs);
 
       const result = await read(saleId);
 
-      expect(result!.current).toMatchObject({ medium: "a4", status: "failed" });
-      expect(result!.actions).toEqual({
-        retryOriginal: null,
-        printOnA4: null,
-        receiptInstead: null,
-        email: { designation: "original" },
+      expect(duplicate.designation).toBe("duplicate");
+      expect(result!.current).toMatchObject({ id: duplicate.id });
+      expect(result!.originalPrinterId).toBe(office);
+    });
+
+    it("is the printer of a printed receipt original no row tracks, over a newer failed A4 original", async () => {
+      const v = await venue();
+      const saleId = await invoice(v.nodeId);
+      const office = await pagePrinter(v.locationId);
+      await attempt(v, saleId, "a4", "failed", office);
+      const jobId = await receiptJob(v, saleId, { status: "done" });
+
+      expect((await read(saleId))!.originalPrinterId).toBe(await jobPrinter(jobId));
+    });
+
+    it("is the newest original attempt's printer while none was sent", async () => {
+      const v = await venue();
+      const saleId = await invoice(v.nodeId);
+      const office = await pagePrinter(v.locationId);
+      const upstairs = await pagePrinter(v.locationId, {
+        invoiceDefault: false,
+        name: "Upstairs",
       });
-    },
-  );
+      await attempt(v, saleId, "a4", "failed", office);
+      await attempt(v, saleId, "a4", "unknown", upstairs);
+
+      expect((await read(saleId))!.originalPrinterId).toBe(upstairs);
+    });
+
+    it("is null when the newest original attempt was an email, and the receipt job's printer for paper", async () => {
+      const v = await venue();
+      const emailed = await invoice(v.nodeId);
+      const office = await pagePrinter(v.locationId);
+      await attempt(v, emailed, "a4", "failed", office);
+      await attempt(v, emailed, "email", "failed");
+      const printed = await invoice(v.nodeId);
+      const receipt = await attempt(v, printed, "receipt", "failed");
+
+      expect((await read(emailed))!.originalPrinterId).toBeNull();
+      expect((await read(printed))!.originalPrinterId).toBe(await jobPrinter(receipt.printJobId!));
+    });
+  });
 
   it("offers duplicates only once an original has completed, even after a failed duplicate", async () => {
     const v = await venue();
@@ -519,7 +643,7 @@ describe("readInvoiceDeliveries", () => {
     expect(result!.originalCompleted).toBe(true);
     expect(result!.actions).toEqual({
       retryOriginal: null,
-      printOnA4: { printer: { id: office, name: "Back office" }, designation: "duplicate" },
+      print: { printers: [a4(office)], designation: "duplicate" },
       receiptInstead: null,
       email: { designation: "duplicate" },
     });
@@ -537,7 +661,7 @@ describe("readInvoiceDeliveries", () => {
     expect(result!.current).toMatchObject({ id: duplicate.id, status: "queued" });
     expect(result!.actions).toEqual({
       retryOriginal: null,
-      printOnA4: null,
+      print: null,
       receiptInstead: null,
       email: null,
     });
@@ -563,7 +687,7 @@ describe("readInvoiceDeliveries", () => {
     // A late success on a superseded attempt is history only: the next one is still original.
     expect(result!.originalCompleted).toBe(false);
     expect(result!.actions.retryOriginal).toEqual({ medium: "a4" });
-    expect(result!.actions.printOnA4).toMatchObject({ designation: "original" });
+    expect(result!.actions.print).toMatchObject({ designation: "original" });
   });
 
   describe("email", () => {
@@ -674,9 +798,10 @@ describe("readInvoiceDeliveries", () => {
       expect(result).toEqual({
         current,
         originalCompleted: true,
+        originalPrinterId: job!.printerId,
         actions: {
           retryOriginal: null,
-          printOnA4: { printer: { id: office, name: "Back office" }, designation: "duplicate" },
+          print: { printers: [a4(office)], designation: "duplicate" },
           receiptInstead: null,
           email: { designation: "duplicate" },
         },
@@ -714,7 +839,7 @@ describe("readInvoiceDeliveries", () => {
       expect(result!.current).toMatchObject({ id: null, status, at: null });
       expect(result!.actions).toEqual({
         retryOriginal: null,
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: null,
       });
@@ -730,7 +855,7 @@ describe("readInvoiceDeliveries", () => {
       expect(result!.current).toMatchObject({ id: null, status: "failed", failureCode: null });
       expect(result!.actions).toEqual({
         retryOriginal: { medium: "receipt" },
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: { designation: "original" },
       });
@@ -748,7 +873,7 @@ describe("readInvoiceDeliveries", () => {
       expect(result!.current).toMatchObject({ medium: "a4", status: "failed" });
       expect(result!.actions).toEqual({
         retryOriginal: null,
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: null,
       });
@@ -788,7 +913,7 @@ describe("readInvoiceDeliveries", () => {
     expect(result!.current).toMatchObject({ id: delivery.id, status: "failed" });
     expect(result!.actions).toEqual({
       retryOriginal: null,
-      printOnA4: { printer: { id: office, name: "Back office" }, designation: "original" },
+      print: { printers: [a4(office)], designation: "original" },
       receiptInstead: null,
       email: { designation: "original" },
     });
@@ -855,7 +980,7 @@ describe("readInvoiceDeliveries", () => {
       expect(result!.current).toMatchObject({ id: a4.id, status: "queued" });
       expect(result!.actions).toEqual({
         retryOriginal: null,
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: null,
       });
@@ -868,12 +993,12 @@ describe("readInvoiceDeliveries", () => {
       await attempt(v, saleId, "receipt", "failed");
       await attempt(v, saleId, "a4", "failed", old);
 
-      const result = await read(saleId);
+      const result = await read(saleId, true, async () => []);
 
       expect(result!.current).toMatchObject({ medium: "a4", status: "failed" });
       expect(result!.actions).toEqual({
         retryOriginal: { medium: "receipt" },
-        printOnA4: null,
+        print: null,
         receiptInstead: null,
         email: { designation: "original" },
       });
@@ -912,20 +1037,33 @@ describe("readInvoiceDeliveries", () => {
     });
   });
 
-  it("reads the sale's own location's invoice printer", async () => {
+  it("asks its caller for the printers of each full invoice, with the sale's own location", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
     const terrace = await location("Terrace");
     const terraceNode = await seedNode(suite.db, brandLocation(terrace));
     const other = await invoice(terraceNode);
-    const terracePrinter = await pagePrinter(terrace, { name: "Terrace office" });
-    await pagePrinter(v.locationId);
+    const simplified = await invoice(v.nodeId, false);
+    const asked: InvoiceDeliverySale[] = [];
+    const offer: Offer = async (sale) => {
+      asked.push(sale);
+      return [];
+    };
 
-    expect((await read(other))!.actions.printOnA4).toEqual({
-      printer: { id: terracePrinter, name: "Terrace office" },
-      designation: "original",
-    });
-    expect((await read(saleId))!.actions.printOnA4!.printer.name).toBe("Back office");
+    await withTransaction(suite.db, (tx) =>
+      readInvoiceDeliveriesFor(tx, [saleId, other, simplified], {
+        emailAvailable: true,
+        printers: offer,
+      }),
+    );
+
+    expect(asked).toHaveLength(2);
+    expect(asked).toEqual(
+      expect.arrayContaining([
+        { id: saleId, locationId: v.locationId },
+        { id: other, locationId: terrace },
+      ]),
+    );
   });
 
   it("reads several sales at once exactly as it reads each one", async () => {
@@ -949,12 +1087,17 @@ describe("readInvoiceDeliveries", () => {
     const ids = [failedA4, printed, untracked, fresh, simplified, queuedReceipt];
 
     const batch = await withTransaction(suite.db, (tx) =>
-      readInvoiceDeliveriesFor(tx, [...ids, missing], { emailAvailable: true }),
+      readInvoiceDeliveriesFor(tx, [...ids, missing], {
+        emailAvailable: true,
+        printers: locationOffices,
+      }),
     );
 
     expect([...batch.keys()].sort()).toEqual([...ids].sort());
     for (const id of ids) expect(batch.get(id), id).toEqual(await read(id));
     expect(batch.get(simplified)).toBeNull();
-    expect(batch.get(fresh)!.actions.printOnA4!.printer.name).toBe("Terrace office");
+    expect(batch.get(fresh)!.actions.print!.printers).toEqual([
+      expect.objectContaining({ name: "Terrace office" }),
+    ]);
   });
 });

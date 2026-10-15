@@ -8,6 +8,7 @@ import {
   deviceProfiles,
   invoiceDeliveries,
   invoiceSeries,
+  locations,
   pagePrinters,
   printAgents,
   tenants,
@@ -148,7 +149,64 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
 const printOnA4 = (cookie: string, billId: string, body: Record<string, unknown>) =>
   send(venue.orders, cookie, "POST", `/management-api/orders/${billId}/invoice-deliveries`, body);
 
-const a4 = (requestKey: string = randomUUID()) => ({ medium: "a4", requestKey });
+const a4 = (requestKey: string = randomUUID(), printerId: string = officeId) => ({
+  medium: "print",
+  printerId,
+  requestKey,
+});
+
+let hostCounter = 30;
+/** Another A4 printer, at the venue's location unless `locationId` names another. */
+async function extraOffice(name: string, locationId: string = venue.cfg.locationId) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .insert(pagePrinters)
+      .values({
+        locationId,
+        name,
+        host: `192.0.2.${hostCounter++}`,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+      })
+      .returning({ id: pagePrinters.id }),
+  );
+  return row!.id;
+}
+
+/** Runs `act` with extra A4 printers that are switched off afterwards, for the suites after it. */
+async function withExtraOffices(
+  act: (extra: { upstairs: string; elsewhere: string; off: string }) => Promise<void>,
+) {
+  const [terrace] = await inTx(venue, (tx) =>
+    tx
+      .insert(locations)
+      .values({
+        name: `Terrace ${hostCounter}`,
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurante",
+      })
+      .returning({ id: locations.id }),
+  );
+  const extra = {
+    upstairs: await extraOffice("Arriba"),
+    elsewhere: await extraOffice("Terraza", terrace!.id),
+    off: await extraOffice("Apagada"),
+  };
+  await inTx(venue, (tx) =>
+    tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, extra.off)),
+  );
+  try {
+    await act(extra);
+  } finally {
+    await inTx(venue, (tx) =>
+      tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, extra.upstairs)),
+    );
+  }
+}
 
 const deliveriesOf = (saleId: string) =>
   inTx(venue, (tx) =>
@@ -163,7 +221,7 @@ async function deliveryCount(): Promise<number> {
 }
 
 describe("dashboard print on A4", () => {
-  it("queues an A4 original on the location's invoice printer for a staff dashboard session", async () => {
+  it("queues an A4 original on the chosen printer for a staff dashboard session", async () => {
     const { billId, saleId } = await fullInvoice();
     const answer = await printOnA4(venue.staffDashboard, billId, a4());
     expect(answer.status).toBe(200);
@@ -235,22 +293,22 @@ describe("dashboard print on A4", () => {
     expect(await deliveryCount()).toBe(before);
   });
 
-  it("refuses when the location has no invoice printer", async () => {
+  it("prints on any active A4 printer at the sale's location, and refuses any other", async () => {
     const { billId, saleId } = await fullInvoice();
-    await inTx(venue, (tx) =>
-      tx.update(pagePrinters).set({ invoiceDefault: false }).where(eq(pagePrinters.id, officeId)),
-    );
-    try {
-      expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
-        status: 409,
-        json: { code: "invoice_delivery.printer_invalid" },
-      });
-    } finally {
-      await inTx(venue, (tx) =>
-        tx.update(pagePrinters).set({ invoiceDefault: true }).where(eq(pagePrinters.id, officeId)),
-      );
-    }
-    expect(await deliveriesOf(saleId)).toEqual([]);
+    await withExtraOffices(async ({ upstairs, elsewhere, off }) => {
+      for (const printerId of [elsewhere, off, randomUUID()]) {
+        expect(
+          await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), printerId)),
+        ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+      }
+      expect(await deliveriesOf(saleId)).toEqual([]);
+      expect(
+        (await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), upstairs))).status,
+      ).toBe(200);
+      expect(await deliveriesOf(saleId)).toEqual([
+        expect.objectContaining({ medium: "a4", pagePrinterId: upstairs }),
+      ]);
+    });
   });
 
   it("refuses a bound dashboard device without print-receipt, writing nothing", async () => {
@@ -303,17 +361,36 @@ describe("dashboard print on A4", () => {
       status: 401,
       json: { code: "management_session.required" },
     });
-    for (const body of [{ requestKey: randomUUID() }, { medium: "fax", requestKey: randomUUID() }])
+    for (const body of [
+      { requestKey: randomUUID() },
+      { medium: "fax", requestKey: randomUUID() },
+      { medium: "a4", requestKey: randomUUID() },
+    ])
       expect(await printOnA4(venue.adminDashboard, billId, body)).toMatchObject({
         status: 400,
         json: { code: "management.request_invalid", params: { field: "medium" } },
       });
     for (const requestKey of [undefined, "not-an-id"])
       expect(
-        await printOnA4(venue.adminDashboard, billId, { medium: "a4", requestKey }),
+        await printOnA4(venue.adminDashboard, billId, {
+          medium: "print",
+          printerId: officeId,
+          requestKey,
+        }),
       ).toMatchObject({
         status: 400,
         json: { code: "management.request_invalid", params: { field: "requestKey" } },
+      });
+    for (const printerId of [undefined, "not-an-id"])
+      expect(
+        await printOnA4(venue.adminDashboard, billId, {
+          medium: "print",
+          printerId,
+          requestKey: randomUUID(),
+        }),
+      ).toMatchObject({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "printerId" } },
       });
     for (const id of [open, randomUUID(), "not-a-bill"])
       expect(await printOnA4(venue.adminDashboard, id, a4())).toMatchObject({
@@ -366,7 +443,7 @@ describe("the order detail's delivery status", () => {
           printerHold: null,
         },
         originalCompleted: true,
-        actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+        actions: { retryOriginal: null, print: null, receiptInstead: null },
         history: [
           { medium: "a4", designation: "duplicate", personName: "Ana" },
           {
@@ -414,18 +491,52 @@ describe("the order detail's delivery status", () => {
     });
   });
 
-  it("offers Print on A4 with the invoice printer when nothing is active", async () => {
+  it("offers the location's active A4 printer when nothing is active", async () => {
     const { billId } = await fullInvoice();
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: {
         current: null,
         originalCompleted: false,
+        originalPrinterId: null,
         actions: {
-          printOnA4: { printer: { id: officeId, name: "Oficina" }, designation: "original" },
+          print: {
+            printers: [{ id: officeId, name: "Oficina", kind: "a4" }],
+            designation: "original",
+          },
         },
         history: [],
       },
       invoicePdfDownloads: [],
+    });
+  });
+
+  it("offers every active A4 printer at the sale's location by name, with the original's printer", async () => {
+    const { billId } = await fullInvoice();
+    await withExtraOffices(async ({ upstairs }) => {
+      expect(
+        (await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), upstairs))).status,
+      ).toBe(200);
+      const detail = (await detailOf(venue.adminDashboard, billId)).json as {
+        deliveries: { originalPrinterId: string | null };
+      };
+      expect(detail.deliveries.originalPrinterId).toBe(upstairs);
+      await inTx(venue, (tx) =>
+        tx.update(invoiceDeliveries).set({ status: "failed", failureCode: "printer_refused" }),
+      );
+      expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
+        deliveries: {
+          originalPrinterId: upstairs,
+          actions: {
+            print: {
+              printers: [
+                { id: upstairs, name: "Arriba", kind: "a4" },
+                { id: officeId, name: "Oficina", kind: "a4" },
+              ],
+              designation: "original",
+            },
+          },
+        },
+      });
     });
   });
 

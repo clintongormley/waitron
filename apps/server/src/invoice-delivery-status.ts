@@ -4,7 +4,6 @@ import { invoiceDeliveries, nodes, printJobs, sales, type Transaction } from "@w
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
-import { readInvoicePrinters } from "./page-printers.js";
 import { type OriginalReceiptPrint, readOriginalReceiptPrints } from "./receipt-print.js";
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
@@ -37,13 +36,25 @@ export interface InvoiceDeliveryAttempt {
   lateSuccess: boolean;
 }
 
+/** A printer the caller offers to print the full invoice on. */
+export interface OfferedPrinter {
+  id: string;
+  name: string;
+  kind: "a4" | "receipt";
+}
+
 export interface InvoiceDeliveryStatus {
   current: InvoiceDeliveryAttempt | null;
   originalCompleted: boolean;
+  /**
+   * The printer of the original that was sent, else of the newest original attempt; null when that
+   * attempt was an email, or there is none.
+   */
+  originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: InvoiceDeliveryMedium } | null;
-    printOnA4: {
-      printer: { id: string; name: string };
+    print: {
+      printers: OfferedPrinter[];
       designation: InvoiceDelivery["designation"];
     } | null;
     /** A waiting A4 or email original, not yet claimed, that paper may replace. */
@@ -58,21 +69,28 @@ export interface InvoiceDeliveryStatus {
  * Whether an invoice email can be sent now; when not, no action offers email. The reader cannot
  * tell by itself: the mail transport lives outside the database.
  */
-export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
+export type InvoiceDeliveryReadOptions = { emailAvailable: boolean; printers?: PrinterOffer };
 
 /** A full invoice's sale, as the status reader found it. */
 export type InvoiceDeliverySale = { id: string; locationId: string };
 
+/**
+ * The printers a full invoice may be printed on, which depend on who asks; none when omitted, so
+ * nothing is offered to print.
+ */
+export type PrinterOffer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
+
 /** For one sale, `emailAvailable` may be asked of it once it is known to be a full invoice. */
 export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
+  printers?: PrinterOffer;
 };
 
 /** The status, with what the reader read on the way that an action deciding on it needs again. */
 export interface InvoiceDeliveryState {
   status: InvoiceDeliveryStatus;
   locationId: string;
-  printer: { id: string; name: string } | null;
+  printers: OfferedPrinter[];
   receipt: OriginalReceiptPrint;
 }
 
@@ -91,7 +109,7 @@ export async function readInvoiceDeliveryState(
   saleId: string,
   options: InvoiceDeliverySaleReadOptions,
 ): Promise<InvoiceDeliveryState | null> {
-  const state = (await readStates(tx, [saleId], options.emailAvailable)).get(saleId);
+  const state = (await readStates(tx, [saleId], options)).get(saleId);
   if (state === undefined) throw new AppError("invoice_delivery.not_found", {});
   return state;
 }
@@ -105,15 +123,16 @@ export async function readInvoiceDeliveriesFor(
   saleIds: readonly string[],
   options: InvoiceDeliveryReadOptions,
 ): Promise<Map<string, InvoiceDeliveryStatus | null>> {
-  const states = await readStates(tx, saleIds, options.emailAvailable);
+  const states = await readStates(tx, saleIds, options);
   return new Map([...states].map(([id, state]) => [id, state?.status ?? null]));
 }
 
 async function readStates(
   tx: Transaction,
   saleIds: readonly string[],
-  emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>),
+  options: InvoiceDeliverySaleReadOptions,
 ): Promise<Map<string, InvoiceDeliveryState | null>> {
+  const { emailAvailable, printers: offer = async () => [] } = options;
   const ids = [...saleIds];
   const found = await tx
     .select({ id: sales.id, recipient: sales.counterpartyTaxId, locationId: nodes.locationId })
@@ -129,6 +148,7 @@ async function readStates(
     .select({
       saleId: printJobs.saleId,
       id: printJobs.id,
+      printerId: printJobs.printerId,
       status: printJobs.status,
       attempts: printJobs.attempts,
       createdAt: printJobs.createdAt,
@@ -143,9 +163,6 @@ async function readStates(
       ),
     );
   const receipts = await readOriginalReceiptPrints(tx, ids);
-  const printers = await readInvoicePrinters(tx, [
-    ...new Set(found.map((sale) => sale.locationId)),
-  ]);
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
   const states = new Map<string, InvoiceDeliveryState | null>();
@@ -155,21 +172,20 @@ async function readStates(
       continue;
     }
     const receipt = receipts.get(sale.id)!;
-    const printer = printers.get(sale.locationId) ?? null;
+    const located = { id: sale.id, locationId: sale.locationId };
+    const printers = await offer(located);
     const emailable =
-      typeof emailAvailable === "boolean"
-        ? emailAvailable
-        : await emailAvailable({ id: sale.id, locationId: sale.locationId });
+      typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(located);
     states.set(sale.id, {
       status: deliveryStatus(
         rowsOf.get(sale.id) ?? [],
         jobsOf.get(sale.id) ?? [],
         receipt,
-        printer,
+        printers,
         emailable,
       ),
       locationId: sale.locationId,
-      printer,
+      printers,
       receipt,
     });
   }
@@ -191,18 +207,33 @@ function deliveryStatus(
   rows: InvoiceDelivery[],
   jobs: {
     id: string;
+    printerId: string;
     status: string;
     attempts: number;
     createdAt: string;
     deliveredAt: string | null;
   }[],
   receipt: OriginalReceiptPrint,
-  printer: { id: string; name: string } | null,
+  printers: OfferedPrinter[],
   emailAvailable: boolean,
 ): InvoiceDeliveryStatus {
   const history = rows.map(rowAttempt);
+  const jobPrinter = (jobId: string | null) =>
+    jobs.find((candidate) => candidate.id === jobId)?.printerId ?? null;
+  const originals = rows
+    .filter((row) => row.designation === "original")
+    .map((row) => ({
+      sent: row.status === "sent",
+      printerId:
+        row.medium === "a4"
+          ? row.pagePrinterId
+          : row.medium === "receipt"
+            ? jobPrinter(row.printJobId)
+            : null,
+    }));
   if (receipt.status !== "not_queued" && !rows.some((row) => row.printJobId === receipt.jobId)) {
     const job = jobs.find((candidate) => candidate.id === receipt.jobId)!;
+    originals.push({ sent: receipt.status === "done", printerId: job.printerId });
     // Listed as the oldest attempt: an untracked receipt original predates delivery rows.
     history.push({
       id: null,
@@ -235,7 +266,7 @@ function deliveryStatus(
             current.medium === "email"
               ? emailAvailable
               : current.medium === "a4"
-                ? printer !== null
+                ? printers.some((printer) => printer.kind === "a4")
                 : receiptRetryable
           )
         ? current.medium
@@ -244,12 +275,14 @@ function deliveryStatus(
           : null;
   const latest = rows[0];
   const designation = originalCompleted ? "duplicate" : "original";
+  const original = originals.find((attempt) => attempt.sent) ?? originals[0];
   return {
     current,
     originalCompleted,
+    originalPrinterId: original?.printerId ?? null,
     actions: {
       retryOriginal: retryMedium === null ? null : { medium: retryMedium },
-      printOnA4: printer === null || busy ? null : { printer, designation },
+      print: printers.length === 0 || busy ? null : { printers, designation },
       receiptInstead:
         latest !== undefined &&
         (latest.medium === "a4" || latest.medium === "email") &&

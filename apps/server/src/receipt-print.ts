@@ -11,7 +11,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { profileAllows, readPrinterRoles } from "@waitron/layouts";
+import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { readReceiptLanguage } from "@waitron/catalogue";
@@ -96,6 +96,33 @@ export async function resolvePaymentSlipPrinter(
   origin: Origin,
 ): Promise<DevicePrinter | undefined> {
   return printerLookup(tx, origin)("payment_slip");
+}
+
+/** A full invoice's printer: an A4 page printer, or a receipt printer with its layout settings. */
+export type InvoicePrinter =
+  | { kind: "a4"; id: string; name: string }
+  | ({ kind: "receipt"; id: string; name: string } & EscSetting);
+
+/**
+ * The printer the device's full invoices resolve to: its own choice, else its profile's default at
+ * its location. `undefined` when it resolves to none, the printer is switched off, or the origin is
+ * not a device; no other printer stands in.
+ */
+export async function resolveInvoicePrinter(
+  tx: Transaction,
+  origin: Origin,
+): Promise<InvoicePrinter | undefined> {
+  if (origin.source !== "device") return undefined;
+  const equipment = await readPrinterEquipment(tx, [origin.deviceId], { lists: false });
+  const role = equipment.roles.get(origin.deviceId)?.find((state) => state.role === "invoice");
+  const printer = role?.resolvedId == null ? undefined : equipment.printers.get(role.resolvedId);
+  if (printer === undefined || !printer.active) return undefined;
+  if (printer.kind === "a4") return { kind: "a4", id: printer.id, name: printer.name };
+  const [setting] = await tx
+    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .from(printers)
+    .where(eq(printers.id, printer.id));
+  return { kind: "receipt", id: printer.id, name: printer.name, ...setting! };
 }
 
 /** Each role's printer, by role, when the device resolves one and it is switched on. */

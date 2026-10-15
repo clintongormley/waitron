@@ -95,6 +95,7 @@ import {
   enqueueReceiptReprint,
   enqueueOriginalReceipt,
   enqueueSaleReceipt,
+  resolveInvoicePrinter,
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
 } from "./receipt-print.js";
@@ -1944,6 +1945,100 @@ describe("a record with no device prints nothing", () => {
       ).toBeDefined();
     },
   );
+});
+
+describe("the device's invoice printer", () => {
+  async function officePrinter(cfg: DeviceRequestConfig, active = true): Promise<string> {
+    const [row] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId: cfg.locationId,
+        name: active ? "Back office" : "Old office",
+        host: `192.0.2.${active ? 40 : 41}`,
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        active,
+      })
+      .returning({ id: pagePrinters.id });
+    return row!.id;
+  }
+
+  async function profileOf(cfg: DeviceRequestConfig): Promise<string> {
+    const [device] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, cfg.origin.deviceId));
+    return device!.profileId;
+  }
+
+  const resolve = (origin: Parameters<typeof resolveInvoicePrinter>[1]) =>
+    withTransaction(suite.db, (tx) => resolveInvoicePrinter(tx, origin));
+
+  it("resolves the profile's default A4 printer at the device's location", async () => {
+    const { cfg } = await setupVenue();
+    const office = await officePrinter(cfg);
+    await withTransaction(suite.db, async (tx) =>
+      listInvoicePrinter(tx, {
+        profileId: await profileOf(cfg),
+        pagePrinterId: office,
+        isDefault: true,
+      }),
+    );
+
+    expect(await resolve(cfg.origin)).toEqual({ kind: "a4", id: office, name: "Back office" });
+  });
+
+  it("resolves the device's own receipt-printer choice over the profile's default", async () => {
+    const { cfg } = await setupVenue();
+    const office = await officePrinter(cfg);
+    const receipt = await makePrinter(cfg);
+    await withTransaction(suite.db, async (tx) => {
+      const profileId = await profileOf(cfg);
+      await listInvoicePrinter(tx, { profileId, pagePrinterId: office, isDefault: true });
+      await listInvoicePrinter(tx, { profileId, printerId: receipt, isDefault: false });
+      await tx
+        .update(devices)
+        .set({ invoicePrinterId: receipt })
+        .where(eq(devices.id, cfg.origin.deviceId));
+    });
+
+    expect(await resolve(cfg.origin)).toEqual({
+      kind: "receipt",
+      id: receipt,
+      name: "Recibos",
+      paperWidth: "80mm",
+      resolution: "180dpi",
+    });
+  });
+
+  it("resolves none when the profile lists no invoice printer, or the origin is not a device", async () => {
+    const { cfg } = await setupVenue();
+    await officePrinter(cfg);
+
+    expect(await resolve(cfg.origin)).toBeUndefined();
+    expect(await resolve(jobOrigin("operator_script"))).toBeUndefined();
+  });
+
+  it("resolves none for a switched-off choice, never falling back to the profile's default", async () => {
+    const { cfg } = await setupVenue();
+    const office = await officePrinter(cfg);
+    const old = await officePrinter(cfg, false);
+    await withTransaction(suite.db, async (tx) => {
+      const profileId = await profileOf(cfg);
+      await listInvoicePrinter(tx, { profileId, pagePrinterId: office, isDefault: true });
+      await listInvoicePrinter(tx, { profileId, pagePrinterId: old, isDefault: false });
+      await tx
+        .update(devices)
+        .set({ invoicePagePrinterId: old })
+        .where(eq(devices.id, cfg.origin.deviceId));
+    });
+
+    expect(await resolve(cfg.origin)).toBeUndefined();
+  });
 });
 
 describe("receipt issuer", () => {

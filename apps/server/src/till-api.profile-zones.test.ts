@@ -674,7 +674,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/sales/:id/deliveries",
     "POST",
     (x) => `/api/sales/${x.deliOrder}/deliveries`,
-    () => ({ medium: "a4", requestKey: randomUUID() }),
+    () => ({ medium: "print", printerId: randomUUID(), requestKey: randomUUID() }),
     deliOrderZone,
   ],
   [

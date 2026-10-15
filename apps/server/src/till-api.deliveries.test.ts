@@ -351,8 +351,48 @@ async function send(
 
 const readStatus = (v: Venue, orderId: string, cookie?: string) =>
   send(v, "GET", `/api/sales/${orderId}/deliveries`, undefined, cookie);
-const printOnA4 = (v: Venue, orderId: string, requestKey: string = randomUUID(), cookie?: string) =>
-  send(v, "POST", `/api/sales/${orderId}/deliveries`, { medium: "a4", requestKey }, cookie);
+const printOnA4 = (
+  v: Venue,
+  orderId: string,
+  requestKey: string = randomUUID(),
+  cookie?: string,
+  printerId: string = v.officeId,
+) =>
+  send(
+    v,
+    "POST",
+    `/api/sales/${orderId}/deliveries`,
+    { medium: "print", printerId, requestKey },
+    cookie,
+  );
+
+/** Another active A4 printer at the venue, listed on every till profile and chosen by every till. */
+async function upstairsOffice(v: Venue): Promise<string> {
+  return withTransaction(suite.db, async (tx) => {
+    const [upstairs] = await tx
+      .insert(pagePrinters)
+      .values({
+        locationId: v.cfg.locationId,
+        name: "Upstairs office",
+        host: "192.0.2.21",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+        agentId: v.agentId,
+      })
+      .returning({ id: pagePrinters.id });
+    for (const { profileId } of await tx
+      .selectDistinct({ profileId: devices.deviceProfileId })
+      .from(devices)) {
+      await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
+    }
+    await tx.update(devices).set({ invoicePagePrinterId: upstairs!.id });
+    return upstairs!.id;
+  });
+}
 const toReceipt = (
   v: Venue,
   orderId: string,
@@ -478,19 +518,39 @@ describe("GET /api/sales/:id/deliveries", () => {
     const { orderId, saleId } = await invoice(v);
     const answer = await readStatus(v, orderId);
     expect(answer.status).toBe(200);
+    const offered = [{ id: v.officeId, name: "Back office", kind: "a4" as const }];
     expect(answer.body).toEqual(
       await withTransaction(suite.db, (tx) =>
-        readInvoiceDeliveries(tx, saleId, { emailAvailable: true }),
+        readInvoiceDeliveries(tx, saleId, { emailAvailable: true, printers: async () => offered }),
       ),
     );
     expect(answer.body).toMatchObject({
       current: null,
-      actions: {
-        printOnA4: { printer: { id: v.officeId, name: "Back office" }, designation: "original" },
-      },
+      actions: { print: { printers: offered, designation: "original" } },
     });
     const simplified = await invoice(v, false);
     expect(await readStatus(v, simplified.orderId)).toEqual({ status: 200, body: null });
+  });
+
+  it("offers the till's own invoice printer, not another A4 printer at the location", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const upstairs = await upstairsOffice(v);
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      actions: {
+        print: {
+          printers: [{ id: upstairs, name: "Upstairs office", kind: "a4" }],
+          designation: "original",
+        },
+      },
+    });
+  });
+
+  it("offers nothing to print when the till has no invoice printer", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
+    expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
   });
 
   it("ends a lapsed A4 claim before reading, so the attempt reads uncertain and can be retried", async () => {
@@ -513,7 +573,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     const denied = await v.app.request(`/api/sales/${orderId}/deliveries`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ medium: "a4", requestKey: randomUUID() }),
+      body: JSON.stringify({ medium: "print", printerId: v.officeId, requestKey: randomUUID() }),
     });
     expect(denied.status).toBe(401);
     const restricted = await till(
@@ -530,19 +590,34 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
   it.each([
     ["a missing medium", { requestKey: randomUUID() }, "medium"],
     ["an unknown medium", { medium: "fax", requestKey: randomUUID() }, "medium"],
-    ["a missing request key", { medium: "a4" }, "requestKey"],
-    ["a request key that is not an id", { medium: "a4", requestKey: "again" }, "requestKey"],
+    ["the retired A4 medium", { medium: "a4", requestKey: randomUUID() }, "medium"],
+    ["a missing request key", { medium: "print", printerId: "office" }, "requestKey"],
+    [
+      "a request key that is not an id",
+      { medium: "print", printerId: "office", requestKey: "again" },
+      "requestKey",
+    ],
+    ["a missing printer", { medium: "print", requestKey: randomUUID() }, "printerId"],
+    [
+      "a printer that is not an id",
+      { medium: "print", printerId: "office-1", requestKey: randomUUID() },
+      "printerId",
+    ],
   ])("refuses %s as an invalid request, writing nothing", async (_what, body, field) => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    expect(await send(v, "POST", `/api/sales/${orderId}/deliveries`, body)).toEqual({
+    const sent =
+      (body as { printerId?: unknown }).printerId === "office"
+        ? { ...body, printerId: v.officeId }
+        : body;
+    expect(await send(v, "POST", `/api/sales/${orderId}/deliveries`, sent)).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field } } },
     });
     expect(await deliveryRows(saleId)).toEqual([]);
   });
 
-  it("queues an original on the location's invoice printer for the signed-in staff member", async () => {
+  it("queues an original on the till's invoice printer for the signed-in staff member", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const answer = await printOnA4(v, orderId);
@@ -623,7 +698,37 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     expect(await deliveryRows(saleId)).toEqual([]);
   });
 
-  it("refuses when the location has no invoice printer", async () => {
+  it("prints on the till's own invoice printer, and refuses another A4 printer at the location", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const upstairs = await upstairsOffice(v);
+    expect(await printOnA4(v, orderId, randomUUID(), undefined, v.officeId)).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+    expect(await printOnA4(v, orderId, randomUUID(), undefined, randomUUID())).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+    expect(await deliveryRows(saleId)).toEqual([]);
+    expect((await printOnA4(v, orderId, randomUUID(), undefined, upstairs)).status).toBe(200);
+    expect(await deliveryRows(saleId)).toEqual([
+      expect.objectContaining({ medium: "a4", pagePrinterId: upstairs }),
+    ]);
+  });
+
+  it("refuses its invoice printer once it is switched off, with no other printer standing in", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const upstairs = await upstairsOffice(v);
+    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, upstairs));
+    for (const printerId of [upstairs, v.officeId]) {
+      expect(await printOnA4(v, orderId, randomUUID(), undefined, printerId)).toEqual(
+        refusal(409, "invoice_delivery.printer_invalid"),
+      );
+    }
+    expect(await deliveryRows(saleId)).toEqual([]);
+  });
+
+  it("refuses when the till has no invoice printer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     await suite.db.update(pagePrinters).set({ invoiceDefault: false });
@@ -896,7 +1001,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead)"
     ).toBe("renewed");
     expect((await readStatus(v, orderId)).body).toMatchObject({
       current: { id: a4, status: "sending", printerHold: "paper_out" },
-      actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+      actions: { retryOriginal: null, print: null, receiptInstead: null },
     });
     const rows = await deliveryRows(saleId);
     const jobs = await jobsOf(saleId);
@@ -1593,7 +1698,7 @@ describe("what each delivery route reads", () => {
     expect(statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement))).toEqual([]);
   });
 
-  it("reads the invoice printer once to refuse A4, whether one is busy or none is set up", async () => {
+  it("reads the A4 printers at most once to refuse a print, whether one is busy or none is set up", async () => {
     const v = await venue();
     const busy = await invoice(v);
     await printOnA4(v, busy.orderId);
@@ -1606,7 +1711,7 @@ describe("what each delivery route reads", () => {
     const none = await invoice(v);
     expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, none.orderId))).toEqual({
       answer: refusal(409, "invoice_delivery.printer_invalid"),
-      reads: 1,
+      reads: 0,
     });
   });
 

@@ -571,12 +571,14 @@ async function printOnA4(saleId: string, pagePrinterId: string) {
   );
 }
 
-/** Staff ask the till to print the invoice on A4 again. */
+/** Staff ask the till to print the invoice again on the printer it offers. */
 async function retryOnA4(v: Venue, orderId: string) {
+  const offered = (await tillStatus(v, orderId)).actions.print!.printers;
+  expect(offered).toHaveLength(1);
   const answer = await v.app.request(`/api/sales/${orderId}/deliveries`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.tillCookie },
-    body: JSON.stringify({ medium: "a4", requestKey: randomUUID() }),
+    body: JSON.stringify({ medium: "print", printerId: offered[0]!.id, requestKey: randomUUID() }),
   });
   expect(answer.status).toBe(200);
   return row(((await answer.json()) as { id: string }).id);
@@ -590,6 +592,7 @@ async function tillStatus(v: Venue, orderId: string) {
   expect(answer.status).toBe(200);
   return (await answer.json()) as {
     current: { id: string; status: string; printerHold: string | null } | null;
+    actions: { print: { printers: { id: string }[] } | null };
   };
 }
 
@@ -873,7 +876,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       expect(await tillStatus(v, orderId)).toMatchObject({
         current: { id: held.id, status: "sending", printerHold: "paper_out" },
         originalCompleted: false,
-        actions: { retryOriginal: null, printOnA4: null, receiptInstead: null },
+        actions: { retryOriginal: null, print: null, receiptInstead: null },
       });
 
       const other = await printOnA4(await fullInvoice(v), kitchenOffice);
