@@ -4,7 +4,6 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { mergeCheckedBills } from "./bill-actions.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
-import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
 import {
   isUntouched,
   leaveParty,
@@ -15,7 +14,7 @@ import {
   type OtherPartyRead,
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { SlipsLater } from "./moved-slips.js";
+import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import { moveDraftsToParty } from "./order-drafts.js";
 import {
   groupArrivingDishes,
@@ -106,21 +105,21 @@ export async function moveGuests(
   }
   if (table.holding === null) await refuseUnseatable(tx, cfg, table);
 
-  const before = await readPartiesSentWork(tx, [partyId]);
-  const leaving = held.filter((id) => id !== toTableId);
-  await leaveForClearing(tx, leaving, nowIso());
-  const mainBillId = await readMainBill(tx, partyId);
-  // A turnover, as seating one: no manual status carries over to these guests.
-  if (table.holding === null) {
-    await addTable(tx, partyId, toTableId, { clearStatus: true });
-  }
-  // The table moved to is now the party's only one.
-  if (table.zoneId !== zoneBefore) {
-    await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
-  }
-  await leaveMergeOf(tx, toTableId, held);
-  await enqueueMovedSlipsFor(tx, cfg, before);
-  return { partyId, mainBillId, merged: false };
+  return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
+    const leaving = held.filter((id) => id !== toTableId);
+    await leaveForClearing(tx, leaving, nowIso());
+    const mainBillId = await readMainBill(tx, partyId);
+    // A turnover, as seating one: no manual status carries over to these guests.
+    if (table.holding === null) {
+      await addTable(tx, partyId, toTableId, { clearStatus: true });
+    }
+    // The table moved to is now the party's only one.
+    if (table.zoneId !== zoneBefore) {
+      await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
+    }
+    await leaveMergeOf(tx, toTableId, held);
+    return { partyId, mainBillId, merged: false };
+  });
 }
 
 /** Only a party staying on part of its merge breaks it up; a merge left whole stays, free. */
@@ -163,12 +162,13 @@ export async function joinTables(
   }
   await refuseUnseatable(tx, cfg, table);
 
-  const later = options.slipsLater !== undefined;
-  const before = later ? null : await readPartiesSentWork(tx, [partyId]);
-  const mainBillId = await readMainBill(tx, partyId);
-  await addTable(tx, partyId, tableId, { clearStatus: false });
-  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
-  return { partyId, mainBillId, merged: false };
+  const reach =
+    options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
+  return withMovedSlips(tx, cfg, reach, async () => {
+    const mainBillId = await readMainBill(tx, partyId);
+    await addTable(tx, partyId, tableId, { clearStatus: false });
+    return { partyId, mainBillId, merged: false };
+  });
 }
 
 /**
@@ -185,27 +185,26 @@ async function combineAt(
   intoZoneId?: string | null,
   attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
-  const later = options.slipsLater;
-  const before = later === undefined ? await readPartiesSentWork(tx, [from, into]) : null;
-  const combined = await combineParties(
-    tx,
-    cfg,
-    {
-      from,
-      into,
-      bills: options.bills,
-      tables,
-      operatorId: options.operatorId,
-      intoZoneId,
-    },
-    attendance,
-  );
-  if (later !== undefined) {
+  const reach =
+    options.slipsLater === undefined ? { parties: [from, into] } : { later: options.slipsLater };
+  return withMovedSlips(tx, cfg, reach, async (slips) => {
+    const combined = await combineParties(
+      tx,
+      cfg,
+      {
+        from,
+        into,
+        bills: options.bills,
+        tables,
+        operatorId: options.operatorId,
+        intoZoneId,
+      },
+      attendance,
+    );
     for (const [billId, intoBillId] of combined.mergedInto)
-      later.mergedInto.set(billId, intoBillId);
-  }
-  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before, combined.mergedInto);
-  return { partyId: into, mainBillId: combined.mainBillId, merged: combined.merged };
+      slips.mergedInto.set(billId, intoBillId);
+    return { partyId: into, mainBillId: combined.mainBillId, merged: combined.merged };
+  });
 }
 
 /**
@@ -325,44 +324,44 @@ export async function splitTable(
     firers = await leaveParty(tx, billId);
   }
 
-  const before = await readPartiesSentWork(tx, [partyId]);
-  await leaveTables(tx, [tableId]);
-  const [table] = await tx
-    .select({ zoneId: diningTables.zoneId })
-    .from(diningTables)
-    .where(eq(diningTables.id, tableId));
-  const { partyId: newParty } = await openParty(tx, {
-    guestCount: null,
-    operatorId: options.operatorId,
-    tableId,
-  });
-  let mainBillId: string | null = null;
-  if (billId === null) {
-    mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
-  } else {
-    const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-    const { held } = await groupArrivingDishes(
-      tx,
-      newParty,
-      billId,
-      options.operatorId,
-      firers,
-      attendance === undefined
-        ? undefined
-        : {
-            recorder: attendance.recorder,
-            at: attendance.clock.now().instant.toISOString(),
-          },
-    );
-    await printHoldTickets(tx, cfg, held);
-    if (status === "open") {
-      await setMainBill(tx, newParty, billId);
-      mainBillId = billId;
+  return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
+    await leaveTables(tx, [tableId]);
+    const [table] = await tx
+      .select({ zoneId: diningTables.zoneId })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId));
+    const { partyId: newParty } = await openParty(tx, {
+      guestCount: null,
+      operatorId: options.operatorId,
+      tableId,
+    });
+    let mainBillId: string | null = null;
+    if (billId === null) {
+      mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
+    } else {
+      const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+      const { held } = await groupArrivingDishes(
+        tx,
+        newParty,
+        billId,
+        options.operatorId,
+        firers,
+        attendance === undefined
+          ? undefined
+          : {
+              recorder: attendance.recorder,
+              at: attendance.clock.now().instant.toISOString(),
+            },
+      );
+      await printHoldTickets(tx, cfg, held);
+      if (status === "open") {
+        await setMainBill(tx, newParty, billId);
+        mainBillId = billId;
+      }
     }
-  }
-  await leaveMergesRestoring(tx, [tableId]);
-  await enqueueMovedSlipsFor(tx, cfg, before);
-  return { partyId: newParty, mainBillId };
+    await leaveMergesRestoring(tx, [tableId]);
+    return { partyId: newParty, mainBillId };
+  });
 }
 
 /**
