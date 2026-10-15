@@ -17,6 +17,7 @@ import {
   NOTHING_BY_KEY,
   areaPicker,
   droppedNotice,
+  guidesKeeper,
   paintRow,
   painterStyles,
   refusedEdit,
@@ -113,6 +114,7 @@ export class StaffingSpecialDayPainter extends LitElement {
   private coordinator?: LeaveCoordinator;
   private watchingRoles = false;
   private dateColumns?: { key: string; columns: readonly StaffingColumn[] };
+  private readonly guides = guidesKeeper();
 
   readonly #roles = new QueryController(
     this,
@@ -359,13 +361,12 @@ export class StaffingSpecialDayPainter extends LitElement {
     if (!read.areas[0]!.dates.length)
       return html`<p class="message" data-test="no-dates">${t("staffing.painter.no_dates")}</p>`;
     const columns = this.columns(read);
-    const guides = read.guides[shown] ?? {};
     return html`<staffing-grid
       followable
       .target=${`${this.specialDayId}/${shown}`}
       .columns=${columns}
       .days=${this.draft.get(shown) ?? NOTHING_BY_KEY}
-      .guides=${new Map(columns.map(({ key }) => [key, guides[key] ?? []]))}
+      .guides=${this.guides(read.guides[shown], columns)}
       .staffRoles=${this.staffRoles}
       .chosen=${chosen}
       .headcount=${this.headcount}

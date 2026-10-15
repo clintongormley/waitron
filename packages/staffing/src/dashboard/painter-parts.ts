@@ -4,8 +4,9 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { MAX_HEADCOUNT } from "../block-model.js";
 import { areaKey, type AreaRef } from "../slots.js";
-import type { StaffRole } from "../staffing-types.js";
+import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import type { StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
 import "./staff-role-dialog.js";
 
@@ -13,6 +14,28 @@ import "./staff-role-dialog.js";
  *  dialog, refusal reading and styles. */
 
 export const NOTHING_BY_KEY: ReadonlyMap<string, never> = new Map<string, never>();
+
+type Guides = ReadonlyMap<string, readonly StaffingGuideRange[]>;
+type GuideRecord = Readonly<Record<string, readonly StaffingGuideRange[]>>;
+const NO_GUIDES: GuideRecord = {};
+
+/** The grid lays its columns out again whenever `guides` is a new object, so a painter keeps one map
+ *  while the read's hours for the shown area and the columns stay the same. */
+export function guidesKeeper(): (
+  from: GuideRecord | undefined,
+  columns: readonly StaffingColumn[],
+) => Guides {
+  let kept: { from: GuideRecord; columns: readonly StaffingColumn[]; guides: Guides } | undefined;
+  return (from = NO_GUIDES, columns) => {
+    if (kept?.from !== from || kept.columns !== columns)
+      kept = {
+        from,
+        columns,
+        guides: new Map(columns.map(({ key }) => [key, from[key] ?? []])),
+      };
+    return kept.guides;
+  };
+}
 
 export const painterStyles = css`
   :host {

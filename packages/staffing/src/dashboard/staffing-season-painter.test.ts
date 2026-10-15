@@ -190,6 +190,16 @@ it("keeps each area's edits while the picker moves between them, never writing t
   expect(open).not.toHaveBeenCalled();
 });
 
+it("hands the grid the same hours while only the paint changes, so it does not lay them out again", async () => {
+  const { painter } = await mount();
+  const guides = grid(painter).guides;
+  await paint(painter, "3", [dinner]);
+  expect(grid(painter).days.get("3")).toEqual([dinner]);
+  expect(grid(painter).guides).toBe(guides);
+  await pick(painter, "station:st-kitchen");
+  expect(grid(painter).guides).not.toBe(guides);
+});
+
 it("draws a department's opening hours behind its weekdays, and nothing behind a prep station", async () => {
   const { painter } = await mount();
   expect(grid(painter).guides.get("2")).toEqual([{ startsAt: "12:00", endsAt: "16:00" }]);

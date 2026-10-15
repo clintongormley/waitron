@@ -19,6 +19,7 @@ import {
   NOTHING_BY_KEY,
   areaPicker,
   droppedNotice,
+  guidesKeeper,
   paintRow,
   painterStyles,
   refusedEdit,
@@ -143,6 +144,7 @@ export class StaffingSeasonPainter extends LitElement {
   private coordinator?: LeaveCoordinator;
   private watchingRoles = false;
   private weekColumns?: { locale: string; columns: readonly StaffingColumn[] };
+  private readonly guides = guidesKeeper();
 
   readonly #roles = new QueryController(
     this,
@@ -420,12 +422,12 @@ export class StaffingSeasonPainter extends LitElement {
         : html`<p class="message" data-test="loading">${t("staffing.painter.loading")}</p>`;
     if (!read.areas.length)
       return html`<p class="message" data-test="no-areas">${t("staffing.painter.no_areas")}</p>`;
-    const guides = read.guides[shown] ?? {};
+    const columns = this.columns();
     return html`<staffing-grid
       .target=${`${this.seasonId}/${shown}`}
-      .columns=${this.columns()}
+      .columns=${columns}
       .days=${this.draft.get(shown) ?? NOTHING_BY_KEY}
-      .guides=${new Map(WEEKDAYS.map((weekday) => [String(weekday), guides[weekday] ?? []]))}
+      .guides=${this.guides(read.guides[shown], columns)}
       .staffRoles=${this.staffRoles}
       .chosen=${chosen}
       .headcount=${this.headcount}
