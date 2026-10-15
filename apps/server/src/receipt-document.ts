@@ -327,11 +327,8 @@ export function buildReceiptDocument({
       const name = lineName(option.descriptions, namesLocale);
       let caption: string;
       if (!simplified) {
-        const unit =
-          option.unitName == null
-            ? ""
-            : ` ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
-        caption = `  ${name} ${option.quantity}${unit}`;
+        const { quantity: count, unitName, soldInEach } = option;
+        caption = `  ${name} ${quantityText({ quantity: count, unitName, soldInEach }, namesLocale)}`;
       } else if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;

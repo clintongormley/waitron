@@ -677,4 +677,36 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
       "9,00 €",
     ]);
   });
+
+  it("prints a with-VAT group's extra as the dish prints its quantity: a count in Each is bare", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.lines = [
+      {
+        descriptions: { "es-ES": "Tostada" },
+        unitName: { es: "ud" },
+        quantity: "1",
+        gross: "3.00",
+      },
+      {
+        descriptions: { "es-ES": "Pan" },
+        parentLineNo: 1,
+        unitName: { es: "ud" },
+        quantity: "2",
+        gross: "1.00",
+      },
+      {
+        descriptions: { "es-ES": "Jamón" },
+        parentLineNo: 1,
+        unitName: { es: "kg" },
+        quantity: "0.050",
+        gross: "2.00",
+      },
+    ];
+    expect(amountRows(buildReceiptDocument(input))).toEqual(
+      expect.arrayContaining([
+        ["Pan 2", "1,00 €"],
+        ["Jamón 0.050 kg", "2,00 €"],
+      ]),
+    );
+  });
 });
