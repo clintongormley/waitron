@@ -6,20 +6,11 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } fro
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { isValidGuestCount } from "@waitron/shared";
+import { parseGuestCount } from "./guest-count.js";
 import { t } from "../i18n/t.js";
 
 export interface SeatConfirmDetail {
   guestCount: number | null;
-}
-
-/** A blank field records no count; anything else must be a whole number from 1. */
-function parseGuestCount(value: string): { guestCount: number | null } | undefined {
-  const trimmed = value.trim();
-  if (trimmed === "") return { guestCount: null };
-  if (!/^[0-9]+$/.test(trimmed)) return undefined;
-  const count = Number(trimmed);
-  return isValidGuestCount(count) ? { guestCount: count } : undefined;
 }
 
 @customElement("till-seat-dialog")
