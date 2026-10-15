@@ -465,12 +465,13 @@ export class OpeningHoursYearView extends LitElement {
 
   #notes(model: OpeningHoursYear) {
     const year = String(model.year);
-    const coverage = model.holidayCoverage.find((item) => item.year === model.year);
-    if (!model.publicHolidaysAvailable || coverage?.nationalRegional === "complete") return nothing;
+    const state =
+      model.holidayCoverage.find((item) => item.year === model.year)?.nationalRegional ?? "unknown";
+    if (!model.publicHolidaysAvailable || state === "complete") return nothing;
     const national =
-      coverage?.nationalRegional === "area_required"
+      state === "area_required"
         ? format("calendar.area_required", { year })
-        : nationalCoverage(model.year, coverage);
+        : nationalCoverage(model.year, state);
     return html`<ul class="note notes">
       <li data-test="coverage">${national}</li>
     </ul>`;

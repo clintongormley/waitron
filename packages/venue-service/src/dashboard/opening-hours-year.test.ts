@@ -459,6 +459,14 @@ describe("Opening hours year", () => {
     expect(text(root(unread).querySelector('[data-test="coverage"]'))).toBe(
       "2027: which official holidays apply could not be read.",
     );
+    const otherYear = yearModel();
+    otherYear.holidayCoverage = [
+      { ...otherYear.holidayCoverage[0]!, year: 2028, nationalRegional: "complete" },
+    ];
+    const elsewhere = await mount(otherYear);
+    expect(text(root(elsewhere).querySelector('[data-test="coverage"]'))).toBe(
+      "2027: which official holidays apply could not be read.",
+    );
   });
 
   it("draws each month's name as a link", async () => {

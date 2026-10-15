@@ -654,8 +654,6 @@ const en = {
     "{year}: official holidays are not available yet, so none are shown.",
   "hours.calendar.coverage.unknown_region":
     "{year}: the venue's province is not recognised, so official holidays are not shown.",
-  "hours.calendar.coverage.area_required":
-    "{year}: only official holidays for the whole province are shown until the holiday area is chosen under Special dates.",
   "hours.calendar.coverage.unsupported_country":
     "{year}: official holidays are not available for this country.",
   "hours.calendar.coverage.unknown": "{year}: which official holidays apply could not be read.",
@@ -1517,8 +1515,6 @@ const es: Record<keyof typeof en, string> = {
     "{year}: los festivos oficiales aún no están disponibles, así que no se muestra ninguno.",
   "hours.calendar.coverage.unknown_region":
     "{year}: no se reconoce la provincia del local, así que no se muestran los festivos oficiales.",
-  "hours.calendar.coverage.area_required":
-    "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que se elija la zona de festivos en Fechas especiales.",
   "hours.calendar.coverage.unsupported_country":
     "{year}: no hay festivos oficiales disponibles para este país.",
   "hours.calendar.coverage.unknown": "{year}: no se pudo leer qué festivos oficiales se aplican.",
