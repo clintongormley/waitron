@@ -1461,6 +1461,23 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`packages/media/src/dashboard/client.ts`). **Next action:** drop the field, or say what it is
   kept for.
 
+- **The dashboard lets a manager attach an extras list to a product sold in a unit with decimals or
+  on a scale, and the till then offers no extras for it, with no word to the manager** (left open by
+  A663 Part 2d). Refuse it, or say so, in the product editor (`writeProductModifiers`,
+  `packages/catalogue/src/product-modifiers.ts`, checks no unit).
+
+- **Check what an extra costs on a dish sold in a unit counted in many small units with no decimals
+  (ml)** (left open by A663 Part 2d). Such a dish keeps its extras, and by
+  `packages/catalogue/src/pricing.ts` (`quantity` of an extra = dish quantity × portion × picks) an
+  extra on 250 ml of a dish would be billed 250 times. Read, not run.
+
+- **The till decides whether a dish offers extras from the dish's own unit, the server from the
+  chosen variant's** (left open by A663 Part 2d). A variant carries its own unit
+  (`selectMenuVariant`, `packages/catalogue/src/variants.ts`), and the server's refusal reads it;
+  the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`) reads the dish's. So a counted
+  dish whose variant is sold in a decimal unit is offered extras that the server then refuses with
+  `extras.unsupported_product`. Read, not run.
+
 - **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
   action:** decide whether the picker should list variants.
@@ -3526,8 +3543,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
-  extras only on a dish sold by the unit, so no half portion of an extra is stored (Part 2d, its own
-  PR), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+  guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - **A661's six wording and behaviour choices were built on the recommended defaults (left open by
