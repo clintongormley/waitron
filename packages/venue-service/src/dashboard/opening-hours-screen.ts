@@ -534,12 +534,12 @@ export class OpeningHoursScreen extends LitElement {
     rereadWatches: () => this.api.rereadWithSpecialDays(),
   };
   private openMonth(month: string) {
-    void Promise.resolve(
+    return Promise.resolve(
       this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
     ).then(() => this.followUrl());
   }
   private openYear(year: string) {
-    void Promise.resolve(
+    return Promise.resolve(
       this.url.write({
         dashboard: "opening-hours",
         view: "year",
@@ -963,7 +963,7 @@ export class OpeningHoursScreen extends LitElement {
           name="calendarSpan"
           value=${value}
           .checked=${live(this.view === value)}
-          @change=${() => this.chooseSpan(value)}
+          @change=${(event: Event) => this.chooseSpan(value, event.currentTarget as HTMLElement)}
         /><span>${t(VIEW_LABELS[value])}</span></label
       >`;
     return html`<div
@@ -976,9 +976,24 @@ export class OpeningHoursScreen extends LitElement {
       ${SHOWN_VIEWS.map(option)}
     </div>`;
   }
-  private chooseSpan(view: View) {
-    if (view === "year") this.openYear(this.shownMonth().slice(0, 4));
-    else this.openMonth(this.monthOfShownYear());
+  /** A change made from a focused radio puts focus back on the switch the next view draws, since
+   *  the radio that held it goes with the view it sat in. */
+  private chooseSpan(view: View, radio: HTMLElement) {
+    const opened =
+      view === "year"
+        ? this.openYear(this.shownMonth().slice(0, 4))
+        : this.openMonth(this.monthOfShownYear());
+    if (this.shadowRoot?.activeElement !== radio) return;
+    void opened.then(async () => {
+      await this.updateComplete;
+      await this.shadowRoot?.querySelector<LitElement>("opening-hours-year, opening-hours-month")
+        ?.updateComplete;
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (!this.isConnected || radio.isConnected || !lost) return;
+      this.shadowRoot
+        ?.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")
+        ?.focus();
+    });
   }
   private monthOfShownYear() {
     const year = String(this.shownYear()).padStart(4, "0");
@@ -1045,7 +1060,7 @@ export class OpeningHoursScreen extends LitElement {
                   }}
                   @year-month-open=${(event: CustomEvent<{ date: string }>) => {
                     event.stopPropagation();
-                    this.openMonth(event.detail.date.slice(0, 7));
+                    void this.openMonth(event.detail.date.slice(0, 7));
                   }}
                   >${this.viewSwitch()}</opening-hours-year
                 >`

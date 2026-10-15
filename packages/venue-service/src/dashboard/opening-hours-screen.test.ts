@@ -1770,6 +1770,61 @@ describe("Month view", () => {
       expect(checkedView(el)).toBe("year");
     });
 
+    /** The focused element as `<view>:<radio value>` when it is a switch radio, else its tag. */
+    const focused = (el: Screen) => {
+      const active = el.shadowRoot!.activeElement;
+      if (!(active instanceof HTMLInputElement) || active.name !== "calendarSpan")
+        return active?.localName ?? document.activeElement?.localName;
+      return `${active.closest("opening-hours-year, opening-hours-month")?.localName}:${active.value}`;
+    };
+
+    it("keeps focus on the switch when the arrow keys change the view, so they can change it back", async () => {
+      const { el, view } = await monthMount("/manage/opening-hours/view/year/year/2026");
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("opening-hours-year")?.model)
+        .toBeDefined();
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="year"]',
+      )!.focus();
+      expect(focused(el)).toBe("opening-hours-year:year");
+      await userEvent.keyboard("{ArrowRight}");
+      await expect
+        .poll(() => location.pathname)
+        .toBe("/manage/opening-hours/view/month/month/2026-10");
+      await shown(view, "2026-10");
+      await expect.poll(() => focused(el)).toBe("opening-hours-month:month");
+      expect(document.activeElement).toBe(el);
+      await userEvent.keyboard("{ArrowLeft}");
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+      await expect.poll(() => focused(el)).toBe("opening-hours-year:year");
+      expect(checkedView(el)).toBe("year");
+    });
+
+    it("leaves focus alone when the view changes other than from the switch", async () => {
+      const { el, view } = await monthMount("/manage/opening-hours/view/year/year/2026");
+      const year = () => el.shadowRoot!.querySelector("opening-hours-year");
+      await expect.poll(() => year()?.model).toBeDefined();
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="year"]',
+      )!.focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await shown(view, "2026-10");
+      await expect.poll(() => focused(el)).toBe("opening-hours-month:month");
+
+      history.pushState(null, "", "/manage/opening-hours/view/year/year/2026");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await expect.poll(() => year()?.model).toBeDefined();
+      await year()!.updateComplete;
+      await el.updateComplete;
+      expect(focused(el)).toBe("body");
+
+      year()!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=month-name]")[2]!.focus();
+      await userEvent.keyboard("{Enter}");
+      await shown(view, "2026-03");
+      await el.updateComplete;
+      expect(focused(el)).toBe("body");
+    });
+
     it("fits a phone's width", async () => {
       const before = [window.innerWidth, window.innerHeight] as const;
       await page.viewport(390, 800);
