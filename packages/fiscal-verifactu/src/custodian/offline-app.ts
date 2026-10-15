@@ -129,7 +129,7 @@ export class OfflineCustodyApp extends LitElement {
   `;
   @state() private locale: CustodyLocale = "en";
   @state() private theme: "light" | "dark" = "light";
-  @state() private error = "";
+  @state() private error: "" | "unsupported" | "refusal" | "correct" = "";
   @state() private fieldErrors: Record<string, string> = {};
   @state() private values: Record<string, string> = {};
   @state() private choices: Record<string, boolean> = {};
@@ -185,7 +185,7 @@ export class OfflineCustodyApp extends LitElement {
     try {
       await body();
     } catch {
-      this.error = name === "create" ? this.t.unsupported : this.t.refusal;
+      this.error = name === "create" ? "unsupported" : "refusal";
     } finally {
       this.action = "";
       this.revision++;
@@ -200,7 +200,7 @@ export class OfflineCustodyApp extends LitElement {
     }
     this.fieldErrors = errors;
     if (Object.keys(errors).length) {
-      this.error = this.t.correct;
+      this.error = "correct";
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return false;
     }
@@ -238,8 +238,8 @@ export class OfflineCustodyApp extends LitElement {
       const errors = { ...this.fieldErrors };
       for (const checked of this.#checked) errors[checked] = this.fieldError(checked);
       this.fieldErrors = errors;
-      if (Object.values(errors).some(Boolean)) this.error = this.t.correct;
-      else if (this.error === this.t.correct) this.error = "";
+      if (Object.values(errors).some(Boolean)) this.error = "correct";
+      else if (this.error === "correct") this.error = "";
     };
     return multiline
       ? html`<wt-textarea
@@ -247,7 +247,7 @@ export class OfflineCustodyApp extends LitElement {
           label=${label}
           required
           .value=${this.values[name] ?? ""}
-          .error=${this.fieldErrors[name] ?? ""}
+          .error=${this.fieldErrors[name] ? this.fieldError(name) : ""}
           autocomplete="off"
           .spellcheck=${false}
           @wt-change=${change}
@@ -258,7 +258,7 @@ export class OfflineCustodyApp extends LitElement {
           type=${type}
           required
           .value=${this.values[name] ?? ""}
-          .error=${this.fieldErrors[name] ?? ""}
+          .error=${this.fieldErrors[name] ? this.fieldError(name) : ""}
           autocomplete="off"
           @wt-change=${change}
           @keydown=${(event: KeyboardEvent) => this.submitField(name, event)}
@@ -791,7 +791,7 @@ export class OfflineCustodyApp extends LitElement {
             </section>`
           : nothing
       }
-      ${session !== null ? html`<section><wt-form-actions .error=${this.error}>${this.button("incident", t.saveIncident, () => this.download(session.incidentRecord(), "custody-history.json"))}${this.button("close", t.close, () => this.clearSecrets())}</wt-form-actions></section>` : nothing}
+      ${session !== null ? html`<section><wt-form-actions .error=${this.error ? t[this.error] : ""}>${this.button("incident", t.saveIncident, () => this.download(session.incidentRecord(), "custody-history.json"))}${this.button("close", t.close, () => this.clearSecrets())}</wt-form-actions></section>` : nothing}
     </main>`;
   }
 }
