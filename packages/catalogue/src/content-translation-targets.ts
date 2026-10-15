@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { AppError, contentLanguageCode, type ContentLanguages } from "@waitron/shared";
 import { sql, type SQL } from "drizzle-orm";
+import { batches } from "./batches.js";
 import { contentLanguagesOr } from "./content-languages.js";
 import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
@@ -34,12 +35,17 @@ export type ResolvedTranslationTarget =
       inheritedNames: Record<string, string>;
       structure: TranslationStructure;
     };
+export interface TranslationSettings {
+  config: ContentLanguages;
+  required: string[];
+}
 export interface TranslationResolution {
   language: string;
   config: ContentLanguages;
   required: string[];
   targets: ResolvedTranslationTarget[];
 }
+export type TranslationRow = NamedRow;
 type NamedRow = {
   kind: TranslationGapKind;
   id: string;
@@ -96,24 +102,32 @@ function blankIn(language: SQL, path: SQL, defaultLanguage: string): SQL {
 }
 const ABSENT = sql`kind in ('product', 'variant', 'option_list', 'option_label', 'menu', 'section')
       and (names is null or names = '{}')`;
-async function configuration(tx: Transaction, language: string, context: TranslationContext) {
-  if (typeof language !== "string" || contentLanguageCode(language) !== language) invalid();
+export async function readTranslationSettings(
+  tx: Transaction,
+  context: TranslationContext,
+): Promise<TranslationSettings> {
   const saved = await tx.execute<{ default_language: string; languages: string }>(
     sql`select default_language, languages from content_languages where id = 1`,
   );
   const row = saved.rows[0];
-  const config = contentLanguagesOr(
-    row
-      ? { defaultLanguage: row.default_language, languages: JSON.parse(row.languages) as string[] }
-      : undefined,
-    context.fallbackLanguage,
-  );
-  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
   return {
-    language,
-    config,
+    config: contentLanguagesOr(
+      row
+        ? {
+            defaultLanguage: row.default_language,
+            languages: JSON.parse(row.languages) as string[],
+          }
+        : undefined,
+      context.fallbackLanguage,
+    ),
     required: [...new Set(context.required.map(contentLanguageCode))].sort(),
   };
+}
+async function configuration(tx: Transaction, language: string, context: TranslationContext) {
+  if (typeof language !== "string" || contentLanguageCode(language) !== language) invalid();
+  const { config, required } = await readTranslationSettings(tx, context);
+  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
+  return { language, config, required };
 }
 // Each filtered branch binds at most one batch of ids; ownership joins never load an editor's graph.
 function namedRows(refs?: readonly TranslationRef[]): SQL {
@@ -216,7 +230,7 @@ function resolved(
   language: string,
   config: ContentLanguages,
   required: string[],
-): ResolvedTranslationTarget {
+): Extract<ResolvedTranslationTarget, { state: "present" }> {
   const names = row.names === null ? null : (JSON.parse(row.names) as Record<string, string>);
   const inheritedNames =
     row.inherited === null ? {} : (JSON.parse(row.inherited) as Record<string, string>);
@@ -327,6 +341,25 @@ async function readTargets(
       : missing(ref, state.config, state.required, state.language);
   });
 }
+/** The rows `refs` name, keyed `kind:id`, read without the route's checks or its bound on `refs`. */
+export async function readTranslationRows(
+  tx: Transaction,
+  refs: readonly TranslationRef[],
+): Promise<Map<string, TranslationRow>> {
+  const rows = new Map<string, TranslationRow>();
+  for (const batch of batches(refs))
+    for (const row of (await tx.execute<NamedRow>(namedRows(batch))).rows)
+      rows.set(`${row.kind}:${row.id}`, row);
+  return rows;
+}
+/** What {@link resolveTranslationTargets} answers for `row` in `language`, with no read. */
+export function resolveTranslationRow(
+  row: TranslationRow,
+  language: string,
+  settings: TranslationSettings,
+): Extract<ResolvedTranslationTarget, { state: "present" }> {
+  return resolved(row, language, settings.config, settings.required);
+}
 export async function resolveTranslationTargets(
   tx: Transaction,
   language: string,
@@ -409,25 +442,25 @@ export async function listAbsentTranslationRefs(tx: Transaction): Promise<Transl
 }
 
 /**
- * In one read, every ref {@link listTranslationTargets} lists under any of `config`'s languages,
- * and every ref {@link listAbsentTranslationRefs} lists, in the dialog's order.
+ * In one read, the row of every ref {@link listTranslationTargets} lists under any of `config`'s
+ * languages, and of every ref {@link listAbsentTranslationRefs} lists, in the dialog's order.
  */
-export async function listTranslationGapRefs(
+export async function listTranslationGapRows(
   tx: Transaction,
   config: ContentLanguages,
-): Promise<TranslationRef[]> {
+): Promise<TranslationRow[]> {
   const blank = blankIn(
     sql`language.value`,
     sql`'$."' || language.value || '"'`,
     config.defaultLanguage,
   );
-  const result = await tx.execute<{ kind: TranslationGapKind; id: string }>(sql`
+  const result = await tx.execute<NamedRow>(sql`
     with candidates as (${namedRows()})
-    select kind, id from candidates
+    select * from candidates
     where ${LIVE_CANDIDATE} and ((${ABSENT}) or exists (
       select 1 from json_each(${JSON.stringify(config.languages)}) as language where ${blank}))
     order by ${POSITION}, id`);
-  return result.rows.map(({ kind, id }) => ({ kind, id }));
+  return result.rows;
 }
 
 export function projectTranslationTarget(

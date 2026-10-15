@@ -21,7 +21,7 @@ import {
 import { writeContentLanguages } from "./content-languages.js";
 import {
   listAbsentTranslationRefs,
-  listTranslationGapRefs,
+  listTranslationGapRows,
   listTranslationTargets,
   resolveTranslationTargets,
 } from "./content-translation-targets.js";
@@ -393,7 +393,7 @@ describe("the gaps a run starts from", () => {
         } while (after !== null);
       }
       for (const ref of await listAbsentTranslationRefs(tx)) listed.add(suggestionRef(ref));
-      expect((await listTranslationGapRefs(tx, THREE)).map(suggestionRef)).toEqual(
+      expect((await listTranslationGapRows(tx, THREE)).map(suggestionRef)).toEqual(
         sortRefs([...listed]),
       );
     });

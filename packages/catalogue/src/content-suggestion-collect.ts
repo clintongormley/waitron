@@ -2,14 +2,17 @@ import { categories, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
-import { readContentLanguages } from "./content-languages.js";
 import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import {
-  listTranslationGapRefs,
-  resolveTranslationTargets,
+  listTranslationGapRows,
+  readTranslationRows,
+  readTranslationSettings,
+  resolveTranslationRow,
   type ResolvedTranslationTarget,
   type TranslationContext,
+  type TranslationRow,
+  type TranslationSettings,
 } from "./content-translation-targets.js";
 import type { TranslationRef, TranslationTarget } from "./content-translation-types.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
@@ -19,13 +22,22 @@ import { contentSuggestions } from "./schema/suggestions.js";
 /** Cloud's bound on every text field, counted as JavaScript string length (contract, "Submit"). */
 export const TEXT_LIMIT = 500;
 
-type LiveTarget = Extract<ResolvedTranslationTarget, { state: "present" }>;
-export interface SuggestionGap {
+export type LiveTarget = Extract<ResolvedTranslationTarget, { state: "present" }>;
+/** A live item in the default language, with the row it was resolved from for any other. */
+export interface LiveItem {
+  row: TranslationRow;
   entry: LiveTarget;
+}
+export interface SuggestionGap extends LiveItem {
   target: TranslationTarget;
   missing: Set<string>;
 }
-export type SuggestionGaps = Map<string, SuggestionGap>;
+/** The gaps keyed by ref, with the settings they were read under. */
+export class SuggestionGaps extends Map<string, SuggestionGap> {
+  constructor(readonly settings: TranslationSettings) {
+    super();
+  }
+}
 
 export function suggestionRef(ref: { kind: string; id: string }): string {
   return `${ref.kind}:${ref.id}`;
@@ -65,19 +77,22 @@ export function effectiveNames(entry: LiveTarget): Record<string, string> {
   return { ...entry.inheritedNames, ...entry.names };
 }
 
-export async function resolveLive(
+function liveItem(row: TranslationRow, settings: TranslationSettings): LiveItem | null {
+  const entry = resolveTranslationRow(row, settings.config.defaultLanguage, settings);
+  return isLiveTarget(entry) ? { row, entry } : null;
+}
+
+/** The live items among `refs`, keyed by ref. */
+export async function readLiveItems(
   tx: Transaction,
-  language: string,
   refs: readonly TranslationRef[],
-  context: TranslationContext,
-): Promise<LiveTarget[]> {
-  const live: LiveTarget[] = [];
-  for (const chunk of batches(refs, 100))
-    live.push(
-      ...(await resolveTranslationTargets(tx, language, chunk, context)).targets.filter(
-        isLiveTarget,
-      ),
-    );
+  settings: TranslationSettings,
+): Promise<Map<string, LiveItem>> {
+  const live = new Map<string, LiveItem>();
+  for (const [key, row] of await readTranslationRows(tx, refs)) {
+    const item = liveItem(row, settings);
+    if (item) live.set(key, item);
+  }
   return live;
 }
 
@@ -86,15 +101,18 @@ export async function resolveLive(
 export async function readSuggestionGaps(
   tx: Transaction,
   context: TranslationContext,
+  read?: TranslationSettings,
 ): Promise<SuggestionGaps> {
-  const config = await readContentLanguages(tx, context.fallbackLanguage);
-  const refs = await listTranslationGapRefs(tx, config);
-  const gaps: SuggestionGaps = new Map();
-  for (const entry of await resolveLive(tx, config.defaultLanguage, refs, context)) {
-    const effective = effectiveNames(entry);
-    gaps.set(suggestionRef(entry.target), {
-      entry,
-      target: entry.target,
+  const settings = read ?? (await readTranslationSettings(tx, context));
+  const { config } = settings;
+  const gaps = new SuggestionGaps(settings);
+  for (const row of await listTranslationGapRows(tx, config)) {
+    const item = liveItem(row, settings);
+    if (!item) continue;
+    const effective = effectiveNames(item.entry);
+    gaps.set(suggestionRef(item.entry.target), {
+      ...item,
+      target: item.entry.target,
       missing: new Set(config.languages.filter((language) => blankName(effective[language]))),
     });
   }
@@ -189,12 +207,10 @@ export async function collectSuggestionItems(
   exclude: ReadonlySet<string>,
   read?: SuggestionGaps,
 ): Promise<SuggestionItem[]> {
-  const config = await readContentLanguages(tx, context.fallbackLanguage);
+  const all = read ?? (await readSuggestionGaps(tx, context));
+  const { config } = all.settings;
   const gaps = new Map(
-    [...(read ?? (await readSuggestionGaps(tx, context)))].map(([ref, gap]) => [
-      ref,
-      { entry: gap.entry, missing: new Set(gap.missing) },
-    ]),
+    [...all].map(([ref, gap]) => [ref, { entry: gap.entry, missing: new Set(gap.missing) }]),
   );
   const waiting = await tx
     .select({
@@ -307,26 +323,30 @@ function fitHouseStyle(examples: readonly HouseStyleExample[]): HouseStyleExampl
   return kept;
 }
 
-/** The family heads the items name but do not include, as context entries keyed by ref. */
+/** The family heads the items name but do not include, as context entries keyed by ref. A head
+ * among `gaps` is taken from there rather than read again. */
 async function readContextHeads(
   tx: Transaction,
-  context: TranslationContext,
-  config: ContentLanguages,
+  gaps: SuggestionGaps,
   items: readonly SuggestionItem[],
 ): Promise<Map<string, SuggestionItem>> {
   const listed = new Set(items.map((item) => item.ref));
   const families = [...new Set(items.map((item) => item.family))].filter(
     (family) => !listed.has(family),
   );
-  const live = await resolveLive(
+  const unread = families.filter((family) => !gaps.has(family));
+  const read = await readLiveItems(
     tx,
-    config.defaultLanguage,
-    families.map((family) => parseSuggestionRef(family)!),
-    context,
+    unread.map((family) => parseSuggestionRef(family)!),
+    gaps.settings,
   );
+  const live = families.flatMap((family) => {
+    const item = gaps.get(family) ?? read.get(family);
+    return item ? [item.entry] : [];
+  });
   const heads = await describeItems(
     tx,
-    config,
+    gaps.settings.config,
     live.map((entry) => ({ entry, missing: [] })),
   );
   return new Map(heads.map((head) => [head.ref, head]));
@@ -346,16 +366,17 @@ export async function buildSuggestionJob(
   tx: Transaction,
   context: TranslationContext,
   exclude: ReadonlySet<string>,
-  gaps?: SuggestionGaps,
+  read?: SuggestionGaps,
 ): Promise<SuggestionJobDraft | null> {
+  const gaps = read ?? (await readSuggestionGaps(tx, context));
   const items = await collectSuggestionItems(tx, context, exclude, gaps);
   if (items.length === 0) return null;
-  const config = await readContentLanguages(tx, context.fallbackLanguage);
+  const { config } = gaps.settings;
   const [tenant] = await tx
     .select({ country: tenants.country })
     .from(tenants)
     .where(eq(tenants.id, 1));
-  const heads = await readContextHeads(tx, context, config, items);
+  const heads = await readContextHeads(tx, gaps, items);
   const job = {
     version: 1,
     country: tenant!.country,

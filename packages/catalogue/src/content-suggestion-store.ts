@@ -1,13 +1,13 @@
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { readContentLanguages } from "./content-languages.js";
 import {
   blankName,
   buildSuggestionJob,
   effectiveNames,
   parseSuggestionRef,
-  resolveLive,
+  readLiveItems,
+  readSuggestionGaps,
   suggestionRef,
 } from "./content-suggestion-collect.js";
 import { readSuggestionRun, sentInRun } from "./content-suggestion-jobs.js";
@@ -17,12 +17,15 @@ import type {
   SuggestionResult,
   SuggestionResults,
 } from "./content-suggestion-types.js";
-import type { TranslationContext } from "./content-translation-targets.js";
+import {
+  readTranslationSettings,
+  resolveTranslationRow,
+  type TranslationContext,
+} from "./content-translation-targets.js";
 import type { TranslationEdit, TranslationRef } from "./content-translation-types.js";
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
-type LiveTarget = Awaited<ReturnType<typeof resolveLive>>[number];
 type Fix = SuggestionResult["corrections"][number];
 interface PlannedRow {
   language: string | null;
@@ -34,16 +37,6 @@ interface PlannedRow {
 
 // The save route's own bound (`checkedBatch`, content-translations.ts), so a suggestion can be saved.
 const NAME_BYTES = 4096;
-
-async function liveByRef(
-  tx: Transaction,
-  language: string,
-  refs: readonly TranslationRef[],
-  context: TranslationContext,
-): Promise<Map<string, LiveTarget>> {
-  const live = await resolveLive(tx, language, refs, context);
-  return new Map(live.map((entry) => [suggestionRef(entry.target), entry]));
-}
 
 function emptyRow(language: string | null): PlannedRow {
   return { language, text: null, expected: null, placeholder: false, fix: null };
@@ -74,7 +67,8 @@ export async function storeSuggestionResults(
     .from(contentSuggestionJobs)
     .where(eq(contentSuggestionJobs.id, jobId));
   if (!job || job.state !== "running") return;
-  const { defaultLanguage, languages } = await readContentLanguages(tx, context.fallbackLanguage);
+  const settings = await readTranslationSettings(tx, context);
+  const { languages } = settings.config;
   const failed = new Set(results.failed.filter((key) => Object.hasOwn(job.sent, key)));
   const answered = new Map<string, { ref: TranslationRef; result: SuggestionResult }>();
   let dropped = 0;
@@ -83,17 +77,16 @@ export async function storeSuggestionResults(
     if (!ref || failed.has(result.ref) || answered.has(result.ref)) dropped += 1;
     else answered.set(result.ref, { ref, result });
   }
-  const current = await liveByRef(
+  const current = await readLiveItems(
     tx,
-    defaultLanguage,
     [...answered.values()].map(({ ref }) => ref),
-    context,
+    settings,
   );
   const planned = new Map<string, { ref: TranslationRef; rows: Map<string | null, PlannedRow> }>();
-  const named = new Map<string, TranslationRef[]>();
   for (const [key, { ref, result }] of answered) {
     const missing = job.sent[key]!;
-    const entry = current.get(key);
+    const live = current.get(key);
+    const entry = live?.entry;
     const rows = new Map<string | null, PlannedRow>();
     let usable = result.placeholder;
     for (const [language, name] of Object.entries(result.names)) {
@@ -107,12 +100,16 @@ export async function storeSuggestionResults(
         continue;
       }
       usable = true;
-      if (!entry || !languages.includes(language)) {
+      if (!live || !languages.includes(language)) {
         dropped += 1;
         continue;
       }
-      rows.set(language, { ...emptyRow(language), text: trimmed });
-      named.set(language, [...(named.get(language) ?? []), ref]);
+      const target = resolveTranslationRow(live.row, language, settings).target;
+      if (!blankName(target.effectiveSelectedText)) {
+        dropped += 1;
+        continue;
+      }
+      rows.set(language, { ...emptyRow(language), text: trimmed, expected: target.expected });
     }
     const effective: Record<string, string> = entry ? effectiveNames(entry) : {};
     for (const fix of result.corrections) {
@@ -135,21 +132,6 @@ export async function storeSuggestionResults(
     }
     if (usable) planned.set(key, { ref, rows });
     else failed.add(key);
-  }
-  for (const [language, refs] of named) {
-    // Liveness never reads the language: `namedRows` (content-translation-targets.ts) takes none,
-    // and `resolved` there sets the eligibility and activity flags from the row alone. So every ref
-    // live above resolves live here.
-    const targets = await liveByRef(tx, language, refs, context);
-    for (const ref of refs) {
-      const key = suggestionRef(ref);
-      const target = targets.get(key)!.target;
-      const rows = planned.get(key)!.rows;
-      if (!blankName(target.effectiveSelectedText)) {
-        dropped += 1;
-        rows.delete(language);
-      } else rows.set(language, { ...rows.get(language)!, expected: target.expected });
-    }
   }
   for (const { ref, rows } of planned.values())
     for (const row of rows.values()) {
@@ -196,7 +178,9 @@ export async function storeSuggestionResults(
   const sent = await sentInRun(tx, job.runId);
   // The month's spending cap stopped this job, so Cloud would refuse the next one; a next job with
   // no item would be refused too (see buildSuggestionJob).
-  const built = limitReached ? null : await buildSuggestionJob(tx, context, sent);
+  const built = limitReached
+    ? null
+    : await buildSuggestionJob(tx, context, sent, await readSuggestionGaps(tx, context, settings));
   const next = built && built.included > 0 ? built : null;
   const runTotal = sent.size + (next ? Object.keys(next.sent).length + next.remaining : 0);
   if (next)
@@ -249,7 +233,8 @@ export async function listContentSuggestions(
   query: { after?: string },
   context: TranslationContext,
 ): Promise<ContentSuggestionPage> {
-  const config = await readContentLanguages(tx, context.fallbackLanguage);
+  const settings = await readTranslationSettings(tx, context);
+  const { config } = settings;
   if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
   const shown = or(
     inArray(contentSuggestions.language, [...new Set([language, config.defaultLanguage])]),
@@ -265,25 +250,11 @@ export async function listContentSuggestions(
   const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
   const refs = new Map<string, TranslationRef>();
   for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
-  const live = await liveByRef(tx, config.defaultLanguage, [...refs.values()], context);
-  const byLanguage = new Map<string, TranslationRef[]>();
-  for (const row of rows)
-    if (row.text !== null && live.has(keyOf(row))) {
-      // A row with text has a language (content_suggestions_text_language_ck).
-      const textLanguage = row.language!;
-      byLanguage.set(textLanguage, [
-        ...(byLanguage.get(textLanguage) ?? []),
-        { kind: row.kind, id: row.itemId },
-      ]);
-    }
-  const tokens = new Map<string, string>();
-  for (const [textLanguage, languageRefs] of byLanguage)
-    for (const [key, entry] of await liveByRef(tx, textLanguage, languageRefs, context))
-      tokens.set(`${textLanguage} ${key}`, entry.target.expected);
+  const live = await readLiveItems(tx, [...refs.values()], settings);
   const suggestions: ContentSuggestionView[] = [];
   for (const row of rows) {
-    const key = keyOf(row);
-    if (!live.has(key)) continue;
+    const item = live.get(keyOf(row));
+    if (!item) continue;
     suggestions.push({
       id: row.id,
       kind: row.kind,
@@ -296,10 +267,14 @@ export async function listContentSuggestions(
         row.fixField === null
           ? null
           : { field: row.fixField, wrong: row.fixWrong!, right: row.fixRight! },
-      // A row with text has `expected` (content_suggestions_name_ck), and an item live in the
-      // default language is live in every language (see the note in `storeSuggestionResults`).
+      // A row with text has a language and `expected` (content_suggestions_text_language_ck,
+      // content_suggestions_name_ck).
       stale:
-        row.text !== null && suggestionStale(row.expected!, tokens.get(`${row.language} ${key}`)!),
+        row.text !== null &&
+        suggestionStale(
+          row.expected!,
+          resolveTranslationRow(item.row, row.language!, settings).target.expected,
+        ),
     });
   }
   return {
