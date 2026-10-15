@@ -192,14 +192,14 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes**, which a
-  fresh database migrated in one go never has. `applyMigrations` removes the change feed first for
-  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
-  another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
-  than its name — its rows are synthetic and counted, not compared, and it installs today's
-  change-feed list, and today's append-only list less the tables the previous step lacked, at every
-  step. Cost: an earlier bricked box that was wiped, and a box that failed three
-  starts on 2026-09-26.
+- **A migration can fail on a box that already has a trigger naming what it changes.**
+  `applyMigrations` removes the change feed first for that reason (`installChangeFeed` in
+  `apps/server/src/boot.ts` reinstalls it); a rebuild of a table another set's trigger BODY reads
+  still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker than its name — its rows are
+  synthetic and counted, not compared, and it installs today's change-feed list, and today's
+  append-only list less the tables the previous step lacked, at every step. Cost: an earlier bricked
+  box that was wiped, and a box that failed three starts on 2026-09-26. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
 - **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
   which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed
   out in CI five times. Nothing guards it. Receipt:
