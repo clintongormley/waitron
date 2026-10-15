@@ -20,6 +20,7 @@ const shifts: MyShift[] = [
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
     role: "bar",
+    description: "bar",
     rosterVersionId: null,
   },
 ];
@@ -251,7 +252,7 @@ describe("my-schedule-screen", () => {
   });
 
   it("labels a role-less shift without a trailing role, and names an off-roster swap party by raw id", async () => {
-    const roleless: MyShift = { ...shifts[0]!, id: "s-noRole", role: null };
+    const roleless: MyShift = { ...shifts[0]!, id: "s-noRole", role: null, description: null };
     const fromStranger: MySwap = {
       ...offeredToMe,
       id: "sw-stranger",
@@ -547,7 +548,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
 
   it("keeps the chosen shift when my shifts refresh in a different order", async () => {
     const liveData = new LiveData();
-    const second: MyShift = { ...shifts[0]!, id: "s2", role: "cocina" };
+    const second: MyShift = { ...shifts[0]!, id: "s2", role: "cocina", description: "cocina" };
     const api = Object.assign(
       stubApi({ listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, second]) }),
       { liveData },
@@ -789,4 +790,19 @@ describe("my-schedule-screen — each list's own load failure", () => {
     expect(api.listMySwaps).toHaveBeenCalledTimes(1);
     expect(api.listMyAbsences).toHaveBeenCalledTimes(1);
   });
+});
+
+it("shows the module description instead of the legacy free-text role", async () => {
+  const { el } = await mount(
+    stubApi({
+      listMyShifts: vi
+        .fn()
+        .mockResolvedValue([{ ...shifts[0], description: "Kitchen · Sous chef" }]),
+    }),
+  );
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain("2026-05-04 09:00–17:00 · Kitchen · Sous chef");
+  expect(
+    el.shadowRoot!.querySelector(".shift")?.textContent ?? el.shadowRoot!.textContent,
+  ).not.toContain("· bar");
 });

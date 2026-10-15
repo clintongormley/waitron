@@ -1,10 +1,17 @@
+import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { WORKFORCE_MIGRATIONS, absences, shiftSwaps, shifts } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  absences,
+  shiftSwaps,
+  shifts,
+  rosterVersions,
+} from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, convenioConfig } from "@waitron/workforce-es";
 import type { Logger } from "./logger.js";
 import { mountWorkforceApi } from "./workforce-api.js";
@@ -732,5 +739,235 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
       { cookie: staffCookie },
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("roster warnings while planning", () => {
+  async function warningLocation(withRules = true, overrides = {}) {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Warnings",
+        timeZone: "Europe/Madrid",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurant",
+      })
+      .returning();
+    if (withRules)
+      await suite.db.insert(convenioConfig).values({ locationId: location!.id, ...overrides });
+    return location!.id;
+  }
+  async function version(
+    locationId: string,
+    periodStart: string,
+    status: "published" | "draft" | "superseded",
+  ) {
+    const end = new Date(Date.parse(periodStart) + 6 * 86400000).toISOString().slice(0, 10);
+    const [row] = await suite.db
+      .insert(rosterVersions)
+      .values({
+        locationId,
+        periodStart,
+        periodEnd: end,
+        status,
+        publishedAt: status === "draft" ? null : "2026-01-01T00:00:00Z",
+      })
+      .returning();
+    return row!.id;
+  }
+  async function planned(
+    locationId: string,
+    startsAt: string,
+    endsAt: string,
+    rosterVersionId: string | null = null,
+    offset = 0,
+    worker = personId,
+  ) {
+    const [row] = await suite.db
+      .insert(shifts)
+      .values({
+        locationId,
+        personId: worker,
+        startsAt,
+        endsAt,
+        startsOffsetMinutes: offset,
+        endsOffsetMinutes: offset,
+        rosterVersionId,
+      })
+      .returning();
+    return row!.id;
+  }
+  const read = (locationId: string, period = "2026-03-02", cookie = managerCookie) =>
+    send(
+      mountApp(),
+      "GET",
+      `/management-api/roster/breaches?locationId=${locationId}&period=${period}`,
+      { cookie },
+    );
+
+  it("uses preferred drafts and adjacent weeks, keeps boundary rest warnings and returns the resolved rules", async () => {
+    const loc = await warningLocation();
+    const previous = await version(loc, "2026-02-23", "published");
+    const published = await version(loc, "2026-03-02", "published");
+    const draft = await version(loc, "2026-03-02", "draft");
+    const superseded = await version(loc, "2026-03-02", "superseded");
+    const next = await version(loc, "2026-03-09", "published");
+    const sundayBefore = await planned(
+      loc,
+      "2026-03-01T19:00:00Z",
+      "2026-03-01T23:00:00Z",
+      previous,
+    );
+    const monday = await planned(loc, "2026-03-02T06:00:00Z", "2026-03-02T10:00:00Z", draft);
+    const ignoredPublished = await planned(
+      loc,
+      "2026-03-02T07:00:00Z",
+      "2026-03-02T11:00:00Z",
+      published,
+    );
+    const ignoredHistory = await planned(
+      loc,
+      "2026-03-04T00:00:00Z",
+      "2026-03-05T00:00:00Z",
+      superseded,
+    );
+    await planned(loc, "2026-03-03T09:00:00Z", "2026-03-03T13:00:00Z");
+    const sunday = await planned(loc, "2026-03-08T22:00:00Z", "2026-03-09T00:00:00Z", draft);
+    const nextMonday = await planned(loc, "2026-03-09T05:00:00Z", "2026-03-09T09:00:00Z", next);
+    const response = await read(loc, "2026-03-04");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ruleset: unknown;
+      breaches: Array<Record<string, unknown>>;
+    };
+    expect(body.ruleset).toEqual(makeRuleset());
+    expect(body.breaches.filter((b) => b.kind === "rest_too_short")).toEqual([
+      {
+        kind: "rest_too_short",
+        personId,
+        previousShiftId: sundayBefore,
+        shiftId: monday,
+        restMinutes: 420,
+        requiredMinutes: 720,
+      },
+      {
+        kind: "rest_too_short",
+        personId,
+        previousShiftId: sunday,
+        shiftId: nextMonday,
+        restMinutes: 300,
+        requiredMinutes: 720,
+      },
+    ]);
+    expect(body.breaches).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ shiftId: ignoredPublished })]),
+    );
+    expect(body.breaches).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ shiftId: ignoredHistory })]),
+    );
+    expect(body.breaches.filter((b) => b.kind === "night_work").map((b) => b.shiftId)).toEqual([
+      sunday,
+    ]);
+  });
+
+  it("reads unattached shifts by their local calendar date and scopes them to this location", async () => {
+    const loc = await warningLocation();
+    const included = await planned(loc, "2026-03-01T23:30:00Z", "2026-03-02T07:30:00Z", null, 60);
+    const excluded = await planned(loc, "2026-03-08T23:30:00Z", "2026-03-09T07:30:00Z", null, 60);
+    const foreignLoc = await warningLocation();
+    const foreign = await planned(foreignLoc, "2026-03-02T08:00:00Z", "2026-03-02T20:00:00Z");
+    const response = await read(loc);
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches.filter((b) => b.kind === "break_owed").map((b) => b.shiftId)).toEqual([
+      included,
+    ]);
+    expect(breaches.some((b) => b.shiftId === excluded || b.shiftId === foreign)).toBe(false);
+  });
+
+  it("keeps day/week warnings in the requested week and omits the annual cap", async () => {
+    const loc = await warningLocation(true, {
+      maxOrdinaryDailyMinutes: 60,
+      maxWeeklyMinutes: 120,
+      annualOvertimeCapHours: 0,
+    });
+    for (const day of ["2026-02-24", "2026-03-03", "2026-03-10"])
+      await planned(loc, `${day}T09:00:00Z`, `${day}T13:00:00Z`);
+    const response = await read(loc);
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches).toEqual([
+      {
+        kind: "exceeds_daily_max",
+        personId,
+        workDate: "2026-03-03",
+        plannedMinutes: 240,
+        maxMinutes: 60,
+      },
+      {
+        kind: "exceeds_weekly_max",
+        personId,
+        weekStart: "2026-03-02",
+        plannedMinutes: 240,
+        maxMinutes: 120,
+      },
+    ]);
+  });
+
+  it("judges weekly rest with surrounding weeks, but not for a person whose only shifts are in the requested week", async () => {
+    const loc = await warningLocation();
+    const [worker] = await suite.db
+      .insert(persons)
+      .values({ displayName: crypto.randomUUID() })
+      .returning();
+    await planned(loc, "2026-03-01T09:00:00Z", "2026-03-01T17:00:00Z");
+    for (let day = 2; day <= 8; day++)
+      for (const person of [personId, worker!.id]) {
+        const date = `2026-03-${String(day).padStart(2, "0")}`;
+        await planned(loc, `${date}T09:00:00Z`, `${date}T17:00:00Z`, null, 0, person);
+      }
+    await planned(loc, "2026-03-09T09:00:00Z", "2026-03-09T17:00:00Z");
+    const response = await read(loc);
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches.filter((b) => b.kind === "weekly_rest_insufficient")).toEqual([
+      {
+        kind: "weekly_rest_insufficient",
+        personId,
+        weekStart: "2026-03-02",
+        longestRestMinutes: 960,
+        requiredMinutes: 2160,
+      },
+    ]);
+  });
+
+  it("returns convenio.not_found when no labour rules row exists", async () => {
+    const loc = await warningLocation(false);
+    expect(await refusal(await read(loc))).toEqual([
+      409,
+      "convenio.not_found",
+      { locationId: loc },
+    ]);
+  });
+  it("refuses staff and unauthenticated reads", async () => {
+    const loc = await warningLocation();
+    const denied = await read(loc, "2026-03-02", staffCookie);
+    expect(denied.status).toBe(403);
+    expect(await refusal(denied)).toEqual([
+      403,
+      "authorization.not_permitted",
+      { permission: "schedule.manage" },
+    ]);
+    const response = await send(
+      mountApp(),
+      "GET",
+      `/management-api/roster/breaches?locationId=${loc}&period=2026-03-02`,
+      { cookie: null },
+    );
+    expect(response.status).toBe(401);
+  });
+  it.each(["", "2026-02-30", "not-a-date"])("refuses the invalid period %s", async (period) => {
+    const loc = await warningLocation();
+    expect((await read(loc, period)).status).toBe(400);
   });
 });

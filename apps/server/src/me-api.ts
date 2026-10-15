@@ -1,3 +1,4 @@
+import type { WaitronModule } from "@waitron/module";
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -53,6 +54,7 @@ import type { AccountEmailSender } from "./account-email.js";
 
 export interface MeApiDeps {
   db: Database;
+  describeShifts?: WaitronModule["describeShifts"];
   cfg: { nodeId: string };
   /** The language the dashboard defaults to before a signed-in person's own preference is known. */
   venueLocale: string;
@@ -372,7 +374,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listShiftsForPerson(tx, { personId, from, to });
+        const shifts = await listShiftsForPerson(tx, { personId, from, to });
+        const descriptions = await deps.describeShifts?.(
+          tx,
+          shifts.map((shift) => shift.id),
+        );
+        return shifts.map((shift) => ({
+          ...shift,
+          description: descriptions?.get(shift.id) ?? shift.role,
+        }));
       });
       return c.json(rows);
     }),

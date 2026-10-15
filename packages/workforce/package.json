@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./attendance-contract": "./src/attendance-contract.ts",
     "./test/fixtures.js": "./test/fixtures.ts",
-    "./dashboard": "./src/dashboard/index.ts"
+    "./dashboard": "./src/dashboard/index.ts",
+    "./roster-validation": "./src/roster-validation.ts"
   },
   "scripts": {
     "test": "vitest run",

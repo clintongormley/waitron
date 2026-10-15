@@ -5,12 +5,15 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { listShiftsForPerson } from "./schedule-reads.js";
+import { acceptSwap, decideSwap } from "./shift-swaps.js";
 import { WorkforceBackend } from "./clocking.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   insertDraftShift,
   insertRosterVersion,
+  insertShiftSwap,
   insertTimeEntry,
   makeRuleset,
   seedLocation,
@@ -919,5 +922,262 @@ describe("getPlannedVsActual", () => {
       }),
     );
     expect(rows).toEqual([]);
+  });
+});
+
+describe("copyPublishedToDraft", () => {
+  async function publishedWeek() {
+    const locationId = await seedLocation(suite.db);
+    const versionId = await insertRosterVersion(suite.db, { locationId });
+    const shiftId = await insertDraftShift(suite.db, {
+      locationId,
+      personId,
+      rosterVersionId: versionId,
+      startsAt: "2026-01-05T23:30:00Z",
+      startsOffsetMinutes: 60,
+      endsAt: "2026-01-06T03:30:00Z",
+      endsOffsetMinutes: 120,
+      role: "Kitchen",
+    });
+    await run((tx) => backend.publishRoster(tx, { versionId, publishedByPersonId: personId }));
+    return { locationId, versionId, shiftId };
+  }
+
+  it("copies an empty published period without inventing shifts or swaps", async () => {
+    const locationId = await seedLocation(suite.db);
+    const versionId = await insertRosterVersion(suite.db, {
+      locationId,
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-10",
+    });
+    await run((tx) => backend.publishRoster(tx, { versionId }));
+    const result = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    expect(result.shiftIds).toEqual(new Map());
+    expect(result.openSwaps).toEqual([]);
+    expect(
+      await run((tx) => backend.getRosterVersion(tx, { versionId: result.versionId })),
+    ).toMatchObject({
+      locationId,
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-10",
+      status: "draft",
+    });
+    expect(
+      await countRows(sql`select count(*) as n from shifts where location_id=${locationId}`),
+    ).toBe(0);
+  });
+
+  it("serializes two simultaneous copies so only one draft is created", async () => {
+    const { locationId, versionId } = await publishedWeek();
+    const results = await Promise.allSettled([
+      run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
+      run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    expect(failure.reason).toMatchObject({ code: "roster.draft_exists", params: { locationId } });
+    expect(
+      await countRows(
+        sql`select count(*) as n from roster_versions where location_id=${locationId} and status='draft'`,
+      ),
+    ).toBe(1);
+  });
+
+  it("copies every shift field, keeps the published rows, and switches staff visibility only on publication", async () => {
+    const { locationId, versionId, shiftId } = await publishedWeek();
+    const original = await suite.db.execute(sql`select * from shifts where id=${shiftId}`);
+    const versionBefore = await suite.db.execute(
+      sql`select * from roster_versions where id=${versionId}`,
+    );
+    const result = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    expect(result.versionId).not.toBe(versionId);
+    expect(result.openSwaps).toEqual([]);
+    expect([...result.shiftIds.keys()]).toEqual([shiftId]);
+    const copyId = result.shiftIds.get(shiftId)!;
+    expect(copyId).not.toBe(shiftId);
+    expect((await suite.db.execute(sql`select * from shifts where id=${copyId}`)).rows).toEqual([
+      { ...original.rows[0], id: copyId, roster_version_id: result.versionId },
+    ]);
+    expect((await suite.db.execute(sql`select * from shifts where id=${shiftId}`)).rows).toEqual(
+      original.rows,
+    );
+    expect(
+      (await suite.db.execute(sql`select * from roster_versions where id=${versionId}`)).rows,
+    ).toEqual(versionBefore.rows);
+    const draft = await run((tx) => backend.getRosterVersion(tx, { versionId: result.versionId }));
+    expect(draft).toMatchObject({
+      locationId,
+      periodStart: "2026-01-05",
+      periodEnd: "2026-01-11",
+      status: "draft",
+      publishedAt: null,
+      publishedByPersonId: null,
+    });
+    const own = () =>
+      run((tx) => listShiftsForPerson(tx, { personId, from: "2026-01-05", to: "2026-01-12" }));
+    expect(
+      (await own()).filter((row) => row.locationId === locationId).map((row) => row.id),
+    ).toEqual([shiftId]);
+    await run((tx) => backend.publishRoster(tx, { versionId: result.versionId }));
+    expect(
+      (await own()).filter((row) => row.locationId === locationId).map((row) => row.id),
+    ).toEqual([copyId]);
+    expect((await run((tx) => backend.getRosterVersion(tx, { versionId }))).status).toBe(
+      "superseded",
+    );
+  });
+
+  it.each(["draft", "superseded"] as const)(
+    "refuses a %s source without creating a version",
+    async (status) => {
+      const { locationId, versionId } = await publishedWeek();
+      await suite.db.execute(
+        sql`update roster_versions set status=${status}, published_at=${status === "draft" ? null : "2026-01-01T00:00:00Z"} where id=${versionId}`,
+      );
+      expect(
+        await refusalOf(() => run((tx) => backend.copyPublishedToDraft(tx, { versionId }))),
+      ).toEqual({ code: "roster.not_published", params: { rosterVersionId: versionId } });
+      expect(
+        await countRows(
+          sql`select count(*) as n from roster_versions where location_id=${locationId}`,
+        ),
+      ).toBe(1);
+    },
+  );
+
+  it("refuses an unknown version", async () => {
+    expect(
+      await refusalOf(() =>
+        run((tx) => backend.copyPublishedToDraft(tx, { versionId: UNKNOWN_ID })),
+      ),
+    ).toEqual({ code: "roster.not_found", params: { rosterVersionId: UNKNOWN_ID } });
+  });
+
+  it("refuses a second draft for the same location and period", async () => {
+    const { locationId, versionId } = await publishedWeek();
+    await insertRosterVersion(suite.db, { locationId });
+    expect(
+      await refusalOf(() => run((tx) => backend.copyPublishedToDraft(tx, { versionId }))),
+    ).toEqual({ code: "roster.draft_exists", params: { locationId } });
+    expect(
+      await countRows(
+        sql`select count(*) as n from roster_versions where location_id=${locationId}`,
+      ),
+    ).toBe(2);
+  });
+
+  it("moves both ends of requested and accepted swaps, leaves decided history, and permits the pending decisions", async () => {
+    const { locationId, versionId, shiftId } = await publishedWeek();
+    const other = await seedPerson(suite.db, "Return shift worker");
+    const otherShift = await insertDraftShift(suite.db, {
+      personId: other,
+      locationId,
+      rosterVersionId: versionId,
+    });
+    const swaps = new Map<string, string>();
+    for (const status of ["requested", "accepted", "approved", "rejected"] as const) {
+      swaps.set(
+        status,
+        await insertShiftSwap(suite.db, {
+          requestedByPersonId: personId,
+          fromShiftId: shiftId,
+          toPersonId: other,
+          toShiftId: otherShift,
+          status,
+        }),
+      );
+    }
+    const copied = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    const copyId = copied.shiftIds.get(shiftId)!;
+    expect(copied.openSwaps).toEqual(
+      expect.arrayContaining(
+        ["requested", "accepted"].map((status) => ({
+          swapId: swaps.get(status)!,
+          fromShiftId: copyId,
+        })),
+      ),
+    );
+    expect(copied.openSwaps).toHaveLength(2);
+    for (const [status, swapId] of swaps) {
+      const open = status === "requested" || status === "accepted";
+      const { rows } = await suite.db.execute(
+        sql`select from_shift_id, to_shift_id, status from shift_swaps where id=${swapId}`,
+      );
+      expect(rows).toEqual([
+        {
+          from_shift_id: open ? copyId : shiftId,
+          to_shift_id: open ? copied.shiftIds.get(otherShift) : otherShift,
+          status,
+        },
+      ]);
+    }
+    await run(async (tx) => {
+      await acceptSwap(tx, { swapId: swaps.get("requested")!, acceptingPersonId: other });
+      await decideSwap(tx, {
+        swapId: swaps.get("requested")!,
+        decision: "approved",
+        decidedByPersonId: personId,
+      });
+      await decideSwap(tx, {
+        swapId: swaps.get("accepted")!,
+        decision: "rejected",
+        decidedByPersonId: personId,
+      });
+    });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select status from shift_swaps where id=${swaps.get("requested")}`,
+        )
+      ).rows,
+    ).toEqual([{ status: "approved" }]);
+  });
+
+  it("retargets a return shift from this week even when the offered shift belongs to another week", async () => {
+    const { locationId, versionId, shiftId } = await publishedWeek();
+    const other = await seedPerson(suite.db, "Other week worker");
+    const outside = await insertDraftShift(suite.db, { personId: other, locationId });
+    const swapId = await insertShiftSwap(suite.db, {
+      requestedByPersonId: other,
+      fromShiftId: outside,
+      toPersonId: personId,
+      toShiftId: shiftId,
+    });
+    const copied = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    expect(
+      (
+        await suite.db.execute(
+          sql`select from_shift_id, to_shift_id from shift_swaps where id=${swapId}`,
+        )
+      ).rows,
+    ).toEqual([{ from_shift_id: outside, to_shift_id: copied.shiftIds.get(shiftId) }]);
+    expect(copied.openSwaps).toEqual([{ swapId, fromShiftId: outside }]);
+  });
+
+  it("rolls back the copy and pending swap move when its caller's transaction fails", async () => {
+    const { locationId, versionId, shiftId } = await publishedWeek();
+    const other = await seedPerson(suite.db, "Swap recipient");
+    const swapId = await insertShiftSwap(suite.db, {
+      requestedByPersonId: personId,
+      fromShiftId: shiftId,
+      toPersonId: other,
+    });
+    await expect(
+      run(async (tx) => {
+        await backend.copyPublishedToDraft(tx, { versionId });
+        throw new Error("after copy");
+      }),
+    ).rejects.toThrow("after copy");
+    expect(
+      await countRows(
+        sql`select count(*) as n from roster_versions where location_id=${locationId}`,
+      ),
+    ).toBe(1);
+    expect(
+      await countRows(sql`select count(*) as n from shifts where location_id=${locationId}`),
+    ).toBe(1);
+    expect(
+      (await suite.db.execute(sql`select from_shift_id from shift_swaps where id=${swapId}`)).rows,
+    ).toEqual([{ from_shift_id: shiftId }]);
   });
 });

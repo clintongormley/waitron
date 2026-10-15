@@ -1,3 +1,4 @@
+import type { WaitronModule } from "@waitron/module";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -25,6 +26,7 @@ import type { Logger } from "./logger.js";
 
 export interface ScheduleApiDeps {
   db: Database;
+  describeShifts?: WaitronModule["describeShifts"];
 }
 
 /** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
@@ -58,7 +60,17 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const { personId } = await requireSession(deps, c);
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
-      const rows = await asStaff((tx) => listShiftsForPerson(tx, { personId, from, to }));
+      const rows = await asStaff(async (tx) => {
+        const shifts = await listShiftsForPerson(tx, { personId, from, to });
+        const descriptions = await deps.describeShifts?.(
+          tx,
+          shifts.map((shift) => shift.id),
+        );
+        return shifts.map((shift) => ({
+          ...shift,
+          description: descriptions?.get(shift.id) ?? shift.role,
+        }));
+      });
       return c.json(rows);
     }),
   );

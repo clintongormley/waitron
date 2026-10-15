@@ -29,3 +29,4 @@ export {
   updateStaffRole,
   type StaffRoleInput,
 } from "./staff-roles.js";
+export { describeShifts } from "./describe-shifts.js";

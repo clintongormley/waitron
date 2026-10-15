@@ -34,6 +34,7 @@ declare module "@waitron/shared" {
     /** The approver's `persons.role` is not supervisor, manager or admin. */
     "correction.not_permitted": { personId: string };
     "shift.not_found": { shiftId: string };
+    "roster.not_published": { rosterVersionId: string };
     "roster.not_found": { rosterVersionId: string };
     /** The version is no longer a `draft`: a roster is published exactly once. */
     "roster.already_published": { rosterVersionId: string };

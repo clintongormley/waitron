@@ -1302,11 +1302,11 @@ Branch `feat/a585-5-workforce-rota`. Waits for A585-1 and A10-3. Re-read A10-1�
   `apps/server/src/me-api.cross-person.test.ts`, `apps/dashboard/src/api/live-queries.ts:484`,
   the till's live-query list for `listMyShifts` if it has one
 
-- [ ] **Step 1: Failing test** in `schedule-reads.test.ts`: a person with one shift in a published
+- [x] **Step 1: Failing test** in `schedule-reads.test.ts`: a person with one shift in a published
   version, one in a draft version and one in no version sees only the published one. The existing
   cases that insert unattached shifts and expect to see them now attach them to a published version
   first; keep each case's other assertions as they are.
-- [ ] **Step 2: Run**; FAIL. **Step 3:** add
+- [x] **Step 2: Run**; FAIL. **Step 3:** add
   `join roster_versions rv on rv.id = shifts.roster_version_id and rv.status = 'published'` to the
   query (keep `shifts` unaliased: `shiftLocalDate` names it). Add `roster_versions` to the
   `listMyShifts` live-query dependencies. **Step 4: Run** the workforce, server and dashboard tests
@@ -1321,7 +1321,7 @@ Branch `feat/a585-5-workforce-rota`. Waits for A585-1 and A10-3. Re-read A10-1�
 - Produces: `WorkforceBackend.copyPublishedToDraft(tx, { versionId }): Promise<{ versionId: string; shiftIds: Map<string, string>; openSwaps: { swapId: string; fromShiftId: string }[] }>`
   (old shift id → new shift id; the open swap requests now on the copies).
 
-- [ ] **Step 1: Failing tests:** copying a published version creates a draft for the same location
+- [x] **Step 1: Failing tests:** copying a published version creates a draft for the same location
   and period whose shifts equal the published ones field by field except `id` and
   `roster_version_id`; the published version and its shifts are unchanged; copying a draft or a
   superseded version is refused `roster.not_published` (declare the code in workforce's `errors.ts`);
@@ -1336,7 +1336,7 @@ Branch `feat/a585-5-workforce-rota`. Waits for A585-1 and A10-3. Re-read A10-1�
   `openSwaps: { swapId: string; fromShiftId: string }[]` (new ids) so the caller can warn. Test: an
   open request follows its shift to the copy and can still be accepted and decided there; a decided
   one stays on the old shift.
-- [ ] **Steps 2–4:** run (FAIL), implement (insert the version, then `insert … select` the shifts
+- [x] **Steps 2–4:** run (FAIL), implement (insert the version, then `insert … select` the shifts
   with new ids, returning the map), run (PASS). **Step 5: Commit** `"A585-5: copy a published week into a draft"`.
 
 ### Task 5.3: Modules describe shifts
@@ -1361,7 +1361,7 @@ describeShifts?: (tx: Transaction, shiftIds: readonly string[]) => Promise<Map<s
 export async function describeShifts(tx: Transaction, shiftIds: readonly string[]): Promise<Map<string, string>>;
 ```
 
-- [ ] **Step 1: Failing tests:** staffing's `describeShifts` answers "Kitchen · Sous chef" for an
+- [x] **Step 1: Failing tests:** staffing's `describeShifts` answers "Kitchen · Sous chef" for an
   assigned shift (area name, then staff role name) and nothing for an unassigned one; the till's
   `/api/schedule/shifts` and the dashboard's `/management-api/me/schedule/shifts` carry
   `description` from the seat and fall back to the free-text `role` when no module describes the
@@ -1369,7 +1369,7 @@ export async function describeShifts(tx: Transaction, shiftIds: readonly string[
   `time · description`. **Live updates:** core apps cannot name staffing's tables, so renaming an
   area or a staff role does not refresh an open My schedule until its next read; adding or moving a
   shift does, through `shifts` and `roster_versions`. Accepted; say so in the PR.
-- [ ] **Steps 2–5:** run (FAIL), implement, run every package touched (PASS), commit
+- [x] **Steps 2–5:** run (FAIL), implement, run every package touched (PASS), commit
   `"A585-5: modules describe shifts for the till and My schedule"`.
 
 ### Task 5.4: The warnings route
@@ -1377,7 +1377,7 @@ export async function describeShifts(tx: Transaction, shiftIds: readonly string[
 **Files:**
 - Modify: `apps/server/src/workforce-api.ts` (+ `workforce-api.test.ts`, the gate-sweep test)
 
-- [ ] **Step 1: Failing tests:** `GET /management-api/roster/breaches?locationId&period` answers
+- [x] **Step 1: Failing tests:** `GET /management-api/roster/breaches?locationId&period` answers
   `{ breaches, ruleset }`. It runs `validateRoster` over THREE weeks — the week before, the week
   asked for and the week after — each week's shifts being its roster's (the draft if there is one,
   otherwise the published version, as `getRoster` chooses) plus that week's unattached shifts by
@@ -1390,7 +1390,7 @@ export async function describeShifts(tx: Transaction, shiftIds: readonly string[
   `convenio_config` row answers 409 `convenio.not_found`; a staff session is refused 403; the gate
   sweep covers the route. The annual overtime cap and each person's running total arrive with A586
   (the spec's open point 6); this route does not judge the cap.
-- [ ] **Steps 2–5:** run, implement, run, commit `"A585-5: the rota's warnings route"`.
+- [x] **Steps 2–5:** run, implement, run, commit `"A585-5: the rota's warnings route"`.
 
 ### Task 5.5: The roster checks are importable in a browser
 
@@ -1402,7 +1402,7 @@ export async function describeShifts(tx: Transaction, shiftIds: readonly string[
   finds), a test in `packages/workforce` that reads `roster-validation.ts`, `ruleset.ts` and the
   files they import and asserts each import is `import type` or relative to a file in the same list.
 
-- [ ] Steps: failing test → add the map (keep `main`) → `pnpm --filter @waitron/workforce typecheck`,
+- [x] Steps: failing test → add the map (keep `main`) → `pnpm --filter @waitron/workforce typecheck`,
   the workspace typecheck of every package importing `@waitron/workforce`, and
   `pnpm --filter @waitron/workforce-es test` → PASS → commit
   `"A585-5: the roster checks are importable in a browser"`.

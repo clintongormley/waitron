@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,12 +14,14 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   insertAbsence,
   insertDraftShift,
+  insertRosterVersion,
   insertShiftSwap,
   seedLocation,
   seedPerson,
 } from "../test/fixtures.js";
 
 let locationId: string;
+let publishedVersionId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -26,6 +29,10 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
+    publishedVersionId = await insertRosterVersion(db, { locationId });
+    await db.execute(
+      sql`update roster_versions set status='published', published_at='2026-01-01T00:00:00Z' where id=${publishedVersionId}`,
+    );
   },
 });
 
@@ -34,6 +41,32 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("listShiftsForPerson", () => {
+  it("shows only published shifts while drafts, unattached and superseded shifts stay hidden", async () => {
+    const personId = await seedPerson(suite.db, `publication-${crypto.randomUUID()}`);
+    const loc = await seedLocation(suite.db);
+    const published = await insertRosterVersion(suite.db, { locationId: loc });
+    const draft = await insertRosterVersion(suite.db, { locationId: loc });
+    const superseded = await insertRosterVersion(suite.db, { locationId: loc });
+    await suite.db.execute(
+      sql`update roster_versions set status='published', published_at='2026-01-01T00:00:00Z' where id=${published}`,
+    );
+    await suite.db.execute(
+      sql`update roster_versions set status='superseded', published_at='2025-12-31T00:00:00Z' where id=${superseded}`,
+    );
+    const visible = await insertDraftShift(suite.db, {
+      personId,
+      locationId: loc,
+      rosterVersionId: published,
+    });
+    for (const rosterVersionId of [draft, null, superseded]) {
+      await insertDraftShift(suite.db, { personId, locationId: loc, rosterVersionId });
+    }
+    const rows = await run((tx) =>
+      listShiftsForPerson(tx, { personId, from: "2026-01-05", to: "2026-01-12" }),
+    );
+    expect(rows.map((row) => row.id)).toEqual([visible]);
+  });
+
   it("returns only the requester's shifts in the window (never a second person's), ordered by starts_at", async () => {
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
@@ -41,14 +74,15 @@ describe("listShiftsForPerson", () => {
     const late = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
       role: "bar",
-      rosterVersionId: null,
     });
     const early = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
       role: "kitchen",
@@ -56,6 +90,7 @@ describe("listShiftsForPerson", () => {
     await insertDraftShift(suite.db, {
       personId: other,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T10:00:00Z",
       endsAt: "2026-01-05T18:00:00Z",
     });
@@ -66,12 +101,13 @@ describe("listShiftsForPerson", () => {
     expect(rows[0]).toEqual({
       id: early,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-01-05T17:00:00Z",
       endsOffsetMinutes: 0,
       role: "kitchen",
-      rosterVersionId: null,
+      description: null,
     });
   });
 
@@ -80,18 +116,21 @@ describe("listShiftsForPerson", () => {
     const before = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-04T09:00:00Z",
       endsAt: "2026-01-04T17:00:00Z",
     });
     const atFrom = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
     });
     const atTo = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
     });
@@ -110,6 +149,7 @@ describe("listShiftsForPerson", () => {
     const rollsOver = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
+      rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T23:30:00Z",
       startsOffsetMinutes: 60,
       endsAt: "2026-01-06T03:30:00Z",

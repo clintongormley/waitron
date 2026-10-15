@@ -327,6 +327,62 @@ export class WorkforceBackend {
     return rows[0]!.id;
   }
 
+  async copyPublishedToDraft(
+    tx: Transaction,
+    input: { versionId: string },
+  ): Promise<{
+    versionId: string;
+    shiftIds: Map<string, string>;
+    openSwaps: { swapId: string; fromShiftId: string }[];
+  }> {
+    const source = await this.getRosterVersion(tx, input);
+    if (source.status !== "published") {
+      throw new AppError("roster.not_published", { rosterVersionId: source.id });
+    }
+    const { rows: drafts } = await tx.execute<{ id: string }>(sql`
+      select id from roster_versions where location_id=${source.locationId}
+        and period_start=${source.periodStart} and period_end=${source.periodEnd} and status='draft' limit 1`);
+    if (drafts.length > 0)
+      throw new AppError("roster.draft_exists", { locationId: source.locationId });
+    const versionId = newId();
+    await tx.execute(sql`insert into roster_versions (id, location_id, period_start, period_end, created_at)
+      values (${versionId}, ${source.locationId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
+    const originalShifts = await this.shiftsForVersion(tx, source.id);
+    const shiftIds = new Map<string, string>();
+    for (const shift of originalShifts) {
+      const copyId = newId();
+      await tx.execute(sql`insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
+        ends_at, ends_offset_minutes, role, roster_version_id, created_at)
+        select ${copyId}, person_id, location_id, starts_at, starts_offset_minutes,
+          ends_at, ends_offset_minutes, role, ${versionId}, created_at from shifts where id=${shift.id}`);
+      shiftIds.set(shift.id, copyId);
+    }
+    const openSwaps: { swapId: string; fromShiftId: string }[] = [];
+    if (shiftIds.size > 0) {
+      const ids = sql.join(
+        [...shiftIds.keys()].map((id) => sql`${id}`),
+        sql`, `,
+      );
+      const { rows: swaps } = await tx.execute<{
+        id: string;
+        from_shift_id: string;
+        to_shift_id: string | null;
+      }>(sql`
+        select id, from_shift_id, to_shift_id from shift_swaps where status in ('requested', 'accepted')
+          and (from_shift_id in (${ids}) or to_shift_id in (${ids})) order by id`);
+      for (const swap of swaps) {
+        const fromShiftId = shiftIds.get(swap.from_shift_id) ?? swap.from_shift_id;
+        const toShiftId =
+          swap.to_shift_id === null ? null : (shiftIds.get(swap.to_shift_id) ?? swap.to_shift_id);
+        await tx.execute(
+          sql`update shift_swaps set from_shift_id=${fromShiftId}, to_shift_id=${toShiftId} where id=${swap.id}`,
+        );
+        openSwaps.push({ swapId: swap.id, fromShiftId });
+      }
+    }
+    return { versionId, shiftIds, openSwaps };
+  }
+
   /** The week's DRAFT if there is one, else its PUBLISHED version. */
   async getRoster(
     tx: Transaction,

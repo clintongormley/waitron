@@ -11,7 +11,7 @@ import {
   startManagementSession,
   webauthnCredentials,
 } from "@waitron/identity";
-import { shifts } from "@waitron/workforce";
+import { shifts, rosterVersions } from "@waitron/workforce";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -178,10 +178,28 @@ async function seedShift(
   startsAt: string,
   endsAt: string,
 ): Promise<string> {
+  const { rows: versions } = await suite.db.execute<{ id: string }>(sql`
+    select id from roster_versions where location_id=${locationId}
+      and period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
+  let rosterVersionId = versions[0]?.id;
+  if (rosterVersionId === undefined) {
+    const [version] = await suite.db
+      .insert(rosterVersions)
+      .values({
+        locationId,
+        periodStart: "2026-01-01",
+        periodEnd: "2026-12-31",
+        status: "published",
+        publishedAt: "2026-01-01T00:00:00Z",
+      })
+      .returning({ id: rosterVersions.id });
+    rosterVersionId = version!.id;
+  }
   const [row] = await suite.db
     .insert(shifts)
     .values({
       personId,
+      rosterVersionId,
       locationId,
       startsAt,
       startsOffsetMinutes: 0,

@@ -18,6 +18,7 @@ const shifts: MyShift[] = [
     endsAt: "2026-05-04T17:00:00Z",
     endsOffsetMinutes: 0,
     role: "bar",
+    description: "bar",
     rosterVersionId: null,
   },
 ];

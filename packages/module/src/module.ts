@@ -1299,6 +1299,10 @@ export interface WaitronModule {
   readonly fiscal?: FiscalContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;
+  readonly describeShifts?: (
+    tx: Transaction,
+    shiftIds: readonly string[],
+  ) => Promise<Map<string, string>>;
   readonly floorAnnotations?: FloorAnnotator;
   readonly tableRemoval?: TableRemoval;
   readonly venueService?: VenueServiceContribution;

@@ -178,6 +178,14 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
       ),
     );
     await expect403(
+      await send(
+        app,
+        "GET",
+        `/management-api/roster/breaches?locationId=${locationId}&period=2026-03-02`,
+        staffCookie,
+      ),
+    );
+    await expect403(
       await send(app, "POST", "/management-api/roster", staffCookie, {
         locationId,
         period: "2026-03-02",

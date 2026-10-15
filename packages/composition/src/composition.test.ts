@@ -38,6 +38,7 @@ import {
   STAFFING_MIGRATIONS,
   STAFFING_PERMISSIONS,
   STAFFING_ROUTES,
+  describeShifts,
 } from "@waitron/staffing";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import {
@@ -238,6 +239,7 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(staffing?.classification).toBe(STAFFING_CLASSIFICATION);
     expect(staffing?.changes).toBe(STAFFING_CHANGE_SOURCES);
     expect(staffing?.routes).toBe(STAFFING_ROUTES);
+    expect(staffing?.describeShifts).toBe(describeShifts);
     expect(staffing?.permissions).toBe(STAFFING_PERMISSIONS);
     expect(staffing?.configurationTransfer).toBe(STAFFING_CONFIGURATION_TRANSFER);
   });

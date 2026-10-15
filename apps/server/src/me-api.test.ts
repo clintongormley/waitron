@@ -23,6 +23,7 @@ import {
   absences,
   shiftSwaps,
   shifts,
+  rosterVersions,
   type ShiftSwapStatus,
 } from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
@@ -155,6 +156,23 @@ async function send(
 }
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
+  const { rows: versions } = await suite.db.execute<{ id: string }>(sql`
+    select id from roster_versions where location_id=${locationId}
+      and period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
+  let rosterVersionId = versions[0]?.id;
+  if (rosterVersionId === undefined) {
+    const [version] = await suite.db
+      .insert(rosterVersions)
+      .values({
+        locationId,
+        periodStart: "2026-01-01",
+        periodEnd: "2026-12-31",
+        status: "published",
+        publishedAt: "2026-01-01T00:00:00Z",
+      })
+      .returning({ id: rosterVersions.id });
+    rosterVersionId = version!.id;
+  }
   const [row] = await suite.db
     .insert(shifts)
     .values({
@@ -165,6 +183,7 @@ async function insertShift(personId: string, startsAt: string, endsAt: string): 
       endsAt,
       endsOffsetMinutes: 0,
       role: "bar",
+      rosterVersionId,
     })
     .returning({ id: shifts.id });
   return row!.id;
@@ -503,6 +522,81 @@ describe("mountMeApi — locales (public)", () => {
 });
 
 describe("mountMeApi — shifts", () => {
+  it("returns a module's description for an owned shift and the free-text fallback for an undescribed one", async () => {
+    const described = await insertShift(me, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
+    const fallback = await insertShift(me, "2026-10-06T09:00:00Z", "2026-10-06T17:00:00Z");
+    await insertShift(colleague, "2026-10-05T09:00:00Z", "2026-10-05T17:00:00Z");
+    const app = mountApp({
+      describeShifts: async (tx, ids) => {
+        expect(tx).toBeDefined();
+        expect(ids).toEqual([described, fallback]);
+        return new Map([[described, "Kitchen · Sous chef"]]);
+      },
+    });
+    const res = await send(
+      app,
+      "GET",
+      "/management-api/me/schedule/shifts?from=2026-10-05&to=2026-10-12",
+      { cookie: await cookieFor(me) },
+    );
+    expect(res.status).toBe(200);
+    expect(
+      ((await res.json()) as { id: string; description: string | null }[]).map((row) => ({
+        id: row.id,
+        description: row.description,
+      })),
+    ).toEqual([
+      { id: described, description: "Kitchen · Sous chef" },
+      { id: fallback, description: "bar" },
+    ]);
+    const noModule = await send(
+      mountApp(),
+      "GET",
+      "/management-api/me/schedule/shifts?from=2026-10-05&to=2026-10-12",
+      { cookie: await cookieFor(me) },
+    );
+    expect(
+      ((await noModule.json()) as { description: string }[]).map((row) => row.description),
+    ).toEqual(["bar", "bar"]);
+  });
+
+  it("keeps draft, unattached and superseded shifts out of the person's schedule", async () => {
+    const visible = await insertShift(me, "2026-09-07T09:00:00Z", "2026-09-07T17:00:00Z");
+    for (const status of ["draft", "superseded", null] as const) {
+      let rosterVersionId: string | null = null;
+      if (status !== null) {
+        const [version] = await suite.db
+          .insert(rosterVersions)
+          .values({
+            locationId,
+            periodStart: "2026-09-07",
+            periodEnd: "2026-09-13",
+            status,
+            publishedAt: status === "draft" ? null : "2026-09-01T00:00:00Z",
+          })
+          .returning({ id: rosterVersions.id });
+        rosterVersionId = version!.id;
+      }
+      await suite.db.insert(shifts).values({
+        personId: me,
+        locationId,
+        rosterVersionId,
+        startsAt: "2026-09-07T10:00:00Z",
+        endsAt: "2026-09-07T18:00:00Z",
+        startsOffsetMinutes: 0,
+        endsOffsetMinutes: 0,
+      });
+    }
+    const res = await send(
+      mountApp(),
+      "GET",
+      "/management-api/me/schedule/shifts?from=2026-09-07&to=2026-09-14",
+      { cookie: await cookieFor(me) },
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { id: string }[]).map((row) => row.id)).toEqual([visible]);
+  });
+
   it("GET /management-api/me/schedule/shifts returns the session person's shifts in the window", async () => {
     const shiftId = await insertShift(me, "2026-05-04T09:00:00Z", "2026-05-04T17:00:00Z");
     // A colleague's shift in the same window must NOT appear.

@@ -1,3 +1,4 @@
+import type { WaitronModule } from "@waitron/module";
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
@@ -1832,11 +1833,21 @@ async function bootServer(
       },
       log,
     );
-  mountScheduleApi(app, { db }, log);
+  const describeShifts: NonNullable<WaitronModule["describeShifts"]> = async (tx, shiftIds) => {
+    const descriptions = new Map<string, string>();
+    for (const module of setsToMigrate) {
+      if (module.describeShifts === undefined) continue;
+      for (const [id, description] of await module.describeShifts(tx, shiftIds))
+        descriptions.set(id, description);
+    }
+    return descriptions;
+  };
+  mountScheduleApi(app, { db, describeShifts }, log);
   mountMeApi(
     app,
     {
       db,
+      describeShifts,
       cfg: { nodeId: till.nodeId },
       venueLocale,
       onboardingIntent: config.onboardingIntent,

@@ -59,6 +59,7 @@ import {
   STAFFING_CONFIGURATION_TRANSFER,
   STAFFING_PERMISSIONS,
   STAFFING_ROUTES,
+  describeShifts,
 } from "@waitron/staffing";
 import {
   WORKFORCE_CLASSIFICATION,
@@ -317,6 +318,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: STAFFING_CHANGE_SOURCES,
     routes: STAFFING_ROUTES,
     permissions: STAFFING_PERMISSIONS,
+    describeShifts,
     configurationTransfer: STAFFING_CONFIGURATION_TRANSFER,
   },
 ];
