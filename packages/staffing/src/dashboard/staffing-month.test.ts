@@ -325,7 +325,7 @@ describe("the Staffing view's month", () => {
     liveData.clear();
   });
 
-  it("reads the same whether or not the person may write, each day only becoming a button", async () => {
+  it("reads the same whether or not the person may write, a season day only becoming a button for a person who may write", async () => {
     const { el } = await mount();
     const markup = (node: Element, part: "outerHTML" | "innerHTML") =>
       node[part].replace(/<!--[^]*?-->/g, "");

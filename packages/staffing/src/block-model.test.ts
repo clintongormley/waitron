@@ -189,7 +189,7 @@ describe("resizeBlock", () => {
     expect(resizeBlock(kept, 0, "end", "06:00", "06:10")).toEqual(moved);
   });
 
-  it("answers a block the server accepts for any block and any quarter hour, kept ones included", () => {
+  it("answers a block the server accepts when a day's only block, on any quarter hours, has either edge moved to any quarter hour, under changeovers 06:00 and 06:10", () => {
     const quarters = Array.from(
       { length: 96 },
       (_, n) =>
