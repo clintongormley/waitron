@@ -536,3 +536,37 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     }
   });
 });
+
+describe("a till join without a merge", () => {
+  it("guests at Long table joining Bar, whose party has food, bills merged: a moved notice for Bar's dish, on the bill it merged into", async () => {
+    const { table } = await LONG_TABLE();
+    const atLong = await seat(v, table.long!);
+    const atBar = await seat(v, table.bar!);
+    await order(v, atLong.tabId, "Burger");
+    await order(v, atBar.tabId, "Burger");
+
+    await ok(
+      Promise.resolve(
+        app.request(`/api/parties/${atLong.partyId}/join`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({
+            tableId: table.bar!,
+            bills: "merge",
+            expectedPartyRevision: await revisionOf(v, atLong.partyId),
+            otherPartyId: atBar.partyId,
+            expectedOtherPartyRevision: await revisionOf(v, atBar.partyId),
+          }),
+        }),
+      ),
+    );
+
+    expect(await noticesOn([atLong.tabId, atBar.tabId])).toEqual([
+      {
+        working_order_id: atLong.tabId,
+        kind: "moved",
+        moved_to: await namesOf(table.long!, table.bar!),
+      },
+    ]);
+  });
+});
