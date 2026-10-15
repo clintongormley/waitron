@@ -128,8 +128,7 @@ export async function recordSuggestionJobEnded(
   now: Date = new Date(),
 ): Promise<void> {
   // Cloud has already deleted an expired job and cannot be reached for one that is not connected
-  // (it deletes the job after 24 hours itself), and a rejected request is not retried, so none is
-  // released.
+  // (it deletes the job after 24 hours itself). A rejected job is not released either.
   const nothingToRelease =
     state === "expired" || failure === "not_connected" || failure === "rejected";
   await tx

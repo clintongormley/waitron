@@ -136,9 +136,9 @@ export async function storeSuggestionResults(
     else failed.add(key);
   }
   for (const [language, refs] of named) {
-    // Liveness never reads the language: whether the row is found (`content-translation-targets.ts`
-    // :316-329, `namedRows` takes no language) and its eligibility and activity flags (:226-249)
-    // come from the row alone. So every ref live above resolves live here.
+    // Liveness never reads the language: `namedRows` (content-translation-targets.ts) takes none,
+    // and `resolved` there sets the eligibility and activity flags from the row alone. So every ref
+    // live above resolves live here.
     const targets = await liveByRef(tx, language, refs, context);
     for (const ref of refs) {
       const key = suggestionRef(ref);
