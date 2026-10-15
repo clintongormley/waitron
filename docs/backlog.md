@@ -3443,7 +3443,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   sections, a large TOTAL, one row per item on a full invoice, the registered
   address once or labelled, "× 2" for quantities, VAT rates like "10%" and "17,5%", guests and per
   person, and an optional drink/food subtotal. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
-  [mockups](backlog/mockups/a663-receipt-layout/)
+  [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
