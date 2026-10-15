@@ -82,6 +82,18 @@ const en = {
   "staffing.grid.delete": "Delete",
   "staffing.grid.people_one": "1 person",
   "staffing.grid.people_other": "{count} people",
+  "staffing.painter.heading": "Staffing",
+  "staffing.painter.week": "{season} week",
+  "staffing.painter.previous_season": "Previous season",
+  "staffing.painter.next_season": "Next season",
+  "staffing.painter.area": "Department or prep station",
+  "staffing.painter.departments": "Departments",
+  "staffing.painter.stations": "Prep stations",
+  "staffing.painter.paint": "Paint:",
+  "staffing.painter.new_staff_role": "+ New staff role",
+  "staffing.painter.loading": "Loading the staffing…",
+  "staffing.painter.load_error": "Could not load the staffing: {reason}",
+  "staffing.painter.refused_on": "{area}, {day}: {message}",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -157,6 +169,18 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.delete": "Eliminar",
   "staffing.grid.people_one": "1 persona",
   "staffing.grid.people_other": "{count} personas",
+  "staffing.painter.heading": "Personal",
+  "staffing.painter.week": "Semana de {season}",
+  "staffing.painter.previous_season": "Temporada anterior",
+  "staffing.painter.next_season": "Temporada siguiente",
+  "staffing.painter.area": "Departamento o estación de preparación",
+  "staffing.painter.departments": "Departamentos",
+  "staffing.painter.stations": "Estaciones de preparación",
+  "staffing.painter.paint": "Pintar:",
+  "staffing.painter.new_staff_role": "+ Nuevo rol de personal",
+  "staffing.painter.loading": "Cargando el personal…",
+  "staffing.painter.load_error": "No se pudo cargar el personal: {reason}",
+  "staffing.painter.refused_on": "{area}, {day}: {message}",
 };
 
 export const STAFFING_STRINGS = { en, es };
