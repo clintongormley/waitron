@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
@@ -20,6 +20,8 @@ export interface PartyNameDetail {
   /** Trimmed; null clears the name. */
   name: string | null;
 }
+
+const sameName = (a: string, b: string): boolean => a.trim() === b.trim();
 
 @customElement("till-party-name-dialog")
 export class TillPartyNameDialog extends LitElement {
@@ -57,19 +59,34 @@ export class TillPartyNameDialog extends LitElement {
     this.requestUpdate();
   }
 
-  override willUpdate(): void {
-    if (!this.isConnected || !this.active || this.#scope) return;
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (changed.has("savedValue")) this.#followStored();
+  }
+
+  #track(): void {
     this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => a.trim() === b.trim(),
+      equal: sameName,
       restore: (value) => (this.value = value),
     });
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+  }
+
+  /** A name stored elsewhere while the window is open becomes what Save compares against, and
+   * replaces the field only while the field still reads the previous stored name. */
+  #followStored(): void {
+    const stored = this.savedValue;
+    if (stored === undefined || sameName(stored, this.#baseline!)) return;
+    if (sameName(this.value, this.#baseline!)) this.value = stored;
+    this.#baseline = stored;
+    this.#scope!.commit(stored);
   }
 
   override disconnectedCallback(): void {

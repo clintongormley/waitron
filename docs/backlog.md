@@ -2180,14 +2180,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
   the server's refusal is the backstop.
 
-- **A717 — The till's Name window keeps comparing against the name stored when it opened, after
-  the name is changed on another till while it is open (2026-10-15; open, left open by A714, #1754; found by
-  reading in A713's review, not probed).** A713 fixed the same shape for the Guests window, which now follows a count
-  stored elsewhere (`#followStored`, `apps/till/src/widgets/party-guests-dialog.ts`); the Name window
-  (`apps/till/src/widgets/party-name-dialog.ts`) sets its baseline once. **Next action:** probe it in
-  real Chromium; if Save compares against the old name, follow the stored name as the Guests window
-  does.
-
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
   it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill

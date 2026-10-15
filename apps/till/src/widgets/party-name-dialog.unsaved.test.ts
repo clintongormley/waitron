@@ -218,3 +218,27 @@ it("a refused submitted name starts dirty against the stored party name", async 
   await fill(form, " Ana ");
   expect(unload()).toBe(false);
 });
+it("a stored name changed elsewhere moves an untouched window with it, and leaves a typed one unsaved", async () => {
+  const { app, form } = await mount();
+  app.savedValue = "Luis";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.value).toBe("Luis");
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a name typed before the stored one changes elsewhere stays unsaved against the new stored name", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Eva");
+  app.savedValue = "Luis";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(input.value).toBe("Eva");
+  expect(unload()).toBe(true);
+  await fill(form, "Luis");
+  expect(unload()).toBe(false);
+});

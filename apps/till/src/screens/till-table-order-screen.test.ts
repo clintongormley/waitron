@@ -4710,6 +4710,41 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBe(dialog);
     });
 
+    it("moves an untouched Name window to a name stored elsewhere, so the opening name can still be saved", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const named = heard(el, "name-party");
+      await toMenu(el);
+      click(el, '[data-action="name"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-party-name-dialog")!;
+      await dialog.updateComplete;
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, name: "Luis" };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      const field = dialog.shadowRoot!.querySelector("wt-input")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(input.value).toBe("Luis");
+      const save = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "wt-button[data-name-save]",
+      )!;
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      for (const value of ["Eva", "Ana"]) {
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await dialog.updateComplete;
+      }
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+      save.click();
+      await el.updateComplete;
+      expect(named).toEqual([{ name: "Ana" }]);
+    });
+
     it("offers Guests right after Name the party whenever a party is open", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
