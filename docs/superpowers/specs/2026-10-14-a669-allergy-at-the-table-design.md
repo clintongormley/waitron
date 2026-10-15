@@ -116,10 +116,12 @@ changed and removed in normal use.
   it adds and puts them in the descriptor's `requires`.
 
 Every write goes through one `withTransaction` per request. The allergy belongs to the party: when
-parties merge, the merged party's guests and ticks join the surviving party's; when a party is split
-from a joined table, each resulting party keeps a copy of the guests, and each tick stays with its
-line. (This split rule is mine: copying errs on the side of telling the kitchen too much. The plan
-confirms it against how `split-table` moves lines.)
+parties merge, the merged party's guests and ticks join the surviving party's. **When a table leaves
+a party** (the order screen's Actions → "Split a table", `splitTable` in
+`apps/server/src/table-actions.ts`, which opens a new party on the leaving table; not the floor
+plan's "Split tables…", which creates no party), **both parties keep a copy of every allergic
+guest**, and each tick stays with its line (owner, 2026-10-15). The waiter deletes a guest from the
+party it does not belong to (below). The plan confirms the copy against how `splitTable` moves bills.
 
 ## The flow
 
@@ -150,8 +152,11 @@ confirms it against how `split-table` moves lines.)
   Nothing shows while unanswered.
 - A ticked dish carries a small red tag with the guest's who, on unsent and sent lines.
 - Actions gains **Allergies**, first in the list.
-- **The allergy window** (from Change or Actions) lists each guest with Edit, "+ Another guest with
-  allergies", every dish of the party's bills (sent ones marked "sent 13:24"), "No allergies"
+- **The allergy window** (from Change or Actions) lists each guest with Edit and **Delete** (owner,
+  2026-10-15, for a guest a split copied to the wrong party). Delete clears that guest's ticks, asks
+  for confirmation when any dish is ticked for them, and sends "ALLERGY REMOVED" for a ticked dish a
+  station still has; deleting the last guest leaves the answer as Allergies with no guest until the
+  waiter adds one or chooses No allergies. Then "+ Another guest with allergies", every dish of the party's bills (sent ones marked "sent 13:24"), "No allergies"
   (which clears every guest and tick, after a confirmation when any dish was ticked) and Save.
 - Other devices showing the party see an allergy change without reopening it. The plan names the
   mechanism (the party's `revision` or a live subscription) after checking which one those screens
@@ -211,8 +216,9 @@ slices, each one implementer's size:
 
 - Each of the four table paths, with a party unanswered: the till asks; and the server, called
   directly, refuses `allergy.unanswered` with no line fired.
-- Ticks survive submit (draft line to working line), move bill, transfer and merge; a split copies
-  the guests.
+- Ticks survive submit (draft line to working line), move bill, transfer and merge; a table leaving
+  the party copies the guests to both parties; deleting a guest clears its ticks and sends a notice
+  for a ticked dish a station has.
 - A clash: ticking Croquetas (gluten, milk) for a guest avoiding gluten shows the reason and "Send
   anyway"; the ticket carries the clash line.
 - Paper at 58 and 80 mm, English and Spanish: the heading only on the ticket with a ticked dish;
@@ -230,4 +236,5 @@ slices, each one implementer's size:
 
 - Spanish wording for the question, the pages, the banner, the paper heading and block, and the
   notices.
-- The split-table rule above (copy to both) is mine; the owner may prefer otherwise.
+- Settled 2026-10-15: a table leaving a party copies the allergic guests to both parties, and a
+  guest can be deleted.
