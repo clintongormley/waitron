@@ -9,6 +9,7 @@ import {
   MONEY_SCALE,
   resolveSnapshotText,
   subtractDecimal,
+  sumDecimals,
   type Decimal,
 } from "@waitron/shared";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
@@ -102,6 +103,134 @@ export function groupDiscounts(
   return byRate
     .filter((entry) => !isZeroDecimal(entry.amount))
     .map((entry) => ({ ...entry, named }));
+}
+
+export interface FiguredGroup {
+  /** The group's position in `groupByParent(result.lines)`. */
+  at: number;
+  /** `dish.dishFamily` when set, else the dish's own index in `result.lines`. */
+  family: number;
+  lines: readonly FiguredLine[];
+}
+
+export interface InvoiceDiscounts {
+  /** Own rows to print under a group, keyed by `FiguredGroup.at`. */
+  under: ReadonlyMap<number, GroupDiscount[]>;
+  /** One row per rate, in the order rates first appear in `groups`; never zero. */
+  atEnd: GroupDiscount[];
+}
+
+/** A dish family's own discount prints under the family; what the bill took off prints once per
+ *  rate at the end. Per family and rate: own + bill share = the lines' discounts, so the table still
+ *  comes to the filed bases. `groups` holds the invoice's groups whose lines all have `net`. */
+export function invoiceDiscounts(
+  groups: readonly FiguredGroup[],
+  billAdjustments: readonly ReceiptAdjustment[],
+): InvoiceDiscounts {
+  const families = new Map<number, FiguredGroup[]>();
+  for (const group of groups) {
+    const members = families.get(group.family);
+    if (members === undefined) families.set(group.family, [group]);
+    else members.push(group);
+  }
+  const hasBill = billAdjustments.length > 0;
+  const under = new Map<number, GroupDiscount[]>();
+  const billShares: { rate: string; amount: Decimal }[] = [];
+  for (const members of families.values()) {
+    const lines = members.flatMap((group) => group.lines);
+    const ownEntries = lines.flatMap(({ line }) => line.adjustments ?? []);
+    const byRate = discountsByRate(lines);
+    const oneRate = byRate.length === 1;
+    const home =
+      members.find((group) =>
+        group.lines.some(({ line }) => (line.adjustments ?? []).length > 0),
+      ) ?? members[0]!;
+    for (const entry of byRate) {
+      const ownAmount =
+        !hasBill || (ownEntries.length > 0 && !oneRate)
+          ? entry.amount
+          : ownEntries.length === 0
+            ? ZERO
+            : clamp(
+                baseFromGross(
+                  sumDecimals(ownEntries.map((own) => decimal(own.amount))),
+                  decimal(entry.rate),
+                ),
+                entry.amount,
+              );
+      addByRate(billShares, entry.rate, subtractDecimal(entry.amount, ownAmount));
+      if (isZeroDecimal(ownAmount)) continue;
+      const row: GroupDiscount = {
+        rate: entry.rate,
+        amount: ownAmount,
+        comp: entry.comp,
+        named: ownEntries.length === 1 && (!hasBill || oneRate) ? ownEntries[0]! : null,
+      };
+      const rows = under.get(home.at);
+      if (rows === undefined) under.set(home.at, [row]);
+      else rows.push(row);
+    }
+  }
+  const atEndNamed = billAdjustments.length === 1 ? billAdjustments[0]! : null;
+  const atEnd = firstRates(groups)
+    .map((rate) => ({
+      rate,
+      amount: billShares.find((share) => sameRate(share.rate, rate))?.amount ?? ZERO,
+      comp: false,
+      named: atEndNamed,
+    }))
+    .filter((row) => !isZeroDecimal(row.amount));
+  return { under, atEnd };
+}
+
+function sameRate(left: string, right: string): boolean {
+  return compareDecimal(decimal(left), decimal(right)) === 0;
+}
+
+function addByRate(
+  totals: { rate: string; amount: Decimal }[],
+  rate: string,
+  amount: Decimal,
+): void {
+  const entry = totals.find((candidate) => sameRate(candidate.rate, rate));
+  if (entry === undefined) totals.push({ rate, amount });
+  else entry.amount = addDecimal(entry.amount, amount);
+}
+
+/** Every rate the lines carry, as first filed, in the order they first appear. */
+function firstRates(groups: readonly FiguredGroup[]): string[] {
+  const rates: string[] = [];
+  for (const { line } of groups.flatMap((group) => group.lines)) {
+    if (!rates.some((rate) => sameRate(rate, line.net.rate))) rates.push(line.net.rate);
+  }
+  return rates;
+}
+
+/** The lines' discounts added per rate, in the order the rates first appear; `comp` when every
+ *  line at the rate has a filed base of zero. */
+function discountsByRate(
+  lines: readonly FiguredLine[],
+): { rate: string; amount: Decimal; comp: boolean }[] {
+  const byRate: { rate: string; amount: Decimal; comp: boolean }[] = [];
+  for (const {
+    line,
+    figures: { discount },
+  } of lines) {
+    const zeroBase = isZeroDecimal(decimal(line.net.base));
+    const entry = byRate.find((candidate) => sameRate(candidate.rate, line.net.rate));
+    if (entry === undefined) byRate.push({ rate: line.net.rate, amount: discount, comp: zeroBase });
+    else {
+      entry.amount = addDecimal(entry.amount, discount);
+      entry.comp &&= zeroBase;
+    }
+  }
+  return byRate;
+}
+
+/** `value` kept between zero and `ceiling`. */
+function clamp(value: Decimal, ceiling: Decimal): Decimal {
+  if (compareDecimal(value, ZERO) < 0) return ZERO;
+  return compareDecimal(value, ceiling) > 0 ? ceiling : value;
 }
 
 /** "4" for a count in the Each unit or a line with no unit; "2" for two portions of an extra
