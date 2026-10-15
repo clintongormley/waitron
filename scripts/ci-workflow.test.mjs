@@ -1818,8 +1818,8 @@ function unquoted(value) {
 }
 
 /**
- * Each step under a `steps:` key, with its `name:` and the first line, unquoted, or `|`/`>` block
- * of its `run:`, shell comments cut.
+ * Each step under a `steps:` key, with its `name:`, its `timeout-minutes:` value as written, and the
+ * first line, unquoted, or `|`/`>` block of its `run:`, shell comments cut.
  */
 function workflowSteps(text) {
   const workflowLines = text.split("\n");
@@ -1852,13 +1852,15 @@ function workflowSteps(text) {
       } else if (indent !== step.keyIndent) continue;
       const [, key, value] = /^([\w-]+):\s*(.*)$/.exec(current.slice(step.keyIndent)) ?? [];
       if (key === "name") step.name = value.trim();
+      if (key === "timeout-minutes") step.timeoutMinutes = value.trim();
       if (key !== "run") continue;
       if (/^[|>][-+\d]*\s*(#.*)?$/.test(value)) blockIndent = step.keyIndent;
       else step.run.push(unquoted(value));
     }
   });
-  return steps.map(({ line, name, run }) => ({
+  return steps.map(({ line, name, run, timeoutMinutes }) => ({
     step: name ?? `the step at line ${line}`,
+    timeoutMinutes,
     command: run
       .filter((runLine) => !/^\s*#/.test(runLine))
       .map((runLine) => runLine.replace(/\s#.*$/, ""))
@@ -2426,13 +2428,12 @@ describe("CI image provenance", () => {
   );
 });
 
-const SETUP_PNPM_RUN = /^\s*(?:-\s+)?run:\s*bash scripts\/ci-setup-pnpm\.sh\b/;
-
 /**
- * One workflow's pnpm setups: every non-comment `uses: pnpm/action-setup` line, every step that
- * runs `scripts/ci-setup-pnpm.sh` and whether it carries a positive `timeout-minutes`, and the jobs
- * whose first step running `pnpm` comes before (or without) that setup step. Jobs are two-space keys
- * under `jobs:` and steps the dash lines at the indent of the first one under `steps:`.
+ * One workflow's pnpm setups: every non-comment `uses: pnpm/action-setup` line, every step whose
+ * `run:` command names `scripts/ci-setup-pnpm.sh` and whether it carries a positive
+ * `timeout-minutes`, the jobs with a step running `pnpm`, and those of them whose first such step
+ * comes before (or without) a step running `bash scripts/ci-setup-pnpm.sh`. Jobs are two-space keys
+ * under `jobs:`; steps and their commands come from `workflowSteps`.
  */
 function pnpmSetups(text) {
   const workflowLines = text.split("\n");
@@ -2451,37 +2452,23 @@ function pnpmSetups(text) {
     }
   }
   const setups = [];
+  const pnpmJobs = [];
   const lateJobs = [];
   for (const { id, lines } of jobBlocks) {
-    const stepsAt = lines.findIndex((line) => /^\s*steps:\s*(#.*)?$/.test(line));
-    if (stepsAt === -1) continue;
-    const isContent = (line) => line.trim() !== "" && !/^\s*#/.test(line);
-    const first = lines.slice(stepsAt + 1).find(isContent);
-    if (first === undefined || !/^\s*- /.test(first)) continue;
-    const dash = first.search(/\S/);
-    const stepBlocks = [];
-    for (const line of lines.slice(stepsAt + 1)) {
-      if (isContent(line) && line.search(/\S/) < dash) break;
-      if (isContent(line) && line.search(/\S/) === dash && /^\s*- /.test(line)) stepBlocks.push([]);
-      stepBlocks.at(-1)?.push(line);
+    const steps = workflowSteps(lines.join("\n"));
+    for (const { command, timeoutMinutes } of steps) {
+      if (!/\bscripts\/ci-setup-pnpm\.sh\b/.test(command)) continue;
+      setups.push({ job: id, bounded: /^[1-9]\d*\s*(#.*)?$/.test(timeoutMinutes ?? "") });
     }
-    for (const step of stepBlocks) {
-      if (!step.some((line) => SETUP_PNPM_RUN.test(line))) continue;
-      setups.push({
-        job: id,
-        bounded: step.some((line) =>
-          /^\s*(?:-\s+)?timeout-minutes:\s*[1-9]\d*\s*(#.*)?$/.test(line),
-        ),
-      });
-    }
-    const commands = workflowSteps(lines.join("\n")).map(({ command }) => command);
-    const setupAt = commands.findIndex((command) =>
+    const setupAt = steps.findIndex(({ command }) =>
       /\bbash scripts\/ci-setup-pnpm\.sh\b/.test(command),
     );
-    const pnpmAt = commands.findIndex((command) => /(?:^|[\s;&|(!])pnpm\s/m.test(command));
-    if (pnpmAt !== -1 && (setupAt === -1 || setupAt > pnpmAt)) lateJobs.push(id);
+    const pnpmAt = steps.findIndex(({ command }) => /(?:^|[\s;&|(!])pnpm\s/m.test(command));
+    if (pnpmAt === -1) continue;
+    pnpmJobs.push(id);
+    if (setupAt === -1 || setupAt > pnpmAt) lateJobs.push(id);
   }
-  return { actionSetup, setups, lateJobs };
+  return { actionSetup, setups, pnpmJobs, lateJobs };
 }
 
 /**
@@ -2491,7 +2478,7 @@ function pnpmSetups(text) {
  * each workflow as TEXT and does not run it, so a setup inside a composite action or a reusable
  * workflow is invisible, and a `pnpm` reached through a script a step runs is not seen.
  */
-describe("every pnpm setup is bounded", () => {
+describe("the workflows' pnpm setups", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
   const setup =
     "      - name: Set up pnpm\n        timeout-minutes: 5\n        run: bash scripts/ci-setup-pnpm.sh\n";
@@ -2503,6 +2490,7 @@ describe("every pnpm setup is bounded", () => {
     expect(pnpmSetups(text)).toEqual({
       actionSetup: [],
       setups: [{ job: "a", bounded: true }],
+      pnpmJobs: ["a"],
       lateJobs: [],
     });
   });
@@ -2524,6 +2512,20 @@ describe("every pnpm setup is bounded", () => {
       "      - name: Set up pnpm\n        run: bash scripts/ci-setup-pnpm.sh\n",
     );
     expect(pnpmSetups(text).setups).toEqual([{ job: "a", bounded: false }]);
+  });
+
+  it.each([
+    [
+      "a block, with no time limit",
+      "|\n          echo setting up\n          bash scripts/ci-setup-pnpm.sh",
+      false,
+    ],
+    ["a quoted line, with no time limit", '"bash scripts/ci-setup-pnpm.sh"', false],
+    ["a block, with a time limit", "|\n          bash scripts/ci-setup-pnpm.sh", true],
+  ])("reads a setup run from %s", (_shape, run, limited) => {
+    const limit = limited ? "        timeout-minutes: 5\n" : "";
+    const text = workflow(`      - name: Set up pnpm\n${limit}        run: ${run}\n`);
+    expect(pnpmSetups(text).setups).toEqual([{ job: "a", bounded: limited }]);
   });
 
   it("does not count a job's time limit as the step's", () => {
@@ -2570,6 +2572,10 @@ describe("every pnpm setup is bounded", () => {
   });
 
   it("sets pnpm up before each job's first pnpm command", () => {
+    expect(
+      found.find(({ name }) => name === "ci.yml").pnpmJobs.length,
+      "expected ci.yml's jobs that run pnpm to still be read",
+    ).toBeGreaterThan(0);
     expect(found.flatMap(({ name, lateJobs }) => lateJobs.map((job) => `${name}: ${job}`))).toEqual(
       [],
     );
