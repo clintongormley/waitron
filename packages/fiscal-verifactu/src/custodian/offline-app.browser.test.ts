@@ -414,3 +414,45 @@ for (const theme of ["light", "dark"] as const)
     expect(store).not.toHaveBeenCalled();
     await click("Close and clear");
   });
+
+it.each(["required", "invalid", "refused", "unsupported"] as const)(
+  "translates an existing %s error when the offline language changes",
+  async (kind) => {
+    const el = await mount();
+    await userEvent.click(page.getByRole("button", { name: "New kit", exact: true }));
+    await upload(el, "host-request", kind === "refused" ? {} : await custodyRequest());
+    await userEvent.click(page.getByRole("button", { name: "Load setup request", exact: true }));
+    if (kind !== "refused") {
+      await userEvent.click(
+        page.getByRole("button", { name: "No — create the first kit", exact: true }),
+      );
+      if (kind !== "required") await fill(el, "custodian", kind === "invalid" ? " " : "Elena");
+      if (kind === "unsupported")
+        vi.spyOn(crypto.subtle, "generateKey").mockRejectedValue(new Error("unsupported"));
+      await userEvent.click(page.getByRole("button", { name: "Create key", exact: true }));
+    }
+    const actions = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
+    await expect.poll(() => actions().error).not.toBe("");
+    await userEvent.click(page.getByRole("button", { name: "ES", exact: true }));
+    const expected =
+      kind === "refused"
+        ? "Revisa la entrada seleccionada y el original vigente. No se confirmó nada."
+        : kind === "unsupported"
+          ? "Criptografía no disponible. Usa la herramienta guardada en un navegador local compatible."
+          : "Corrige los campos marcados.";
+    expect(actions().error).toBe(expected);
+    if (kind === "required" || kind === "invalid") {
+      const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        'wt-input[name="custodian"]',
+      )!;
+      expect(field.error).toBe(kind === "required" ? "Completa este campo." : "Revisa este campo.");
+      await fill(el, "custodian", "Elena");
+      expect(field.error).toBe("");
+      expect(actions().error).toBe("");
+      await expect
+        .element(page.getByRole("button", { name: "Crear clave", exact: true }))
+        .toBeEnabled();
+    }
+  },
+);
