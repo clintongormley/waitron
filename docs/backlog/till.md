@@ -1473,29 +1473,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
 
-## The party Name window stays open, and saves to the new party, when the order screen switches party under it
-
-A714, found by A713's review (2026-10-15). The order screen's party can change while a window is
-open: `#rememberOrderParty` (`apps/till/src/till-app.ts`) takes the party of the active table from
-each floor read, so when another till joins this table into its party, the same order screen is
-pointed at that party. A713 found the Guests window then saved its count to the other party, and
-Split a table split a table off it; both now close when the screen's party id changes
-(`willUpdate`, `apps/till/src/screens/till-table-order-screen.ts`).
-
-The Name window has the same shape and was left alone: `naming` is not cleared on a party change, so
-the window stays open, and on confirm the app's `#onNameParty` sends the name to `this.orderParty`,
-which is by then the other party. This comes from reading the code, plus the reviewer's real-Chromium
-probe of the Guests window; the Name window itself was not probed.
-
-The Name window also keeps comparing against the name stored when it opened when the name is changed on
-another till while it is open, the defect A713 fixed for the Guests window (found by reading, not
-probed).
-
-**Next action:** close the Name window when the screen's party id changes, in the same `willUpdate`
-check A713 added, with a test that switches the party while the window is open and sees nothing sent.
-
 ## Decisions and deliberate limits
 
+- **A guest count typed in the Guests or Split a table window replaces a count another till saved
+  while the window was open, once this till has received that change: the last count saved wins,
+  with no warning (A715, owner 2026-10-15).** Asked whether such a save should be refused so the
+  waiter sees the other count first, the owner answered "(a) keep it — the last count saved wins".
 - **Guests: the waiter changes the count at any time, joined tables add their counts, and only Split
   a table asks again (A713, owner 2026-10-15).** Owner's words: "add joined counts. the waiter should
   always be able to update the number of people sitting at a table. when they split, the waiter

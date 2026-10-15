@@ -4680,6 +4680,36 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
     });
 
+    it("closes the name dialog, sending nothing, when the screen switches to another party", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const named = heard(el, "name-party");
+      await toMenu(el);
+      click(el, '[data-action="name"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).not.toBeNull();
+
+      el.party = { ...floor.party, id: "v8", revision: 1, tableIds: ["t4", "t5", "t7"] };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+      expect(named).toEqual([]);
+    });
+
+    it("keeps the name dialog open when only the same party's name changes", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      await toMenu(el);
+      click(el, '[data-action="name"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-party-name-dialog");
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, name: "Ana B" };
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBe(dialog);
+    });
+
     it("offers Guests right after Name the party whenever a party is open", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
