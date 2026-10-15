@@ -2832,6 +2832,25 @@ describe("TillApi", () => {
     );
   });
 
+  it("splitTable sends each side's guest count as the body's guests when given one", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", mainBillId: null }));
+    const api = new TillApi("", fetchStub);
+
+    await api.splitTable("v1", "tbl-4", null, 3, { staying: 3, leaving: null });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/split-table",
+      expect.objectContaining({
+        body: JSON.stringify({
+          tableId: "tbl-4",
+          billId: null,
+          expectedPartyRevision: 3,
+          guests: { staying: 3, leaving: null },
+        }),
+      }),
+    );
+  });
+
   it("setPartyName PUTs the name, or null to clear it, and the revision to the party's /name route", async () => {
     const fetchStub = vi.fn(async () => jsonResponse({ revision: 4, name: "Ana" }));
     const api = new TillApi("", fetchStub);

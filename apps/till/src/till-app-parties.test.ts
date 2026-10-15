@@ -2029,6 +2029,39 @@ describe("till-app: table actions on the party", () => {
     expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4);
   });
 
+  it("passes the guests the waiter gave each side of a split to the split", async () => {
+    const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const afterSplit = [
+      seated({}, { revision: 4, tableIds: ["t4"], guestCount: 3 }),
+      seated(
+        { id: "t5", label: "5" },
+        { id: "v-split", revision: 0, tableIds: ["t5"], guestCount: 2 },
+      ),
+      mesa7,
+      mesa9,
+    ];
+    const reads = floorThat([atTwo, mesa5, mesa7, mesa9], afterSplit);
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      splitTable: vi.fn(async () => {
+        reads.other.acted = true;
+        return { partyId: "v-split", mainBillId: null };
+      }),
+    });
+    const order = await openMesa(el, "t4");
+
+    emit(order, "split-table", {
+      tableId: "t5",
+      billId: null,
+      guests: { staying: 3, leaving: 2 },
+    });
+    await flush(el);
+
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, { staying: 3, leaving: 2 });
+    expect(tableOrder(el)!.party?.guestCount).toBe(3);
+  });
+
   it("opens the party's main bill once the bill on screen has gone with the table split off", async () => {
     const atTwo = seated({}, { tableIds: ["t4", "t5"] });
     const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });

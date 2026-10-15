@@ -189,7 +189,11 @@ import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import { otherPartyRead, shownTableNames } from "./widgets/table-targets.js";
-import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
+import type {
+  BillPayDetail,
+  MoveBillDetail,
+  SplitTableDetail,
+} from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
@@ -8840,14 +8844,15 @@ export class TillApp extends LitElement {
    * by the time they answer.
    */
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId } = (event as CustomEvent<{ tableId: string; billId: string | null }>)
-      .detail;
+    const { tableId, billId, guests } = (event as CustomEvent<SplitTableDetail>).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
     this.errorKey = undefined;
     try {
-      await this.api.splitTable(party.id, tableId, billId, party.revision);
+      await (guests === undefined
+        ? this.api.splitTable(party.id, tableId, billId, party.revision)
+        : this.api.splitTable(party.id, tableId, billId, party.revision, guests));
     } catch (error) {
       await this.#onTableRefusal(error);
       return;

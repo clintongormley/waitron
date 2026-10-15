@@ -83,6 +83,7 @@ import "../widgets/table-status.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
+import type { SplitGuestsDetail } from "../widgets/split-guests-dialog.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
   BillBalance,
@@ -234,6 +235,13 @@ interface ActionDraft {
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
   bills: BillChoiceDetail["bills"];
+}
+
+/** Split a table's choice: the table leaving, the bill it takes or null, and each side's guests. */
+export interface SplitTableDetail {
+  tableId: string;
+  billId: string | null;
+  guests?: SplitGuestsDetail;
 }
 
 /** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
