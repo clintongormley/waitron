@@ -160,7 +160,7 @@ type NavItem = ScreenRule & { labelKey: StringKey };
 type NavGroup = {
   id: NavGroupId;
   headerKey?: StringKey;
-  icon?: string;
+  icon: string;
   items: NavItem[];
   itemsAfterModules?: NavItem[];
 };
@@ -173,10 +173,15 @@ const coreItems = (group: NavGroup): NavItem[] => [
 type NavPage = { screen: ScreenId; label: string };
 
 const NAV_GROUPS: NavGroup[] = [
-  { id: "overview", items: [{ screen: "overview", labelKey: "nav.overview" }] },
+  {
+    id: "overview",
+    icon: "section-overview",
+    items: [{ screen: "overview", labelKey: "nav.overview" }],
+  },
   {
     id: "reports",
     headerKey: "nav.group.reports",
+    icon: "section-reports",
     items: [
       { screen: "sales", labelKey: "nav.sales" },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
@@ -186,11 +191,13 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "service",
     headerKey: "nav.group.service",
+    icon: "section-service",
     items: [],
   },
   {
     id: "menu",
     headerKey: "nav.group.menu",
+    icon: "section-menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
@@ -206,12 +213,14 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "operations",
     headerKey: "nav.group.operations",
+    icon: "section-operations",
     items: [],
     itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
     id: "team",
     headerKey: "nav.group.team",
+    icon: "section-team",
     items: [
       { screen: "staff", labelKey: "nav.staff" },
       { screen: "roster", labelKey: "nav.roster" },
@@ -222,6 +231,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "purchasing",
     headerKey: "nav.group.purchasing",
+    icon: "section-purchasing",
     items: [{ screen: "purchases", labelKey: "nav.purchases" }],
   },
   {
@@ -1915,7 +1925,7 @@ export class DashboardApp extends LitElement {
                 ? nothing
                 : searching
                   ? html`<div class="nav-group" data-test="nav-group-${group.id}">
-                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <wt-icon class="group-icon" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <span class="chevron-space"></span>
                     </div>`
@@ -1928,7 +1938,7 @@ export class DashboardApp extends LitElement {
                       @click=${(e: MouseEvent) =>
                         this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                     >
-                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <wt-icon class="group-icon" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
                     </button>`

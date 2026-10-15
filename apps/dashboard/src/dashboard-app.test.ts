@@ -3209,7 +3209,7 @@ describe("dashboard-app", () => {
     expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
   });
 
-  it("shows the gear icon on the Settings group header, and no other group header", async () => {
+  it("shows the gear icon on the Settings group header and the team icon on the Team header", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3218,7 +3218,10 @@ describe("dashboard-app", () => {
     expect(settingsHeader.textContent).toContain(t("nav.group.configuration"));
     expect(settingsHeader.querySelector('wt-icon[name="gear"]')).not.toBeNull();
     const teamHeader = el.shadowRoot!.querySelector('[data-test="nav-group-team"]')!;
-    expect(teamHeader.querySelectorAll("wt-icon")).toHaveLength(1); // only the chevron, no gear
+    expect([...teamHeader.querySelectorAll("wt-icon")].map((i) => i.getAttribute("name"))).toEqual([
+      "section-team",
+      "chevron-down",
+    ]);
   });
   it("shows the hamburger icon on the drawer toggle, not the kebab", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
