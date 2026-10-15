@@ -1707,7 +1707,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **At 390 px a long name in a month cell breaks mid-word ("Christ|mas")**: the dashboard page
   declares no language, so the browser cannot hyphenate — left open by A506-7, #1623. Seen again in
   A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
-  (`overflow-wrap: anywhere` and the four-line clamp on `.name`, `opening-hours-month.ts:206-208`).
+  (`overflow-wrap: anywhere` and the four-line clamp on `.name` in `opening-hours-month.ts`).
 
 - **Season colours differ between Opening hours' Year and its month (and the Times tab)**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the

@@ -44,6 +44,7 @@ and Month views…" in `docs/backlog/service-periods.md`, plus the A719, A721, A
 sections beside it (they build on this one) and A724 point 3 in `docs/backlog/workforce.md` (the
 same as A720 point 7). Mockups: `docs/backlog/mockups/a718-a727-calendar-and-stations/01-year-view.png`,
 `03-month-view.png` and, for Part 5, `10-staffing-month.png`; read that folder's `README.md`.
+Line numbers are against `main` at `3b1a13010`, before Part 1; Parts 2–5 find each place by the function or selector named beside it.
 Look at the three pictures before starting any task. The owner reviewed every item and its mockups;
 there are no open owner questions. Where this plan departs from a drawing, it says so and why
 ("Decisions" below).
@@ -1410,7 +1411,7 @@ habitual de {season}". Deleted: `staffing.month.seasons`, `staffing.month.season
 
 ## Seams left for later items
 
-- **A721 (Seasons…):** the Year view's season row (`season-chips` at `opening-hours-year.ts:582-588`
+- **A721 (Seasons…):** the Year view's season row (`season-chips` at `opening-hours-year.ts:527-533`
   after Part 1). A721 adds "Seasons…" at its end and removes the chips' ✎ and "+ Season" with the
   season dialog (Decision 3).
 - **A719 (Periods…):** beside A721's "Seasons…" on the same row; if A719 lands first it starts the

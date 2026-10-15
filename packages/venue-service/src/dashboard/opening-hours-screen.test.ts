@@ -1327,7 +1327,7 @@ describe("Month view", () => {
     return dialog;
   }
 
-  it("draws the month the address names from that month's read, under the Year tab", async () => {
+  it("draws the month the address names from that month's read, with Month chosen in the switch", async () => {
     const { el, view, data, months } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
     );
@@ -1888,7 +1888,7 @@ describe("the Calendar's module views", () => {
     expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
   });
 
-  it("shows a chosen view in place of the own tabs, in the month holding today's business date", async () => {
+  it("shows a chosen view in place of the Year or the Month, in the month holding today's business date", async () => {
     vi.setSystemTime(new Date("2026-12-15T12:00:00Z"));
     const el = await mountCalendar();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=view-switch]")).not.toBeNull();

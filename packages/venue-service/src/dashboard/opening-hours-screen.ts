@@ -282,7 +282,7 @@ export class OpeningHoursScreen extends LitElement {
   private hoursUrl(params: Readonly<Record<string, string>>) {
     return this.calendarUrl(hoursPath(parseCalendarMonth(params["month"])));
   }
-  /** The switch carries the month the page shows, when it shows one. */
+  /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
     const month = this.moduleView
       ? this.moduleView.params["month"]
