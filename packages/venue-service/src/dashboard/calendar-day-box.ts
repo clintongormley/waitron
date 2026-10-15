@@ -113,6 +113,10 @@ export class CalendarDayBox extends LitElement {
     if (opening) this.headingEl.focus();
   }
 
+  get shown(): boolean {
+    return this.popup?.matches(":popover-open") ?? false;
+  }
+
   hide(): void {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }

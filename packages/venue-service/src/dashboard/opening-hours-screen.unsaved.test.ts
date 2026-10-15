@@ -5,6 +5,7 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import "./opening-hours-screen.js";
 
 class OpeningLeaveApp extends LitElement {
@@ -62,6 +63,8 @@ class OpeningLeaveApp extends LitElement {
         localHolidaysPerYear: 2,
       };
     if (path.endsWith("/special-days")) return [];
+    if (path.includes("/opening-hours/month?"))
+      return monthModel({ month: new URL(path, "http://x").searchParams.get("month")! });
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },

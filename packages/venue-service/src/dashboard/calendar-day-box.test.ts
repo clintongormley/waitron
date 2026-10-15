@@ -150,6 +150,14 @@ describe("calendar-day-box", () => {
     expect(closes).toBe(1);
   });
 
+  it("says whether it is shown, false from the moment it is hidden", () => {
+    expect(box.shown).toBe(false);
+    box.show(anchor);
+    expect(box.shown).toBe(true);
+    box.hide();
+    expect(box.shown).toBe(false);
+  });
+
   it("stays inside a phone's width", async () => {
     await page.viewport(390, 800);
     expect(innerWidth).toBe(390);

@@ -6,7 +6,6 @@ import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-cal
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { CalendarDayOpen } from "./opening-hours-month.js";
-import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
 import "./opening-hours-year.js";
 
@@ -115,9 +114,9 @@ const cell = (el: OpeningHoursYearView, date: LocalDate) =>
 const dayButton = (el: OpeningHoursYearView, date: LocalDate) =>
   cell(el, date).querySelector<HTMLButtonElement>("button")!;
 function actions(el: OpeningHoursYearView) {
-  const sent: SpecialDayAction[] = [];
+  const sent: unknown[] = [];
   el.addEventListener("special-day-action", (event) =>
-    sent.push((event as CustomEvent<SpecialDayAction>).detail),
+    sent.push((event as CustomEvent<unknown>).detail),
   );
   return sent;
 }
