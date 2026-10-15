@@ -2072,11 +2072,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A704 — The till's join should read the target group's tables, as the floor's merge does
-  (2026-10-15; owner decided; not started).** Only the floor's merge passes `targetGroupOf` to
-  `withMovedSlips` (`apps/server/src/moved-slips.ts`); the owner chose on 2026-10-15 that the till's
-  join, when it pushes tables together, does too. Left open by A677.
-
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
   table was released as the counter, a known edge A650 Part 1 deferred and has not yet put to

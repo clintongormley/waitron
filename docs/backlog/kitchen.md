@@ -184,6 +184,13 @@ Owner, 2026-10-14, from screenshots of the Santet venue at desktop width and on 
 
 ## Decisions and deliberate limits
 
+- **The till's Join that pushes tables together reads what was sent from the target group's
+  tables, as the floor plan's merge does (A704, owner 2026-10-15).** A counter order
+  delivered to a table already in the group, whose place becomes the group's name, gets a MOVED
+  slip ("From: Table 9 / To: Fiesta"); so does a party seated at one of those tables, only when
+  its place changes. Both routes hand `withMovedSlips` the two tables and the target's group
+  (`apps/server/src/moved-slips.ts`). The owner turned down keeping the two routes different.
+
 - **The party's name prints on every kitchen ticket, as on MOVED slips (A683, owner 2026-10-14).**
   A named party's tickets read `Order 5 · Ana` / `Pedido 5 · Ana`, so the cook meets the name on
   the first ticket; a merged party's read the name of the party it ended up in, and an unnamed
