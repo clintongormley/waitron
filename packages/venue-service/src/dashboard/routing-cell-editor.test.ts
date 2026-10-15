@@ -293,6 +293,44 @@ it("offers Clear only for a stored cell, and Clear asks the screen to clear it",
   expect(button(inherited, "clear-cell")).toBeNull();
 });
 
+it("puts Clear setting on the left after Cancel, still red, with Save alone on the right", async () => {
+  const el = await mount();
+  const cancel = button(el, "cancel-cell")!;
+  const clear = button(el, "clear-cell")!;
+  const save = button(el, "save-cell")!;
+  expect(clear.variant).toBe("danger");
+  const group = cancel.parentElement!;
+  expect(group.slot).toBe("cancel");
+  expect([...group.children]).toEqual([cancel, clear]);
+  expect(save.slot).toBe("");
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(clear.getBoundingClientRect().left).toBeGreaterThan(cancel.getBoundingClientRect().right);
+  expect(clear.getBoundingClientRect().right).toBeLessThan(save.getBoundingClientRect().left);
+});
+
+it.each(["en", "es"] as const)(
+  "keeps the footer's buttons inside the dialog at a 390 px window, in %s",
+  async (locale) => {
+    setLocale(locale);
+    await page.viewport(390, 800);
+    try {
+      const el = await mount();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const modal = one(el, "wt-modal")!;
+      const dialog = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(dialog.right).toBeLessThanOrEqual(390);
+      for (const test of ["cancel-cell", "clear-cell", "save-cell"]) {
+        const box = button(el, test)!.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+        expect(box.right).toBeLessThanOrEqual(dialog.right);
+      }
+    } finally {
+      await page.viewport(1280, 800);
+    }
+  },
+);
+
 it("gives the default cell no period lines and no Clear, and offers it stations only", async () => {
   const el = await mount(
     { address: { row: { kind: "all" }, zoneId: null }, label: "All categories, Every zone" },
