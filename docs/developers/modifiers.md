@@ -202,8 +202,10 @@ the basket resolved, and decides what is stored:
   malformed pick is `extras.invalid` naming the field.
 - A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
   refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
-  priced dish × pick would carry a weight or a fraction of an extra, not a number of them. An
-  options answer on such a dish is still allowed.
+  priced dish × pick would carry a weight or a fraction of an extra, not a number of them. Its
+  extras lists are treated as not offered, so a list's `minPicks` does not refuse an order of it
+  with no picks (`extrasListsFor`, `apps/server/src/working-order.ts`). An options answer on such
+  a dish is still allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
@@ -334,7 +336,8 @@ Six things it is worth knowing about that payload:
   version no longer offers checks that line's options answer against the dish's own current lists
   (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
   check it against. A required list the picker never drew would refuse the order with
-  `options.label_required` or `extras.limit_exceeded`, and an offered list the server does not know
+  `options.label_required` or `extras.limit_exceeded` — except an extras list on a dish not sold
+  by the unit, which neither the till draws nor the server requires — and an offered list the server does not know
   about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available**, and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field

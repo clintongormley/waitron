@@ -75,7 +75,7 @@ import {
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
 } from "./till-sale.js";
-import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
+import { addTabRound, createOpenOrder, updateHeldOrder, updateOrderLine } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { recordSale } from "@waitron/core";
@@ -2193,6 +2193,152 @@ describe("ordering extras and options — parent + child lines", () => {
         params: { productId: v.burgerId, soldBy: "fraction" },
       });
     }
+  });
+
+  /** Gives the burger a second extras list, "Pan", that needs one pick, and a unit of `precision`
+   * decimal places with no scale. Answers the list's id. */
+  const requireBread = (v: ModifierVenue, unitName: string, precision: number) =>
+    withTransaction(suite.db, async (tx) => {
+      const pan = await createExtraList(
+        tx,
+        {
+          name: "Pan",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 1,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: v.patatasId, maxQuantity: 1, preselected: false, price: "1.00" }],
+        },
+        v.cfg.locale,
+      );
+      await writeProductModifiers(tx, v.burgerId, [
+        { kind: "extras", id: v.extrasListId },
+        { kind: "extras", id: pan.id },
+      ]);
+      const unit = await createUnit(
+        tx,
+        {
+          name: { [v.defaultLanguage]: unitName },
+          abbreviation: { [v.defaultLanguage]: unitName.slice(0, 2) },
+          precision,
+        },
+        v.defaultLanguage,
+      );
+      await assignProductUnit(tx, v.burgerId, unit.id);
+      await republishMenus(tx);
+      return pan.id;
+    });
+
+  /** A party tab on a fresh table holding one round of `line`. */
+  const tabWith = (v: ModifierVenue, line: TillSaleRequest["lines"][number]) =>
+    withTransaction(suite.db, async (tx) => {
+      const tableId = randomUUID();
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        zoneId: v.tablesZoneId,
+        label: `Mesa ${tableId.slice(0, 4)}`,
+      });
+      await tx.insert(floorTodayTables).values({ tableId });
+      const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
+      await addTabRound(tx, v.cfg, tabId, [line]);
+      return tabId;
+    });
+
+  // The till offers no extras list on such a dish, so a list that needs a pick would otherwise make
+  // the dish unsellable.
+  it("sells a dish in a unit with decimal places with no extras picks, whatever its extras lists require", async () => {
+    const v = await setupModifierVenue();
+    const panId = await requireBread(v, "Jarra", 2);
+    const deps = { db: suite.db, backend, clock };
+    const tender = { method: "cash" as const, amount: "50.00" };
+    const burger = v.offerFor(v.burgerId);
+
+    // A new sale, with the extras field absent and empty: 0.5 × 9.00 + 9.00.
+    const sale = await recordTillSale(deps, v.cfg, {
+      zoneId: v.zoneId,
+      lines: [
+        { menuItemId: burger, quantity: "0.5" },
+        { menuItemId: burger, quantity: "1", extras: [] },
+      ],
+      tender,
+    });
+    expect(sale.total).toBe("13.50");
+
+    // A held order, then paid.
+    const heldId = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(tx, v.cfg, heldId, [{ menuItemId: burger, quantity: "0.5" }], null, {
+        zoneId: v.zoneId,
+      }),
+    );
+    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
+      "4.50",
+    );
+
+    // A table round, then a change of the sent line that answers the extras lists with nothing and
+    // raises its quantity: 1.5 × 9.00.
+    const tabId = await tabWith(v, { menuItemId: burger, quantity: "0.5" });
+    await withTransaction(suite.db, async (tx) =>
+      updateOrderLine(
+        tx,
+        v.cfg,
+        tabId,
+        1,
+        { quantity: "1.5", extras: [] },
+        await revisionOf(tabId),
+        "cccccccc-0000-4000-8000-00000000000b",
+      ),
+    );
+    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
+      "13.50",
+    );
+
+    // A pick on the required list is still refused.
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: burger,
+            quantity: "1",
+            extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+          },
+        ],
+        tender,
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.unsupported_product",
+      params: { productId: v.burgerId, soldBy: "fraction" },
+    });
+  });
+
+  it("still refuses an empty answer to a required extras list on a dish in a counted unit", async () => {
+    const v = await setupModifierVenue();
+    const panId = await requireBread(v, "Ración", 0);
+    const deps = { db: suite.db, backend, clock };
+    const burger = v.offerFor(v.burgerId);
+    const refused = { code: "extras.limit_exceeded", params: { extraListId: panId } };
+
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
+        lines: [{ menuItemId: burger, quantity: "1" }],
+        tender: { method: "cash", amount: "50.00" },
+      }),
+    ).rejects.toMatchObject(refused);
+
+    const tabId = await tabWith(v, {
+      menuItemId: burger,
+      quantity: "1",
+      extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+    });
+    await expect(
+      withTransaction(suite.db, async (tx) =>
+        updateOrderLine(tx, v.cfg, tabId, 1, { extras: [] }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject(refused);
   });
 
   // An extra that is Unavailable or Inactive is refused like a pick the list does not offer. Each

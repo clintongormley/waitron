@@ -399,6 +399,23 @@ function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferMod
   return { extras, options, extraProducts };
 }
 
+/** Whole units with no scale: the one kind of dish an extras pick may go on. */
+function soldByTheUnit(unit: { hardwareUnit: string | null; precision: number }): boolean {
+  return unit.hardwareUnit === null && unit.precision === 0;
+}
+
+/** The extras lists a line of a dish in `unit` is checked against. A dish not sold by the unit is
+ * offered none of them, so none may demand a pick; a pick that is sent is refused as
+ * `extras.unsupported_product` once it is priced. */
+function extrasListsFor(
+  lists: ResolvedExtraList[],
+  unit: { hardwareUnit: string | null; precision: number } | undefined,
+): ResolvedExtraList[] {
+  return unit === undefined || soldByTheUnit(unit)
+    ? lists
+    : lists.map((list) => ({ ...list, minPicks: 0 }));
+}
+
 /** Each product's own options lists, in its order, keyed by the lower-cased product id. */
 async function productOptionLists(
   tx: Transaction,
@@ -707,7 +724,8 @@ export async function priceOrderLines(
     const modifiers = modifiersByOffer.get(offer.id)!;
     const built = buildLineExtras(
       {
-        extras: line[FROZEN_EXTRAS] === undefined ? modifiers.extras : [],
+        extras:
+          line[FROZEN_EXTRAS] === undefined ? extrasListsFor(modifiers.extras, selection.unit) : [],
         options: line[FROZEN_OPTIONS] === undefined ? modifiers.options : [],
       },
       modifiers.extraProducts,
@@ -722,10 +740,7 @@ export async function priceOrderLines(
 
     // A child is priced at dish quantity × pick quantity, so on a dish sold by weight or in decimals
     // an extra's quantity would be a weight or a fraction, not a number of extras.
-    if (
-      extraChildren.length > 0 &&
-      (selection.unit.hardwareUnit !== null || selection.unit.precision > 0)
-    ) {
+    if (extraChildren.length > 0 && !soldByTheUnit(selection.unit)) {
       throw new AppError("extras.unsupported_product", {
         productId: offer.productId,
         soldBy: selection.unit.hardwareUnit !== null ? "weight" : "fraction",
@@ -5067,6 +5082,12 @@ async function applyLineEdits(
     }
     return modifiers;
   };
+  /** The unit the live offer sells the line's dish or variant in; none where it no longer sells it. */
+  const liveUnitOf = (line: EditableParent) => {
+    const offer = offerById.get(menuItemOf(line));
+    if (line.parentProductId === null) return offer?.unit;
+    return offer?.variants.find((variant) => variant.id === line.productId)?.unit;
+  };
 
   type Action = "free" | "change" | "raise" | "drop";
   const changes: {
@@ -5141,10 +5162,15 @@ async function applyLineEdits(
             added: [],
             removed: [],
           }
-        : editLineExtras(modifiers.extras, modifiers.extraProducts, intent.extras.set, {
-            children: parent.children,
-            dishQuantity: parent.quantity,
-          });
+        : editLineExtras(
+            extrasListsFor(modifiers.extras, liveUnitOf(parent)),
+            modifiers.extraProducts,
+            intent.extras.set,
+            {
+              children: parent.children,
+              dishQuantity: parent.quantity,
+            },
+          );
     const changed =
       intent.note !== parent.note ||
       (parent.sentAt === null &&
