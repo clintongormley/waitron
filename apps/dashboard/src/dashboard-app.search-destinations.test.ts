@@ -121,19 +121,17 @@ async function mount(
   await page.viewport(options.width ?? 1280, 800);
   history.replaceState(null, "", options.path ?? "/manage/search-library");
   const api = {
-    getMe: vi
-      .fn()
-      .mockResolvedValue({
-        personId: "p1",
-        role: "manager",
-        email: "ada@example.com",
-        locale: options.locale ?? "en-GB",
-        venueLocale: "en-GB",
-        sessionDefault: "en-GB",
-        venueName: "Library test",
-        permissions: options.permissions ?? ["library.read"],
-        modules: options.modules ?? ["search-fixture"],
-      }),
+    getMe: vi.fn().mockResolvedValue({
+      personId: "p1",
+      role: "manager",
+      email: "ada@example.com",
+      locale: options.locale ?? "en-GB",
+      venueLocale: "en-GB",
+      sessionDefault: "en-GB",
+      venueName: "Library test",
+      permissions: options.permissions ?? ["library.read"],
+      modules: options.modules ?? ["search-fixture"],
+    }),
     getGoogleConfig: async () => ({ configured: false }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
