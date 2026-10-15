@@ -74,7 +74,10 @@ export interface ReceiptPreviewResponse {
   >;
 }
 
-/** Where `withField` differs from `without`: the blocks between their common start and end. */
+/**
+ * Where `withField` differs from `without`: the blocks between their common start and end, less
+ * any rule at either end, which belongs to the section a field opens or closes, not to the field.
+ */
 function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[]): BlockRange {
   const same = (a: PrintPreviewBlock | undefined, b: PrintPreviewBlock | undefined) =>
     JSON.stringify(a) === JSON.stringify(b);
@@ -87,7 +90,12 @@ function addedBlocks(without: PrintPreviewBlock[], withField: PrintPreviewBlock[
     same(without.at(-1 - tail), withField.at(-1 - tail))
   )
     tail++;
-  return { start, end: withField.length - tail };
+  let end = withField.length - tail;
+  const rule = (block: PrintPreviewBlock | undefined) =>
+    block?.kind === "image" && /^-+$/u.test(block.text?.trim() ?? "");
+  while (start < end && rule(withField[start])) start++;
+  while (end > start && rule(withField[end - 1])) end--;
+  return { start, end };
 }
 
 /** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */

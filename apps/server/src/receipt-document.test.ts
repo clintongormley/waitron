@@ -36,8 +36,7 @@ describe("format-neutral invoice content", () => {
     const rows = document.elements.flatMap((element) =>
       element.kind === "amount" ? [[element.caption, element.amount]] : [],
     );
-    expect(text).toContain("Charcutería La Buena SL");
-    expect(text).toContain("NIF: B12345678");
+    expect(text[text.indexOf("Charcutería La Buena SL") + 1]).toBe("NIF: B12345678");
     expect(text).toContain(
       "Calle del domicilio fiscal original número 27, edificio de la plaza mayor, segunda planta, Madrid 28001",
     );
@@ -111,8 +110,7 @@ it.each(["thermal", "a4"] as const)(
       const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
       expect(text.includes("Current address")).toBe(surface === "thermal");
       expect(text.includes("Filed domicile")).toBe(domicile !== undefined);
-      expect(text).toContain("Filed issuer");
-      expect(text).toContain("NIF: B12345678");
+      expect(text[text.indexOf("Filed issuer") + 1]).toBe("NIF: B12345678");
       expect(text).not.toContain("Current mutable issuer");
       expect(text).not.toContain("Current mutable domicile");
     }
@@ -253,10 +251,57 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
     expect(first).toMatchObject({ text: "Charcutería La Buena SL", style: { bold: true } });
   });
 
+  /** The kinds of the elements that draw something, alignment changes left out. */
+  const drawn = (input: Parameters<typeof buildReceiptDocument>[0]) =>
+    buildReceiptDocument(input)
+      .elements.filter((e) => e.kind !== "align")
+      .map((e) => (e.kind === "text" ? e.text : e.kind));
+
   it("separates every section with a rule and leaves no blank-line breaks", () => {
     const kinds = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements.map((e) => e.kind);
     expect(kinds).not.toContain("break");
-    expect(kinds.at(-1)).not.toBe("rule");
     expect(kinds.filter((k) => k === "rule").length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("never draws two rules in a row, or a rule first or last, whichever sections are empty", () => {
+    const fixture = FULL_INVOICE_DOCUMENT_FIXTURE;
+    let inputs = 0;
+    for (const simulated of [false, true])
+      for (const footerMessage of [undefined, "Hasta pronto"])
+        for (const qr of ["", fixture.result.qr])
+          for (const tender of [{ method: "unpaid" as const }, fixture.result.tender])
+            for (const lines of [[], fixture.result.lines])
+              for (const vatBreakdown of [[], fixture.result.vatBreakdown]) {
+                const kinds = drawn({
+                  ...fixture,
+                  simulated,
+                  receipt: { ...fixture.receipt, footerMessage },
+                  result: { ...fixture.result, qr, tender, lines, vatBreakdown },
+                });
+                const input = JSON.stringify({
+                  simulated,
+                  footerMessage,
+                  qr: qr !== "",
+                  tender: tender.method,
+                  lines: lines.length,
+                  vat: vatBreakdown.length,
+                });
+                expect(kinds[0], input).not.toBe("rule");
+                expect(kinds.at(-1), input).not.toBe("rule");
+                for (const [at, kind] of kinds.entries())
+                  if (kind === "rule") expect(kinds[at + 1], `${input} at ${at}`).not.toBe("rule");
+                inputs++;
+              }
+    expect(inputs).toBe(64);
+  });
+
+  it("draws one rule, not two, above a practice receipt's closing mark when there is no footer", () => {
+    const kinds = drawn({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      simulated: true,
+      receipt: { ...FULL_INVOICE_DOCUMENT_FIXTURE.receipt, footerMessage: undefined },
+      result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
+    });
+    expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "PRUEBA - SIN COBRO REAL"]);
   });
 });

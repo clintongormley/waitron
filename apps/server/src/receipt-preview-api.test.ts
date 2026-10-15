@@ -330,10 +330,17 @@ describe("POST /management-api/receipt-preview", () => {
     expect(headerSubtitle!.end - headerSubtitle!.start).toBe(2);
     expect(linesOf(result, headerSubtitle!.start, headerSubtitle!.end).join(" ")).toBe(header);
     expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 2)).toEqual([legal(), nif()]);
-    // The footer is the last section, so the rule above it is drawn only when it is.
-    expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual([
+    expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
+    expect(linesOf(result, footerMessage!.start - 1, footerMessage!.start)).toEqual([RULE]);
+  });
+
+  it("marks only the footer's own line on a practice receipt, not the rule drawn below it", async () => {
+    const result = await rendered({ footerMessage: "Hasta pronto" }, { practiceMode: true });
+    const { footerMessage } = result.marks;
+    expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
+    expect(linesOf(result, footerMessage!.end, footerMessage!.end + 2)).toEqual([
       RULE,
-      "Hasta pronto",
+      "PRUEBA - SIN COBRO REAL",
     ]);
   });
 

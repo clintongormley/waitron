@@ -123,14 +123,9 @@ export function buildReceiptDocument({
   ): void => {
     elements.push({ kind: "amount", caption, amount, indent, ...(style ? { style } : {}) });
   };
-  const lastDrawn = (): number => {
-    let at = elements.length - 1;
-    while (at >= 0 && elements[at]!.kind === "align") at--;
-    return at;
-  };
   // Ends a section; a section that drew nothing adds no second rule.
   const rule = (): void => {
-    if (elements[lastDrawn()]?.kind !== "rule") elements.push({ kind: "rule" });
+    if (elements.at(-1)?.kind !== "rule") elements.push({ kind: "rule" });
   };
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
@@ -325,8 +320,7 @@ export function buildReceiptDocument({
     rule();
     text(label.practice);
   }
-  const last = lastDrawn();
-  if (elements[last]?.kind === "rule") elements.splice(last, 1);
+  if (elements.at(-1)?.kind === "rule") elements.pop();
 
   return { elements, duplicate, practice: simulated };
 }
