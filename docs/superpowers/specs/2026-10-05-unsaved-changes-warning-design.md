@@ -10,6 +10,8 @@ A form is dirty when the values you would submit differ from the values captured
 
 Capture a detached baseline once per editor identity. A background read must not overwrite that baseline or the current draft. After a write succeeds, commit the submitted snapshot immediately, before a subsequent refresh. If the user edited again while the write ran, compare that newer draft with the committed snapshot. A failed write stays dirty. Independently saved rows and receipt settings parts commit independently; a partial failure cannot clear another part's changes.
 
+> **2026-10-15, A713 and A717:** the till's Guests, Split a table and party name windows deliberately follow a value stored on another till while they are open: the baseline moves to it, and an untouched field moves with it.
+
 Read-only views, unchanged or reverted forms, successful saves and existing automatic saves are exempt. Search, report and preview controls that do not author a staged write are exempt. Explicitly submitted credential and payment-input forms receive the same protection before submission, but W69 never adds a confirmation to the submission itself. Acknowledgements in safety confirmations remain those confirmations, without another discard question.
 
 ## One shared mechanism, with owners supplying the meaning

@@ -232,7 +232,7 @@ it("a refused submitted name starts dirty against the stored party name", async 
   await fill(form, " Ana ");
   expect(unload()).toBe(false);
 });
-it("a stored name changed elsewhere moves an untouched window with it, and leaves a typed one unsaved", async () => {
+it("a stored name changed elsewhere moves an untouched window with it, which then closes without a warning", async () => {
   const { app, form } = await mount();
   app.savedValue = "Luis";
   app.requestUpdate();

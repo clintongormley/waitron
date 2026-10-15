@@ -2096,7 +2096,8 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
-  scope last committed — the opened value, then each saved value — in a field the disconnect does
+  scope last committed — the opened value, then each saved value, or, in the till's party name, Guests and
+  Split a table windows, each value stored on another till while they are open — in a field the disconnect does
   not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
   reopened form starts changed. A form that forgets on disconnect which record it opened re-seeds
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
@@ -2227,6 +2228,9 @@ and nothing guards it across screens:
   the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Reset table window
   (`apps/till/src/widgets/reset-table-dialog.ts`); the floor's Rename window
   (`apps/till/src/widgets/today-name-dialog.ts`).
+  The party name dialog, the Guests window and the Split a table window compare against the stored
+  value, not the opened one, and follow a value stored on another till while they are open
+  (`#followStored`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).

@@ -232,7 +232,7 @@ it("a refused submitted count starts dirty against the stored count", async () =
   await fill(form, " 2 ");
   expect(unload()).toBe(false);
 });
-it("a stored count changed elsewhere moves an untouched window with it, and leaves a typed one unsaved", async () => {
+it("a stored count changed elsewhere moves an untouched window with it, which then closes without a warning", async () => {
   const { app, form } = await mount();
   app.savedValue = "6";
   app.requestUpdate();
