@@ -801,6 +801,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           receipt: held.receiptPrinterId,
           payment_slip: held.paymentSlipPrinterId,
           cash_drawer: held.cashDrawerPrinterId,
+          invoice: held.invoicePrinterId ?? held.invoicePagePrinterId,
         };
         for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
           const printerId = chosen[role];
@@ -860,6 +861,7 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
   "receipt",
   "payment_slip",
   "cash_drawer",
+  "invoice",
   "card_terminal",
 ];
 

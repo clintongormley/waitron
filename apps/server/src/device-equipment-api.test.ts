@@ -6,6 +6,7 @@ import {
   billPayments,
   devices,
   locations,
+  pagePrinters,
   printerHolders,
   printers,
   withTransaction,
@@ -75,6 +76,24 @@ async function seedPrinter(
       hasCashDrawer: opts.hasCashDrawer ?? false,
     })
     .returning({ id: printers.id });
+  return row!.id;
+}
+
+async function seedPagePrinter(name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(pagePrinters)
+    .values({
+      locationId: venue.cfg.locationId,
+      name,
+      host: "10.0.0.8",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 600,
+    })
+    .returning({ id: pagePrinters.id });
   return row!.id;
 }
 
@@ -928,6 +947,7 @@ describe("management: a device's equipment", () => {
       "receipt",
       "payment_slip",
       "cash_drawer",
+      "invoice",
       "card_terminal",
     ]);
     expect(rowA.equipment).toEqual((await equipmentOf(venue.cookie)).map(summary));
@@ -955,6 +975,86 @@ describe("management: a device's equipment", () => {
       expect.objectContaining({ id: r1, busy: true }),
     );
     expect(await listed()).toEqual(before);
+  });
+});
+
+describe("the invoice role, which names a receipt printer or an A4 printer", () => {
+  let office: string;
+
+  beforeEach(async () => {
+    office = await seedPagePrinter("Oficina");
+    await printerLists({ invoicePrinterIds: [office, pp], invoicePrinterDefaultId: office });
+  });
+
+  it("lists the invoice role after the drawer, its choices carrying each printer's kind", async () => {
+    const roles = await equipmentOf(venue.cookie);
+
+    expect(roles.map((role) => role.role)).toEqual([
+      "receipt",
+      "payment_slip",
+      "cash_drawer",
+      "invoice",
+      "card_terminal",
+    ]);
+    const invoice = roleOf(roles, "invoice");
+    expect(invoice).toMatchObject({
+      selection: "default",
+      chosenId: null,
+      resolved: { id: office, name: "Oficina", available: true },
+    });
+    expect(invoice.choices).toEqual([
+      {
+        id: office,
+        name: "Oficina",
+        kind: "a4",
+        portable: false,
+        available: true,
+        busy: false,
+        heldBy: null,
+      },
+      {
+        id: pp,
+        name: "Portátil",
+        kind: "receipt",
+        portable: true,
+        available: true,
+        busy: false,
+        heldBy: null,
+      },
+    ]);
+  });
+
+  it("shows no holder on an invoice choice another device holds, while the receipt role does", async () => {
+    expect((await choose(venue.cookie2, "receipt", { id: pp }, "scan")).status).toBe(200);
+
+    const roles = await equipmentOf(venue.cookie);
+
+    expect(roleOf(roles, "receipt").choices.find((c) => c.id === pp)!.heldBy).toMatchObject({
+      deviceId: b,
+    });
+    expect(roleOf(roles, "invoice").choices.find((c) => c.id === pp)!.heldBy).toBeNull();
+  });
+
+  it.each(["a receipt", "an A4"] as const)("chooses %s printer for invoices", async (kind) => {
+    const id = kind === "an A4" ? office : pp;
+
+    const res = await choose(venue.cookie, "invoice", { id }, "list");
+
+    expect(res.status, JSON.stringify(res.json)).toBe(200);
+    const invoice = roleOf((res.json as { roles: RoleEquipment[] }).roles, "invoice");
+    expect(invoice).toMatchObject({ selection: "item", chosenId: id, resolved: { id } });
+    expect(invoice.chosen).toMatchObject({ id, kind: kind === "an A4" ? "a4" : "receipt" });
+    expect(await printerHolder(pp)).toBeNull();
+  });
+
+  it("refuses an invoice printer the profile does not list, naming the invoice field", async () => {
+    const res = await choose(venue.cookie, "invoice", { id: fp }, "list");
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "device.binding_invalid",
+      params: { field: "invoicePrinterId" },
+    });
   });
 });
 

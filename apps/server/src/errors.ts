@@ -1459,4 +1459,8 @@ declare module "@waitron/shared" {
 
 /** The request field naming each equipment role. */
 export type EquipmentField =
-  "receiptPrinterId" | "paymentSlipPrinterId" | "cashDrawerPrinterId" | "cardReaderId";
+  | "receiptPrinterId"
+  | "paymentSlipPrinterId"
+  | "cashDrawerPrinterId"
+  | "invoicePrinterId"
+  | "cardReaderId";

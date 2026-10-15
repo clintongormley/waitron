@@ -4,6 +4,7 @@ import {
   deviceProfilePrinters,
   devices,
   locations,
+  pagePrinters,
   printerHolders,
   printers,
   withTransaction,
@@ -79,6 +80,32 @@ async function seedPrinter(
     })
     .returning({ id: printers.id });
   return row!.id;
+}
+
+async function seedPagePrinter(locationId: string, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(pagePrinters)
+    .values({
+      locationId,
+      name,
+      host: "10.0.0.9",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+    })
+    .returning({ id: pagePrinters.id });
+  return row!.id;
+}
+
+async function invoiceColumns(deviceId: string) {
+  const [row] = await suite.db
+    .select({ printer: devices.invoicePrinterId, page: devices.invoicePagePrinterId })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
+  return row!;
 }
 
 async function columns(deviceId: string) {
@@ -443,6 +470,7 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(read.printers.get(p1)).toEqual({
       id: p1,
       name: "Handheld",
+      kind: "receipt",
       portable: true,
       active: true,
       holderDeviceId: b,
@@ -982,5 +1010,259 @@ describe("a deleted printer as a device's choice or a portable setting", () => {
     await inTx((tx) => setPrinterPortable(tx, fixed, true));
     expect(await portableOf(fixed)).toBe(true);
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+});
+
+describe("the invoice role, which names a receipt printer or a page printer", () => {
+  let loc: string;
+  let elsewhere: string;
+  let profile: string;
+  let a: string;
+  let b: string;
+  let receiptPrinter: string;
+  let page: string;
+  let carried: string;
+  let awayPage: string;
+  let awayPrinter: string;
+
+  beforeEach(async () => {
+    await seedTenant(suite.db);
+    loc = await seedLocation("Here");
+    elsewhere = await seedLocation("Elsewhere");
+    const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
+    profile = first.profileId;
+    a = first.deviceId;
+    b = (await seedDevice(suite.db, { locationId: loc, label: "Till B", profileId: profile }))
+      .deviceId;
+    receiptPrinter = await seedPrinter(loc, "Bar");
+    page = await seedPagePrinter(loc, "Office");
+    carried = await seedPrinter(loc, "Handheld", { portable: true });
+    awayPage = await seedPagePrinter(elsewhere, "Other office");
+    awayPrinter = await seedPrinter(elsewhere, "Other bar");
+  });
+
+  function listInvoices(ids: string[], defaultId: string | null = null) {
+    return inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        profile,
+        lists({ invoicePrinterIds: ids, invoicePrinterDefaultId: defaultId }),
+      ),
+    );
+  }
+
+  async function setPageActive(id: string, active: boolean): Promise<void> {
+    await suite.db.update(pagePrinters).set({ active }).where(eq(pagePrinters.id, id));
+  }
+
+  it.each(["page", "receipt"] as const)(
+    "resolves the profile's default %s printer on Use default, and the device's choice of the other kind over it",
+    async (defaultKind) => {
+      const [byDefault, chosen] =
+        defaultKind === "page" ? [page, receiptPrinter] : [receiptPrinter, page];
+      await listInvoices([receiptPrinter, page], byDefault);
+      expect(await resolve(a, "invoice")).toBe(byDefault);
+
+      expect(await choose(a, "invoice", { id: chosen })).toEqual({
+        ok: true,
+        previousHolderDeviceId: null,
+      });
+      expect(await resolve(a, "invoice")).toBe(chosen);
+      expect(await resolve(b, "invoice")).toBe(byDefault);
+    },
+  );
+
+  it.each(["page", "receipt"] as const)(
+    "resolves None when the default %s printer is at another location",
+    async (kind) => {
+      const away = kind === "page" ? awayPage : awayPrinter;
+      await listInvoices([away], away);
+      expect(await resolve(a, "invoice")).toBeNull();
+    },
+  );
+
+  it.each(["page", "receipt"] as const)(
+    "a switched-off %s printer choice stays chosen and resolves to it, with no fallback to the default",
+    async (kind) => {
+      const chosen = kind === "page" ? page : receiptPrinter;
+      const other = kind === "page" ? receiptPrinter : page;
+      await listInvoices([receiptPrinter, page], other);
+      await choose(a, "invoice", { id: chosen });
+      if (kind === "page") await setPageActive(page, false);
+      else await setActive(receiptPrinter, false);
+
+      const read = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }));
+      expect(read.roles.get(a)!.find((r) => r.role === "invoice")).toMatchObject({
+        chosenId: chosen,
+        resolvedId: chosen,
+      });
+      expect(read.printers.get(chosen)).toMatchObject({ active: false });
+    },
+  );
+
+  it.each([
+    ["an unlisted page printer", () => page, () => listInvoices([receiptPrinter])],
+    ["a page printer at another location", () => awayPage, () => listInvoices([awayPage])],
+    [
+      "a switched-off page printer",
+      () => page,
+      async () => {
+        await listInvoices([page]);
+        await setPageActive(page, false);
+      },
+    ],
+    [
+      "a receipt printer listed only for receipts",
+      () => receiptPrinter,
+      () =>
+        inTx((tx) =>
+          setProfilePrinterLists(tx, profile, lists({ receiptPrinterIds: [receiptPrinter] })),
+        ),
+    ],
+  ] as const)("refuses %s as not_permitted, changing nothing", async (_, id, arrange) => {
+    await arrange();
+    expect(await choose(a, "invoice", { id: id() })).toEqual({
+      ok: false,
+      refusal: "not_permitted",
+    });
+    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+  });
+
+  it("choosing one kind clears the other kind's column, and Use default clears both", async () => {
+    await listInvoices([receiptPrinter, page]);
+    await choose(a, "invoice", { id: receiptPrinter });
+    expect(await invoiceColumns(a)).toEqual({ printer: receiptPrinter, page: null });
+
+    await choose(a, "invoice", { id: page });
+    expect(await invoiceColumns(a)).toEqual({ printer: null, page });
+
+    await choose(a, "invoice", { id: receiptPrinter });
+    expect(await invoiceColumns(a)).toEqual({ printer: receiptPrinter, page: null });
+
+    await suite.db.update(devices).set({ invoicePagePrinterId: page }).where(eq(devices.id, a));
+    await choose(a, "invoice", "default");
+    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+  });
+
+  it("prefers the receipt printer column when both are set", async () => {
+    await listInvoices([receiptPrinter, page]);
+    await suite.db
+      .update(devices)
+      .set({ invoicePrinterId: receiptPrinter, invoicePagePrinterId: page })
+      .where(eq(devices.id, a));
+    expect(await resolve(a, "invoice")).toBe(receiptPrinter);
+  });
+
+  it.each(["page", "receipt"] as const)(
+    "a list edit that drops the chosen %s printer puts the device back on Use default",
+    async (kind) => {
+      const [chosen, kept] = kind === "page" ? [page, receiptPrinter] : [receiptPrinter, page];
+      await listInvoices([receiptPrinter, page]);
+      await choose(a, "invoice", { id: chosen });
+
+      await listInvoices([kept], kept);
+
+      expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+      expect(await resolve(a, "invoice")).toBe(kept);
+    },
+  );
+
+  it("clearing a device's unlisted choices clears an invoice choice in either column", async () => {
+    await listInvoices([receiptPrinter, page]);
+    await suite.db
+      .update(devices)
+      .set({ invoicePrinterId: awayPrinter, invoicePagePrinterId: awayPage })
+      .where(eq(devices.id, a));
+    await suite.db.update(devices).set({ invoicePagePrinterId: page }).where(eq(devices.id, b));
+
+    await inTx((tx) => clearUnlistedPrinterChoices(tx, a));
+    await inTx((tx) => clearUnlistedPrinterChoices(tx, b));
+
+    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+    expect(await invoiceColumns(b)).toEqual({ printer: null, page });
+  });
+
+  it("a portable printer another device holds still resolves for invoices, and choosing it takes no hold", async () => {
+    await inTx((tx) =>
+      setProfilePrinterLists(
+        tx,
+        profile,
+        lists({
+          receiptPrinterIds: [carried],
+          receiptPrinterDefaultId: carried,
+          invoicePrinterIds: [carried, page],
+          invoicePrinterDefaultId: carried,
+        }),
+      ),
+    );
+    await choose(b, "receipt", "default");
+    expect(await holders()).toEqual([[carried, b]]);
+
+    expect(await resolve(a, "invoice")).toBe(carried);
+    expect(await choose(a, "invoice", { id: carried }, "list")).toEqual({
+      ok: true,
+      previousHolderDeviceId: null,
+    });
+    expect(await holders()).toEqual([[carried, b]]);
+    expect(await resolve(a, "invoice")).toBe(carried);
+    const roles = await inTx((tx) => readPrinterRoles(tx, a));
+    expect(roles.find((r) => r.role === "invoice")).toEqual({
+      role: "invoice",
+      chosenId: carried,
+      chosenHolderDeviceId: null,
+      defaultId: carried,
+      defaultHolderDeviceId: null,
+      resolvedId: carried,
+    });
+  });
+
+  it("reads the invoice role with each listed printer and its kind", async () => {
+    await listInvoices([page, receiptPrinter, awayPage], page);
+
+    const read = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }));
+
+    expect(read.roles.get(a)!.map((r) => r.role)).toEqual([
+      "receipt",
+      "payment_slip",
+      "cash_drawer",
+      "invoice",
+    ]);
+    expect(read.listed).toEqual([
+      {
+        profileId: profile,
+        role: "invoice",
+        id: page,
+        locationId: loc,
+        active: true,
+        isDefault: true,
+      },
+      {
+        profileId: profile,
+        role: "invoice",
+        id: receiptPrinter,
+        locationId: loc,
+        active: true,
+        isDefault: false,
+      },
+      {
+        profileId: profile,
+        role: "invoice",
+        id: awayPage,
+        locationId: elsewhere,
+        active: true,
+        isDefault: false,
+      },
+    ]);
+    expect(read.printers.get(page)).toEqual({
+      id: page,
+      name: "Office",
+      kind: "a4",
+      portable: false,
+      active: true,
+      holderDeviceId: null,
+    });
+    expect(read.printers.get(receiptPrinter)).toMatchObject({ kind: "receipt" });
+    const unlisted = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: false }));
+    expect([...unlisted.printers.keys()]).toEqual([page]);
   });
 });

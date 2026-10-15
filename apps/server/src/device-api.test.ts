@@ -3062,6 +3062,7 @@ describe("a device's current printers", () => {
       payment_slip: t.portable,
       card_terminal: null,
       cash_drawer: null,
+      invoice: null,
     });
   });
 

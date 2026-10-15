@@ -73,11 +73,13 @@ export async function insertDevice(
   }
 }
 
-/** The receipt, slip and drawer printers a device row has chosen; `null` is Use default. */
+/** The printers a device row has chosen for each role; `null` is Use default. */
 interface DevicePrinters {
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
   cashDrawerPrinterId: string | null;
+  invoicePrinterId: string | null;
+  invoicePagePrinterId: string | null;
 }
 
 /**
@@ -121,6 +123,8 @@ export async function updateDeviceSettings(
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
       cashDrawerPrinterId: devices.cashDrawerPrinterId,
+      invoicePrinterId: devices.invoicePrinterId,
+      invoicePagePrinterId: devices.invoicePagePrinterId,
     })
     .from(devices)
     .where(eq(devices.id, device.id));

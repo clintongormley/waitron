@@ -616,6 +616,7 @@ describe("readDeviceEquipment", () => {
       { role: "receipt", choices: [counter, here] },
       { role: "payment_slip", choices: [] },
       { role: "cash_drawer", choices: [here] },
+      { role: "invoice", choices: [] },
       { role: "card_terminal", choices: [] },
     ]);
   });
@@ -634,7 +635,7 @@ describe("readDeviceEquipment", () => {
     const a = await enrol(venue, "Caja A", profile);
 
     const { roles } = await inTx((tx) => readDeviceEquipment(tx, a));
-    const terminal = roles[3]!;
+    const terminal = roles[4]!;
 
     expect(terminal.resolved).toEqual({
       id: sumup,
@@ -682,7 +683,7 @@ describe("readDeviceEquipment", () => {
     const both = await readsOf((tx) => readDevicesEquipment(tx, [a, b]));
 
     expect(one.value.roles[0]!.default!.heldBy).toMatchObject({ deviceId: b, personName: "Lucía" });
-    expect(both.value.get(b)![3]!.resolved).toMatchObject({ id: reader });
+    expect(both.value.get(b)![4]!.resolved).toMatchObject({ id: reader });
     // Devices, the profiles' printers, the printers with their holders; the device's reader
     // choices, the profiles' readers, the readers with their holders; then, for the device's own
     // read only, payments in progress and the holding devices' names and who is signed in on them.
@@ -714,6 +715,7 @@ describe("readDeviceEquipment", () => {
       "receipt",
       "payment_slip",
       "cash_drawer",
+      "invoice",
       "card_terminal",
     ]);
     expect(seen.roles[0]).toEqual({
@@ -725,6 +727,7 @@ describe("readDeviceEquipment", () => {
       default: {
         id: handheld,
         name: "Handheld",
+        kind: "receipt",
         portable: true,
         available: true,
         busy: false,
@@ -734,6 +737,7 @@ describe("readDeviceEquipment", () => {
         {
           id: handheld,
           name: "Handheld",
+          kind: "receipt",
           portable: true,
           available: true,
           busy: false,
@@ -757,7 +761,7 @@ describe("readDeviceEquipment", () => {
         { id: drawer, name: "Cajón", portable: false, available: true, busy: false, heldBy: null },
       ],
     });
-    expect(seen.roles[3]).toMatchObject({
+    expect(seen.roles[4]).toMatchObject({
       role: "card_terminal",
       selection: "default",
       resolved: null,
@@ -773,7 +777,7 @@ describe("readDeviceEquipment", () => {
       resolved: { id: handheld, name: "Handheld", available: true },
       default: { id: handheld, heldBy: null },
     });
-    expect(own.roles[3]).toMatchObject({
+    expect(own.roles[4]).toMatchObject({
       resolved: { id: reader, name: "Lector", available: true },
       default: { id: reader, heldBy: null, busy: false },
     });

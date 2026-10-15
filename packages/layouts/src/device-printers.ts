@@ -7,11 +7,11 @@ import { refuseDeletedPrinters, settleProfilePrinterDevices } from "./device-equ
 
 export type PrinterRole = "receipt" | "payment_slip";
 
-/** Every role a profile lists printers for; a cash drawer is never chosen through `PrinterRole`. */
-export type ProfilePrinterRole = PrinterRole | "cash_drawer";
-
-/** Every role a profile keeps a list for; only the invoice list may name a page printer. */
-export type ProfileListRole = ProfilePrinterRole | "invoice";
+/**
+ * Every role a profile lists printers for; a cash drawer is never chosen through `PrinterRole`, and
+ * only the invoice list may name a page printer.
+ */
+export type ProfilePrinterRole = PrinterRole | "cash_drawer" | "invoice";
 
 /** Each role's list in display order and its default, which is on that list or `null` for none. */
 export type ProfilePrinterLists = {
@@ -31,11 +31,11 @@ const LIST_KEYS = {
   cash_drawer: { ids: "cashDrawerPrinterIds", defaultId: "cashDrawerPrinterDefaultId" },
   invoice: { ids: "invoicePrinterIds", defaultId: "invoicePrinterDefaultId" },
 } as const satisfies Record<
-  ProfileListRole,
+  ProfilePrinterRole,
   { ids: keyof ProfilePrinterLists; defaultId: keyof ProfilePrinterLists }
 >;
 
-const PROFILE_PRINTER_ROLES = Object.keys(LIST_KEYS) as ProfileListRole[];
+const PROFILE_PRINTER_ROLES = Object.keys(LIST_KEYS) as ProfilePrinterRole[];
 
 export function emptyPrinterLists(): ProfilePrinterLists {
   return {
@@ -58,7 +58,7 @@ export function foldPrinterLists(
   rows: {
     printerId: string | null;
     pagePrinterId: string | null;
-    role: ProfileListRole;
+    role: ProfilePrinterRole;
     isDefault: boolean;
   }[],
 ): ProfilePrinterLists {
