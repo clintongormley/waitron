@@ -543,3 +543,21 @@ it("another worker's actual target, question and proposal confer no own authorit
   expect(value.pending.items).toEqual([]);
   expect(value.record.entries.every((e) => e.entry.personId === venue.personId)).toBe(true);
 });
+
+it("refuses an unknown manager workplace with the same domain refusal as queue and day", async () => {
+  const locationId = crypto.randomUUID();
+  for (const route of [
+    `hours?locationId=${locationId}&kind=pay-period`,
+    `queue?locationId=${locationId}`,
+    `day?locationId=${locationId}&personId=${venue.personId}&date=2026-01-05`,
+  ]) {
+    const response = await ask("/management-api/attendance/" + route, undefined, ownerCookie);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "attendance.invalid", params: { reason: "record_scope_or_period" } },
+    });
+  }
+  expect(
+    (await ask("/management-api/attendance/" + path("pay-period"), undefined, ownerCookie)).status,
+  ).toBe(200);
+});

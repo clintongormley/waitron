@@ -2929,6 +2929,8 @@ export class TillApp extends LitElement {
           this.#clockNeedsInitialRead = false;
           this.clockPage = snapshot.state.state === "out" && snapshot.state.firstClockIn;
         }
+        if (this.drill?.kind === "hours" && !snapshot.reading && snapshot.state !== null)
+          this.#startHours();
       },
       (action, state) => {
         if (current()) this.#settleClockAction(action, state);
@@ -3032,6 +3034,11 @@ export class TillApp extends LitElement {
 
   #startHours(): void {
     if (this.#hours || this.drill?.kind !== "hours" || !this.#allowsDestination("hours")) return;
+    const locationId = this.clockSnapshot.state?.locationId;
+    if (!locationId) {
+      if (!this.clockSnapshot.reading) void this.#clocking?.refresh();
+      return;
+    }
     const api = this.api,
       session = this.#operatorSession,
       signIn = this.#signIns;
@@ -3066,8 +3073,7 @@ export class TillApp extends LitElement {
       }
     });
     this.#hours = controller;
-    const locationId = this.clockSnapshot.state?.locationId;
-    if (locationId) void controller.start(this.operatorPersonId, locationId, { kind: "week" });
+    void controller.start(this.operatorPersonId, locationId, { kind: "week" });
     void this.#attendance?.refresh();
   }
 
@@ -10608,7 +10614,8 @@ export class TillApp extends LitElement {
           }}
           @hours-refresh=${(event: Event) => {
             event.stopPropagation();
-            void this.#hours?.refresh();
+            if (this.#hours) void this.#hours.refresh();
+            else this.#startHours();
             void this.#attendance?.refresh();
           }}
           @hours-day=${(event: CustomEvent<{ date: string; locationId: string }>) => {

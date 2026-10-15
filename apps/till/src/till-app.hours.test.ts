@@ -225,3 +225,47 @@ it("a known absent response can be retried from Hours with the same command iden
   );
   expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).toBeNull();
 });
+
+it("Hours recovers a missing initial clock location before starting its own read", async () => {
+  const f = await clockApp({ state: clockState("working", "in") });
+  f.api.getClockState.mockRejectedValueOnce(new TypeError("initial clock offline"));
+  await signIn(f.el);
+  await vi.waitFor(() =>
+    expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).not.toBeNull(),
+  );
+  const questions = f.el.shadowRoot!.querySelector("till-attendance-questions")!;
+  await questions.updateComplete;
+  await userEvent.click(questions.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await working(f.el);
+  await open(f.el);
+  await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
+  expect(f.api.getClockState).toHaveBeenCalledTimes(2);
+  expect(f.api.getHours).toHaveBeenCalledWith(
+    "venue",
+    { kind: "week" },
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(f.api.clockIn).not.toHaveBeenCalled();
+});
+
+it("Refresh retries the missing clock location after its opening recovery also failed", async () => {
+  const f = await clockApp({ state: clockState("working", "in") });
+  f.api.getClockState
+    .mockRejectedValueOnce(new TypeError("offline"))
+    .mockRejectedValueOnce(new TypeError("still offline"));
+  await signIn(f.el);
+  await vi.waitFor(() =>
+    expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).not.toBeNull(),
+  );
+  const questions = f.el.shadowRoot!.querySelector("till-attendance-questions")!;
+  await questions.updateComplete;
+  await userEvent.click(questions.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await working(f.el);
+  await open(f.el);
+  await vi.waitFor(() => expect(f.api.getClockState).toHaveBeenCalledTimes(2));
+  expect(screen(f.el)!.error).not.toBe("");
+  expect(f.api.getHours).not.toHaveBeenCalled();
+  await userEvent.click(screen(f.el)!.shadowRoot!.querySelector<HTMLElement>("[data-refresh]")!);
+  await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
+  expect(f.api.getClockState).toHaveBeenCalledTimes(3);
+});

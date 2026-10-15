@@ -169,6 +169,13 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "manager");
+          const [location] = await tx
+            .select({ id: locations.id })
+            .from(locations)
+            .where(eq(locations.id, scope.locationId))
+            .limit(1);
+          if (!location)
+            throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
           const now = deps.now();
           const clock = await readLocationClock(tx, scope.locationId);
           return readManagerHours(tx, { ...scope, clock, now });

@@ -4622,6 +4622,15 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   Hours tab and manager Hours are built, alongside clocking, end-of-day checks and corrections.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
+- **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
+  January closes makes 1 February resolve to 26 January–2 February, which closure refuses
+  for overlap. Decide the transition before exposing cadence editing.
+  [Receipt and next step](backlog/workforce.md#pay-period-changes-after-closure).
+
+- **Manager Hours needs a live-removal draft check.** Deleting the guard that keeps the
+  selected person while a proposal is open leaves both Hours suites green. Add a controlled
+  summary-removal case that checks the retained subject and blocked draft.
+
 - **Workforce period reads still load complete history.** Narrow them without losing late or
   cross-period corrections; retain the new latest-instant and person-scoped reads. A10-1’s
   four-year synthetic measurement and the remaining query paths are in
