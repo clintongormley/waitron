@@ -396,3 +396,15 @@ it("an unchanged disabled host click leaves a pristine form unsubmitted", async 
   expect((field(el, "attendanceReason") as HTMLElement & { error: string }).error).toBe("");
   expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
 });
+
+it("uses request wording for workers while retaining disagreement and default proposal headings", async () => {
+  const { el } = await mount({ purpose: "request" });
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Request a time change");
+  el.reasonOnly = true;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Disagree with this change");
+  el.reasonOnly = false;
+  el.purpose = "propose";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Propose a time change");
+});
