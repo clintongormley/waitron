@@ -192,7 +192,13 @@ export class StaffingMonthView extends LitElement {
       td[data-closed] .special {
         color: inherit;
       }
+      .unfilled {
+        flex-basis: 100%;
+        font-size: var(--wt-font-size-xs);
+        overflow-wrap: anywhere;
+      }
       .line {
+        flex-wrap: wrap;
         display: flex;
         align-items: center;
         gap: var(--wt-space-1);
@@ -259,6 +265,7 @@ export class StaffingMonthView extends LitElement {
   /** The address's words after `view/staffing`; `area` holds the chosen area's key. */
   @property({ attribute: false }) params: Readonly<Record<string, string>> = {};
   @property({ type: Boolean }) canWrite = false;
+  @property({ type: Boolean }) canOpenRota = false;
   /** Moves the Calendar's address. */
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
 
@@ -491,7 +498,11 @@ export class StaffingMonthView extends LitElement {
     const isToday = day.date === today;
     const shown = day.areas
       .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
-      .map(({ area, needed }) => ({ name: names.get(areaKey(area)) ?? "", needed }));
+      .map(({ area, needed, unfilled }) => ({
+        name: names.get(areaKey(area)) ?? "",
+        needed,
+        unfilled,
+      }));
     const label = [
       cellLabel.format(utc(day.date)),
       day.specialDay?.name ?? "",
@@ -532,6 +543,7 @@ export class StaffingMonthView extends LitElement {
               ${body}
             </div>`
       }
+      ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<wt-button variant="ghost" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</wt-button>` : nothing}
     </td>`;
   }
 
@@ -546,7 +558,7 @@ export class StaffingMonthView extends LitElement {
   #dayBody(
     day: Day,
     isToday: boolean,
-    shown: readonly { name: string; needed: number }[],
+    shown: readonly { name: string; needed: number; unfilled: number | null }[],
     largest: number,
   ) {
     return html`
@@ -567,7 +579,7 @@ export class StaffingMonthView extends LitElement {
           : nothing
       }
       ${shown.map(
-        ({ name, needed }) =>
+        ({ name, needed, unfilled }) =>
           html`<span class="line" data-test="area-line">
             <span
               class="bar"
@@ -578,8 +590,9 @@ export class StaffingMonthView extends LitElement {
             ></span>
             <span class="label"
               ><span class="name" data-test="area-name" title=${name}>${name}</span
-              ><span class="count" data-test="area-count"> ${needed}</span></span
+              ><span class="count" data-test="area-count">${` ${needed}`}</span></span
             >
+            ${unfilled !== null ? html`<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}
           </span>`,
       )}
     `;

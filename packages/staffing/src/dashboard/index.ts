@@ -4,6 +4,7 @@ import { StaffingApi } from "./client.js";
 import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 import "./staffing-month.js";
+import "./rota-view.js";
 import "./staffing-season-painter.js";
 import "./staffing-special-day-painter.js";
 
@@ -33,6 +34,7 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
                 .month=${host.month}
                 .params=${host.params}
                 .canWrite=${host.canWrite}
+                .canOpenRota=${ctx.calendarViews?.some((entry) => entry.view.id === "rota") ?? false}
                 .open=${host.open}
               ></staffing-month
               >${
@@ -59,6 +61,26 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
         };
       },
     },
+    {
+      id: "rota",
+      labelKey: "staffing.rota.tab",
+      order: 20,
+      requiresPermission: "schedule.manage",
+      readPermission: "schedule.manage",
+      create(ctx, host) {
+        const api = new StaffingApi(ctx.request, ctx.liveData);
+        return {
+          render: () =>
+            html`<staffing-rota
+              .api=${api}
+              .week=${validWeek(host.params.week) ? host.params.week! : monday(host.month)}
+              .params=${host.params}
+              .canWrite=${host.canWrite}
+              .open=${host.open}
+            ></staffing-rota>`,
+        };
+      },
+    },
   ],
   create(ctx) {
     const api = new StaffingApi(ctx.request, ctx.liveData);
@@ -71,3 +93,19 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
     };
   },
 };
+
+function monday(month: string): string {
+  const date = new Date(`${month}-01T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+}
+
+function validWeek(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value &&
+    date.getUTCDay() === 1
+  );
+}

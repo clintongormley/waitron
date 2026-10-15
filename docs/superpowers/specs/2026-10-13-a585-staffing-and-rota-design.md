@@ -7,6 +7,11 @@ Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review 
 > [part 5 plan](../plans/2026-10-13-a585-staffing-and-rota.md#part-a585-5--workforce-what-staff-see-copying-a-week-describing-shifts-warnings)
 > records its interfaces. The Rota views and retirement in parts 6–8 remain open.
 
+> 2026-10-15 implementation pointer: part 6 adds the area rota, slot filling and picker, and the
+> month's unfilled counts. Parts 7–8 still provide editing, the person view, labour warnings,
+> publishing, changing a week and retiring the old screen. The day-length question A644 remains
+> open; part 6 keeps the existing slot limit.
+
 ## Why
 
 Opening hours say when each department serves customers: the Restaurant's Lunch, say, 13:00–16:00.

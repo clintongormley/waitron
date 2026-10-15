@@ -3754,6 +3754,25 @@ sits above its label. The staffing painters have their own addresses:
 `…/painter/special-day/special-day/<id>`; the month opens them with its own month, and with the
 area in its own address. Each opens over the month, and closing it returns to the month and
 area in its address.
+
+The Rota view (`packages/staffing/src/dashboard/rota-view.ts`) opens for `schedule.manage` at
+`/view/rota/week/<monday>[/area/<area>]`. It starts with the week holding the Calendar month's first
+day when the address supplies no valid Monday. The area's staff roles form the rows; slots show
+filled, partly uncovered, unfilled and outside-staff-role states, with unmatched assigned shifts
+marked as not needed. Unassigned shifts and shifts whose area is inactive sit under Not in a slot.
+A version's shifts outside its business week remain visible on the first or last day with the
+adjacent-week label. The people panel shows planned hours across all areas against contracted hours.
+With 1280 px available to the view, the seven days fit beside the panel; at phone width the panel follows the grid, whose
+staff-role column stays pinned while you scroll sideways.
+
+Choose an unfilled slot to open its picker. Staff-role holders come first, with leave or overlapping
+work and their week hours; Show everyone includes the other active people. A choice writes at once,
+and a refusal stays in the picker for retry. The picker closes after a successful write before the
+rota refreshes. Published weeks offer no slot actions. Editing existing shifts, warnings, Publish
+and Change this week remain part 7; the old Rota page remains available meanwhile. The Staffing
+month shows unfilled counts for weeks with a roster version, and offers Rota for this week when
+you may read that view.
+
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season

@@ -58,7 +58,7 @@ describe("STAFFING_DASHBOARD", () => {
 
   it("adds the Staffing view to the Calendar, drawn for the host's current month and address", async () => {
     const [view, ...others] = STAFFING_DASHBOARD.calendarViews!;
-    expect(others).toEqual([]);
+    expect(others.map((view) => view.id)).toEqual(["rota"]);
     expect(view).toMatchObject({
       id: "staffing",
       labelKey: "staffing.view.tab",
@@ -249,5 +249,50 @@ describe("STAFFING_DASHBOARD", () => {
     address.params = { month: "2026-12", painter: "season", "special-day": "sd-eve" };
     render(handle.render(false), container);
     expect(container.querySelector("staffing-special-day-painter")).toBeNull();
+  });
+});
+
+describe("the Rota contribution", () => {
+  it("uses the host's week and area, and falls back to the month's Monday for an invalid week address", async () => {
+    const view = STAFFING_DASHBOARD.calendarViews!.find((v) => v.id === "rota")!;
+    const fixture = await import("../testing/rota-fixture.js");
+    const request = vi.fn(async (path: string) => fixture.rotaWeek(path.split("week=")[1]!));
+    const address = {
+      month: "2026-12",
+      params: { week: "nonsense", area: "station:kitchen" } as Record<string, string>,
+    };
+    const host: CalendarViewHost = {
+      get month() {
+        return address.month;
+      },
+      get params() {
+        return address.params;
+      },
+      canWrite: true,
+      open: vi.fn(),
+    };
+    const handle = view.create({ request: request as unknown as DashboardRequest }, host);
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(), container);
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/management-api/staffing/rota?week=2026-11-30",
+        "GET",
+        undefined,
+        { passive: true },
+      ),
+    );
+    address.params = { week: "2026-12-07", area: "station:kitchen" };
+    render(handle.render(), container);
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenLastCalledWith(
+        "/management-api/staffing/rota?week=2026-12-07",
+        "GET",
+        undefined,
+        { passive: true },
+      ),
+    );
   });
 });

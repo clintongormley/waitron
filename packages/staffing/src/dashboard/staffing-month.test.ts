@@ -730,3 +730,27 @@ describe("the Staffing view's month", () => {
     });
   });
 });
+
+describe("the month opens its rota week", () => {
+  it("opens the Monday's rota retaining the selected area and lists unfilled counts", async () => {
+    const client = fakeApi(async (month) => {
+      const r = staffingMonth(month);
+      r.days.find((d) => d.date === "2026-12-01")!.areas[0]!.unfilled = 2;
+      return r;
+    });
+    const { el, open } = await mount({
+      api: client.api,
+      params: { area: "department:dep-restaurant" },
+    });
+    (el as StaffingMonthView & { canOpenRota: boolean }).canOpenRota = true;
+    await el.updateComplete;
+    const link = root(el).querySelector<HTMLElement>("[data-rota-week='2026-11-30']");
+    expect(link).not.toBeNull();
+    link!.click();
+    expect(open).toHaveBeenCalledWith("rota", {
+      week: "2026-11-30",
+      area: "department:dep-restaurant",
+    });
+    expect(cell(el, "2026-12-01").textContent).toContain("2 unfilled");
+  });
+});
