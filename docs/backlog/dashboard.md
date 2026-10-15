@@ -1031,6 +1031,14 @@ From A334 (#1416, held reorder drags scroll at the list edge):
 
 - Floor and grid placement editors remain outside this change.
 
+- **Which dialogs take the medium height (A735, owner 2026-10-15).** Seven short dialogs open at
+  `wt-modal`'s `height="medium"`: add department and add zone (Add to department shares that dialog
+  and takes it too), the floor plan's Add tables and Add joined table, Include menu as folder, the
+  Prep stations route-change notice, the printers' Add agent and Calibrate, Pair device, and only
+  the password step of setting up an authenticator app on the profile. The Units and Modifiers
+  Delete dialogs do not: depending on the data they show a table or nothing, and a fixed height
+  could squeeze the table.
+
 ## A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)
 
 The owner's words (2026-10-13, watcher session): "I want a help interface so that there is a
@@ -1146,22 +1154,3 @@ Products Select and Structure Select buttons pressed, in both themes, and fix th
 A fix in `wt-icon` must keep every sidebar icon in the text colour (A654): the headers and an open
 strip button set the primary colour around their icons today, and
 `apps/dashboard/src/dashboard-app.sidebar-fold.test.ts` checks both.
-
-## Which other dialogs take the medium height (owner to approve)
-
-Left open by A734 (#1762); open, waiting for the owner. `wt-modal`'s `height="medium"` (design-system.md →
-"Use `wt-modal` for an add or edit form") is used only by the Routes tab's cell editor (before:
-[screenshot](mockups/a656-routes-tab/1-editor-no-period-route.png)). Candidates, each a non-compact
-modal with short content:
-`packages/venue-service/src/dashboard/department-dialogs.ts:449` (add department or add zone: one
-field); `apps/dashboard/src/screens/floor-plan-add-joined-table.ts:215` and
-`floor-plan-add-tables.ts:245` (the floor plan's add dialogs);
-`apps/dashboard/src/widgets/include-folder-form.ts:331` (a menu's included folder);
-`packages/venue-service/src/dashboard/prep-stations-screen.ts:1428` (`#previewDialog`, the
-route-change notice, wide: the case that started this);
-`apps/dashboard/src/screens/printers-screen.ts:3432` (the calibrate dialog) and `:2247` (Add
-agent); `apps/dashboard/src/screens/devices-screen.ts:2644` (Pair device);
-`apps/dashboard/src/screens/profile-screen.ts:1090` (the two-step code dialog, standard in that
-mode, whose first step is short). Depending on the data, a table or nothing, so a fixed height
-could squeeze the table: `apps/dashboard/src/screens/modifiers-screen.ts:682` (delete) and
-`apps/dashboard/src/screens/units-screen.ts:593` (delete).
