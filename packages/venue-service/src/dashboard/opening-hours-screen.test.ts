@@ -1688,6 +1688,28 @@ describe("Month view", () => {
     },
   );
 
+  it("a Year date's box lists every department after one was picked in the Month", async () => {
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/department/bar/month/2026-12",
+    );
+    await shown(view);
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="year"]',
+      )!,
+    );
+    const yearView = () => el.shadowRoot!.querySelector("opening-hours-year");
+    await expect.poll(() => yearView()?.model?.year).toBe(2026);
+    await yearView()!.updateComplete;
+    yearView()!
+      .shadowRoot!.querySelector<HTMLElement>('td[data-date="2026-12-15"] button')!
+      .click();
+    await expect.poll(() => dayBox(el)?.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.rows.map((row) => row.name)).toEqual(
+      expect.arrayContaining(["Restaurant", "Bar"]),
+    );
+  });
+
   const withWinter = (data: OpeningHoursModel) => {
     data.seasons = [
       { id: "autumn", name: "Autumn", startsOn: "09-01" },

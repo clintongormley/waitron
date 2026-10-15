@@ -972,9 +972,11 @@ export class OpeningHoursScreen extends LitElement {
     const read = year ? this.boxMonth : this.monthModel;
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
-      const departmentId = day.departments.some((d) => d.departmentId === this.departmentId)
-        ? this.departmentId
-        : "";
+      // The department picker is the Month's: the Year lists every department.
+      const departmentId =
+        !year && day.departments.some((d) => d.departmentId === this.departmentId)
+          ? this.departmentId
+          : "";
       const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
       const monthHolidays = read.days.flatMap((row) => row.holidays);
       return {
