@@ -209,3 +209,50 @@ describe("a units cell too wide to leave a useful item column", () => {
         }
   });
 });
+
+describe("figures too wide for one line together", () => {
+  const catering = (columns: number) =>
+    tableLines(
+      {
+        header: HEADER,
+        withRate: true,
+        rows: [
+          {
+            units: "1",
+            item: "Catering",
+            price: "10.000.000,00",
+            amount: "10.000.000,00",
+            rate: "21%",
+          },
+        ],
+      },
+      columns,
+    ).map((l) => l.text);
+
+  it("puts the rate on a line of its own, right-aligned, when it does not fit beside the others", () => {
+    expect(catering(30)).toEqual([
+      "Uds Concepto",
+      "          Precio       Importe",
+      "                           IVA",
+      "  1 Catering",
+      "   10.000.000,00 10.000.000,00",
+      "                           21%",
+    ]);
+  });
+
+  it("never prints past the paper, whatever the figures' widths", () => {
+    for (const columns of [30, 42, 48])
+      for (let width = 0; width <= columns + 5; width++) {
+        const figure = "9".repeat(width);
+        const lines = tableLines(
+          {
+            header: HEADER,
+            withRate: true,
+            rows: [{ units: "1", item: "Catering", price: figure, amount: figure, rate: figure }],
+          },
+          columns,
+        );
+        for (const line of lines) expect(line.text.length).toBeLessThanOrEqual(columns);
+      }
+  });
+});

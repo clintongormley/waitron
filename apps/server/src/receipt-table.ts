@@ -36,12 +36,32 @@ export function tableLines(table: ReceiptTable, columns: number): TableLine[] {
   const amountWidth = widest((row) => row.amount);
   const rateWidth = widest((row) => row.rate ?? "");
 
-  const figures = (row: ReceiptTableRow): string => {
-    const cells = [row.price.padStart(priceWidth), row.amount.padStart(amountWidth)];
-    if (table.withRate) cells.push((row.rate ?? "").padStart(rateWidth));
-    return cells.join(" ");
-  };
-  const figuresWidth = priceWidth + 1 + amountWidth + (table.withRate ? 1 + rateWidth : 0);
+  type FigureCell = { width: number; cell: (row: ReceiptTableRow) => string };
+  const figureCells: FigureCell[] = [
+    { width: priceWidth, cell: (row) => row.price },
+    { width: amountWidth, cell: (row) => row.amount },
+    ...(table.withRate
+      ? [{ width: rateWidth, cell: (row: ReceiptTableRow) => row.rate ?? "" }]
+      : []),
+  ];
+  const figures = (row: ReceiptTableRow, cells = figureCells): string =>
+    cells.map(({ width, cell }) => cell(row).padStart(width)).join(" ");
+  const cellsWidth = (cells: readonly FigureCell[]): number =>
+    cells.reduce((total, { width }) => total + width, cells.length - 1);
+  const figuresWidth = cellsWidth(figureCells);
+  const figureGroups: FigureCell[][] = [];
+  for (const cell of figureCells) {
+    const group = figureGroups.at(-1);
+    if (group !== undefined && cellsWidth([...group, cell]) <= columns) group.push(cell);
+    else figureGroups.push([cell]);
+  }
+  const figureLines = (row: ReceiptTableRow): string[] =>
+    figureGroups.flatMap((group) => {
+      const text = figures(row, group);
+      if (text.trim() === "") return [];
+      const lines = text.length <= columns ? [text] : wrapText(text.trim(), columns);
+      return lines.map((line) => line.padStart(columns));
+    });
   const oneLineItemWidth = columns - unitsWidth - 1 - 1 - figuresWidth;
   const twoLines = oneLineItemWidth < MIN_ITEM_WIDTH;
   const itemWidth = twoLines ? columns - unitsWidth - 1 : oneLineItemWidth;
@@ -57,12 +77,7 @@ export function tableLines(table: ReceiptTable, columns: number): TableLine[] {
     if (!twoLines) {
       return [(lead + first.padEnd(itemWidth) + " " + figures(row)).trimEnd(), ...continuation];
     }
-    const figureLine = figures(row);
-    return [
-      lead + first,
-      ...continuation,
-      ...(figureLine.trim() === "" ? [] : [figureLine.padStart(columns)]),
-    ];
+    return [lead + first, ...continuation, ...figureLines(row)];
   };
 
   return [
