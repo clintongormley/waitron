@@ -799,8 +799,9 @@ export function batteryAlertSource(deps: {
 }
 
 /** The Translate all notice: open once a run has stopped, however it stopped, while any suggestion
- * is waiting, until someone opens the translations dialog. A run with a job still active is not
- * stopped: opening the dialog cannot mark it opened (`markSuggestionRunOpened`). */
+ * is waiting, until someone opens the translations dialog. Quiet while `readActiveSuggestionJob`
+ * finds a job, even a failed one `readSuggestionRun` already reports as stopped:
+ * `markSuggestionRunOpened` would not clear it. */
 export function contentSuggestionsAlertSource(): AlertSource {
   return {
     area: "content",
