@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { roleInitials } from "./role-initials.js";
+
+const before = currentLocale();
+afterEach(() => {
+  vi.restoreAllMocks();
+  setLocale(before);
+});
 
 describe("roleInitials", () => {
   it("takes the first letter of the first and last words, in capitals", () => {
@@ -29,5 +36,21 @@ describe("roleInitials", () => {
 
   it("gives two roles the same initials when their words start alike", () => {
     expect(roleInitials("Sous chef")).toBe(roleInitials("Senior cook"));
+  });
+
+  it("capitalises in the language it is given, not the browser's", () => {
+    expect(roleInitials("ilan", "en-GB")).toBe("Il");
+    expect(roleInitials("ilan", "tr-TR")).toBe("İl");
+    expect(roleInitials("ayudante de igualas", "tr-TR")).toBe("Aİ");
+  });
+
+  it("capitalises in staffing's own language when given none", () => {
+    const upper = vi.spyOn(String.prototype, "toLocaleUpperCase");
+    setLocale("es");
+    roleInitials("ilan");
+    expect(upper).toHaveBeenLastCalledWith("es-ES");
+    setLocale("en");
+    roleInitials("ilan ayudante");
+    expect(upper).toHaveBeenLastCalledWith("en-GB");
   });
 });
