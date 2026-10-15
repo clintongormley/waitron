@@ -56,8 +56,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Abre esta página en el servidor principal activo para conectar el local.",
   },
   "cloud.not_configured": {
-    en: "Cloud services are not available on this server yet.",
-    es: "Los servicios Cloud aún no están disponibles en este servidor.",
+    en: "This server is not connected to Waitron Cloud",
+    es: "Este servidor no está conectado a Waitron Cloud",
   },
   "cloud.request_invalid": {
     en: "Check the connection details and try again.",

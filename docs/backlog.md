@@ -5394,13 +5394,6 @@ the tree. What remains, largest first:
   `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
   (2026-10-15), not measured against a real Cloud.
 
-- **A box that is not connected, or is revoked, refuses Translate all with `cloud.not_configured`,
-  whose dashboard wording was written for a server with no Cloud set up at all** ("Cloud services
-  are not available on this server yet"). The neighbouring Cloud calls use
-  `cloud.binding_conflict`. The translations dialog's Translate all bar now shows this wording when a
-  run ends because the box is no longer connected, and when the start request is refused. Owner to
-  choose the code and the wording (lane B's question 4, 2026-10-15). Raised by #1729's review. The same code is also set by
-  `FAILURE_CODES.not_connected` in `packages/catalogue/src/content-suggestion-jobs.ts`.
 
 - **The signing and size-capped reading of a request to Cloud is repeated across the
   `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729

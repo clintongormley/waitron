@@ -360,7 +360,7 @@ export const en = {
   "cloud.retry": "Try again",
   "cloud.retry_start": "Retry request",
   "cloud.restart": "Start again",
-  "cloud.not_configured": "Cloud services are not available on this server yet.",
+  "cloud.not_configured": "This server is not connected to Waitron Cloud",
   "cloud.not_primary": "Open this page on your serving primary server to connect the venue.",
   "cloud.loading": "Checking Cloud connection…",
 
@@ -3383,7 +3383,7 @@ export const es: Record<StringKey, string> = {
   "cloud.retry": "Volver a intentar",
   "cloud.retry_start": "Reintentar solicitud",
   "cloud.restart": "Empezar de nuevo",
-  "cloud.not_configured": "Los servicios Cloud aún no están disponibles en este servidor.",
+  "cloud.not_configured": "Este servidor no está conectado a Waitron Cloud",
   "cloud.not_primary": "Abre esta página en el servidor principal activo para conectar el local.",
   "cloud.loading": "Comprobando la conexión con Cloud…",
 
