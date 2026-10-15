@@ -3477,8 +3477,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
-- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Ruled
-  sections, TOTAL straight after the items, one row per item on a full invoice, the registered
+- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** One row
+  per item on a full invoice, the registered
   address once or labelled, "× 2" for quantities, and guests and per person. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
