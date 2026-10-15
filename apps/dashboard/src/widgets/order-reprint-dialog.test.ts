@@ -3,7 +3,13 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OfferedPrinter, OrderDetailDto, OrderRowDto } from "../api/client.js";
+import type {
+  DashboardApi,
+  OfferedPrinter,
+  OrderDeliveryAttempt,
+  OrderDetailDto,
+  OrderRowDto,
+} from "../api/client.js";
 import "./order-reprint-dialog.js";
 import type { OrderReprintDialog } from "./order-reprint-dialog.js";
 
@@ -589,6 +595,29 @@ describe("printing a full invoice", () => {
       history: [],
     },
   });
+  /** The detail with an attempt in `status` as its current delivery. */
+  const withCurrent = (
+    detail: OrderDetailDto,
+    status: OrderDeliveryAttempt["status"],
+  ): OrderDetailDto => {
+    const attempt: OrderDeliveryAttempt = {
+      id: "delivery-1",
+      medium: "receipt",
+      designation: "original",
+      status,
+      failureCode: null,
+      requestedAt: "2026-09-30T12:05:00Z",
+      at: null,
+      personId: null,
+      personName: null,
+      printerHold: null,
+      lateSuccess: false,
+    };
+    return {
+      ...detail,
+      deliveries: { ...detail.deliveries!, current: attempt, history: [attempt] },
+    };
+  };
   type InvoiceApi = DashboardApi & {
     getOrder: ReturnType<typeof vi.fn>;
     getOrderPrinters: ReturnType<typeof vi.fn>;
@@ -681,11 +710,12 @@ describe("printing a full invoice", () => {
     const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id, "original"));
     const el = await openInvoice(api);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
-    api.getOrder.mockResolvedValue(invoiceDetail(null, OFICINA.id));
+    api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFICINA.id), "queued"));
     printButton(el).click();
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Invoice sent to Oficina"));
     await vi.waitFor(() => expect(chooser(el)).toBeNull());
     expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("There is no active printer to print on");
     expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
       "Print the invoice",
     );
@@ -747,18 +777,74 @@ describe("printing a full invoice", () => {
     expect(chooser(el)!.error).toBe("");
   });
 
-  it("says the invoice is on its way and keeps Print quiet while the server offers no print", async () => {
-    setLocale("en-GB");
-    const api = invoiceApi(invoiceDetail(null, null));
+  it.each(["queued", "sending"] as const)(
+    "says the invoice is on its way and keeps Print quiet while its current delivery is %s",
+    async (status) => {
+      setLocale("en-GB");
+      const api = invoiceApi(withCurrent(invoiceDetail(null, null), status));
+      const el = await openInvoice(api);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=print-busy]")?.textContent?.trim()).toBe(
+          codeMessage("invoice_delivery.active"),
+        ),
+      );
+      expect(loadingLine(el)).toBeNull();
+      expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+      expect(printButton(el).variant).toBe("secondary");
+    },
+  );
+
+  it.each([
+    ["en-GB", null, "There is no active printer to print on"],
+    ["en-GB", "sent", "There is no active printer to print on"],
+    ["es-ES", "failed", "No hay ninguna impresora activa"],
+  ] as const)(
+    "says there is no active printer, not that the invoice is on its way, when the server offers no print and nothing is on its way (%s, current %s)",
+    async (locale, current, words) => {
+      setLocale(locale);
+      const offerless = invoiceDetail(null, null);
+      const api = invoiceApi(current === null ? offerless : withCurrent(offerless, current));
+      const el = await openInvoice(api);
+      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(words));
+      expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+      expect(loadingLine(el)).toBeNull();
+      expect(printButton(el).getAttribute("disabled")).not.toBeNull();
+      expect(printButton(el).variant).toBe("secondary");
+    },
+  );
+
+  it("keeps the person's choice when Try again reads the bill again after a failed read", async () => {
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
     const el = await openInvoice(api);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=print-busy]")?.textContent?.trim()).toBe(
-        codeMessage("invoice_delivery.active"),
-      ),
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
+    chooser(el)!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "printer-2" },
+        bubbles: true,
+        composed: true,
+      }),
     );
-    expect(loadingLine(el)).toBeNull();
-    expect(printButton(el).getAttribute("disabled")).not.toBeNull();
-    expect(printButton(el).variant).toBe("secondary");
+    api.getOrder.mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA, COCINA], OFICINA.id));
+    const reads = api.getOrder.mock.calls.length;
+    retryButton(el)!.click();
+    await vi.waitFor(() => expect(retryButton(el)).toBeNull());
+    expect(api.getOrder.mock.calls.length).toBeGreaterThan(reads);
+    await el.updateComplete;
+    expect(chooser(el)!.value).toBe("printer-2");
+  });
+
+  it("chooses the original's printer again on Try again when the first read failed", async () => {
+    const api = invoiceApi(invoiceDetail([BARRA, OFICINA], OFICINA.id), {
+      getOrder: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openInvoice(api);
+    await vi.waitFor(() => expect(retryButton(el)).not.toBeNull());
+    api.getOrder.mockResolvedValue(invoiceDetail([BARRA, OFICINA], OFICINA.id));
+    retryButton(el)!.click();
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
   });
 
   it.each([

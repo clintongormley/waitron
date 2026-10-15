@@ -31,6 +31,9 @@ export class OrderReprintDialog extends LitElement {
   @state() private designation: "original" | "duplicate" = "original";
   /** In invoice mode, the server offers no print because a delivery is on its way. */
   @state() private deliveryBusy = false;
+  /** In invoice mode, the next answer chooses the original's printer: true until one has offered
+   * a print since the bill was opened. */
+  #preselect = true;
   @state() private printersFailed = false;
   @state() private printerId = "";
   @state() private printing = false;
@@ -73,6 +76,7 @@ export class OrderReprintDialog extends LitElement {
     if (changed.has("mode") || this.mode === "invoice") {
       this.printers = null;
       this.deliveryBusy = false;
+      this.#preselect = true;
     }
     if (this.row === null || this.mode === "invoice") this.#queries.release("getOrderPrinters");
     if (this.row === null || this.mode === "receipt") this.#queries.release("getOrder");
@@ -99,29 +103,33 @@ export class OrderReprintDialog extends LitElement {
       .catch(() => undefined);
   }
 
-  /** The first answer chooses the printer the original went to when it is listed; a later one keeps
-   * the person's choice while it is still listed. */
+  /** The first answer chooses the printer the original went to when it is listed; a later one, a
+   * Try again's included, keeps the person's choice while it is still listed. */
   #watchInvoice(id: string): void {
-    let first = true;
     void this.#queries
       .watch("getOrder", [id], (detail: OrderDetailDto) => {
         const status = detail.deliveries;
         const print = status?.actions.print ?? null;
         this.printersFailed = false;
-        this.deliveryBusy = print === null;
+        // No print is offered either while a delivery is on its way or when no printer is active.
+        this.deliveryBusy =
+          print === null &&
+          (status?.history ?? []).some(
+            (attempt) => attempt.status === "queued" || attempt.status === "sending",
+          );
         if (print === null) {
-          this.printers ??= [];
+          this.printers = [];
           return;
         }
         this.designation = print.designation;
         this.printers = print.printers;
         const listed = (printerId: string | null | undefined) =>
           print.printers.some((printer) => printer.id === printerId);
-        if (first || !listed(this.printerId))
+        if (this.#preselect || !listed(this.printerId))
           this.printerId = listed(status?.originalPrinterId)
             ? status!.originalPrinterId!
             : (print.printers[0]?.id ?? "");
-        first = false;
+        this.#preselect = false;
       })
       .catch(() => undefined);
   }
