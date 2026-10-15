@@ -57,6 +57,13 @@
       "when": 1792000312754,
       "tag": "0007_attendance_state",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792028429750,
+      "tag": "0008_attendance_responses",
+      "breakpoints": true
     }
   ]
 }
