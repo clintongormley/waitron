@@ -3539,9 +3539,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
-  base and VAT on a one-rate simplified receipt (Part 2b), each line's price before any discount
-  and the whole-bill discount once per rate (Part 2c; it also settles how a part portion of an extra prints, owner
-  question of 2026-10-15, default «1.5» portions), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
+  each line's price before any discount and the whole-bill discount once per rate (Part 2c), closing
+  where a part portion of an extra is stored (owner 2026-10-15: "we don't offer half portions"; in
+  2c or its own PR), and guests and per person (Part 3). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
 - **A661's six wording and behaviour choices were built on the recommended defaults (left open by
@@ -3566,8 +3566,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   that rule. Decide whether a manager's resend should.
 
 - **The till's on-screen receipt is a second copy of the layout (left open by A663 Part 1a).** It
-  prints its own unit-price line, rates as «21.00%», «4 ud» where paper prints «4», and a full
-  invoice's discounts with VAT, so A663's changes do not reach it; bring it into line with the
+  prints its own unit-price line, rates as «21.00%», «4 ud» where paper prints «4», «Base» where
+  paper prints «Base imponible», and a full invoice's discounts with VAT, so A663's changes do not reach it; bring it into line with the
   printed receipt.
   [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
 

@@ -355,18 +355,8 @@ export function buildReceiptDocument({
   if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
   rule();
   const vatRows = (): void => {
-    const [only] = result.vatBreakdown;
-    // Art. 7.1.f: one rate needs only the rate; several need each rate's base as well.
-    if (simplified && only !== undefined && result.vatBreakdown.length === 1) {
-      row(
-        label.vatIncludedAtRate.replace("{rate}", formatVatRate(only.rate, locale)),
-        formatMoney(only.tax, locale),
-      );
-      return;
-    }
-    const baseLabel = simplified ? label.base : label.taxableBase;
     for (const v of result.vatBreakdown) {
-      row(`${baseLabel} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
+      row(`${label.taxableBase} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
       row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
     }
   };

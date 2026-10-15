@@ -980,7 +980,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
       // Tipo(s) impositivo(s) + base imponible per rate, plus the cuota (allowed extra) (7.1.f).
       for (const v of FILED_SALE.vatBreakdown) {
-        expect(s).toContain(`Base ${v.rate}%`);
+        expect(s).toContain(`Base imponible ${v.rate}%`);
         expect(s).toContain(`IVA ${v.rate}%`);
       }
 
@@ -1040,7 +1040,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       FILED_SALE.invoiceNumber,
       lineName(FILED_SALE.lines[0]!),
       "TOTAL",
-      "Base 21%",
+      "Base imponible 21%",
       "Efectivo",
       TRIM.footerMessage!,
     ];
@@ -1921,7 +1921,7 @@ describe("formatReceipt — printer layout", () => {
       }),
     );
     expect(lines).toContain(`TOTAL${" ".repeat(3)}20,90 €`);
-    expect(lines).toContain(`Base 21%${" ".repeat(15)}10,00 €`);
+    expect(lines).toContain(`Base imponible 21%${" ".repeat(5)}10,00 €`);
   });
 
   it.each([
@@ -2015,9 +2015,9 @@ describe("a bill paid in parts before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
-      "Base 21% 10,00 €",
+      "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
-      "Base 10% 8,00 €",
+      "Base imponible 10% 8,00 €",
       "IVA 10% 0,80 €",
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
@@ -2067,9 +2067,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
-      "Base 21% 10,00 €",
+      "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
-      "Base 10% 8,00 €",
+      "Base imponible 10% 8,00 €",
       "IVA 10% 0,80 €",
       "Efectivo 50,00 €",
       "Devolución -6,00 €",
@@ -2107,9 +2107,9 @@ describe("a bill payment partly given back before its invoice", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
 
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
-      "Base 21% 10,00 €",
+      "Base imponible 21% 10,00 €",
       "IVA 21% 2,10 €",
-      "Base 10% 8,00 €",
+      "Base imponible 10% 8,00 €",
       "IVA 10% 0,80 €",
       "Tarjeta 20,00 €",
       "Ref. OP-3",
@@ -2241,13 +2241,14 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     const lines = printed80(BILL_DISCOUNT);
     const first = lines.indexOf(at80("2  Agua mineral", "4,00"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 6)).toEqual([
+    expect(lines.slice(first, first + 7)).toEqual([
       at80("2  Agua mineral", "4,00"),
       at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 12,5%", "-0,81"),
       rule(PRINTER_80),
       `TOTAL${" ".repeat(10)}5,69 €`,
-      at80("IVA 10% incluido", "0,52 €"),
+      at80("Base imponible 10%", "5,17 €"),
+      at80("IVA 10%", "0,52 €"),
     ]);
     expect(lines.filter((line) => line.startsWith("Descuento"))).toHaveLength(1);
   });
@@ -2458,7 +2459,7 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicili fiscal: Calle Fiscal 27, Madrid",
         comp: "Invitació -12,00",
         discount: "Descompte 12,5% -1,50",
-        base: "Base 21% 10,00 €",
+        base: "Base imposable 21% 10,00 €",
         vat: "IVA 21% 2,10 €",
         total: "TOTAL 20,90 €",
         cash: "Efectiu 50,00 €",
@@ -2493,7 +2494,7 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Domicilio fiscal: Calle Fiscal 27, Madrid",
         comp: "Invitación -12,00",
         discount: "Desconto 12,5% -1,50",
-        base: "Base 21% 10,00 €",
+        base: "Base impoñible 21% 10,00 €",
         vat: "IVE 21% 2,10 €",
         total: "TOTAL 20,90 €",
         cash: "Efectivo 50,00 €",
@@ -2528,7 +2529,7 @@ describe("the receipt's fixed words follow its language", () => {
         registeredAddress: "Helbide fiskala: Calle Fiscal 27, Madrid",
         comp: "Gonbidapena -12,00",
         discount: "Deskontua 12,5% -1,50",
-        base: "Oinarria 21% 10,00 €",
+        base: "Zerga-oinarria 21% 10,00 €",
         vat: "BEZ 21% 2,10 €",
         total: "GUZTIRA 20,90 €",
         cash: "Eskudirua 50,00 €",
@@ -2687,7 +2688,8 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toContain("IVA 10% inclòs 0,36 €");
+    expect(text).toContain("Base imposable 10% 3,64 €");
+    expect(text).toContain("IVA 10% 0,36 €");
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/^2 rebanada Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
@@ -2703,7 +2705,7 @@ describe("a receipt's goods names can be looked up in another language than its 
     ]) {
       expect(text).not.toContain(other);
     }
-    expect(text).not.toContain("IVA 10% incluido");
+    expect(text).not.toContain("Base imponible 10%");
   });
 
   it("looks the names up in the fixed words' language when no names' language is given", () => {
@@ -2923,7 +2925,13 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
       }),
     );
     const { columns } = textGrid(PRINTER_80.paperWidth, PRINTER_80.resolution);
-    for (const start of ["1  Menú del día", "2  Agua mineral", "Base 21%", "IVA 10%", "TOTAL"]) {
+    for (const start of [
+      "1  Menú del día",
+      "2  Agua mineral",
+      "Base imponible 21%",
+      "IVA 10%",
+      "TOTAL",
+    ]) {
       const line = lines.find((l) => l.startsWith(start));
       expect(line, start).toBeDefined();
       expect(line!.length, start).toBe(start === "TOTAL" ? Math.floor(columns / 2) : columns);
@@ -3333,15 +3341,16 @@ describe("the simplified receipt's own layout (A663)", () => {
       expect(lines).toContain("1 Bloody Mary 15,00");
       expect(lines).toContain("4 Agua, pan y aceite 24,00");
       expect(lines).toContain("TOTAL 39,00 €");
-      expect(lines).toContain("IVA 10% incluido 3,55 €");
-      expect(lines.some((line) => line.startsWith("Base"))).toBe(false);
+      expect(lines).toContain("Base imponible 10% 35,45 €");
+      expect(lines).toContain("IVA 10% 3,55 €");
       expect(lines).not.toContain("Factura T-2026/000112");
       expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
       expect(heading).toBeLessThan(at("Factura simplificada"));
       expect(at("Factura simplificada")).toBeLessThan(at("1 Bloody Mary"));
       expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
-      expect(at("TOTAL")).toBeLessThan(at("IVA 10% incluido"));
-      expect(at("IVA 10% incluido")).toBeLessThan(at("Efectivo"));
+      expect(at("TOTAL")).toBeLessThan(at("Base imponible 10%"));
+      expect(at("Base imponible 10%")).toBeLessThan(at("IVA 10%"));
+      expect(at("IVA 10%")).toBeLessThan(at("Efectivo"));
       expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
       expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
     },
@@ -3437,19 +3446,19 @@ describe("the simplified receipt's own layout (A663)", () => {
     );
   });
 
-  it("keeps a base and a VAT line per rate when there are several", () => {
+  it("prints a base and a VAT line for each of several rates", () => {
     const lines = squeezed(FILED_WITHOUT_TEXT, PRINTER_80);
     expect(lines).toEqual(
       expect.arrayContaining([
-        "Base 21% 10,00 €",
+        "Base imponible 21% 10,00 €",
         "IVA 21% 2,10 €",
-        "Base 10% 8,00 €",
+        "Base imponible 10% 8,00 €",
         "IVA 10% 0,80 €",
       ]),
     );
     expect(lines.some((line) => line.includes("incluido"))).toBe(false);
     expect(lines.findIndex((l) => l.startsWith("TOTAL"))).toBeLessThan(
-      lines.findIndex((l) => l.startsWith("Base 21%")),
+      lines.findIndex((l) => l.startsWith("Base imponible 21%")),
     );
     expect(lines.findIndex((l) => l.startsWith("IVA 10%"))).toBeLessThan(
       lines.findIndex((l) => l.startsWith("Efectivo")),

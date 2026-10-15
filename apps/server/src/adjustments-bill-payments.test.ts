@@ -241,8 +241,13 @@ describe("a reduction after contributions (design §8 test 11)", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "" && !/^-+$/.test(line))
-        .slice(0, 3),
-    ).toEqual(["IVA 21% incluido 6,95 €", "Efectivo 50,00 €", "Devolución -10,00 €"]);
+        .slice(0, 4),
+    ).toEqual([
+      "Base imponible 21% 33,05 €",
+      "IVA 21% 6,95 €",
+      "Efectivo 50,00 €",
+      "Devolución -10,00 €",
+    ]);
   });
 });
 

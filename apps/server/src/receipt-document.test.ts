@@ -387,9 +387,9 @@ describe("the simplified receipt's own layout (A663)", () => {
       ["2  Agua mineral", "8,80", undefined],
       "rule",
       ["TOTAL", "19,69 €", { double: true }],
-      ["Base 21%", "9,00 €", undefined],
+      ["Base imponible 21%", "9,00 €", undefined],
       ["IVA 21%", "1,89 €", undefined],
-      ["Base 10%", "8,00 €", undefined],
+      ["Base imponible 10%", "8,00 €", undefined],
       ["IVA 10%", "0,80 €", undefined],
       "rule",
       ["Efectivo", "20,00 €", undefined],
@@ -398,7 +398,7 @@ describe("the simplified receipt's own layout (A663)", () => {
     ]);
   });
 
-  it("prints one VAT-included line for a single rate, in the receipt's language", () => {
+  it("prints the base and the VAT under TOTAL for a single rate, in the receipt's language", () => {
     const oneRate = (invoiceLocale: string) =>
       rows({
         ...SIMPLIFIED,
@@ -409,12 +409,17 @@ describe("the simplified receipt's own layout (A663)", () => {
         },
       });
     const es = oneRate("es-ES");
-    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 4)).toEqual([
+    expect(es.slice(es.indexOf("rule", 5) + 1, es.indexOf("rule", 5) + 5)).toEqual([
       ["TOTAL", "19,69 €", { double: true }],
-      ["IVA 10% incluido", "1,79 €", undefined],
+      ["Base imponible 10%", "17,90 €", undefined],
+      ["IVA 10%", "1,79 €", undefined],
       "rule",
     ]);
-    expect(oneRate("ca-ES")).toContainEqual(["IVA 10% inclòs", "1,79 €", undefined]);
+    const ca = oneRate("ca-ES");
+    expect(ca).toContainEqual(["Base imposable 10%", "17,90 €", undefined]);
+    expect(ca).toContainEqual(["IVA 10%", "1,79 €", undefined]);
+    const captions = [...es, ...ca].flatMap((row) => (Array.isArray(row) ? [String(row[0])] : []));
+    expect(captions.filter((caption) => /incluido|inclòs/u.test(caption))).toEqual([]);
   });
 
   it("prints a dish priced per pack by its quantity and unit, not its count of packs", () => {

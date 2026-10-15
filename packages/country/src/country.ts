@@ -79,7 +79,6 @@ export const RECEIPT_LABEL_KEYS = [
   "practice",
   "phone",
   "simplifiedInvoice",
-  "vatIncludedAtRate",
   "invoiceHeading",
   "customer",
   "unitsColumn",

@@ -370,15 +370,19 @@ just a green typecheck.
   re-check the result against RD 1619/2012 arts. 6 and 7 on the BOE before landing.
   [Mockup: simplified receipt](mockups/a663-receipt-layout/1-simplified-receipt.png),
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
-  receipt, rendered from the code on 2026-10-14.
+  receipt, rendered from the code on 2026-10-14. The owner replaced the simplified mockup's «IVA 10%
+  incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
   What is left:
-  - **Part 2b: base and VAT on a one-rate simplified receipt** (owner, Q11). The «IVA x% incluido»
-    line gives way to a base row and a VAT row under TOTAL, from the record's own figures.
   - **Part 2c: each line's price before any discount, and the whole-bill discount once per rate**
     (owner, Q9 and Q10). A new column on `sale_lines` keeps the price before any discount, so a
     weighed line under one kilo prints its value; a whole-bill discount prints one row per rate at
     the end of the table instead of a share under each dish.
+  - **A part portion of an extra.** A review of Part 2 found an order can store half a portion of a
+    per-portion extra (half a dish, in a venue-made unit with no scale). The owner, 2026-10-15: "we
+    don't offer half portions" — find where it enters and refuse it at the source with a domain
+    error code (in Part 2c or its own small PR); if it turns out to be a real product feature, ask
+    the owner with the example instead.
   - **Part 3: guests and the amount per person** when the table's guests were entered.
     Joined tables' counts are added together when they join (or when guests move onto a seated
     table), so the party's own count holds the sum, or no count when either party had none or the sum
@@ -391,7 +395,8 @@ just a green typecheck.
   itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
   … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
   for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
-  also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), and a full
+  also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
+  rate's base «Base» (`labels.base`) where paper now prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
   invoice's discounts with VAT where paper now prints them before VAT. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed.
 

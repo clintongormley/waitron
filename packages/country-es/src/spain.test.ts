@@ -284,14 +284,10 @@ describe("receipt labels", () => {
     },
   );
 
-  it.each(SPAIN.invoiceLocales)("holds {rate} in %s's one-rate VAT label", (locale) => {
-    expect(SPAIN.receiptLabels?.[locale]?.vatIncludedAtRate).toContain("{rate}");
-  });
-
-  it("labels a simplified invoice and a single VAT rate in Spanish", () => {
+  it("labels a simplified invoice and the taxable base in Spanish", () => {
     const labels = SPAIN.receiptLabels?.["es-ES"];
     expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
-    expect(labels?.vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
+    expect(labels?.taxableBase).toBe("Base imponible");
     expect(labels?.registeredAddress).toBe("Domicilio fiscal");
     expect(labels?.invoiceHeading).toBe("FACTURA");
   });
