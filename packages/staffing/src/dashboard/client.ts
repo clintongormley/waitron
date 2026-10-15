@@ -1,22 +1,10 @@
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
 import type { AreaRef } from "../slots.js";
-import type { CalendarColour, StaffingMonth, StaffRole } from "../staffing-types.js";
+import type { CalendarColour, StaffingArea, StaffingMonth, StaffRole } from "../staffing-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
-export type { AreaRef, CalendarColour, StaffingMonth, StaffRole };
-
-/** A staffing area by name, in the order the venue lists them. */
-export interface StaffingArea {
-  area: AreaRef;
-  name: string;
-}
-
-/** The month's staffing and the names of the areas it can list. */
-export interface StaffingMonthRead {
-  month: StaffingMonth;
-  areas: StaffingArea[];
-}
+export type { AreaRef, CalendarColour, StaffingArea, StaffingMonth, StaffRole };
 
 export interface StaffRoleInput {
   name: string;
@@ -80,33 +68,24 @@ export class StaffingApi {
     );
   }
 
-  /** Keeps `apply` fed with `month` (YYYY-MM) and the areas' names; resolves after the first read. */
+  /** Keeps `apply` fed with `month` (YYYY-MM); resolves after the first read. */
   watchMonth(
     queries: QueryController,
     month: string,
-    apply: (read: StaffingMonthRead) => void | Promise<void>,
+    apply: (read: StaffingMonth) => void | Promise<void>,
   ): Promise<void> {
     return queries.watch(
       "staffing-month",
       {
         key: `staffing:month:${month}`,
         dependencies: QUERY_DEPENDENCIES["staffing-month"].map((type) => ({ type })),
-        read: async () => ({
-          month: await this.request<StaffingMonth>(
+        read: () =>
+          this.request<StaffingMonth>(
             `/management-api/staffing/month?month=${encodeURIComponent(month)}`,
             "GET",
             undefined,
             { passive: true },
           ),
-          areas: (
-            await this.request<{ areas: StaffingArea[] }>(
-              "/management-api/staffing/areas",
-              "GET",
-              undefined,
-              { passive: true },
-            )
-          ).areas,
-        }),
       },
       apply,
     );

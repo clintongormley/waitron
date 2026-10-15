@@ -456,6 +456,21 @@ describe("resolveStaffing", () => {
     });
   });
 
+  it("refuses a given day plan that leaves out an asked day", async () => {
+    const v = await venue();
+    const plan = {
+      seasonIdOn: new Map([["2026-08-14", v.seasonId]]),
+      special: new Map([["2026-08-14", null]]),
+    };
+    await expect(
+      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"], { plan })),
+    ).rejects.toThrow("the day plan does not cover 2026-08-15");
+    plan.special.delete("2026-08-14");
+    await expect(
+      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14"], { plan })),
+    ).rejects.toThrow("the day plan does not cover 2026-08-14");
+  });
+
   it("returns empty days when there are no days or no season", async () => {
     const v = await venue();
     expect(await inTx((tx) => resolveStaffing(tx, v.cfg, []))).toEqual(new Map());

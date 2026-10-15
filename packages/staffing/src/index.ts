@@ -17,7 +17,6 @@ export {
   saveSpecialDayStaffing,
   type SeasonStaffingEdit,
   type SpecialDayStaffingEdit,
-  type StaffingArea,
 } from "./paint.js";
 export {
   createStaffRole,

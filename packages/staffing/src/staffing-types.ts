@@ -4,6 +4,12 @@ import type { AreaRef, StaffingBlock } from "./slots.js";
 
 export type { CalendarColour };
 
+/** An active department or station by name. */
+export interface StaffingArea {
+  area: AreaRef;
+  name: string;
+}
+
 export interface StaffRole {
   id: string;
   name: string;
@@ -49,6 +55,8 @@ export interface StaffingMonthArea {
 export interface StaffingMonth {
   month: string;
   today: string | null;
+  /** Every active area, in `listStaffingAreas` order, painted in the month or not. */
+  areas: StaffingArea[];
   /** The seasons the listed days touch, in the order they are first touched. */
   seasons: StaffingSeason[];
   days: {

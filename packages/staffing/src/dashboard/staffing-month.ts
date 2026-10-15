@@ -6,8 +6,8 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { areaKey } from "../slots.js";
-import type { StaffingMonth, StaffingSeason } from "../staffing-types.js";
-import type { StaffingApi, StaffingArea, StaffingMonthRead } from "./client.js";
+import type { StaffingArea, StaffingMonth, StaffingSeason } from "../staffing-types.js";
+import type { StaffingApi } from "./client.js";
 import { t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -276,7 +276,7 @@ export class StaffingMonthView extends LitElement {
   /** Moves the Calendar's address. */
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
 
-  @state() private read?: StaffingMonthRead;
+  @state() private read?: StaffingMonth;
   @state() private loadError?: string;
 
   readonly #queries = new QueryController(
@@ -327,7 +327,7 @@ export class StaffingMonthView extends LitElement {
   override render() {
     const current = this.month;
     if (!current) return nothing;
-    const read = this.read?.month.month === current ? this.read : undefined;
+    const read = this.read?.month === current ? this.read : undefined;
     const step = (
       by: number,
       test: string,
@@ -392,7 +392,8 @@ export class StaffingMonthView extends LitElement {
     ></wt-combobox>`;
   }
 
-  #grid({ month, areas }: StaffingMonthRead) {
+  #grid(month: StaffingMonth) {
+    const { areas } = month;
     const chosen = this.#chosen(areas);
     const names = new Map(areas.map(({ area, name }) => [areaKey(area), name]));
     const shown = (day: Day) =>

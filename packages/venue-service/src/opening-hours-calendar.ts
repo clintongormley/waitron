@@ -1,4 +1,5 @@
 import type { Transaction } from "@waitron/db";
+import type { BusinessDayClock } from "@waitron/shared";
 import { readLocationClock } from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import {
@@ -130,6 +131,73 @@ function lastDayAfter(date: LocalDate, sorted: readonly Season[], season: Season
   return addDays(start, -1).slice(5);
 }
 
+/** What a month of the calendar stands on before any hours: its dates, seasons and special days. */
+export interface CalendarMonthPlan {
+  month: string;
+  today: LocalDate | null;
+  /** The seasons the returned dates touch, in the order they are first touched. */
+  seasons: readonly (Season & { lastDay: string })[];
+  /** As stored; the days' changeovers read a zone this runtime cannot place as UTC. */
+  clock: BusinessDayClock;
+  plan: DayPlan;
+  /** The whole Monday-to-Sunday weeks that cover `month`. */
+  days: readonly {
+    date: LocalDate;
+    inMonth: boolean;
+    /** The business day's own changeover, and its length in minutes up to the next day's. */
+    dayCutover: string;
+    endMinute: number;
+    seasonId: string | null;
+    specialDay: { id: string; name: string } | null;
+    closedAllDay: boolean;
+  }[];
+}
+
+const wallClock = (stored: BusinessDayClock): BusinessDayClock =>
+  isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+
+/** `month` is a `YYYY-MM` the caller has checked. */
+export async function readCalendarMonthPlan(
+  tx: Transaction,
+  cfg: VenueScope,
+  month: string,
+  at: Date,
+): Promise<CalendarMonthPlan> {
+  const first = `${month}-01`;
+  const last = addDays(addDays(first, 32).slice(0, 7) + "-01", -1);
+  const from = addDays(first, -((weekdayOf(first) + 6) % 7));
+  const to = addDays(last, (7 - weekdayOf(last)) % 7);
+  const dates = rangeDates(from, to);
+  const stored = await readLocationClock(tx, cfg.locationId);
+  const clock = wallClock(stored);
+  const seasons = await readSeasons(tx, cfg);
+  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const touched = new Map<string, Season & { lastDay: string }>();
+  for (const date of dates) {
+    const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
+    if (season !== undefined && !touched.has(season.id))
+      touched.set(season.id, { ...season, lastDay: lastDayAfter(date, seasons, season) });
+  }
+  return {
+    month,
+    today: venueLocalMoment(at, stored)?.civilDate ?? null,
+    seasons: [...touched.values()],
+    clock: stored,
+    plan,
+    days: dates.map((date) => {
+      const special = plan.special.get(date) ?? null;
+      return {
+        date,
+        inMonth: date.startsWith(month),
+        ...serviceDayWallContext(clock, date),
+        seasonId: plan.seasonIdOn.get(date) ?? null,
+        specialDay: special === null ? null : { id: special.specialDayId, name: special.name },
+        closedAllDay: special?.closedAllDay ?? false,
+      };
+    }),
+  };
+}
+
 /** `month` is a `YYYY-MM` the caller has checked. */
 export async function readOpeningHoursMonth(
   tx: Transaction,
@@ -137,16 +205,11 @@ export async function readOpeningHoursMonth(
   month: string,
   at: Date,
 ): Promise<OpeningHoursMonth> {
-  const first = `${month}-01`;
-  const last = addDays(addDays(first, 32).slice(0, 7) + "-01", -1);
-  const from = addDays(first, -((weekdayOf(first) + 6) % 7));
-  const to = addDays(last, (7 - weekdayOf(last)) % 7);
-  const dates = rangeDates(from, to);
-  const stored = await readLocationClock(tx, cfg.locationId);
-  const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
-  const status = await readBusinessDayScheduleStatus(tx, cfg, stored, at);
-  const seasons = await readSeasons(tx, cfg);
-  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const frame = await readCalendarMonthPlan(tx, cfg, month, at);
+  const { plan } = frame;
+  const clock = wallClock(frame.clock);
+  const dates = frame.days.map(({ date }) => date);
+  const status = await readBusinessDayScheduleStatus(tx, cfg, frame.clock, at);
   const departments = await readActiveDepartments(tx, cfg);
   const zones = await readServiceZones(tx, cfg);
   const hours = await resolveDepartmentsDays(
@@ -166,38 +229,25 @@ export async function readOpeningHoursMonth(
     plan,
   );
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of await readHolidayFacts(tx, cfg, from, to))
+  for (const fact of await readHolidayFacts(tx, cfg, dates[0]!, dates.at(-1)!))
     factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
-  const touched = new Map<string, Season & { lastDay: string }>();
-  for (const date of dates) {
-    const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
-    if (season !== undefined && !touched.has(season.id))
-      touched.set(season.id, { ...season, lastDay: lastDayAfter(date, seasons, season) });
-  }
   return {
     ...status,
     month,
-    today: venueLocalMoment(at, stored)?.civilDate ?? null,
-    seasons: [...touched.values()],
-    days: dates.map((date) => {
-      const special = plan.special.get(date) ?? null;
-      return {
-        date,
-        inMonth: date.startsWith(month),
-        ...serviceDayWallContext(clock, date),
-        seasonId: plan.seasonIdOn.get(date) ?? null,
-        specialDay: special === null ? null : { id: special.specialDayId, name: special.name },
-        holidays: factsOn.get(date) ?? [],
-        closedAllDay: special?.closedAllDay ?? false,
-        departments: departments.map(({ id }) => ({
-          departmentId: id,
-          ranges: hours.get(id)!.get(date)!.ranges,
-          zones: zones
-            .filter(({ departmentId }) => departmentId === id)
-            .map((zone) => ({ zoneId: zone.id, closed: closures.get(zone.id)!.get(date)! })),
-        })),
-      };
-    }),
+    today: frame.today,
+    seasons: frame.seasons,
+    days: frame.days.map(({ closedAllDay, ...day }) => ({
+      ...day,
+      holidays: factsOn.get(day.date) ?? [],
+      closedAllDay,
+      departments: departments.map(({ id }) => ({
+        departmentId: id,
+        ranges: hours.get(id)!.get(day.date)!.ranges,
+        zones: zones
+          .filter(({ departmentId }) => departmentId === id)
+          .map((zone) => ({ zoneId: zone.id, closed: closures.get(zone.id)!.get(day.date)! })),
+      })),
+    })),
   };
 }
 
@@ -222,8 +272,7 @@ export async function readSeasonDays(
   dates: readonly LocalDate[],
 ): Promise<SeasonDays> {
   const days = [...new Set(dates)];
-  const stored = await readLocationClock(tx, cfg.locationId);
-  const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+  const clock = wallClock(await readLocationClock(tx, cfg.locationId));
   const seasons = await readSeasons(tx, cfg);
   const plan: DayPlan = {
     seasonIdOn: new Map(days.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),

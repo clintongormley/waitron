@@ -923,6 +923,12 @@ Tasks 3.1–3.3 below, these win.
   venue-service's `readOpeningHoursMonth` (exported from `@waitron/venue-service` in this part)
   rather than worked out twice: `today`, `seasons` (as `OpeningHoursMonth.seasons`), and on each
   day `seasonId`, `specialDay` (`{ id, name } | null`) and `closedAllDay`.
+- (2026-10-15, after Task 3.2's review.) The staffing month reads those through
+  `readCalendarMonthPlan`, the part of `readOpeningHoursMonth` that comes before any hours and that
+  the opening-hours month now calls itself; it hands that read's day plan and changeover, and its
+  own area list, to `resolveStaffing`, so no table is read twice. `StaffingMonth` also carries
+  `areas`, every active area by name in `listStaffingAreas` order, so the Staffing view asks for
+  the month alone.
 
 ### Task 3.1: The `calendarViews` seam
 

@@ -5,6 +5,7 @@ import { AppError, locationId } from "@waitron/shared";
 import {
   departments,
   readDayPlan,
+  type DayPlan,
   readDepartmentSeasonWeeks,
   seasons,
   specialDayDates,
@@ -13,14 +14,10 @@ import {
 } from "@waitron/venue-service";
 import { staffingBlocks, staffingDays, staffRoles } from "./schema/staffing.js";
 import { areaKey, blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
-import type { SeasonStaffing, SpecialDayStaffing } from "./staffing-types.js";
+import type { SeasonStaffing, SpecialDayStaffing, StaffingArea } from "./staffing-types.js";
 import "./errors.js";
 
 type Cfg = { locationId: string };
-export interface StaffingArea {
-  area: AreaRef;
-  name: string;
-}
 export interface SeasonStaffingEdit {
   area: AreaRef;
   weekday: number;
@@ -344,18 +341,30 @@ export async function saveSpecialDayStaffing(
   }
 }
 
+/** What a caller has already read for {@link resolveStaffing}: a `plan` covering every business
+ *  day, the `listStaffingAreas` answer, and the location's current `cutover`. */
+export interface ResolveStaffingGiven {
+  plan?: DayPlan;
+  areas?: readonly StaffingArea[];
+  cutover?: string;
+}
+
 /** Each business day's blocks per active area (day → areaKey → blocks): the special day's row for
  *  the area wins, else the season's weekday row, else no entry. */
 export async function resolveStaffing(
   tx: Transaction,
   cfg: Cfg,
   businessDays: readonly string[],
+  given: ResolveStaffingGiven = {},
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
   const resolved = new Map<string, Map<string, StaffingBlock[]>>();
   if (businessDays.length === 0) return resolved;
-  const plan = await readDayPlan(tx, venueScope(cfg), businessDays);
-  const areas = await listStaffingAreas(tx, cfg);
-  const cutover = await currentCutover(tx, cfg);
+  const plan = given.plan ?? (await readDayPlan(tx, venueScope(cfg), businessDays));
+  for (const day of businessDays)
+    if (!plan.seasonIdOn.has(day) || !plan.special.has(day))
+      throw new Error(`the day plan does not cover ${day}`);
+  const areas = given.areas ?? (await listStaffingAreas(tx, cfg));
+  const cutover = given.cutover ?? (await currentCutover(tx, cfg));
   const seasonIds = [...new Set([...plan.seasonIdOn.values()].filter((id) => id !== null))];
   const dateIds = [...new Set([...plan.special.values()].flatMap((s) => (s ? [s.dateId] : [])))];
   const paint = await readPaint(

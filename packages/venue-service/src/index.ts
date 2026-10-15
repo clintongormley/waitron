@@ -84,4 +84,4 @@ export { readDayPlan, type DayPlan } from "./day-resolver.js";
 export { readSeasons } from "./seasons.js";
 export type { Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";
-export { readOpeningHoursMonth, type OpeningHoursMonth } from "./opening-hours-calendar.js";
+export { readCalendarMonthPlan } from "./opening-hours-calendar.js";

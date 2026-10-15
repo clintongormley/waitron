@@ -54,6 +54,7 @@ export function staffingMonth(month = "2026-12"): StaffingMonth {
   return {
     month,
     today: "2026-12-02",
+    areas: AREAS,
     seasons: [
       { id: "autumn", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
       { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
@@ -62,16 +63,14 @@ export function staffingMonth(month = "2026-12"): StaffingMonth {
   };
 }
 
-/** A StaffingApi whose month read answers `month(<YYYY-MM>)` and whose areas read answers `AREAS`. */
+/** A StaffingApi whose month read answers `month(<YYYY-MM>)`; any other path throws. */
 export function fakeApi(
   month: (requested: string) => Promise<StaffingMonth> = async (requested) =>
     staffingMonth(requested),
   liveData?: LiveData,
 ) {
-  const request = vi.fn((path: string) => {
-    const asked = /\/month\?month=(.+)$/.exec(path);
-    if (asked) return month(decodeURIComponent(asked[1]!));
-    return Promise.resolve({ areas: AREAS });
-  });
+  const request = vi.fn((path: string) =>
+    month(decodeURIComponent(/\/month\?month=(.+)$/.exec(path)![1]!)),
+  );
   return { api: new StaffingApi(request as unknown as DashboardRequest, liveData), request };
 }

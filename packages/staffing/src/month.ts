@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import { locationId } from "@waitron/shared";
-import { readOpeningHoursMonth } from "@waitron/venue-service";
+import { readCalendarMonthPlan } from "@waitron/venue-service";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { areaKey, slotsForDay } from "./slots.js";
 import type { StaffingMonth } from "./staffing-types.js";
@@ -12,7 +12,7 @@ export async function readStaffingMonth(
   month: string,
   at: Date,
 ): Promise<StaffingMonth> {
-  const hours = await readOpeningHoursMonth(
+  const frame = await readCalendarMonthPlan(
     tx,
     { locationId: locationId(cfg.locationId) },
     month,
@@ -22,18 +22,20 @@ export async function readStaffingMonth(
   const resolved = await resolveStaffing(
     tx,
     cfg,
-    hours.days.map((day) => day.date),
+    frame.days.map((day) => day.date),
+    { plan: frame.plan, areas, cutover: frame.clock.dayCutover },
   );
   return {
     month,
-    today: hours.today,
-    seasons: hours.seasons.map(({ id, name, startsOn, lastDay }) => ({
+    today: frame.today,
+    areas,
+    seasons: frame.seasons.map(({ id, name, startsOn, lastDay }) => ({
       id,
       name,
       startsOn,
       lastDay,
     })),
-    days: hours.days.map((day) => {
+    days: frame.days.map((day) => {
       const byArea = resolved.get(day.date)!;
       return {
         date: day.date,

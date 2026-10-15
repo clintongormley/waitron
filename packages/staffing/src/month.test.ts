@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import {
@@ -40,8 +40,10 @@ const block = (staffRoleId: string, over: Partial<StaffingBlock> = {}): Staffing
   ...over,
 });
 
-/** The seeded venue with Friday paint for its department and station, and a two-date special day:
- *  Friday 2026-08-14 painted for the department only, Saturday 2026-08-15 closed all day. */
+/** The seeded venue with Friday paint for its department and station and Saturday paint for its
+ *  department, and a three-date special day: Friday 2026-08-14 painted for the department only,
+ *  Saturday 2026-08-15 closed all day with no row of its own, and Friday 2026-08-21 an empty row
+ *  for the department. */
 async function painted() {
   const v = await seedVenue(suite.db);
   return inTx(async (tx) => {
@@ -63,6 +65,7 @@ async function painted() {
           date: "2026-08-15",
           closedAllDay: true,
         },
+        { specialDayId: special!.id, locationId: v.cfg.locationId, date: "2026-08-21" },
       ])
       .returning({ id: specialDayDates.id, date: specialDayDates.date });
     const dept: AreaRef = { kind: "department", id: v.departmentId };
@@ -75,7 +78,8 @@ async function painted() {
         weekday: 5,
         blocks: [block(role), block(role, { headcount: 1, startsAt: "20:00", endsAt: "02:00" })],
       },
-      { area: grill, weekday: 5, blocks: [block(role, { headcount: 3 })] },
+      { area: grill, weekday: 5, blocks: [block(role, { headcount: 4 })] },
+      { area: dept, weekday: 6, blocks: [block(role, { headcount: 6 })] },
     ]);
     await saveSpecialDayStaffing(tx, v.cfg, special!.id, [
       {
@@ -83,6 +87,7 @@ async function painted() {
         dateId: dates.find((d) => d.date === "2026-08-14")!.id,
         blocks: [block(role, { headcount: 5 })],
       },
+      { area: dept, dateId: dates.find((d) => d.date === "2026-08-21")!.id, blocks: [] },
     ]);
     return { ...v, dept, grill, specialDayId: special!.id };
   });
@@ -97,6 +102,10 @@ describe("readStaffingMonth", () => {
     const month = await read(v.cfg);
     expect(month.month).toBe("2026-08");
     expect(month.today).toBe("2026-08-10");
+    expect(month.areas).toEqual([
+      { area: v.dept, name: "Dining room" },
+      { area: v.grill, name: "Grill" },
+    ]);
     expect(month.seasons).toEqual([
       { id: v.seasonId, name: "Summer", startsOn: "06-01", lastDay: "05-31" },
     ]);
@@ -107,7 +116,7 @@ describe("readStaffingMonth", () => {
     const day = (date: string) => month.days.find((d) => d.date === date)!;
     const friday = [
       { area: v.dept, needed: 3, unfilled: null },
-      { area: v.grill, needed: 3, unfilled: null },
+      { area: v.grill, needed: 4, unfilled: null },
     ];
     expect(day("2026-07-31")).toEqual({
       date: "2026-07-31",
@@ -126,7 +135,7 @@ describe("readStaffingMonth", () => {
       closedAllDay: false,
       areas: [
         { area: v.dept, needed: 5, unfilled: null },
-        { area: v.grill, needed: 3, unfilled: null },
+        { area: v.grill, needed: 4, unfilled: null },
       ],
     });
     expect(day("2026-08-15")).toEqual({
@@ -135,17 +144,45 @@ describe("readStaffingMonth", () => {
       seasonId: v.seasonId,
       specialDay: { id: v.specialDayId, name: "Fiesta" },
       closedAllDay: true,
-      areas: [],
+      areas: [{ area: v.dept, needed: 6, unfilled: null }],
     });
+    expect(day("2026-08-21").areas).toEqual([
+      { area: v.dept, needed: 0, unfilled: null },
+      { area: v.grill, needed: 4, unfilled: null },
+    ]);
     const paintedDays = month.days.filter((d) => d.areas.length > 0).map((d) => d.date);
     expect(paintedDays).toEqual([
       "2026-07-31",
+      "2026-08-01",
       "2026-08-07",
+      "2026-08-08",
       "2026-08-14",
+      "2026-08-15",
       "2026-08-21",
+      "2026-08-22",
       "2026-08-28",
+      "2026-08-29",
       "2026-09-04",
+      "2026-09-05",
     ]);
+  });
+
+  it("lists an active area with no paint, on no day", async () => {
+    const v = await painted();
+    const [pastry] = await inTx((tx) =>
+      tx
+        .insert(kitchenStations)
+        .values({ locationId: v.cfg.locationId, name: "Pastry", displayOrder: 1 })
+        .returning({ id: kitchenStations.id }),
+    );
+    const month = await read(v.cfg);
+    const area: AreaRef = { kind: "station", id: pastry!.id };
+    expect(month.areas).toEqual([
+      { area: v.dept, name: "Dining room" },
+      { area: v.grill, name: "Grill" },
+      { area, name: "Pastry" },
+    ]);
+    expect(month.days.flatMap((d) => d.areas).filter((a) => a.area.id === area.id)).toEqual([]);
   });
 
   it("leaves out a switched-off department's paint", async () => {
@@ -155,6 +192,33 @@ describe("readStaffingMonth", () => {
     );
     const month = await read(v.cfg);
     const friday = month.days.find((d) => d.date === "2026-08-14")!;
-    expect(friday.areas).toEqual([{ area: v.grill, needed: 3, unfilled: null }]);
+    expect(friday.areas).toEqual([{ area: v.grill, needed: 4, unfilled: null }]);
+    expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
+  });
+
+  it("reads each table once, and none of the hours, zones, holidays or clock status it does not show", async () => {
+    const v = await painted();
+    const tables = await inTx(async (tx) => {
+      const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
+        .session;
+      const prepared = vi.spyOn(session, "prepareQuery");
+      try {
+        await readStaffingMonth(tx, v.cfg, "2026-08", AT);
+        return prepared.mock.calls.map(
+          (call) => /\bfrom "(\w+)"/.exec((call[0] as { sql: string }).sql)?.[1],
+        );
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+    expect(tables).toContain("staffing_days");
+    expect(tables.length).toBe(new Set(tables).size);
+    for (const unshown of [
+      "floor_zones",
+      "holiday_geographies",
+      "location_business_day_settings",
+      "tenants",
+    ])
+      expect(tables).not.toContain(unshown);
   });
 });

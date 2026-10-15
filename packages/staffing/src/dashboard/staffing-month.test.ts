@@ -238,7 +238,40 @@ describe("the Staffing view's month", () => {
     expect(request.mock.calls.filter(([path]) => path.includes("/month?"))).toHaveLength(2);
   });
 
-  it("leaves a day no season holds untinted, and an area the names read lacks unnamed", async () => {
+  it("asks for the month alone on each read, the areas' names coming with it", async () => {
+    const liveData = new LiveData();
+    const { api, request } = fakeApi(undefined, liveData);
+    const { el } = await mount({ api });
+    const asked = [
+      "/management-api/staffing/month?month=2026-12",
+      "GET",
+      undefined,
+      { passive: true },
+    ];
+    expect(request.mock.calls).toEqual([asked]);
+    liveData.invalidate([{ type: "staffing_blocks" }]);
+    await vi.waitFor(() => expect(request.mock.calls).toEqual([asked, asked]));
+    expect(lines(el, "2026-12-01")).toEqual(["Restaurant 6", "Bar 2", "Kitchen 4"]);
+    liveData.clear();
+  });
+
+  it("offers an area the month does not paint", async () => {
+    const terrace = { area: { kind: "department", id: "dep-terrace" } as const, name: "Terrace" };
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      return { ...read, areas: [...read.areas, terrace] };
+    });
+    const { el } = await mount({ api });
+    expect(picker(el).options.map((option) => option.label)).toEqual([
+      "All areas",
+      "Restaurant",
+      "Bar",
+      "Kitchen",
+      "Terrace",
+    ]);
+  });
+
+  it("leaves a day no season holds untinted, and an area the month does not name unnamed", async () => {
     const { api } = fakeApi(async (month) => {
       const read = staffingMonth(month);
       read.days[1] = { ...read.days[1]!, seasonId: null };
