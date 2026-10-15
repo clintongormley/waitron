@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { StaffingBlock } from "../slots.js";
@@ -146,7 +146,7 @@ test("a block is a button drawn at its times, named by its day, staff role, head
   expect(block(el, "tue").getAttribute("aria-label")).toBe(
     "Tuesday, Head chef, 3 people, 09:00–16:30",
   );
-  expect(block(el, "tue").textContent).toContain("Head chef");
+  expect(block(el, "tue").textContent).toContain("HC");
   expect(block(el, "tue").textContent).toContain("×3");
   expect(block(el, "tue").getAttribute("data-colour")).toBe("purple");
   const style = getComputedStyle(block(el, "tue"));
@@ -155,6 +155,147 @@ test("a block is a button drawn at its times, named by its day, staff role, head
   host.append(probe);
   expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
   expect(style.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+});
+
+interface Clip {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+/** The part of the page an element's overflow clipping leaves showing: its padding box. */
+function clipOf(at: HTMLElement): Clip {
+  const outer = at.getBoundingClientRect();
+  return {
+    left: outer.left + at.clientLeft,
+    top: outer.top + at.clientTop,
+    right: outer.left + at.clientLeft + at.clientWidth,
+    bottom: outer.top + at.clientTop + at.clientHeight,
+  };
+}
+/** Every piece of text a block draws, with its box and what the block and the clipping elements
+ *  inside it leave showing. */
+function blockTexts(el: StaffingGrid) {
+  return [...el.shadowRoot!.querySelectorAll<HTMLElement>(".block")].flatMap((at) => {
+    const walker = document.createTreeWalker(at, NodeFilter.SHOW_TEXT);
+    const texts: { text: string; box: DOMRect; clip: Clip }[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node.textContent!.trim() === "") continue;
+      let clip = clipOf(at);
+      for (let up = node.parentElement!; up !== at; up = up.parentElement!) {
+        if (getComputedStyle(up).overflow === "visible") continue;
+        const inner = clipOf(up);
+        clip = {
+          left: Math.max(clip.left, inner.left),
+          top: Math.max(clip.top, inner.top),
+          right: Math.min(clip.right, inner.right),
+          bottom: Math.min(clip.bottom, inner.bottom),
+        };
+      }
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      texts.push({ text: node.textContent!, box: range.getBoundingClientRect(), clip });
+    }
+    return texts;
+  });
+}
+const inside = (box: DOMRect, clip: Clip) =>
+  box.left >= clip.left - 0.5 &&
+  box.right <= clip.right + 0.5 &&
+  box.top >= clip.top - 0.5 &&
+  box.bottom <= clip.bottom + 0.5;
+const outside = (box: DOMRect, clip: Clip) =>
+  box.left >= clip.right - 0.5 ||
+  box.right <= clip.left + 0.5 ||
+  box.top >= clip.bottom - 0.5 ||
+  box.bottom <= clip.top + 0.5;
+
+for (const [width, height, narrowest] of [
+  [1280, 900, 45],
+  [390, 844, 32],
+] as const)
+  test(`at ${width}×${height}, four side-by-side blocks show their staff roles' initials and cut no text`, async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, height);
+      const lunch: StaffingBlock[] = [
+        headChef,
+        { ...sous, headcount: 1 },
+        { staffRoleId: "sc", headcount: 12, startsAt: "11:00", endsAt: "17:00" },
+        { staffRoleId: "dw", headcount: 1, startsAt: "13:00", endsAt: "16:30" },
+        { staffRoleId: "dw", headcount: 1, startsAt: "20:00", endsAt: "20:45" },
+      ];
+      const el = await grid({
+        mon: [],
+        tue: lunch,
+        wed: [],
+        thu: [],
+        fri: [],
+        sat: [],
+        sun: [],
+      });
+      expect(block(el, "tue", 0).getBoundingClientRect().width).toBeLessThan(narrowest);
+      const texts = blockTexts(el);
+      for (const { text, box, clip } of texts)
+        expect(inside(box, clip) || outside(box, clip), `"${text}" is cut by its block`).toBe(true);
+      const shown = (index: number) =>
+        texts
+          .filter(({ box, clip }) => inside(box, clip))
+          .some(({ text, box }) => {
+            const at = block(el, "tue", index).getBoundingClientRect();
+            return (
+              text === ["HC", "SC", "SC", "Di", "Di"][index] &&
+              box.left >= at.left &&
+              box.right <= at.right &&
+              box.top >= at.top &&
+              box.bottom <= at.bottom
+            );
+          });
+      for (const index of [0, 1, 2, 3])
+        expect(shown(index), `block ${index}'s initials`).toBe(true);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+test("at 390×844 a narrow block shows both its times or neither", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const dinner: StaffingBlock[] = [
+      { staffRoleId: "hc", headcount: 1, startsAt: "18:00", endsAt: "00:00" },
+      { staffRoleId: "sc", headcount: 1, startsAt: "18:00", endsAt: "00:00" },
+      { staffRoleId: "dw", headcount: 1, startsAt: "20:00", endsAt: "00:00" },
+    ];
+    const el = await grid({ mon: [], tue: dinner, wed: [], thu: [], fri: [], sat: [], sun: [] });
+    const texts = blockTexts(el);
+    const visible = (text: string, index: number) => {
+      const at = block(el, "tue", index).getBoundingClientRect();
+      return texts.some(
+        (seen) =>
+          seen.text === text &&
+          seen.box.left >= at.left &&
+          seen.box.right <= at.right &&
+          inside(seen.box, seen.clip),
+      );
+    };
+    for (const [index, { startsAt, endsAt }] of dinner.entries())
+      expect(visible(startsAt, index), `block ${index}`).toBe(visible(endsAt, index));
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
+test("a block draws its staff role's initials, headcount and times on their own lines, keeping the full name in its accessible name", async () => {
+  const el = await grid({
+    tue: [{ staffRoleId: "dw", headcount: 2, startsAt: "13:00", endsAt: "16:30" }],
+  });
+  expect(block(el, "tue").getAttribute("aria-label")).toBe(
+    "Tuesday, Dishwasher, 2 people, 13:00–16:30",
+  );
+  expect(
+    [...block(el, "tue").querySelectorAll(".text")].map((line) => line.textContent!.trim()),
+  ).toEqual(["Di", "×2", "13:00", "16:30"]);
 });
 
 test("a drag down a column previews and adds a block of the chosen staff role and headcount", async () => {

@@ -29,6 +29,7 @@ import {
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
+import { roleInitials } from "./role-initials.js";
 import { peopleNeeded, t } from "./strings.js";
 
 export interface StaffingColumn {
@@ -103,11 +104,36 @@ export class StaffingGrid extends LitElement {
         background: var(--period-fill);
         color: var(--period-on-fill);
       }
+      /* A line that does not fit wraps out of sight rather than being cut: one below the block's
+         foot into a column past its end edge, and text too wide for its line onto that line's
+         hidden second row. Each leads with an empty item, so even the first line can wrap away. */
       .block {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
+        flex-flow: column wrap;
+        align-content: flex-start;
+        padding: 0;
+        line-height: 1.25;
+        font-variant-numeric: tabular-nums;
         border: 1px solid var(--wt-color-border);
+      }
+      .block::before {
+        content: "";
+        inline-size: 100%;
+      }
+      .block .text {
+        display: flex;
+        flex-wrap: wrap;
+        box-sizing: border-box;
+        inline-size: 100%;
+        block-size: 1lh;
+        padding-inline: calc(var(--wt-space-1) / 2);
+        overflow: hidden;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      .block .text::before {
+        content: "";
+        block-size: 100%;
       }
       .block[data-colour] {
         border-color: transparent;
@@ -396,8 +422,10 @@ export class StaffingGrid extends LitElement {
     });
   }
   #content(block: StaffingBlock) {
-    return html`<span class="name">${this.#role(block.staffRoleId)?.name ?? ""}</span
-      ><span>×${block.headcount}</span><span>${block.startsAt}–${block.endsAt}</span>`;
+    return html`<span class="text name"
+        >${roleInitials(this.#role(block.staffRoleId)?.name ?? "")}</span
+      ><span class="text">×${block.headcount}</span><span class="text">${block.startsAt}</span
+      ><span class="text">${block.endsAt}</span>`;
   }
   #block(
     column: StaffingColumn,

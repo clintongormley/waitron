@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { applyTokens, registerIcons } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
@@ -639,4 +640,19 @@ it("speaks Spanish", async () => {
   const { painter } = await mount();
   expect(grid(painter).columns.map(({ label }) => label)).toEqual(["jue 24 dic", "vie 25 dic"]);
   expect(byTest(painter, "new-staff-role")!.textContent!.trim()).toBe("+ Nuevo rol de personal");
+});
+
+it("at 1280×900 the grid fills the frame's height under the paint row, still showing the whole day", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const { painter } = await mount();
+    const slot = grid(painter).getBoundingClientRect();
+    const scroll = grid(painter).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    expect(slot.height).toBeGreaterThan(600);
+    expect(Math.abs(scroll.getBoundingClientRect().bottom - slot.bottom)).toBeLessThan(1);
+    expect(scroll.scrollHeight).toBeLessThanOrEqual(scroll.clientHeight);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });

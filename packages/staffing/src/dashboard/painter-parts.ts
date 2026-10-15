@@ -29,8 +29,10 @@ export const painterStyles = css`
   .message[role="alert"] {
     color: var(--wt-color-danger);
   }
+  /* The days fill the grid's slot: less the heading row and its line, and the grid's two borders. */
   staffing-grid {
     container-type: size;
+    --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
   }
 `;
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { applyTokens, registerIcons } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
@@ -713,4 +714,19 @@ it("names only the removed areas that held edits, one in the singular", async ()
   answer(fresh);
   await settle(painter);
   expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
+});
+
+it("at 1280×900 the grid fills the frame's height under the paint row, still showing the whole day", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const { painter } = await mount();
+    const slot = grid(painter).getBoundingClientRect();
+    const scroll = grid(painter).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    expect(slot.height).toBeGreaterThan(600);
+    expect(Math.abs(scroll.getBoundingClientRect().bottom - slot.bottom)).toBeLessThan(1);
+    expect(scroll.scrollHeight).toBeLessThanOrEqual(scroll.clientHeight);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
