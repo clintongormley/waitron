@@ -943,6 +943,46 @@ describe("copyPublishedToDraft", () => {
     return { locationId, versionId, shiftId };
   }
 
+  it("copies an empty published period without inventing shifts or swaps", async () => {
+    const locationId = await seedLocation(suite.db);
+    const versionId = await insertRosterVersion(suite.db, {
+      locationId,
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-10",
+    });
+    await run((tx) => backend.publishRoster(tx, { versionId }));
+    const result = await run((tx) => backend.copyPublishedToDraft(tx, { versionId }));
+    expect(result.shiftIds).toEqual(new Map());
+    expect(result.openSwaps).toEqual([]);
+    expect(
+      await run((tx) => backend.getRosterVersion(tx, { versionId: result.versionId })),
+    ).toMatchObject({
+      locationId,
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-10",
+      status: "draft",
+    });
+    expect(
+      await countRows(sql`select count(*) as n from shifts where location_id=${locationId}`),
+    ).toBe(0);
+  });
+
+  it("serializes two simultaneous copies so only one draft is created", async () => {
+    const { locationId, versionId } = await publishedWeek();
+    const results = await Promise.allSettled([
+      run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
+      run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    expect(failure.reason).toMatchObject({ code: "roster.draft_exists", params: { locationId } });
+    expect(
+      await countRows(
+        sql`select count(*) as n from roster_versions where location_id=${locationId} and status='draft'`,
+      ),
+    ).toBe(1);
+  });
+
   it("copies every shift field, keeps the published rows, and switches staff visibility only on publication", async () => {
     const { locationId, versionId, shiftId } = await publishedWeek();
     const original = await suite.db.execute(sql`select * from shifts where id=${shiftId}`);
