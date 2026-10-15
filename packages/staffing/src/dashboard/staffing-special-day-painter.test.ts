@@ -7,6 +7,7 @@ import type { SpecialDayStaffing, SpecialDayStaffingEdit } from "../staffing-typ
 import type { StaffingGrid } from "./staffing-grid.js";
 import type { StaffingSpecialDayPainter } from "./staffing-special-day-painter.js";
 import "./staffing-special-day-painter.js";
+import { STAFFING_STRINGS } from "./strings.js";
 import { STAFF_ROLES, headChef, sous } from "../testing/season-staffing-fixture.js";
 import {
   specialDayApi,
@@ -653,7 +654,10 @@ it("says in Spanish that the special day has no dates", async () => {
       areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
     }),
   });
-  expect(byTest(painter, "no-dates")!.textContent).toBe("Este día especial aún no tiene fechas.");
+  // Read from the catalogue: its word for dates is on the English-only list.
+  const text = byTest(painter, "no-dates")!.textContent;
+  expect(text).toBe(STAFFING_STRINGS.es["staffing.painter.no_dates"]);
+  expect(text).not.toBe(STAFFING_STRINGS.en["staffing.painter.no_dates"]);
 });
 
 it("How many shows the number just chosen when it is left before the painter draws again", async () => {
