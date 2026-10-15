@@ -2246,7 +2246,7 @@ answer. Line numbers are from Part 2's branch on 2026-10-15; re-check them on `m
   receipt alone uses it.
 - The `vatIncludedAtRate` label key (`packages/country/src/country.ts:82`, and its four languages in
   `packages/country-es/src/receipt-labels.ts`) loses its only reader: `git grep vatIncludedAtRate` on
-  2026-10-15 found `receipt-document.ts:362` and `packages/country-es/src/spain.test.ts:289, 295`,
+  2026-10-15 found `receipt-document.ts:362` and `packages/country-es/src/spain.test.ts:288, 294`,
   and nothing in `apps/till`. The tasks remove it with its test lines.
 - Tests: `git grep -n 'incluido' -- apps packages` on 2026-10-15 lists the suites that name the
   row — `receipt-document.test.ts`, `receipt-ticket.test.ts`, `receipt-language.test.ts`,
