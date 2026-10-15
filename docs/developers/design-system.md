@@ -3509,10 +3509,11 @@ Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, rea
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
 `opening-hours-month.ts`): ‹ › step months, and there is no ‹ year, no department picker, no
-+ Special day and no Rows legend. Each date draws one bar of the times the station gets orders, worked out from
++ Special day. Each date draws one bar of the times the station gets orders, worked out from
 routed products and the zones that can order them, and reads "No orders" on a date it gets none.
-When more than one department sends the station orders in the weeks shown, each period's label
-names its department ("Lunch (Restaurant)"). Dates show their special day's and public holiday's
+When more than one department sends the station orders in the weeks shown, each date draws one
+track per department in department order, a Rows key names them, a department with nothing that
+date draws an empty track, and hovering a range names its department ("Lunch (Restaurant)"). Dates show their special day's and public holiday's
 names, as in Opening hours, and the season chips are only a key to the tints, not buttons
 (`keyOnly` on `season-chips.ts`). These are planned times; today's station closures and service
 extensions do not change them. A default station shows "Always open: this is the default
