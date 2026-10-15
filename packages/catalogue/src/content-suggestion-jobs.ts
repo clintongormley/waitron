@@ -34,24 +34,20 @@ const FAILURE_CODES: Record<SuggestionFailure, string> = {
   rejected: "cloud.request_invalid",
 };
 
+/** A job that refuses a new run: still going, or ended with a Cloud job not yet released. */
+const ACTIVE = or(
+  inArray(jobs.state, ["submitting", "running"]),
+  and(
+    inArray(jobs.state, ["done", "partly_done", "failed"]),
+    isNotNull(jobs.cloudJobId),
+    eq(jobs.released, false),
+  ),
+);
+
 export async function readActiveSuggestionJob(
   tx: Transaction,
 ): Promise<SuggestionJobRow | undefined> {
-  const [job] = await tx
-    .select()
-    .from(jobs)
-    .where(
-      or(
-        inArray(jobs.state, ["submitting", "running"]),
-        and(
-          inArray(jobs.state, ["done", "partly_done", "failed"]),
-          isNotNull(jobs.cloudJobId),
-          eq(jobs.released, false),
-        ),
-      ),
-    )
-    .orderBy(asc(jobs.position))
-    .limit(1);
+  const [job] = await tx.select().from(jobs).where(ACTIVE).orderBy(asc(jobs.position)).limit(1);
   return job;
 }
 
@@ -164,11 +160,15 @@ function outcome(
 }
 
 export async function readSuggestionRun(tx: Transaction): Promise<SuggestionRunView | null> {
-  const run = await tx.select().from(jobs).orderBy(asc(jobs.position));
+  const rows = await tx
+    .select({ job: jobs, active: sql<number>`${ACTIVE}` })
+    .from(jobs)
+    .orderBy(asc(jobs.position));
+  const run = rows.map((row) => row.job);
   const first = run[0];
   if (!first) return null;
   const last = run.at(-1)!;
-  const active = await readActiveSuggestionJob(tx);
+  const active = rows.find((row) => row.active)?.job;
   const [counted] = await tx
     .select({ waiting: sql<number>`count(*)` })
     .from(contentSuggestions)
