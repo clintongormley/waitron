@@ -1079,7 +1079,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
 - **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
-  tasks 1–10 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
+  tasks 1–12 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
@@ -1098,20 +1098,30 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   a Cloud without version 2 refuses, so Cloud's version 2 must be deployed before a box built from
   `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)). **Tasks 5–10 (the
   catalogue's job and suggestion tables, collecting and building a job, recording a job, and
-  storing, listing and discarding suggestions) are on `main` too**; until the runner and routes
-  (Task 11 onwards), only the translations save reaches them, deleting the saved items' waiting
-  suggestions.
+  storing, listing and discarding suggestions) are on `main` too**, and so are **Tasks 11–12**: the
+  job runner, which starts with the server when a Cloud address is configured and works only while
+  the node is primary, and the three `/management-api/content-suggestions` routes. Nothing in the
+  dashboard calls those routes until Task 13 onwards.
 
 - **Translate all: a venue with more than Cloud's 20 content languages gets a job Cloud refuses.**
   The box saves up to 200 languages and sends them all as `languages.enabled`; Cloud refuses every
   job past 20 with 400, which reaches the dialog as `cloud.request_invalid` (ruling W1b, A689's
   second PR). A box-side refusal before any job is built would say what is wrong.
 
-- **Translate all: a submit Cloud accepted whose reply was lost, followed by the box ending the job,
-  leaves Cloud holding the job until its own 24-hour expiry.** The box never learns Cloud's job id,
-  so when it then ends the job as not connected (the service switched off) or expired (its own
-  24-hour clock), it marks the job released without releasing it in Cloud; resending after 24 hours
-  could create a second job. Pinned by "a job Cloud took but whose reply was lost…" in
+- **Translate all: a job the box ends itself is marked released without a call to Cloud, and
+  Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
+  clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
+  no longer lists the service `ready`, or the connection is revoked), and when a status or collect
+  call is refused as a request Cloud will never accept (ended `rejected`). Cloud's 24 hours run
+  from its own submit, or from when the job finished, so it can still hold the job, and while that
+  job is queued or running the contract's `translation_job_running` refuses the venue's next
+  submit. A release would not end a queued or running job (Cloud answers 409
+  `translation_not_ready`); it only deletes a finished job's results sooner. Cloud's operator
+  switching the service off answers 503, which the box retries rather than ending the job. A
+  submit Cloud accepted whose reply was lost is the worst case: the box never learned Cloud's job
+  id, so it could not release the job even once Cloud finished it. Pinned by "a job Cloud took but
+  whose reply was lost…", "a running job 24 hours old ends expired without asking Cloud" and "a
+  status Cloud refuses as a request it will never accept…" in
   `apps/server/src/content-suggestion-runner.test.ts`. What would fix it is open.
 
 - **Translate all: open points from the review of A689's second PR.** (1) A suggestion's

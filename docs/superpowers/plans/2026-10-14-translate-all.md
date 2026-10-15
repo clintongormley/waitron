@@ -57,6 +57,11 @@ Each is stated at its site in the code too, where a rule requires it.
 11. **Cloud's `reason` reaches the dialog.** `partly_done` with `limit_reached` and `failed` with `limit_reached` show `content.suggestion_limit_reached` with `fits: 0`; `failed` with `consent_required` shows `content.suggestion_consent_required`; `failed` with `provider_unavailable` shows `content.suggestion_service_unavailable`; `partly_done` with `provider_failed` shows only the count that could not be done.
 12. **A translation call does not hold the Cloud connection's lock across its HTTP exchange.** `refresh()` and `report()` refuse `cloud.busy` while the lock is held (`apps/server/src/cloud-client.ts:304-306`, `:429-450`), and a translation exchange can take 30 seconds. The lock is taken only to renew the control lease (Task 4).
 13. **A job always ends.** Cloud can stop offering the service to this box mid-job (its `permission_denied` maps to `cloud.unavailable`, which the runner would otherwise retry for ever), and any refusal can recur. So the runner ends an open job when `translationService()` is no longer `on`, exactly as when the box is not connected, and ends any job 24 hours after it was created as `expired` — Cloud has deleted it by then anyway (Task 11). Either way the run stops refusing a new one.
+
+   > **2026-10-15, A689's third PR:** "Cloud has deleted it by then anyway" is wrong: Cloud's
+   > 24 hours run from its submit or the job's finish, so it can still hold the job. See the
+   > backlog entry "a job the box ends itself is marked released without a call to Cloud".
+
 14. **A run's total counts only items with languages to write.** `run_total` is the number of items sent plus those left for later jobs, never context heads (which Cloud's own `total` leaves out too); progress is `done + failed` summed over the run's jobs; and when the run's last job is stored the total is set to what was actually sent, so a name someone filled meanwhile does not leave the count short (Tasks 8 and 9).
 15. **Rows the default-language page leaves out survive the dialog's live refreshes because the dialog passes them in as page rows.** `TranslationDrafts.snapshot()` keeps a row only when it holds a person's edit or is in the page scan (`apps/dashboard/src/widgets/content-translations-model.ts:54`). The dialog's scan therefore reads the waiting suggestions, resolves each one's item that the page did not list through the translations route's `targets` form, and appends those rows to what it hands the model (Task 16).
 
@@ -5838,6 +5843,10 @@ export async function sentInRun(tx: Transaction, runId: string): Promise<Set<str
   return new Set(rows.flatMap((row) => Object.keys(row.sent)));
 }
 ```
+
+> **2026-10-15, as landed in A689's third PR.** The comment in `recordSuggestionJobEnded` above was
+> cut: a job the box ends on its own 24-hour clock can still be held by Cloud. See the backlog
+> entry "a job the box ends itself is marked released without a call to Cloud".
 
 In `packages/catalogue/src/index.ts`, after the `content-suggestion-collect.js` export Task 6 added:
 
