@@ -147,6 +147,11 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
+- **Walk-up invoice dates follow the server process time zone.** With the venue fixed to
+  Madrid at `2026-10-14T23:30Z`, A693's probe stored 14 October under `TZ=UTC` and
+  15 October under `TZ=Europe/Madrid`. Decide the intended zone, audit the issuing paths
+  and qualify a fiscal fix before going live. [Detail](backlog/fiscal.md#walk-up-invoice-dates-follow-the-server-process-time-zone).
+
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
   the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
@@ -5341,12 +5346,6 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
-
-- **A693. `transactional-series.test.ts`'s offline-drain case failed under every time zone tried
-  whose date was ahead of UTC's (2026-10-15; check, fiscal drain).** `TZ=Europe/Madrid` and
-  `TZ=Asia/Tokyo` failed it, `TZ=UTC` and `TZ=America/New_York` passed; CI runs in UTC. Not yet run
-  under Madrid while its date matches UTC's. Next: run it under `TZ=Europe/Madrid` while the two
-  dates agree. [Detail](backlog/ci.md#a693-the-offline-drain-case-failed-under-madrid-and-tokyo-time-and-passed-under-utc-and-new-york-time).
 
 - **A674. `ci` can fail on a job GitHub has finished but not yet marked finished.** Its second
   step reads the jobs API and gives up after six tries ten seconds apart (`docs/developers/ci-and-gates.md`,

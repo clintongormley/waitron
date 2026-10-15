@@ -229,30 +229,53 @@ describe("transactional active series qualification", () => {
     expect(await snapshot(v)).toEqual(committed);
   });
 
-  it("keeps the emergency series through offline drain and successful reconnection", async () => {
-    const v = await venueWithOtherNode();
-    const active = await activate(v, emergency);
-    await issue(v, "walk-up", await prepare(v, "walk-up"));
-    const before = await v.db.select().from(invoiceSeries);
-    const aeat = createFakeAeat({ serverNow: new Date() });
-    let connected = false;
-    const drainDeps = {
-      db: v.db,
-      environment: "preproduction" as const,
-      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
-      resolveClient: async () => {
-        if (!connected) throw new Error("synthetic offline connection");
-        return aeat.client();
-      },
-    };
-    const offline = await drain(drainDeps, new Date());
-    expect(offline.recordsAccepted).toBe(0);
-    connected = true;
-    const online = await drain(drainDeps, new Date(Date.now() + 3_600_000));
-    expect(online.recordsAccepted).toBe(1);
-    expect(await v.db.select().from(invoiceSeries)).toEqual(before);
-    await issue(v, "walk-up", await prepare(v, "walk-up"));
-    const rows = await v.db.select().from(sales);
-    expect(rows.map((sale) => sale.seriesId)).toEqual([active.id, active.id]);
-  });
+  it.each([
+    ["UTC", "2026-10-14T12:00:00.000Z"],
+    ["UTC", "2026-10-14T23:30:00.000Z"],
+    ["Europe/Madrid", "2026-10-14T12:00:00.000Z"],
+    ["Europe/Madrid", "2026-10-14T23:30:00.000Z"],
+    ["Asia/Tokyo", "2026-10-14T12:00:00.000Z"],
+    ["Asia/Tokyo", "2026-10-14T23:30:00.000Z"],
+    ["America/New_York", "2026-10-14T12:00:00.000Z"],
+    ["America/New_York", "2026-10-14T23:30:00.000Z"],
+  ])(
+    "keeps the emergency series through offline drain and successful reconnection (%s, %s)",
+    async (zone, at) => {
+      vi.stubEnv("TZ", zone);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(at));
+      try {
+        const v = await venueWithOtherNode();
+        const active = await activate(v, emergency);
+        await issue(v, "walk-up", await prepare(v, "walk-up"));
+        const before = await v.db.select().from(invoiceSeries);
+        const aeat = createFakeAeat({ serverNow: new Date() });
+        let connected = false;
+        const drainDeps = {
+          db: v.db,
+          environment: "preproduction" as const,
+          skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+          resolveClient: async () => {
+            if (!connected) throw new Error("synthetic offline connection");
+            return aeat.client();
+          },
+        };
+        const offline = await drain(drainDeps, new Date());
+        expect(offline.recordsAccepted).toBe(0);
+        connected = true;
+        // The fake compares invoice dates at UTC midnight, so reconnect after that boundary too.
+        const reconnectedAt = new Date("2026-10-15T12:00:00.000Z");
+        aeat.setServerNow(reconnectedAt);
+        const online = await drain(drainDeps, reconnectedAt);
+        expect(online.recordsAccepted).toBe(1);
+        expect(await v.db.select().from(invoiceSeries)).toEqual(before);
+        await issue(v, "walk-up", await prepare(v, "walk-up"));
+        const rows = await v.db.select().from(sales);
+        expect(rows.map((sale) => sale.seriesId)).toEqual([active.id, active.id]);
+      } finally {
+        vi.useRealTimers();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });
