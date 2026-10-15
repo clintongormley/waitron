@@ -149,6 +149,74 @@ describe("StaffingApi", () => {
     expect(sent(fetchImpl, 2)).toMatchObject({ path: `${BASE}/${waiter.id}`, method: "DELETE" });
   });
 
+  it("reads a season's and a special day's staffing with passive reads, and saves each with a PUT of its edits", async () => {
+    const season = { cutover: "06:00", seasons: [], areas: [], guides: {} };
+    const special = { cutover: "06:00", name: "Fiesta", areas: [], guides: {} };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(season))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse(special))
+      .mockResolvedValueOnce(emptyResponse());
+    const client = api(fetchImpl);
+    const area = { kind: "department", id: "d1" } as const;
+    const blocks = [{ staffRoleId: waiter.id, headcount: 2, startsAt: "12:00", endsAt: "16:00" }];
+    const STAFFING = "/management-api/staffing";
+    expect(await client.readSeason("s/1")).toEqual(season);
+    expect(sent(fetchImpl)).toEqual({
+      path: `${STAFFING}/seasons/s%2F1`,
+      method: "GET",
+      body: undefined,
+      live: "1",
+    });
+    expect(await client.saveSeason("s/1", [{ area, weekday: 5, blocks }])).toBeUndefined();
+    expect(sent(fetchImpl, 1)).toEqual({
+      path: `${STAFFING}/seasons/s%2F1`,
+      method: "PUT",
+      body: { edits: [{ area, weekday: 5, blocks }] },
+      live: null,
+    });
+    expect(await client.readSpecialDay("x/2")).toEqual(special);
+    expect(sent(fetchImpl, 2)).toEqual({
+      path: `${STAFFING}/special-days/x%2F2`,
+      method: "GET",
+      body: undefined,
+      live: "1",
+    });
+    const edits = [
+      { area, dateId: "a", blocks },
+      { area, dateId: "b", blocks: null },
+    ];
+    expect(await client.saveSpecialDay("x/2", edits)).toBeUndefined();
+    expect(sent(fetchImpl, 3)).toEqual({
+      path: `${STAFFING}/special-days/x%2F2`,
+      method: "PUT",
+      body: { edits },
+      live: null,
+    });
+  });
+
+  it("rejects a refused save with the refusal's code and params", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: { code: "staffing.invalid", params: { field: "edits.0.blocks.0.headcount" } },
+      }),
+    } as unknown as Response);
+    const client = api(fetchImpl);
+    await expect(client.saveSeason("s", [])).rejects.toEqual({
+      code: "staffing.invalid",
+      params: { field: "edits.0.blocks.0.headcount" },
+      status: 400,
+    });
+    await expect(client.saveSpecialDay("x", [])).rejects.toEqual({
+      code: "staffing.invalid",
+      params: { field: "edits.0.blocks.0.headcount" },
+      status: 400,
+    });
+  });
+
   it("encodes an id it puts in a path", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     await api(fetchImpl).deleteStaffRole("a/b");

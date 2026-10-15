@@ -1,10 +1,29 @@
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
 import type { AreaRef } from "../slots.js";
-import type { CalendarColour, StaffingArea, StaffingMonth, StaffRole } from "../staffing-types.js";
+import type {
+  CalendarColour,
+  SeasonStaffing,
+  SeasonStaffingEdit,
+  SpecialDayStaffing,
+  SpecialDayStaffingEdit,
+  StaffingArea,
+  StaffingMonth,
+  StaffRole,
+} from "../staffing-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
-export type { AreaRef, CalendarColour, StaffingArea, StaffingMonth, StaffRole };
+export type {
+  AreaRef,
+  CalendarColour,
+  SeasonStaffing,
+  SeasonStaffingEdit,
+  SpecialDayStaffing,
+  SpecialDayStaffingEdit,
+  StaffingArea,
+  StaffingMonth,
+  StaffRole,
+};
 
 export interface StaffRoleInput {
   name: string;
@@ -20,6 +39,10 @@ export interface StaffPerson {
 
 const BASE = "/management-api/staffing/staff-roles";
 const path = (staffRoleId: string) => `${BASE}/${encodeURIComponent(staffRoleId)}`;
+const seasonPath = (seasonId: string) =>
+  `/management-api/staffing/seasons/${encodeURIComponent(seasonId)}`;
+const specialDayPath = (specialDayId: string) =>
+  `/management-api/staffing/special-days/${encodeURIComponent(specialDayId)}`;
 
 export class StaffingApi {
   constructor(
@@ -89,6 +112,24 @@ export class StaffingApi {
       },
       apply,
     );
+  }
+
+  readSeason(seasonId: string): Promise<SeasonStaffing> {
+    return this.request(seasonPath(seasonId), "GET", undefined, { passive: true });
+  }
+
+  /** Replaces only the (area, weekday) pairs `edits` names. */
+  saveSeason(seasonId: string, edits: readonly SeasonStaffingEdit[]): Promise<void> {
+    return this.request(seasonPath(seasonId), "PUT", { edits });
+  }
+
+  readSpecialDay(specialDayId: string): Promise<SpecialDayStaffing> {
+    return this.request(specialDayPath(specialDayId), "GET", undefined, { passive: true });
+  }
+
+  /** Replaces only the (area, date) pairs `edits` names; `blocks: null` follows the season. */
+  saveSpecialDay(specialDayId: string, edits: readonly SpecialDayStaffingEdit[]): Promise<void> {
+    return this.request(specialDayPath(specialDayId), "PUT", { edits });
   }
 
   createStaffRole(input: StaffRoleInput): Promise<StaffRole> {

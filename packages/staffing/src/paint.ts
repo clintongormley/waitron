@@ -7,6 +7,8 @@ import {
   readDayPlan,
   type DayPlan,
   readDepartmentSeasonWeeks,
+  readSeasons,
+  resolveDepartmentsDays,
   seasons,
   specialDayDates,
   specialDays,
@@ -14,22 +16,18 @@ import {
 } from "@waitron/venue-service";
 import { staffingBlocks, staffingDays, staffRoles } from "./schema/staffing.js";
 import { areaKey, blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
-import type { SeasonStaffing, SpecialDayStaffing, StaffingArea } from "./staffing-types.js";
+import type {
+  SeasonStaffing,
+  SeasonStaffingEdit,
+  SpecialDayStaffing,
+  SpecialDayStaffingEdit,
+  StaffingArea,
+} from "./staffing-types.js";
 import "./errors.js";
 
+export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
+
 type Cfg = { locationId: string };
-export interface SeasonStaffingEdit {
-  area: AreaRef;
-  weekday: number;
-  /** Times as `HH:MM`, as `parseBlocks` returns them. */
-  blocks: readonly StaffingBlock[];
-}
-export interface SpecialDayStaffingEdit {
-  area: AreaRef;
-  dateId: string;
-  /** Times as `HH:MM`, as `parseBlocks` returns them; null: the date follows the season. */
-  blocks: readonly StaffingBlock[] | null;
-}
 
 const venueScope = (cfg: Cfg) => ({ locationId: locationId(cfg.locationId) });
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
@@ -139,6 +137,9 @@ async function currentCutover(tx: Transaction, cfg: Cfg): Promise<string> {
   return (await readLocationClock(tx, cfg.locationId)).dayCutover;
 }
 
+const guideRanges = (ranges: readonly { startsAt: string; endsAt: string }[]) =>
+  ranges.map((r) => ({ startsAt: r.startsAt, endsAt: r.endsAt }));
+
 async function assertSeasonHere(tx: Transaction, cfg: Cfg, seasonId: string): Promise<void> {
   const [row] = await tx
     .select({ id: seasons.id })
@@ -147,22 +148,24 @@ async function assertSeasonHere(tx: Transaction, cfg: Cfg, seasonId: string): Pr
   if (row === undefined) throw new AppError("season.not_found", { seasonId });
 }
 
-/** The special day's dates in date order; refused unless the special day is at the location. */
-async function specialDayDatesHere(
+/** The special day's name and its dates in date order; refused unless the special day is at the
+ *  location. */
+async function specialDayHere(
   tx: Transaction,
   cfg: Cfg,
   specialDayId: string,
-): Promise<{ dateId: string; date: string }[]> {
+): Promise<{ name: string; dates: { dateId: string; date: string }[] }> {
   const [row] = await tx
-    .select({ id: specialDays.id })
+    .select({ name: specialDays.name })
     .from(specialDays)
     .where(and(eq(specialDays.id, specialDayId), eq(specialDays.locationId, cfg.locationId)));
   if (row === undefined) throw new AppError("special_day.not_found", { specialDayId });
-  return tx
+  const dates = await tx
     .select({ dateId: specialDayDates.id, date: specialDayDates.date })
     .from(specialDayDates)
     .where(eq(specialDayDates.specialDayId, specialDayId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  return { name: row.name, dates };
 }
 
 /** Refuses an area that is not an active department or station at the location, and a staff
@@ -220,7 +223,9 @@ export async function readSeasonStaffing(
   cfg: Cfg,
   seasonId: string,
 ): Promise<SeasonStaffing> {
-  await assertSeasonHere(tx, cfg, seasonId);
+  const all = await readSeasons(tx, venueScope(cfg));
+  if (!all.some((season) => season.id === seasonId))
+    throw new AppError("season.not_found", { seasonId });
   const areas = await listStaffingAreas(tx, cfg);
   const cutover = await currentCutover(tx, cfg);
   const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
@@ -231,6 +236,8 @@ export async function readSeasonStaffing(
     cutover,
   );
   return {
+    cutover,
+    seasons: all.map(({ id, name, startsOn }) => ({ id, name, startsOn })),
     areas: areas.map(({ area, name }) => {
       const byDay = paint.get(areaKey(area));
       return {
@@ -246,12 +253,7 @@ export async function readSeasonStaffing(
         const week = area.kind === "department" ? hours.get(area.id)?.get(seasonId) : undefined;
         return [
           areaKey(area),
-          Object.fromEntries(
-            WEEKDAYS.map((w) => [
-              w,
-              (week?.[w] ?? []).map((r) => ({ startsAt: r.startsAt, endsAt: r.endsAt })),
-            ]),
-          ),
+          Object.fromEntries(WEEKDAYS.map((w) => [w, guideRanges(week?.[w] ?? [])])),
         ];
       }),
     ),
@@ -291,9 +293,10 @@ export async function readSpecialDayStaffing(
   cfg: Cfg,
   specialDayId: string,
 ): Promise<SpecialDayStaffing> {
-  const dates = await specialDayDatesHere(tx, cfg, specialDayId);
+  const { name: specialDayName, dates } = await specialDayHere(tx, cfg, specialDayId);
   const areas = await listStaffingAreas(tx, cfg);
-  const cutover = await currentCutover(tx, cfg);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const cutover = clock.dayCutover;
   const paint = await readPaint(
     tx,
     areas,
@@ -303,7 +306,27 @@ export async function readSpecialDayStaffing(
     ),
     cutover,
   );
+  const hours = await resolveDepartmentsDays(
+    tx,
+    venueScope(cfg),
+    idsOf(areas, "department"),
+    dates.map((d) => d.date),
+    clock,
+  );
   return {
+    cutover,
+    name: specialDayName,
+    guides: Object.fromEntries(
+      areas.map(({ area }) => {
+        const byDate = area.kind === "department" ? hours.get(area.id) : undefined;
+        return [
+          areaKey(area),
+          Object.fromEntries(
+            dates.map(({ dateId, date }) => [dateId, guideRanges(byDate?.get(date)?.ranges ?? [])]),
+          ),
+        ];
+      }),
+    ),
     areas: areas.map(({ area, name }) => ({
       area,
       name,
@@ -324,7 +347,7 @@ export async function saveSpecialDayStaffing(
   specialDayId: string,
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
-  const dateIds = new Set((await specialDayDatesHere(tx, cfg, specialDayId)).map((d) => d.dateId));
+  const dateIds = new Set((await specialDayHere(tx, cfg, specialDayId)).dates.map((d) => d.dateId));
   const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
   if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
   await assertEditTargets(tx, cfg, edits);

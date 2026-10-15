@@ -460,6 +460,8 @@ describe("the staffing paint routes", () => {
       204,
     );
     await answers(await p.call("GET", path, p.supervisor), 200, {
+      cutover: "06:00",
+      seasons: [{ id: p.seasonId, name: "Summer", startsOn: "06-01" }],
       areas: [
         { area: p.dept, name: "Dining room", weekdays: week({ 0: [lunch] }) },
         { area: p.grill, name: "Grill", weekdays: week({ 6: [night] }) },
@@ -616,7 +618,11 @@ describe("the staffing paint routes", () => {
       }),
       204,
     );
+    const noGuide = { [p.aug14]: [], [p.aug15]: [] };
     await answers(await p.call("GET", path, p.supervisor), 200, {
+      cutover: "06:00",
+      name: "Fiesta",
+      guides: { [`department:${p.departmentId}`]: noGuide, [`station:${p.stationId}`]: noGuide },
       areas: [
         {
           area: p.dept,
