@@ -1411,7 +1411,7 @@ habitual de {season}". Deleted: `staffing.month.seasons`, `staffing.month.season
 
 ## Seams left for later items
 
-- **A721 (Seasons…):** the Year view's season row (`season-chips` at `opening-hours-year.ts:527-533`
+- **A721 (Seasons…):** the Year view's season row (the `<season-chips>` in `opening-hours-year.ts`'s render
   after Part 1). A721 adds "Seasons…" at its end and removes the chips' ✎ and "+ Season" with the
   season dialog (Decision 3).
 - **A719 (Periods…):** beside A721's "Seasons…" on the same row; if A719 lands first it starts the

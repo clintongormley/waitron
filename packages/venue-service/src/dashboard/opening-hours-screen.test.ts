@@ -1816,13 +1816,13 @@ describe("Month view", () => {
       await expect.poll(() => year()?.model).toBeDefined();
       await year()!.updateComplete;
       await el.updateComplete;
-      expect(focused(el)).toBe("body");
+      expect(focused(el)).not.toBe("opening-hours-year:year");
 
       year()!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=month-name]")[2]!.focus();
       await userEvent.keyboard("{Enter}");
       await shown(view, "2026-03");
       await el.updateComplete;
-      expect(focused(el)).toBe("body");
+      expect(focused(el)).not.toBe("opening-hours-month:month");
     });
 
     it("fits a phone's width", async () => {

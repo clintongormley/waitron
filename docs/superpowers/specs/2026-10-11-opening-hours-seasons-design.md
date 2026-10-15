@@ -311,8 +311,8 @@ Nothing on them shows live state.
 
 **2026-10-15 (A720 Part 1):** a Year / Month switch after ‹ › replaces the tab row and the month's
 "‹ year"; the Year's legend, "+ Special day", its "included" coverage sentence and the town-holiday
-sentence are gone, and the month draws no season chips, "+ Special day" or Rows line outside a prep
-station's Times tab.
+sentence are gone, and the month no longer draws "+ Special day", and draws season chips and a Rows
+line only on a prep station's Times tab.
 
 ### 10.3 The painter (both editors; mockups 3, 4, 9)
 
