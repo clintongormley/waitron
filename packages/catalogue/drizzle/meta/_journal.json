@@ -225,6 +225,13 @@
       "when": 1791449973239,
       "tag": "0031_blushing_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792026899394,
+      "tag": "0032_content_suggestions",
+      "breakpoints": true
     }
   ]
 }
