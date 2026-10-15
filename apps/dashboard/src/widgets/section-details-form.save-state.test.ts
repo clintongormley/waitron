@@ -18,12 +18,16 @@ const stored: SectionDetails = {
   members: [],
 };
 
-async function mount(value: SectionDetails | null = stored): Promise<Form> {
+async function mount(
+  value: SectionDetails | null = stored,
+  extra: Partial<Form> = {},
+): Promise<Form> {
   const { el } = await mountWidget<Form>("dashboard-section-details-form", {
     open: true,
     heading: "Section details",
     value,
     languages: { defaultLanguage: "en", languages: ["en", "es"] },
+    ...extra,
   });
   await el.updateComplete;
   return el;
@@ -69,6 +73,24 @@ it("opens a create with nothing typed with Save quiet, and spaces alone change n
   await expectQuiet(el);
   change(el, "internalName", "Specials");
   await expectReady(el);
+});
+
+const chosen = (el: Form) =>
+  el.shadowRoot!.querySelector<HTMLElement>('button[role="radio"][aria-checked="true"]')!.dataset
+    .color;
+
+it("opens a create on its start colour with Save quiet until a name is typed", async () => {
+  const el = await mount(null, { startColor: "#ededab" });
+  expect(chosen(el)).toBe("#ededab");
+  await expectQuiet(el);
+  change(el, "internalName", "Specials");
+  await expectReady(el);
+});
+
+it("opens a stored section with no colour as having none, whatever the start colour", async () => {
+  const el = await mount({ ...stored, color: null }, { startColor: "#ededab" });
+  expect(chosen(el)).toBe("");
+  await expectQuiet(el);
 });
 
 it.each([

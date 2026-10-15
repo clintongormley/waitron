@@ -2308,6 +2308,117 @@ it("creates a section at the menu's top level from the root row's ⋮, and gives
   expect(structureRows(el).shadowRoot.activeElement).toBe(rootAdds(el));
 });
 
+/** A section of the menu's own, at whichever level it is placed. */
+const ownSectionNode = (n: number): MenuStructureNode => ({
+  memberId: `m-own-${n}`,
+  ref: { kind: "section", sectionId: `s-own-${n}` },
+  internalName: `Own ${n}`,
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
+  children: [],
+});
+
+const includedWineNode: MenuStructureNode = {
+  memberId: "included-wine",
+  ref: { kind: "section", sectionId: "wine-root" },
+  internalName: "Wine menu",
+  includedMenuId: "wine",
+  ownerMenuId: "wine",
+  folder: { showAsFolder: true, overrides: {} },
+  children: [],
+};
+
+/** The colour the open section form has chosen; "" for none. */
+function chosenColor(el: MenusScreen): string {
+  return inModal(el, "new-section", 'button[role="radio"][aria-checked="true"]').dataset.color!;
+}
+
+async function createAt(el: MenusScreen, key: string, name: string): Promise<void> {
+  await rowAction(el, key, "new-section");
+  type(inModal(el, "new-section", 'wt-input[name="internalName"]'), name);
+  await el.updateComplete;
+}
+
+it.each([
+  ["no sections of its own", [productNode("m-burger", "p-burger")], "#edabab"],
+  [
+    "two sections of its own beside a product and an included menu",
+    [ownSectionNode(0), productNode("m-burger", "p-burger"), includedWineNode, ownSectionNode(1)],
+    "#ededab",
+  ],
+  ["eight sections of its own", [0, 1, 2, 3, 4, 5, 6, 7].map(ownSectionNode), "#edabab"],
+])(
+  "starts a new top-level section in a menu with %s with the next pale colour, and sends it",
+  async (_label, nodes, expected) => {
+    const client = api({ getMenuStructure: vi.fn(async () => lunchWith(nodes)) });
+    const el = await mountLunch(client);
+    await createAt(el, "", "Ciders");
+    expect(chosenColor(el)).toBe(expected);
+    inModal(el, "new-section", '[data-test="new-section-save"]').click();
+    await vi.waitFor(() =>
+      expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith(
+        "root-lunch",
+        expect.objectContaining({ internalName: "Ciders", color: expected }),
+      ),
+    );
+  },
+);
+
+it("starts a new section inside another section with no colour, and sends none", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await createAt(el, "m-drinks", "Ciders");
+  expect(chosenColor(el)).toBe("");
+  inModal(el, "new-section", '[data-test="new-section-save"]').click();
+  await vi.waitFor(() =>
+    expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith(
+      "s-drinks",
+      expect.objectContaining({ internalName: "Ciders", color: null }),
+    ),
+  );
+});
+
+it("sends no colour when the starting colour of a new top-level section is cleared", async () => {
+  const client = api({ getMenuStructure: vi.fn(async () => lunchWith([])) });
+  const el = await mountLunch(client);
+  await emptyAdd(el, "new-section");
+  type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
+  await el.updateComplete;
+  expect(chosenColor(el)).toBe("#edabab");
+  inModal(el, "new-section", 'button[data-color=""]').click();
+  await el.updateComplete;
+  expect(chosenColor(el)).toBe("");
+  inModal(el, "new-section", '[data-test="new-section-save"]').click();
+  await vi.waitFor(() =>
+    expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith(
+      "root-lunch",
+      expect.objectContaining({ internalName: "Ciders", color: null }),
+    ),
+  );
+});
+
+it("edits a top-level section with no colour as having none, Save quiet, while a new one would start pale", async () => {
+  const el = await mountLunch(api());
+  await rowAction(el, "m-drinks", "edit");
+  await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
+  const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+    el,
+    '[data-test="section-form"]',
+  )!;
+  await vi.waitFor(() => expect(form.value?.id).toBe("s-drinks"));
+  await form.updateComplete;
+  expect(chosenColor(el)).toBe("");
+  const save = inModal<HTMLElementTagNameMap["wt-button"]>(
+    el,
+    "new-section",
+    '[data-test="new-section-save"]',
+  );
+  await save.updateComplete;
+  expect(save.disabled).toBe(true);
+});
+
 it("turns Select and reorder off and puts focus on the empty box's first add when removing the last member empties the menu", async () => {
   let removed = false;
   const client = api({
@@ -3871,7 +3982,7 @@ it("closes a new-section form quietly when its section is created and added whil
     internalName: "Specials",
     names: {},
     image: null,
-    color: null,
+    color: "#ededab",
   });
   expect(client.addSectionMember).not.toHaveBeenCalled();
   expect(q(el, '[data-test="member-error"]')).toBeNull();

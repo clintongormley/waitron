@@ -52,3 +52,8 @@ export const CATEGORY_PALETTE = [
   "#dd5fdd",
   "#edabed",
 ] as const;
+
+/** The pale tone of the n-th hue, wrapping after magenta. */
+export function paleSwatch(n: number): string {
+  return CATEGORY_PALETTE[(n % 8) * 3 + 2]!;
+}

@@ -45,6 +45,9 @@ const UNIT_ABBR = {
   l: { en: "l", es: "l", ca: "l", "ca-ES-valencia": "l", gl: "l", eu: "l" },
 } as const;
 
+// The pale blue swatch of CATEGORY_PALETTE (packages/ui/src/category-color.ts).
+const NEW_VENUE_DEFAULT_COLOR = "#abcced";
+
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content languages",
@@ -64,7 +67,10 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         "general";
       await tx
         .insert(catalogueSettings)
-        .values({ defaultProductVatClass: defaultProductVatClass as VatClass })
+        .values({
+          defaultProductVatClass: defaultProductVatClass as VatClass,
+          defaultColor: NEW_VENUE_DEFAULT_COLOR,
+        })
         .onConflictDoNothing({ target: catalogueSettings.id });
       const { defaultLanguage, languages } = resolveInstalledStartingContentLanguages({
         country,

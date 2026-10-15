@@ -737,15 +737,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#a647--tidy-the-product-editor),
   [mockups](backlog/mockups/a647-product-editor/)
 
-- **A648 — pale default colours (owner, 2026-10-14; open).** A new venue's "All products" default
-  colour (`catalogue_settings.default_color`) starts as the pale blue swatch `#abcced`, so a product
-  with no category is no longer white. Each new top-level section in a menu starts with a colour
-  from the pale row of `CATEGORY_PALETTE` (`packages/ui/src/category-color.ts`: red, orange, yellow,
-  green, teal, blue, violet, magenta, then red again), chosen by how many top-level sections the
-  menu already has. The colour is set once, at creation: moving or deleting sections never
-  recolours one, and it can be changed or cleared like any other. No data migration (CLAUDE.md §3:
-  venues are reset). [Mockup](backlog/mockups/a648-pale-default-colours/1-pale-defaults.png)
-
 - **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
   spec written, awaiting the owner's review).** A "Contains none of the 14" choice, so a dish stops
   reading "not reviewed" for ever; "may contain" dropped; Gluten and Nuts say which cereals and nuts;
@@ -5333,6 +5324,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **A693. `transactional-series.test.ts`'s offline-drain case failed under every time zone tried
+  whose date was ahead of UTC's (2026-10-15; check, fiscal drain).** `TZ=Europe/Madrid` and
+  `TZ=Asia/Tokyo` failed it, `TZ=UTC` and `TZ=America/New_York` passed; CI runs in UTC. Not yet run
+  under Madrid while its date matches UTC's. Next: run it under `TZ=Europe/Madrid` while the two
+  dates agree. [Detail](backlog/ci.md#a693-the-offline-drain-case-failed-under-madrid-and-tokyo-time-and-passed-under-utc-and-new-york-time).
 
 - **A674. `ci` can fail on a job GitHub has finished but not yet marked finished.** Its second
   step reads the jobs API and gives up after six tries ten seconds apart (`docs/developers/ci-and-gates.md`,

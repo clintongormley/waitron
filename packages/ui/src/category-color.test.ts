@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { readableTextColor, CATEGORY_PALETTE, isHexColor } from "./category-color.js";
+import { readableTextColor, CATEGORY_PALETTE, isHexColor, paleSwatch } from "./category-color.js";
 
 function contrast(a: string, b: string): number {
   const lum = (hex: string) => {
@@ -97,4 +97,24 @@ test("isHexColor rejects a hex colour with anything before or after it", () => {
   expect(isHexColor("x#dd9e5f")).toBe(false);
   expect(isHexColor(" #dd9e5f")).toBe(false);
   expect(isHexColor("background:#dd9e5f")).toBe(false);
+});
+
+test("paleSwatch walks the pale tone of each hue in palette order", () => {
+  expect([0, 1, 2, 3, 4, 5, 6, 7].map(paleSwatch)).toEqual([
+    "#edabab",
+    "#edccab",
+    "#ededab",
+    "#abedab",
+    "#abede2",
+    "#abcced",
+    "#c1abed",
+    "#edabed",
+  ]);
+});
+
+test("paleSwatch wraps back to red after magenta", () => {
+  expect(paleSwatch(8)).toBe("#edabab");
+  expect(paleSwatch(9)).toBe("#edccab");
+  expect(paleSwatch(15)).toBe("#edabed");
+  expect(paleSwatch(16)).toBe("#edabab");
 });

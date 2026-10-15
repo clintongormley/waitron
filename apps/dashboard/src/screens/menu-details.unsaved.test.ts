@@ -24,6 +24,7 @@ customElements.define("menu-details-leave-test-app", MenuDetailsLeaveApp);
 for (const kind of ["menu", "section"] as const) {
   for (const succeeds of [true, false]) {
     it(`${kind} ${succeeds ? "success commits before close and failed refresh" : "refusal retains its draft and warns"}`, async () => {
+      const color = kind === "section" ? "#edabab" : null;
       history.replaceState(
         null,
         "",
@@ -110,13 +111,13 @@ for (const kind of ["menu", "section"] as const) {
       });
       form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
       await vi.waitFor(() =>
-        expect(inputs).toEqual([{ internalName: "Specials", names: {}, image: null, color: null }]),
+        expect(inputs).toEqual([{ internalName: "Specials", names: {}, image: null, color }]),
       );
       if (succeeds) {
         await expect
           .poll(() => atCommit)
           .toEqual({
-            submitted: { internalName: "Specials", names: {}, image: null, color: null },
+            submitted: { internalName: "Specials", names: {}, image: null, color },
             dirty: false,
             open: true,
           });

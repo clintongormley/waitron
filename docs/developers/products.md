@@ -388,7 +388,8 @@ or on its Price overrides tab.
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
-default colour (`catalogue_settings.default_color`); with no default it has none, and each
+default colour (`catalogue_settings.default_color`, which the catalogue's setup step sets to the
+pale blue `#abcced` when it creates the venue's settings row, `CATALOGUE_PROVISIONING` in `packages/catalogue/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
 `categoryColorSource` (which also says which category the colour came from) in
 `packages/catalogue/src/color-inheritance.ts`, which the server and the
@@ -431,7 +432,11 @@ product's own colour goes into the next version's offer in the same way
 earlier document format is not sold from: [product-categories.md](product-categories.md).
 
 A menu section has a colour of its own, set in the section form. It paints the section's own tile
-and nothing else: the products inside the section keep their own colours.
+and nothing else: the products inside the section keep their own colours. The section form for a new
+section at a menu's top level opens on the next pale swatch, picked by how many top-level sections
+of its own the menu has (red first, back to red after magenta); a new section inside another opens
+with none (`paleSwatch`, `packages/ui/src/category-color.ts`, called from
+`apps/dashboard/src/screens/menus-screen.ts`).
 
 On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a section tile with a
 colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,

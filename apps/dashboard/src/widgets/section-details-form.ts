@@ -71,6 +71,8 @@ export class SectionDetailsForm extends LitElement {
     languages: ["en"],
   };
   @property({ attribute: false }) value: SectionDetails | null = null;
+  /** The colour a create opens on; never applied to a stored section. */
+  @property({ attribute: false }) startColor: string | null = null;
   @property({ attribute: false }) draftParent?: object;
   @property() heading = "";
   @property() nameLabel = "";
@@ -119,7 +121,7 @@ export class SectionDetailsForm extends LitElement {
       this.internalName = this.value?.internalName ?? "";
       for (const locale of this.languages.languages) this.names[locale] ??= "";
       this.image = this.value?.image ?? null;
-      this.color = this.value?.color ?? null;
+      this.color = this.value ? (this.value.color ?? null) : this.startColor;
       this.attempted = false;
       this.dismissed = new Set();
     }
