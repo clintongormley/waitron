@@ -19,7 +19,15 @@ export async function renderInvoicePdf(input: ReceiptDocumentInput): Promise<Buf
     pdf.addPage({ size: [INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT], margin: 0 });
     for (const element of page.elements) {
       if (element.kind === "text") {
-        pdf.fontSize(element.size).text(element.text, element.x, element.y, { lineBreak: false });
+        if (element.bold) {
+          pdf.lineWidth(0.35).fontSize(element.size).text(element.text, element.x, element.y, {
+            lineBreak: false,
+            fill: true,
+            stroke: true,
+          });
+        } else {
+          pdf.fontSize(element.size).text(element.text, element.x, element.y, { lineBreak: false });
+        }
       } else if (element.kind === "logo") {
         const { raster } = element;
         const pitch = element.width / raster.widthDots;

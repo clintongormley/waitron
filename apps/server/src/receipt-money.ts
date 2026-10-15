@@ -1,4 +1,19 @@
-const formatters = new Map<string, Intl.NumberFormat>();
+const moneyFormatters = new Map<string, Intl.NumberFormat>();
+const rateFormatters = new Map<string, Intl.NumberFormat>();
+const amountFormatters = new Map<string, Intl.NumberFormat>();
+
+function cached(
+  map: Map<string, Intl.NumberFormat>,
+  locale: string,
+  options: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  let formatter = map.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, options);
+    map.set(locale, formatter);
+  }
+  return formatter;
+}
 
 /**
  * A money amount for paper, formatted in `locale`. `Intl.NumberFormat("es-ES", …)` separates the amount
@@ -9,12 +24,20 @@ const formatters = new Map<string, Intl.NumberFormat>();
  * and not reliably beyond.
  */
 export function formatMoney(value: string, locale: string): string {
-  let formatter = formatters.get(locale);
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" });
-    formatters.set(locale, formatter);
-  }
-  return formatter
+  return cached(moneyFormatters, locale, { style: "currency", currency: "EUR" })
+    .format(Number(value))
+    .replace(/[\u{a0}\u{202f}]/gu, " ")
+    .replace(/\u{2212}/gu, "-");
+}
+
+/** A VAT rate as a receipt prints it: significant digits only, the locale's decimal mark, then "%". */
+export function formatVatRate(rate: string, locale: string): string {
+  return `${cached(rateFormatters, locale, { maximumFractionDigits: 2 }).format(Number(rate))}%`;
+}
+
+/** An amount in `locale` without the currency sign, with formatMoney's space and minus-sign replacements. */
+export function formatAmount(value: string, locale: string): string {
+  return cached(amountFormatters, locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     .format(Number(value))
     .replace(/[\u{a0}\u{202f}]/gu, " ")
     .replace(/\u{2212}/gu, "-");

@@ -11,7 +11,7 @@ import {
   type ReceiptPresentation,
 } from "@waitron/shared";
 import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
-import { formatMoney } from "./receipt-money.js";
+import { formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -41,13 +41,26 @@ export interface ReceiptDocumentInput {
   duplicate?: boolean;
 }
 
-// The roll renderer resolves an indent after this prefix against its own column count.
+// The roll renderer resolves an indent after this prefix against the columns the line is drawn in.
 export type ReceiptIndent = number | { after: string };
 export const PART_SEPARATOR = " · ";
+export type ReceiptStyle = { bold?: true; double?: true };
 export type ReceiptElement =
   // `parts` is set only on a line the document itself joined from them with PART_SEPARATOR.
-  | { kind: "text"; text: string; indent: ReceiptIndent; parts?: readonly string[] }
-  | { kind: "amount"; caption: string; amount: string; indent: ReceiptIndent }
+  | {
+      kind: "text";
+      text: string;
+      indent: ReceiptIndent;
+      parts?: readonly string[];
+      style?: ReceiptStyle;
+    }
+  | {
+      kind: "amount";
+      caption: string;
+      amount: string;
+      indent: ReceiptIndent;
+      style?: ReceiptStyle;
+    }
   | { kind: "break" }
   | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
@@ -108,8 +121,8 @@ export function buildReceiptDocument({
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
   const elements: ReceiptElement[] = [];
-  const text = (text: string, indent: ReceiptIndent = 0): void => {
-    elements.push({ kind: "text", text, indent });
+  const text = (text: string, indent: ReceiptIndent = 0, style?: ReceiptStyle): void => {
+    elements.push({ kind: "text", text, indent, ...(style ? { style } : {}) });
   };
   const joined = (parts: string[]): void => {
     if (parts.length === 1) text(parts[0]!);
@@ -117,8 +130,13 @@ export function buildReceiptDocument({
       elements.push({ kind: "text", text: parts.join(PART_SEPARATOR), indent: 0, parts });
     }
   };
-  const row = (caption: string, amount: string, indent: ReceiptIndent = 0): void => {
-    elements.push({ kind: "amount", caption, amount, indent });
+  const row = (
+    caption: string,
+    amount: string,
+    indent: ReceiptIndent = 0,
+    style?: ReceiptStyle,
+  ): void => {
+    elements.push({ kind: "amount", caption, amount, indent, ...(style ? { style } : {}) });
   };
   const line = (): void => {
     elements.push({ kind: "break" });
@@ -133,9 +151,17 @@ export function buildReceiptDocument({
       `${formatMoney(line.net.unitPrice, locale)} / ${trimQuantityForDisplay(line.net.priceQuantity)}${unit}`,
       indent,
     );
-    row(`${label.base} ${line.net.rate}%`, formatMoney(line.net.base, locale), indent);
+    row(
+      `${label.base} ${formatVatRate(line.net.rate, locale)}`,
+      formatMoney(line.net.base, locale),
+      indent,
+    );
     if (line.net.tax !== undefined) {
-      row(`${label.vat} ${line.net.rate}%`, formatMoney(line.net.tax, locale), indent);
+      row(
+        `${label.vat} ${formatVatRate(line.net.rate, locale)}`,
+        formatMoney(line.net.tax, locale),
+        indent,
+      );
     }
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
@@ -258,11 +284,11 @@ export function buildReceiptDocument({
   for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
   line();
   for (const v of result.vatBreakdown) {
-    row(`${label.base} ${v.rate}%`, formatMoney(v.base, locale));
-    row(`${label.vat} ${v.rate}%`, formatMoney(v.tax, locale));
+    row(`${label.base} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
+    row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
   }
   elements.push({ kind: "rule" });
-  row(label.total, formatMoney(result.total, locale));
+  row(label.total, formatMoney(result.total, locale), 0, { double: true });
   line();
   const t = result.tender;
   if (result.payments !== undefined && result.payments.length > 0) {

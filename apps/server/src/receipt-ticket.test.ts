@@ -344,9 +344,10 @@ it.each([PRINTER_58, PRINTER_80])(
       .join(" ")
       .replace(/\s+/g, " ");
     const dish = content.slice(content.indexOf("Plato"), content.indexOf("Extra"));
-    const extra = content.slice(content.indexOf("Extra"), content.indexOf("Base 21%"));
-    expect(dish).toContain("IVA 21.00% 2,10 €");
-    expect(extra).toContain("IVA 10.00% 0,80 €");
+    const extraStart = content.indexOf("Extra");
+    const extra = content.slice(extraStart, content.indexOf("Base 21%", extraStart));
+    expect(dish).toContain("IVA 21% 2,10 €");
+    expect(extra).toContain("IVA 10% 0,80 €");
   },
 );
 
@@ -478,7 +479,13 @@ it.each([PRINTER_58, PRINTER_80])(
       expect(content).toContain("Factura completa");
       const price = invoiceLocale === "es-ES" ? "25,00 €" : "€25.00";
       expect(content).toContain(`Precio sin IVA ${price} / 1 kg`);
-      expect(content).toContain(`Base 10.00% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`);
+      const hamStart = content.indexOf(invoiceLocale === "es-ES" ? "Jamón" : "Ham");
+      const hamEnd = content.indexOf("Base 21%", hamStart);
+      expect(hamStart).toBeGreaterThan(-1);
+      expect(hamEnd).toBeGreaterThan(hamStart);
+      expect(content.slice(hamStart, hamEnd)).toContain(
+        `Base 10% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`,
+      );
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
       expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
     }
@@ -1884,7 +1891,7 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    expect(lines).toContain(`TOTAL${" ".repeat(18)}20,90 €`);
+    expect(lines).toContain(`TOTAL${" ".repeat(3)}20,90 €`);
     expect(lines).toContain(`Base 21%${" ".repeat(15)}10,00 €`);
   });
 
@@ -2186,7 +2193,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
       at80("  Descuento", "-0,99 €"),
       "",
     ]);
-    expect(lines).toContain(at80("TOTAL", "22,60 €"));
+    expect(lines).toContain(`TOTAL${" ".repeat(9)}22,60 €`);
   });
 
   it("prints a whole-bill discount once, after the goods and before the VAT breakdown", () => {
@@ -2800,7 +2807,7 @@ describe("the top block is centred: logo, names, slogan, legal name and NIF, add
     for (const start of ["1  Menú del día", "2  Agua mineral", "Base 21%", "IVA 10%", "TOTAL"]) {
       const line = lines.find((l) => l.startsWith(start));
       expect(line, start).toBeDefined();
-      expect(line!.length, start).toBe(columns);
+      expect(line!.length, start).toBe(start === "TOTAL" ? Math.floor(columns / 2) : columns);
     }
   });
 
@@ -3047,5 +3054,56 @@ describe("a joined top-block line on a roll too narrow for it (A497)", () => {
     const at = lines.indexOf("Terraza · Mesa del fondo 6 ·");
     expect(at).toBeGreaterThan(-1);
     expect(lines[at + 1]).toBe("Pedido 41");
+  });
+});
+
+describe("TOTAL drawn double size", () => {
+  function doubleLines(result: TillSaleResult, printer: EscSetting): string[] {
+    return printedCommands(
+      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES", printer }),
+    )
+      .filter((command) => command.heightDots === 56)
+      .map((command) => (command.text ?? "<not text>").trim().replace(/\s+/g, " "));
+  }
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "draws TOTAL double size on one line when it fits ($paperWidth)",
+    (printer) => {
+      expect(doubleLines(FILED_WITHOUT_TEXT, printer)).toEqual(["TOTAL 20,90 €"]);
+    },
+  );
+
+  it("puts a wide TOTAL's amount on its own double line on 58 mm", () => {
+    const result = { ...FILED_WITHOUT_TEXT, total: "10000.00" };
+    expect(doubleLines(result, PRINTER_58)).toEqual(["TOTAL", "10.000,00 €"]);
+    const amountLine = printedCommands(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    ).filter((command) => command.heightDots === 56)[1]!;
+    expect(amountLine.text).toBe(`${" ".repeat(4)}10.000,00 €`);
+  });
+
+  it("keeps a wide TOTAL on one double line on 80 mm", () => {
+    expect(doubleLines({ ...FILED_WITHOUT_TEXT, total: "10000.00" }, PRINTER_80)).toEqual([
+      "TOTAL 10.000,00 €",
+    ]);
+  });
+
+  it("prints TOTAL at normal size when even its amount is wider than half the paper", () => {
+    const huge = { ...FILED_WITHOUT_TEXT, total: "1234567890123.00" };
+    const bytes = formatReceipt({
+      result: huge,
+      issuer: ISSUER,
+      receipt: {},
+      invoiceLocale: "es-ES",
+      printer: PRINTER_58,
+    });
+    expect(decodeTicket(bytes)).toContain("1.234.567.890.123,00 €");
+    expect(doubleLines(huge, PRINTER_58)).toEqual([]);
   });
 });

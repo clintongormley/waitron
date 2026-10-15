@@ -1,7 +1,7 @@
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_PAGE_WIDTH, layoutInvoicePages, type InvoicePageElement } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -313,6 +313,74 @@ describe("A4 line above the total and space around the logo", () => {
       ).toBe("rule");
   });
 
+  it("moves the rule onto the next page with a double-size TOTAL that does not fit below it", () => {
+    const repeated = (count: number) => ({
+      ...fixture,
+      result: {
+        ...fixture.result,
+        lines: Array.from({ length: count }, () => fixture.result.lines[0]!),
+      },
+    });
+    const pages = layoutInvoicePages(repeated(37));
+    expect(pages.length).toBeGreaterThan(1);
+    for (const [index, page] of pages.slice(0, -1).entries())
+      expect(page.elements.at(-1)?.kind, `page ${index + 1} ends with`).not.toBe("rule");
+    const page = pages.find((candidate) =>
+      candidate.elements.some((e) => e.kind === "text" && e.text.startsWith("TOTAL")),
+    )!;
+    const total = page.elements.findIndex(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    const rule = page.elements[total - 1]!;
+    if (rule.kind !== "rule") throw new Error(`expected a rule before TOTAL, got ${rule.kind}`);
+    expect(page.elements[total]!.y).toBeCloseTo(rule.y + (LINE / 2 + rule.thickness) / 2, 5);
+  });
+
+  it("moves every rule in a row onto the next page with the element after them", async () => {
+    vi.resetModules();
+    vi.doMock("./receipt-document.js", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("./receipt-document.js")>()),
+      buildReceiptDocument: (input: { result: { lines: unknown[] } }) => ({
+        duplicate: false,
+        practice: false,
+        elements: [
+          ...input.result.lines.map((_, index) => ({
+            kind: "text",
+            text: `Line ${index}`,
+            indent: 0,
+          })),
+          { kind: "rule" },
+          { kind: "rule" },
+          { kind: "text", text: "TOTAL", indent: 0, style: { double: true } },
+        ],
+      }),
+    }));
+    try {
+      const { layoutInvoicePages: layout } = await import("./invoice-page.js");
+      for (let count = 40; count <= 70; count++) {
+        const pages = layout({
+          ...fixture,
+          result: { ...fixture.result, lines: Array(count).fill(fixture.result.lines[0]) },
+        });
+        for (const [index, page] of pages.slice(0, -1).entries())
+          expect(
+            page.elements.at(-1)?.kind,
+            `${count} lines: page ${index + 1} ends with`,
+          ).not.toBe("rule");
+        expect(
+          pages
+            .at(-1)!
+            .elements.slice(-3)
+            .map((element) => element.kind),
+          `${count} lines`,
+        ).toEqual(["rule", "rule", "text"]);
+      }
+    } finally {
+      vi.doUnmock("./receipt-document.js");
+      vi.resetModules();
+    }
+  });
+
   it("draws the rule as a dark line in the PDF and never as a QR", async () => {
     const input = { ...fixture, result: { ...fixture.result, qr: "" } };
     const rule = layoutInvoicePages(input)[0]!.elements.find((element) => element.kind === "rule");
@@ -407,5 +475,14 @@ describe("A4 QR black square", () => {
       if (page.pixels.data[(row * page.pixels.width + x) * 4]! < 128) dark.push(x);
     const millimetres = (dark.at(-1)! - dark[0]! + 1) / 2 / MM;
     expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
+  });
+});
+
+describe("A4 TOTAL size", () => {
+  it("draws TOTAL at twice the body size", () => {
+    const total = layoutInvoicePages(fixture)[0]!.elements.find(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    expect(total).toMatchObject({ kind: "text", size: 20 });
   });
 });

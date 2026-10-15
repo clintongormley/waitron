@@ -4,8 +4,8 @@
 
 **Goal:** Print the simplified receipt and the full invoice in the two layouts the owner approved on
 2026-10-14 — ruled-off sections, a large TOTAL, one row per item on a full invoice, the registered
-address once or labelled, VAT rates written "10%" and "17,5%", guests and the amount per person, and
-an optional drink/food subtotal — on 58 mm and 80 mm paper and on the A4 page.
+address once or labelled, VAT rates written "10%" and "17,5%", and guests and the amount per person —
+on 58 mm and 80 mm paper and on the A4 page.
 
 **Architecture:** Everything printed comes from one list of elements built by
 `buildReceiptDocument` (`apps/server/src/receipt-document.ts:95`). Two renderers draw that list: the
@@ -18,9 +18,8 @@ printer draws every line of text as a picture from our own glyph table
 `packages/printing`, not printer commands. Nothing filed, hashed or sent to AEAT changes: the work
 reads the same filed figures and lays them out differently.
 
-**Tech Stack:** TypeScript, Vitest (unit tests, plus `useVenueDb` for the readers in Parts 3–4), the
-`@waitron/printing` raster builder, PDFKit and sharp for A4, Lit for the two dashboard switches in
-Part 4.
+**Tech Stack:** TypeScript, Vitest (unit tests, plus `useVenueDb` for the reader in Part 3), the
+`@waitron/printing` raster builder, and PDFKit and sharp for A4.
 
 **Spec:** `docs/backlog/printers.md`, section "A663 — receipts and full invoices that are easier to
 read", with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
@@ -31,20 +30,21 @@ mockups are "drawn, not rendered": where this plan departs from a drawing, it sa
 
 ## How the work is cut
 
-Five pull requests: Part 1 is split in two (1a and 1b) so that the half that touches no file of
-lane A's open A661 branch can start now. Each leaves `main` green and correct on its own; none needs
+Four pull requests (a fifth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
+#1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
 request holds.
 
 | Part | What it delivers | Tasks | Can start |
 | ---- | ---------------- | ----- | --------- |
 | 1a | Bold and double-size lines in `@waitron/printing`; VAT rates as "10%"/"17,5%" and the `formatAmount` helper; TOTAL drawn double size on paper and A4, on both documents, where it already sits | 1.1, 1.3, 1.4, then 1.8 (LOOK, fiscal gate, backlog) | Now |
-| 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed |
-| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed |
-| 3 | Guests and the amount per person | 3 | After A661 lands (it edits `receipt-print.ts`); uses owner question Q2's default unless answered |
-| 4 | The drink/food subtotal setting | 6 | After owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
+| 1b | Receipt labels; ruled sections and the one-fact-per-line business block on both documents; the simplified receipt's layout (heading lines, TOTAL straight after the items, «IVA 10% incluido») | 1.2, 1.5, 1.6 (in two halves), 1.7 | After Part 1a and A661 have landed (A661 landed 2026-10-15, #1745) |
+| 2 | The full invoice's layout: "FACTURA" heading, a "Cliente" block, one table row per item, «Base imponible» per rate, the address once or labelled «Domicilio fiscal:», and the same on the A4 page | 6 | After Part 1b and A661 have landed (A661 landed 2026-10-15, #1745) |
+| 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
+| 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
-Why 1b and 2 wait for A661: see "A661 overlap" below.
+Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
 
 Point 4 of the spec ("17,50 € × 2", not "/ 2") is handled inside Part 2: on paper and on the A4
 page, the only place a unit price is printed beside a quantity is the full invoice's «Precio sin
@@ -65,7 +65,7 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
-  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`, `feat/a663-4-drink-food-subtotals`.
+  `feat/a663-2-full-invoice-layout`, `feat/a663-3-guests`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -133,17 +133,13 @@ counted 125 files (run 2026-10-15, after a `git fetch`). The ones this plan coul
   receipt, which prints its own «Precio sin IVA … / 1 ud» line and two-decimal rates ("21.00%",
   `till-ticket-view.ts:91-92, 97, 104, 807, 811`). It is outside A663, and A661 changes it; Task
   1.8 adds a backlog entry for it.
-- `apps/dashboard/src/api/client.ts` and `apps/dashboard/src/i18n/strings.ts` (both in A661's
-  list): Part 4's Task 4.2 edits them.
 - `apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`,
   `apps/server/src/management-api.ts`, `apps/server/src/orders-api.ts`,
   `apps/server/src/errors.ts`, `apps/server/src/invoice-delivery-*.ts`,
   `apps/server/src/invoice-choice-delivery.ts`: no task here edits them.
 - `docs/backlog.md` and `docs/backlog/printers.md`: each part's backlog edit is small; rebase over
   A661 if it lands first.
-- A661 adds core migrations `0155`–`0157` in `packages/db/drizzle/`. Part 4's migration (if Q1 keeps
-  its default) is in the catalogue set (`packages/catalogue/drizzle/`, last entry today
-  `0032_content_suggestions.sql`), so the numbers cannot collide.
+- A661 adds core migrations `0155`–`0157` in `packages/db/drizzle/`.
 
 **So:** Part 1a (Tasks 1.1, 1.3, 1.4, 1.8) starts now. None of its files —
 `packages/printing/src/{raster-text,escpos,index}.ts`,
@@ -154,8 +150,8 @@ their tests, the two `.bin` files and `apps/server/scripts/receipt-look.ts` — 
 `apps/till/src/screens/till-ticket-view.test.ts` (`git grep -n -E "[0-9]\.[0-9]{2}%"` over
 `apps/server/src/*.test.ts` and `apps/till/src`), the till screen this item does not change. If a
 Part 1a run of the receipt suites still fails in a file A661 changes, stop: move that change to
-Part 1b rather than editing the file. Part 1b, Part 2, Part 3 and Part 4 start only after A661 has
-merged.
+Part 1b rather than editing the file. Part 1b, Part 2 and Part 3 start only after A661 has
+merged (A661 landed 2026-10-15, #1745).
 
 **Whichever of A661 and A663 lands second** re-runs the receipt suites (Global Constraints) on top
 of the other and updates the layout assertions that fail — in the files above and in any the other
@@ -236,7 +232,7 @@ Two pull requests:
 - **Part 1a**, branch `feat/a663-1-receipt-layout`, starts now: Task 1.1, Task 1.3, Task 1.4, then
   Task 1.8 (its own LOOK, fiscal gate and backlog step, written after Task 1.4 below).
 - **Part 1b**, branch `feat/a663-1b-receipt-layout`, from `main` after Part 1a **and A661** have
-  merged: Task 1.2, Task 1.5, Task 1.6a, Task 1.6b, Task 1.7.
+  merged (A661 landed 2026-10-15, #1745): Task 1.2, Task 1.5, Task 1.6a, Task 1.6b, Task 1.7.
 
 ### Task 1.1: Bold and double-size lines in `@waitron/printing`, readable back as text (Part 1a)
 
@@ -959,7 +955,8 @@ three bold lines that `printedLines` reads back as the name's words, and none is
 - [ ] **Step 2:** Run the files — FAIL (header still joined; `break` elements present).
 - [ ] **Step 3: Implement** the block and the rules in `buildReceiptDocument`. Replace each
   section-ending `line()` with a `rule` element. On A4, `invoice-page.ts` already draws `rule` as a
-  thin line across the content width (`invoice-page.ts:117-127`); keep that. The thermal renderer's
+  thin line across the content width (the `rule` helper in `layoutInvoicePages`, which also carries a
+  rule left last on a page over to the next); keep that. The thermal renderer's
   logo spacing reads "was the previous element a blank line" (`receipt-ticket.ts:58-64, 90-96`):
   treat a `rule` as that boundary too, so a logo after the rule gets no extra blank line above it.
 - [ ] **Step 4:** Run the files — PASS. Run the receipt suites and update expectations that named
@@ -1131,8 +1128,8 @@ and that split is accepted, as for the date.)
 
 # Part 2 — the full invoice
 
-Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661
-changes `bill-payments.test.ts` and adds "Factura completa" assertions this part must update; see
+Branch `feat/a663-2-full-invoice-layout`, from `main` after Part 1b **and A661** have merged (A661 landed 2026-10-15, #1745; it
+changed `bill-payments.test.ts` and added "Factura completa" assertions this part must update; see
 "A661 overlap"). Target layout (`2-full-invoice.png`):
 
 ```
@@ -1533,7 +1530,7 @@ it("prints the registered address unlabelled when it is the only one", () => {
 ### Task 2.5: The A4 page — columns and right-aligned amounts
 
 Today the A4 page draws an amount row as caption and amount joined by one space
-(`invoice-page.ts:148-150`), so nothing lines up. After this task: an `amount` element draws its
+(the `text`/`amount` case of `layoutInvoicePages`), so nothing lines up. After this task: an `amount` element draws its
 caption at the left and its amount right-aligned to `INVOICE_PAGE_WIDTH - MARGIN`; a `table`
 element draws columns — units right-aligned in a column as wide as its widest cell, the item column
 from there, and price, amount and rate right-aligned at fixed right edges measured with the font
@@ -1593,7 +1590,8 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
   right edge, «Domicilio fiscal:» appears only when the addresses differ.
 - [ ] **Step 3: Fiscal gate**, unedited, PASS.
 - [ ] **Step 4: Backlog.** In `docs/backlog/printers.md`, mark points 2, 3 and 4 done (point 4 by
-  the table; see Q4 for an extras portion's price). Add a short entry under the fiscal area
+  the table; see Q4 for an extras portion's price). If no point is left open, delete the A663 entry from
+  `docs/backlog/printers.md` and its line from `docs/backlog.md`. Add a short entry under the fiscal area
   (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
   different from its issue date; art. 7.1.c then requires it on the receipt, and the document
   builder prints one only on a full invoice (`receipt-document.ts`)".
@@ -1603,7 +1601,7 @@ logo, pagination without clipping (`invoice-pdf.test.ts:118`), the rule above TO
 
 # Part 3 — guests and the amount per person
 
-Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged**
+Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged** (A661 landed 2026-10-15, #1745)
 (this part edits `receipt-print.ts`). Uses owner question Q2's default unless the owner has answered.
 
 Guests are stored on the party, not the bill: `parties.guest_count`, null or at least 1
@@ -1717,13 +1715,16 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 - [ ] Extend `receipt-look.ts` with `guests: 4` on the one-rate sample and the full invoice; run;
   open the pictures; the line sits after the payment, before the footer, in its own ruled section.
 - [ ] Fiscal gate, unedited, PASS.
-- [ ] Backlog: point 6 done; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
+- [ ] Backlog: point 6 done; A663 entry deleted from `docs/backlog/printers.md` and its line removed
+  from `docs/backlog.md` if no point is left open; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
   bills print no guests line — owner to confirm".
 - [ ] Commit, then `/finish-branch`.
 
 ---
 
 # Part 4 — the drink/food subtotal setting
+
+Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built.
 
 Branch `feat/a663-4-drink-food-subtotals`. **Waits for owner questions Q1, Q3 and Q6**, and for A661
 to merge (this part edits `receipt-print.ts`, `apps/dashboard/src/api/client.ts` and
@@ -1860,7 +1861,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 - Spec coverage: point 1 → Tasks 1.4 (Part 1a), 1.5 and 1.6 (Part 1b); point 2 → 2.3, 2.5, 2.6
   (operation date pinned); point 3 → 2.4; point 4 → 2.3 (the line it applies to is replaced; Q4);
   point 5 → 1.3 (on paper and A4; the till's on-screen copy is a follow-up, Task 1.8); point 6 →
-  Part 3; point 7 → Part 4 (Q3 on where its switch lives). The BOE re-check is done above; Task 2.6 records the one open legal question.
+  Part 3; point 7 (drink/food subtotals) → withdrawn by the owner on 2026-10-15. The BOE re-check is done above; Task 2.6 records the one open legal question.
 - The "VERI\*FACTU line may be printed in bold for margin" option in the spec is not taken: the
   roll font is already a bold face, and Orden HAC/1177/2024 art. 20.1.b asks only that the phrase be
   as visible as the rest; the caption keeps the other lines' size and weight.
@@ -1873,10 +1874,10 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 ## Owner questions
 
 Answer by quoting the question number. Parts 1a, 1b and 2 need no answer (Part 2 builds Q4's,
-Q5's and Q8's defaults unless told otherwise); Part 3 can be built on Q2's default; Part 4 waits for
-Q1, Q3 and Q6.
+Q5's and Q8's defaults unless told otherwise); Part 3 can be built on Q2's default; Q1, Q3 and Q6 were for Part 4, which the owner withdrew on
+2026-10-15.
 
-**Q1 — How does the till know a product is a drink?** (Blocks Part 4.)
+**Q1 — How does the till know a product is a drink?** (Part 4 withdrawn 2026-10-15; no answer needed.)
 Recommended: **mark categories.** In Products, a category's menu gets a "Drinks" switch; every
 product in that category or any category under it counts as drink. Example: you switch it on for
 "Bebidas"; "Vinos", "Cervezas" and "Refrescos" under it are drinks, and a new wine added to "Vinos"
@@ -1897,7 +1898,7 @@ entered only when a table is seated, so the till has no count for the joined par
 the joined tables' counts together («5 comensales · por persona 30,00 €») — right when each table's
 count was entered, wrong when one was left blank.
 
-**Q3 — Where the drink/food switch lives.** (Blocks Part 4.)
+**Q3 — Where the drink/food switch lives.** (Part 4 withdrawn 2026-10-15; no answer needed.)
 The spec says "a venue setting" (point 7, and the mockup's legend: «a venue setting, off by
 default»); this plan's default departs from that, so it needs your yes.
 Default: **in each department's receipt settings, beside "Print address"**, which is where a
@@ -1936,7 +1937,7 @@ under its item (art. 6.1.f only asks that it be shown). Example: «1 Menú del d
 that 10,00 − 1,00 = 9,00 adds up on the line; that is a new figure the receipt works out rather than
 one it was given.
 
-**Q6 — Drink/food subtotals on a bill with a whole-bill discount.** (Blocks Part 4.)
+**Q6 — Drink/food subtotals on a bill with a whole-bill discount.** (Part 4 withdrawn 2026-10-15; no answer needed.)
 Default: **share the discount in proportion**, so Bebida + Comida always equals TOTAL. Example:
 drinks 63,00, food 344,00, 10% off the whole bill (total 366,30) → Bebida 56,70, Comida 309,60.
 Alternative: print the subtotals before the discount, which then do not add up to TOTAL.

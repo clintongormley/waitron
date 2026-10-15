@@ -5,7 +5,7 @@
 
 import { textGrid, type PaperWidth, type Resolution, type TextGrid } from "./layout.js";
 import { assertPictureSize, type MonoRaster } from "./dither.js";
-import { TEXT_BAND_HEIGHT, drawTextBand, type Alignment } from "./raster-text.js";
+import { drawTextBand, textBandHeight, type Alignment, type TextStyle } from "./raster-text.js";
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -40,7 +40,7 @@ export interface EscSetting {
 }
 
 /**
- * Text is never sent as text: each line is drawn to a `GS v 0` image {@link TEXT_BAND_HEIGHT} dots
+ * Text is never sent as text: each line is drawn to a `GS v 0` image {@link textBandHeight} dots
  * tall and as wide as the setting's dot width, so no printer character table is involved.
  */
 export class EscBuilder {
@@ -66,7 +66,7 @@ export class EscBuilder {
   }
 
   /** Draws `s` as one band on the setting's grid; no text draws a blank band. */
-  line(s = ""): this {
+  line(s = "", style: TextStyle = {}): this {
     if (this.grid === undefined) {
       throw new Error(
         "esc() was made without a paper width and resolution, so it cannot draw text",
@@ -74,8 +74,8 @@ export class EscBuilder {
     }
     this.pushRaster(
       Math.ceil(this.grid.widthDots / 8),
-      TEXT_BAND_HEIGHT,
-      drawTextBand(s, this.grid, this.alignment),
+      textBandHeight(style),
+      drawTextBand(s, this.grid, this.alignment, style),
     );
     return this;
   }

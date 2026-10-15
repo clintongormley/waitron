@@ -17,8 +17,8 @@ export type { EscSetting } from "./escpos.js";
 export { LOGO_MAX_HEIGHT_DOTS, ditherToRaster } from "./dither.js";
 export type { MonoRaster } from "./dither.js";
 export { prepareText } from "./text.js";
-export { TEXT_BAND_HEIGHT, drawTextBand, readRasterText } from "./raster-text.js";
-export type { Alignment } from "./raster-text.js";
+export { TEXT_BAND_HEIGHT, drawTextBand, readRasterText, textBandHeight } from "./raster-text.js";
+export type { Alignment, TextStyle } from "./raster-text.js";
 export {
   DOTS_PER_COLUMN,
   QR_QUIET_ZONE,

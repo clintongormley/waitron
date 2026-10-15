@@ -11,7 +11,14 @@ const LINE_HEIGHT = 14;
 const QR_SIZE = (35 * 72) / 25.4;
 const RULE_THICKNESS = 0.75;
 
-type PageText = { kind: "text"; text: string; x: number; y: number; size: number };
+type PageText = {
+  kind: "text";
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  bold: boolean;
+};
 type PageQr = {
   kind: "qr";
   modules: readonly (readonly boolean[])[];
@@ -33,23 +40,23 @@ export interface InvoicePage {
   elements: InvoicePageElement[];
 }
 
-function width(text: string): number {
-  return (invoiceFont.layout(text).advanceWidth * BODY_SIZE) / invoiceFont.unitsPerEm;
+function width(text: string, size: number): number {
+  return (invoiceFont.layout(text).advanceWidth * size) / invoiceFont.unitsPerEm;
 }
 
-function wrap(text: string, available: number): string[] {
+function wrap(text: string, available: number, size: number): string[] {
   const lines: string[] = [];
   let line = "";
   for (const word of text.trim().split(/\s+/u)) {
     const combined = line === "" ? word : `${line} ${word}`;
-    if (width(combined) <= available) {
+    if (width(combined, size) <= available) {
       line = combined;
       continue;
     }
     if (line !== "") lines.push(line);
     line = "";
     for (const character of word) {
-      if (line !== "" && width(line + character) > available) {
+      if (line !== "" && width(line + character, size) > available) {
         lines.push(line);
         line = "";
       }
@@ -65,23 +72,46 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   let y = MARGIN;
   let alignment: "left" | "center" = "left";
   let afterBreak = false;
-  const room = (height: number): void => {
-    if (y + height > INVOICE_PAGE_HEIGHT - MARGIN) {
-      pages.push({ elements: [] });
-      y = MARGIN;
-    }
+  const rule = (): void => {
+    pages.at(-1)!.elements.push({
+      kind: "rule",
+      x: MARGIN,
+      y: y + (LINE_HEIGHT / 2 - RULE_THICKNESS) / 2,
+      width: INVOICE_PAGE_WIDTH - 2 * MARGIN,
+      thickness: RULE_THICKNESS,
+    });
+    y += LINE_HEIGHT / 2;
   };
-  const text = (value: string, x: number, available: number, centered = false): void => {
-    for (const line of wrap(value, available)) {
-      room(LINE_HEIGHT);
+  const room = (height: number): void => {
+    if (y + height <= INVOICE_PAGE_HEIGHT - MARGIN) return;
+    const previous = pages.at(-1)!.elements;
+    let strandedRules = 0;
+    while (previous.at(-1)?.kind === "rule") {
+      previous.pop();
+      strandedRules++;
+    }
+    pages.push({ elements: [] });
+    y = MARGIN;
+    for (let count = 0; count < strandedRules; count++) rule();
+  };
+  const text = (
+    value: string,
+    x: number,
+    available: number,
+    { size, bold, centered }: { size: number; bold: boolean; centered: boolean },
+  ): void => {
+    const height = (LINE_HEIGHT * size) / BODY_SIZE;
+    for (const line of wrap(value, available, size)) {
+      room(height);
       pages.at(-1)!.elements.push({
         kind: "text",
         text: line,
-        x: centered ? (INVOICE_PAGE_WIDTH - width(line)) / 2 : x,
+        x: centered ? (INVOICE_PAGE_WIDTH - width(line, size)) / 2 : x,
         y,
-        size: BODY_SIZE,
+        size,
+        bold,
       });
-      y += LINE_HEIGHT;
+      y += height;
     }
   };
   for (const element of buildReceiptDocument({ ...input, surface: "a4" }).elements) {
@@ -115,15 +145,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         y += LINE_HEIGHT / 2;
         break;
       case "rule":
-        room(LINE_HEIGHT / 2 + LINE_HEIGHT);
-        pages.at(-1)!.elements.push({
-          kind: "rule",
-          x: MARGIN,
-          y: y + (LINE_HEIGHT / 2 - RULE_THICKNESS) / 2,
-          width: INVOICE_PAGE_WIDTH - 2 * MARGIN,
-          thickness: RULE_THICKNESS,
-        });
-        y += LINE_HEIGHT / 2;
+        room(LINE_HEIGHT / 2);
+        rule();
         break;
       case "qr": {
         const modules = qrModules(element.text);
@@ -147,7 +170,11 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         const available = INVOICE_PAGE_WIDTH - MARGIN - x;
         const value =
           element.kind === "text" ? element.text : `${element.caption} ${element.amount}`;
-        text(value, x, available, alignment === "center");
+        text(value, x, available, {
+          size: element.style?.double === true ? BODY_SIZE * 2 : BODY_SIZE,
+          bold: element.style?.bold === true,
+          centered: alignment === "center",
+        });
         break;
       }
     }

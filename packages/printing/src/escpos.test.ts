@@ -3,6 +3,8 @@ import { cellsFrom, expectedBand } from "../test/expected-band.js";
 import { escPosCommands } from "./testing/escpos-commands.js";
 import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 import { GLYPHS } from "./glyphs.js";
+import { textGrid } from "./layout.js";
+import { drawTextBand } from "./raster-text.js";
 
 // These pin the exact bytes, not that a physical printer accepts them.
 describe("esc() ESC/POS builder", () => {
@@ -485,6 +487,20 @@ describe("text drawn as images", () => {
       "GS V",
       "GS W",
       "GS v 0",
+    ]);
+  });
+
+  it("draws a bold line and a double line as text images in their own styles", () => {
+    const bytes = esc(TM_T88_80).line("A", { bold: true }).line("B", { double: true }).bytes();
+    const images = escPosCommands(bytes).filter((command) => command.name === "GS v 0");
+    expect(images.map((command) => command.heightDots)).toEqual([28, 56]);
+    const pictures = images.map(({ offset, length }) => [
+      ...bytes.subarray(offset + 8, offset + length),
+    ]);
+    const grid = textGrid("80mm", "180dpi");
+    expect(pictures).toEqual([
+      [...drawTextBand("A", grid, "left", { bold: true })],
+      [...drawTextBand("B", grid, "left", { double: true })],
     ]);
   });
 });

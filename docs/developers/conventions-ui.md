@@ -824,9 +824,12 @@ that page. Built in #310 and extended in #695; `apps/server/src/recovery-surface
 
 A printed document never hard-codes a paper width or a QR size: it reads them from the printer it is
 printing to (`paperWidth` and `resolution` on `printers`). Nothing is sent to a printer as text.
-Every line is drawn on the server as a 1-bit picture 28 dots tall and sent with `GS v 0`, one picture
-per line (`EscBuilder`, `packages/printing/src/escpos.ts`). Each letter is a 12-dot-wide picture from
-a table derived from the font Iosevka Term Bold (`packages/printing/src/glyphs.ts`, made by
+Every line is drawn on the server as a 1-bit picture and sent with `GS v 0`, one picture per line
+(`EscBuilder`, `packages/printing/src/escpos.ts`): 28 dots tall, or 56 for a double-size line, which
+draws each letter twice as wide and twice as tall on half as many columns (`textBandHeight` and
+`drawTextBand`, `packages/printing/src/raster-text.ts`). A bold line draws each letter over itself
+shifted one dot right, kept inside its 12-dot cell (`embolden`). Each letter is a 12-dot-wide picture
+from a table derived from the font Iosevka Term Bold (`packages/printing/src/glyphs.ts`, made by
 `packages/printing/scripts/build-glyph-table.mjs`; the licence ships from `deploy/third-party/iosevka/`),
 so what prints does not depend on the character tables a printer holds. Outside the calibration
 ruler page, a line's picture is as wide as the printer's dots across for its paper width and
@@ -835,7 +838,7 @@ each number comes from; 576 is unmeasured), and its text sits on a grid of 30 co
 and 42 on 80mm whatever the resolution, centred in the picture. Text is passed through `prepareText`
 before it is measured, which turns a character the table cannot draw into a fixed replacement, the
 same character without its accents, or `?`, and through `wrapText`/`labelAmountLines` before it is
-printed, so one character is one column. Receipts, category sales pages and the printer test page
+printed, so one character is one column, or two on a double-size line. Receipts, category sales pages and the printer test page
 (`apps/server/src/printer-test-page.ts`) also set the printer's print area to the picture's width
 (`printArea`, `GS L` and `GS W`). The calibration ruler page
 (`apps/server/src/test-page.ts`) is the exception to both: whatever the printer, it sets a print
@@ -848,7 +851,9 @@ printer commands, not pictures.
 
 The print preview shows the job's own pictures, and the text it reports is read back from them
 (`apps/server/src/print-job-preview.ts`, through `readRasterText` in
-`packages/printing/src/raster-text.ts`, which matches each 12-dot cell against the glyph table). A
+`packages/printing/src/raster-text.ts`, which matches each 12-dot cell against the glyph table and
+its bold form, and reads a double-size line from one dot of each 2×2 block, keeping that reading only
+when redrawing it gives the same picture). A
 test reads a payload's printed text the same way, with `printedLines`
 (`apps/server/src/testing/decode-ticket.ts`), which fails the test when the preview stops at an
 unsupported command or is cut short instead of hiding the rest of the ticket. Characters drawn
