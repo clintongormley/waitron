@@ -4357,6 +4357,29 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
   });
 
+  it("sends no F1 retry for an original whose printer is not this till's invoice printer", async () => {
+    const retryReceipt = vi.fn().mockResolvedValue({ jobId: "retry" });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({
+        status: "failed",
+        jobId: "original",
+        canRetry: true,
+        printerWithdrawn: true,
+      }),
+      retryReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")).toBeNull();
+    emit(ticket(el)!, "retry-receipt");
+    await flush(el);
+    expect(retryReceipt).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("keeps a refused F1 retry visible when a later status read recovers", async () => {
     const getReceiptPrintStatus = vi
       .fn()
@@ -16956,8 +16979,8 @@ describe("the device's equipment, chosen from the header", () => {
   const S2 = item("S2", "Portable slip printer");
   const KNOWN = new Map([P1, P2, P3, POFF, S1, S2].map((each) => [each.id, each]));
 
-  /** The four roles as the server answers them for these explicit receipt and slip choices: the
-   * receipt chosen from P1 and P2, the slip from S1 and S2, no drawer or reader. */
+  /** The five roles as the server answers them for these explicit receipt and slip choices: the
+   * receipt chosen from P1 and P2, the slip from S1 and S2, no drawer, invoice printer or reader. */
   function equipmentOf(chosen: { receipt: string | null; payment_slip: string | null }) {
     const role = (name: "receipt" | "payment_slip", choices: EquipmentItem[]): RoleEquipment => {
       const picked = chosen[name] === null ? null : KNOWN.get(chosen[name])!;
@@ -16974,7 +16997,7 @@ describe("the device's equipment, chosen from the header", () => {
         choices,
       };
     };
-    const none = (name: "cash_drawer" | "card_terminal"): RoleEquipment => ({
+    const none = (name: "cash_drawer" | "invoice" | "card_terminal"): RoleEquipment => ({
       role: name,
       selection: "default",
       chosenId: null,
@@ -16988,6 +17011,7 @@ describe("the device's equipment, chosen from the header", () => {
         role("receipt", [P1, P2]),
         role("payment_slip", [S1, S2]),
         none("cash_drawer"),
+        none("invoice"),
         none("card_terminal"),
       ],
     } satisfies DeviceEquipment;
@@ -17246,7 +17270,7 @@ describe("the device's equipment, chosen from the header", () => {
   function refusedPick(code: "device.equipment_held" | "reader.payment_in_progress") {
     const R1 = item("R1", "Bar reader");
     const before = structuredClone(initial);
-    before.roles[3]!.choices = [R1];
+    before.roles[4]!.choices = [R1];
     const after = structuredClone(before);
     if (code === "device.equipment_held") {
       after.roles[0]!.choices[1] = {
@@ -17261,7 +17285,7 @@ describe("the device's equipment, chosen from the header", () => {
         shown: { code, field: "receiptPrinterId" },
       };
     }
-    after.roles[3]!.choices = [{ ...R1, busy: true }];
+    after.roles[4]!.choices = [{ ...R1, busy: true }];
     return {
       before,
       after,
@@ -17323,7 +17347,7 @@ describe("the device's equipment, chosen from the header", () => {
   it("after a reader.not_found refusal the list is read again, so a deleted reader drops out", async () => {
     const R1 = item("R1", "Bar reader");
     const before = structuredClone(initial);
-    before.roles[3]!.choices = [R1];
+    before.roles[4]!.choices = [R1];
     const after = structuredClone(initial);
     const getDeviceEquipment = vi.fn().mockResolvedValue(before);
     const el = await openEquipment({

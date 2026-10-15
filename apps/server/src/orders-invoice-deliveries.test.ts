@@ -37,8 +37,9 @@ import { placeOrder } from "./working-order.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { mountOrdersApi } from "./orders-api.js";
 
-// The dashboard's Print on A4 and the order detail's delivery status, against synthetic full
-// invoices written through the core (public F1 issuance stays disabled).
+// The dashboard's Print invoice (any active printer at the sale's location) and the order detail's
+// delivery status, against synthetic full invoices written through the core (public F1 issuance
+// stays disabled).
 const EMAIL = "cliente@example.test";
 let venue: OrderVenue;
 let fullSeriesId = "";
@@ -150,10 +151,10 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
   return { billId, saleId };
 }
 
-const printOnA4 = (cookie: string, billId: string, body: Record<string, unknown>) =>
+const printInvoice = (cookie: string, billId: string, body: Record<string, unknown>) =>
   send(venue.orders, cookie, "POST", `/management-api/orders/${billId}/invoice-deliveries`, body);
 
-const a4 = (requestKey: string = randomUUID(), printerId: string = officeId) => ({
+const printBody = (requestKey: string = randomUUID(), printerId: string = officeId) => ({
   medium: "print",
   printerId,
   requestKey,
@@ -224,10 +225,10 @@ async function deliveryCount(): Promise<number> {
   return venue.db.all<{ n: number }>(sql`select count(*) as n from invoice_deliveries`)[0]!.n;
 }
 
-describe("dashboard print on A4", () => {
+describe("dashboard Print invoice", () => {
   it("queues an A4 original on the chosen printer for a staff dashboard session", async () => {
     const { billId, saleId } = await fullInvoice();
-    const answer = await printOnA4(venue.staffDashboard, billId, a4());
+    const answer = await printInvoice(venue.staffDashboard, billId, printBody());
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({
       medium: "a4",
@@ -250,9 +251,9 @@ describe("dashboard print on A4", () => {
   it("answers a replayed request key with the same attempt and no second row", async () => {
     const { billId, saleId } = await fullInvoice();
     const key = randomUUID();
-    const first = await printOnA4(venue.adminDashboard, billId, a4(key));
+    const first = await printInvoice(venue.adminDashboard, billId, printBody(key));
     expect(first.status).toBe(200);
-    const again = await printOnA4(venue.adminDashboard, billId, a4(key));
+    const again = await printInvoice(venue.adminDashboard, billId, printBody(key));
     expect(again).toEqual(first);
     expect(await deliveriesOf(saleId)).toHaveLength(1);
   });
@@ -261,10 +262,12 @@ describe("dashboard print on A4", () => {
     const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       const key = randomUUID();
-      expect((await printOnA4(venue.adminDashboard, billId, a4(key))).status).toBe(200);
+      expect((await printInvoice(venue.adminDashboard, billId, printBody(key))).status).toBe(200);
       const before = await deliveriesOf(saleId);
       for (const printerId of [upstairs, venue.printerId]) {
-        expect(await printOnA4(venue.adminDashboard, billId, a4(key, printerId))).toMatchObject({
+        expect(
+          await printInvoice(venue.adminDashboard, billId, printBody(key, printerId)),
+        ).toMatchObject({
           status: 409,
           json: { code: "submission.id_reused", params: { submissionId: key } },
         });
@@ -277,12 +280,12 @@ describe("dashboard print on A4", () => {
   it("refuses a receipt printer's request key reused for an A4 printer, writing nothing", async () => {
     const { billId, saleId } = await fullInvoice();
     const key = randomUUID();
-    expect((await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId))).status).toBe(
-      200,
-    );
+    expect(
+      (await printInvoice(venue.adminDashboard, billId, printBody(key, venue.printerId))).status,
+    ).toBe(200);
     const rows = await deliveriesOf(saleId);
     const jobs = await jobsOfSale(saleId);
-    expect(await printOnA4(venue.adminDashboard, billId, a4(key))).toMatchObject({
+    expect(await printInvoice(venue.adminDashboard, billId, printBody(key))).toMatchObject({
       status: 409,
       json: { code: "submission.id_reused", params: { submissionId: key } },
     });
@@ -292,9 +295,9 @@ describe("dashboard print on A4", () => {
 
   it("refuses a second attempt while one is active, writing nothing", async () => {
     const { billId, saleId } = await fullInvoice();
-    expect((await printOnA4(venue.adminDashboard, billId, a4())).status).toBe(200);
+    expect((await printInvoice(venue.adminDashboard, billId, printBody())).status).toBe(200);
     const before = await deliveriesOf(saleId);
-    expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
+    expect(await printInvoice(venue.adminDashboard, billId, printBody())).toMatchObject({
       status: 409,
       json: { code: "invoice_delivery.active" },
     });
@@ -313,7 +316,7 @@ describe("dashboard print on A4", () => {
       }),
     );
     const before = await deliveriesOf(saleId);
-    expect(await printOnA4(venue.adminDashboard, billId, a4(key))).toMatchObject({
+    expect(await printInvoice(venue.adminDashboard, billId, printBody(key))).toMatchObject({
       status: 409,
       json: { code: "submission.id_reused", params: { submissionId: key } },
     });
@@ -323,7 +326,7 @@ describe("dashboard print on A4", () => {
   it("refuses a simplified invoice, writing nothing", async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const before = await deliveryCount();
-    expect(await printOnA4(venue.adminDashboard, billId, a4())).toMatchObject({
+    expect(await printInvoice(venue.adminDashboard, billId, printBody())).toMatchObject({
       status: 409,
       json: { code: "invoice_delivery.full_invoice_required" },
     });
@@ -335,12 +338,13 @@ describe("dashboard print on A4", () => {
     await withExtraOffices(async ({ upstairs, elsewhere, off }) => {
       for (const printerId of [elsewhere, off, randomUUID()]) {
         expect(
-          await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), printerId)),
+          await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
         ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
       }
       expect(await deliveriesOf(saleId)).toEqual([]);
       expect(
-        (await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), upstairs))).status,
+        (await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), upstairs)))
+          .status,
       ).toBe(200);
       expect(await deliveriesOf(saleId)).toEqual([
         expect.objectContaining({ medium: "a4", pagePrinterId: upstairs }),
@@ -365,7 +369,7 @@ describe("dashboard print on A4", () => {
       profileId: profile!.id,
     });
     const cookie = `${venue.staffDashboard}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
-    expect(await printOnA4(cookie, billId, a4())).toMatchObject({
+    expect(await printInvoice(cookie, billId, printBody())).toMatchObject({
       status: 403,
       json: { code: "device.forbidden_action", params: { action: "invoice_delivery" } },
     });
@@ -382,19 +386,21 @@ describe("dashboard print on A4", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(await printOnA4(venue.staffDashboard, old.billId, a4())).toMatchObject({
+    expect(await printInvoice(venue.staffDashboard, old.billId, printBody())).toMatchObject({
       status: 404,
       json: { code: "working_order.not_found" },
     });
     expect(await deliveriesOf(old.saleId)).toEqual([]);
-    expect((await printOnA4(venue.supervisorDashboard, old.billId, a4())).status).toBe(200);
+    expect((await printInvoice(venue.supervisorDashboard, old.billId, printBody())).status).toBe(
+      200,
+    );
   });
 
   it("refuses a missing session, a bad body and a bill with no invoice", async () => {
     const { billId } = await fullInvoice();
     const open = await parked(venue, "Caña");
     const before = await deliveryCount();
-    expect(await printOnA4("", billId, a4())).toMatchObject({
+    expect(await printInvoice("", billId, printBody())).toMatchObject({
       status: 401,
       json: { code: "management_session.required" },
     });
@@ -403,13 +409,13 @@ describe("dashboard print on A4", () => {
       { medium: "fax", requestKey: randomUUID() },
       { medium: "a4", requestKey: randomUUID() },
     ])
-      expect(await printOnA4(venue.adminDashboard, billId, body)).toMatchObject({
+      expect(await printInvoice(venue.adminDashboard, billId, body)).toMatchObject({
         status: 400,
         json: { code: "management.request_invalid", params: { field: "medium" } },
       });
     for (const requestKey of [undefined, "not-an-id"])
       expect(
-        await printOnA4(venue.adminDashboard, billId, {
+        await printInvoice(venue.adminDashboard, billId, {
           medium: "print",
           printerId: officeId,
           requestKey,
@@ -420,7 +426,7 @@ describe("dashboard print on A4", () => {
       });
     for (const printerId of [undefined, "not-an-id"])
       expect(
-        await printOnA4(venue.adminDashboard, billId, {
+        await printInvoice(venue.adminDashboard, billId, {
           medium: "print",
           printerId,
           requestKey: randomUUID(),
@@ -430,7 +436,7 @@ describe("dashboard print on A4", () => {
         json: { code: "management.request_invalid", params: { field: "printerId" } },
       });
     for (const id of [open, randomUUID(), "not-a-bill"])
-      expect(await printOnA4(venue.adminDashboard, id, a4())).toMatchObject({
+      expect(await printInvoice(venue.adminDashboard, id, printBody())).toMatchObject({
         status: 404,
         json: { code: "working_order.not_found" },
       });
@@ -455,7 +461,7 @@ describe("the order detail's delivery status", () => {
         .set({ status: "sent", completedAt: new Date().toISOString() })
         .where(eq(invoiceDeliveries.id, email.id)),
     );
-    const printed = await printOnA4(venue.staffDashboard, billId, a4());
+    const printed = await printInvoice(venue.staffDashboard, billId, printBody());
     expect(printed.status).toBe(200);
     expect(
       (
@@ -554,7 +560,8 @@ describe("the order detail's delivery status", () => {
     const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(
-        (await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), upstairs))).status,
+        (await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), upstairs)))
+          .status,
       ).toBe(200);
       const detail = (await detailOf(venue.adminDashboard, billId)).json as {
         deliveries: { originalPrinterId: string | null };
@@ -617,7 +624,7 @@ describe("the order detail's delivery status", () => {
 
   it("shows what the office printer is holding the A4 for", async () => {
     const { billId, saleId } = await fullInvoice();
-    const printed = await printOnA4(venue.adminDashboard, billId, a4());
+    const printed = await printInvoice(venue.adminDashboard, billId, printBody());
     await inTx(venue, (tx) =>
       tx
         .update(invoiceDeliveries)
@@ -637,7 +644,7 @@ describe("the order detail's delivery status", () => {
 
   it("ends a lapsed A4 claim before reading", async () => {
     const { billId, saleId } = await fullInvoice();
-    expect((await printOnA4(venue.adminDashboard, billId, a4())).status).toBe(200);
+    expect((await printInvoice(venue.adminDashboard, billId, printBody())).status).toBe(200);
     await inTx(venue, (tx) =>
       tx
         .update(invoiceDeliveries)
@@ -976,7 +983,11 @@ describe("dashboard print on a receipt printer", () => {
         },
       },
     });
-    const answer = await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), venue.printerId));
+    const answer = await printInvoice(
+      venue.adminDashboard,
+      billId,
+      printBody(randomUUID(), venue.printerId),
+    );
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({ medium: "receipt", designation: "original" });
     const [job, ...more] = await jobsOfSale(saleId);
@@ -996,12 +1007,14 @@ describe("dashboard print on a receipt printer", () => {
 
   it("records a receipt copy for a duplicate, once per request key, and the original's printer stays the original's", async () => {
     const { billId, saleId } = await fullInvoice();
-    await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), venue.printerId));
+    await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), venue.printerId));
     await receiptPrinted(saleId);
     const key = randomUUID();
-    const copy = await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId));
+    const copy = await printInvoice(venue.adminDashboard, billId, printBody(key, venue.printerId));
     expect(copy.json).toMatchObject({ medium: "receipt", designation: "duplicate" });
-    expect(await printOnA4(venue.adminDashboard, billId, a4(key, venue.printerId))).toEqual(copy);
+    expect(
+      await printInvoice(venue.adminDashboard, billId, printBody(key, venue.printerId)),
+    ).toEqual(copy);
     const [, copyJob, ...more] = await jobsOfSale(saleId);
     expect(more).toEqual([]);
     expect(copyJob).toMatchObject({ printerId: venue.printerId, receiptCopy: true });
@@ -1010,7 +1023,7 @@ describe("dashboard print on a receipt printer", () => {
       expect.objectContaining({ printJobId: copyJob!.id, personId: venue.adminId }),
     ]);
     await receiptPrinted(saleId);
-    expect((await printOnA4(venue.adminDashboard, billId, a4())).json).toMatchObject({
+    expect((await printInvoice(venue.adminDashboard, billId, printBody())).json).toMatchObject({
       medium: "a4",
       designation: "duplicate",
     });
@@ -1052,7 +1065,7 @@ describe("dashboard print on a receipt printer", () => {
     });
     for (const printerId of [off, deleted, elsewhere]) {
       expect(
-        await printOnA4(venue.adminDashboard, billId, a4(randomUUID(), printerId)),
+        await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), printerId)),
       ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
     }
     expect(await deliveriesOf(saleId)).toEqual([]);

@@ -1047,20 +1047,12 @@ describe("readInvoiceDeliveries", () => {
       return [];
     };
 
-    await withTransaction(suite.db, (tx) =>
-      readInvoiceDeliveriesFor(tx, [saleId, other, simplified], {
-        emailAvailable: true,
-        printers: offer,
-      }),
-    );
+    for (const id of [saleId, other, simplified]) await read(id, true, offer);
 
-    expect(asked).toHaveLength(2);
-    expect(asked).toEqual(
-      expect.arrayContaining([
-        { id: saleId, locationId: v.locationId },
-        { id: other, locationId: terrace },
-      ]),
-    );
+    expect(asked).toEqual([
+      { id: saleId, locationId: v.locationId },
+      { id: other, locationId: terrace },
+    ]);
   });
 
   it("reads several sales at once exactly as it reads each one", async () => {
@@ -1068,7 +1060,6 @@ describe("readInvoiceDeliveries", () => {
     const office = await pagePrinter(v.locationId);
     const terrace = await location("Terrace");
     const terraceNode = await seedNode(suite.db, brandLocation(terrace));
-    await pagePrinter(terrace, { name: "Terrace office" });
     const failedA4 = await invoice(v.nodeId);
     await attempt(v, failedA4, "a4", "failed", office);
     const printed = await invoice(v.nodeId);
@@ -1084,17 +1075,12 @@ describe("readInvoiceDeliveries", () => {
     const ids = [failedA4, printed, untracked, fresh, simplified, queuedReceipt];
 
     const batch = await withTransaction(suite.db, (tx) =>
-      readInvoiceDeliveriesFor(tx, [...ids, missing], {
-        emailAvailable: true,
-        printers: locationOffices,
-      }),
+      readInvoiceDeliveriesFor(tx, [...ids, missing], { emailAvailable: true }),
     );
 
     expect([...batch.keys()].sort()).toEqual([...ids].sort());
-    for (const id of ids) expect(batch.get(id), id).toEqual(await read(id));
+    for (const id of ids) expect(batch.get(id), id).toEqual(await read(id, true, async () => []));
     expect(batch.get(simplified)).toBeNull();
-    expect(batch.get(fresh)!.actions.print!.printers).toEqual([
-      expect.objectContaining({ name: "Terrace office" }),
-    ]);
+    expect(batch.get(fresh)!.actions.print).toBeNull();
   });
 });

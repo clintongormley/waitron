@@ -229,13 +229,7 @@ describe("invoice-choice email contact selection", () => {
 
 describe("invoice-choice A4 staging", () => {
   const a4: InvoicePrinter = { kind: "a4", id: randomUUID(), name: "Office" };
-  const receipt: InvoicePrinter = {
-    kind: "receipt",
-    id: randomUUID(),
-    name: "Bar",
-    paperWidth: "80mm",
-    resolution: "203dpi",
-  };
+  const receipt: InvoicePrinter = { kind: "receipt", id: randomUUID(), name: "Bar" };
   async function staged(pagePrinterId: string, printer: InvoicePrinter | undefined) {
     const f = await fixture();
     return withTransaction(suite.db, (tx) =>

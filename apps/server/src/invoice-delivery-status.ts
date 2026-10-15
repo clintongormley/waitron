@@ -69,7 +69,7 @@ export interface InvoiceDeliveryStatus {
  * Whether an invoice email can be sent now; when not, no action offers email. The reader cannot
  * tell by itself: the mail transport lives outside the database.
  */
-export type InvoiceDeliveryReadOptions = { emailAvailable: boolean; printers?: PrinterOffer };
+export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
 
 /** A full invoice's sale, as the status reader found it. */
 export type InvoiceDeliverySale = { id: string; locationId: string };
@@ -92,6 +92,11 @@ export interface InvoiceDeliveryState {
   locationId: string;
   printers: OfferedPrinter[];
   receipt: OriginalReceiptPrint;
+  /**
+   * The receipt original went to a printer a print request chose, and that printer is not among
+   * `printers`, so it may not be sent there again.
+   */
+  receiptPrinterWithdrawn: boolean;
 }
 
 /** Null for a sale that is not a full invoice. */
@@ -149,6 +154,7 @@ async function readStates(
       saleId: printJobs.saleId,
       id: printJobs.id,
       printerId: printJobs.printerId,
+      resendOf: printJobs.resendOf,
       status: printJobs.status,
       attempts: printJobs.attempts,
       createdAt: printJobs.createdAt,
@@ -176,17 +182,15 @@ async function readStates(
     const printers = await offer(located);
     const emailable =
       typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(located);
+    const saleRows = rowsOf.get(sale.id) ?? [];
+    const saleJobs = jobsOf.get(sale.id) ?? [];
+    const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);
     states.set(sale.id, {
-      status: deliveryStatus(
-        rowsOf.get(sale.id) ?? [],
-        jobsOf.get(sale.id) ?? [],
-        receipt,
-        printers,
-        emailable,
-      ),
+      status: deliveryStatus(saleRows, saleJobs, receipt, withdrawn, printers, emailable),
       locationId: sale.locationId,
       printers,
       receipt,
+      receiptPrinterWithdrawn: withdrawn,
     });
   }
   return states;
@@ -203,17 +207,41 @@ function bySale<T extends { saleId: string | null }>(items: readonly T[]): Map<s
   return grouped;
 }
 
+type OriginalJob = {
+  id: string;
+  printerId: string;
+  resendOf: string | null;
+  status: string;
+  attempts: number;
+  createdAt: string;
+  deliveredAt: string | null;
+};
+
+/**
+ * A print request marks the delivery row of each job it queues (`printerChosen`), and a resend's row
+ * is unmarked, so the chain's first row decides; the device's receipt role marks none, and its
+ * original is resent wherever it went.
+ */
+function receiptPrinterWithdrawn(
+  rows: InvoiceDelivery[],
+  jobs: OriginalJob[],
+  receipt: OriginalReceiptPrint,
+  printers: OfferedPrinter[],
+): boolean {
+  if (receipt.status === "not_queued") return false;
+  const job = jobs.find((candidate) => candidate.id === receipt.jobId)!;
+  const first = job.resendOf ?? job.id;
+  return (
+    rows.some((row) => row.printJobId === first && row.printerChosen) &&
+    !printers.some((printer) => printer.kind === "receipt" && printer.id === job.printerId)
+  );
+}
+
 function deliveryStatus(
   rows: InvoiceDelivery[],
-  jobs: {
-    id: string;
-    printerId: string;
-    status: string;
-    attempts: number;
-    createdAt: string;
-    deliveredAt: string | null;
-  }[],
+  jobs: OriginalJob[],
   receipt: OriginalReceiptPrint,
+  receiptWithdrawn: boolean,
   printers: OfferedPrinter[],
   emailAvailable: boolean,
 ): InvoiceDeliveryStatus {
@@ -255,7 +283,7 @@ function deliveryStatus(
   // The same rule `reserveInvoiceDelivery` refuses a new attempt by.
   const busy =
     rows.some((row) => row.status === "queued" || row.status === "sending") || jobs.some(inFlight);
-  const receiptRetryable = receipt.status !== "not_queued" && receipt.canRetry;
+  const receiptRetryable = receipt.status !== "not_queued" && receipt.canRetry && !receiptWithdrawn;
   const retryMedium =
     current === null ||
     !(current.status === "failed" || current.status === "unknown") ||

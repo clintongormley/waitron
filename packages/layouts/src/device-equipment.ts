@@ -35,7 +35,7 @@ type ChoiceColumn = (typeof COLUMN)[ProfilePrinterRole] | "invoicePagePrinterId"
 type Choices = Record<ChoiceColumn, string | null>;
 
 /** The role's stored choice; an invoice choice is in one of two columns, the receipt one first. */
-function chosenOf(device: Choices, role: ProfilePrinterRole): string | null {
+export function chosenPrinterOf(device: Choices, role: ProfilePrinterRole): string | null {
   return role === "invoice"
     ? (device.invoicePrinterId ?? device.invoicePagePrinterId)
     : device[COLUMN[role]];
@@ -197,7 +197,7 @@ async function readStatesWith(
   const ids = [
     ...new Set([
       ...deviceRows.flatMap((device) => [
-        ...ROLES.map((role) => chosenOf(device, role)),
+        ...ROLES.map((role) => chosenPrinterOf(device, role)),
         ...defaultsOf.get(device.id)!.values(),
       ]),
       ...(withLists ? profileRows.map((row) => row.id) : []),
@@ -218,7 +218,8 @@ async function readStatesWith(
           .from(printers)
           .leftJoin(printerHolders, eq(printerHolders.printerId, printers.id))
           .where(inArray(printers.id, ids));
-  const unfound = ids.filter((id) => !printerRows.some((row) => row.id === id));
+  const found = new Set(printerRows.map((row) => row.id));
+  const unfound = ids.filter((id) => !found.has(id));
   const pageRows =
     unfound.length === 0
       ? []
@@ -273,7 +274,7 @@ function roleState(state: DeviceState, role: ProfilePrinterRole): PrinterRoleSta
   // A portable printer serves only the device holding it, whether chosen or the default.
   const resolves = (id: string | null) =>
     id === null || !held || !state.portable.has(id) || holder(id) === state.device.id ? id : null;
-  const chosenId = chosenOf(state.device, role);
+  const chosenId = chosenPrinterOf(state.device, role);
   const defaultId = state.defaults.get(role) ?? null;
   return {
     role,
@@ -552,7 +553,7 @@ async function clearUnlisted(
 ): Promise<ChoiceRow> {
   let cleared: Partial<Choices> = {};
   for (const role of ROLES) {
-    const chosenId = chosenOf(device, role);
+    const chosenId = chosenPrinterOf(device, role);
     if (chosenId !== null && !listed.some((p) => p.role === role && p.id === chosenId)) {
       cleared = { ...cleared, ...choiceColumns(role, null) };
     }

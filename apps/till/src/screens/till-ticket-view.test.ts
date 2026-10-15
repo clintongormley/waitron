@@ -2211,6 +2211,25 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(button(el, "retry-receipt")).toBeNull();
   });
 
+  it("offers no receipt retry for an original on a printer this till no longer prints invoices on", async () => {
+    const current = attempt({ medium: "receipt", status: "failed" });
+    const original = { status: "failed", jobId: "original", canRetry: true } as const;
+    const { el } = await mountF1({
+      deliveries: { ...statusOf(current), originalPrinterId: "counter" },
+      originalReceiptPrint: original,
+    });
+    expect(button(el, "retry-receipt")).not.toBeNull();
+    el.originalReceiptPrint = { ...original, printerWithdrawn: true };
+    await el.updateComplete;
+    const section = button(el, "original-delivery")!.textContent!;
+    expect(section).toContain(
+      "Printing failed on a printer this device does not print invoices on.",
+    );
+    expect(section).not.toContain("Retry the original");
+    expect(section).not.toContain("Automatic retry is pending");
+    expect(button(el, "retry-receipt")).toBeNull();
+  });
+
   it.each([
     ["an A4", {}],
     ["an email", { medium: "email" }],

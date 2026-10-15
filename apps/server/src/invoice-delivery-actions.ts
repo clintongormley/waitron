@@ -193,19 +193,24 @@ export async function retryEmailDelivery(
 /**
  * Replaces an A4 or email original nothing has claimed with a receipt original, in the caller's one
  * transaction: the attempt ends `switched` before the receipt is reserved, because a reservation is
- * refused while another attempt is active.
+ * refused while another attempt is active. A receipt original a print request sent is resent only
+ * to a printer `offer` still gives.
  */
 export async function switchToReceipt(
   tx: Transaction,
   deps: { backend: FiscalBackend; cfg: OriginConfig },
   sale: { id: string; workingOrderId: string },
+  offer: PrinterOffer,
   deliveryId: string,
   request: Request,
 ): Promise<InvoiceDeliveryAttempt> {
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, isReceipt);
   if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, sale.id, { emailAvailable: false });
+  const state = await readInvoiceDeliveryState(tx, sale.id, {
+    emailAvailable: false,
+    printers: offer,
+  });
   if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
   const { status, receipt } = state;
   const attempt = status.history.find((candidate) => candidate.id === deliveryId);
@@ -217,6 +222,9 @@ export async function switchToReceipt(
       attempt.designation === "original" &&
       receipt.status !== "not_queued"
     ) {
+      if (receipt.canRetry && state.receiptPrinterWithdrawn) {
+        throw new AppError("invoice_delivery.printer_invalid", {});
+      }
       throw new AppError("print_job.not_resendable", { id: receipt.jobId });
     }
     throw new AppError("invoice_delivery.active", {});

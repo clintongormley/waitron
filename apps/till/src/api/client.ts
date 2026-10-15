@@ -2101,6 +2101,11 @@ export type OriginalReceiptPrint =
       canRetry: boolean;
       /** Only on a failed original: its printer was deleted, so it will never print there. */
       failureCode?: "printer.deleted";
+      /**
+       * Only on a retryable full invoice's original that a print request sent to a printer that is
+       * not this till's invoice printer: the till may not send it there again.
+       */
+      printerWithdrawn?: true;
       handover?: { personId: string; confirmedAt: string };
     };
 

@@ -2006,13 +2006,7 @@ describe("the device's invoice printer", () => {
         .where(eq(devices.id, cfg.origin.deviceId));
     });
 
-    expect(await resolve(cfg.origin)).toEqual({
-      kind: "receipt",
-      id: receipt,
-      name: "Recibos",
-      paperWidth: "80mm",
-      resolution: "180dpi",
-    });
+    expect(await resolve(cfg.origin)).toEqual({ kind: "receipt", id: receipt, name: "Recibos" });
   });
 
   it("resolves none when the profile lists no invoice printer, or the origin is not a device", async () => {

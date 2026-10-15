@@ -738,6 +738,24 @@ describe("a deleted printer on a profile's lists", () => {
     },
   );
 
+  it("names the deleted printer before an id no printer has, whichever list comes first", async () => {
+    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    await tombstone(gone);
+    const e = await captureError(() =>
+      inTx((tx) =>
+        setProfilePrinterLists(
+          tx,
+          profileId,
+          lists({ receiptPrinterIds: ["nowhere"], invoicePrinterIds: [gone] }),
+        ),
+      ),
+    );
+    expect([(e as AppError).code, (e as AppError).params]).toEqual([
+      "printer.not_found",
+      { id: gone },
+    ]);
+  });
+
   it("still saves lists naming a switched-off printer that is not deleted", async () => {
     const { profileId } = await seedDevice(suite.db, { locationId: loc });
     const saved = withGone(ROLES[5][1]);

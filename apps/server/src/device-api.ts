@@ -14,6 +14,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, profilesAdmitting, sessions, type Permission } from "@waitron/identity";
 import {
+  chosenPrinterOf,
   kindOfFormFactor,
   listDeviceProfiles,
   refuseDeletedPrinters,
@@ -801,15 +802,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
-        const current: Record<ProfilePrinterRole, string | null> = {
-          receipt: held.receiptPrinterId,
-          payment_slip: held.paymentSlipPrinterId,
-          cash_drawer: held.cashDrawerPrinterId,
-          invoice: held.invoicePrinterId ?? held.invoicePagePrinterId,
-        };
         for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
           const printerId = chosen[role];
-          if (printerId === undefined || printerId === current[role]) continue;
+          if (printerId === undefined || printerId === chosenPrinterOf(held, role)) continue;
           await selectDeviceEquipment(tx, {
             deviceId: id,
             role,

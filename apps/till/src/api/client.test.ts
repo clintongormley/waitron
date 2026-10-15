@@ -1400,6 +1400,7 @@ describe("TillApi", () => {
     { status: "not_queued" },
     { status: "queued", jobId: "original-1", canRetry: false },
     { status: "failed", jobId: "original-2", canRetry: true },
+    { status: "failed", jobId: "original-4", canRetry: true, printerWithdrawn: true },
     { status: "done", jobId: "original-3", canRetry: false },
   ])("reads the original receipt status without requesting a print: $status", async (status) => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(status));

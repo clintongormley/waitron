@@ -5,7 +5,7 @@ import { deviceProfilePrinters, pagePrinters, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { refuseDeletedPrinters, settleProfilePrinterDevices } from "./device-equipment.js";
+import { settleProfilePrinterDevices } from "./device-equipment.js";
 
 export type PrinterRole = "receipt" | "payment_slip";
 
@@ -106,13 +106,6 @@ export async function setProfilePrinterLists(
   profileId: string,
   lists: ProfilePrinterLists,
 ): Promise<void> {
-  await refuseDeletedPrinters(
-    tx,
-    PROFILE_PRINTER_ROLES.flatMap((role) => [
-      ...lists[LIST_KEYS[role].ids],
-      lists[LIST_KEYS[role].defaultId],
-    ]),
-  );
   const pageIds = await refuseUnknownPrinters(tx, lists);
   for (const role of PROFILE_PRINTER_ROLES) {
     const keys = LIST_KEYS[role];
@@ -159,21 +152,34 @@ export async function setProfilePrinterLists(
 }
 
 /**
- * Refuses with `printer.not_found` the first listed id that names no printer its list may hold, and
- * returns the invoice list's ids that name a page printer. The lookup is by id alone: location and
- * switched-off state are judged where a device resolves the role.
+ * Refuses with `printer.not_found` the first id on a list or default that names a deleted printer,
+ * then the first listed id that names no printer its list may hold, and returns the invoice list's
+ * ids that name a page printer. The lookup is by id alone: location and switched-off state are
+ * judged where a device resolves the role.
  */
 async function refuseUnknownPrinters(
   tx: Transaction,
   lists: ProfilePrinterLists,
 ): Promise<Set<string>> {
-  const named = [...new Set(PROFILE_PRINTER_ROLES.flatMap((role) => lists[LIST_KEYS[role].ids]))];
-  if (named.length === 0) return new Set();
-  const receiptIds = new Set(
-    (await tx.select({ id: printers.id }).from(printers).where(inArray(printers.id, named))).map(
-      (row) => row.id,
+  const named = [
+    ...new Set(
+      PROFILE_PRINTER_ROLES.flatMap((role) => [
+        ...lists[LIST_KEYS[role].ids],
+        lists[LIST_KEYS[role].defaultId],
+      ]).filter((id): id is string => id !== null),
     ),
+  ];
+  if (named.length === 0) return new Set();
+  const found = new Map(
+    (
+      await tx
+        .select({ id: printers.id, deletedAt: printers.deletedAt })
+        .from(printers)
+        .where(inArray(printers.id, named))
+    ).map((row) => [row.id, row.deletedAt] as const),
   );
+  const deleted = named.find((id) => (found.get(id) ?? null) !== null);
+  if (deleted !== undefined) throw new AppError("printer.not_found", { id: deleted });
   const pageIds = new Set(
     lists.invoicePrinterIds.length === 0
       ? []
@@ -186,7 +192,7 @@ async function refuseUnknownPrinters(
   );
   for (const role of PROFILE_PRINTER_ROLES) {
     const unknown = lists[LIST_KEYS[role].ids].find(
-      (id) => !receiptIds.has(id) && !(role === "invoice" && pageIds.has(id)),
+      (id) => !found.has(id) && !(role === "invoice" && pageIds.has(id)),
     );
     if (unknown !== undefined) throw new AppError("printer.not_found", { id: unknown });
   }

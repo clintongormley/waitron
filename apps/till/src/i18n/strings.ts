@@ -231,6 +231,8 @@ export const en = {
   "invoice.check_print": "Check print status",
   "invoice.print_done": "Printing completed. Hand the original to the customer.",
   "invoice.print_failed": "Printing failed. Retry the original.",
+  "invoice.print_failed_withdrawn":
+    "Printing failed on a printer this device does not print invoices on.",
   "invoice.print_auto_retry": "Printing failed. Automatic retry is pending.",
   "invoice.print_printing": "The original is printing.",
   "invoice.print_queued": "The original is waiting to print.",
@@ -1620,6 +1622,8 @@ export const es: Record<StringKey, string> = {
   "invoice.check_print": "Comprobar impresión",
   "invoice.print_done": "Impresión completada. Entrega el original al cliente.",
   "invoice.print_failed": "La impresión falló. Reintenta el original.",
+  "invoice.print_failed_withdrawn":
+    "La impresión falló en una impresora en la que este dispositivo no imprime facturas.",
   "invoice.print_auto_retry": "La impresión falló. Hay un reintento automático pendiente.",
   "invoice.print_printing": "El original se está imprimiendo.",
   "invoice.print_queued": "El original está esperando para imprimirse.",

@@ -102,10 +102,8 @@ export async function resolvePaymentSlipPrinter(
   return printerLookup(tx, origin)("payment_slip");
 }
 
-/** A full invoice's printer: an A4 page printer, or a receipt printer with its layout settings. */
-export type InvoicePrinter =
-  | { kind: "a4"; id: string; name: string }
-  | ({ kind: "receipt"; id: string; name: string } & EscSetting);
+/** A full invoice's printer: an A4 page printer or a receipt printer. */
+export type InvoicePrinter = { kind: "a4" | "receipt"; id: string; name: string };
 
 /**
  * The printer the device's full invoices resolve to: its own choice, else its profile's default at
@@ -123,12 +121,7 @@ export async function resolveInvoicePrinter(
   const printer = role?.resolvedId == null ? undefined : equipment.printers.get(role.resolvedId);
   if (printer === undefined || !printer.active) return undefined;
   if (at !== undefined && printer.locationId !== at.locationId) return undefined;
-  if (printer.kind === "a4") return { kind: "a4", id: printer.id, name: printer.name };
-  const [setting] = await tx
-    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
-    .from(printers)
-    .where(eq(printers.id, printer.id));
-  return { kind: "receipt", id: printer.id, name: printer.name, ...setting! };
+  return { kind: printer.kind, id: printer.id, name: printer.name };
 }
 
 /** Each role's printer, by role, when the device resolves one and it is switched on. */
@@ -371,6 +364,7 @@ export async function enqueueInvoiceReceipt(
     ...request,
     medium: "receipt",
     printJobId: job.jobId,
+    printerChosen: true,
   });
 }
 

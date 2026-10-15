@@ -5984,7 +5984,8 @@ export class TillApp extends LitElement {
       retry &&
       (!full ||
         this.originalReceiptPrint?.status !== "failed" ||
-        !this.originalReceiptPrint.canRetry)
+        !this.originalReceiptPrint.canRetry ||
+        this.originalReceiptPrint.printerWithdrawn === true)
     )
       return;
     if (full && !retry && this.originalReceiptPrint?.status !== "not_queued") return;
