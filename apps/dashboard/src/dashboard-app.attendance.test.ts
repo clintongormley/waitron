@@ -6,6 +6,7 @@ import { currentLocale, setLocale } from "./i18n/t.js";
 import type { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
+import { managerHours } from "../test/manager-hours-fixtures.js";
 import { hoursView } from "../test/hours-fixtures.js";
 import.meta.glob("./screens/attendance-corrections-screen.ts", { eager: true });
 let locale: string;
@@ -73,6 +74,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
           record: hoursView({ personId: "boss" }).record,
           items: [],
         });
+      if (path.includes("/attendance/hours?")) return Response.json(managerHours());
       if (path.includes("/queue?")) return Response.json({ locationId: "shop", items: [] });
       throw new Error(path);
     },
@@ -210,3 +212,50 @@ it("Back from Hours protects a dirty own request while retaining the hidden sche
   expect(panel.shadowRoot!.querySelector("dashboard-hours-record")).toBeNull();
   expect(screen.shadowRoot!.querySelector('[data-test="abs-note"]')).not.toBeNull();
 });
+
+it("opens contributed manager Hours directly while preserving the Time corrections route", async () => {
+  const { el, requests } = await mount(
+    ["workforce"],
+    ["workforce.correct"],
+    "supervisor",
+    "/manage/hours",
+  );
+  const nav = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-hours]");
+  expect(nav).toBeTruthy();
+  await expect
+    .poll(
+      () =>
+        el
+          .shadowRoot!.querySelector("dashboard-attendance-corrections-screen")
+          ?.shadowRoot?.querySelector("dashboard-hours-record")?.view,
+    )
+    .toBeTruthy();
+  expect(location.pathname).toBe("/manage/hours");
+  expect(requests.some((path) => path.includes("/attendance/hours?"))).toBe(true);
+  expect(requests.some((path) => path.includes("/attendance/queue?"))).toBe(false);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(nav!.textContent).toContain("Horas");
+  const team = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-team]")!;
+  if (team.getAttribute("aria-expanded") === "false") await userEvent.click(team);
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-time-corrections]")!,
+  );
+  await expect.poll(() => location.pathname).toBe("/manage/time-corrections");
+  await expect.poll(() => requests.some((path) => path.includes("/attendance/queue?"))).toBe(true);
+  expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")?.mode).toBe(
+    "corrections",
+  );
+});
+it.each([
+  [[], ["workforce.correct"]],
+  [["workforce"], []],
+])(
+  "hides manager Hours without enabled workforce and authority: %j / %j",
+  async (modules, permissions) => {
+    const { el, requests } = await mount(modules, permissions, "supervisor", "/manage/hours");
+    expect(el.shadowRoot!.querySelector("[data-test=nav-hours]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")).toBeNull();
+    expect(requests).toEqual([]);
+  },
+);

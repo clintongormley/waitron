@@ -68,3 +68,13 @@ it("registers Time corrections in Team for workforce correction authority", () =
     requiresPermission: "workforce.correct",
   });
 });
+
+it("registers workforce Hours beside Time corrections with current correction authority", () => {
+  const workforce = DASHBOARD_MODULES.find((contribution) => contribution.module === "workforce");
+  expect(workforce?.moreScreens?.find((entry) => entry.screen.id === "hours")?.screen).toEqual({
+    id: "hours",
+    navLabelKey: "nav.hours",
+    group: "team",
+    requiresPermission: "workforce.correct",
+  });
+});

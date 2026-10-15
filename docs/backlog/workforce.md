@@ -79,13 +79,21 @@ for disagreeing. Original entries and responses remain in the history. Automatic
 before acknowledgment, and administrator self-approval is shown explicitly. If a reply is lost,
 Retry read checks the saved response before another attendance write is offered.
 
-The [part 5 plan](../superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md) covers till My hours,
-the same record and own correction requests in My Schedule, and manager hours. It reuses the
-existing correction executor and approval rules.
+Part 5 connects the [hours screens](../superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md).
+Open My hours from your name menu or handheld More, or the Hours tab in My Schedule.
+Choose a week or month, starting with the current week on Monday. Days show completed
+worked time, recorded offsets and original/corrected history; open shifts and breaks stay
+separate. Pending answers remain visible outside the selected dates. Fix my hours opens
+the existing correction request; own dashboard requests also wait for manager approval.
 
-Parts 5–6 remain open: My hours, manager hours screens and export/access screens. My hours has no
-placeholder; Fix my hours remains the correction entry until part 5 supplies the hours screen.
-The period-read cost remains open.
+In Team → Hours, choose a workplace, worker and pay period. The initial period follows
+the venue’s configured cadence, monthly by default. Open a day to propose a change or read
+a request before approval or decline. Time corrections remains a separate queue. Automatic
+ends already count while awaiting acknowledgment; stored self-approval, frozen period totals
+and later changes are shown separately.
+
+Part 6 remains open: PDF/CSV and representatives’ export surfaces. Inspector remote access
+and the period-read cost remain separate open entries.
 
 
 ## A10 period read cost

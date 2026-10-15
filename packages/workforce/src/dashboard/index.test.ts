@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { createRequest, LiveData } from "@waitron/dashboard-kit";
 import { WORKFORCE_DASHBOARD } from "./index.js";
 describe("workforce correction contribution", () => {
+  it("adds manager Hours beside the unchanged correction entry and binds its hours mode", () => {
+    const request = createRequest({ fetchImpl: async () => new Response("") });
+    const liveData = new LiveData();
+    const hours = WORKFORCE_DASHBOARD.moreScreens?.find((entry) => entry.screen.id === "hours");
+    expect(hours?.screen).toEqual({
+      id: "hours",
+      navLabelKey: "nav.hours",
+      group: "team",
+      requiresPermission: "workforce.correct",
+    });
+    expect(WORKFORCE_DASHBOARD.strings.en["nav.hours"]).toBe("Hours");
+    expect(WORKFORCE_DASHBOARD.strings.es["nav.hours"]).toBe("Horas");
+    const rendered = hours!.create({ request, liveData }).render();
+    expect(rendered.strings.join("")).toContain("<dashboard-attendance-corrections-screen");
+    expect(rendered.values).toEqual(["hours", request, liveData]);
+  });
   it("requires current correction authority in Team and supplies both navigation languages", () => {
     const value = WORKFORCE_DASHBOARD;
     expect(value.module).toBe("workforce");

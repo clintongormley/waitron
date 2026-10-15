@@ -89,6 +89,7 @@ export class HoursRecord extends LitElement {
   ];
 
   @property({ attribute: false }) view: PersonHours | null = null;
+  @property({ type: Boolean }) manager = false;
   @property() dayActionLabel = "";
   @property({ type: Boolean }) blocked = false;
   #day(event: Event, date: string): void {
@@ -146,7 +147,7 @@ export class HoursRecord extends LitElement {
         view.pending.automaticEntryIds.length
           ? html`<section>
               <h2>${t("hours.pending")}</h2>
-              ${view.pending.automaticEntryIds.map(() => html`<p>${t("attendance.automatic_counted")} ${t("hours.awaiting_acknowledgement")}</p>`)}${view.pending.prompts.map(
+              ${view.pending.automaticEntryIds.map(() => html`<p>${t("attendance.automatic_counted")} ${t(this.manager ? "hours.awaiting_worker_acknowledgement" : "hours.awaiting_acknowledgement")}</p>`)}${view.pending.prompts.map(
                 (prompt) =>
                   html`<article>
                     <h3>${prompt.locationName} · ${prompt.businessDay ?? ""}</h3>
