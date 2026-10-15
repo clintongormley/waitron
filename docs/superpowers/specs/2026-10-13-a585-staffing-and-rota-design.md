@@ -2,6 +2,11 @@
 
 Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review of this written spec.
 
+> 2026-10-15 implementation pointer: part 5 adds published-only own shifts, copying a published
+> week into a draft, module descriptions on both own schedules and the warnings read. The
+> [part 5 plan](../plans/2026-10-13-a585-staffing-and-rota.md#part-a585-5--workforce-what-staff-see-copying-a-week-describing-shifts-warnings)
+> records its interfaces. The Rota views and retirement in parts 6–8 remain open.
+
 ## Why
 
 Opening hours say when each department serves customers: the Restaurant's Lunch, say, 13:00–16:00.

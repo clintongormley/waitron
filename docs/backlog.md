@@ -4715,16 +4715,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
 
-- **A585. Staffing needs and the rota** — staff roles painted per area and day like opening hours,
-  and a rota of slots to fill, in a Calendar with Opening hours, Staffing and Rota views. **Designed
-  2026-10-13** ([spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md),
-  [mockups](backlog/mockups/a585-staffing/)); after the A506 chain, its remaining rota work builds on the clocking and Hours readers.
-  Part 1 (the `staffing` package, staff roles and who holds them, the Staff roles page) landed
-  (#1681); part 2 (staffing paint storage and routes, the slot and matching library) landed
-  (#1686); part 3 (the Calendar with module views, the staffing month read and the Staffing view's
-  month) landed (#1735); part 4 (the season-week and special-day staffing painters) landed
-  (#1742); parts 5–8 are open, in the order of the
-  [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md).
+- **A585. Staffing needs and the rota** — build the Calendar's Rota view by area and by person,
+  fill its slots, show live labour warnings, publish and change a week, then retire the old Rota
+  screen and free-text staff role. Parts 6–8 remain, in the order of the
+  [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
+  [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
+  [mockups](backlog/mockups/a585-staffing/) define the remaining views.
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
   formatting.** `stepMonth` and the first and last month in
   `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside

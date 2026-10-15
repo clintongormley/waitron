@@ -130,7 +130,7 @@ an earlier label for the same id. Both own-shift routes return `description`, fa
 shift's free-text `role` when no contribution labels it. The till and My schedule render that
 field. See `apps/server/src/boot.shift-descriptions.test.ts` for enabled and disabled boot cases.
 
-Core live subscriptions watch `shifts` and `roster_versions`. An area or staff-role rename alone
+The dashboard's `listMyShifts` subscription watches `shifts` and `roster_versions`. An area or staff-role rename alone
 does not refresh an already open own schedule; the next read picks it up.
 
 ## A test-only dependency closes a workspace dependency loop as surely as a runtime one

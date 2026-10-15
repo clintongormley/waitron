@@ -1,4 +1,5 @@
 import type { WorkTimeRuleset } from "./ruleset.js";
+export type { WorkTimeRuleset } from "./ruleset.js";
 
 /**
  * Every threshold comes from the caller's `WorkTimeRuleset`; none is hard-coded here.
