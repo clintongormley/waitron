@@ -213,4 +213,8 @@ describe("bold and double-size lines", () => {
   it("does not read a 56-dot picture that is not a double line", () => {
     expect(readRasterText(512, 56, new Uint8Array(64 * 56).fill(0xff))).toBeUndefined();
   });
+
+  it("does not read a 56-dot picture whose width is not a whole number of bytes", () => {
+    expect(readRasterText(100, 56, new Uint8Array(13 * 56))).toBeUndefined();
+  });
 });

@@ -106,8 +106,9 @@ function inkBetween(data: Uint8Array, row: number, from: number, to: number): bo
 /**
  * The text of a band drawn by {@link drawTextBand}, read on the grid {@link gridForWidth} gives for
  * its width: one character a cell, a blank cell a space, trailing spaces dropped. Undefined when the
- * band is not one line tall (regular, bold or double), its bytes do not fill it exactly, or it has
- * ink that is not a glyph in a grid cell — a QR code or a ruler.
+ * band is not one line tall (regular, bold or double), a double one's width is not whole bytes,
+ * its bytes do not fill it exactly, or it has ink that is not a glyph in a grid cell — a QR code or
+ * a ruler.
  */
 export function readRasterText(
   widthDots: number,
@@ -117,7 +118,9 @@ export function readRasterText(
   const stride = Math.ceil(widthDots / 8);
   if (data.length !== stride * heightDots) return undefined;
   if (heightDots === TEXT_BAND_HEIGHT) return readLine(widthDots, stride, data);
-  if (heightDots === TEXT_BAND_HEIGHT * 2) return readDoubleLine(widthDots, stride, data);
+  if (heightDots === TEXT_BAND_HEIGHT * 2 && widthDots % 8 === 0) {
+    return readDoubleLine(widthDots, stride, data);
+  }
   return undefined;
 }
 
