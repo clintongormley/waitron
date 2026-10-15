@@ -222,7 +222,7 @@ describe("DepartmentTransferMonitor", () => {
     expect(monitor.running).toBe(true);
   });
 
-  it("keeps a sender's updates when the incoming queue is refused to a profile with no department", async () => {
+  it("keeps a sender's updates when only the incoming queue is refused", async () => {
     const reads: string[] = [];
     const api = new client.TillApi("", async (url) => {
       reads.push(String(url));
