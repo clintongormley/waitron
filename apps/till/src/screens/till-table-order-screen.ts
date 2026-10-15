@@ -78,9 +78,11 @@ import {
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
+import "../widgets/party-guests-dialog.js";
 import "../widgets/table-status.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
+import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
   BillBalance,
@@ -1183,6 +1185,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
+  /** The app's answer to a guest count the server refused: the count sent, and why. */
+  @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
   /** The visible half of the app's guard against a second group command while one runs. */
@@ -1294,6 +1298,7 @@ export class TillTableOrderScreen extends LitElement {
   @state() private billChoice: { verb: TableVerb; table: TableState } | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
+  @state() private counting: { value: string; refusal: string } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
   @state() private transferLineNos = new Set<number>();
@@ -1644,6 +1649,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#reminderDue = reminderDueAt(this.currentOrders?.reminder) <= (this.now ?? Date.now());
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
+    }
+    if (changed.has("guestsRefusal") && this.guestsRefusal !== null) {
+      this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
     }
     if (changed.has("cancelOffer") && this.cancelOffer !== null) {
       const offered = this.lines.find(
@@ -2609,7 +2617,7 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#previewDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
         ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
-        ${this.#billChoiceDialog()} ${this.#nameDialog()}
+        ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
       </section>
     `;
   }
@@ -4498,6 +4506,39 @@ export class TillTableOrderScreen extends LitElement {
     ></till-party-name-dialog>`;
   }
 
+  #openCounting(): void {
+    this.#closeActions();
+    this.counting = { value: this.#savedGuests(), refusal: "" };
+  }
+
+  #savedGuests(): string {
+    const count = this.party?.guestCount ?? null;
+    return count === null ? "" : String(count);
+  }
+
+  #guestsDialog(): TemplateResult | typeof nothing {
+    const counting = this.counting;
+    const party = this.party;
+    if (counting === null || party === null) return nothing;
+    return html`<till-party-guests-dialog
+      .tables=${partyTablesLabel(party, this.tables)}
+      .value=${counting.value}
+      .savedValue=${this.#savedGuests()}
+      .refusal=${counting.refusal}
+      @party-guests-confirm=${(event: Event) => {
+        event.stopPropagation();
+        this.counting = null;
+        this.#dispatch("guests-party", {
+          guestCount: (event as CustomEvent<PartyGuestsDetail>).detail.guestCount,
+        });
+      }}
+      @party-guests-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.counting = null;
+      }}
+    ></till-party-guests-dialog>`;
+  }
+
   /** The party's bills Split a table can give the new party: open or presented, not the main one. */
   #splitTableBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
@@ -4814,6 +4855,7 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         ${party === null ? nothing : action("name", "table.action_name", () => this.#openNaming())}
+        ${party === null ? nothing : action("guests", "table.action_guests", () => this.#openCounting())}
         ${this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing}
         ${verb("merge", "table.action_merge_bills")} ${verb("transfer", "table.action_transfer")}
         <wt-button

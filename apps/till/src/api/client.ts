@@ -4055,6 +4055,19 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/name`, "PUT", { name, expectedPartyRevision });
   }
 
+  /** Set the party's guest count, or clear it with null → `PUT /api/parties/:id/guests`. A count
+   * outside 1–999 is `management.request_invalid` naming the field `guestCount`. */
+  setPartyGuests(
+    partyId: string,
+    guestCount: number | null,
+    expectedPartyRevision: number,
+  ): Promise<{ revision: number; guestCount: number | null }> {
+    return this.#request(`/api/parties/${partyId}/guests`, "PUT", {
+      guestCount,
+      expectedPartyRevision,
+    });
+  }
+
   /**
    * Put the chosen items of a bill on a new bill of the same party → `POST /api/bills/:billId/split`,
    * answering the new bill's id. Rejects, among others, `bill.paid`, `bill.presented`,

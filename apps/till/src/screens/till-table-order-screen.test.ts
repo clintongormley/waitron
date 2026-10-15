@@ -4457,6 +4457,73 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
     });
 
+    it("offers Guests right after Name the party whenever a party is open", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      await toMenu(el);
+      const guests = el.shadowRoot!.querySelector('[data-action="guests"]')!;
+      expect(guests.textContent!.trim()).toBe(t("table.action_guests"));
+      expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(guests);
+    });
+
+    it("Guests opens the guests dialog with the party's count, and sends guests-party { guestCount }", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const counted = heard(el, "guests-party");
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; savedValue: string; tables: string; refusal: string }
+      >("till-party-guests-dialog")!;
+      expect(dialog.value).toBe("3");
+      expect(dialog.savedValue).toBe("3");
+      expect(dialog.tables).toBe("Mesa 4, 5");
+      expect(dialog.refusal).toBe("");
+
+      dialog.dispatchEvent(
+        new CustomEvent("party-guests-confirm", {
+          detail: { guestCount: 5 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(counted).toEqual([{ guestCount: 5 }]);
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+    });
+
+    it("Guests opens with an empty field when the party has no count", async () => {
+      const floor = partyTables();
+      const party = { ...floor.party, guestCount: null };
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor, party });
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; savedValue: string }
+      >("till-party-guests-dialog")!;
+      expect(dialog.value).toBe("");
+      expect(dialog.savedValue).toBe("");
+    });
+
+    it("reopens the guests dialog with the count sent and the refusal beside the field when the app hands one back", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+
+      el.guestsRefusal = { value: "1000", message: t("seat.guest_count_invalid") };
+      await el.updateComplete;
+
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { value: string; refusal: string }>(
+        "till-party-guests-dialog",
+      )!;
+      expect(dialog.value).toBe("1000");
+      expect(dialog.refusal).toBe(t("seat.guest_count_invalid"));
+      dialog.dispatchEvent(
+        new CustomEvent("party-guests-cancel", { bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
+    });
+
     it("merge lists the party's other untouched bills only, and dispatches merge-bills { fromBillId }", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
       await toMenu(el);

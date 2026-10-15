@@ -241,6 +241,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) billBalance: BillBalance | null = null;
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
+  @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
@@ -532,6 +533,7 @@ export class TillCardGrid extends LitElement {
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
+          .guestsRefusal=${this.guestsRefusal}
           .busy=${this.busy}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheld}
