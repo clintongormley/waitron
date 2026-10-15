@@ -10511,6 +10511,7 @@ export class TillApp extends LitElement {
         .activeReaders=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .receiptLanguages=${this.receiptLanguages}
+        .fullInvoices=${this.fullInvoices}
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
@@ -10547,6 +10548,7 @@ export class TillApp extends LitElement {
       .activeReaders=${this.#payReaders()}
       .defaultReaderId=${this.#payDefaultReaderId()}
       .receiptLanguages=${this.receiptLanguages}
+      .fullInvoices=${this.fullInvoices}
       .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
       .api=${this.api}
       .fireControl=${this.fireControl}
@@ -10641,6 +10643,7 @@ export class TillApp extends LitElement {
           .party=${this.orderParty}
           .bills=${this.partyBills}
           .receiptLanguages=${this.receiptLanguages}
+          .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}

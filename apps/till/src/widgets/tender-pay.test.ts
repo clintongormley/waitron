@@ -156,10 +156,22 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("offers Full invoice before payment and requests the choice without starting a tender", async () => {
+  it("offers no Full invoice while full invoices are off", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "1");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+
+    expect(query(el, ".hold")).not.toBeNull();
+    expect(query(el, "[data-full-invoice]")).toBeNull();
+  });
+
+  it("offers Full invoice before payment and requests the choice without starting a tender", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      fullInvoices: true,
+    });
     const chosen = vi.fn();
     const payment = vi.fn();
     el.addEventListener("choose-invoice", chosen);
@@ -221,6 +233,7 @@ describe("till-tender-pay", () => {
         store,
         mode: "ticket_then_pay",
         stage: "collect",
+        fullInvoices: true,
         receiptLanguages: ["es-ES", "ca-ES"],
         receiptLanguage: "es-ES",
       });
@@ -233,6 +246,7 @@ describe("till-tender-pay", () => {
       const store = new WorkingOrderStore();
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
+        fullInvoices: true,
         receiptLanguages: ["es-ES", "ca-ES"],
         receiptLanguage: "es-ES",
       });

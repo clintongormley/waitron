@@ -201,6 +201,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property({ type: Boolean }) fullInvoices = false;
   @property() receiptLanguage = "";
   /**
    * Set when rendered INSIDE the canvas tab shell, which owns the header chrome, so the screen drops its
@@ -362,6 +363,7 @@ export class TillCounterScreen extends LitElement {
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         .receiptLanguages=${this.receiptLanguages}
+        .fullInvoices=${this.fullInvoices}
         .receiptLanguage=${this.receiptLanguage}
         ><div slot="menu-controls" class="menu-controls">
           ${this.#menuControls()}

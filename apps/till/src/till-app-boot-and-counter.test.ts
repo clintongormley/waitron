@@ -2035,6 +2035,38 @@ describe("till-app simplified-invoice limit", () => {
     expect(api.recordSale).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["off", false, false],
+    ["on", true, true],
+  ])(
+    "draws the counter's Full invoice only while full invoices are on (%s)",
+    async (_case, fullInvoices, drawn) => {
+      const paying = {
+        ...limitedTill,
+        fullInvoices,
+        canvas: {
+          ...limitedTill.canvas,
+          tabs: [
+            {
+              ...limitedTill.canvas.tabs[0]!,
+              cards: [
+                ...limitedTill.canvas.tabs[0]!.cards,
+                { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+              ],
+            },
+          ],
+        } satisfies CanvasDef,
+      };
+      const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(paying) });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      await flush(el);
+      const panel = deepFind(el, "till-tender-pay")!;
+      expect(panel.shadowRoot!.querySelector(".hold")).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector("[data-full-invoice]") !== null).toBe(drawn);
+    },
+  );
+
   it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...limitedTill, fullInvoices: true }),
