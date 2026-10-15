@@ -417,3 +417,33 @@ export async function buildSuggestionJob(
     bytes,
   };
 }
+
+export async function pruneSuggestions(
+  tx: Transaction,
+  context: TranslationContext,
+): Promise<void> {
+  const gaps = await readSuggestionGaps(tx, context);
+  const rows = await tx
+    .select({
+      id: contentSuggestions.id,
+      kind: contentSuggestions.kind,
+      itemId: contentSuggestions.itemId,
+      language: contentSuggestions.language,
+      text: contentSuggestions.text,
+    })
+    .from(contentSuggestions);
+  const gone = rows
+    .filter((row) => {
+      const gap = gaps.get(suggestionRef({ kind: row.kind, id: row.itemId }));
+      return (
+        !gap ||
+        gap.missing.size === 0 ||
+        (row.text !== null && !gap.missing.has(row.language ?? ""))
+      );
+    })
+    .map((row) => row.id);
+  for (let start = 0; start < gone.length; start += 500)
+    await tx
+      .delete(contentSuggestions)
+      .where(inArray(contentSuggestions.id, gone.slice(start, start + 500)));
+}

@@ -1,5 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
   buildSuggestionJob,
@@ -7,10 +8,16 @@ import {
   resolveLive,
   suggestionRef,
 } from "./content-suggestion-collect.js";
-import { sentInRun } from "./content-suggestion-jobs.js";
-import type { SuggestionResult, SuggestionResults } from "./content-suggestion-types.js";
+import { readSuggestionRun, sentInRun } from "./content-suggestion-jobs.js";
+import type {
+  ContentSuggestionPage,
+  ContentSuggestionView,
+  SuggestionResult,
+  SuggestionResults,
+} from "./content-suggestion-types.js";
 import type { TranslationContext } from "./content-translation-targets.js";
-import type { TranslationRef } from "./content-translation-types.js";
+import type { TranslationEdit, TranslationRef } from "./content-translation-types.js";
+import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
 type LiveTarget = Awaited<ReturnType<typeof resolveLive>>[number];
@@ -203,4 +210,126 @@ export async function storeSuggestionResults(
     .update(contentSuggestionJobs)
     .set({ runTotal })
     .where(and(eq(contentSuggestionJobs.runId, job.runId), eq(contentSuggestionJobs.position, 1)));
+}
+
+const SUGGESTION_PAGE = 100;
+const COMPARED = [
+  "ref",
+  "language",
+  "owners",
+  "selectedText",
+  "effectiveSelectedText",
+  "inheritedSelectedText",
+] as const;
+
+function readToken(token: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(token);
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function suggestionStale(stored: string, current: string): boolean {
+  const before = readToken(stored);
+  const after = readToken(current);
+  if (!before || !after) return true;
+  return COMPARED.some((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+}
+
+export async function listContentSuggestions(
+  tx: Transaction,
+  language: string,
+  query: { after?: string },
+  context: TranslationContext,
+): Promise<ContentSuggestionPage> {
+  const config = await readContentLanguages(tx, context.fallbackLanguage);
+  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
+  const shown = or(
+    inArray(contentSuggestions.language, [...new Set([language, config.defaultLanguage])]),
+    isNull(contentSuggestions.language),
+    isNull(contentSuggestions.text),
+  );
+  const rows = await tx
+    .select()
+    .from(contentSuggestions)
+    .where(query.after === undefined ? shown : and(shown, gt(contentSuggestions.id, query.after)))
+    .orderBy(asc(contentSuggestions.id))
+    .limit(SUGGESTION_PAGE);
+  const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
+  const refs = new Map<string, TranslationRef>();
+  for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
+  const live = await liveByRef(tx, config.defaultLanguage, [...refs.values()], context);
+  const byLanguage = new Map<string, TranslationRef[]>();
+  for (const row of rows)
+    if (row.text !== null && row.language !== null && live.has(keyOf(row)))
+      byLanguage.set(row.language, [
+        ...(byLanguage.get(row.language) ?? []),
+        { kind: row.kind, id: row.itemId },
+      ]);
+  const tokens = new Map<string, string>();
+  for (const [textLanguage, languageRefs] of byLanguage)
+    for (const [key, entry] of await liveByRef(tx, textLanguage, languageRefs, context))
+      tokens.set(`${textLanguage} ${key}`, entry.target.expected);
+  const suggestions: ContentSuggestionView[] = [];
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!live.has(key)) continue;
+    suggestions.push({
+      id: row.id,
+      kind: row.kind,
+      itemId: row.itemId,
+      language: row.language,
+      text: row.text,
+      placeholder: row.placeholder,
+      // The store writes the three fix columns together, from one correction.
+      fix:
+        row.fixField === null
+          ? null
+          : { field: row.fixField, wrong: row.fixWrong!, right: row.fixRight! },
+      // A row with text has `expected` (content_suggestions_name_ck), and an item live in the
+      // default language is live in every language, as above.
+      stale:
+        row.text !== null && suggestionStale(row.expected!, tokens.get(`${row.language} ${key}`)!),
+    });
+  }
+  return {
+    language,
+    run: await readSuggestionRun(tx),
+    suggestions,
+    next: rows.length === SUGGESTION_PAGE ? rows.at(-1)!.id : null,
+  };
+}
+
+export async function discardContentSuggestion(tx: Transaction, id: string): Promise<void> {
+  const deleted = await tx
+    .delete(contentSuggestions)
+    .where(eq(contentSuggestions.id, id))
+    .returning({ id: contentSuggestions.id });
+  if (deleted.length === 0)
+    throw new AppError("content.suggestion_not_found", { suggestionId: id });
+}
+
+export async function deleteSavedSuggestions(
+  tx: Transaction,
+  language: string,
+  defaultLanguage: string,
+  edits: readonly Pick<TranslationEdit, "kind" | "id" | "defaultText">[],
+): Promise<void> {
+  for (const edit of edits)
+    await tx
+      .delete(contentSuggestions)
+      .where(
+        and(
+          eq(contentSuggestions.kind, edit.kind),
+          eq(contentSuggestions.itemId, edit.id),
+          inArray(
+            contentSuggestions.language,
+            edit.defaultText === undefined ? [language] : [language, defaultLanguage],
+          ),
+        ),
+      );
 }

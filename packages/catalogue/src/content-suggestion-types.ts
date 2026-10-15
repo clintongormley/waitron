@@ -50,3 +50,27 @@ export interface SuggestionRunView {
   finishedAt: string | null;
   opened: boolean;
 }
+
+export interface ContentSuggestionView {
+  id: string;
+  kind: TranslationGapKind;
+  itemId: string;
+  language: string | null;
+  text: string | null;
+  placeholder: boolean;
+  fix: { field: string; wrong: string; right: string } | null;
+  stale: boolean;
+}
+
+export interface ContentSuggestionPage {
+  language: string;
+  run: SuggestionRunView | null;
+  suggestions: ContentSuggestionView[];
+  next: string | null;
+}
+
+/** The GET route's reply; the server fills the two fields the catalogue cannot know. */
+export interface ContentSuggestionRead extends ContentSuggestionPage {
+  service: "on" | "off" | "not_connected";
+  cloudOrigin: string | null;
+}

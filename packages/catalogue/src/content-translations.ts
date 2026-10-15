@@ -25,6 +25,7 @@ import {
   writeSectionTranslation,
   writeIncludedMenuTranslation,
 } from "./content-translation-writes.js";
+import { deleteSavedSuggestions } from "./content-suggestion-store.js";
 import "./errors.js";
 
 const writers = {
@@ -317,5 +318,6 @@ export async function saveContentTranslations(
   }
   if (!retried)
     for (const entry of proposed) await writers[entry.target.kind](tx, entry, entry.names!);
+  await deleteSavedSuggestions(tx, language, resolution.config.defaultLanguage, edits);
   return { saved: proposed.map((entry) => entry.target) };
 }
