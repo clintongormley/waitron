@@ -1854,7 +1854,8 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed.slice(start).filter((l) => l !== "" && !/^-+$/.test(l))).toEqual([
       "TOTAL 60,00 €",
-      "IVA 21% incluido 10,42 €",
+      "Base imponible 21% 49,58 €",
+      "IVA 21% 10,42 €",
       "Tarjeta 30,00 €",
       "Devolución -10,00 €",
       "Efectivo 20,00 €",

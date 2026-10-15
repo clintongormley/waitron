@@ -4611,7 +4611,8 @@ describe("refund first (design §4.3, §6a)", () => {
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
     expect(printed.slice(start + 1).filter((line) => line !== "" && !/^-+$/.test(line))).toEqual([
-      "IVA 21% incluido 6,95 €",
+      "Base imponible 21% 33,05 €",
+      "IVA 21% 6,95 €",
       "Efectivo 50,00 €",
       "Devolución -10,00 €",
     ]);
