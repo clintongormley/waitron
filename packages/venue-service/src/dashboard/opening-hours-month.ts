@@ -187,7 +187,7 @@ export class OpeningHoursMonthView extends LitElement {
         white-space: nowrap;
       }
       .name,
-      .closed-row {
+      .no-orders {
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 4;
@@ -241,11 +241,8 @@ export class OpeningHoursMonthView extends LitElement {
       .segment[data-colour="purple"] {
         background: var(--wt-color-palette-purple);
       }
-      .closed-row {
-        color: inherit;
-      }
       /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
-         word kept for a screen reader; a date closed all day says so in its name alone. */
+         word kept for a screen reader. */
       @container month (width < 560px) {
         table {
           border-spacing: calc(var(--wt-space-1) / 2);
@@ -253,7 +250,7 @@ export class OpeningHoursMonthView extends LitElement {
         .day {
           padding: var(--wt-space-1) calc(var(--wt-space-1) / 4);
         }
-        .closed-row[data-all-day] {
+        .no-orders[data-all-day] {
           display: none;
         }
         .top {
@@ -269,7 +266,7 @@ export class OpeningHoursMonthView extends LitElement {
           ${visuallyHiddenStyles}
         }
         .name,
-        .closed-row {
+        .no-orders {
           -webkit-line-clamp: 6;
         }
       }
@@ -357,7 +354,12 @@ export class OpeningHoursMonthView extends LitElement {
       { key: chosen, name: name(chosen), ranges: department.ranges, gaps: [] },
       ...department.zones.map((zone) => {
         const own = zoneOwnHours(department.ranges, zone.closed, day);
-        return { key: zone.zoneId, name: name(zone.zoneId), ranges: own.ranges, gaps: own.closed };
+        return {
+          key: zone.zoneId,
+          name: name(zone.zoneId),
+          ranges: own.ranges,
+          gaps: own.ranges.length ? own.closed : [],
+        };
       }),
     ];
   }
@@ -377,12 +379,6 @@ export class OpeningHoursMonthView extends LitElement {
     };
   }
 
-  #emptyRow(row: Row): string {
-    return this.stationMode
-      ? t("month.no_orders")
-      : format("month.department_closed", { name: row.name });
-  }
-
   #noOrders(rows: readonly Row[]): boolean {
     return this.stationMode && rows.every((row) => !row.ranges.length);
   }
@@ -400,7 +396,7 @@ export class OpeningHoursMonthView extends LitElement {
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
       if (this.stationMode && !row.ranges.length) return `${row.name}: ${t("month.no_orders")}`;
-      if (!row.ranges.length) return this.#emptyRow(row);
+      if (!row.ranges.length) return format("month.department_closed", { name: row.name });
       const parts = row.ranges.map((range) =>
         format("month.range", {
           name: names.period(range.periodId).name,
@@ -456,12 +452,9 @@ export class OpeningHoursMonthView extends LitElement {
       </span>
       ${nameLines}
       ${(none ? rows.slice(0, 1) : rows).map((row) =>
-        !row.ranges.length && (!this.stationMode || none)
-          ? html`<span
-              class="closed-row"
-              ?data-all-day=${day.closedAllDay}
-              data-test=${this.stationMode ? "no-orders" : "department-closed"}
-              >${this.#emptyRow(row)}</span
+        none
+          ? html`<span class="no-orders" ?data-all-day=${day.closedAllDay} data-test="no-orders"
+              >${t("month.no_orders")}</span
             >`
           : html`<span class="track" data-row=${row.key}>
               ${row.ranges.map((range) => {

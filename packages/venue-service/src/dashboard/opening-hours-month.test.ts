@@ -132,7 +132,9 @@ describe("Opening hours month", () => {
     const xmas = cell(el, "2026-12-25");
     expect(xmas.hasAttribute("data-closed")).toBe(true);
     expect(text(xmas.querySelector('[data-test="name"]'))).toBe("Christmas Day · Closed");
-    expect(xmas.querySelectorAll(".track")).toHaveLength(0);
+    const xmasTracks = [...xmas.querySelectorAll<HTMLElement>(".track")];
+    expect(xmasTracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+    for (const track of xmasTracks) expect(track.querySelectorAll(".segment")).toHaveLength(0);
     expect(text(cell(el, "2026-12-09").querySelector('[data-test="name"]'))).toBe("");
   });
 
@@ -204,16 +206,19 @@ describe("Opening hours month", () => {
     expect(text(cell(el, "2026-12-26").querySelector('[data-test="name"]'))).toBe("Closed");
   });
 
-  it('reads "<department> closed" in place of the bar of a department with no hours that date', async () => {
+  it("draws a department closed that date as an empty bar", async () => {
     const el = await mount();
     const sunday = cell(el, "2026-12-06");
-    expect([...sunday.querySelectorAll('[data-test="department-closed"]')].map(text)).toEqual([
-      "Restaurant closed",
-    ]);
-    expect(sunday.querySelectorAll(".track")).toHaveLength(1);
-    expect(cell(el, "2026-12-07").querySelectorAll('[data-test="department-closed"]')).toHaveLength(
-      0,
-    );
+    const tracks = [...sunday.querySelectorAll<HTMLElement>(".track")];
+    expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+    expect(tracks[0]!.querySelectorAll(".segment")).toHaveLength(0);
+    expect(sunday.querySelector('[data-test="department-closed"]')).toBeNull();
+    expect(text(sunday)).not.toContain("Restaurant closed");
+  });
+
+  it("still says a closed department in words", async () => {
+    const el = await mount();
+    expect(dayButton(el, "2026-12-06").getAttribute("aria-label")).toContain("Restaurant closed");
   });
 
   it("draws a bar per department, each range placed from changeover to changeover in its period's colour", async () => {
@@ -322,8 +327,37 @@ describe("Opening hours month", () => {
     expect(gaps[0]!.title).toBe("Terrace closed 22:00–23:00");
     expect(percent(gaps[0]!.style.left)).toBeCloseTo((16 / 24) * 100, 3);
     expect(percent(gaps[0]!.style.width)).toBeCloseTo((1 / 24) * 100, 3);
+    expect(terrace.querySelectorAll(".segment")).toHaveLength(3);
     const dinner = [...terrace.querySelectorAll<HTMLElement>(".segment")][2]!;
     expect(dinner.title).toBe("Dinner 20:00–22:00");
+  });
+
+  it("a zone closed for its department's whole day is an empty grey bar, spoken closed", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-02"
+        ? {
+            ...day,
+            departments: day.departments.map((d) =>
+              d.departmentId === "rest"
+                ? {
+                    ...d,
+                    zones: [
+                      { zoneId: "terrace", closed: [{ startsAt: "07:00", endsAt: "05:00" }] },
+                    ],
+                  }
+                : d,
+            ),
+          }
+        : day,
+    );
+    const el = await mount({ ...model, days }, { departmentId: "rest" });
+    const terrace = cell(el, "2026-12-02").querySelector<HTMLElement>('[data-row="terrace"]');
+    expect(terrace).not.toBeNull();
+    expect(terrace!.querySelectorAll(".segment")).toHaveLength(0);
+    expect(terrace!.querySelectorAll('[data-test="gap"]')).toHaveLength(0);
+    const label = dayButton(el, "2026-12-02").getAttribute("aria-label")!;
+    expect(label).toMatch(/Terrace closed(,|$)/);
   });
 
   it("says a zone's own hours to a screen reader", async () => {
@@ -711,14 +745,10 @@ describe("Opening hours month", () => {
         const name = cell(el, date).querySelector<HTMLElement>('[data-test="name"]')!;
         expect(whole(name), `${locale} ${date}: ${text(name)}`).toBe(true);
       }
-      for (const line of cell(el, "2026-12-06").querySelectorAll<HTMLElement>(
-        '[data-test="department-closed"]',
-      ))
-        expect(whole(line), `${locale}: ${text(line)}`).toBe(true);
     }
   });
 
-  it('reads "<name> · Closed" and one closed line per department on a date closed all day', async () => {
+  it('reads "<name> · Closed" and an empty bar per row on a date closed all day', async () => {
     const long = "Lunes siguiente al Día de la Constitución Española";
     const model = monthModel();
     const days = model.days.map((day) =>
@@ -729,32 +759,40 @@ describe("Opening hours month", () => {
     const name = xmas.querySelector<HTMLElement>('[data-test="name"]')!;
     expect(text(name)).toBe("Christmas Day · Closed");
     expect(whole(name)).toBe(true);
-    expect([...xmas.querySelectorAll('[data-test="department-closed"]')].map(text)).toEqual([
-      "Restaurant closed",
-      "Bar closed",
-    ]);
+    const emptyRows = () =>
+      [...xmas.querySelectorAll<HTMLElement>(".track")]
+        .filter((track) => !track.querySelector(".segment"))
+        .map((track) => track.dataset.row);
+    expect(emptyRows()).toEqual(["rest", "bar"]);
     const holidayName = cell(el, "2026-12-07").querySelector<HTMLElement>('[data-test="name"]')!;
     expect(text(holidayName)).toBe(long);
     expect(whole(holidayName)).toBe(true);
     el.departmentId = "rest";
     await el.updateComplete;
-    expect([...xmas.querySelectorAll('[data-test="department-closed"]')].map(text)).toEqual([
-      "Restaurant closed",
-      "Terrace closed",
-    ]);
+    expect(emptyRows()).toEqual(["rest", "terrace"]);
   });
 
-  it("leaves out a closed date's department lines at a phone's width, where its name says Closed", async () => {
-    const el = await mountAt(PHONE, monthModel(), { departmentId: "rest" });
-    const lines = [
-      ...cell(el, "2026-12-25").querySelectorAll<HTMLElement>('[data-test="department-closed"]'),
-    ];
-    expect(lines).toHaveLength(2);
-    for (const line of lines) expect(line.getBoundingClientRect().height).toBe(0);
-    const open = cell(el, "2026-12-06").querySelector<HTMLElement>(
-      '[data-test="department-closed"]',
-    )!;
-    expect(open.getBoundingClientRect().height).toBeGreaterThan(0);
+  it("keeps every date of a row the same height", async () => {
+    const el = await mountAt(DESKTOP);
+    const [sunday, monday] = ["2026-12-06", "2026-12-07"].map((date) => cell(el, date));
+    expect(sunday!.querySelectorAll(".track")).toHaveLength(
+      monday!.querySelectorAll(".track").length,
+    );
+    expect(sunday!.querySelector<HTMLElement>(".day")!.getBoundingClientRect().height).toBe(
+      monday!.querySelector<HTMLElement>(".day")!.getBoundingClientRect().height,
+    );
+  });
+
+  it("draws a date closed all day with a bar per row, at a phone's width too", async () => {
+    const el = await mountAt(PHONE);
+    const xmas = cell(el, "2026-12-25");
+    const tracks = [...xmas.querySelectorAll<HTMLElement>(".track")];
+    expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+    for (const track of tracks) {
+      expect(track.querySelectorAll(".segment")).toHaveLength(0);
+      expect(track.getBoundingClientRect().height).toBeGreaterThan(0);
+    }
+    expect(text(xmas.querySelector('[data-test="name"]'))).toBe("Christmas Day · Closed");
   });
 
   it("draws every date of a week row the row's full height", async () => {

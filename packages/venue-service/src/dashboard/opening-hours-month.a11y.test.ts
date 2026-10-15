@@ -98,7 +98,7 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
       '[data-test="today"]',
       ".name.special",
       ".name.holiday",
-      '[data-test="department-closed"]',
+      ".track:not(:has(.segment))",
     ])
       expect(root.querySelector(shown), shown).not.toBeNull();
     if (states[state]!.departmentId) expect(root.querySelector('[data-test="gap"]')).not.toBeNull();
