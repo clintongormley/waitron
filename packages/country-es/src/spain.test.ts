@@ -283,6 +283,16 @@ describe("receipt labels", () => {
       expect(values).not.toContain("QR tributario:");
     },
   );
+
+  it.each(SPAIN.invoiceLocales)("holds {rate} in %s's one-rate VAT label", (locale) => {
+    expect(SPAIN.receiptLabels?.[locale]?.vatIncludedAtRate).toContain("{rate}");
+  });
+
+  it("labels a simplified invoice and a single VAT rate in Spanish", () => {
+    const labels = SPAIN.receiptLabels?.["es-ES"];
+    expect(labels?.simplifiedInvoice).toBe("Factura simplificada");
+    expect(labels?.vatIncludedAtRate.replace("{rate}", "10%")).toBe("IVA 10% incluido");
+  });
 });
 
 describe("validateSpanishPhone", () => {

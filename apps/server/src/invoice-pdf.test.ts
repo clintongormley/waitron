@@ -3,7 +3,12 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
-import { INVOICE_PAGE_WIDTH, layoutInvoicePages, type InvoicePageElement } from "./invoice-page.js";
+import {
+  INVOICE_PAGE_HEIGHT,
+  INVOICE_PAGE_WIDTH,
+  layoutInvoicePages,
+  type InvoicePageElement,
+} from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { sampleDocument } from "./sample-receipt.js";
 
@@ -250,18 +255,24 @@ describe("A4 optional address and logo controls", () => {
 
 describe("A4 line above the total and space around the logo", () => {
   const LINE = 14;
+  const PAGE_FOOT = INVOICE_PAGE_HEIGHT - 36;
   const logo = { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) };
   const textAt = (elements: InvoicePageElement[], start: string) =>
     elements.find((element) => element.kind === "text" && element.text.startsWith(start));
 
-  it("puts one rule across the content width directly above TOTAL", () => {
+  it("puts a rule across the content width directly above TOTAL, and rules between sections", () => {
     const elements = layoutInvoicePages(fixture)[0]!.elements;
     const total = elements.findIndex(
       (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
     );
     const rule = elements[total - 1];
-    expect(elements.filter((element) => element.kind === "rule")).toHaveLength(1);
+    const rules = elements.filter(
+      (element): element is Extract<InvoicePageElement, { kind: "rule" }> =>
+        element.kind === "rule",
+    );
     if (rule?.kind !== "rule") throw new Error(`expected a rule before TOTAL, got ${rule?.kind}`);
+    expect(rules.length).toBeGreaterThan(1);
+    for (const each of rules) expect([each.x, each.width]).toEqual([rule.x, rule.width]);
     expect(rule.x).toBe(36);
     expect(rule.width).toBeCloseTo(595.28 - 72, 2);
     expect(rule.thickness).toBeGreaterThan(0);
@@ -272,24 +283,50 @@ describe("A4 line above the total and space around the logo", () => {
     expect(rule.y + rule.thickness).toBeLessThan(elements[total]!.y);
   });
 
-  it("keeps the rule on the same page as TOTAL when the invoice runs onto a second page", () => {
-    const ruleThenTotal = (input: ReceiptDocumentInput) => {
-      const pages = layoutInvoicePages(input);
-      const page = pages.findIndex((candidate) =>
-        candidate.elements.some(
-          (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
-        ),
-      );
-      const elements = pages[page]!.elements;
-      const total = elements.findIndex(
+  /**
+   * Where TOTAL lands, and whether the rule above it was carried over: it starts TOTAL's page
+   * although the page before had room for it, which is where it would be stranded otherwise.
+   */
+  const totalPlacement = (pages: ReturnType<typeof layoutInvoicePages>) => {
+    const page = pages.findIndex((candidate) =>
+      candidate.elements.some(
         (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
-      );
-      return { page, before: elements[total - 1]?.kind };
+      ),
+    );
+    const elements = pages[page]!.elements;
+    const total = elements.findIndex(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    const last = pages[page - 1]?.elements.at(-1);
+    const roomForRule =
+      last?.kind === "text" && last.y + (LINE * last.size) / 10 + LINE / 2 <= PAGE_FOOT;
+    return {
+      page,
+      total,
+      elements,
+      before: elements[total - 1]?.kind,
+      carried: total === 1 && roomForRule,
     };
-    const longInvoice = (count: number, simulated: boolean, qr: string) => ({
+  };
+
+  /**
+   * The receipt trim with 0 to 3 of its one-line header facts. An item adds four or five lines, so
+   * without these one-line steps a range of counts can step over the narrow band where the rule
+   * fits at a page foot and TOTAL does not.
+   */
+  const headerLines = (count: number) => {
+    const { headerSubtitle, phone, email, ...rest } = fixture.receipt;
+    return {
+      ...rest,
+      ...Object.fromEntries(Object.entries({ headerSubtitle, phone, email }).slice(0, count)),
+    };
+  };
+
+  it("keeps the rule on the same page as TOTAL when the invoice runs onto a second page", () => {
+    const longInvoice = (count: number, simulated: boolean, qr: string, extra = 0) => ({
       ...fixture,
       simulated,
-      receipt: { ...fixture.receipt, headerSubtitle: undefined },
+      receipt: headerLines(extra),
       result: {
         ...fixture.result,
         qr,
@@ -297,43 +334,57 @@ describe("A4 line above the total and space around the logo", () => {
       },
     });
 
-    expect(ruleThenTotal(longInvoice(20, false, fixture.result.qr))).toEqual({
-      page: 2,
-      before: "rule",
-    });
-    // Each count leaves room for the rule but not for TOTAL at the foot of a page.
-    for (const [count, simulated, qr] of [
-      [9, false, ""],
-      [6, true, fixture.result.qr],
-      [22, true, ""],
-    ] as const)
-      expect(
-        ruleThenTotal(longInvoice(count, simulated, qr)).before,
-        `${count} lines, simulated ${simulated}, QR ${qr !== ""}`,
-      ).toBe("rule");
+    expect(
+      totalPlacement(layoutInvoicePages(longInvoice(20, false, fixture.result.qr))),
+    ).toMatchObject({ page: 2, before: "rule" });
+    for (const [simulated, qr] of [
+      [false, ""],
+      [true, fixture.result.qr],
+      [true, ""],
+    ] as const) {
+      const shape = `simulated ${simulated}, QR ${qr !== ""}`;
+      let carried = 0;
+      for (let count = 1; count <= 12; count++)
+        for (let extra = 0; extra <= 3; extra++) {
+          const placement = totalPlacement(
+            layoutInvoicePages(longInvoice(count, simulated, qr, extra)),
+          );
+          expect(placement.before, `${shape}, ${count} lines, ${extra} header lines`).toBe("rule");
+          if (placement.carried) carried++;
+        }
+      expect(carried, `${shape}: inputs whose rule was carried over`).toBeGreaterThan(0);
+    }
   });
 
   it("moves the rule onto the next page with a double-size TOTAL that does not fit below it", () => {
-    const repeated = (count: number) => ({
+    const repeated = (count: number, extra: number) => ({
       ...fixture,
+      receipt: headerLines(extra),
       result: {
         ...fixture.result,
         lines: Array.from({ length: count }, () => fixture.result.lines[0]!),
       },
     });
-    const pages = layoutInvoicePages(repeated(37));
-    expect(pages.length).toBeGreaterThan(1);
-    for (const [index, page] of pages.slice(0, -1).entries())
-      expect(page.elements.at(-1)?.kind, `page ${index + 1} ends with`).not.toBe("rule");
-    const page = pages.find((candidate) =>
-      candidate.elements.some((e) => e.kind === "text" && e.text.startsWith("TOTAL")),
-    )!;
-    const total = page.elements.findIndex(
-      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
-    );
-    const rule = page.elements[total - 1]!;
-    if (rule.kind !== "rule") throw new Error(`expected a rule before TOTAL, got ${rule.kind}`);
-    expect(page.elements[total]!.y).toBeCloseTo(rule.y + (LINE / 2 + rule.thickness) / 2, 5);
+    let carried = 0;
+    for (let count = 1; count <= 12; count++)
+      for (let extra = 0; extra <= 3; extra++) {
+        const input = `${count} lines, ${extra} header lines`;
+        const pages = layoutInvoicePages(repeated(count, extra));
+        for (const [index, page] of pages.slice(0, -1).entries())
+          expect(page.elements.at(-1)?.kind, `${input}: page ${index + 1} ends with`).not.toBe(
+            "rule",
+          );
+        const placement = totalPlacement(pages);
+        const rule = placement.elements[placement.total - 1]!;
+        if (rule.kind !== "rule")
+          throw new Error(`${input}: expected a rule before TOTAL, got ${rule.kind}`);
+        expect(placement.elements[placement.total]!.y, input).toBeCloseTo(
+          rule.y + (LINE / 2 + rule.thickness) / 2,
+          5,
+        );
+        if (placement.carried) carried++;
+      }
+    expect(carried, "inputs whose rule was carried over").toBeGreaterThan(0);
   });
 
   it("moves every rule in a row onto the next page with the element after them", async () => {
@@ -416,7 +467,7 @@ describe("A4 line above the total and space around the logo", () => {
     );
   });
 
-  it("does not stack the logo's space on the blank line after the QR", () => {
+  it("does not stack the logo's space on the rule after the QR", () => {
     const elements = layoutInvoicePages({
       ...fixture,
       logo,
@@ -424,7 +475,8 @@ describe("A4 line above the total and space around the logo", () => {
     })[0]!.elements;
     const index = elements.findIndex((element) => element.kind === "logo");
     const drawn = elements[index]!;
-    const legend = elements[index - 1]!;
+    expect(elements[index - 1]!.kind).toBe("rule");
+    const legend = elements[index - 2]!;
     expect(legend.kind === "text" && legend.text).toBe("VERI*FACTU");
     expect(drawn.y - (legend.y + LINE)).toBeCloseTo(LINE / 2, 5);
   });

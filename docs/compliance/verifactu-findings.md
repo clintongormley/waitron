@@ -1013,7 +1013,8 @@ ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a prin
 > **Pointer, 2026-10-15 (A663 Part 1a).** The printed receipt now draws TOTAL double size where it
 > fits in half the roll's width, and the A4 page draws it at twice the body size; every other line,
 > the caption and the VERI\*FACTU line among them, keeps the ordinary size. Why no asesor question is
-> needed: `docs/backlog/printers.md` → A663, point 1.
+> needed: `docs/backlog/printers.md` → Decisions and deliberate limits, «TOTAL is printed double size
+> with no asesor question».
 >
 > **The C115 entry, moved here unedited from `docs/backlog.md` on 2026-10-08 (A430):**
 >

@@ -372,26 +372,7 @@ just a green typecheck.
   [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
   receipt, rendered from the code on 2026-10-14.
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md)
-  — Part 1a landed; Part 1b buildable now (A661 landed, #1745); Part 2 after Part 1b; Part 3 after
-  Parts 1a and 1b.
-  1. **The simplified receipt.**
-     - The QR code, «QR tributario:» and VERI\*FACTU stay first. AEAT's QR specification v0.5.0, §3,
-       requires the QR at the start of the invoice (quoted in
-       `docs/compliance/verifactu-findings.md`).
-     - A ruled line between every section.
-     - The business block one fact per line, with the trading name in bold.
-     - Table, order and time on one line, and the number labelled "Factura simplificada".
-     - TOTAL drawn double size straight after the items, then the VAT, then the payment. No asesor
-       question needed (owner, 2026-10-14): Orden HAC/1177/2024 art. 20.1.b asks for the
-       VERI\*FACTU phrase in «un tipo de letra y tamaño bien visibles, similares a los del resto de
-       datos de la factura» (quoted from the BOE in
-       `docs/compliance/regional-language-rules.md`), and with only the TOTAL enlarged the rest of
-       the data keeps the caption's size. The same call as the till screen's larger TOTAL on
-       2026-10-01 (`docs/compliance/verifactu-findings.md`, C115). The VERI\*FACTU line may be
-       printed in bold for margin.
-       TOTAL is drawn double size (Part 1a's pull request); its place after the items is still open.
-     - With one VAT rate, one line «IVA 10% incluido». Art. 7.1.f asks for the rate only, and for the
-       base of each rate only when there are several, which keep their Base lines.
+  — Part 2 and Part 3 next.
   2. **The full invoice.**
      - "FACTURA" and its number head it, not "Factura completa" sitting left above the centred
        header.
@@ -425,7 +406,7 @@ just a green typecheck.
 - **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's receipt
   itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
   … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
-  for a filed sale), so A663's rate spelling, and later its item table, do not reach it. Bring it
+  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and later its item table, do not reach it. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed.
 
 ## Quantities print with "." whatever the receipt language
@@ -581,6 +562,13 @@ returns `null`. This checks those readers, not every sale path.
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
 ## Decisions and deliberate limits
+
+- **TOTAL is printed double size with no asesor question (owner, 2026-10-14).** Orden HAC/1177/2024
+  art. 20.1.b asks for the VERI\*FACTU phrase in «un tipo de letra y tamaño bien visibles, similares
+  a los del resto de datos de la factura» (quoted from the BOE in
+  `docs/compliance/regional-language-rules.md`); with only the TOTAL enlarged, the rest of the data
+  keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
+  `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.

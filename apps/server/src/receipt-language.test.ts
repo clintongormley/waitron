@@ -325,11 +325,11 @@ describe("a receipt follows its location's saved language when its order saves n
     });
 
     const [receipt] = await takePrinted(suite.db);
-    for (const label of ["Factura", "Data", "IVA", "Efectiu", "Canvi"]) {
+    for (const label of ["Factura", "IVA 21% inclòs", "IVA", "Efectiu", "Canvi"]) {
       expect(startsWith(receipt!, label), label).toBe(true);
     }
-    expect(receipt!.find((line) => line.startsWith("Data "))).toContain("d’oct.");
-    expect(startsWith(receipt!, "Fecha")).toBe(false);
+    expect(receipt!.find((line) => line.startsWith("Comanda "))).toContain("d’oct.");
+    expect(startsWith(receipt!, "IVA 21% incluido")).toBe(false);
     expect(startsWith(receipt!, "Efectivo")).toBe(false);
   });
 
@@ -373,7 +373,9 @@ describe("a receipt follows its location's saved language when its order saves n
     expect((await saleRow(suite.db, sale.id))?.locale).toBe("gl-ES");
     const [receipt] = await takePrinted(suite.db);
     expect(startsWith(receipt!, "IVE")).toBe(true);
-    expect(receipt!.find((line) => line.startsWith("Data "))).not.toContain("d’oct.");
+    expect(
+      receipt!.find((line) => line.startsWith("Pedido ") && line.includes("2026")),
+    ).not.toContain("d’oct.");
   });
 
   it("prints a location saved with two languages in the first, and files both", async () => {
@@ -390,7 +392,7 @@ describe("a receipt follows its location's saved language when its order saves n
       { "es-ES": "CLIENT-ES Pan con tomate", "ca-ES": "CLIENT-ES Pan con tomate" },
     ]);
     const [receipt] = await takePrinted(suite.db);
-    expect(startsWith(receipt!, "Fecha")).toBe(true);
+    expect(startsWith(receipt!, "IVA 21% incluido")).toBe(true);
     expect(startsWith(receipt!, "Efectivo")).toBe(true);
     expect(receipt!.some((line) => line.includes("CLIENT-ES Pan con tomate"))).toBe(true);
     expect(receipt!.some((line) => line.includes("CLIENT-CA"))).toBe(false);
@@ -480,8 +482,8 @@ describe("a bill paid in parts and an unpaid invoice file the location's languag
     await printSaleReceipt(deps, venue.cfg, id, false);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
-    expect(startsWith(receipt, "Data"), "Data").toBe(true);
-    expect(startsWith(receipt, "Fecha")).toBe(false);
+    expect(startsWith(receipt, "IVA 21% inclòs"), "IVA 21% inclòs").toBe(true);
+    expect(startsWith(receipt, "IVA 21% incluido")).toBe(false);
   });
 });
 
@@ -642,11 +644,11 @@ describe("an issued receipt reprinted in another receipt language", () => {
 
     const catalan = printedLines(original.payload).map((line) => line.trim());
     const spanish = printedLines(copy.payload).map((line) => line.trim());
-    for (const label of ["Factura", "Fecha", "IVA", "Efectivo", "Cambio"]) {
+    for (const label of ["Factura", "IVA 21% incluido", "IVA", "Efectivo", "Cambio"]) {
       expect(startsWith(spanish, label), label).toBe(true);
     }
     expect(spanish).toContain("DUPLICADO");
-    for (const label of ["Data", "Efectiu", "Canvi", "Comanda", "DUPLICAT"]) {
+    for (const label of ["IVA 21% inclòs", "Efectiu", "Canvi", "Comanda", "DUPLICAT"]) {
       expect(startsWith(spanish, label), label).toBe(false);
     }
     // The dish name is the one the line stored, in the default content language (Spanish).
@@ -661,7 +663,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
     );
     expect(differing).toEqual([
       ["Comanda", "Pedido"],
-      ["Data", "Fecha"],
+      ["IVA", "IVA"],
       ["Efectiu", "Efectivo"],
       ["Canvi", "Cambio"],
     ]);
@@ -674,7 +676,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
       expect((await reprint(v, sale.id, body)).status).toBe(200);
     }
     for (const receipt of await takePrinted(suite.db)) {
-      expect(startsWith(receipt, "Data"), "Data").toBe(true);
+      expect(startsWith(receipt, "IVA 21% inclòs"), "IVA 21% inclòs").toBe(true);
       expect(receipt).toContain("DUPLICAT");
     }
   });
@@ -936,7 +938,7 @@ describe("a sale prints its goods in the default content language its lines stor
       expect(sale.status).toBe(200);
       expect(sale.body.locale).toBe("ca-ES");
       const [receipt] = await takePrinted(suite.db);
-      for (const label of ["Data", "Efectiu", "Canvi"]) {
+      for (const label of ["IVA 21% inclòs", "Efectiu", "Canvi"]) {
         expect(startsWith(receipt!, label), label).toBe(true);
       }
       expectGoods(receipt!, "es");
@@ -957,10 +959,10 @@ describe("a sale prints its goods in the default content language its lines stor
       invoiceLocales: ["ca-ES", "es-ES"],
     });
     const [receipt] = await takePrinted(suite.db);
-    for (const label of ["Factura", "Fecha", "IVA", "Efectivo", "Cambio"]) {
+    for (const label of ["Factura", "IVA 21% incluido", "IVA", "Efectivo", "Cambio"]) {
       expect(startsWith(receipt!, label), label).toBe(true);
     }
-    for (const label of ["Data", "Efectiu", "Canvi"]) {
+    for (const label of ["IVA 21% inclòs", "Efectiu", "Canvi"]) {
       expect(startsWith(receipt!, label), label).toBe(false);
     }
     expectGoods(receipt!, "es");
@@ -990,10 +992,10 @@ describe("a sale prints its goods in the default content language its lines stor
       { "ca-ES": "CLIENT-ES Pan con tomate", "es-ES": "CLIENT-ES Pan con tomate" },
     ]);
     const [receipt] = await takePrinted(suite.db);
-    for (const label of ["Fecha", "Efectivo", "Cambio"]) {
+    for (const label of ["IVA 21% incluido", "Efectivo", "Cambio"]) {
       expect(startsWith(receipt!, label), label).toBe(true);
     }
-    expect(startsWith(receipt!, "Data")).toBe(false);
+    expect(startsWith(receipt!, "IVA 21% inclòs")).toBe(false);
     expect(receipt!.some((line) => line.includes("CLIENT-ES Pan con tomate"))).toBe(true);
     expect(receipt!.some((line) => line.includes("CLIENT-CA"))).toBe(false);
   });
@@ -1120,13 +1122,13 @@ describe("a sale prints its goods in the default content language its lines stor
 
     expect((await reprint(v, sale.id)).status).toBe(200);
     const [original] = await takePrinted(suite.db);
-    expect(startsWith(original!, "Data"), "Data").toBe(true);
+    expect(startsWith(original!, "IVA 21% inclòs"), "IVA 21% inclòs").toBe(true);
     expect(original).toContain("DUPLICAT");
     expectGoods(original!, "es");
 
     expect((await reprint(v, sale.id, { language: "es-ES" })).status).toBe(200);
     const [spanish] = await takePrinted(suite.db);
-    expect(startsWith(spanish!, "Fecha"), "Fecha").toBe(true);
+    expect(startsWith(spanish!, "IVA 21% incluido"), "IVA 21% incluido").toBe(true);
     expect(spanish).toContain("DUPLICADO");
     expectGoods(spanish!, "es");
   });
@@ -1141,9 +1143,9 @@ describe("a sale prints its goods in the default content language its lines stor
     expect([chosen.status, chosen.body.locale]).toEqual([200, "es-ES"]);
     const [spanish] = await takePrinted(suite.db);
 
-    expect(startsWith(catalan!, "Data"), "Data").toBe(true);
+    expect(startsWith(catalan!, "IVA 21% inclòs"), "IVA 21% inclòs").toBe(true);
     expectGoods(catalan!, "ca");
-    expect(startsWith(spanish!, "Fecha"), "Fecha").toBe(true);
+    expect(startsWith(spanish!, "IVA 21% incluido"), "IVA 21% incluido").toBe(true);
     expectGoods(spanish!, "ca");
   });
 
@@ -1158,11 +1160,11 @@ describe("a sale prints its goods in the default content language its lines stor
     expect([chosen.status, chosen.body.locale]).toEqual([200, "es-ES"]);
     const [spanish] = await takePrinted(suite.db);
 
-    for (const label of ["Data", "Efectiu", "Canvi"]) {
+    for (const label of ["IVA 21% inclòs", "Efectiu", "Canvi"]) {
       expect(startsWith(catalan!, label), label).toBe(true);
     }
     expectGoods(catalan!, "en");
-    for (const label of ["Fecha", "Efectivo", "Cambio"]) {
+    for (const label of ["IVA 21% incluido", "Efectivo", "Cambio"]) {
       expect(startsWith(spanish!, label), label).toBe(true);
     }
     expectGoods(spanish!, "en");

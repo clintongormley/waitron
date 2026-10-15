@@ -477,17 +477,18 @@ describe("receiptLines", () => {
         },
       }),
     );
-    const start = printed.findIndex((line) => line.startsWith("Fecha")) + 2;
+    const start = printed.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
 
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
-    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
-      at80("1 ud  Hamburguesa", "12,00 €"),
-      at80("  Invitación", "-12,00 €"),
-      at80("1 ud  Rioja crianza", "30,00 €"),
-      at80("  Descuento 20%", "-6,00 €"),
-      at80("1 ud  Pan de pueblo", "2,50 €"),
-      at80("Descuento 10%", "-2,65 €"),
+    const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
+    expect(printed.slice(start, rule)).toEqual([
+      at80("1 ud  Hamburguesa", "12,00"),
+      at80("  Invitación", "-12,00"),
+      at80("1 ud  Rioja crianza", "30,00"),
+      at80("  Descuento 20%", "-6,00"),
+      at80("1 ud  Pan de pueblo", "2,50"),
+      at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
   });
@@ -519,14 +520,15 @@ describe("receiptLines", () => {
         },
       }),
     );
-    const start = printed.findIndex((line) => line.startsWith("Fecha")) + 2;
+    const start = printed.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
-    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
-      at80("2 ud  Croquetas de jamón", "6,66 €"),
-      at80("  Descuento", "-1,00 €"),
-      at80("1 ud  Pan de pueblo", "2,50 €"),
-      at80("1 ud  Croquetas de jamón", "3,33 €"),
+    const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
+    expect(printed.slice(start, rule)).toEqual([
+      at80("2 ud  Croquetas de jamón", "6,66"),
+      at80("  Descuento", "-1,00"),
+      at80("1 ud  Pan de pueblo", "2,50"),
+      at80("1 ud  Croquetas de jamón", "3,33"),
     ]);
   });
 });

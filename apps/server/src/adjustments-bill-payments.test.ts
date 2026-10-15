@@ -232,17 +232,17 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     ]);
     const printed = await newTicket(jobsBefore);
     // The comped line prints at its price, with the comp on its own line beneath it.
-    const pulpo = printed.findIndex((line) => line.endsWith(" Pulpo a la gallega 20,00 €"));
+    const pulpo = printed.findIndex((line) => line.endsWith(" Pulpo a la gallega 20,00"));
     expect(pulpo).toBeGreaterThanOrEqual(0);
-    expect(printed[pulpo + 1]).toBe("Invitación -20,00 €");
+    expect(printed[pulpo + 1]).toBe("Invitación -20,00");
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
     expect(
       printed
         .slice(start + 1)
-        .filter((line) => line !== "")
-        .slice(0, 2),
-    ).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €"]);
+        .filter((line) => line !== "" && !/^-+$/.test(line))
+        .slice(0, 3),
+    ).toEqual(["IVA 21% incluido 6,95 €", "Efectivo 50,00 €", "Devolución -10,00 €"]);
   });
 });
 

@@ -3321,12 +3321,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
-- **The legal name and tax ID share one printed line, unchecked against what a receipt must show**
-  — left open by A497. A receipt's and an A4 invoice's top block print the legal name, then " · ",
-  then the tax ID with its label, as one line where it fits; a narrow roll breaks it at the
-  separator (`apps/server/src/receipt-document.ts`, `textLines` in
-  `apps/server/src/receipt-ticket.ts`), and the A4 page wraps it by width.
-
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
   is in the server log. Decide how the till should show that outcome and offer another copy.
@@ -3491,8 +3485,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
 
-- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Ruled
-  sections, TOTAL straight after the items, one row per item on a full invoice, the registered
+- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** One row
+  per item on a full invoice, the registered
   address once or labelled, "× 2" for quantities, and guests and per person. [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
@@ -4630,7 +4624,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   formatted on the server and keeps the language's own pattern. [Detail](backlog/languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
 
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
-  its own line on 58 mm paper.
+  its own line on 58 mm paper; on a simplified receipt it also drops below the order line on 80 mm
+  when that line is long, as «Mesa 6 · Eskaera 41» is.
 
 - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
   «Café y tostada») in every language; only its fixed words change.

@@ -14,7 +14,6 @@ import {
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import {
-  PART_SEPARATOR,
   buildReceiptDocument,
   type ReceiptDocumentInput,
   type ReceiptIndent,
@@ -31,7 +30,19 @@ function toTextStyle(style: ReceiptStyle | undefined): TextStyle {
   return { bold: style?.bold === true, double: style?.double === true };
 }
 
-export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptInput): Uint8Array {
+export function formatReceipt(input: FormatReceiptInput): Uint8Array {
+  return drawReceipt(input).bytes;
+}
+
+/**
+ * The receipt's commands, and which of the pictures they draw, counted from 0, are the rules that
+ * end its sections, so a preview can tell a rule from a trim line of dashes that draws the same.
+ */
+export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInput): {
+  bytes: Uint8Array;
+  rules: number[];
+} {
+  const rules: number[] = [];
   const document = buildReceiptDocument({ ...input, surface: "thermal" });
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
@@ -41,43 +52,17 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     const width = prepareText(indent.after).length;
     return width > available / 2 ? 2 : width;
   };
-  const textLines = (
-    text: string,
-    parts: readonly string[] | undefined,
-    indent: number,
-    columns: number,
-  ): string[] => {
-    const whole = wrapText(prepareText(text), columns, indent);
-    if (whole.length === 1 || parts === undefined) return whole;
-    const lines: string[] = [];
-    let current = "";
-    for (const part of parts.map(prepareText)) {
-      const joined = current === "" ? part : `${current}${PART_SEPARATOR}${part}`;
-      if (current === "" || joined.length <= columns) {
-        current = joined;
-        continue;
-      }
-      lines.push(...wrapText(current, columns, indent));
-      current = `${" ".repeat(indent)}${part}`;
-    }
-    return [...lines, ...wrapText(current, columns, indent)];
-  };
-  let lastBlank = false;
-  const blank = (): void => {
-    b.line();
-    lastBlank = true;
-  };
+  let afterRule = false;
   for (const element of document.elements) {
-    if (element.kind !== "align" && element.kind !== "logo") lastBlank = false;
+    if (element.kind !== "align" && element.kind !== "logo") afterRule = element.kind === "rule";
     switch (element.kind) {
       case "text": {
         const style = toTextStyle(element.style);
         const width = style.double ? Math.floor(columns / 2) : columns;
-        for (const line of textLines(
-          element.text,
-          element.parts,
-          indentation(element.indent, width),
+        for (const line of wrapText(
+          prepareText(element.text),
           width,
+          indentation(element.indent, width),
         )) {
           b.line(line, style);
         }
@@ -90,7 +75,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         if (style.double) {
           const half = Math.floor(columns / 2);
           const indent = indentation(element.indent, half);
-          const double = labelAmountLines(caption, amount, half, indent);
+          const double = labelAmountLines(caption, amount, half, indent, element.gap);
           if (double.length === 1) {
             b.line(double[0], style);
             break;
@@ -107,15 +92,14 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
           amount,
           columns,
           indentation(element.indent, columns),
+          element.gap,
         )) {
           b.line(line, { bold: style.bold });
         }
         break;
       }
-      case "break":
-        blank();
-        break;
       case "rule":
+        rules.push(b.pictures);
         b.line("-".repeat(columns));
         break;
       case "align":
@@ -123,9 +107,9 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         break;
       case "logo":
         if (logo !== null) {
-          if (!lastBlank) b.line();
+          if (!afterRule) b.line();
           b.bitmap(logo);
-          blank();
+          b.line();
         }
         break;
       case "qr": {
@@ -140,5 +124,5 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
       }
     }
   }
-  return b.feedAndCut().bytes();
+  return { bytes: b.feedAndCut().bytes(), rules };
 }
