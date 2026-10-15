@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { clockApp, clockState, deferred, signIn, shellAction, working } from "../test/clock-app.js";
@@ -7,7 +7,7 @@ import { hoursView } from "../test/hours-fixtures.js";
 import type { TillApp } from "./till-app.js";
 import type { PersonHours } from "./api/client.js";
 import type { TillHoursScreen } from "./screens/till-hours-screen.js";
-import { attendanceInbox, attendancePrompt } from "../test/attendance-fixtures.js";
+import { attendanceInbox, attendanceItem, attendancePrompt } from "../test/attendance-fixtures.js";
 import { codeMessage } from "./i18n/codes.js";
 const locale = currentLocale();
 afterEach(() => {
@@ -21,6 +21,71 @@ async function open(el: TillApp) {
   await vi.waitFor(() => expect(screen(el)).not.toBeNull());
   await screen(el)!.updateComplete;
 }
+it.each(["accept", "disagree"] as const)(
+  "Hours routes proposal %s through the current inbox rather than the summary",
+  async (action) => {
+    const f = await clockApp({ state: clockState("working", "in") });
+    await signIn(f.el);
+    await working(f.el);
+    const item = attendanceItem({ personId: "p1", locationId: "venue" });
+    const prompt = attendancePrompt({
+      personId: "p1",
+      locationId: "venue",
+      kind: "proposal",
+      itemId: item.id,
+      questionId: null,
+      history: item.history,
+    });
+    const pending = { prompts: [prompt], items: [item], automaticEntryIds: [] };
+    f.api.getAttendanceInbox.mockResolvedValue({
+      ...attendanceInbox([prompt], [item]),
+      personId: "p1",
+      revision: "proposal-revision",
+      locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+    });
+    f.api.getHours.mockImplementation(async (locationId, selection) =>
+      hoursView({ locationId, selection, pending }),
+    );
+    await open(f.el);
+    await vi.waitFor(() => expect(screen(f.el)!.reading).toBe(false));
+    await userEvent.click(
+      screen(f.el)!.shadowRoot!.querySelector<HTMLElement>(`[data-prompt-action="${action}"]`)!,
+    );
+    if (action === "accept") {
+      await vi.waitFor(() => expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1));
+      expect(f.api.sendAttendanceCommand.mock.calls[0]![0]).toEqual({
+        commandId: expect.any(String),
+        expectedRevision: "proposal-revision",
+        action: "accept",
+        itemId: "proposal",
+      });
+    } else {
+      await vi.waitFor(() =>
+        expect(f.el.shadowRoot!.querySelector("till-attendance-correction-dialog")).not.toBeNull(),
+      );
+      const editor = f.el.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
+      await editor.updateComplete;
+      expect(editor.shadowRoot!.querySelector("wt-input")).toBeNull();
+      expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
+      const reason = editor.shadowRoot!.querySelector("wt-textarea")!;
+      await reason.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(reason.shadowRoot!.querySelector("textarea")!),
+        "The original time is right",
+      );
+      await editor.updateComplete;
+      await userEvent.click(editor.shadowRoot!.querySelector<HTMLElement>("[data-save]")!);
+      await vi.waitFor(() => expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1));
+      expect(f.api.sendAttendanceCommand.mock.calls[0]![0]).toEqual({
+        commandId: expect.any(String),
+        expectedRevision: "proposal-revision",
+        action: "disagree",
+        itemId: "proposal",
+        reason: "The original time is right",
+      });
+    }
+  },
+);
 it("offers My hours only in the name menu and opens the server's current week without a sign-in step", async () => {
   const f = await clockApp({ state: clockState("working", "in") });
   await signIn(f.el);

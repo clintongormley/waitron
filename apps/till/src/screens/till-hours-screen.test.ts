@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { mountWidget, cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
+import { attendanceItem, attendancePrompt } from "../../test/attendance-fixtures.js";
 import type { TillHoursScreen } from "./till-hours-screen.js";
 const modules = import.meta.glob<typeof import("./till-hours-screen.js")>("./till-hours-screen.ts");
 const locale = currentLocale();
@@ -186,4 +187,84 @@ it("a blocked attendance response disables day and prompt actions while preservi
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-back]")!.disabled,
   ).toBe(false);
+});
+it("month navigation crosses a year boundary from the first day rather than overflowing the selected date", async () => {
+  const { el } = await mount();
+  const seen: unknown[] = [];
+  el.addEventListener("hours-select", (event) => seen.push((event as CustomEvent).detail));
+  const change = (name: string, value: string) =>
+    el
+      .shadowRoot!.querySelector(`[name="${name}"]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  change("hoursDate", "2026-01-31");
+  change("hoursWindow", "month");
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-previous]")!);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
+  expect(seen).toEqual([
+    { locationId: "venue", selection: { kind: "week", date: "2026-01-31" } },
+    { locationId: "venue", selection: { kind: "month", date: "2026-01-31" } },
+    { locationId: "venue", selection: { kind: "month", date: "2025-12-01" } },
+    { locationId: "venue", selection: { kind: "month", date: "2026-01-01" } },
+    { locationId: "venue", selection: { kind: "month", date: "2026-02-01" } },
+  ]);
+});
+it("refuses malformed dates, impossible dates and unsupported windows without replacing the last valid selection", async () => {
+  const { el } = await mount();
+  const seen: unknown[] = [];
+  el.addEventListener("hours-select", (event) => seen.push((event as CustomEvent).detail));
+  for (const [name, value] of [
+    ["hoursDate", "tomorrow"],
+    ["hoursDate", "2026-02-30"],
+    ["hoursWindow", "year"],
+  ])
+    el.shadowRoot!.querySelector(`[name="${name}"]`)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  expect(seen).toEqual([]);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
+  expect(seen).toEqual([{ locationId: "venue", selection: { kind: "week", date: "2026-01-12" } }]);
+});
+it("a proposal can be accepted only when ready, while disagreement and missing-time edits keep their prompt identities", async () => {
+  const item = attendanceItem({ personId: "p1", locationId: "venue", readyToApply: false });
+  const proposal = attendancePrompt({
+    id: "proposal-prompt",
+    personId: "p1",
+    locationId: "venue",
+    kind: "proposal",
+    itemId: item.id,
+    questionId: null,
+    history: item.history,
+  });
+  const missing = attendancePrompt({
+    id: "missing-prompt",
+    personId: "p1",
+    locationId: "venue",
+    kind: "missing-times",
+  });
+  const view = hoursView({
+    pending: { prompts: [proposal, missing], items: [item], automaticEntryIds: [] },
+  });
+  const { el, host } = await mount({ view });
+  const seen: unknown[] = [];
+  host.addEventListener("hours-prompt", (event) => seen.push((event as CustomEvent).detail));
+  const action = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      `[data-prompt-action="${key}"]`,
+    )!;
+  expect(action("accept").disabled).toBe(true);
+  await userEvent.click(action("disagree"));
+  await userEvent.click(action("edit"));
+  el.view = { ...view, pending: { ...view.pending, items: [{ ...item, readyToApply: true }] } };
+  await el.updateComplete;
+  expect(action("accept").disabled).toBe(false);
+  await userEvent.click(action("accept"));
+  expect(seen).toEqual([
+    { promptId: "proposal-prompt", action: "disagree" },
+    { promptId: "missing-prompt", action: "edit" },
+    { promptId: "proposal-prompt", action: "accept" },
+  ]);
 });
