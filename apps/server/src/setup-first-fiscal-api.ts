@@ -184,6 +184,12 @@ export function mountSetupFirstFiscalApi(
         });
       });
     });
+  app.post(`${root}/offerings`, (c) =>
+    boundary(c, log, async () => {
+      const body = exact(await readFirstFiscalBody(c), ["fiscalTerritory"]);
+      return c.json({ modules: host.offerings(text(body.fiscalTerritory)) });
+    }),
+  );
   app.post(`${root}/claim`, (c) =>
     boundary(c, log, async () => {
       const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "venue"]);

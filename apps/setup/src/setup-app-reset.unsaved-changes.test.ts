@@ -21,6 +21,8 @@ const field = (form: SetupResetScreen, key: string) =>
 const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 async function mount() {
   const api = {
+    firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+    firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
     getVenueDefaults: vi.fn().mockResolvedValue({}),

@@ -1457,6 +1457,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       )
         c.res = c.redirect("/", 302);
     });
+    app.use("/setup-assets/*", async (c, next) => {
+      await next();
+      if (c.res.status === 200) c.header("Content-Disposition", "attachment");
+    });
     mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
   } else {
     app.get("*", (c) =>

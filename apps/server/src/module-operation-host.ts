@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
   configureModuleOperations,
   enabledModules,
+  initialSetupFor,
   type ModuleOperationHost,
   type OperationBinding,
   type WaitronModule,
@@ -72,6 +73,15 @@ export function createFirstSetupModuleHost(options: {
     coordinator,
     store,
     owner,
+    offerings(territory: string) {
+      const selected = enabledModules(
+        options.modules,
+        venueFiscalSelection(options.modules, territory, options.moduleConfig).config,
+      );
+      return selected
+        .filter((module) => initialSetupFor(selected, module.name) !== undefined)
+        .map((module) => ({ module: module.name, version: module.version }));
+    },
     evidence,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(

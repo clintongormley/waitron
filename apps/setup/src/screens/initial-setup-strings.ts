@@ -1,0 +1,38 @@
+export const initialSetupStrings = {
+  en: {
+    heading: "Fiscal setup",
+    unavailable: "This setup screen is unavailable. Reload to reconnect.",
+    proof: "Confirm your administrator password",
+    password: "Administrator password",
+    required: "Enter your password.",
+    block: "Confirm before using the number block.",
+    activation: "Confirm before activation.",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    next: "Review",
+    fix: "Correct the highlighted field.",
+    reconnect: "Reconnect to check the saved result before continuing.",
+    reload: "Reconnect",
+    download: "Download offline tool",
+    outside:
+      "Use the downloaded tool offline on your custodian’s separate computer. Keep its key, passphrase and secret recovery paper off this box.",
+  },
+  es: {
+    heading: "Configuración fiscal",
+    unavailable: "Esta pantalla no está disponible. Recarga para reconectar.",
+    proof: "Confirma tu contraseña de administrador",
+    password: "Contraseña de administrador",
+    required: "Introduce tu contraseña.",
+    block: "Confirma antes de usar el bloque de números.",
+    activation: "Confirma antes de activar.",
+    confirm: "Confirmar",
+    cancel: "Cancelar",
+    next: "Revisar",
+    fix: "Corrige el campo señalado.",
+    reconnect: "Reconecta para comprobar el resultado guardado antes de continuar.",
+    reload: "Reconectar",
+    download: "Descargar herramienta sin conexión",
+    outside:
+      "Usa la herramienta descargada sin conexión en el ordenador separado del custodio. No introduzcas en este equipo su clave, contraseña ni papel secreto de recuperación.",
+  },
+} as const;

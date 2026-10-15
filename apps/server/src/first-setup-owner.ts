@@ -45,6 +45,7 @@ export interface PublicFirstSetupState {
   revision: number;
   ownerGeneration: number;
   status: FirstSetupState["status"];
+  consumptionIntent: boolean;
   environment: FirstSetupFrozen["environment"];
   venue: Omit<VenueRequest, "admin"> & {
     admin: Omit<VenueRequest["admin"], "pinHash" | "passwordHash">;
@@ -87,6 +88,7 @@ export function publicFirstSetupState(state: FirstSetupState): PublicFirstSetupS
     revision: state.revision,
     ownerGeneration: state.ownerGeneration,
     status: state.status,
+    consumptionIntent: state.consumptionIntent,
     environment: state.frozen.environment,
     venue: structuredClone({ ...state.frozen.request, admin }),
     modules: state.frozen.modules.map(({ module, version }) => ({ module, version })),

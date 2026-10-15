@@ -21,6 +21,8 @@ afterEach(() => {
 
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
   return {
+    firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+    firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({
       provisioned: false,
@@ -1059,7 +1061,7 @@ describe("setup-app", () => {
     goto(el, "venue");
     patch(el, { mode: "live" });
     advance(el);
-    await el.updateComplete;
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).toBeNull();
   });
@@ -1112,7 +1114,7 @@ describe("setup-app", () => {
       venue: { location: { fiscalTerritory: "ES-other" } },
     } as unknown as DeepPartial<ProvisionBody>);
     advance(el);
-    await el.updateComplete;
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
   });

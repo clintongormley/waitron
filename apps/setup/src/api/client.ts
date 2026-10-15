@@ -414,6 +414,12 @@ export class SetupApi {
     return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
+  firstSetupOfferings(
+    fiscalTerritory: string,
+  ): Promise<{ modules: { module: string; version: string }[] }> {
+    return this.#request("/setup-api/first-setup/offerings", "POST", { fiscalTerritory });
+  }
+
   firstSetupStatus(owner?: FirstSetupOwner): Promise<FirstSetupStatus> {
     return this.#request(
       "/setup-api/first-setup/status",
