@@ -4021,6 +4021,66 @@ describe("till-table-order-screen", () => {
         };
       };
 
+      it.each(["move", "move-bill"] as const)(
+        "%s leaves closed destination areas out, keeping the closed source area and unknown areas",
+        async (action) => {
+          const setUp = floor("table_tab");
+          const { el } = await mount({
+            ...setUp,
+            zones: setUp.zones.map((zone) => ({ ...zone, closed: true })),
+            tables: [...setUp.tables, tableState({ id: "unknown", label: "10", zoneId: null })],
+          });
+          await toMenu(el);
+          click(el, `[data-action="${action}"]`);
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(
+            action === "move" ? ["unknown", "t6", "t9"] : ["counter", "unknown", "t6", "t9"],
+          );
+
+          el.zones = setUp.zones;
+          await el.updateComplete;
+          expect(targetIds(el)).toContain("t7");
+          expect(targetIds(el)).toContain("t8");
+          el.zones = setUp.zones.map((zone) => ({ ...zone, closed: true }));
+          await el.updateComplete;
+          expect(targetIds(el)).not.toContain("t7");
+          expect(targetIds(el)).not.toContain("t8");
+          el.bills = [];
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(
+            action === "move" ? ["unknown", "t6", "t9"] : ["counter", "unknown", "t6", "t9"],
+          );
+        },
+      );
+
+      it("keeps joining in closed areas available, including when the source table is unread", async () => {
+        const setUp = floor("table_tab");
+        const { el } = await mount({
+          ...setUp,
+          zones: setUp.zones.map((zone) => ({ ...zone, closed: true })),
+        });
+        await toMenu(el);
+        click(el, '[data-action="join"]');
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["t6", "t9"]);
+        el.tables = setUp.tables.filter((table) => table.id !== "t4");
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["t6", "t7", "t8", "t9"]);
+      });
+
+      it("keeps moving a presented bill into a closed area available", async () => {
+        const setUp = floor("table_tab");
+        const { el } = await mount({
+          ...setUp,
+          bills: setUp.bills.map((bill) => ({ ...bill, status: "placed" as const })),
+          zones: setUp.zones.map((zone) => ({ ...zone, closed: true })),
+        });
+        await toMenu(el);
+        click(el, '[data-action="move-bill"]');
+        await el.updateComplete;
+        expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+      });
+
       it.each([
         ["Move guests", "move", ["t6", "t7", "t9"]],
         ["Move this bill", "move-bill", ["counter", "t6", "t7", "t9"]],
