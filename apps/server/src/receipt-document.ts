@@ -292,11 +292,7 @@ export function buildReceiptDocument({
     }
   };
   const withVatGroup = ({ dish, options }: LineGroup): void => {
-    const unit =
-      dish.unitName == null
-        ? ""
-        : ` ${resolveSnapshotText(dish.unitName, namesLocale, namesLocale)}`;
-    const quantity = `${dish.quantity}${unit}  `;
+    const quantity = `${quantityText(dish, namesLocale)}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     row(
       `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,

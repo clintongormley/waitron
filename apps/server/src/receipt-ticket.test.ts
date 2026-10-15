@@ -1200,8 +1200,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
     // A unit's abbreviation map keeps bare content-language keys, never the invoice locales a line's
     // `descriptions` are keyed by, so the receipt must match the tag "es-ES" against the bare key
-    // "es"; reading the first entry prints whichever language happens to come first. The pairs are
-    // `EACH_UNIT`'s (`packages/catalogue/src/units.ts`).
+    // "es"; reading the first entry prints whichever language happens to come first. The first
+    // line's pairs are `EACH_UNIT`'s (`packages/catalogue/src/units.ts`), which print as a bare
+    // count (owner, A663 Q8), so a venue's own unit carries the check.
     const result: TillSaleResult = {
       ...FILED_SALE,
       lines: [
@@ -1212,8 +1213,15 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
           unitPrecision: 0,
         },
+        {
+          descriptions: { "es-ES": "Vino de la casa" },
+          quantity: "3",
+          gross: "6.00",
+          unitName: { ca: "cop.", en: "gl.", es: "copa", eu: "kop.", gl: "cop." },
+          unitPrecision: 0,
+        },
       ],
-      total: "3.00",
+      total: "9.00",
     };
     const text = decodeTicket(
       formatReceipt({
@@ -1224,7 +1232,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    expect(text).toMatch(/2 ud\s+Agua mineral/u);
+    expect(text).toMatch(/^ *2 {2}Agua mineral /mu);
+    expect(text).toMatch(/^ *3 copa {2}Vino de la casa /mu);
+    expect(text).not.toMatch(/\b(ud|ea|u|gl\.|cop\.|kop\.)\s+(Agua|Vino)/u);
   });
 
   it("prints a filed Each extra as a pick count in Spanish, regardless of its abbreviation", () => {
@@ -2585,7 +2595,7 @@ describe("a receipt's goods names can be looked up in another language than its 
         quantity: "2",
         gross: "3.50",
         parentLineNo: null,
-        unitName: { ca: "unit.", es: "ud" },
+        unitName: { ca: "llesca", es: "rebanada" },
         unitPrecision: 0,
         optionSnapshots: [
           {
@@ -2623,12 +2633,12 @@ describe("a receipt's goods names can be looked up in another language than its 
       .join("\n");
     expect(text).toContain("IVA 10% inclòs 0,36 €");
     expect(text).toContain("Efectiu 4,00 €");
-    expect(text).toMatch(/2 ud Pan con tomate 3,50$/mu);
+    expect(text).toMatch(/^2 rebanada Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
     expect(text).toMatch(/^Jamón extra 0,50$/mu);
     for (const other of [
       "Pa amb tomàquet",
-      "unit.",
+      "llesca",
       "Tipus de pa",
       "Sègol sencer",
       "Integral",
@@ -2652,7 +2662,7 @@ describe("a receipt's goods names can be looked up in another language than its 
     )
       .map((line) => line.trim().replace(/\s+/g, " "))
       .join("\n");
-    expect(text).toMatch(/2 unit\. Pa amb tomàquet 3,50$/mu);
+    expect(text).toMatch(/^2 llesca Pa amb tomàquet 3,50$/mu);
     expect(text).toContain("Tipus de pa: Sègol sencer");
     expect(text).toMatch(/^Pernil extra 0,50$/mu);
   });
@@ -3264,20 +3274,44 @@ describe("the simplified receipt's own layout (A663)", () => {
           /^Mesa 12 · Pedido 112 13 oct 2026, \d+:53$/.test(line),
         ),
       ).toBe(true);
-      expect(lines).toContain("1 ud Bloody Mary 15,00");
-      expect(lines).toContain("4 ud Agua, pan y aceite 24,00");
+      expect(lines).toContain("1 Bloody Mary 15,00");
+      expect(lines).toContain("4 Agua, pan y aceite 24,00");
       expect(lines).toContain("TOTAL 39,00 €");
       expect(lines).toContain("IVA 10% incluido 3,55 €");
       expect(lines.some((line) => line.startsWith("Base"))).toBe(false);
       expect(lines).not.toContain("Factura T-2026/000112");
       expect(lines.some((line) => line.startsWith("Fecha"))).toBe(false);
       expect(heading).toBeLessThan(at("Factura simplificada"));
-      expect(at("Factura simplificada")).toBeLessThan(at("1 ud Bloody Mary"));
-      expect(at("1 ud Bloody Mary")).toBeLessThan(at("TOTAL"));
+      expect(at("Factura simplificada")).toBeLessThan(at("1 Bloody Mary"));
+      expect(at("1 Bloody Mary")).toBeLessThan(at("TOTAL"));
       expect(at("TOTAL")).toBeLessThan(at("IVA 10% incluido"));
       expect(at("IVA 10% incluido")).toBeLessThan(at("Efectivo"));
       expect(at("VERI*FACTU")).toBeGreaterThanOrEqual(0);
       expect(at("VERI*FACTU")).toBeLessThan(at("Factura simplificada"));
+    },
+  );
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints a count in «ud» bare and keeps any other unit's name ($paperWidth)",
+    (printer) => {
+      const lines = squeezed(
+        {
+          ...ONE_RATE,
+          lines: [
+            ONE_RATE.lines[1]!,
+            {
+              descriptions: { "es-ES": "Jamón ibérico" },
+              unitName: { es: "kg" },
+              quantity: "0.35",
+              gross: "15.00",
+            },
+          ],
+        },
+        printer,
+      );
+      expect(lines.some((line) => line.startsWith("4 Agua, pan y aceite"))).toBe(true);
+      expect(lines.some((line) => line.startsWith("0.35 kg Jamón ibérico"))).toBe(true);
+      expect(lines.some((line) => line.includes("4 ud"))).toBe(false);
     },
   );
 
@@ -3325,7 +3359,7 @@ describe("the simplified receipt's own layout (A663)", () => {
     const total = commands.findIndex((command) => command.text!.trim().startsWith("TOTAL"));
     expect(commands[total - 1]!.text!.trim()).toMatch(/^-+$/);
     expect(commands[total - 2]!.text!.trim().replace(/\s+/g, " ")).toBe(
-      "4 ud Agua, pan y aceite 24,00",
+      "4 Agua, pan y aceite 24,00",
     );
     const grid = esc(PRINTER_80).grid;
     expect(commands[total]!.bytes.subarray(8)).not.toEqual(
@@ -3384,7 +3418,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         printer,
       );
       const discount = lines.indexOf("Descuento 10% -3,90");
-      expect(discount).toBeGreaterThan(lines.indexOf("4 ud Agua, pan y aceite 24,00"));
+      expect(discount).toBeGreaterThan(lines.indexOf("4 Agua, pan y aceite 24,00"));
       expect(lines[discount + 1]).toMatch(/^-+$/);
       expect(lines[discount + 2]).toBe("TOTAL 35,10 €");
     },

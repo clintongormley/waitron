@@ -483,11 +483,11 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("1 ud  Hamburguesa", "12,00"),
+      at80("1  Hamburguesa", "12,00"),
       at80("  Invitación", "-12,00"),
-      at80("1 ud  Rioja crianza", "30,00"),
+      at80("1  Rioja crianza", "30,00"),
       at80("  Descuento 20%", "-6,00"),
-      at80("1 ud  Pan de pueblo", "2,50"),
+      at80("1  Pan de pueblo", "2,50"),
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
@@ -525,10 +525,10 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("2 ud  Croquetas de jamón", "6,66"),
+      at80("2  Croquetas de jamón", "6,66"),
       at80("  Descuento", "-1,00"),
-      at80("1 ud  Pan de pueblo", "2,50"),
-      at80("1 ud  Croquetas de jamón", "3,33"),
+      at80("1  Pan de pueblo", "2,50"),
+      at80("1  Croquetas de jamón", "3,33"),
     ]);
   });
 });
