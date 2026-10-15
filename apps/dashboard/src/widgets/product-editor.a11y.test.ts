@@ -218,25 +218,31 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       // Without these the scan could pass on an editor that drew no choices, no help and no refusal.
       const field = el.shadowRoot!.querySelector<
         HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }
-      >("wt-combobox[name=ordering]")!;
+      >("wt-segmented-control[name=ordering]")!;
       expect(field.value).toBe(state === "ordering" ? "staff_only" : "public");
       if (state === "ordering-refused") expect(field.error).not.toBe("");
       await field.updateComplete;
-      if (state === "ordering") {
-        // Open, so the scan reads each choice with its explanation as the operator sees them.
-        field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
-        await field.updateComplete;
-        const lines = [...field.shadowRoot!.querySelectorAll<HTMLElement>(".option-description")];
-        expect(lines.map((line) => line.checkVisibility())).toEqual([true, true, true]);
-      }
+      const selling = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        '[data-section="selling"]',
+      )!;
+      selling.open = true;
+      await selling.updateComplete;
+      const choices = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="radio"]')];
+      expect(choices.map((choice) => choice.checkVisibility())).toEqual([true, true, true]);
+      expect(field.shadowRoot!.querySelectorAll(".hint")).toHaveLength(1);
     }
+
     if (state.startsWith("photo")) {
       // Without these the scan could pass on an editor that drew no photo beside Name.
       const upload = el.shadowRoot!.querySelector("[data-section=name] dashboard-image-upload")!;
       await (upload as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(upload.shadowRoot!.querySelector("button[data-test=choose-image]")).not.toBeNull();
+      expect(upload.shadowRoot!.querySelector("[data-test=choose-image]")).not.toBeNull();
       if (state === "photo-inherited")
-        expect(upload.shadowRoot!.querySelector("[data-test=inherited-caption]")).not.toBeNull();
+        expect(
+          el
+            .shadowRoot!.querySelector("dashboard-product-appearance")!
+            .shadowRoot!.querySelector("[data-test=inherited-caption]"),
+        ).not.toBeNull();
       if (state === "photo-refused")
         expect(el.shadowRoot!.querySelector("[data-test=image-error]")).not.toBeNull();
     }
@@ -346,7 +352,8 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
           HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
         >(`[data-section="${name}"]`)!;
         await disclosure.updateComplete;
-        disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+        if (!disclosure.open)
+          disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
         await disclosure.updateComplete;
         expect(disclosure.open, name).toBe(true);
       }

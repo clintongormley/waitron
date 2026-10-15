@@ -4,6 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -94,6 +95,11 @@ export class VariantTable extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+      [data-test="pricing-unit"]::part(button) {
+        border: 0;
+        padding-inline: 0;
+        color: var(--wt-color-primary-text);
       }
       /* An amount never breaks inside the number. */
       .amount {
@@ -441,8 +447,9 @@ export class VariantTable extends LitElement {
               <th scope="col">${t("editor.name")}</th>
               <th scope="col">
                 <span class="price-heading"
-                  >${t("product.price")}<wt-button
-                    variant="secondary"
+                  >${t("product.price")} ·
+                  <wt-button
+                    variant="ghost"
                     data-test="pricing-unit"
                     aria-label=${fill("editor.change_pricing_unit", { unit: this.unitLabel })}
                     aria-haspopup="dialog"
@@ -452,9 +459,8 @@ export class VariantTable extends LitElement {
                       if (this.busy) return;
                       this.#emit("wt-unit-click", {});
                     }}
-                    >${this.unitLabel}</wt-button
-                  ></span
-                >
+                    >${this.unitLabel}<wt-icon name="chevron-down"></wt-icon></wt-button
+                ></span>
               </th>
               <th scope="col">${t("editor.available")}</th>
               <th scope="col">

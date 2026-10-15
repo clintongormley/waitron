@@ -22,6 +22,8 @@ export { WtSpinner } from "./components/wt-spinner.js";
 export type { WtSpinnerSize } from "./components/wt-spinner.js";
 export { WtCard } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
+export { WtSegmentedControl } from "./components/wt-segmented-control.js";
+export type { SegmentedOption } from "./components/wt-segmented-control.js";
 export type { SummaryField } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
 export { parseDecimalInput, formatDecimalInput, decimalMark } from "@waitron/ui-core";

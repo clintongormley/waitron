@@ -147,7 +147,8 @@ async function openSections(el: ProductEditor) {
       HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
     >(`[data-section="${name}"]`)!;
     await disclosure.updateComplete;
-    disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+    if (!disclosure.open)
+      disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
     await disclosure.updateComplete;
     expect(disclosure.open, name).toBe(true);
   }

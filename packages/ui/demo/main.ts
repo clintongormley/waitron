@@ -23,6 +23,7 @@ import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
+import "../src/components/wt-segmented-control.js";
 import "../src/components/wt-slider.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
@@ -54,6 +55,7 @@ registerIcons({
 const panel = (theme: "light" | "dark") => `
   <div class="panel" data-theme="${theme}">
     <h2>${theme}</h2>
+    <wt-segmented-control label="Ordered on its own by" value="public"></wt-segmented-control>
     <div class="row">
       <wt-button variant="primary">Cobrar</wt-button>
       <wt-button variant="secondary">Cancelar</wt-button>
@@ -311,6 +313,12 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       ...mapTable("8", 4, "free"),
       placement: { x: 4, y: 12, width: 6, height: 6, shape: "round", rotation: 0 },
     },
+  ];
+  const segmented = el.querySelector("wt-segmented-control")!;
+  segmented.options = [
+    { value: "public", label: "Anyone" },
+    { value: "staff_only", label: "Staff only" },
+    { value: "not_sold_separately", label: "Nobody" },
   ];
   const tabs = el.querySelector("wt-tabs")!;
   tabs.items = [

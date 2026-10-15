@@ -176,22 +176,37 @@ it("keeps the unit button in the price heading a tap target on both axes", async
   });
 });
 
-it("leaves a --wt-space-2 gap between the price heading's word and its unit button", async () => {
+it("leaves a --wt-space-2 gap between Price with its middot and the unit link", async () => {
   await atDesktopWidth(async () => {
     const el = await mountTable({ unitLabel: "kg" });
     const button = unitButton(el);
     const word = [...button.parentElement!.childNodes].find(
       (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
     )!;
-    expect(word.textContent!.trim()).toBe(t("product.price"));
+    expect(button.parentElement!.textContent!.replace(/\s+/g, " ").trim()).toContain(
+      `${t("product.price")} · kg`,
+    );
     const range = document.createRange();
-    range.selectNodeContents(word);
+    range.setStartBefore(word);
+    range.setEndBefore(button);
     const wordEnd = range.getBoundingClientRect().right;
     const buttonStart = button.getBoundingClientRect().left;
     expect(buttonStart).toBeGreaterThan(wordEnd);
     const space2 = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
     expect(space2).toBeGreaterThan(0);
     expect(buttonStart - wordEnd).toBeCloseTo(space2, 0);
+  });
+});
+
+it("draws the pricing unit as an unbordered link with a dropdown chevron", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({ unitLabel: "kg" });
+    const unit = unitButton(el);
+    await unit.updateComplete;
+    const button = unit.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(button).borderTopWidth).toBe("0px");
+    expect(unit.querySelector('wt-icon[name="chevron-down"]')).not.toBeNull();
+    expect(unit.getAttribute("variant")).toBe("ghost");
   });
 });
 

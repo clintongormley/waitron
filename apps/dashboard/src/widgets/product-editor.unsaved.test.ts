@@ -548,6 +548,7 @@ it("Product ancestry includes a nested image editor without editing the Product'
     imageLibraryRequest: vi.fn().mockResolvedValue({ images: [], total: 0 }),
   } as unknown as DashboardApi;
   await editor.updateComplete;
+  editor.shadowRoot!.querySelector("dashboard-product-appearance")!.openPanel();
   const upload = editor.shadowRoot!.querySelector("dashboard-image-upload")!;
   await upload.updateComplete;
   upload.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();

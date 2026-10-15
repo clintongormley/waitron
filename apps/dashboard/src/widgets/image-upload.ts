@@ -228,11 +228,12 @@ export class ImageUpload extends LitElement {
               : nothing
         }
       </div>
-      ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
+      ${this.image ? html`<img class="preview" part="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
       ${
         !this.image && this.inheritedImage
           ? html`<img
               class="preview"
+              part="preview"
               data-test="inherited-preview"
               src=${`/media/${encodeURIComponent(this.inheritedImage)}`}
               alt=${t("editor.inherited_image_alt")}

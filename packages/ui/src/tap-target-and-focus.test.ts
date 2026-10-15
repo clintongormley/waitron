@@ -39,7 +39,7 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-button, wt-combobox, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-slider, wt-switch, and wt-textarea", () => {
+test("the interactive set is exactly wt-button, wt-combobox, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
   // A primitive leaving or joining the set otherwise changes only how many tests run below.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
     "wt-button",
@@ -48,6 +48,7 @@ test("the interactive set is exactly wt-button, wt-combobox, wt-input, wt-number
     "wt-number-stepper",
     "wt-price-input",
     "wt-row-actions",
+    "wt-segmented-control",
     "wt-slider",
     "wt-switch",
     "wt-textarea",
@@ -74,6 +75,15 @@ async function mountNarrow(
   applyTokens(wrapper);
   wrapper.innerHTML = `<${tag}></${tag}>`;
   const el = wrapper.firstElementChild as HTMLElement & { updateComplete: Promise<unknown> };
+  if (tag === "wt-segmented-control") {
+    const choices = el as HTMLElementTagNameMap["wt-segmented-control"];
+    choices.label = "Who may order";
+    choices.options = [
+      { value: "anyone", label: "Anyone" },
+      { value: "staff", label: "Staff only" },
+    ];
+    choices.value = "staff";
+  }
   await el.updateComplete;
   return el;
 }

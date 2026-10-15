@@ -2198,9 +2198,12 @@ describe("catalogue-screen", () => {
         value: "Croquetas sin guardar",
       });
       await editor(el).updateComplete;
-      const kitchen = editor(el).shadowRoot!.querySelector<LitElement>('[data-section="kitchen"]')!;
+      const kitchen = editor(el).shadowRoot!.querySelector<LitElement & { open: boolean }>(
+        '[data-section="kitchen"]',
+      )!;
       await kitchen.updateComplete;
-      await userEvent.click(kitchen.shadowRoot!.querySelector<HTMLElement>("button.header")!);
+      if (!kitchen.open)
+        await userEvent.click(kitchen.shadowRoot!.querySelector<HTMLElement>("button.header")!);
       const box = courseBox(el) as unknown as LitElement;
       await box.updateComplete;
       await userEvent.click(box.shadowRoot!.querySelector<HTMLElement>(".trigger")!);

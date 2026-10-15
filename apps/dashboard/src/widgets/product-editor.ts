@@ -26,6 +26,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
@@ -37,6 +38,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./allergen-dietary-picker.js";
 import "./image-upload.js";
+import "./product-appearance.js";
 import "./variant-form.js";
 import { EACH_CHOICE } from "./variant-table.js";
 import { categoryPathField, categoryPathText } from "./classification-fields.js";
@@ -101,7 +103,9 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 const SECTION_FIELDS = {
   kitchen: ["kitchen-name", "product-course"],
   descriptors: ["customer-name-", "description-"],
-  price: ["tax", "unit"],
+  price: ["tax", "unit", "unit-price"],
+  selling: ["ordering", "available"],
+  modifiers: ["modifier"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
 
@@ -245,12 +249,18 @@ export class ProductEditor extends LitElement {
       .form {
         gap: var(--wt-space-4);
       }
-      .form > [data-section="descriptors"]:not([open]) + [data-section="nutrition"]:not([open]),
-      .form > [data-section="nutrition"]:not([open]) + [data-section="price"]:not([open]) {
-        margin-block-start: calc(-1 * var(--wt-space-4));
+      wt-disclosure::part(section) {
+        padding-block: 0;
       }
-      .form > [data-section="modifiers"] {
-        margin-block-start: var(--wt-space-2);
+      .unavailable {
+        color: var(--wt-color-warning);
+      }
+      .selling-summary {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      dashboard-product-appearance dashboard-image-upload::part(preview) {
+        display: none;
       }
       .group-label {
         color: var(--wt-color-text-muted);
@@ -432,6 +442,8 @@ export class ProductEditor extends LitElement {
   /** Whether the Pricing fold starts open: on a product never saved, whose price and VAT are still
    * being set. Read once per product, so a fold the person closes stays closed. */
   #pricingStartsOpen = false;
+  #variantsStartOpen = false;
+  #modifiersStartOpen = false;
   private submitted = false;
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
@@ -506,7 +518,9 @@ export class ProductEditor extends LitElement {
       this.unitPickerOpen = false;
       this.variantOpen = false;
       this.variantIndex = null;
-      this.#pricingStartsOpen = !this.value?.id;
+      this.#pricingStartsOpen = !this.hasActiveVariant;
+      this.#variantsStartOpen = this.hasActiveVariant;
+      this.#modifiersStartOpen = this.draft.modifiers.length > 0;
       this.#variantProblems = new Map();
       if (this.open && this.initialField === "image") this.#focusField = this.initialField;
       this.#draftScope?.dispose();
@@ -562,6 +576,10 @@ export class ProductEditor extends LitElement {
    * and focusing a hidden element silently does nothing, so wait for that section first. */
   private async focusField(name: string): Promise<void> {
     await this.updateComplete;
+    if (name === "product-color") {
+      await this.shadowRoot?.querySelector("dashboard-product-appearance")?.focusColor();
+      return;
+    }
     if (name === "image") {
       await this.focusImage();
       return;
@@ -580,11 +598,8 @@ export class ProductEditor extends LitElement {
 
   /** The photo control has no input of its own; its button is where a refused photo puts focus. */
   private async focusImage(): Promise<void> {
-    const upload = this.shadowRoot?.querySelector<LitElement>("dashboard-image-upload");
-    if (!upload) return;
-    await upload.updateComplete;
-    await this.shadowRoot?.querySelector<LitElement>("wt-modal")?.updateComplete;
-    upload.shadowRoot?.querySelector<HTMLElement>("[data-test=choose-image]")?.focus();
+    const appearance = this.shadowRoot?.querySelector("dashboard-product-appearance");
+    await appearance?.focusImage();
   }
 
   /** A variant has no input of its own in this form — its fields live in the window the row's Edit
@@ -719,12 +734,12 @@ export class ProductEditor extends LitElement {
   private taxLabel(tax: { label: string; rate: string }) {
     return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
   }
-  private text(value: LocalizedText) {
-    return resolveContentText(value, this.language, this.language);
+  private unitText(value: LocalizedText): string {
+    return resolveContentText(value, currentLocale(), this.language);
   }
   private unitLabel(unit: UnitChoice) {
-    const name = this.text(unit.name);
-    const abbr = this.text(unit.abbreviation);
+    const name = this.unitText(unit.name);
+    const abbr = this.unitText(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
   }
   /** Empty for a product with no unit; callers choose the no-unit wording from the empty string. */
@@ -733,7 +748,7 @@ export class ProductEditor extends LitElement {
     if (!unitId) return "";
     const unit = this.units.find((unit) => unit.id === unitId);
     if (!unit) return t("editor.missing_choice");
-    return this.text(unit.abbreviation) || this.text(unit.name);
+    return this.unitText(unit.abbreviation) || this.unitText(unit.name);
   }
   /** Only while the editor itself is open, and on a product's own page: a variant's unit is its
    * product's. */
@@ -779,7 +794,15 @@ export class ProductEditor extends LitElement {
           .map((locale) => `${errorKey}${locale}`),
       );
     } else if (errorKey !== undefined) this.dismiss(errorKey);
+    const hadVariant = this.hasActiveVariant;
     this.draft = { ...this.draft, [key]: value };
+    if (key === "variants" && hadVariant !== this.hasActiveVariant) {
+      this.#pricingStartsOpen = !this.hasActiveVariant;
+      const pricing = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        'wt-disclosure[data-section="price"]',
+      );
+      if (pricing) pricing.open = this.#pricingStartsOpen;
+    }
     this.#draftScope?.changed();
     if (key === "unitId") void this.readUnitUsage();
   }
@@ -1090,6 +1113,8 @@ export class ProductEditor extends LitElement {
       ),
     ];
     return html`<wt-disclosure
+      ruled
+      open
       data-section="kitchen"
       heading=${t("editor.section_kitchen")}
       .summaryFields=${summary}
@@ -1168,30 +1193,50 @@ export class ProductEditor extends LitElement {
       (value) => this.change("name", value),
       true,
     );
-    if (!this.api) return html`<div class="group" data-section="name">${name}</div>`;
+    const fromCategory = categoryColor(this.draft.primaryCategoryId, this.#categoryNodes, null);
     return html`<div class="group" data-section="name">
-      <dashboard-image-upload
-        .draftParent=${this}
-        thumbnail
-        .api=${this.api}
+      <dashboard-product-appearance
         .image=${this.draft.image}
         .inheritedImage=${this.inherited?.image ?? null}
-        .invalid=${!!this.error("image")}
-        @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-          event.stopPropagation();
-          this.change("image", event.detail.image);
-        }}
-        @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-          event.stopPropagation();
-          this.imageOpen = event.detail.open;
-        }}
-        >${name}</dashboard-image-upload
+        .color=${this.draft.color ?? fromCategory ?? this.defaultColor}
+        .disabled=${this.busy || this.childOpen || this.variantOpen}
+        .invalid=${!!this.error("image") || !!this.error("product-color")}
       >
-      ${
-        this.error("image")
-          ? html`<span class="error" data-test="image-error">${this.error("image")}</span>`
-          : nothing
-      }
+        ${name}
+        <div slot="controls" class="group">
+          ${
+            this.api
+              ? html`<dashboard-image-upload
+                  .draftParent=${this}
+                  .api=${this.api}
+                  .image=${this.draft.image}
+                  .inheritedImage=${this.inherited?.image ?? null}
+                  .disabled=${this.busy || this.childOpen || this.variantOpen}
+                  .invalid=${!!this.error("image")}
+                  @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+                    event.stopPropagation();
+                    this.change("image", event.detail.image);
+                  }}
+                  @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+                    event.stopPropagation();
+                    this.imageOpen = event.detail.open;
+                    if (!event.detail.open) {
+                      const generation = this.generation;
+                      void this.updateComplete.then(async () => {
+                        if (this.open && generation === this.generation && !this.imageOpen)
+                          await this.shadowRoot
+                            ?.querySelector("dashboard-product-appearance")
+                            ?.focusImage();
+                      });
+                    }
+                  }}
+                ></dashboard-image-upload>`
+              : nothing
+          }
+          ${this.inherited ? nothing : this.renderColor()}
+        </div>
+      </dashboard-product-appearance>
+      ${this.error("image") ? html`<span class="error" data-test="image-error">${this.error("image")}</span>` : nothing}
     </div>`;
   }
 
@@ -1237,6 +1282,7 @@ export class ProductEditor extends LitElement {
       },
     ];
     return html`<wt-disclosure
+      ruled
       data-section="descriptors"
       heading=${t("editor.section_descriptors")}
       .summaryRows=${summary}
@@ -1330,6 +1376,7 @@ export class ProductEditor extends LitElement {
       ),
     ];
     return html`<wt-disclosure
+      ruled
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
       .summaryFields=${summary}
@@ -1370,30 +1417,39 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
-  /** Who may order the product on its own. A variant is only ever ordered under its dish, so its
-   * page does not offer the choice. */
+  private renderSelling() {
+    return html`<wt-disclosure
+      ruled
+      data-section="selling"
+      heading=${t("editor.selling")}
+      ?has-error=${this.sectionHasError("selling")}
+    >
+      <span slot="summary" class="selling-summary"
+        ><strong class=${this.draft.available ? "" : "unavailable"}
+          >${t(this.draft.available ? "editor.available" : "product.unavailable_badge")}</strong
+        >${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}</span
+      >
+      <div class="group">
+        ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
+        ${this.inherited ? nothing : this.renderOrdering()}
+      </div>
+    </wt-disclosure>`;
+  }
+
   private renderOrdering() {
-    return html`<div class="group" data-section="ordering">
-      <wt-combobox
-        name="ordering"
-        label=${t("product.ordering")}
-        search="auto"
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        ?disabled=${this.suspended}
-        .options=${PRODUCT_ORDERINGS.map((ordering) => ({
-          value: ordering,
-          label: t(`product.ordering_${ordering}`),
-          description: t(`product.ordering_${ordering}_hint`),
-        }))}
-        .value=${this.draft.ordering}
-        error=${this.error("ordering")}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.change("ordering", event.detail.value as ProductEditorDraft["ordering"]);
-        }}
-      ></wt-combobox>
-    </div>`;
+    return html`<wt-segmented-control
+      name="ordering"
+      label=${t("editor.ordered_on_own")}
+      ?disabled=${this.suspended}
+      .options=${PRODUCT_ORDERINGS.map((value) => ({ value, label: t(`product.ordering_${value}`) }))}
+      .value=${this.draft.ordering}
+      hint=${t(`product.ordering_${this.draft.ordering}_hint`)}
+      error=${this.error("ordering")}
+      @wt-change=${(event: CustomEvent<{ value: ProductEditorDraft["ordering"] }>) => {
+        event.stopPropagation();
+        this.change("ordering", event.detail.value);
+      }}
+    ></wt-segmented-control>`;
   }
 
   private renderTax() {
@@ -1435,7 +1491,15 @@ export class ProductEditor extends LitElement {
         placeholder=${each}
         .options=${[
           { value: EACH_CHOICE, label: each },
-          ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
+          ...[...this.units]
+            .sort(
+              (a, b) =>
+                new Intl.Collator(currentLocale()).compare(
+                  this.unitText(a.name),
+                  this.unitText(b.name),
+                ) || a.id.localeCompare(b.id),
+            )
+            .map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
         ?disabled=${this.suspended}
         .value=${this.draft.unitId ?? EACH_CHOICE}
@@ -1565,14 +1629,10 @@ export class ProductEditor extends LitElement {
           : nothing
       }
       ${this.renderTax()}`;
-    if (!base)
-      return html`<fieldset class="group" data-section="price">
-        <legend class="group-label">${t("editor.pricing")}</legend>
-        ${fields}
-      </fieldset>`;
     return keyed(
       this.generation,
       html`<wt-disclosure
+        ruled
         data-section="price"
         heading=${t("editor.pricing")}
         .summaryFields=${this.pricingSummary(amount, unitLabel)}
@@ -1588,87 +1648,103 @@ export class ProductEditor extends LitElement {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
     const unsaved = this.value !== null && !sameValue(this.draft, this.value);
     const { variants } = this.draft;
-    return html`<div class="group" data-section="variants">
-      ${
-        variants.length
-          ? html`<span class="group-label">${t("editor.variants")}</span>
-              <dashboard-variant-table
-                .variants=${this.draft.variants}
-                basePrice=${this.draft.unitPrice ?? ""}
-                unitLabel=${this.unitShortLabel || t("editor.unit_each")}
-                .busy=${this.suspended}
-                .openBlocked=${unsaved}
-                .errors=${this.#rowsNow}
-                .archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}
-                @wt-unit-click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.openUnits("heading");
-                }}
-                @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
-                  event.stopPropagation();
-                  // The table has ALREADY moved the row on screen, so a host that does not apply the
-                  // same move leaves the draft silently out of step with what is displayed.
-                  this.change(
-                    "variants",
-                    reorder(this.draft.variants, event.detail.from, event.detail.to),
-                  );
-                }}
-                @wt-toggle-available=${(
-                  event: CustomEvent<{ index: number; available: boolean }>,
-                ) => {
-                  event.stopPropagation();
-                  this.changeVariant(event.detail.index, (variant) => ({
-                    ...variant,
-                    available: event.detail.available,
-                  }));
-                }}
-                @wt-edit=${(event: CustomEvent<{ index: number; via: "row" | "menu" }>) => {
-                  event.stopPropagation();
-                  this.openVariant(event.detail.index, event.detail.via);
-                }}
-                @wt-open=${(event: CustomEvent<{ index: number }>) => {
-                  event.stopPropagation();
-                  const id = this.draft.variants[event.detail.index]?.id;
-                  if (this.suspended || unsaved || id === undefined) return;
-                  this.dispatchEvent(
-                    new CustomEvent("wt-open-product", {
-                      detail: { productId: id },
-                      bubbles: true,
-                      composed: true,
-                    }),
-                  );
-                }}
-                @wt-remove=${(event: CustomEvent<{ index: number }>) => {
-                  event.stopPropagation();
-                  const { index } = event.detail;
-                  if (this.draft.variants[index]?.id === undefined)
+    return keyed(
+      this.generation,
+      html`<wt-disclosure
+        ruled
+        data-section="variants"
+        heading=${t("editor.variants")}
+        ?open=${this.#variantsStartOpen}
+        ?has-error=${Object.keys(this.#rowsNow).length > 0}
+        summary=${
+          variants
+            .filter((variant) => variant.active)
+            .map((variant) => variant.name)
+            .join(", ") || t("editor.none")
+        }
+      >
+        <div class="group">
+          ${
+            variants.length
+              ? html`<dashboard-variant-table
+                  .variants=${this.draft.variants}
+                  basePrice=${this.draft.unitPrice ?? ""}
+                  unitLabel=${this.unitShortLabel || t("editor.unit_each")}
+                  .busy=${this.suspended}
+                  .openBlocked=${unsaved}
+                  .errors=${this.#rowsNow}
+                  .archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}
+                  @wt-unit-click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.openUnits("heading");
+                  }}
+                  @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
+                    event.stopPropagation();
+                    // The table has ALREADY moved the row on screen, so a host that does not apply the
+                    // same move leaves the draft silently out of step with what is displayed.
                     this.change(
                       "variants",
-                      this.draft.variants.filter((_, i) => i !== index),
+                      reorder(this.draft.variants, event.detail.from, event.detail.to),
                     );
-                  else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
-                  void this.focusAfterRemove();
-                }}
-                @wt-restore=${(event: CustomEvent<{ index: number }>) => {
-                  event.stopPropagation();
-                  this.changeVariant(event.detail.index, (variant) => ({
-                    ...variant,
-                    active: true,
-                  }));
-                }}
-              ></dashboard-variant-table>`
-          : nothing
-      }
-      <div class="row">
-        <wt-button
-          variant="secondary"
-          data-test="add-variant"
-          ?disabled=${this.suspended}
-          @click=${this.addVariant}
-          >${t("editor.add_variant")}</wt-button
-        >
-      </div>
-    </div>`;
+                  }}
+                  @wt-toggle-available=${(
+                    event: CustomEvent<{ index: number; available: boolean }>,
+                  ) => {
+                    event.stopPropagation();
+                    this.changeVariant(event.detail.index, (variant) => ({
+                      ...variant,
+                      available: event.detail.available,
+                    }));
+                  }}
+                  @wt-edit=${(event: CustomEvent<{ index: number; via: "row" | "menu" }>) => {
+                    event.stopPropagation();
+                    this.openVariant(event.detail.index, event.detail.via);
+                  }}
+                  @wt-open=${(event: CustomEvent<{ index: number }>) => {
+                    event.stopPropagation();
+                    const id = this.draft.variants[event.detail.index]?.id;
+                    if (this.suspended || unsaved || id === undefined) return;
+                    this.dispatchEvent(
+                      new CustomEvent("wt-open-product", {
+                        detail: { productId: id },
+                        bubbles: true,
+                        composed: true,
+                      }),
+                    );
+                  }}
+                  @wt-remove=${(event: CustomEvent<{ index: number }>) => {
+                    event.stopPropagation();
+                    const { index } = event.detail;
+                    if (this.draft.variants[index]?.id === undefined)
+                      this.change(
+                        "variants",
+                        this.draft.variants.filter((_, i) => i !== index),
+                      );
+                    else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
+                    void this.focusAfterRemove();
+                  }}
+                  @wt-restore=${(event: CustomEvent<{ index: number }>) => {
+                    event.stopPropagation();
+                    this.changeVariant(event.detail.index, (variant) => ({
+                      ...variant,
+                      active: true,
+                    }));
+                  }}
+                ></dashboard-variant-table>`
+              : nothing
+          }
+          <div class="row">
+            <wt-button
+              variant="secondary"
+              data-test="add-variant"
+              ?disabled=${this.suspended}
+              @click=${this.addVariant}
+              >${t("editor.add_variant")}</wt-button
+            >
+          </div>
+        </div></wt-disclosure
+      >`,
+    );
   }
 
   /** The list's own STAFF name. This surface shows exactly one of a list's three names and it is
@@ -1772,71 +1848,82 @@ export class ProductEditor extends LitElement {
       ];
     };
     const options = [...offered("extras"), ...offered("options")];
-    return html`<div class="group" data-section="modifiers">
-      <span class="group-label">${t("editor.modifiers")}</span>
-      ${
-        attached.length
-          ? html`<div
-              class="table-wrap"
-              tabindex="0"
-              role="region"
-              aria-label=${t("editor.modifiers")}
-            >
-              <table>
-                <caption class="visually-hidden">
-                  ${t("editor.modifiers")}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <span class="visually-hidden">${t("editor.reorder_modifier")}</span>
-                    </th>
-                    <th scope="col">${t("editor.name")}</th>
-                    <th scope="col">${t("editor.modifier_kind")}</th>
-                    <th scope="col">
-                      <span class="visually-hidden">${t("editor.modifier_actions")}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${repeat(attached, modifierKey, (ref) => this.renderModifierRow(ref))}
-                </tbody>
-              </table>
-            </div>`
-          : nothing
-      }
-      ${this.#reorder.liveRegion()}
-      <wt-combobox
-        name="modifier"
-        data-test="add-modifier"
-        label=${t("editor.add_modifier")}
-        placeholder=${t("editor.choose")}
-        searchPlaceholder=${t("editor.search_choices")}
-        noResultsLabel=${t("editor.no_modifiers")}
-        .disabled=${this.suspended}
-        .options=${options}
-        .value=${""}
-        .error=${this.error("modifier")}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          const chosen = event.detail.value;
-          // A chosen row is a command, spent where it is chosen: one opens a nested form, the rest
-          // attach a list to the table above. So the control returns to its placeholder — and it
-          // has to be told to ON the element, because `wt-combobox` sets its own `value` when a row
-          // is picked and Lit never re-commits the unchanged constant bound above
-          // (docs/developers/conventions-ui.md measured that). Assigning rather than replacing the
-          // element keeps the focus the pick just returned to the trigger.
-          (event.currentTarget as HTMLElement & { value: string }).value = "";
-          if (chosen === "") return;
-          if (chosen === CREATE_EXTRA_LIST) this.related(event, "extras");
-          else if (chosen === CREATE_OPTION_LIST) this.related(event, "options");
-          else {
-            const [kind, ...rest] = chosen.split(":");
-            if (kind === "extras" || kind === "options") this.selectRelated(kind, rest.join(":"));
+    return keyed(
+      this.generation,
+      html`<wt-disclosure
+        ruled
+        data-section="modifiers"
+        heading=${t("editor.modifiers")}
+        ?open=${this.#modifiersStartOpen}
+        ?has-error=${this.sectionHasError("modifiers")}
+        summary=${attached.map((ref) => this.modifierLabel(ref)).join(SUMMARY_SEPARATOR) || t("editor.none")}
+      >
+        <div class="group">
+          ${
+            attached.length
+              ? html`<div
+                  class="table-wrap"
+                  tabindex="0"
+                  role="region"
+                  aria-label=${t("editor.modifiers")}
+                >
+                  <table>
+                    <caption class="visually-hidden">
+                      ${t("editor.modifiers")}
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">
+                          <span class="visually-hidden">${t("editor.reorder_modifier")}</span>
+                        </th>
+                        <th scope="col">${t("editor.name")}</th>
+                        <th scope="col">${t("editor.modifier_kind")}</th>
+                        <th scope="col">
+                          <span class="visually-hidden">${t("editor.modifier_actions")}</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${repeat(attached, modifierKey, (ref) => this.renderModifierRow(ref))}
+                    </tbody>
+                  </table>
+                </div>`
+              : nothing
           }
-        }}
-      ></wt-combobox>
-    </div>`;
+          ${this.#reorder.liveRegion()}
+          <wt-combobox
+            name="modifier"
+            data-test="add-modifier"
+            label=${t("editor.add_modifier")}
+            placeholder=${t("editor.choose")}
+            searchPlaceholder=${t("editor.search_choices")}
+            noResultsLabel=${t("editor.no_modifiers")}
+            .disabled=${this.suspended}
+            .options=${options}
+            .value=${""}
+            .error=${this.error("modifier")}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const chosen = event.detail.value;
+              // A chosen row is a command, spent where it is chosen: one opens a nested form, the rest
+              // attach a list to the table above. So the control returns to its placeholder — and it
+              // has to be told to ON the element, because `wt-combobox` sets its own `value` when a row
+              // is picked and Lit never re-commits the unchanged constant bound above
+              // (docs/developers/conventions-ui.md measured that). Assigning rather than replacing the
+              // element keeps the focus the pick just returned to the trigger.
+              (event.currentTarget as HTMLElement & { value: string }).value = "";
+              if (chosen === "") return;
+              if (chosen === CREATE_EXTRA_LIST) this.related(event, "extras");
+              else if (chosen === CREATE_OPTION_LIST) this.related(event, "options");
+              else {
+                const [kind, ...rest] = chosen.split(":");
+                if (kind === "extras" || kind === "options")
+                  this.selectRelated(kind, rest.join(":"));
+              }
+            }}
+          ></wt-combobox></div
+      ></wt-disclosure>`,
+    );
   }
 
   override render() {
@@ -1869,17 +1956,7 @@ export class ProductEditor extends LitElement {
       >
         <div class="form">
           ${this.renderCategories()} ${keyed(this.generation, this.renderName(fields))}
-          ${this.inherited ? nothing : this.renderColor()}
-          <div class="group" data-section="available">
-            ${switchField(
-              fields,
-              "available",
-              t("editor.available"),
-              this.draft.available,
-              (value) => this.change("available", value),
-            )}
-          </div>
-          ${this.inherited ? nothing : this.renderOrdering()}
+          ${keyed(this.generation, this.renderSelling())}
           ${keyed(this.generation, this.renderKitchen())}
           ${keyed(this.generation, this.renderDescriptors())}
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
