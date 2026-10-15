@@ -13,16 +13,19 @@ export interface UrlPathConfig {
   primary: string;
   /** Navigation field → path label, grouped by primary destination; * applies to every destination. */
   children: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** Destinations whose unlisted `<key>/<value>` pairs a write keeps, as the address spells them,
+   *  while the destination stays the same. */
+  keepUnlisted?: readonly string[];
   leave?: NavigationLeave;
 }
 
-function encode(value: string): string {
+export function encodePathSegment(value: string): string {
   // Empty selections and dot-only identifiers must survive URL path normalization.
   if (value === "" || value === "." || value === "..") return `~${value}`;
   return encodeURIComponent(value).replaceAll("~", "%7E");
 }
 
-function decode(value: string): string {
+export function decodePathSegment(value: string): string {
   if (value === "~" || value === "~." || value === "~..") return value.slice(1);
   return decodeURIComponent(value);
 }
@@ -55,19 +58,22 @@ export class UrlStateController implements ReactiveController {
     return this.config.children[primary] ?? this.config.children["*"] ?? {};
   }
 
-  #read(): Record<string, string | null> {
+  #parts(): string[] {
     const prefix = `${this.config.basePath}/`;
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    if (!url.pathname.startsWith(prefix)) return {};
-    const parts = url.pathname.slice(prefix.length).split("/");
+    return url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length).split("/") : [];
+  }
+
+  #read(): Record<string, string | null> {
+    const parts = this.#parts();
     if (!parts[0]) return {};
     try {
-      const primary = decode(parts[0]);
+      const primary = decodePathSegment(parts[0]);
       const values: Record<string, string | null> = { [this.config.primary]: primary };
       const fields = this.#children(primary);
       for (let i = 1; i + 1 < parts.length; i += 2) {
         const key = Object.keys(fields).find((key) => fields[key] === parts[i]);
-        if (key !== undefined) values[key] = decode(parts[i + 1]!);
+        if (key !== undefined) values[key] = decodePathSegment(parts[i + 1]!);
       }
       return values;
     } catch {
@@ -85,15 +91,29 @@ export class UrlStateController implements ReactiveController {
     removeQuery: readonly string[] = [],
   ): void | Promise<LeaveOutcome> {
     if (!this.host.isConnected) return;
-    const values = { ...this.#read(), ...changes };
+    const current = this.#read();
+    const values = { ...current, ...changes };
     const primary = values[this.config.primary];
     const parts: string[] = [];
     if (primary != null) {
-      parts.push(encode(primary));
-      for (const [key, segment] of Object.entries(this.#children(primary))) {
+      parts.push(encodePathSegment(primary));
+      const children = Object.entries(this.#children(primary));
+      const pending = new Map(children);
+      const add = (key: string, segment: string) => {
         const value = values[key];
-        if (value != null) parts.push(segment, encode(value));
+        if (value != null) parts.push(segment, encodePathSegment(value));
+      };
+      // Pairs stay in the address's order, so a rewrite that changes nothing writes nothing.
+      if (primary === current[this.config.primary] && this.config.keepUnlisted?.includes(primary)) {
+        const keys = new Map(children.map(([key, segment]) => [segment, key]));
+        const path = this.#parts();
+        for (let i = 1; i + 1 < path.length; i += 2) {
+          const key = keys.get(path[i]!);
+          if (key === undefined) parts.push(path[i]!, path[i + 1]!);
+          else if (pending.delete(key)) add(key, path[i]!);
+        }
       }
+      for (const [key, segment] of pending) add(key, segment);
     }
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);

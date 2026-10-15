@@ -226,6 +226,16 @@ it("preserves an Opening hours month view's month while the shell replaces its s
   host.remove();
 });
 
+it("keeps a Calendar module view and its week while the shell replaces its section", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  document.body.append(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  await url.write({ dashboard: "opening-hours" }, true);
+  expect(location.pathname).toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+});
+
 it("draws the Calendar's own-hours clock from the dashboard registry", async () => {
   registerIcons(DASHBOARD_ICONS);
   const icon = document.createElement("wt-icon");
@@ -248,6 +258,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
     month: "month",
     "special-day": "special-day",
   });
+  expect(dashboardPath.keepUnlisted).toEqual(["opening-hours"]);
 });
 
 it("reads the floor plan editor's zone from its path", () => {

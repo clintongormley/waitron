@@ -275,7 +275,7 @@ it("shows nothing in Painted in while the painted-in read has not answered", asy
   expect(cell(grid, "period:p2", "period")!.querySelector("[part~=unpainted]")).toBeNull();
 });
 
-it("the row menu column is keyed actions and pinned to the end, holding Edit, Open in Opening hours and Delete", async () => {
+it("the row menu column is keyed actions and pinned to the end, holding Edit, Open in Calendar and Delete", async () => {
   const el = await mount();
   const grid = await loaded(el);
   expect(grid.columns.find((c) => c.key === "actions")?.pinned).toBe("end");
@@ -286,7 +286,7 @@ it("the row menu column is keyed actions and pinned to the end, holding Edit, Op
   expect(menu.getAttribute("label")).toBe("Actions: Lunch");
   expect(menu.querySelector("[data-test=edit-period]")!.textContent!.trim()).toBe("Edit");
   const open = menu.querySelector<HTMLAnchorElement>("a[data-test=open-hours]")!;
-  expect(open.textContent!.trim()).toBe("Open in Opening hours");
+  expect(open.textContent!.trim()).toBe("Open in Calendar");
   expect(open.getAttribute("href")).toBe("/manage/opening-hours/view/season/department/restaurant");
   expect(menu.querySelector("[data-test=delete-period]")!.textContent!.trim()).toBe("Delete");
   const bar = cell(grid, "period:p3", "actions")!.querySelector("a[data-test=open-hours]")!;
@@ -399,7 +399,7 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
     cell(grid, "period:p1", "actions")!
       .querySelector("a[data-test=open-hours]")!
       .textContent!.trim(),
-  ).toBe("Abrir en Horario de apertura");
+  ).toBe("Abrir en Calendario");
 });
 
 // Verdana is about as wide as CI's Linux system font.

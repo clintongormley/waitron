@@ -4,6 +4,12 @@ import type { AreaRef, StaffingBlock } from "./slots.js";
 
 export type { CalendarColour };
 
+/** An active department or station by name. */
+export interface StaffingArea {
+  area: AreaRef;
+  name: string;
+}
+
 export interface StaffRole {
   id: string;
   name: string;
@@ -26,5 +32,40 @@ export interface SpecialDayStaffing {
     name: string;
     /** `blocks` null: the date follows the season. */
     dates: { dateId: string; date: string; blocks: StaffingBlock[] | null }[];
+  }[];
+}
+
+export interface StaffingSeason {
+  id: string;
+  name: string;
+  /** MM-DD. */
+  startsOn: string;
+  /** The MM-DD before the next season starts. */
+  lastDay: string;
+}
+
+/** A staffing area's slots on one business day; `unfilled` is null until the rota counts it. */
+export interface StaffingMonthArea {
+  area: AreaRef;
+  needed: number;
+  unfilled: number | null;
+}
+
+/** The whole Monday-to-Sunday weeks covering `month`, as the opening-hours month lists them. */
+export interface StaffingMonth {
+  month: string;
+  today: string | null;
+  /** Every active area, in `listStaffingAreas` order, painted in the month or not. */
+  areas: StaffingArea[];
+  /** The seasons the listed days touch, in the order they are first touched. */
+  seasons: StaffingSeason[];
+  days: {
+    date: string;
+    inMonth: boolean;
+    seasonId: string | null;
+    specialDay: { id: string; name: string } | null;
+    closedAllDay: boolean;
+    /** Only areas with paint on the day, in `listStaffingAreas` order. */
+    areas: StaffingMonthArea[];
   }[];
 }

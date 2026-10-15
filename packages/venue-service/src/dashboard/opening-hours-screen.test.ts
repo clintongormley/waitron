@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LitElement } from "lit";
+import { html, LitElement } from "lit";
 import { userEvent } from "vitest/browser";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  CALENDAR_OWN_VIEW_IDS,
+  registerCatalogue,
+  setLocale,
+  type CalendarViewHost,
+  type DashboardCalendarView,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { applyTokens, NavigationGuard } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
@@ -213,10 +220,10 @@ it("reads no prep-station list, on the Year or on an old station address", async
   expect(paths.some((path) => path.startsWith("/management-api/stations"))).toBe(false);
 });
 
-it("shows the Spanish Opening hours title", async () => {
+it("shows the Spanish Calendar title", async () => {
   setLocale("es");
   const el = await mount();
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Horario de apertura");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Calendario");
 });
 
 function pickerModel(): OpeningHoursModel {
@@ -1731,4 +1738,358 @@ it("treats the retired Periods view as an unknown view", async () => {
       .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-tabs"]>("wt-tabs")!
       .items.map((item) => item.key),
   ).toEqual(["year"]);
+});
+
+describe("the Calendar's module views", () => {
+  registerCatalogue({
+    en: { "test.view.staffing": "Staffing", "test.view.rota": "Rota" },
+    es: { "test.view.staffing": "Personal", "test.view.rota": "Turnos" },
+  });
+  type Rendered = { host: CalendarViewHost; readOnly: boolean | undefined };
+  let hostsSeen: Record<string, CalendarViewHost[]>;
+  let renders: Rendered[];
+  beforeEach(() => {
+    hostsSeen = {};
+    renders = [];
+  });
+  function stubView(id: string, order: number): DashboardCalendarView {
+    return {
+      id,
+      labelKey: `test.view.${id}`,
+      order,
+      requiresPermission: `${id}.write`,
+      create: (_ctx, host) => {
+        (hostsSeen[id] ??= []).push(host);
+        return {
+          render: (readOnly) => {
+            renders.push({ host, readOnly });
+            return html`<p data-test="stub-${id}">${host.month} ${JSON.stringify(host.params)}</p>`;
+          },
+        };
+      },
+    };
+  }
+  const staffing = stubView("staffing", 10);
+  const rota = stubView("rota", 20);
+  async function mountCalendar(
+    views: { view: DashboardCalendarView; canWrite: boolean }[] = [
+      { view: staffing, canWrite: true },
+      { view: rota, canWrite: true },
+    ],
+  ) {
+    const el = document.createElement("dashboard-opening-hours-screen") as Screen & {
+      calendar?: unknown;
+    };
+    const request = (async (path: string) =>
+      path.includes("/opening-hours/year?")
+        ? yearRead(2026)
+        : path.includes("/opening-hours/month?")
+          ? { days: [] }
+          : structuredClone(model())) as DashboardRequest;
+    el.api = new OpeningHoursApi(withSeasonDays(request));
+    el.calendar = { ctx: { request }, views };
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await expect.poll(() => el.shadowRoot?.querySelector("h1")).not.toBeNull();
+    await el.updateComplete;
+    return el;
+  }
+  const switchLabels = (el: Screen) =>
+    [...el.shadowRoot!.querySelectorAll("[data-test=calendar-switch] label")].map((label) =>
+      label.textContent!.trim(),
+    );
+  const choose = (el: Screen, value: string) =>
+    userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        `[data-test=calendar-switch] input[value="${value}"]`,
+      )!,
+    );
+  const checked = (el: Screen) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=calendar-switch] input:checked")
+      ?.value;
+
+  it("draws no switch and titles the page Calendar when no module view is given", async () => {
+    const el = await mountCalendar([]);
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=calendar-switch]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Calendar");
+  });
+
+  it("offers Opening hours first, then each view, with Opening hours chosen", async () => {
+    const el = await mountCalendar();
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    expect(switchLabels(el)).toEqual(["Opening hours", "Staffing", "Rota"]);
+    expect(checked(el)).toBe("hours");
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
+  });
+
+  it("shows a chosen view in place of the own tabs, in the month holding today's business date", async () => {
+    vi.setSystemTime(new Date("2026-12-15T12:00:00Z"));
+    const el = await mountCalendar();
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    await choose(el, "staffing");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/staffing");
+    expect(checked(el)).toBe("staffing");
+    expect(hostsSeen["staffing"]![0]!.month).toBe("2026-12");
+    expect(hostsSeen["staffing"]![0]!.params).toEqual({});
+  });
+
+  it("carries the shown month from Opening hours' month into the view, and back", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/month/month/2027-03");
+    const el = await mountCalendar();
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
+    await choose(el, "staffing");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/month/2027-03");
+    expect(hostsSeen["staffing"]![0]!.month).toBe("2027-03");
+    await choose(el, "hours");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/month/month/2027-03");
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
+    expect(checked(el)).toBe("hours");
+  });
+
+  it("moves to another address through host.open and hands the view its params", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const host = hostsSeen["staffing"]![0]!;
+    host.open("staffing", { week: "2026-11-30" });
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]")!.textContent)
+      .toContain('{"week":"2026-11-30"}');
+    expect(host.params).toEqual({ week: "2026-11-30" });
+    expect(hostsSeen["staffing"]).toHaveLength(1);
+    host.open("rota", { week: "2026-12-07" });
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=stub-rota]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
+    expect(host.params).toEqual({});
+    host.open("hours", {});
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    history.back();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=stub-rota]")).not.toBeNull();
+    expect(hostsSeen["rota"]).toHaveLength(1);
+  });
+
+  it("opens the view an address names on load, with its params", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(hostsSeen["staffing"]![0]!.params).toEqual({ week: "2026-11-30" });
+    expect(checked(el)).toBe("staffing");
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+  });
+
+  it("hands a person who may read but not write the view canWrite false and a read-only render", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar([{ view: staffing, canWrite: false }]);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(hostsSeen["staffing"]![0]!.canWrite).toBe(false);
+    expect(renders.at(-1)!.readOnly).toBe(true);
+  });
+
+  it("gives a writer canWrite true and an editable render", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar([{ view: staffing, canWrite: true }]);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(hostsSeen["staffing"]![0]!.canWrite).toBe(true);
+    expect(renders.at(-1)!.readOnly).toBe(false);
+    (el as Screen & { calendar?: unknown }).calendar = {
+      ctx: { request: async () => ({}) },
+      views: [],
+    };
+    expect(hostsSeen["staffing"]![0]!.canWrite).toBe(false);
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=calendar-switch]")).toBeNull();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+  });
+
+  it("returns to Opening hours' month when the view it shows leaves a changed list", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/month/2027-03");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const push = vi.spyOn(history, "pushState");
+    (el as Screen & { calendar?: unknown }).calendar = {
+      ctx: { request: async () => ({}) },
+      views: [{ view: rota, canWrite: true }],
+    };
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2027-03");
+    expect(push).not.toHaveBeenCalled();
+    push.mockRestore();
+    expect(switchLabels(el)).toEqual(["Opening hours", "Rota"]);
+    expect(checked(el)).toBe("hours");
+  });
+
+  it("keeps showing a view that stays in a changed list", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    (el as Screen & { calendar?: unknown }).calendar = {
+      ctx: { request: async () => ({}) },
+      views: [{ view: staffing, canWrite: false }],
+    };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+    expect(renders.at(-1)!.readOnly).toBe(true);
+  });
+
+  it("leaves a view param named view out of the address it opens", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const host = hostsSeen["staffing"]![0]!;
+    host.open("staffing", { view: "rota", week: "2026-11-30" });
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/week/2026-11-30");
+    expect(host.params).toEqual({ week: "2026-11-30" });
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
+  });
+
+  // The words the screen routes itself, in `followUrl` and `openCalendarView`, and the old `week`
+  // address that opens the season painter: the app refuses a module view by these names only while
+  // the kit's list holds every one.
+  it.each(["year", "month", "season", "special-day", "date", "calendar", "hours", "week"])(
+    "keeps its own view word %s in the kit's list of words no module view may take",
+    (word) => {
+      expect(CALENDAR_OWN_VIEW_IDS).toContain(word);
+    },
+  );
+
+  it("never shows a view the person may not read, not even from its address", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar([{ view: rota, canWrite: true }]);
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
+    expect(switchLabels(el)).toEqual(["Opening hours", "Rota"]);
+    expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).toBeNull();
+    expect(hostsSeen["staffing"]).toBeUndefined();
+  });
+
+  it("ignores host.open naming a view it was not given", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar([{ view: staffing, canWrite: true }]);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    hostsSeen["staffing"]![0]!.open("rota", {});
+    await el.updateComplete;
+    expect(location.pathname).toBe("/manage/opening-hours/view/staffing");
+  });
+
+  it("carries a view's month to the next view the switch chooses", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/month/2027-03");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    await choose(el, "rota");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/rota/month/2027-03");
+    expect(hostsSeen["rota"]![0]!.month).toBe("2027-03");
+    await choose(el, "staffing");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/month/2027-03");
+  });
+
+  it("returns from a view with no month to Opening hours' year", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing/week/2026-11-30");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    await choose(el, "hours");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-year")).not.toBeNull();
+  });
+
+  it("leaves out a pair whose value is not a valid escape, and keeps the rest", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/opening-hours/view/staffing/area/%E0%A4%A/week/2026-11-30",
+    );
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(hostsSeen["staffing"]![0]!.params).toEqual({ week: "2026-11-30" });
+  });
+
+  it("round-trips a value the path has to escape", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    const host = hostsSeen["staffing"]![0]!;
+    host.open("staffing", { area: "station:a/b", week: "" });
+    await expect.poll(() => host.params).toEqual({ area: "station:a/b", week: "" });
+  });
+
+  it("takes the browser's month when the venue's clock cannot be read", async () => {
+    vi.setSystemTime(new Date("2027-05-15T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const unreadable = model();
+    unreadable.clockReadable = false;
+    const el = document.createElement("dashboard-opening-hours-screen") as Screen & {
+      calendar?: unknown;
+    };
+    const request = (async () => structuredClone(unreadable)) as DashboardRequest;
+    el.api = new OpeningHoursApi(request);
+    el.calendar = { ctx: { request }, views: [{ view: staffing, canWrite: true }] };
+    hosts.push(el);
+    document.body.append(el);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    expect(hostsSeen["staffing"]![0]!.month).toBe("2027-05");
+  });
+
+  it("does nothing on host.open once the screen has gone", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/staffing");
+    const el = await mountCalendar();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=stub-staffing]"))
+      .not.toBeNull();
+    el.remove();
+    hostsSeen["staffing"]![0]!.open("rota", {});
+    expect(location.pathname).toBe("/manage/opening-hours/view/staffing");
+  });
+
+  it("titles the Spanish page Calendario", async () => {
+    setLocale("es");
+    const el = await mountCalendar();
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Calendario");
+    expect(switchLabels(el)).toEqual(["Horario de apertura", "Personal", "Turnos"]);
+  });
 });

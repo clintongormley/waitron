@@ -1,6 +1,6 @@
 # Public holidays
 
-You plan holidays in Opening hours → Year (`/manage/opening-hours/view/year`). Public
+You plan holidays in the Calendar's Year tab (`/manage/opening-hours/view/year`). Public
 holidays come only from the country's shipped calendar: its national and regional dates. The venue
 is not a holiday source. To change the venue's hours on a day, your town's holiday included, make
 that day a special day (see "Special days" in [conventions-data.md](conventions-data.md)). A
@@ -86,7 +86,7 @@ name" in `packages/venue-service/src/holidays.test.ts`.
 Spain's 2 comes from BOE-A-2025-21667: "hasta dos días de cada año natural con carácter de fiestas
 locales". The source is archived in `packages/country-es/src/data/sources/BOE-A-2025-21667.xml`.
 It is guidance about the public calendar, not a limit on special days: no screen has shown it since
-A506-6 removed the Calendar (2026-10-13), and `saveSpecialDay` never reads it. A special day is your assertion; nothing checks
+A506-6 removed the old Calendar view (2026-10-13), and `saveSpecialDay` never reads it. A special day is your assertion; nothing checks
 it against a municipal list.
 
 ## What a configuration transfer carries

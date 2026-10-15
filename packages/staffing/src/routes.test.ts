@@ -28,7 +28,7 @@ import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
 import { shiftAssignments, staffRoles } from "./schema/staffing.js";
-import type { StaffRole } from "./staffing-types.js";
+import type { StaffingMonth, StaffRole } from "./staffing-types.js";
 import type { AreaRef, StaffingBlock } from "./slots.js";
 
 registerModulePermissions(STAFFING_PERMISSIONS);
@@ -800,5 +800,49 @@ describe("the staffing paint routes", () => {
       }),
     );
     await answers(await p.call("PUT", season, "", { edits: [] }), 401);
+  });
+});
+
+describe("the staffing month route", () => {
+  it("reads a month's slot counts to a viewer", async () => {
+    const p = await painted();
+    await answers(
+      await p.call("PUT", `${STAFFING}/seasons/${p.seasonId}`, p.manager, {
+        edits: [{ area: p.grill, weekday: 5, blocks: [p.block({ headcount: 4 })] }],
+      }),
+      204,
+    );
+    const response = await p.call("GET", `${STAFFING}/month?month=2026-08`, p.supervisor);
+    expect(response.status).toBe(200);
+    const month = (await response.json()) as StaffingMonth;
+    expect(month.month).toBe("2026-08");
+    expect(month.days.find((d) => d.date === "2026-08-21")!.areas).toEqual([
+      { area: p.grill, needed: 4, unfilled: null },
+    ]);
+    expect(month.days.find((d) => d.date === "2026-08-22")!.areas).toEqual([]);
+  });
+
+  it.each(["2026-13", "2026-1", "2026-08-01", "", undefined])(
+    "refuses the month %j as management.request_invalid",
+    async (month) => {
+      const p = await painted();
+      const query = month === undefined ? "" : `?month=${month}`;
+      await answers(
+        await p.call("GET", `${STAFFING}/month${query}`, p.manager),
+        400,
+        refusal("management.request_invalid", { field: "month" }),
+      );
+    },
+  );
+
+  it("refuses staff and anonymous callers", async () => {
+    const p = await painted();
+    const path = `${STAFFING}/month?month=2026-08`;
+    const staff = await p.call("GET", path, p.staff);
+    expect(staff.status).toBe(403);
+    expect(((await staff.json()) as { error: { code: string } }).error.code).toBe(
+      "authorization.not_permitted",
+    );
+    await answers(await p.call("GET", path, ""), 401);
   });
 });

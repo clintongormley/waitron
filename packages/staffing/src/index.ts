@@ -15,10 +15,11 @@ export {
   resolveStaffing,
   saveSeasonStaffing,
   saveSpecialDayStaffing,
+  type ResolveStaffingGiven,
   type SeasonStaffingEdit,
   type SpecialDayStaffingEdit,
-  type StaffingArea,
 } from "./paint.js";
+export { readStaffingMonth } from "./month.js";
 export {
   createStaffRole,
   deleteStaffRole,

@@ -1,8 +1,17 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  t as tKit,
+  type CalendarViewEntry,
+  type CalendarViewHost,
+  type DashboardModuleContext,
+  type DashboardScreenHandle,
+} from "@waitron/dashboard-kit";
+import {
   baseStyles,
+  decodePathSegment,
   leaveCoordinatorFor,
   UrlStateController,
   navigationGuardFor,
@@ -18,7 +27,14 @@ import "./opening-hours-month.js";
 import "./ordinary-date-dialog.js";
 import type { OrdinaryDateOpen } from "./opening-hours-month.js";
 import { seasonTints } from "./season-tint.js";
-import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import {
+  calendarViewPath,
+  hoursPath,
+  openingHoursPath,
+  seasonPainterPath,
+  specialDayPainterPath,
+} from "./opening-hours-paths.js";
+import { segmentedStyles } from "./segmented-styles.js";
 import "./special-day-painter.js";
 import type { SpecialDayAction } from "./special-day-action.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
@@ -43,11 +59,19 @@ type PainterAddress = { seasonId: string; departmentId: string; zoneId: string }
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
 type SpecialAddress = { specialDayId: string | null; date: LocalDate | null };
 const painterEntryKey = "openingHoursPainter";
+/** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
+export type CalendarViews = {
+  ctx: DashboardModuleContext;
+  views: readonly CalendarViewEntry[];
+};
+/** The module view an address names: its id and the `<key>/<value>` pairs after it. */
+type ModuleAddress = { id: string; params: Readonly<Record<string, string>> };
 
 @customElement("dashboard-opening-hours-screen")
 export class OpeningHoursScreen extends LitElement {
   static override styles = [
     baseStyles,
+    segmentedStyles,
     css`
       :host {
         display: block;
@@ -69,6 +93,16 @@ export class OpeningHoursScreen extends LitElement {
         min-height: var(--wt-tap-min);
         text-transform: capitalize;
       }
+      .title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-4);
+        margin-block-end: var(--wt-space-4);
+      }
+      .title h1 {
+        margin: 0;
+      }
       .month-back:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
@@ -77,6 +111,11 @@ export class OpeningHoursScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ type: Boolean }) readOnly = false;
+  @property({ attribute: false }) calendar?: CalendarViews;
+  /** Set while the address names one of `calendar`'s views. */
+  @state() private moduleView?: ModuleAddress;
+  /** Each view's handle, created the first time it is shown and kept for this screen's life. */
+  private readonly viewHandles = new Map<string, DashboardScreenHandle>();
   @state() private model?: OpeningHoursModel;
   @state() private departmentId = "";
   @state() private view: View = "year";
@@ -136,6 +175,13 @@ export class OpeningHoursScreen extends LitElement {
   private followUrl() {
     if (this.url.read("dashboard") !== "opening-hours") return;
     const view = this.url.read("view");
+    if (this.calendarView(view)) {
+      this.painter = undefined;
+      this.special = undefined;
+      this.moduleView = { id: view!, params: this.moduleParams() };
+      return;
+    }
+    this.moduleView = undefined;
     const named = {
       seasonId: this.url.read("season") ?? "",
       departmentId: this.url.read("department") ?? "",
@@ -192,6 +238,117 @@ export class OpeningHoursScreen extends LitElement {
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
   }
+  private calendarView(id: string | null) {
+    return this.calendar?.views.find(({ view }) => view.id === id);
+  }
+  /** Every `<key>/<value>` pair of the address but `view`, read from the path itself because the
+   *  URL controller reads only the keys it is configured with. */
+  private moduleParams() {
+    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
+    const parts = path.slice(openingHoursPath.length + 1).split("/");
+    const params: Record<string, string> = {};
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      if (parts[i] === "view") continue;
+      try {
+        params[decodePathSegment(parts[i]!)] = decodePathSegment(parts[i + 1]!);
+      } catch {
+        // A malformed escape leaves that pair out, as the URL controller does with the address.
+      }
+    }
+    return params;
+  }
+  /** Read only by a view's host, which exists only once the model has loaded. */
+  private moduleMonth() {
+    return (
+      parseCalendarMonth(this.moduleView?.params["month"]) ??
+      (businessDateToday(this.model!) || browserToday()).slice(0, 7)
+    );
+  }
+  /** Moves the Calendar to a module view, or with `"hours"` back to Opening hours (its month when
+   *  `params.month` names one, else its year). A view it was not given is ignored. */
+  private openCalendarView(view: string, params: Record<string, string>) {
+    if (!this.isConnected) return;
+    if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
+    if (!this.calendarView(view)) return;
+    void this.writeAddress(this.calendarUrl(calendarViewPath(view, params)));
+  }
+  private calendarUrl(pathname: string) {
+    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+    url.searchParams.delete("station");
+    url.pathname = pathname;
+    return url;
+  }
+  private hoursUrl(params: Readonly<Record<string, string>>) {
+    return this.calendarUrl(hoursPath(parseCalendarMonth(params["month"])));
+  }
+  /** The switch carries the month the page shows, when it shows one. */
+  private chooseCalendarView(id: string) {
+    const month = this.moduleView
+      ? this.moduleView.params["month"]
+      : this.view === "month"
+        ? this.shownMonth()
+        : "";
+    this.openCalendarView(id, month ? { month } : {});
+  }
+  private static readonly ViewHost = class implements CalendarViewHost {
+    constructor(
+      private readonly screen: OpeningHoursScreen,
+      private readonly id: string,
+    ) {}
+    get month() {
+      return this.screen.moduleMonth();
+    }
+    get params() {
+      const shown = this.screen.moduleView;
+      return shown?.id === this.id ? shown.params : {};
+    }
+    get canWrite() {
+      return this.screen.calendarView(this.id)?.canWrite ?? false;
+    }
+    /** A field, so a view may hand `host.open` on alone. */
+    readonly open = (view: string, params: Record<string, string>) =>
+      this.screen.openCalendarView(view, params);
+  };
+  private viewHandle({ view }: CalendarViewEntry) {
+    let handle = this.viewHandles.get(view.id);
+    if (!handle) {
+      handle = view.create(this.calendar!.ctx, new OpeningHoursScreen.ViewHost(this, view.id));
+      this.viewHandles.set(view.id, handle);
+    }
+    return handle;
+  }
+  private calendarHeading() {
+    const views = this.calendar?.views ?? [];
+    const heading = html`<h1>${t("nav.calendar")}</h1>`;
+    if (views.length === 0) return heading;
+    const chosen = this.moduleView?.id ?? "hours";
+    const option = (value: string, label: string) =>
+      html`<label
+        ><input
+          type="radio"
+          name="calendarView"
+          value=${value}
+          .checked=${live(chosen === value)}
+          @change=${() => this.chooseCalendarView(value)}
+        /><span>${label}</span></label
+      >`;
+    return html`<div class="title">
+      ${heading}
+      <div
+        class="segmented"
+        role="radiogroup"
+        aria-label=${t("nav.calendar")}
+        data-test="calendar-switch"
+      >
+        ${option("hours", t("opening.title"))}
+        ${views.map(({ view }) => option(view.id, tKit(view.labelKey)))}
+      </div>
+    </div>`;
+  }
+  private moduleContent(address: ModuleAddress) {
+    const entry = this.calendarView(address.id)!;
+    return this.viewHandle(entry).render(!entry.canWrite);
+  }
   /** Whether an address with no view names a department, zone, season or an old `?station=`, which
    *  opens the season painter rather than the Year (ruling R3). */
   private namesWeek(url: URL) {
@@ -237,7 +394,13 @@ export class OpeningHoursScreen extends LitElement {
       departments[0]
     );
   }
-  protected override willUpdate() {
+  protected override willUpdate(changed: PropertyValues<this>) {
+    // A new list without the shown view returns to Opening hours, replacing the address naming it.
+    if (changed.has("calendar") && this.moduleView && !this.calendarView(this.moduleView.id)) {
+      const { params } = this.moduleView;
+      this.moduleView = undefined;
+      this.replaceAddress(this.hoursUrl(params));
+    }
     if (!this.model) return;
     this.watchYear();
     this.watchMonth();
@@ -519,10 +682,7 @@ export class OpeningHoursScreen extends LitElement {
     const pushed = this.atPushedPainter();
     this.pushedPainter = undefined;
     if (pushed) history.back();
-    else
-      this.replaceAddress(
-        new URL(this.baseHref ?? "/manage/opening-hours/view/year", location.href),
-      );
+    else this.replaceAddress(new URL(this.baseHref ?? hoursPath(), location.href));
   }
   /** The painter is given what the address names, not what that resolves to, so that when a
    *  refresh removes it the painter sees it go and tells (ruling R11). */
@@ -831,10 +991,12 @@ export class OpeningHoursScreen extends LitElement {
       ></opening-hours-month>`;
   }
   override render() {
-    return html`<h1>${t("opening.title")}</h1>
-      ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
-        !this.model
-          ? nothing
+    return html`${this.calendarHeading()}
+    ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
+      !this.model
+        ? nothing
+        : this.moduleView
+          ? this.moduleContent(this.moduleView)
           : html` <wt-tabs
               label=${t("opening.title")}
               .value=${this.view === "month" ? "year" : this.view}
@@ -889,10 +1051,9 @@ export class OpeningHoursScreen extends LitElement {
                 }
               </div>
             </wt-tabs>`
-      }
-      ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-      ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()}
-      ${this.specialPainter()}`;
+    }
+    ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
+    ${this.namedDialog()} ${this.ordinaryDialog()} ${this.seasonPainter()} ${this.specialPainter()}`;
   }
 }
 declare global {

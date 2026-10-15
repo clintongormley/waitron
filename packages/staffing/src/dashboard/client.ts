@@ -1,9 +1,10 @@
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
-import type { CalendarColour, StaffRole } from "../staffing-types.js";
+import type { AreaRef } from "../slots.js";
+import type { CalendarColour, StaffingArea, StaffingMonth, StaffRole } from "../staffing-types.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
-export type { CalendarColour, StaffRole };
+export type { AreaRef, CalendarColour, StaffingArea, StaffingMonth, StaffRole };
 
 export interface StaffRoleInput {
   name: string;
@@ -62,6 +63,29 @@ export class StaffingApi {
           this.request<DeleteImpact>(`${path(staffRoleId)}/delete-impact`, "GET", undefined, {
             passive: true,
           }),
+      },
+      apply,
+    );
+  }
+
+  /** Keeps `apply` fed with `month` (YYYY-MM); resolves after the first read. */
+  watchMonth(
+    queries: QueryController,
+    month: string,
+    apply: (read: StaffingMonth) => void | Promise<void>,
+  ): Promise<void> {
+    return queries.watch(
+      "staffing-month",
+      {
+        key: `staffing:month:${month}`,
+        dependencies: QUERY_DEPENDENCIES["staffing-month"].map((type) => ({ type })),
+        read: () =>
+          this.request<StaffingMonth>(
+            `/management-api/staffing/month?month=${encodeURIComponent(month)}`,
+            "GET",
+            undefined,
+            { passive: true },
+          ),
       },
       apply,
     );

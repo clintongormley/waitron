@@ -376,6 +376,20 @@ stream, so a misspelled name affects other screens too. The guard catches unknow
 SQL dependencies or disabled-module combinations. Cost: the live-updates run-it review found this
 unguarded coupling.
 
+## Another module's view inside the Calendar is a `calendarViews` entry
+
+A module adds a view to the Calendar (the page at `/manage/opening-hours`) through
+`calendarViews` on its `DashboardContribution` (`packages/dashboard-kit/src/contract.ts`), never by
+venue-service importing it. The app hands the page only the views the person may read, each with
+`canWrite` worked out from its `requiresPermission`, and refuses a repeated id or one of the page's
+own view words (`CALENDAR_OWN_VIEW_IDS`). The view gets a `CalendarViewHost`: the shown `month`, the
+`<key>/<value>` pairs after `view/<id>` in the address, `canWrite`, and `open(view, params)`. Those
+pairs survive the app's own address rewrites because `apps/dashboard/src/navigation.ts` names
+`opening-hours` in `keepUnlisted`; a view never adds its address words to that file. A view whose
+read builds on venue-service's `readCalendarMonthPlan` spreads `CALENDAR_MONTH_PLAN_READS`
+(`packages/venue-service/src/dashboard/live-queries.ts`) into its live dependencies rather than
+copying the tables.
+
 ## The dashboard banner is persistent identity chrome
 
 Put it at the very top of the page at full width, with the menu and content underneath. Show the

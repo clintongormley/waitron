@@ -892,6 +892,45 @@ Branch `feat/a585-3-calendar-views`. Waits for A585-2 and the whole A506 chain.
   Write down any name in Tasks 3.1–3.3 that no longer matches, and correct this plan's text in the
   same branch before Task 3.1. Commit the plan fix on its own.
 
+**Corrections from Task 3.0 (re-checked on `main` 57dc431a1, 2026-10-15).** Where these differ from
+Tasks 3.1–3.3 below, these win.
+
+- `packages/dashboard-kit` has no `contract.test.ts`; the contract's new fields are tested through
+  `apps/dashboard/src/dashboard-app.test.ts` and the screens that use them.
+- The app knows the person's permissions and the screen does not (a screen gets `render(readOnly)`).
+  So the context carries each view with its write answer already worked out:
+  `DashboardModuleContext.calendarViews?: readonly { view: DashboardCalendarView; canWrite: boolean }[]`,
+  holding only views whose `requiresPermission` or `readPermission` the person holds, ordered by
+  `order`. `#activate` (`apps/dashboard/src/dashboard-app.ts`) collects them from every enabled
+  module BEFORE it creates any module's screens, because it builds and hands out `ctx` module by
+  module. The duplicate-id check names the screen's own view words: `year`, `month`, `season`,
+  `special-day`, `date`, `calendar`, `week` (an old address that opens the season painter), and
+  `hours` (a view's way back to Opening hours).
+- The Opening hours screen has ONE own tab today, "Year" (`opening.tab.year`), holding the year and
+  the month; the department picker is inside the month (`opening-hours-month.ts`), not on the page.
+  So Step 5 becomes: the `h1` reads the nav label (key renamed `nav.calendar` at review), which becomes "Calendar"/"Calendario"; the
+  switch's first item reads `opening.title` ("Opening hours"/"Horario de apertura", unchanged); the
+  "Year" tab keeps its label. With no module view the person may read, no switch is drawn and the
+  page is exactly today's.
+- The switch is a radio group drawn like the special-day painter's `.segmented` control
+  (`packages/venue-service/src/dashboard/special-day-painter.ts`), not `wt-tabs`.
+- `UrlStateController` (`packages/ui/src/url-state.ts`) reads only the keys it is configured with,
+  so the screen reads a module view's `<key>/<value>` pairs after `view/<id>` from the path itself.
+  `host.month` is the address's `month` value when it is a valid `YYYY-MM`, else the month holding
+  the venue's business date today, or the browser's today when the venue's clock cannot be read. Choosing a module view from Opening hours' month carries the
+  shown month into its address (`view/staffing/month/2026-12`); a view steps months with
+  `host.open(<its id>, { ...params, month })`.
+- `StaffingMonth` also carries what the season chips and the day clicks of A585-4 need, read through
+  venue-service's `readOpeningHoursMonth` (superseded below: `readCalendarMonthPlan` is what this part exports)
+  rather than worked out twice: `today`, `seasons` (as `OpeningHoursMonth.seasons`), and on each
+  day `seasonId`, `specialDay` (`{ id, name } | null`) and `closedAllDay`.
+- (2026-10-15, after Task 3.2's review.) The staffing month reads those through
+  `readCalendarMonthPlan`, the part of `readOpeningHoursMonth` that comes before any hours and that
+  the opening-hours month now calls itself; it hands that read's day plan and changeover, and its
+  own area list, to `resolveStaffing`, so no table is read twice. `StaffingMonth` also carries
+  `areas`, every active area by name in `listStaffingAreas` order, so the Staffing view asks for
+  the month alone.
+
 ### Task 3.1: The `calendarViews` seam
 
 **Files:**

@@ -62,6 +62,18 @@ const en = {
   "staffing.role.fix_fields": "Correct the highlighted fields to continue.",
   "staffing.role.cancel": "Cancel",
   "staffing.role.save": "Save",
+  "staffing.view.tab": "Staffing",
+  "staffing.month.previous": "Previous month",
+  "staffing.month.next": "Next month",
+  "staffing.month.seasons": "Seasons",
+  "staffing.month.season": "{name} · {from} – {to}",
+  "staffing.month.area": "Show",
+  "staffing.month.all_areas": "All areas",
+  "staffing.month.loading": "Loading staffing…",
+  "staffing.month.load_error": "Could not load the staffing: {reason}",
+  "staffing.month.today": "Today",
+  "staffing.month.closed": "Closed",
+  "staffing.month.legend": "Bars: people needed per area",
 };
 
 const es: Record<keyof typeof en, string> = {
@@ -117,6 +129,18 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.fix_fields": "Corrige los campos marcados para continuar.",
   "staffing.role.cancel": "Cancelar",
   "staffing.role.save": "Guardar",
+  "staffing.view.tab": "Personal",
+  "staffing.month.previous": "Mes anterior",
+  "staffing.month.next": "Mes siguiente",
+  "staffing.month.seasons": "Temporadas",
+  "staffing.month.season": "{name} · {from} – {to}",
+  "staffing.month.area": "Mostrar",
+  "staffing.month.all_areas": "Todas las áreas",
+  "staffing.month.loading": "Cargando personal…",
+  "staffing.month.load_error": "No se pudo cargar el personal: {reason}",
+  "staffing.month.today": "Hoy",
+  "staffing.month.closed": "Cerrado",
+  "staffing.month.legend": "Barras: personas necesarias por área",
 };
 
 export const STAFFING_STRINGS = { en, es };

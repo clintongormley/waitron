@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { floorZones, newId, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
 import type { PaintRange, ZonePaint } from "./day-paint.js";
@@ -51,11 +51,12 @@ export async function holidayDatesFor(
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
   [fromYear, toYear]: readonly [number, number] = holidayHorizon(rules),
+  place?: LocationPlace,
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
   if (named.length === 0) return NO_HOLIDAY_DATES;
   const first = Math.min(...named.map((rule) => yearOf(rule.date))) + 1;
-  return readHolidayDates(tx, cfg, Math.max(fromYear, first), toYear);
+  return readHolidayDates(tx, cfg, Math.max(fromYear, first), toYear, place);
 }
 
 const yearsInOrder = new WeakMap<HolidayDates, readonly number[]>();
@@ -187,6 +188,7 @@ export async function specialDaysOn(
   tx: Transaction,
   cfg: VenueScope,
   days: readonly LocalDate[],
+  place?: LocationPlace,
 ): Promise<Map<LocalDate, SpecialDayOccurrence | null>> {
   const found = new Map<LocalDate, SpecialDayOccurrence | null>(days.map((day) => [day, null]));
   if (days.length === 0) return found;
@@ -222,10 +224,13 @@ export async function specialDaysOn(
       ),
     )
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  const holidays = await holidayDatesFor(tx, cfg, dates, [
-    yearOf(ordered[0]!),
-    yearOf(ordered[ordered.length - 1]!),
-  ]);
+  const holidays = await holidayDatesFor(
+    tx,
+    cfg,
+    dates,
+    [yearOf(ordered[0]!), yearOf(ordered[ordered.length - 1]!)],
+    place,
+  );
   const matched = new Map<LocalDate, (typeof dates)[number]>();
   const standingByYear = new Map<number, Map<LocalDate, (typeof dates)[number]>>();
   for (const day of ordered) {

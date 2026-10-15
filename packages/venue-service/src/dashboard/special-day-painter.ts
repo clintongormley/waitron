@@ -29,6 +29,7 @@ import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import { PeriodEditing, periodsLink } from "./period-editing.js";
 import { periodColourStyles } from "./period-colour-styles.js";
+import { segmentedStyles } from "./segmented-styles.js";
 import { departmentOf, droppedNotice, ownerName, refusalReason } from "./painter-labels.js";
 import {
   browserToday,
@@ -227,6 +228,7 @@ export class SpecialDayPainter extends LitElement {
     baseStyles,
     periodColourStyles,
     paintRowStyles,
+    segmentedStyles,
     css`
       :host {
         display: contents;
@@ -315,42 +317,12 @@ export class SpecialDayPainter extends LitElement {
         cursor: pointer;
       }
       .chip button:focus-visible,
-      .segmented input:focus-visible + span,
       .tick input:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
       add-dates-calendar {
         margin-block-start: var(--wt-space-2);
-      }
-      .segmented {
-        display: inline-flex;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        overflow: hidden;
-      }
-      .segmented label {
-        position: relative;
-        display: inline-flex;
-      }
-      .segmented input {
-        position: absolute;
-        opacity: 0;
-        inset: 0;
-        margin: 0;
-        cursor: pointer;
-      }
-      .segmented span {
-        display: inline-flex;
-        align-items: center;
-        min-block-size: var(--wt-tap-min);
-        padding: 0 var(--wt-space-4);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-      .segmented input:checked + span {
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
       }
       .segmented input:disabled + span {
         color: var(--wt-color-text-muted);

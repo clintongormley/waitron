@@ -12,6 +12,8 @@ import {
 import type { Logger } from "@waitron/server-kit";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, normaliseUuid } from "@waitron/shared";
+import { parseCalendarMonth } from "@waitron/venue-service";
+import { readStaffingMonth } from "./month.js";
 import { parseArea, parseBlocks, record, uuid } from "./paint-rules.js";
 import {
   listStaffingAreas,
@@ -149,6 +151,18 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const areas = await gatedBy(VIEW_VENUE, sessionId, (tx) => listStaffingAreas(tx, ctx.cfg));
         return c.json({ areas });
+      }),
+    );
+
+    app.get(`${ROOT}/month`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const month = parseCalendarMonth(c.req.query("month"));
+        if (month === null) throw new AppError("management.request_invalid", { field: "month" });
+        const at = new Date();
+        return c.json(
+          await gatedBy(VIEW_VENUE, sessionId, (tx) => readStaffingMonth(tx, ctx.cfg, month, at)),
+        );
       }),
     );
 
