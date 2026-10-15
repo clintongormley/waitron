@@ -49,3 +49,19 @@ export interface BillRow {
   orderStatus: "open" | "placed" | "settled" | "abandoned";
   collectionStatus: "waiting_for_payment" | "left_without_paying" | null;
 }
+
+export interface TransactionRow {
+  transactionId: string;
+  saleId: string;
+  workingOrderId: string | null;
+  scopeOrderIds: string[];
+  issuedAt: string;
+  invoiceNumber: string;
+  type: TransactionType;
+  tableName: string | null;
+  customerName: string | null;
+  methods: { method: TenderMethod; last4: string | null }[];
+  staff: { id: string; name: string | null } | null;
+  amount: string;
+}
+export type TransactionsPage = FindBillPage<TransactionRow> & { dates: DateWindow };
