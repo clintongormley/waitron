@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { codeMessage } from "@waitron/dashboard-kit";
+import { afterEach, describe, expect, it } from "vitest";
+import { codeMessage, setLocale } from "@waitron/dashboard-kit";
+import { droppedNotice } from "./painter-parts.js";
 import { colourName, holderCount, peopleNeeded, STAFFING_STRINGS, tf } from "./strings.js";
+
+afterEach(() => setLocale("en"));
 
 describe("staffing strings", () => {
   it("names the page in both languages", () => {
@@ -27,6 +30,20 @@ describe("staffing strings", () => {
     expect(peopleNeeded(3, "en")).toBe("3 people");
     expect(peopleNeeded(1, "es")).toBe("1 persona");
     expect(peopleNeeded(3, "es")).toBe("3 personas");
+  });
+
+  it("says one or several areas and dates were removed", () => {
+    setLocale("en");
+    expect(droppedNotice(["Bar"], ["Fri 25 Dec"])).toBe(
+      "Bar was removed; its changes were dropped. Fri 25 Dec was removed from this special day; its changes were dropped.",
+    );
+    expect(droppedNotice(["Bar", "Kitchen"], ["Thu 24 Dec", "Fri 25 Dec"])).toBe(
+      "Bar and Kitchen were removed; their changes were dropped. Thu 24 Dec and Fri 25 Dec were removed from this special day; their changes were dropped.",
+    );
+    setLocale("es");
+    expect(droppedNotice(["Barra", "Cocina"], ["jue 24 dic", "vie 25 dic"])).toBe(
+      "Barra y Cocina se eliminaron; sus cambios se descartaron. jue 24 dic y vie 25 dic se quitaron de este día especial; sus cambios se descartaron.",
+    );
   });
 
   it("names each calendar colour", () => {
