@@ -140,7 +140,7 @@ export async function recordSuggestionJobEnded(
       finishedAt: now.toISOString(),
       released: nothingToRelease ? true : sql<boolean>`${jobs.cloudJobId} is null`,
     })
-    .where(eq(jobs.id, jobId));
+    .where(and(eq(jobs.id, jobId), inArray(jobs.state, ["submitting", "running"])));
 }
 
 export async function recordSuggestionJobReleased(tx: Transaction, jobId: string): Promise<void> {

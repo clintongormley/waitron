@@ -14,6 +14,7 @@ import {
   sentInRun,
   startSuggestionRun,
 } from "./content-suggestion-jobs.js";
+import { storeSuggestionResults } from "./content-suggestion-store.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import {
   allJobs,
@@ -237,6 +238,27 @@ it("a job that ended before Cloud held it is released at once", async () => {
   await app((tx) => recordSuggestionJobEnded(tx, job.id, "failed", "provider", at));
   expect((await app(allJobs))[0]).toMatchObject({ state: "failed", released: true, body: null });
   expect(await app(readActiveSuggestionJob)).toBeUndefined();
+});
+
+it.each([
+  ["failed", "provider"],
+  ["expired", null],
+] as const)("leaves a job that is already done alone when told it %s", async (state, failure) => {
+  await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    storeSuggestionResults(
+      tx,
+      job.id,
+      { state: "done", results: [], failed: Object.keys(job.sent) },
+      context,
+      at,
+    ),
+  );
+  const before = (await app(allJobs))[0]!;
+  expect(before).toMatchObject({ state: "done", released: false });
+  await app((tx) => recordSuggestionJobEnded(tx, job.id, state, failure, later));
+  expect((await app(allJobs))[0]).toEqual(before);
 });
 
 it("an expired job is released and its run shows content.suggestion_expired", async () => {
