@@ -1,4 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
+import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -153,6 +154,7 @@ import type {
 import { formatInvoiceNumber, recordSale, refuseOverSimplifiedLimit } from "@waitron/core";
 import type {
   FloorAnnotator,
+  KitchenNoteSnapshot,
   MakerResolver,
   ServiceMode,
   ZoneMenuOffer,
@@ -1155,6 +1157,7 @@ export function toVatBreakdown(
  */
 export interface ParkOrderRequest {
   id: string;
+  kitchenNote?: string | null;
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -1189,6 +1192,7 @@ export async function createOpenOrder(
   label: string | null,
   // `creditedTo` is the operator creating the order, whose sale its lines count as.
   placement: {
+    kitchenNote?: string | null;
     deliveryTableId?: string | null;
     zoneId?: string;
     partyId?: string | null;
@@ -1301,6 +1305,10 @@ export async function createOpenOrder(
     receiptLocale: placement.receiptLocale ?? null,
   });
 
+  if (placement.kitchenNote !== undefined) {
+    await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
+  }
+
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.
   if (lineRows.length > 0) {
     await tx.insert(workingOrderLines).values(lineRows);
@@ -1329,6 +1337,7 @@ export async function parkOrder(
   try {
     return await withTransaction(deps.db, async (tx) => {
       const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
+        kitchenNote: req.kitchenNote,
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
       });
@@ -4312,6 +4321,7 @@ export interface HeldOrderSummary {
 /** A retrieved order with the stored commercial snapshot needed to rebuild its basket. */
 export interface HeldOrder {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
   /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
@@ -4586,11 +4596,13 @@ async function readBasketOrder(
         };
       });
 
+    const kitchenNote = (await readOrderKitchenNotes(tx, [order.id])).get(order.id)!;
     return {
       id: order.id,
       orderNumber: order.orderNumber,
       label: order.label,
       revision: order.revision,
+      kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       lines,
     };
@@ -7491,6 +7503,7 @@ export async function readPassBoard(
 /** The seated party a table belongs to, as the floor shows it. */
 export interface TableParty {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   revision: number;
   guestCount: number | null;
   state: "open" | "closed";
@@ -7920,6 +7933,10 @@ async function readSeatedParties(
   const bills = await readBillsOfParties(tx, partyIds);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds);
   const reminders = await readReleaseReminders(tx, partyIds);
+  const notes = await VENUE_SERVICE.readKitchenNotes(
+    tx,
+    partyIds.map((partyId) => ({ partyId })),
+  );
   const partyOf = new Map<string, TableParty>();
   const facts = new Map<string, SeatedPartyFacts>();
   for (const member of members) {
@@ -7932,6 +7949,11 @@ async function readSeatedParties(
     facts.set(member.partyId, { bills: own, billRequestedAt: member.billRequestedAt });
     partyOf.set(member.partyId, {
       id: member.partyId,
+      kitchenNote: {
+        ...notes.get(VENUE_SERVICE.kitchenNoteKey({ partyId: member.partyId }))!,
+        scope: { partyId: member.partyId },
+        ownerRevision: member.revision,
+      },
       revision: member.revision,
       guestCount: member.guestCount,
       state: member.state,

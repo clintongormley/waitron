@@ -1858,6 +1858,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } & LineExtras)[];
         zoneId?: string;
         label?: string;
+        kitchenNote?: string | null;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -1879,6 +1880,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           lines: body.lines,
           zoneId,
           label: body.label,
+          kitchenNote: body.kitchenNote,
           operatorId: personId,
         },
         deps.attendance === undefined

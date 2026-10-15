@@ -1158,6 +1158,14 @@ export interface HeldExtra {
   listId: string | null;
 }
 
+export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
+export interface KitchenNoteSnapshot {
+  scope: KitchenNoteScope;
+  note: string | null;
+  revision: number;
+  ownerRevision: number;
+}
+
 /**
  * `GET /api/working-orders/:id` — a retrieved parked order: its stored inputs and commercial snapshots,
  * enough to rebuild its basket even when a line's live offer is no longer available. `quantity` is a
@@ -1165,6 +1173,7 @@ export interface HeldExtra {
  */
 export interface HeldOrder {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
   /** What a save of this copy sends back, so a save from a copy since changed is refused. */

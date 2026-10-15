@@ -1846,8 +1846,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Plan:
   [whole-order kitchen notes](superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
-  The editor, storage and guarded note API are on the feature branch. Till integration, movement
-  between orders and parties, and kitchen output/corrections remain open. Add a whole-order note
+  The editor, storage, guarded note API, order/party read projections and initial counter-request
+  persistence are on the feature branch. Till integration, movement between orders and parties,
+  and kitchen output/corrections remain open. Add a whole-order note
   ("all together, they have a train at 14:30") alongside the existing line notes: a row at the top of the order
   on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at
   the top of every kitchen ticket the order sends and shown on the kitchen screens. A change after
