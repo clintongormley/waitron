@@ -1252,20 +1252,6 @@ describe("Year view", () => {
     await expect.poll(() => view()?.model?.year).toBe(2026);
     expect(alert()).toBeUndefined();
   });
-
-  it("+ Special day opens an empty special-day painter", async () => {
-    const { el, view, writes } = await yearMount("/manage/opening-hours/view/year");
-    await expect.poll(() => view()?.model?.year).toBe(2026);
-    view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=add-special-day]")!.click();
-    const form = await specialPainter(el);
-    expect(form.specialDayId).toBeNull();
-    expect(form.date).toBeNull();
-    expect(
-      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
-        .value,
-    ).toBe("");
-    expect(writes).toEqual([]);
-  });
 });
 
 describe("Month view", () => {

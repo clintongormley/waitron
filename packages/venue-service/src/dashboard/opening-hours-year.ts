@@ -4,7 +4,6 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
-import type { HolidayCoverage } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
@@ -26,15 +25,6 @@ import { t } from "./strings.js";
 
 type Key = Parameters<typeof t>[0];
 
-/** Whether a year's official list leaves local holidays out; no `local` state says it carries them. */
-function listLacksLocalHolidays(local: HolidayCoverage["local"]): boolean {
-  switch (local) {
-    case "address_unresolved":
-    case "unsupported_country":
-    case "none_entered":
-      return true;
-  }
-}
 export type HolidayAreaWrites = Pick<SpecialDaysApi, "saveHolidayArea" | "rereadWatches">;
 
 /** The year as it begins a date: four digits, so year 100 is `0100`. */
@@ -67,41 +57,8 @@ export class OpeningHoursYearView extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
-      .head .add {
-        margin-inline-start: auto;
-      }
       season-chips {
         margin-block-end: var(--wt-space-2);
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1) var(--wt-space-3);
-        margin: 0 0 var(--wt-space-2);
-        padding: 0;
-        list-style: none;
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      .legend li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-      .swatch {
-        display: inline-block;
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        border-radius: var(--wt-radius-full);
-      }
-      .swatch[data-mark="public_holiday"] {
-        background: var(--wt-color-palette-red);
-      }
-      .swatch[data-mark="special_day"] {
-        background: var(--wt-color-palette-purple);
-      }
-      .swatch[data-mark="closed"] {
-        background: var(--wt-color-day-closed);
       }
       .note {
         margin: 0 0 var(--wt-space-2);
@@ -135,13 +92,16 @@ export class OpeningHoursYearView extends LitElement {
         padding: 0;
         border: 0;
         background: transparent;
-        color: var(--wt-color-text);
+        color: var(--wt-color-primary-text);
         font: inherit;
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
       }
       .month-name::first-letter {
         text-transform: uppercase;
+      }
+      .month-name::after {
+        content: " ›" / "";
       }
       .month-name:focus-visible,
       .day:focus-visible {
@@ -319,7 +279,7 @@ export class OpeningHoursYearView extends LitElement {
       specialDay: day?.specialDay ? { ...day.specialDay } : null,
       holidays: structuredClone(day?.holidays ?? []),
       visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
-      returnTo: () => (trigger.isConnected ? trigger : date === "" ? null : this.#dayButton(date)),
+      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
     });
   }
 
@@ -506,18 +466,13 @@ export class OpeningHoursYearView extends LitElement {
   #notes(model: OpeningHoursYear) {
     const year = String(model.year);
     const coverage = model.holidayCoverage.find((item) => item.year === model.year);
-    const national = !model.publicHolidaysAvailable
-      ? null
-      : coverage?.nationalRegional === "area_required"
+    if (!model.publicHolidaysAvailable || coverage?.nationalRegional === "complete") return nothing;
+    const national =
+      coverage?.nationalRegional === "area_required"
         ? format("calendar.area_required", { year })
         : nationalCoverage(model.year, coverage);
     return html`<ul class="note notes">
-      ${national ? html`<li data-test="coverage">${national}</li>` : nothing}
-      ${
-        coverage && listLacksLocalHolidays(coverage.local)
-          ? html`<li data-test="town-holidays">${t("year.town_holidays")}</li>`
-          : nothing
-      }
+      <li data-test="coverage">${national}</li>
     </ul>`;
   }
 
@@ -567,18 +522,6 @@ export class OpeningHoursYearView extends LitElement {
         <h2 data-test="year" aria-live="polite">${model.year}</h2>
         ${step(1, "next-year", "hours.calendar.next_year", "›")}
         <slot name="switch"></slot>
-        ${
-          this.readOnly
-            ? nothing
-            : html`<wt-button
-                class="add"
-                variant="secondary"
-                data-test="add-special-day"
-                @click=${(event: Event) =>
-                  this.#action("open", "", undefined, event.currentTarget as HTMLElement)}
-                >${t("year.add_special")}</wt-button
-              >`
-        }
       </div>
       <season-chips
         .seasons=${model.seasons}
@@ -587,18 +530,6 @@ export class OpeningHoursYearView extends LitElement {
         .specialDays=${this.specialDays}
         .readOnly=${this.readOnly}
       ></season-chips>
-      <ul class="legend">
-        ${(
-          [
-            ["public_holiday", "calendar.public"],
-            ["special_day", "calendar.special_day"],
-            ["closed", "hours.closed"],
-          ] as const
-        ).map(
-          ([mark, label]) =>
-            html`<li><span class="swatch" data-mark=${mark}></span>${t(label)}</li>`,
-        )}
-      </ul>
       ${
         model.publicHolidaysAvailable
           ? nothing

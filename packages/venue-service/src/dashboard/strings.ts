@@ -52,7 +52,6 @@ const en = {
     "These profiles would have no allowed zones: {names}.",
   "venue.delete_refusal_department_profile_in_use":
     "Move these profiles to another department first: {names}.",
-  "calendar.public": "Public holiday",
   "calendar.special_day": "Special day",
   "calendar.area_required":
     "{year}: only official holidays for the whole province are shown until you choose the holiday area here.",
@@ -123,7 +122,6 @@ const en = {
   "ordinary.add_to_existing": "Or add it to an existing special day:",
   "ordinary.close": "Close",
   "year.holidays_unavailable": "Public holidays for {year} are not available yet",
-  "year.town_holidays": "Town holidays are not in the official lists — add them as special days.",
   "month.previous": "Previous month",
   "month.next": "Next month",
   "month.year_back": "Back to {year}",
@@ -652,8 +650,6 @@ const en = {
   "hours.calendar.scope.regional": "Regional holiday",
   "hours.calendar.scope.local": "Local holiday",
   "hours.calendar.source": "Source:",
-  "hours.calendar.coverage.complete":
-    "{year}: official national and regional holidays are included.",
   "hours.calendar.coverage.missing_year":
     "{year}: official holidays are not available yet, so none are shown.",
   "hours.calendar.coverage.unknown_region":
@@ -906,7 +902,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.delete_counter_empty":
     "Se borra la zona predeterminada de Mostrador; ninguna zona restante la sustituye.",
   "venue.delete_default_empty": "Se borra el departamento predeterminado.",
-  "calendar.public": "Festivo oficial",
   "calendar.special_day": "Día especial",
   "calendar.area_required":
     "{year}: solo se muestran los festivos oficiales de toda la provincia hasta que elijas aquí la zona de festivos.",
@@ -977,8 +972,6 @@ const es: Record<keyof typeof en, string> = {
   "ordinary.add_to_existing": "O añádela a un día especial existente:",
   "ordinary.close": "Cerrar",
   "year.holidays_unavailable": "Los festivos oficiales de {year} aún no están disponibles",
-  "year.town_holidays":
-    "Las fiestas locales no están en las listas oficiales: añádelas como días especiales.",
   "month.previous": "Mes anterior",
   "month.next": "Mes siguiente",
   "month.year_back": "Volver a {year}",
@@ -1520,8 +1513,6 @@ const es: Record<keyof typeof en, string> = {
   "hours.calendar.scope.regional": "Festivo autonómico",
   "hours.calendar.scope.local": "Festivo local",
   "hours.calendar.source": "Fuente:",
-  "hours.calendar.coverage.complete":
-    "{year}: se incluyen los festivos oficiales nacionales y autonómicos.",
   "hours.calendar.coverage.missing_year":
     "{year}: los festivos oficiales aún no están disponibles, así que no se muestra ninguno.",
   "hours.calendar.coverage.unknown_region":
