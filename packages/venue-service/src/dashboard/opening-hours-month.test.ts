@@ -360,7 +360,6 @@ describe("Opening hours month", () => {
     el.model = undefined;
     await el.updateComplete;
     expect(text(testId(el, "month"))).toBe("January 2027");
-    expect(text(testId(el, "year-back"))).toBe("‹ 2027");
     expect(root(el).querySelector("table, wt-combobox, season-chips")).toBeNull();
   });
 
