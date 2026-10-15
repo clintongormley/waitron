@@ -770,6 +770,35 @@ describe("departmentless transfer monitoring", () => {
       }
     });
 
+  it("closes an open departmentless stream when profile admission is removed", async () => {
+    const till = await departmentlessTill();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await app.request("/api/department-transfers/events", {
+        headers: { cookie: till.cookie },
+      });
+      expect(response.status).toBe(200);
+      reader = response.body!.getReader();
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+        "event: ready\ndata: {}\n\n",
+      );
+      await withTransaction(suite.db, (tx) =>
+        setProfileAdmission(tx, till.profileId, {
+          personExceptions: [{ personId, admitted: false }],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+        'event: session-invalid\ndata: {"code":"device_profile.not_admitted"}\n\n',
+      );
+      expect((await reader.read()).done).toBe(true);
+    } finally {
+      await reader?.cancel();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps its authenticated stream through heartbeats and notices a newly assigned receiving department", async () => {
     const f = await ready();
     const id = await pending(f);
