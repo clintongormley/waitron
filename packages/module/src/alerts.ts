@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 
-export type AlertSeverity = "warning" | "error";
+/** A notice is news, not a fault: only an ongoing source raises one, never a recorded incident. */
+export type AlertSeverity = "warning" | "error" | "notice";
 
 /** One alert as the dashboard receives it. An event is a recorded incident and stays until someone
  * marks it handled; an ongoing alert exists only while the check that raised it still finds it. */

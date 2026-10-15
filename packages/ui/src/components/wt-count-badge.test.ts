@@ -41,6 +41,7 @@ test("renders nothing at zero", async () => {
 test.each([
   ["error", "--wt-color-danger", "--wt-color-on-danger"],
   ["warning", "--wt-color-warning", "--wt-color-on-warning"],
+  ["notice", "--wt-color-primary", "--wt-color-on-primary"],
   ["neutral", "--wt-color-surface-raised", "--wt-color-text"],
 ] as const)("a %s badge paints from its tokens", async (tone, background, text) => {
   const el = await mount(`<wt-count-badge count="2" tone="${tone}"></wt-count-badge>`);

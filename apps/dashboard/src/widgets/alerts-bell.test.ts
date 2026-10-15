@@ -45,6 +45,7 @@ const jobsWaiting: AlertView = {
   area: "printing",
   screen: "printers",
 };
+const notice: AlertView = { ...ongoing, key: "notice:local", severity: "notice" };
 
 const menu = (el: AlertsBell) => el.shadowRoot!.querySelector("wt-row-actions")!;
 const popup = (el: AlertsBell) => menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -62,6 +63,28 @@ describe("dashboard-alerts-bell", () => {
     expect((badge as unknown as { count: number }).count).toBe(2);
     expect(menu(el).getAttribute("label")).toBe("Alerts, 2 open");
     el.alerts = [event("1", "warning"), event("2", "error")];
+    await el.updateComplete;
+    expect(badge.getAttribute("tone")).toBe("error");
+  });
+
+  it("draws only notices in the notice tone, and lets a warning or an error outrank them", async () => {
+    setLocale("en-GB");
+    const { el, host } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+      alerts: [notice],
+    });
+    host.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    el.open();
+    const badge = q(el, "wt-count-badge")!;
+    expect(badge.getAttribute("tone")).toBe("notice");
+    const item = qa(el, "li")[0]!;
+    expect(getComputedStyle(item).borderInlineStartColor).toBe("rgb(1, 2, 3)");
+    expect(item.textContent!.replace(/\s+/g, " ")).toContain("Notice · Backups");
+    el.alerts = [notice, event("1", "warning")];
+    await el.updateComplete;
+    expect(badge.getAttribute("tone")).toBe("warning");
+    expect(getComputedStyle(qa(el, "li")[1]!).borderInlineStartColor).toBe("rgb(4, 5, 6)");
+    el.alerts = [notice, event("2", "error")];
     await el.updateComplete;
     expect(badge.getAttribute("tone")).toBe("error");
   });

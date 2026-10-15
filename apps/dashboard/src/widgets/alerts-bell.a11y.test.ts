@@ -29,6 +29,16 @@ const alerts: AlertView[] = [
     area: "backup",
     screen: "backup",
   },
+  {
+    key: "notice:local",
+    kind: "ongoing",
+    code: "backup.disabled",
+    params: {},
+    severity: "notice",
+    since: "2026-09-14T12:00:00.000Z",
+    area: "backup",
+    screen: "backup",
+  },
 ];
 
 describe.each(["light", "dark"] as const)("dashboard-alerts-bell a11y (%s theme)", (theme) => {

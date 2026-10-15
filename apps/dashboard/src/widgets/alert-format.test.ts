@@ -101,6 +101,15 @@ it("names a Spanish warning differently from the alert column it sits under", ()
   expect(severityLabel("warning")).not.toBe(t("alerts.col_alert"));
 });
 
+it("labels a notice in both languages, apart from the alert column it sits under", () => {
+  setLocale("en-GB");
+  expect(severityLabel("notice")).toBe("Notice");
+  setLocale("es-ES");
+  expect(severityLabel("notice")).toBe("Información");
+  expect(severityLabel("notice")).not.toBe(t("alerts.col_alert"));
+  expect(severityLabel("notice")).not.toBe(severityLabel("warning"));
+});
+
 it("names the destination screen by its navigation label", () => {
   setLocale("en-GB");
   expect(goToLabel("backup")).toBe("Go to Backups");
