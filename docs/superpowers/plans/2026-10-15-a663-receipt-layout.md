@@ -1559,7 +1559,7 @@ is green again only after 2.3c-2.
   `@waitron/catalogue` (the file already imports from there, `:26`), and change "from
   `baseFromGross` above" in the comment at `:135-136` to "from `baseFromGross`". Remove any import
   the deleted copy leaves unused (`HUNDRED` if nothing else reads it).
-- Create: `apps/server/src/invoice-figures.ts`
+- Create: `apps/server/src/invoice-figures.ts` (renamed `receipt-figures.ts` on 2026-10-15, after review)
 - Test: `apps/server/src/invoice-figures.test.ts`
 
 **Interfaces:**
@@ -2331,7 +2331,7 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
 - **Where it is read.** The full invoice's reader of filed lines
   (`receipt-adjustments.ts:46-80`, beside `listGross` at `:55` and `:68`), which paper and A4 share
   (A4 reaches it through `receiptLines`, `apps/server/src/invoice-document.ts:62-82`). Then
-  `beforeVatFigures` (`apps/server/src/invoice-figures.ts:24-47`) takes the stored price instead of
+  `beforeVatFigures` (`apps/server/src/receipt-figures.ts:24-47`) takes the stored price instead of
   dividing the list total back, and loses the early return for less than one priced unit (`:35`).
 - The owner's example: «0.123 kg Jamón ibérico 21,82 2,68 10%» and «Descuento 10% -0,26 10%»
   (24,00 ÷ 1,10 = 21,82; 2,95 ÷ 1,10 = 2,68; 2,68 − 2,42 = 0,26; Python `Decimal`, half up,
@@ -2341,7 +2341,7 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
 
 ## Scope — Q10: the whole-bill discount once per rate
 
-- `groupDiscounts` (`invoice-figures.ts:62-92`) and the table builder that calls it
+- `groupDiscounts` (`receipt-figures.ts:62-92`) and the table builder that calls it
   (`receipt-document.ts:285-307`) stop putting a whole-bill share under each dish. A dish's row
   carries its own discount only. After the last item, one row per VAT rate the whole-bill discount
   reached: «Descuento 10% -2,48 21%», «Descuento 10% -0,22 10%» (S5, the owner's example; the label

@@ -11,7 +11,7 @@ import {
   type ReceiptLogoRaster,
   type ReceiptPresentation,
 } from "@waitron/shared";
-import { beforeVatFigures, groupDiscounts, quantityText } from "./invoice-figures.js";
+import { beforeVatFigures, groupDiscounts, quantityText } from "./receipt-figures.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";

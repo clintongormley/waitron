@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beforeVatFigures, groupDiscounts, quantityText } from "./invoice-figures.js";
+import { beforeVatFigures, groupDiscounts, quantityText } from "./receipt-figures.js";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
 
 type Net = NonNullable<TillSaleLine["net"]>;
