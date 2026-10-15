@@ -1061,8 +1061,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; ready to
-  build, Cloud's side first (owner 2026-10-06 ~17:23).** A
+- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
+  tasks 1–4 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
