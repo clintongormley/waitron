@@ -307,15 +307,13 @@ it.each(["own", "manager"] as const)(
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
     const choice = (decision: string) =>
-      el
-        .shadowRoot!.querySelector("wt-unsaved-changes")!
-        .dispatchEvent(
-          new CustomEvent("wt-unsaved-choice", {
-            detail: { decision },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+      el.shadowRoot!.querySelector("wt-unsaved-changes")!.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     choice("keep");
     await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBeFalsy();
     expect(dialog.open).toBe(true);
