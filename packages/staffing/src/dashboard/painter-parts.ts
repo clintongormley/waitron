@@ -68,7 +68,7 @@ const listOf = (names: readonly string[]) => conjunctionList(names, formatLocale
 export function droppedNotice(areas: readonly string[], dates: readonly string[] = []): string {
   return [
     areas.length
-      ? tf(areas.length === 1 ? "staffing.painter.removed_one" : "staffing.painter.removed_many", {
+      ? tf(areas.length === 1 ? "staffing.painter.removed_one" : "staffing.painter.removed_other", {
           names: listOf(areas),
         })
       : "",
@@ -76,7 +76,7 @@ export function droppedNotice(areas: readonly string[], dates: readonly string[]
       ? tf(
           dates.length === 1
             ? "staffing.painter.dates_removed_one"
-            : "staffing.painter.dates_removed_many",
+            : "staffing.painter.dates_removed_other",
           { dates: listOf(dates) },
         )
       : "",
