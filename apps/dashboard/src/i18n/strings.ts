@@ -805,6 +805,7 @@ export const en = {
   "alerts.area.card_reader": "Card readers",
   "alerts.area.kitchen": "Kitchen",
   "alerts.area.invoice_delivery": "Invoice delivery",
+  "alerts.area.content": "Translations",
   "action.account_settings": "Account settings",
   "nav.group.reports": "Reporting",
   "venue_details.address_notice":
@@ -3908,6 +3909,7 @@ export const es: Record<StringKey, string> = {
   "alerts.area.card_reader": "Lectores de tarjetas",
   "alerts.area.kitchen": "Cocina",
   "alerts.area.invoice_delivery": "Entrega de facturas",
+  "alerts.area.content": "Traducciones",
   "action.account_settings": "Configuración de la cuenta",
   "nav.group.reports": "Informes",
   "nav.group.menu": "Productos y cartas",

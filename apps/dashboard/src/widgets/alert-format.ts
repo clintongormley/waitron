@@ -68,9 +68,17 @@ export function formatAlertTime(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+/** A screen's navigation label, under its own name or with its hyphens as underscores
+ * (`content-languages` is labelled `nav.content_languages`). */
+function navLabel(screen: string): string | null {
+  for (const key of [`nav.${screen}`, `nav.${screen.replaceAll("-", "_")}`]) {
+    const label = tKit(key);
+    if (label !== key) return label;
+  }
+  return null;
+}
+
 /** A screen with no navigation label is named by its screen name, like an unknown area. */
 export function goToLabel(screen: string): string {
-  const key = `nav.${screen}`;
-  const label = tKit(key);
-  return fill("alerts.go_to", { screen: label === key ? screen : label });
+  return fill("alerts.go_to", { screen: navLabel(screen) ?? screen });
 }

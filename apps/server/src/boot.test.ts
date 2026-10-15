@@ -63,6 +63,8 @@ import {
 import { orderedMigrationSets } from "@waitron/module";
 import {
   addMember,
+  contentSuggestionJobs,
+  contentSuggestions,
   createCatalogue,
   createCategory,
   createProduct,
@@ -2992,6 +2994,56 @@ describe("startServer — what a trading boot wires behind its management routes
     expect(response.status).toBe(200);
     const body = (await response.json()) as { alerts: { code: string }[] };
     expect(body.alerts.map((alert) => alert.code)).toContain("backup.disabled");
+  }, 60_000);
+
+  it("raises the Translate all notice for a finished run nobody has opened", async () => {
+    const jobId = randomUUID();
+    await liveFixture(port, async (tx) => {
+      await tx.insert(contentSuggestionJobs).values({
+        id: jobId,
+        runId: randomUUID(),
+        position: 1,
+        state: "done",
+        sent: { "product:boot-notice": ["en"] },
+        runTotal: 1,
+        total: 1,
+        done: 1,
+        released: true,
+        finishedAt: "2026-10-14T10:00:00.000Z",
+      });
+      await tx.insert(contentSuggestions).values({
+        jobId,
+        kind: "product",
+        itemId: "boot-notice",
+        language: "en",
+        text: "CLIENT-en Pan",
+        expected: "token",
+      });
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+        headers: { cookie },
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { alerts: { area: string }[] };
+      expect(body.alerts.filter((alert) => alert.area === "content")).toEqual([
+        {
+          key: "content.suggestions_ready",
+          kind: "ongoing",
+          area: "content",
+          code: "content.suggestions_ready",
+          params: { count: 1, failed: 0 },
+          severity: "notice",
+          since: "2026-10-14T10:00:00.000Z",
+          screen: "content-languages",
+        },
+      ]);
+    } finally {
+      await liveFixture(port, async (tx) => {
+        await tx.delete(contentSuggestions);
+        await tx.delete(contentSuggestionJobs);
+      });
+    }
   }, 60_000);
 
   it("gives the archive routes and the bucket-copy routes one queue: a bucket-copy read waits behind a held rotation", async () => {

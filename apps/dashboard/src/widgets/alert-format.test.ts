@@ -117,6 +117,21 @@ it("names the destination screen by its navigation label", () => {
   expect(goToLabel("backup")).toBe("Ir a Copias de seguridad");
 });
 
+it("names a destination whose screen name is hyphenated by its navigation label", () => {
+  setLocale("en-GB");
+  expect(goToLabel("content-languages")).toBe("Go to Content languages");
+  expect(goToLabel("device-profiles")).toBe("Go to Device profiles");
+  setLocale("es-ES");
+  expect(goToLabel("content-languages")).toBe("Ir a Idiomas del contenido");
+});
+
+it("labels the translations area in both languages", () => {
+  setLocale("en-GB");
+  expect(areaLabel("content")).toBe("Translations");
+  setLocale("es-ES");
+  expect(areaLabel("content")).toBe("Traducciones");
+});
+
 it("names a destination with no navigation label by its screen name", () => {
   setLocale("en-GB");
   expect(goToLabel("no-such-screen")).toBe("Go to no-such-screen");

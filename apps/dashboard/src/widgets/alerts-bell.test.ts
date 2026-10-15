@@ -46,6 +46,16 @@ const jobsWaiting: AlertView = {
   screen: "printers",
 };
 const notice: AlertView = { ...ongoing, key: "notice:local", severity: "notice" };
+const suggestionsReady: AlertView = {
+  key: "content.suggestions_ready",
+  kind: "ongoing",
+  code: "content.suggestions_ready_partly",
+  params: { count: 1050, failed: 88 },
+  severity: "notice",
+  since: "2026-09-14T12:00:00.000Z",
+  area: "content",
+  screen: "content-languages",
+};
 
 const menu = (el: AlertsBell) => el.shadowRoot!.querySelector("wt-row-actions")!;
 const popup = (el: AlertsBell) => menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -53,6 +63,22 @@ const q = (el: AlertsBell, sel: string) => el.shadowRoot!.querySelector<HTMLElem
 const qa = (el: AlertsBell, sel: string) => [...el.shadowRoot!.querySelectorAll<HTMLElement>(sel)];
 
 describe("dashboard-alerts-bell", () => {
+  it("words the Translate all notice from its counts and offers the Content languages screen", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+      alerts: [suggestionsReady],
+      canOpen: (screen) => screen === "content-languages",
+    });
+    const item = qa(el, "li")[0]!.textContent!.replace(/\s+/g, " ");
+    expect(item).toContain(
+      "Translations ready: 1050 suggestions are waiting for review. 88 couldn't be done this time.",
+    );
+    expect(item).toContain("Notice · Translations");
+    expect(item).not.toContain("content.suggestions_ready_partly");
+    expect(q(el, "[data-test=alert-go-to]")!.textContent!.trim()).toBe("Go to Content languages");
+    expect(q(el, "wt-count-badge")!.getAttribute("tone")).toBe("notice");
+  });
+
   it("counts open alerts, red when any is an error and amber otherwise, and says the count", async () => {
     setLocale("en-GB");
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
