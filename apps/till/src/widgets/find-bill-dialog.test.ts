@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
-import type { BillLookupRow, InvoiceLookupRow, TillApi } from "../api/client.js";
+import type { BillLookupRow } from "../api/client.js";
 
 const debt: BillLookupRow = {
   workingOrderId: "wo-1",
@@ -18,19 +18,8 @@ const debt: BillLookupRow = {
   status: "left_without_paying",
   stillOwed: "30.00",
 };
-const lookUpBills = vi.fn(async () => ({ bills: [debt] }));
-const invoice: InvoiceLookupRow = {
-  workingOrderId: "wo-filed",
-  invoiceNumber: "FF/7",
-  issuedAt: "2026-10-01T22:00:00.000Z",
-  customerName: "Cliente Facturado",
-  total: "3500.00",
-};
-const lookUpInvoices = vi.fn(async () => ({ invoices: [invoice] }));
-const api = { lookUpBills, lookUpInvoices } as unknown as TillApi;
-
-async function mount() {
-  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { api });
+async function mount(bill = debt) {
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill });
   return el;
 }
 function input(el: TillFindBillDialog, name: string) {
@@ -53,176 +42,21 @@ async function click(el: TillFindBillDialog, selector: string) {
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupWidgets();
-  lookUpBills.mockClear();
-  lookUpInvoices.mockClear();
 });
 
 describe("Find a bill", () => {
-  async function invoices(el: TillFindBillDialog) {
-    const kind = el.shadowRoot!.querySelector("[name=search-kind]");
-    expect(kind).not.toBeNull();
-    kind!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "invoices" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-  }
-
-  it("opens a saved full invoice without offering collection", async () => {
+  it("shows the selected debt with its invoice, table, name and amount", async () => {
     const el = await mount();
-    const opened: unknown[] = [];
-    const paid: unknown[] = [];
-    el.addEventListener("find-invoice-open", (event) => opened.push((event as CustomEvent).detail));
-    el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-    await invoices(el);
-    await type(el, "bill-search", " FF/7 ");
-    await click(el, "[data-search]");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-invoice]")?.textContent).toContain(
-        "Cliente Facturado",
-      ),
-    );
-    const row = el.shadowRoot!.querySelector("[data-invoice]")!;
-    expect(row.textContent).toContain("FF/7");
-    expect(row.textContent).toContain("3,500.00");
-    expect(lookUpInvoices).toHaveBeenCalledWith(" FF/7 ");
-    expect(lookUpBills).not.toHaveBeenCalled();
-    await click(el, "[data-invoice]");
-    expect(opened).toEqual([{ workingOrderId: "wo-filed" }]);
-    expect(paid).toEqual([]);
-    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
-  });
-
-  it("discards an unpaid search finishing after the search kind changes", async () => {
-    let finish!: (value: { bills: BillLookupRow[] }) => void;
-    lookUpBills.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const el = await mount();
-    await type(el, "bill-search", "Ruiz");
-    await click(el, "[data-search]");
-    await invoices(el);
-    finish({ bills: [debt] });
-    await Promise.resolve();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-bill]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-invoice]")).toBeNull();
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-invoice]")).not.toBeNull());
-    expect(el.shadowRoot!.querySelector("[data-invoice]")?.textContent).toContain("FF/7");
-  });
-
-  it("keeps invoice recovery retryable after a search refusal and explains no matches", async () => {
-    lookUpInvoices
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce({ invoices: [] });
-    const el = await mount();
-    await invoices(el);
-    await type(el, "bill-search", "FF/7");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("The search failed"));
-    expect(input(el, "bill-search").value).toBe("FF/7");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("No full invoice matches"));
-  });
-
-  it("does not open an invoice twice while the app loads it", async () => {
-    const el = await mount();
-    await invoices(el);
-    await type(el, "bill-search", "FF/7");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-invoice]")).not.toBeNull());
-    el.busy = true;
-    await el.updateComplete;
-    const opened = vi.fn();
-    el.addEventListener("find-invoice-open", opened);
-    await click(el, "[data-invoice]");
-    expect(opened).not.toHaveBeenCalled();
-  });
-
-  it("searches by the text typed and shows a debt with its invoice, table, name and amount", async () => {
-    const el = await mount();
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(lookUpBills).toHaveBeenCalledWith("A/12"));
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("Familia Ruiz");
-    expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("A/12");
-    expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("Mesa 4");
-    expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("30.00");
-  });
-
-  it("refuses an empty search beside the field", async () => {
-    const el = await mount();
-    await click(el, "[data-search]");
-    expect(lookUpBills).not.toHaveBeenCalled();
-    expect(input(el, "bill-search").error).toContain("Type an invoice number");
-  });
-
-  it("sends a search with its trailing space, and refuses spaces alone", async () => {
-    const el = await mount();
-    await type(el, "bill-search", "gin ");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(lookUpBills).toHaveBeenCalledWith("gin "));
-    await invoices(el);
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(lookUpInvoices).toHaveBeenCalledWith("gin "));
-    lookUpBills.mockClear();
-    lookUpInvoices.mockClear();
-    await type(el, "bill-search", "   ");
-    await click(el, "[data-search]");
-    expect(lookUpBills).not.toHaveBeenCalled();
-    expect(lookUpInvoices).not.toHaveBeenCalled();
-    expect(input(el, "bill-search").error).toContain("Type an invoice number");
-  });
-
-  it("searches when Enter is pressed in the search field", async () => {
-    const el = await mount();
-    await type(el, "bill-search", "A/12");
-    input(el, "bill-search").shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(lookUpBills).toHaveBeenCalledWith("A/12"));
-  });
-
-  it("keeps the query on a failed read and explains an empty result", async () => {
-    lookUpBills.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ bills: [] });
-    const el = await mount();
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("The search failed"));
-    expect(input(el, "bill-search").value).toBe("A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("No unpaid bill matches"));
-  });
-
-  it("clears an earlier result when a new search fails", async () => {
-    lookUpBills
-      .mockResolvedValueOnce({ bills: [debt] })
-      .mockRejectedValueOnce(new Error("offline"));
-    const el = await mount();
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    await type(el, "bill-search", "Mesa 4");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("The search failed"));
-    expect(el.shadowRoot!.querySelector("[data-bill]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain("Familia Ruiz");
+    expect(el.shadowRoot!.textContent).toContain("A/12");
+    expect(el.shadowRoot!.textContent).toContain("Mesa 4");
+    expect(el.shadowRoot!.textContent).toContain("30.00");
   });
 
   it("collects the chosen invoice debt with a cash tender and closes only after the app succeeds", async () => {
     const el = await mount();
     const paid: unknown[] = [];
     el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    await click(el, "[data-bill]");
     await click(el, "[data-collect]");
     expect(paid).toEqual([
       {
@@ -233,38 +67,10 @@ describe("Find a bill", () => {
     ]);
   });
 
-  it("keeps only the latest search answer when requests finish out of order", async () => {
-    let finishFirst!: (value: { bills: BillLookupRow[] }) => void;
-    lookUpBills.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishFirst = resolve;
-        }),
-    );
-    lookUpBills.mockResolvedValueOnce({
-      bills: [{ ...debt, workingOrderId: "wo-2", partyName: "Latest" }],
-    });
-    const el = await mount();
-    await type(el, "bill-search", "first");
-    await click(el, "[data-search]");
-    await type(el, "bill-search", "second");
-    await click(el, "[data-search]");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("Latest"),
-    );
-    finishFirst({ bills: [debt] });
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-bill]")!.textContent).toContain("Latest");
-  });
-
   it("refuses cash below the debt and sends a card reference with the exact debt", async () => {
     const el = await mount();
     const paid: unknown[] = [];
     el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    await click(el, "[data-bill]");
     await type(el, "cash-received", "20.00");
     await click(el, "[data-collect]");
     expect(paid).toEqual([]);
@@ -281,38 +87,32 @@ describe("Find a bill", () => {
     ]);
   });
 
-  it("marks a bill without an invoice for an original receipt and returns to results", async () => {
-    lookUpBills.mockResolvedValueOnce({ bills: [{ ...debt, invoiceNumber: null }] });
-    const el = await mount();
+  it("marks a bill without an invoice for an original receipt and returns to the page", async () => {
+    const el = await mount({ ...debt, invoiceNumber: null });
     const paid: unknown[] = [];
     el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-    await type(el, "bill-search", "12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    await click(el, "[data-bill]");
     await click(el, "[data-collect]");
     expect(paid).toEqual([
       { workingOrderId: "wo-1", tender: { method: "cash", amount: "30.00" }, invoiced: false },
     ]);
+    const closed = vi.fn();
+    el.addEventListener("find-bill-close", closed);
     await click(el, "[slot=cancel]");
-    expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
+    await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
   });
 
-  it("tells the app each time a bill is chosen or left, so the app can drop its error", async () => {
+  it("tells the app when a new bill is selected and when the collector closes", async () => {
     const el = await mount();
-    const changes = vi.fn();
+    const changes = vi.fn(),
+      closes = vi.fn();
     el.addEventListener("find-bill-selection", changes);
-    await type(el, "bill-search", "12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    expect(changes).not.toHaveBeenCalled();
-    await click(el, "[data-bill]");
+    el.addEventListener("find-bill-close", closes);
+    el.bill = { ...debt, workingOrderId: "wo-2" };
+    await el.updateComplete;
     expect(changes).toHaveBeenCalledTimes(1);
     await click(el, "[slot=cancel]");
-    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
-    expect(changes).toHaveBeenCalledTimes(2);
-    await click(el, "[data-bill]");
-    expect(changes).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() => expect(closes).toHaveBeenCalledTimes(1));
+    expect(changes).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -327,10 +127,6 @@ describe("Find a bill", () => {
   ])("words an over-limit refusal naming the limit in %s", async (locale, sentence) => {
     setLocale(locale);
     const el = await mount();
-    await type(el, "bill-search", "A/12");
-    await click(el, "[data-search]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-    await click(el, "[data-bill]");
     el.error = { overLimit: "3010.00" };
     await el.updateComplete;
     const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -340,7 +136,7 @@ describe("Find a bill", () => {
     ).toBe(sentence);
   });
 
-  it("keeps the search field readable at phone width", async () => {
+  it("keeps the collector readable at phone width", async () => {
     await page.viewport(390, 844);
     try {
       const el = await mount();
@@ -360,10 +156,6 @@ it("decimal input cash collection shows Spanish and refuses grouped or over-prec
   const el = await mount();
   const paid: unknown[] = [];
   el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-  await type(el, "bill-search", "A/12");
-  await click(el, "[data-search]");
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-  await click(el, "[data-bill]");
   const control = input(el, "cash-received");
   await control.updateComplete;
   const native = control.shadowRoot!.querySelector("input")!;
@@ -379,4 +171,20 @@ it("decimal input cash collection shows Spanish and refuses grouped or over-prec
   expect(paid).toEqual([
     { workingOrderId: "wo-1", tender: { method: "cash", amount: "40.80" }, invoiced: true },
   ]);
+});
+
+it("a selected collector has no search, and clean Back closes to the page", async () => {
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill: debt });
+  const closed = vi.fn();
+  el.addEventListener("find-bill-close", closed);
+  expect(el.shadowRoot!.querySelector("[name=bill-search]")).toBeNull();
+  expect(input(el, "cash-received").value).toBe("30.00");
+  await click(el, "[slot=cancel]");
+  await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
+  expect(el.shadowRoot!.querySelector("[data-search]")).toBeNull();
+});
+it("no selected bill means no collection or legacy search", async () => {
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {});
+  expect(el.shadowRoot!.querySelector("[name=bill-search]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
 });

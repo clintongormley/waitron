@@ -1,4 +1,6 @@
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
+import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
+import "./screens/till-find-bill-screen.js";
 import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -249,6 +251,7 @@ import type {
   TillMenuOffer,
   TillProduct,
   TillSaleResult,
+  BillLookupRow,
   InvoiceDeliveryStatus,
   InvoiceDeliveryOptions,
   InvoiceDeliveryChoice,
@@ -1678,6 +1681,7 @@ export class TillApp extends LitElement {
 
   override disconnectedCallback(): void {
     this.#stopClocking();
+    this.#cancelFindBillRead();
     this.#equipmentNfc.stop();
     this.#pendingNfc = undefined;
     this.#reloadAsked = false;
@@ -2194,8 +2198,15 @@ export class TillApp extends LitElement {
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
+  @state() private collectionBill: BillLookupRow | null = null;
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
+  #findBillRead?: AbortController;
+  @state() private historicalReceipt: {
+    saleId: string;
+    workingOrderId: string | null;
+    returnTo: "find-bill";
+  } | null = null;
   @state() private findBillError?: StringKey | { overLimit: string } | { code: string };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
@@ -2344,7 +2355,11 @@ export class TillApp extends LitElement {
   @state() private receiptLanguageAsking: { orderId: string; bill?: AskedBill } | null = null;
   /** The sale whose receipt copy is waiting for its language to be chosen, and the language it was
    * filed in. */
-  @state() private reprintAsking: { workingOrderId: string; filedLanguage?: string } | null = null;
+  @state() private reprintAsking: {
+    workingOrderId: string;
+    filedLanguage?: string;
+    transaction?: boolean;
+  } | null = null;
   /**
    * The server resolves a canvas for every boot, so this is `undefined` only after a boot failure, where
    * {@link render} shows the lock screen rather than an empty shell.
@@ -2662,6 +2677,9 @@ export class TillApp extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
+      if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
+      if (this.drill?.kind !== "find-bill" && this.drill?.kind !== "ticket")
+        this.historicalReceipt = null;
       if (this.drill?.kind === "hours") this.#startHours();
       else this.#stopHours();
     }
@@ -5081,35 +5099,170 @@ export class TillApp extends LitElement {
     ]);
   }
 
-  async #onFindInvoiceOpen(event: Event): Promise<void> {
-    if (this.findBillBusy) return;
-    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+  #cancelFindBillRead(): void {
+    this.#invoiceRecoveryVisit++;
+    this.#findBillRead?.abort();
+    this.#findBillRead = undefined;
+    this.findBillBusy = false;
+  }
+
+  async #onFindBillOpen(event: CustomEvent<{ row: BillRow }>): Promise<void> {
+    if (this.drill?.kind !== "find-bill" || this.findBillBusy) return;
+    this.#cancelFindBillRead();
+    const controller = (this.#findBillRead = new AbortController());
     const session = this.#operatorSession;
     const visit = this.#invoiceRecoveryVisit;
+    const current = () =>
+      this.isConnected &&
+      this.drill?.kind === "find-bill" &&
+      session === this.#operatorSession &&
+      visit === this.#invoiceRecoveryVisit;
     this.findBillBusy = true;
-    this.findBillError = undefined;
+    this.errorKey = undefined;
     try {
-      const result = await this.api.getFiledTicket(workingOrderId);
-      if (
-        session !== this.#operatorSession ||
-        visit !== this.#invoiceRecoveryVisit ||
-        !this.findingBill
-      )
+      const row = await this.api.getFindBill(event.detail.row.workingOrderId, {
+        signal: controller.signal,
+      });
+      if (!current()) return;
+      if (row.collectionStatus !== null) {
+        this.collectionBill = {
+          workingOrderId: row.workingOrderId,
+          orderNumber: row.orderNumber,
+          label: row.label,
+          partyName: row.partyName,
+          tables: row.tables,
+          invoiceNumber: row.invoiceNumber,
+          openedAt: row.openedAt,
+          departedAt: row.departedAt,
+          status: row.collectionStatus,
+          stillOwed: row.stillOwed,
+        };
+        this.findBillError = undefined;
+        this.findingBill = true;
         return;
-      this.result = result;
-      this.findingBill = false;
-      this.#showTicket(workingOrderId, false);
+      }
+      if (row.partyId !== null) {
+        await this.#loadFloorData(() => !current());
+        if (!current()) return;
+        const table = this.tables.find((candidate) => candidate.party?.id === row.partyId);
+        if (table === undefined) {
+          this.errorKey = "held.stale";
+          return;
+        }
+        const opening = this.#orderVisit + 1;
+        await this.#onOpenTable(
+          new CustomEvent("open-table", { detail: { tableId: table.id, seated: true } }),
+          () => !current(),
+        );
+        if (
+          session === this.#operatorSession &&
+          this.#orderVisit === opening &&
+          this.orderParty?.id === row.partyId
+        ) {
+          if (this.#tableOrderTabKey() !== undefined) this.#popDrill();
+          await this.#onTakePayment(
+            new CustomEvent("take-payment", { detail: { workingOrderId: row.workingOrderId } }),
+          );
+        }
+        return;
+      }
+      if (row.state === "paid-not-handed-over") {
+        const result = await this.api.getFiledTicket(row.workingOrderId);
+        if (!current()) return;
+        this.result = result;
+        this.#showTicket(row.workingOrderId, false);
+        return;
+      }
+      await this.leave.coordinator.request({
+        scopes: [this.#basketOwner],
+        reason: "navigation",
+        proceed: async () => {
+          if (!current()) return;
+          if (row.orderStatus === "placed") {
+            await this.#onPayWaitingOrder(
+              new CustomEvent("pay-waiting-order", { detail: { id: row.workingOrderId } }),
+              () => !current(),
+              controller.signal,
+            );
+            if (current() && this.#store.id === row.workingOrderId) this.#onBackToCounter();
+          } else if (row.orderStatus === "open") {
+            await this.#loadHeldOrder(row.workingOrderId, () => !current(), controller.signal);
+            if (!current() || this.#store.id !== row.workingOrderId) return;
+            this.#onBackToCounter();
+            if (row.state === "part-paid")
+              await this.#openBillPaying(
+                "contribution",
+                payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+                undefined,
+                { surface: "counter", billId: row.workingOrderId, visit: session },
+              );
+          } else this.errorKey = "held.stale";
+        },
+      });
     } catch {
-      if (
-        session === this.#operatorSession &&
-        visit === this.#invoiceRecoveryVisit &&
-        this.findingBill
-      )
-        this.findBillError = "find_bill.invoice_load_failed";
+      if (current()) this.errorKey = "held.stale";
     } finally {
       if (session === this.#operatorSession && visit === this.#invoiceRecoveryVisit)
         this.findBillBusy = false;
     }
+  }
+
+  async #onFindTransactionOpen(event: CustomEvent<{ row: TransactionRow }>): Promise<void> {
+    if (this.drill?.kind !== "find-bill" || this.findBillBusy) return;
+    this.#cancelFindBillRead();
+    const controller = (this.#findBillRead = new AbortController());
+    const session = this.#operatorSession;
+    const visit = this.#invoiceRecoveryVisit;
+    const current = () =>
+      this.isConnected &&
+      this.drill?.kind === "find-bill" &&
+      session === this.#operatorSession &&
+      visit === this.#invoiceRecoveryVisit;
+    this.findBillBusy = true;
+    this.errorKey = undefined;
+    const { saleId, workingOrderId } = event.detail.row;
+    try {
+      const result = await this.api.getTransactionReceipt(saleId, { signal: controller.signal });
+      if (!current()) return;
+      this.result = result;
+      if (workingOrderId !== null) this.#showTicket(workingOrderId, false);
+      else {
+        this.ticketWorkingOrderId = undefined;
+        this.originalReceiptAvailable = false;
+        this.#receiptPrintVisit++;
+        this.#stopDeliveryReread();
+      }
+      this.historicalReceipt = { saleId, workingOrderId, returnTo: "find-bill" };
+      this.#pushDrill({ kind: "ticket" });
+    } catch {
+      if (current()) this.errorKey = "find_bill.invoice_load_failed";
+    } finally {
+      if (visit === this.#invoiceRecoveryVisit && session === this.#operatorSession)
+        this.findBillBusy = false;
+    }
+  }
+
+  #backToFindBill(): void {
+    if (this.historicalReceipt === null) return;
+    this.#cancelFindBillRead();
+    this.historicalReceipt = null;
+    this.reprintAsking = null;
+    this.errorKey = undefined;
+    this.#pushDrill({ kind: "find-bill" });
+  }
+
+  #findBillBody(): TemplateResult | typeof nothing {
+    if (this.drill?.kind !== "find-bill" && this.historicalReceipt === null) return nothing;
+    return html`<div slot="drill" ?hidden=${this.drill?.kind !== "find-bill"}>
+      <till-find-bill-screen
+        .api=${this.api}
+        .busy=${this.findBillBusy}
+        .active=${this.drill?.kind === "find-bill"}
+        @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
+        @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
+        @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
+      ></till-find-bill-screen>
+    </div>`;
   }
 
   async #onFindBillPay(event: Event): Promise<void> {
@@ -5252,7 +5405,11 @@ export class TillApp extends LitElement {
    * answer is dropped, unsaid, once a later Pay, another basket, a send from the basket or the end of
    * the operator's session has overtaken it.
    */
-  async #onPayWaitingOrder(event: Event): Promise<void> {
+  async #onPayWaitingOrder(
+    event: Event,
+    left: () => boolean = () => false,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const { id } = (event as CustomEvent<PayWaitingOrderDetail>).detail;
     if (this.#counterOrderInFlight()) return;
     const request = ++this.#payWaitingRequest;
@@ -5260,11 +5417,12 @@ export class TillApp extends LitElement {
     const load = this.#store.loadGeneration;
     const sends = this.#counterSends;
     const movedOn = () =>
+      left() ||
       request !== this.#payWaitingRequest ||
       session !== this.#operatorSession ||
       load !== this.#store.loadGeneration ||
       sends !== this.#counterSends;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const limit = limited(TABLE_REQUEST_LIMIT_MS, signal);
     const unlock = this.#store.lockEdits();
     this.#endReloadLock = unlock;
     this.#payWaitingLoading = { id, request, unlock };
@@ -5659,33 +5817,55 @@ export class TillApp extends LitElement {
    * another, which the counter store cannot identify.
    */
   async #onReprint(): Promise<void> {
+    if (this.historicalReceipt !== null) {
+      await this.#reprint(this.historicalReceipt.saleId, this.result?.locale, true);
+      return;
+    }
     if (this.ticketWorkingOrderId === undefined) return;
     await this.#reprint(this.ticketWorkingOrderId, this.result?.locale);
   }
 
   /** A copy of a filed sale's receipt: with several receipt languages the dialog asks which first. */
-  async #reprint(workingOrderId: string, filedLanguage: string | undefined): Promise<void> {
+  async #reprint(
+    workingOrderId: string,
+    filedLanguage: string | undefined,
+    transaction = false,
+  ): Promise<void> {
     this.errorKey = undefined;
     if (this.#copyLanguages(filedLanguage).length > 1) {
-      this.reprintAsking = { workingOrderId, filedLanguage };
+      this.reprintAsking = { workingOrderId, filedLanguage, transaction };
       return;
     }
-    await this.#sendReprint(workingOrderId);
+    await this.#sendReprint(workingOrderId, undefined, transaction);
   }
 
-  async #sendReprint(workingOrderId: string, language?: string): Promise<void> {
+  async #sendReprint(
+    workingOrderId: string,
+    language?: string,
+    transaction = false,
+  ): Promise<void> {
+    const receipt = this.historicalReceipt;
+    const session = this.#operatorSession;
     try {
-      if (language === undefined) await this.api.reprint(workingOrderId);
+      if (transaction) await this.api.reprintTransaction(workingOrderId, language);
+      else if (language === undefined) await this.api.reprint(workingOrderId);
       else await this.api.reprint(workingOrderId, language);
     } catch {
-      this.errorKey = "reprint.error";
+      if (
+        !transaction ||
+        (this.isConnected &&
+          this.historicalReceipt === receipt &&
+          session === this.#operatorSession)
+      )
+        this.errorKey = "reprint.error";
     }
   }
 
   async #onReprintLanguage(event: CustomEvent<ReprintLanguageDetail>): Promise<void> {
     const asking = this.reprintAsking;
     this.reprintAsking = null;
-    if (asking !== null) await this.#sendReprint(asking.workingOrderId, event.detail.language);
+    if (asking !== null)
+      await this.#sendReprint(asking.workingOrderId, event.detail.language, asking.transaction);
   }
 
   /** The languages a copy may print in: the offered ones, and the sale's own when it is not one. */
@@ -6704,20 +6884,20 @@ export class TillApp extends LitElement {
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
    * ({@link billToOpen}). */
-  async #onOpenTable(event: Event): Promise<void> {
+  async #onOpenTable(event: Event, left: () => boolean = () => false): Promise<void> {
     if (this.#partylessScope?.isDirty()) {
       await this.leave.coordinator.request({
         scopes: [this.#partylessOwner],
         reason: "navigation",
-        proceed: () => this.#openTableFromEvent(event),
+        proceed: () => this.#openTableFromEvent(event, left),
       });
       return;
     }
-    await this.#openTableFromEvent(event);
+    await this.#openTableFromEvent(event, left);
   }
 
-  async #openTableFromEvent(event: Event): Promise<void> {
-    if (!this.#inShell()) return;
+  async #openTableFromEvent(event: Event, left: () => boolean = () => false): Promise<void> {
+    if (!this.#inShell() || left()) return;
     const { tableId, seated, guestCount, withTableIds } = (
       event as CustomEvent<{
         tableId: string;
@@ -6738,12 +6918,13 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     try {
       await this.#flushDraft();
-      if (session !== this.#operatorSession) return;
+      if (left() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
         seated ? undefined : (guestCount ?? null),
         offerRequest,
         withTableIds,
+        left,
       );
     } finally {
       this.#tableOpensPending--;
@@ -6757,6 +6938,7 @@ export class TillApp extends LitElement {
     guestCount: number | null | undefined,
     offerRequest: number,
     withTableIds?: string[],
+    left: () => boolean = () => false,
   ): Promise<void> {
     const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
@@ -6764,11 +6946,12 @@ export class TillApp extends LitElement {
       try {
         const catalogue = await this.api.listZoneOffers(table.zoneId);
         const { menus, defaultMenuId } = catalogue;
-        if (offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession) return;
+        if (left() || offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession)
+          return;
         this.#loadTableOffers(table.zoneId, catalogue);
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
-        if (offerRequest !== this.#tableOfferRequest) return;
+        if (left() || offerRequest !== this.#tableOfferRequest) return;
         this.#loadTableOffers(
           undefined,
           {
@@ -6825,14 +7008,14 @@ export class TillApp extends LitElement {
       this.activeTabId = main ?? undefined;
       if (billsRead) {
         const read = await this.#loadPartyBills();
-        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+        if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTabId = billToOpen(read.bills ?? []);
       }
       const [, opened] = await Promise.all([
         billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
         this.#openDraft(true, session),
       ]);
-      if (session !== this.#operatorSession) return;
+      if (left() || session !== this.#operatorSession) return;
       this.#showDraft(opened);
     } else {
       try {
@@ -6842,7 +7025,7 @@ export class TillApp extends LitElement {
             : await this.api.seatAtTables(tableId, guestCount, withTableIds);
         // A table opened after this one has made its own table the active one, so this answer
         // would put this table's order beside that table.
-        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+        if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTableId = tableId;
         this.activeTabId = tabId;
         this.orderParty = {
@@ -6866,8 +7049,9 @@ export class TillApp extends LitElement {
         return;
       }
       await this.#reloadOrder();
-      if (session !== this.#operatorSession) return;
+      if (left() || session !== this.#operatorSession) return;
     }
+    if (left()) return;
     // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
     // in over the floor tab.
     if (this.#inShell()) {
@@ -9755,6 +9939,8 @@ export class TillApp extends LitElement {
     this.#closeBillPaying();
     this.#closeDeparting();
     this.#closeCancelCrediting();
+    this.#cancelFindBillRead();
+    this.historicalReceipt = null;
     this.findingBill = false;
     this.equipmentOpen = false;
     this.equipmentTaken = null;
@@ -10331,6 +10517,7 @@ export class TillApp extends LitElement {
   }
 
   #showTicket(workingOrderId: string, invoiceIssuedNow = true): void {
+    this.historicalReceipt = null;
     this.ticketWorkingOrderId = workingOrderId;
     this.#receiptPrintVisit++;
     this.originalReceiptPrint = undefined;
@@ -10351,10 +10538,19 @@ export class TillApp extends LitElement {
   /** A canvas with no counter tab shows its first tab instead. */
   #onBackToCounter(): void {
     if (!this.#inShell()) return;
+    const fromFindBill = this.drill?.kind === "find-bill";
     this.errorKey = undefined;
     this.#setActiveTab("counter");
     void this.#loadStations();
     this.#popDrill();
+    if (fromFindBill)
+      void this.updateComplete.then(() => {
+        this.shadowRoot
+          ?.querySelector("till-tab-shell")
+          ?.shadowRoot?.querySelector("[data-test=more-menu]")
+          ?.shadowRoot?.querySelector("button")
+          ?.focus();
+      });
   }
 
   /**
@@ -10621,6 +10817,8 @@ export class TillApp extends LitElement {
    * the user with no way out. */
   #drillBody(): TemplateResult | typeof nothing {
     switch (this.drill?.kind) {
+      case "find-bill":
+        return nothing;
       case "table-order": {
         const draft = this.#tableDraft();
         return html`<till-table-order-screen
@@ -10670,6 +10868,9 @@ export class TillApp extends LitElement {
       }
       case "ticket":
         return html`<till-ticket-view
+          .historical=${this.historicalReceipt !== null}
+          .historicalDelivery=${this.historicalReceipt?.workingOrderId != null}
+          @back-to-find-bill=${() => this.#requestLeave(() => this.#backToFindBill())}
           slot="drill"
           .result=${this.result}
           .issuer=${this.issuer}
@@ -10873,13 +11074,13 @@ export class TillApp extends LitElement {
         @invoice-email-cancel=${() => this.#onEmailCancel()}
         @payment-slip=${() => void this.#onPaymentSlip()}
         @open-drawer=${() => void this.#onOpenDrawer()}
-        @find-bill=${() => {
-          this.#invoiceRecoveryVisit++;
-          this.findBillBusy = false;
-          this.findBillError = undefined;
-          this.findingBill = true;
-        }}
-        @find-invoice-open=${(event: Event) => void this.#onFindInvoiceOpen(event)}
+        @find-bill=${() =>
+          this.#requestLeave(() => {
+            this.#cancelFindBillRead();
+            this.findBillError = undefined;
+            this.historicalReceipt = null;
+            this.#pushDrill({ kind: "find-bill" });
+          })}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
         @find-bill-selection=${() => {
           this.findBillError = undefined;
@@ -11059,7 +11260,7 @@ export class TillApp extends LitElement {
         ${
           this.findingBill
             ? html`<till-find-bill-dialog
-                .api=${this.api}
+                .bill=${this.collectionBill}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`
@@ -11311,7 +11512,7 @@ export class TillApp extends LitElement {
                                 ></till-department-transfers>`
                           }
                           ${this.#activeTabBody()}
-                          ${this.#drillBody() /* the drill overlay, when one is open */}
+                          ${this.#findBillBody()}${this.#drillBody() /* the drill overlay, when one is open */}
                         </till-tab-shell>`,
                       )
                     : keyed(

@@ -13,7 +13,7 @@ import type {
   TransactionRow,
   TransactionsQuery,
 } from "../api/find-bill-types.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -107,9 +107,11 @@ export class TillFindBillScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: TillApi;
   @property({ type: Boolean }) active = false;
+  @property({ type: Boolean }) busy = false;
   @state() private tab: Tab = "bills";
   @state() private options?: FindBillOptions;
   @state() private optionsError = "";
+  @state() private openCount: number | null = null;
   @state() private dates: FindBillDates = { preset: "today" };
   @state() private dateFrom = "";
   @state() private dateTo = "";
@@ -247,6 +249,7 @@ export class TillFindBillScreen extends LitElement {
               { signal: controller.signal },
             );
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
+      this.openCount = result.openCount;
       const last = Math.max(0, Math.ceil(result.total / 50) - 1);
       if (view.page > last) {
         view.total = result.total;
@@ -538,7 +541,7 @@ export class TillFindBillScreen extends LitElement {
       .sortKey=${tab === "bills" ? "openedAt" : "when"}
       sortDirection="descending"
       .rowClickLabel=${() => label(tab === "bills" ? "open_bill" : "open_receipt")}
-      .rowClickable=${() => !view.loading && this.active}
+      .rowClickable=${() => !view.loading && this.active && !this.busy}
       .rowClick=${(row: Row) => this.#emit(tab === "bills" ? "find-bill-open" : "find-transaction-open", { row })}
       .loading=${view.loading}
       loadingMessage=${label("loading")}
@@ -580,7 +583,13 @@ export class TillFindBillScreen extends LitElement {
           ? html`<wt-tabs
               label=${t("find_bill.title")}
               .items=${[
-                { key: "bills", label: label("bills") },
+                {
+                  key: "bills",
+                  label:
+                    this.openCount === null
+                      ? label("bills")
+                      : `${label("bills")} · ${countText(this.openCount, "find_page.open_count", "find_page.open_count_one")}`,
+                },
                 { key: "transactions", label: label("transactions") },
               ]}
               .value=${this.tab}

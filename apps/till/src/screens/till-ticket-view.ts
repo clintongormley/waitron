@@ -510,6 +510,8 @@ export class TillTicketView extends LitElement {
   @property() invoiceLocale = "es-ES";
   /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
   @property({ type: Boolean }) simulated = false;
+  @property({ type: Boolean }) historical = false;
+  @property({ type: Boolean }) historicalDelivery = false;
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
   @property({ attribute: false }) originalReceiptPrint?: OriginalReceiptPrint;
@@ -847,7 +849,7 @@ export class TillTicketView extends LitElement {
       </article>
 
       ${
-        r.invoiceType === "F1"
+        r.invoiceType === "F1" && (!this.historical || this.historicalDelivery)
           ? html`<section class="original-delivery" data-test="original-delivery" role="status">
               <p>
                 <strong
@@ -900,53 +902,60 @@ export class TillTicketView extends LitElement {
       <div class="receipt-actions">
         ${
           this.canPrintReceipt
-            ? (
-                r.invoiceType === "F1"
-                  ? // The server refuses a receipt original beside an active or completed delivery.
-                    notQueued &&
-                    !this.deliveries?.originalCompleted &&
-                    attempt?.status !== "queued" &&
-                    attempt?.status !== "sending"
-                  : this.originalReceiptAvailable
-              )
+            ? this.historical && !this.historicalDelivery
               ? html`<wt-button
-                  class="print-receipt"
                   variant="secondary"
-                  size="lg"
-                  data-test="print-receipt"
-                  ?disabled=${receiptBusy}
-                  @click=${() => this.#printReceipt()}
-                >
-                  ${t(r.invoiceType === "F1" ? "invoice.print_original" : "action.print_receipt")}
-                </wt-button>`
-              : r.invoiceType === "F1" &&
-                  this.originalReceiptPrint?.status === "failed" &&
-                  this.originalReceiptPrint.canRetry &&
-                  !this.originalReceiptPrint.printerWithdrawn &&
-                  !failedButSuperseded
+                  data-test="reprint"
+                  @click=${() => this.#reprint()}
+                  >${t("action.reprint")}</wt-button
+                >`
+              : (
+                    r.invoiceType === "F1"
+                      ? // The server refuses a receipt original beside an active or completed delivery.
+                        notQueued &&
+                        !this.deliveries?.originalCompleted &&
+                        attempt?.status !== "queued" &&
+                        attempt?.status !== "sending"
+                      : this.originalReceiptAvailable
+                  )
                 ? html`<wt-button
+                    class="print-receipt"
                     variant="secondary"
                     size="lg"
-                    data-test="retry-receipt"
+                    data-test="print-receipt"
                     ?disabled=${receiptBusy}
-                    @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
-                    >${t("invoice.retry_original")}</wt-button
-                  >`
-                : r.invoiceType !== "F1" || this.originalReceiptPrint?.status === "done"
+                    @click=${() => this.#printReceipt()}
+                  >
+                    ${t(r.invoiceType === "F1" ? "invoice.print_original" : "action.print_receipt")}
+                  </wt-button>`
+                : r.invoiceType === "F1" &&
+                    this.originalReceiptPrint?.status === "failed" &&
+                    this.originalReceiptPrint.canRetry &&
+                    !this.originalReceiptPrint.printerWithdrawn &&
+                    !failedButSuperseded
                   ? html`<wt-button
-                      class="reprint"
                       variant="secondary"
                       size="lg"
-                      data-test="reprint"
-                      @click=${() => this.#reprint()}
-                    >
-                      ${t("action.reprint")}
-                    </wt-button>`
-                  : nothing
+                      data-test="retry-receipt"
+                      ?disabled=${receiptBusy}
+                      @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
+                      >${t("invoice.retry_original")}</wt-button
+                    >`
+                  : r.invoiceType !== "F1" || this.originalReceiptPrint?.status === "done"
+                    ? html`<wt-button
+                        class="reprint"
+                        variant="secondary"
+                        size="lg"
+                        data-test="reprint"
+                        @click=${() => this.#reprint()}
+                      >
+                        ${t("action.reprint")}
+                      </wt-button>`
+                    : nothing
             : nothing
         }
         ${
-          this.canPrintReceipt && r.tender.method === "card"
+          !this.historical && this.canPrintReceipt && r.tender.method === "card"
             ? html`<wt-button
                 class="payment-slip"
                 variant="secondary"
@@ -959,7 +968,7 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         ${
-          this.canOpenDrawer
+          !this.historical && this.canOpenDrawer
             ? html`<wt-button
                 class="open-drawer"
                 variant="secondary"
@@ -973,9 +982,23 @@ export class TillTicketView extends LitElement {
         }
       </div>
 
-      <wt-button class="new-sale" variant="primary" size="lg" @click=${() => this.#newSale()}>
-        ${t("action.new_sale")}
-      </wt-button>
+      ${
+        this.historical
+          ? html`<wt-button
+              variant="secondary"
+              data-back-to-find-bill
+              @click=${() => this.dispatchEvent(new CustomEvent("back-to-find-bill", { bubbles: true, composed: true }))}
+              >${t("find_bill.back")}</wt-button
+            >`
+          : html`<wt-button
+              class="new-sale"
+              variant="primary"
+              size="lg"
+              @click=${() => this.#newSale()}
+            >
+              ${t("action.new_sale")}
+            </wt-button>`
+      }
     `;
   }
 }

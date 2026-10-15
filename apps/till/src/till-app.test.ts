@@ -1,3 +1,12 @@
+import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
+import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
+import {
+  billOptions,
+  billRow,
+  transactionRow,
+  listPage,
+  resolvedDates,
+} from "../test/find-bill-fixtures.js";
 import { leaveCoordinatorFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
@@ -452,6 +461,19 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getTill: vi.fn().mockResolvedValue(till),
+    findBillOptions: vi.fn().mockResolvedValue(billOptions),
+    listBills: vi.fn().mockResolvedValue(listPage()),
+    listTransactions: vi
+      .fn()
+      .mockResolvedValue({ ...listPage([transactionRow()]), dates: resolvedDates }),
+    getFindBill: vi.fn().mockResolvedValue(
+      billRow({
+        workingOrderId: "wo-debt",
+        collectionStatus: "waiting_for_payment",
+        stillOwed: "30.00",
+        invoiceNumber: "A/12",
+      }),
+    ),
     getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
@@ -672,6 +694,17 @@ const fullInvoicesOn = () => ({
 async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   currentApi = stubApi(overrides);
   return mountWidget<TillApp>("till-app", { api: currentApi }, theme);
+}
+
+async function selectDebt(el: TillApp, id = "wo-debt") {
+  const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
+  emit(view, "find-bill-open", { row: billRow({ workingOrderId: id }) });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
+  );
+  const collector = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+  await collector.updateComplete;
+  return collector;
 }
 
 // Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
@@ -10858,7 +10891,7 @@ describe("till-app", () => {
     it("ignores invoice reads and releases their busy gate after closing and reopening recovery", async () => {
       let finish!: (value: TillSaleResult) => void;
       let finishNew!: (value: TillSaleResult) => void;
-      const getFiledTicket = vi
+      const getTransactionReceipt = vi
         .fn()
         .mockImplementationOnce(
           () =>
@@ -10872,31 +10905,31 @@ describe("till-app", () => {
               finishNew = resolve;
             }),
         );
-      const { el } = await mountApp({ getFiledTicket });
+      const { el } = await mountApp({ getTransactionReceipt });
       await toCounter(el);
       const show = async () => {
         el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
           .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
           .click();
         await el.updateComplete;
-        return el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+        return el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
       };
       const first = await show();
       first.dispatchEvent(
-        new CustomEvent("find-invoice-open", {
-          detail: { workingOrderId: "wo-old" },
+        new CustomEvent("find-transaction-open", {
+          detail: { row: transactionRow({ saleId: "sale-old", workingOrderId: "wo-old" }) },
           bubbles: true,
           composed: true,
         }),
       );
       await flush(el);
-      first.dispatchEvent(new CustomEvent("find-bill-close", { bubbles: true, composed: true }));
+      first.dispatchEvent(new CustomEvent("find-bill-back", { bubbles: true, composed: true }));
       await el.updateComplete;
       const reopened = await show();
       expect(reopened.busy).toBe(false);
       reopened.dispatchEvent(
-        new CustomEvent("find-invoice-open", {
-          detail: { workingOrderId: "wo-new" },
+        new CustomEvent("find-transaction-open", {
+          detail: { row: transactionRow({ saleId: "sale-new", workingOrderId: "wo-new" }) },
           bubbles: true,
           composed: true,
         }),
@@ -10914,18 +10947,18 @@ describe("till-app", () => {
 
     it("opens a filed F1 from Find a bill with its original delivery controls", async () => {
       const filed = { ...saleResult, invoiceType: "F1" as const, invoiceNumber: "FF/7" };
-      const getFiledTicket = vi.fn().mockResolvedValue(filed);
+      const getTransactionReceipt = vi.fn().mockResolvedValue(filed);
       const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
-      const { el } = await mountApp({ getFiledTicket, getReceiptPrintStatus });
+      const { el } = await mountApp({ getTransactionReceipt, getReceiptPrintStatus });
       await toCounter(el);
       el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
       dialog.dispatchEvent(
-        new CustomEvent("find-invoice-open", {
-          detail: { workingOrderId: "wo-filed" },
+        new CustomEvent("find-transaction-open", {
+          detail: { row: transactionRow({ saleId: "sale-filed", workingOrderId: "wo-filed" }) },
           bubbles: true,
           composed: true,
         }),
@@ -10934,29 +10967,33 @@ describe("till-app", () => {
       expect(ticket(el)?.result).toEqual(filed);
       expect(ticket(el)?.originalReceiptPrint).toEqual({ status: "not_queued" });
       expect(ticket(el)?.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
-      expect(getFiledTicket).toHaveBeenCalledWith("wo-filed");
+      expect(getTransactionReceipt).toHaveBeenCalledWith("sale-filed", {
+        signal: expect.any(AbortSignal),
+      });
       expect(getReceiptPrintStatus).toHaveBeenCalledWith("wo-filed");
       expect(currentApi.collectOrder).not.toHaveBeenCalled();
       expect(currentApi.recordSale).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!.active,
+      ).toBe(false);
     });
 
     it("keeps invoice recovery open after a read failure and permits retry", async () => {
-      const getFiledTicket = vi
+      const getTransactionReceipt = vi
         .fn()
         .mockRejectedValueOnce({ code: "connection.failed" })
         .mockResolvedValueOnce({ ...saleResult, invoiceType: "F1" });
-      const { el } = await mountApp({ getFiledTicket });
+      const { el } = await mountApp({ getTransactionReceipt });
       await toCounter(el);
       el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
       const open = () =>
         dialog.dispatchEvent(
-          new CustomEvent("find-invoice-open", {
-            detail: { workingOrderId: "wo-filed" },
+          new CustomEvent("find-transaction-open", {
+            detail: { row: transactionRow({ saleId: "sale-filed", workingOrderId: "wo-filed" }) },
             bubbles: true,
             composed: true,
           }),
@@ -10964,7 +11001,7 @@ describe("till-app", () => {
       open();
       await flush(el);
       expect(ticket(el)).toBeNull();
-      expect(dialog.error).toBe("find_bill.invoice_load_failed");
+      expect(el.shadowRoot!.textContent).toContain(t("find_bill.invoice_load_failed"));
       expect(dialog.busy).toBe(false);
       open();
       await flush(el);
@@ -10979,7 +11016,7 @@ describe("till-app", () => {
       const shell = el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
       shell.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = await selectDebt(el);
       expect(dialog).not.toBeNull();
       const reads = waiting.mock.calls.length;
       dialog.dispatchEvent(
@@ -11003,26 +11040,23 @@ describe("till-app", () => {
     });
 
     it.each([true, false])(
-      "Find a bill searches and collects through the dialog (already invoiced: %s)",
+      "Find a bill selects a fresh bill and collects through the dialog (already invoiced: %s)",
       async (invoiced) => {
-        const lookup = vi.fn().mockResolvedValue({
-          bills: [
-            {
-              workingOrderId: "wo-debt",
-              orderNumber: 12,
-              label: "Birthday",
-              partyName: "Familia Ruiz",
-              tables: ["4"],
-              invoiceNumber: invoiced ? "A/12" : null,
-              openedAt: "2026-10-01T18:00:00.000Z",
-              departedAt: null,
-              status: "waiting_for_payment",
-              stillOwed: "30.00",
-            },
-          ],
-        });
+        const lookup = vi.fn().mockResolvedValue(
+          billRow({
+            workingOrderId: "wo-debt",
+            orderNumber: 12,
+            label: "Birthday",
+            partyName: "Familia Ruiz",
+            tables: ["4"],
+            invoiceNumber: invoiced ? "A/12" : null,
+            openedAt: "2026-10-01T18:00:00.000Z",
+            collectionStatus: "waiting_for_payment",
+            stillOwed: "30.00",
+          }),
+        );
         const { el } = await mountApp({
-          lookUpBills: lookup,
+          getFindBill: lookup,
           zonePolicy: { receiptPrintMode: "on_request" },
           getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
         });
@@ -11031,20 +11065,8 @@ describe("till-app", () => {
           .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
           .click();
         await el.updateComplete;
-        const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
-        const search = dialog.shadowRoot!.querySelector<HTMLElement>("[name=bill-search]")!;
-        await vi.waitFor(() => expect(search.shadowRoot!.querySelector("input")).not.toBeNull());
-        const input = search.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-        input.value = "Ruiz";
-        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-        await dialog.updateComplete;
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
-        await vi.waitFor(() =>
-          expect(dialog.shadowRoot!.querySelector("[data-bill]")).not.toBeNull(),
-        );
-        expect(lookup).toHaveBeenCalledWith("Ruiz");
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
-        await dialog.updateComplete;
+        const dialog = await selectDebt(el);
+        expect(lookup).toHaveBeenCalledWith("wo-debt", { signal: expect.any(AbortSignal) });
         dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
         await flush(el);
         expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
@@ -11058,22 +11080,19 @@ describe("till-app", () => {
     it("commits collection before a failed following refresh while retaining the exact tender", async () => {
       let answer!: (result: TillSaleResult) => void;
       const { el } = await mountApp({
-        lookUpBills: vi.fn().mockResolvedValue({
-          bills: [
-            {
-              workingOrderId: "wo-debt",
-              orderNumber: 12,
-              label: null,
-              partyName: null,
-              tables: [],
-              invoiceNumber: "A/12",
-              openedAt: "2026-10-01T18:00:00.000Z",
-              departedAt: null,
-              status: "waiting_for_payment",
-              stillOwed: "30.00",
-            },
-          ],
-        }),
+        getFindBill: vi.fn().mockResolvedValue(
+          billRow({
+            workingOrderId: "wo-debt",
+            orderNumber: 12,
+            label: null,
+            partyName: null,
+            tables: [],
+            invoiceNumber: "A/12",
+            openedAt: "2026-10-01T18:00:00.000Z",
+            collectionStatus: "waiting_for_payment",
+            stillOwed: "30.00",
+          }),
+        ),
         collectOrder: vi.fn(
           () =>
             new Promise<TillSaleResult>((resolve) => {
@@ -11086,7 +11105,7 @@ describe("till-app", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const form = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const form = await selectDebt(el);
       await form.updateComplete;
       const fill = async (name: string, value: string) => {
         const field = form.shadowRoot!.querySelector<WtInput>(`[name=${name}]`)!;
@@ -11095,11 +11114,6 @@ describe("till-app", () => {
         await userEvent.fill(page.elementLocator(input), value);
         await form.updateComplete;
       };
-      await fill("bill-search", "A/12");
-      form.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
-      await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
-      form.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
-      await form.updateComplete;
       await fill("cash-received", "40.00");
       const unload = () => {
         const event = new Event("beforeunload", { cancelable: true });
@@ -11137,7 +11151,7 @@ describe("till-app", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = await selectDebt(el);
       dialog.dispatchEvent(
         new CustomEvent("find-bill-pay", {
           detail: {
@@ -11168,7 +11182,7 @@ describe("till-app", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = await selectDebt(el);
       dialog.dispatchEvent(
         new CustomEvent("find-bill-pay", {
           detail: {
@@ -11199,7 +11213,7 @@ describe("till-app", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = await selectDebt(el);
       dialog.dispatchEvent(
         new CustomEvent("find-bill-pay", {
           detail: {
@@ -11223,7 +11237,7 @@ describe("till-app", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      const dialog = await selectDebt(el);
       dialog.dispatchEvent(
         new CustomEvent("find-bill-pay", {
           detail: {
@@ -11296,10 +11310,12 @@ describe("till-app", () => {
       });
 
       async function refusedThenBack() {
+        let id = "wo-12";
         const { el } = await mountApp({
-          lookUpBills: vi.fn(async (q: string) => ({
-            bills: q === "12" ? [bill("wo-12", 12)] : [bill("wo-13", 13)],
-          })),
+          getFindBill: vi.fn(async () => {
+            const row = bill(id, id === "wo-12" ? 12 : 13);
+            return billRow({ ...row, collectionStatus: row.status as "waiting_for_payment" });
+          }),
           collectOrder: vi.fn().mockRejectedValue({
             code: "sale.total_exceeds_simplified_limit",
             limit: "3010.00",
@@ -11307,53 +11323,36 @@ describe("till-app", () => {
           }),
         });
         await toCounter(el);
-        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
-          .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
-          .click();
-        await el.updateComplete;
-        const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
-        await dialog.updateComplete;
+        emit(shell(el)!, "find-bill");
+        await flush(el);
+        let dialog = await selectDebt(el, id);
         const search = async (query: string) => {
-          const field = dialog.shadowRoot!.querySelector<WtInput>("[name=bill-search]")!;
-          await field.updateComplete;
-          const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-          await userEvent.fill(page.elementLocator(input), query);
-          await dialog.updateComplete;
-          dialog.shadowRoot!.querySelector<HTMLElement>("[data-search]")!.click();
-          await expect
-            .poll(() => dialog.shadowRoot!.querySelector("[data-bill]")?.textContent)
-            .toContain(query);
+          id = `wo-${query}`;
+        };
+        const selectFound = async () => {
+          dialog = await selectDebt(el, id);
         };
         const shownError = async () => {
           await flush(el);
+          if (!dialog.isConnected) return "";
           await dialog.updateComplete;
           const actions = dialog.shadowRoot!.querySelector("wt-form-actions")!;
           await actions.updateComplete;
           return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
         };
-        const selectFound = async () => {
-          dialog.shadowRoot!.querySelector<HTMLElement>("[data-bill]")!.click();
-          await dialog.updateComplete;
-        };
-        await search("12");
-        await selectFound();
         dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
         expect(await shownError()).toContain("3010,00");
-        dialog
-          .shadowRoot!.querySelector("wt-form-actions")!
-          .querySelector<HTMLElement>("[slot=cancel]")!
-          .click();
-        await dialog.updateComplete;
-        expect(dialog.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+        dialog.shadowRoot!.querySelector<HTMLElement>("[slot=cancel]")!.click();
+        await expect.poll(() => el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
         return { search, selectFound, shownError };
       }
 
-      it("shows no error once Back returns to the search", async () => {
+      it("shows no error once Back returns to the page", async () => {
         const { shownError } = await refusedThenBack();
         expect(await shownError()).toBe("");
       });
 
-      it("shows no error on another bill found by a new search", async () => {
+      it("shows no error on another bill selected from the page", async () => {
         const { search, selectFound, shownError } = await refusedThenBack();
         await search("13");
         await selectFound();
@@ -15397,7 +15396,7 @@ describe("a failed list refresh after a successful write", () => {
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
-      emit(el.shadowRoot!.querySelector("till-find-bill-dialog")!, "find-bill-pay", {
+      emit(await selectDebt(el), "find-bill-pay", {
         workingOrderId: "wo-debt",
         tender: { method: "cash", amount: "30.00" },
         invoiced: true,
@@ -20566,5 +20565,564 @@ describe("till-app: a box update while a kitchen display's dish move still waits
     window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
     await flush(el);
     expect(reload).toHaveBeenCalledOnce();
+  });
+});
+
+describe("A737 Find a bill page", () => {
+  const pageOf = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen");
+  async function open(overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage()),
+      listTransactions: vi
+        .fn()
+        .mockResolvedValue({ ...listPage([transactionRow()]), dates: resolvedDates }),
+      ...overrides,
+    });
+    const counter = await toCounter(el);
+    emit(shell(el)!, "find-bill");
+    await flush(el);
+    expect(pageOf(el), "Find a bill is a full page").not.toBeNull();
+    await vi.waitFor(() =>
+      expect(pageOf(el)!.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
+    );
+    return { el, counter, view: pageOf(el)! };
+  }
+  it("opens only from More as a page and Back preserves the counter basket", async () => {
+    const { el, counter, view } = await open();
+    counter.store.addProduct(cafe, "2");
+    await flush(el);
+    const sh = shell(el)!;
+    expect(sh.shadowRoot!.querySelector(".session > .find-bill")).toBeNull();
+    expect(sh.shadowRoot!.querySelector("[data-test=more-menu] .find-bill")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    expect(location.pathname).toContain("/view/find-bill");
+    emit(view, "find-bill-back");
+    await flush(el);
+    expect(pageOf(el)).toBeNull();
+    expect(counter.store.lines).toHaveLength(1);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    expect(location.pathname).not.toContain("/view/find-bill");
+  });
+  it("restores the Find a bill destination from its address", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/find-bill");
+    const { el } = await mountApp({
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage()),
+    });
+    await toCounter(el);
+    expect(pageOf(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+  });
+  it("reads an orderless historical receipt by sale ID and returns to the same Transactions table without altering the basket", async () => {
+    const getTransactionReceipt = vi
+      .fn()
+      .mockResolvedValue({ ...saleResult, invoiceType: "F1", locale: "es-ES" });
+    const originalRead = vi.fn();
+    const listTransactions = vi.fn(async (query: { page: number }) => ({
+      ...listPage([transactionRow()], 101, query.page),
+      dates: resolvedDates,
+    }));
+    const { el, counter, view } = await open({
+      listTransactions,
+      getTransactionReceipt,
+      getReceiptPrintStatus: originalRead,
+      getInvoiceDeliveries: originalRead,
+    });
+    counter.store.addProduct(cafe, "2");
+    await view.updateComplete;
+    const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
+    await userEvent.click(
+      page.elementLocator(
+        tabs.shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
+      ),
+    );
+    await flush(el);
+    const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>(
+      'wt-data-table[data-tab="transactions"]',
+    )!;
+    await vi.waitFor(() => expect(grid.rows).toHaveLength(1));
+    const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+    await userEvent.fill(page.elementLocator(search), "0091 ");
+    await vi.waitFor(() =>
+      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " }),
+    );
+    await vi.waitFor(() => expect(grid.loading).toBe(false));
+    await userEvent.click(
+      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
+    );
+    await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
+    await vi.waitFor(() => expect(grid.loading).toBe(false));
+    await userEvent.click(
+      page.elementLocator(
+        grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
+      ),
+    );
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    expect(getTransactionReceipt.mock.calls[0]![0]).toBe("sale-1");
+    const receipt = ticket(el)!;
+    await receipt.updateComplete;
+    expect(receipt.shadowRoot!.querySelector(".new-sale")).toBeNull();
+    expect(receipt.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
+    expect(receipt.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+    expect(originalRead).not.toHaveBeenCalled();
+    emit(receipt, "back-to-find-bill");
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+    expect(view.shadowRoot!.querySelector('wt-data-table[data-tab="transactions"]')).toBe(grid);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+    await vi.waitFor(() =>
+      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, q: "0091 " }),
+    );
+    expect(grid.serverPaging?.page).toBe(1);
+    expect(search.value).toBe("0091 ");
+  });
+  it("ignores a historical receipt answered after Back", async () => {
+    let resolve!: (value: TillSaleResult) => void;
+    const getTransactionReceipt = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          resolve = done;
+        }),
+    );
+    const { el, view } = await open({ getTransactionReceipt });
+    emit(view, "find-transaction-open", { row: transactionRow() });
+    await vi.waitFor(() => expect(getTransactionReceipt).toHaveBeenCalled());
+    emit(view, "find-bill-back");
+    await flush(el);
+    resolve(saleResult);
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    expect(pageOf(el)).toBeNull();
+  });
+  it("uses the historical sale ID for Reprint and a different offered language", async () => {
+    const reprintTransaction = vi.fn().mockResolvedValue(undefined);
+    const reprint = vi.fn();
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES", "ca-ES"] }),
+      getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, locale: "es-ES" }),
+      reprintTransaction,
+      reprint,
+    });
+    emit(view, "find-transaction-open", { row: transactionRow() });
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    emit(ticket(el)!, "reprint");
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    expect(chooser).not.toBeNull();
+    emit(chooser, "reprint-language-confirm", { language: "ca-ES" });
+    await vi.waitFor(() => expect(reprintTransaction).toHaveBeenCalledWith("sale-1", "ca-ES"));
+    expect(reprint).not.toHaveBeenCalled();
+  });
+  it("aborts an outstanding receipt read on Back and leaves the reopened page usable", async () => {
+    const getTransactionReceipt = vi
+      .fn()
+      .mockImplementationOnce(
+        (_id, { signal }) =>
+          new Promise((_resolve, reject) =>
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            ),
+          ),
+      )
+      .mockResolvedValue(saleResult);
+    const { el, view } = await open({ getTransactionReceipt });
+    emit(view, "find-transaction-open", { row: transactionRow() });
+    await vi.waitFor(() => expect(getTransactionReceipt).toHaveBeenCalledTimes(1));
+    emit(view, "find-bill-back");
+    await flush(el);
+    expect(getTransactionReceipt.mock.calls[0]![1].signal.aborted).toBe(true);
+    emit(shell(el)!, "find-bill");
+    await flush(el);
+    emit(pageOf(el)!, "find-transaction-open", { row: transactionRow({ saleId: "sale-2" }) });
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    expect(getTransactionReceipt.mock.calls[1]![0]).toBe("sale-2");
+  });
+
+  it("freshens a bill by ID before showing the selected unpaid-invoice collector", async () => {
+    let resolve!: (value: ReturnType<typeof billRow>) => void;
+    const getFindBill = vi.fn<TillApi["getFindBill"]>(
+      () =>
+        new Promise<ReturnType<typeof billRow>>((done) => {
+          resolve = done;
+        }),
+    );
+    const { el, counter, view } = await open({ getFindBill });
+    counter.store.addProduct(cafe, "1");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
+    expect(getFindBill.mock.calls[0]![0]).toBe("bill-1");
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    resolve(
+      billRow({
+        invoiceNumber: "F/99",
+        stillOwed: "17.25",
+        collectionStatus: "left_without_paying",
+        departedAt: "2026-10-14T20:00:00Z",
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
+    );
+    const collector = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+    await collector.updateComplete;
+    expect(collector.shadowRoot!.querySelector<WtInput>("[name=cash-received]")!.value).toBe(
+      "17.25",
+    );
+    expect(collector.shadowRoot!.querySelector("[name=bill-search]")).toBeNull();
+    expect(collector.shadowRoot!.textContent).toContain("F/99");
+    expect(counter.store.lines).toHaveLength(1);
+  });
+  it("a refused fresh bill read keeps the basket and page without collecting", async () => {
+    const collectOrder = vi.fn();
+    const getFindBill = vi.fn().mockRejectedValue({ code: "working_order.not_found" });
+    const { el, counter, view } = await open({ getFindBill, collectOrder });
+    counter.store.addProduct(cafe, "1");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.lines).toHaveLength(1);
+    expect(collectOrder).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("held.stale"));
+  });
+  it("an edited basket can stay or discard before a fresh held order replaces it", async () => {
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      id: "bill-1",
+      orderNumber: 42,
+      label: "Held",
+      revision: 3,
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "3.000" }],
+    });
+    const { el, counter, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ state: "held", paid: "0.00" })),
+      retrieveWorkingOrder,
+    });
+    counter.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true),
+    );
+    expect(retrieveWorkingOrder).not.toHaveBeenCalled();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.lines[0]!.quantity).toBe("1");
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(question.open).toBe(true));
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await vi.waitFor(() => expect(counter.store.id).toBe("bill-1"));
+    expect(pageOf(el)).toBeNull();
+    expect(counter.store.lines[0]!.quantity).toBe("3");
+  });
+  it("a partly paid counter bill enters bill payments without using whole-order collection", async () => {
+    const collectOrder = vi.fn(),
+      recordSale = vi.fn();
+    const getBillBalance = vi.fn().mockResolvedValue({
+      workingOrderId: "bill-1",
+      status: "open",
+      total: "25.10",
+      received: "5.00",
+      reserved: "0.00",
+      outstanding: "20.10",
+      tips: "0.00",
+      payments: [],
+      paidLines: [],
+    });
+    const { el, counter, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow()),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "bill-1",
+        orderNumber: 42,
+        label: "Partial",
+        revision: 3,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      }),
+      getBillBalance,
+      collectOrder,
+      recordSale,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull(),
+    );
+    expect(counter.store.id).toBe("bill-1");
+    expect(getBillBalance).toHaveBeenCalledWith("bill-1");
+    expect(collectOrder).not.toHaveBeenCalled();
+    expect(recordSale).not.toHaveBeenCalled();
+  });
+
+  it("a historical F1 linked to an order keeps that order's original delivery controls", async () => {
+    const filed = { ...saleResult, invoiceType: "F1" as const, invoiceNumber: "FF/7" };
+    const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
+    const { el, view } = await open({
+      getTransactionReceipt: vi.fn().mockResolvedValue(filed),
+      getReceiptPrintStatus,
+    });
+    emit(view, "find-transaction-open", { row: transactionRow({ workingOrderId: "wo-filed" }) });
+    await vi.waitFor(() =>
+      expect(ticket(el)?.originalReceiptPrint).toEqual({ status: "not_queued" }),
+    );
+    await ticket(el)!.updateComplete;
+    expect(getReceiptPrintStatus).toHaveBeenCalledWith("wo-filed");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+  });
+  it("Back returns keyboard focus to More", async () => {
+    const { el, view } = await open();
+    await userEvent.click(
+      page.elementLocator(
+        view.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,
+      ),
+    );
+    await flush(el);
+    const menu = shell(el)!.shadowRoot!.querySelector("[data-test=more-menu]")!;
+    expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
+  });
+  it("a held retrieval that fails leaves the current basket on the page and reports stale", async () => {
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ paid: "0.00", state: "held" })),
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(currentApi.retrieveWorkingOrder).toHaveBeenCalled());
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.lines).toHaveLength(0);
+    expect(el.shadowRoot!.textContent).toContain(t("held.stale"));
+  });
+
+  it("opens the selected party bill through the table's existing controls and retains a counter draft", async () => {
+    const getTabLines = vi
+      .fn<TillApi["getTabLines"]>()
+      .mockResolvedValue({ lines: [], revision: 0, editSentLines: false });
+    const { el, view, counter } = await open({
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(
+          billRow({ workingOrderId: "wo-other", partyId: "v-2", state: "unpaid", paid: "0.00" }),
+        ),
+      getTablesState: vi.fn().mockResolvedValue([openTable]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-other" }]),
+      getTabLines,
+    });
+    counter.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-other" }) });
+    await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-other"));
+    expect(getTabLines.mock.calls.map(([id]) => id)).toContain("wo-other");
+    expect(counter.store.lines[0]!.quantity).toBe("1");
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(false);
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+  });
+  it("a placed uninvoiced counter order opens the existing collection stage", async () => {
+    const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      id: "bill-placed",
+      orderNumber: 14,
+      revision: 2,
+      label: "Waiting",
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+    });
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          workingOrderId: "bill-placed",
+          orderStatus: "placed",
+          state: "unpaid",
+          paid: "0.00",
+        }),
+      ),
+      retrievePlacedOrder,
+    });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-placed" }) });
+    await vi.waitFor(() => expect(counter.store.id).toBe("bill-placed"));
+    expect(retrievePlacedOrder.mock.calls[0]![0]).toBe("bill-placed");
+    expect(pageOf(el)).toBeNull();
+    expect(tenderPay(el).stage).toBe("collect");
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+  it("a paid waiting order opens its receipt without discarding the current basket or handing over", async () => {
+    const getFiledTicket = vi.fn().mockResolvedValue(saleResult);
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          workingOrderId: "bill-paid",
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket,
+    });
+    counter.store.addProduct(cafe, "1");
+    await flush(el);
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-paid" }) });
+    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
+    expect(getFiledTicket).toHaveBeenCalledWith("bill-paid");
+    expect(counter.store.lines[0]!.quantity).toBe("1");
+    expect(currentApi.markCollected).not.toHaveBeenCalled();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("Back during a table offer read prevents that table from opening afterwards", async () => {
+    let finish!: (value: ZoneOfferCatalogue) => void;
+    const listZoneOffers = vi.fn(
+      () =>
+        new Promise<ZoneOfferCatalogue>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v-2", workingOrderId: "wo-7" })),
+      getTablesState: vi.fn().mockResolvedValue([openTable]),
+      getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
+      listZoneOffers,
+    });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-7" }) });
+    await vi.waitFor(() => expect(listZoneOffers).toHaveBeenCalledTimes(1));
+    emit(view, "find-bill-back");
+    await flush(el);
+    finish(fixtureOffers({ menus: [defaultMenu], products: [cafe] }));
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(pageOf(el)).toBeNull();
+    expect(currentApi.getTabLines).not.toHaveBeenCalled();
+  });
+  it("Back aborts a pending placed-order read, which cannot replace a newer basket", async () => {
+    let finish!: (value: object) => void;
+    const retrievePlacedOrder = vi.fn<
+      (id: string, options: { signal: AbortSignal }) => Promise<object>
+    >(
+      () =>
+        new Promise<object>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view, counter } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          workingOrderId: "bill-placed",
+          orderStatus: "placed",
+          state: "unpaid",
+          paid: "0.00",
+        }),
+      ),
+      retrievePlacedOrder,
+    });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-placed" }) });
+    await vi.waitFor(() => expect(retrievePlacedOrder).toHaveBeenCalledTimes(1));
+    emit(view, "find-bill-back");
+    await flush(el);
+    expect(retrievePlacedOrder.mock.calls[0]![1].signal.aborted).toBe(true);
+    counter.store.addProduct(cafe, "1");
+    const id = counter.store.id;
+    finish({
+      id: "bill-placed",
+      orderNumber: 14,
+      revision: 2,
+      label: "Late",
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+    });
+    await flush(el);
+    expect(counter.store.id).toBe(id);
+    expect(counter.store.lines[0]!.quantity).toBe("1");
+    expect(tenderPay(el).stage).toBe("order");
+  });
+  it("a fresh bill answered after logout cannot open the collector for another person", async () => {
+    let finish!: (row: ReturnType<typeof billRow>) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof billRow>>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({ getFindBill });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => expect(getFindBill).toHaveBeenCalled());
+    emit(shell(el)!, "logout");
+    await flush(el);
+    finish(billRow({ collectionStatus: "waiting_for_payment", invoiceNumber: "F/99" }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    expect(lock(el)).not.toBeNull();
+    expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("browser Back leaves the page with the basket intact", async () => {
+    const { el, counter } = await open();
+    counter.store.addProduct(cafe, "1");
+    await flush(el);
+    history.back();
+    await vi.waitFor(() => expect(pageOf(el)).toBeNull());
+    expect(counter.store.lines[0]!.quantity).toBe("1");
+    expect(location.pathname).not.toContain("/view/find-bill");
+  });
+  it("a selected invoice's double Pay starts only one collection", async () => {
+    let finish!: (result: TillSaleResult) => void;
+    const collectOrder = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          workingOrderId: "wo-debt",
+          orderStatus: "placed",
+          state: "unpaid",
+          total: "30.00",
+          paid: "0.00",
+          stillOwed: "30.00",
+          invoiceNumber: "A/12",
+          collectionStatus: "waiting_for_payment",
+        }),
+      ),
+      collectOrder,
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
+    );
+    const collector = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+    const detail = {
+      workingOrderId: "wo-debt",
+      tender: { method: "cash", amount: "30.00" },
+      invoiced: true,
+    };
+    emit(collector, "find-bill-pay", detail);
+    emit(collector, "find-bill-pay", detail);
+    expect(collectOrder).toHaveBeenCalledTimes(1);
+    expect(collectOrder).toHaveBeenCalledWith("wo-debt", { method: "cash", amount: "30.00" });
+    finish(saleResult);
+    await flush(el);
+    expect(ticket(el)?.originalReceiptAvailable).toBe(false);
+    expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+  });
+  it("a canvas with an Order tab leaves Find a bill when its selected party bill opens", async () => {
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getTablesState: vi.fn().mockResolvedValue([openTable]),
+      getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(
+          billRow({ workingOrderId: "wo-7", partyId: "v-2", paid: "0.00", state: "unpaid" }),
+        ),
+    });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-7" }) });
+    await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-7"));
+    expect(shell(el)!.activeTabKey).toBe("order");
+    expect(pageOf(el)).toBeNull();
   });
 });

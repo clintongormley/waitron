@@ -820,10 +820,14 @@ describe("till-tab-shell at phone width", () => {
     });
   });
 
-  it("draws the wide header whole: brand, and every button straight in the session row in priority order", async () => {
+  it("draws the wide header with Find a bill in More and every other button in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
-      expect(el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')).toBeNull();
+      expect(
+        el
+          .shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!
+          .querySelectorAll(":scope > *"),
+      ).toHaveLength(1);
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
@@ -835,7 +839,6 @@ describe("till-tab-shell at phone width", () => {
             c.localName,
         ),
       ).toEqual([
-        "find-bill",
         "expo",
         "station",
         "schedule",
@@ -846,6 +849,7 @@ describe("till-tab-shell at phone width", () => {
         "data-open-transfers",
         "wt-language-chooser",
         "operator-menu",
+        "more-menu",
       ]);
       for (const button of session.querySelectorAll(":scope > wt-button")) {
         expect(button.getAttribute("variant")).toBe("secondary");
@@ -859,7 +863,7 @@ describe("till-tab-shell at phone width", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
-      await vi.waitFor(() => expect(menuOf(el)).toBeNull());
+      await vi.waitFor(() => expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1));
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
       await page.viewport(390, 844);
@@ -881,7 +885,6 @@ describe("till-tab-shell above phone width", () => {
     ["schedule", ".schedule"],
     ["station", ".station"],
     ["expo", ".expo"],
-    ["find-bill", ".find-bill"],
     ["operator", ".logout"],
   ] as const;
 
@@ -1018,9 +1021,9 @@ describe("till-tab-shell above phone width", () => {
     loadLocales: full.loadLocales!,
   };
 
-  const service = [".find-bill", ".expo", ".station"] as const;
+  const service = [".expo", ".station"] as const;
 
-  /** What each item that ranks below Find a bill, Pass and Kitchen draws in the session row. */
+  /** What each item that ranks below Pass and Kitchen draws in the session row. */
   const belowService: Record<string, readonly string[]> = {
     transfers: ['[data-test="department-transfers"]', "[data-open-transfers]"],
     equipment: [".equipment"],
@@ -1029,8 +1032,8 @@ describe("till-tab-shell above phone width", () => {
     schedule: [".schedule"],
   };
 
-  /** The items of `shell` that rank below Find a bill, Pass and Kitchen, and the viewport widths
-   * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep all three with the
+  /** The items of `shell` that rank below Pass and Kitchen, and the viewport widths
+   * just wide enough (`fits`) and just too narrow (`tight`) for its bar to keep both with the
    * name hidden and those items in More. Measured in the running browser, because how wide the text
    * draws differs between platforms. */
   async function serviceWidths(
@@ -1041,7 +1044,7 @@ describe("till-tab-shell above phone width", () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
       await settle(el);
       await settle(el);
-      expect(menuOf(el)).toBeNull();
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       const header = el.shadowRoot!.querySelector("header")!;
       const session = header.querySelector<HTMLElement>(".session")!;
       const width = (node: Element) => node.getBoundingClientRect().width;
@@ -1069,7 +1072,6 @@ describe("till-tab-shell above phone width", () => {
       const offset = window.innerWidth - width(header);
       await page.viewport(700, 844);
       await settle(el);
-      need += width(menuOf(el)!) + sessionGap;
       host.remove();
       result = {
         below,
@@ -1085,7 +1087,7 @@ describe("till-tab-shell above phone width", () => {
     ["the demo counter", demoCounter],
   ] as const) {
     for (const locale of ["en-GB", "es-ES"] as const) {
-      it(`moves the transfers, and what ranks below Find a bill, Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
+      it(`moves the transfers, and what ranks below Pass and Kitchen, into More before them, then Kitchen first, with ${fixture} in ${locale}`, async () => {
         await withLocale(locale, async () => {
           const { below, fits, tight } = await serviceWidths(shell);
           expect(below[0]).toBe("transfers");
@@ -1096,6 +1098,34 @@ describe("till-tab-shell above phone width", () => {
             await atViewport(width, async () => {
               const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
               await settle(el);
+              if (width <= 640) {
+                expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).not.toBeNull();
+                expect(inMore(el), `${width}`).toEqual(
+                  fixture === "full"
+                    ? [
+                        "transfers",
+                        "equipment",
+                        "profile",
+                        "allergens",
+                        "schedule",
+                        "station",
+                        "expo",
+                        "operator",
+                      ]
+                    : [
+                        "transfers",
+                        "equipment",
+                        "allergens",
+                        "schedule",
+                        "station",
+                        "expo",
+                        "operator",
+                      ],
+                );
+                expectOneRow(el);
+                host.remove();
+                return;
+              }
               expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).toBeNull();
               expect(inMore(el), `${width}`).toEqual(left);
               const menu = menuOf(el)!;
@@ -1131,7 +1161,7 @@ describe("till-tab-shell above phone width", () => {
         atViewport(ROOMY_WIDTH, async () => {
           const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
           await settle(el);
-          expect(menuOf(el)).toBeNull();
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
             "header .session > [data-open-transfers]",
           )!;
@@ -1154,7 +1184,7 @@ describe("till-tab-shell above phone width", () => {
         await atViewport(ROOMY_WIDTH, async () => {
           const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
           await settle(el);
-          expect(menuOf(el)).toBeNull();
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
           const onBar = nameMenu.querySelector<HTMLElement>(".logout")!;
           expect(onBar.textContent!.trim()).toBe(label);
@@ -1178,19 +1208,17 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
-  it("keeps Find a bill, Pass and Kitchen on the demo counter's Spanish bar at 800 wide when its measured width fits there", async () => {
+  it("keeps Pass and Kitchen on the demo counter's Spanish bar at 800 wide when its measured width fits there", async () => {
     await withLocale("es-ES", async () => {
       const { fits, tight } = await serviceWidths(demoCounter);
-      console.info(
-        `The demo counter's Spanish bar keeps Find a bill, Pass and Kitchen from ${fits} px.`,
-      );
+      console.info(`The demo counter's Spanish bar keeps Pass and Kitchen from ${fits} px.`);
       await atViewport(800, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", demoCounter);
         await settle(el);
         expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
         const moved = inMore(el);
         if (800 >= fits) {
-          for (const key of ["find-bill", "expo", "station"]) {
+          for (const key of ["expo", "station"]) {
             expect(moved, `fits from ${fits}`).not.toContain(key);
           }
         }
@@ -1254,7 +1282,7 @@ describe("till-tab-shell above phone width", () => {
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
       await settle(el);
-      expect(menuOf(el)).toBeNull();
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       expectOneRow(el);
     });
@@ -1327,7 +1355,7 @@ describe("till-tab-shell above phone width", () => {
       atViewport(ROOMY_WIDTH, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
         await settle(el);
-        expect(menuOf(el)).toBeNull();
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
@@ -1401,7 +1429,7 @@ describe("till-tab-shell above phone width", () => {
         expect(inMore(el)).toEqual(held);
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)).toBeNull();
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1410,7 +1438,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
-      atViewport(1024, async () => {
+      atViewport(900, async () => {
         const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
           ...full,
           canSwitchProfile: false,
@@ -1435,7 +1463,7 @@ describe("till-tab-shell above phone width", () => {
         );
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)).toBeNull();
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1559,7 +1587,7 @@ describe("till-tab-shell above phone width", () => {
             for (let i = 0; i < ticks; i += 1) await Promise.resolve();
             el.kiosk = false;
             await settle(el);
-            expect(menuOf(el), `${ticks}`).toBeNull();
+            expect(menuOf(el)!.querySelectorAll(":scope > *"), `${ticks}`).toHaveLength(1);
             expect(el.shadowRoot!.querySelector("header > .brand"), `${ticks}`).not.toBeNull();
             expectOneRow(el);
           }
@@ -1576,7 +1604,7 @@ describe("till-tab-shell above phone width", () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
       await settle(el);
-      expect(menuOf(el)).toBeNull();
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       el.remove();
       host.append(el);
       await settle(el);

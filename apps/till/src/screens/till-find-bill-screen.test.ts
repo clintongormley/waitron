@@ -511,3 +511,28 @@ it("a late refused list cannot overwrite the successful replacement page", async
   expect(table(el).errorMessage).toBe("");
   expect(table(el).shadowRoot!.textContent).toContain("Current bill");
 });
+
+it.each([
+  ["en-GB", 101, "Bills · 101 open"],
+  ["es-ES", 101, "Cuentas · 101 abiertas"],
+  ["es-ES", 1, "Cuentas · 1 abierta"],
+] as const)(
+  "keeps the accessible open count in the Bills tab independently of filtered totals (%s, %s)",
+  async (locale, count, title) => {
+    const source = findBillApi(async (url) =>
+      json(
+        url.pathname.endsWith("options")
+          ? billOptions
+          : { ...listPage([billRow()], 1), openCount: count },
+      ),
+    );
+    const { el } = await mount(source);
+    setLocale(locale);
+    const grid = await ready(el);
+    grid.chooseFilter("state", ["held"]);
+    await vi.waitFor(() => expect(requests(source.fetcher)).toHaveLength(2));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.items[0]!.label).toBe(title);
+    expect(grid.serverPaging?.total).toBe(1);
+  },
+);

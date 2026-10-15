@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { BillBalance, BillPaymentView, TillApi, TillProduct } from "../api/client.js";
+import type { BillBalance, BillPaymentView, BillLookupRow, TillProduct } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 import type { PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
@@ -254,30 +254,20 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
     "sends %s as canonical cash when collecting a found bill",
     async (amount) => {
       setLocale(locale);
-      const api = {
-        lookUpBills: async () => ({
-          bills: [
-            {
-              workingOrderId: "order-1",
-              orderNumber: 1,
-              label: "Order",
-              partyName: "Guest",
-              tables: [],
-              invoiceNumber: null,
-              openedAt: "2026-10-13T09:00:00.000Z",
-              departedAt: "2026-10-13T10:00:00.000Z",
-              status: "left_without_paying",
-              stillOwed: "5.00",
-            },
-          ],
-        }),
-      } as unknown as TillApi;
-      const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { api });
+      const bill = {
+        workingOrderId: "order-1",
+        orderNumber: 1,
+        label: "Order",
+        partyName: "Guest",
+        tables: [],
+        invoiceNumber: null,
+        openedAt: "2026-10-13T09:00:00.000Z",
+        departedAt: "2026-10-13T10:00:00.000Z",
+        status: "left_without_paying",
+        stillOwed: "5.00",
+      } satisfies BillLookupRow;
+      const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", { bill });
       const asked = capture<FindBillPayDetail>(el, "find-bill-pay");
-      await type(el, "bill-search", "Order");
-      await click(el, "[data-search]");
-      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
-      await click(el, "[data-bill]");
       await type(el, "cash-received", amount);
       await click(el, "[data-collect]");
       expect(asked).toEqual([
