@@ -70,7 +70,7 @@ Point 2's "Fecha de operación only when it differs from the issue date" is alre
 behaves: both readers that feed a full invoice drop the operation date when it equals the issue day
 (`apps/server/src/receipt-issuer.ts:29-35`, `apps/server/src/invoice-document.ts:146-148`; both
 since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `2d9726855` and
-`eb6403150`). Two existing cases in `invoice-document.test.ts` pin it (named in commit `1bf7567a6`); Part 2 adds no code.
+`eb6403150`). Three existing cases in `invoice-document.test.ts` pin `invoice-document.ts`'s reader (named in commit `1bf7567a6`), and «retains the full-invoice service date from bill opening …» in `bill-payments.test.ts` pins `receipt-issuer.ts`'s; Part 2 adds no code.
 
 ---
 
@@ -1307,8 +1307,9 @@ For a dish group whose every line has `net`, each line gets four cells, the figu
    by the dish quantity in `grossBasketWithOptions`, `packages/catalogue/src/pricing.ts:319-323`),
    so two 0.05 kg portions are stored as 0.100: the row prints «2 · Queso extra · 1,24 · 2,48», which
    adds up, where «0.100 kg» beside a price per 0.05 would not. When the division is not a whole
-   number (no till path stores such a line: an extra on a dish whose `pricingUnit` is not `each` is refused,
-   `extras.unsupported_product`, `apps/server/src/working-order.ts`; a hand-built test line can store anything), the cell falls back to the quantity and unit name as for
+   number (an extra on a dish sold as a fraction of a unit with no scale — say 0.5 of a venue-made «l» —
+   stores half its portion; a dish on a scale cannot carry extras, `extras.unsupported_product`,
+   `apps/server/src/working-order.ts`; a hand-built test line can store anything), the cell falls back to the quantity and unit name as for
    any other line (`quantityText`, Task 2.3a). This follows the owner's Q4 answer, «we don't need
    the portion size».
 
@@ -1383,6 +1384,8 @@ invoice still prints the record's base and VAT; Task 2.3b pins that.
 | `taxableBase` | Base imponible | Base imposable | Base impoñible | Zerga-oinarria |
 | `registeredAddress` | Domicilio fiscal: | Domicili fiscal: | Domicilio fiscal: | Helbide fiskala: |
 
+(Changed 2026-10-15 after review: the `registeredAddress` labels lost their colon, and the code adds «: », as it does for `nif`.)
+
 - [ ] **Step 1: Failing test** (append to `packages/country-es/src/spain.test.ts`)
 
 ```ts
@@ -1436,6 +1439,8 @@ right-aligned, an empty cell as spaces; the item column takes what is left and w
 (`wrapText`, continuation lines indented to the item column). If the item column would be narrower
 than 10, each row prints in two lines instead: units and item across the full width, then the
 figures right-aligned on the next line (Review Focus 3).
+
+(Changed 2026-10-15 after review: a units cell that would leave the item column under 10 prints on its own line(s) above its row, and in the two-line form figures too wide together split across lines, right-aligned.)
 
 - [ ] **Step 1: Failing tests**
 
@@ -1616,9 +1621,9 @@ name>», the harmless direction. If building this turns out to need a new stored
 line, STOP (Global Constraints) and keep «4 ud».
 
 (Changed 2026-10-15 after review: `receiptLines` reads the recorded `sold_in_each` context for
-every line with a unit name, dishes included, and the name test above is only the fallback for a
-line with no context row, now requiring EVERY stored entry to be Each's abbreviation in its
-language.)
+every line with a unit name, dishes included. Any line it does not mark Each — one with no context
+row, or one whose context says it was not sold in Each — still goes through the name test above,
+which now requires EVERY stored entry to be Each's abbreviation in its language.)
 
 All arithmetic uses `@waitron/shared`'s `decimal`, `multiplyDecimal`, `divideDecimal` (at
 `MONEY_SCALE`), `subtractDecimal`, `addDecimal` and `compareDecimal`; no `Number`.
@@ -2149,6 +2154,8 @@ and price, amount and rate right-aligned at fixed right edges measured with the 
 `:43-45`), the header row bold, an item name wrapping inside its column, an empty cell drawn as
 nothing. A row that needs more than the remaining page height moves to the next page whole.
 
+(Changed 2026-10-15 after review: a units cell that would leave the item column under 100 pt takes a line of its own.)
+
 **Files:**
 - Modify: `apps/server/src/invoice-page.ts`
 - Test: `apps/server/src/invoice-pdf.test.ts`, `apps/server/src/invoice-raster.test.ts`
@@ -2290,9 +2297,9 @@ builds Q10's rows is written. Line numbers are from Part 2's branch on 2026-10-1
   `packages/adjustments/src/record.ts:187-212`). A whole-bill discount is not recorded per line: it
   lowers each line's price (`spreadBillDiscount`, `packages/adjustments/src/spread.ts:308`).
 - The receipt reads those rows when it prints and puts each one on its row or on the bill
-  (`apps/server/src/receipt-adjustments.ts:83-116`), but only when every row finds its line and the
-  list totals less everything taken off equal what was charged (`:117-124`). Otherwise each dish
-  gets one entry for everything it lost (`perDish`, `:147`).
+  (`apps/server/src/receipt-adjustments.ts:79-112`), but only when every row finds its line and the
+  list totals less everything taken off equal what was charged (`:113-120`). Otherwise each dish
+  gets one entry for everything it lost (`perDish`, `:143`).
 - So, when every row is placed, a line's share of the whole-bill discount with VAT is its list
   total less its charged total less its own reductions; before VAT, its own discount is the base of
   its list total less the base of (list total − own reductions), and the bill's share is the rest
@@ -2329,7 +2336,7 @@ filed base is 8,03 (measured, Part 2). Worked by hand with Python's `Decimal`, r
   `recordCorrection` (`record-correction.ts:204`, `:308`) use. What a corrective line stores is
   decided in the tasks (a credit negates `listGross` today, `apps/server/src/cancel-credit.ts:106`).
 - **Where it is read.** The full invoice's reader of filed lines
-  (`receipt-adjustments.ts:46-80`, beside `listGross` at `:55` and `:68`), which paper and A4 share
+  (`receipt-adjustments.ts:42-77`, beside `listGross` at `:51` and `:64`), which paper and A4 share
   (A4 reaches it through `receiptLines`, `apps/server/src/invoice-document.ts:62-82`). Then
   `beforeVatFigures` (`apps/server/src/receipt-figures.ts:38-57`) takes the stored price instead of
   dividing the list total back, and loses the early return for less than one priced unit (`:45`).
