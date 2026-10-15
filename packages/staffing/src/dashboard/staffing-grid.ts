@@ -27,6 +27,8 @@ import {
   deleteBlock,
   laneLayout,
   resizeBlock,
+  sameBlock,
+  sameBlocks,
   span,
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
@@ -54,25 +56,6 @@ function drawnSpan(
 ): { start: number; end: number } {
   const { start, end } = blockSpan(range, cutover);
   return end > start ? { start, end } : { start, end: DAY };
-}
-
-function sameBlock(a: StaffingBlock | undefined, b: StaffingBlock | undefined): boolean {
-  return (
-    a !== undefined &&
-    b !== undefined &&
-    a.staffRoleId === b.staffRoleId &&
-    a.headcount === b.headcount &&
-    a.startsAt === b.startsAt &&
-    a.endsAt === b.endsAt
-  );
-}
-
-function sameBlocks(
-  a: readonly StaffingBlock[] | null,
-  b: readonly StaffingBlock[] | null,
-): boolean {
-  if (a === null || b === null) return a === b;
-  return a.length === b.length && a.every((block, i) => sameBlock(block, b[i]));
 }
 
 /** One area's staffing over several days: a drag down a column adds a block of the chosen staff

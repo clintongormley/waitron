@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   addBlock,
   changeBlock,
+  copyBlocks,
   copyDay,
   deleteBlock,
   laneLayout,
   MAX_BLOCK_MINUTES,
   resizeBlock,
+  sameBlock,
+  sameBlocks,
 } from "./block-model.js";
 import { parseBlocks } from "./paint-rules.js";
 import type { StaffingBlock } from "./slots.js";
@@ -289,5 +292,45 @@ describe("copyDay", () => {
   it("copies a day it does not hold as an empty day", () => {
     const days = new Map<string, StaffingBlock[] | null>([["b", null]]);
     expect(copyDay(days, "z", ["b"])).toEqual(new Map([["b", []]]));
+  });
+});
+
+describe("sameBlocks and copyBlocks", () => {
+  const day = [block("sous", "09:00", "15:00"), block("cook", "12:00", "14:00", 2)];
+
+  it("compares each block's staff role, headcount and times, in order", () => {
+    expect(sameBlocks(day, structuredClone(day))).toBe(true);
+    expect(sameBlocks(day, [day[1]!, day[0]!])).toBe(false);
+    expect(sameBlocks(day, day.slice(0, 1))).toBe(false);
+    for (const change of [
+      { staffRoleId: "cook" },
+      { headcount: 3 },
+      { startsAt: "09:15" },
+      { endsAt: "15:15" },
+    ])
+      expect(sameBlocks(day, [{ ...day[0]!, ...change }, day[1]!]), JSON.stringify(change)).toBe(
+        false,
+      );
+    expect(sameBlock(day[0], undefined)).toBe(false);
+    expect(sameBlock(undefined, undefined)).toBe(false);
+  });
+
+  it("holds a null day equal only to another null day, and a missing day equal to an empty one", () => {
+    expect(sameBlocks(null, null)).toBe(true);
+    expect(sameBlocks(null, [])).toBe(false);
+    expect(sameBlocks([], null)).toBe(false);
+    expect(sameBlocks(null, undefined)).toBe(false);
+    expect(sameBlocks(undefined, null)).toBe(false);
+    expect(sameBlocks(undefined, [])).toBe(true);
+    expect(sameBlocks([], undefined)).toBe(true);
+    expect(sameBlocks(undefined, day)).toBe(false);
+  });
+
+  it("copies each block by value and keeps a null day null", () => {
+    const copied = copyBlocks(day);
+    expect(copied).toEqual(day);
+    copied[0]!.headcount = 9;
+    expect(day[0]!.headcount).toBe(1);
+    expect(copyBlocks(null)).toBeNull();
   });
 });

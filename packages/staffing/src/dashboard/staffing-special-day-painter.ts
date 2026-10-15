@@ -9,6 +9,7 @@ import {
   type LeaveCoordinator,
 } from "@waitron/ui";
 import { paintRowStyles, periodColourStyles } from "@waitron/venue-service/painter";
+import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SpecialDayStaffing, SpecialDayStaffingEdit, StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
@@ -19,7 +20,6 @@ import {
   paintRow,
   painterStyles,
   refusedEdit,
-  sameDay,
   staffRoleDialog,
 } from "./painter-parts.js";
 import type { StaffingChange, StaffingColumn } from "./staffing-grid.js";
@@ -37,18 +37,12 @@ interface Refused {
   reason?: string;
 }
 
-const copyEntry = (day: readonly StaffingBlock[] | null) =>
-  day === null ? null : day.map((block) => ({ ...block }));
 const copyDates = (dates: ReadonlyMap<string, readonly StaffingBlock[] | null>): Dates =>
-  new Map([...dates].map(([key, day]) => [key, copyEntry(day)]));
+  new Map([...dates].map(([key, day]) => [key, copyBlocks(day)]));
 const copyDraft = (draft: Draft): Draft =>
   new Map([...draft].map(([key, dates]) => [key, copyDates(dates)]));
-const sameEntry = (
-  a: readonly StaffingBlock[] | null | undefined,
-  b: readonly StaffingBlock[] | null | undefined,
-) => (a === null || b === null ? a === b : sameDay(a, b));
 const sameDates = (a: Dates, b?: Dates) =>
-  [...a].every(([key, day]) => sameEntry(day, b?.get(key)));
+  [...a].every(([key, day]) => sameBlocks(day, b?.get(key)));
 const sameDraft = (a: Draft, b: Draft) =>
   a.size === b.size && [...a].every(([key, dates]) => sameDates(dates, b.get(key)));
 
@@ -56,7 +50,7 @@ function seed(read: SpecialDayStaffing): Draft {
   return new Map(
     read.areas.map(({ area, dates }) => [
       areaKey(area),
-      new Map(dates.map(({ dateId, blocks }) => [dateId, copyEntry(blocks)])),
+      new Map(dates.map(({ dateId, blocks }) => [dateId, copyBlocks(blocks)])),
     ]),
   );
 }
@@ -218,7 +212,7 @@ export class StaffingSpecialDayPainter extends LitElement {
       const kept = fresh.get(key);
       if (!kept) continue;
       for (const [dateId, day] of dates)
-        if (!kept.has(dateId) && !sameEntry(day, this.baseline.get(key)?.get(dateId)))
+        if (!kept.has(dateId) && !sameBlocks(day, this.baseline.get(key)?.get(dateId)))
           lost.add(dateId);
     }
     const goneDates = lost.size
@@ -237,8 +231,8 @@ export class StaffingSpecialDayPainter extends LitElement {
         key,
         new Map(
           [...dates].map(([dateId, day]) => {
-            const edited = current && !sameEntry(current.get(dateId), before?.get(dateId));
-            return [dateId, edited ? current.get(dateId)! : copyEntry(day)];
+            const edited = current && !sameBlocks(current.get(dateId), before?.get(dateId));
+            return [dateId, edited ? current.get(dateId)! : copyBlocks(day)];
           }),
         ),
       );
@@ -284,8 +278,8 @@ export class StaffingSpecialDayPainter extends LitElement {
       const key = areaKey(area);
       const dates = this.draft.get(key)!;
       return [...dates]
-        .filter(([dateId, day]) => !sameEntry(day, this.baseline.get(key)?.get(dateId)))
-        .map(([dateId, day]) => ({ area: { ...area }, dateId, blocks: copyEntry(day) }));
+        .filter(([dateId, day]) => !sameBlocks(day, this.baseline.get(key)?.get(dateId)))
+        .map(([dateId, day]) => ({ area: { ...area }, dateId, blocks: copyBlocks(day) }));
     });
   }
 
@@ -310,7 +304,7 @@ export class StaffingSpecialDayPainter extends LitElement {
     this.saving = false;
     const baseline = copyDraft(this.baseline);
     for (const { area, dateId, blocks } of edits)
-      baseline.get(areaKey(area))!.set(dateId, copyEntry(blocks));
+      baseline.get(areaKey(area))!.set(dateId, copyBlocks(blocks));
     this.commitBaseline(baseline);
     this.load(true);
   }

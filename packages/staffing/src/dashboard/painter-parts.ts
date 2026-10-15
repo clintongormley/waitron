@@ -3,7 +3,7 @@ import { codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { MAX_HEADCOUNT } from "../block-model.js";
-import { areaKey, type AreaRef, type StaffingBlock } from "../slots.js";
+import { areaKey, type AreaRef } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { t, tf } from "./strings.js";
@@ -35,16 +35,6 @@ export const painterStyles = css`
     --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
   }
 `;
-
-export const sameDay = (a: readonly StaffingBlock[] = [], b: readonly StaffingBlock[] = []) =>
-  a.length === b.length &&
-  a.every(
-    (block, index) =>
-      block.staffRoleId === b[index]!.staffRoleId &&
-      block.headcount === b[index]!.headcount &&
-      block.startsAt === b[index]!.startsAt &&
-      block.endsAt === b[index]!.endsAt,
-  );
 
 const listOf = (names: readonly string[]) =>
   new Intl.ListFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {

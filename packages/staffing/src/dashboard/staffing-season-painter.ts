@@ -11,6 +11,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
 import { paintRowStyles, periodColourStyles, seasonLastDay } from "@waitron/venue-service/painter";
+import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit, StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
@@ -21,7 +22,6 @@ import {
   paintRow,
   painterStyles,
   refusedEdit,
-  sameDay,
   staffRoleDialog,
 } from "./painter-parts.js";
 import type { StaffingChange, StaffingColumn } from "./staffing-grid.js";
@@ -45,11 +45,11 @@ const A_MONDAY = Date.UTC(2024, 0, 1);
 const DAY_MS = 86_400_000;
 
 const copyWeek = (week: ReadonlyMap<string, readonly StaffingBlock[]>): Week =>
-  new Map([...week].map(([key, day]) => [key, day.map((block) => ({ ...block }))]));
+  new Map([...week].map(([key, day]) => [key, copyBlocks(day)]));
 const copyDraft = (draft: Draft): Draft =>
   new Map([...draft].map(([key, week]) => [key, copyWeek(week)]));
 const sameWeek = (a: Week, b?: Week) =>
-  WEEKDAYS.every((weekday) => sameDay(a.get(String(weekday)), b?.get(String(weekday))));
+  WEEKDAYS.every((weekday) => sameBlocks(a.get(String(weekday)), b?.get(String(weekday))));
 const sameDraft = (a: Draft, b: Draft) =>
   a.size === b.size && [...a].every(([key, week]) => sameWeek(week, b.get(key)));
 
@@ -57,12 +57,7 @@ function seed(read: SeasonStaffing): Draft {
   return new Map(
     read.areas.map(({ area, weekdays }) => [
       areaKey(area),
-      new Map(
-        WEEKDAYS.map((weekday) => [
-          String(weekday),
-          (weekdays[weekday] ?? []).map((block) => ({ ...block })),
-        ]),
-      ),
+      new Map(WEEKDAYS.map((weekday) => [String(weekday), copyBlocks(weekdays[weekday] ?? [])])),
     ]),
   );
 }
@@ -251,8 +246,8 @@ export class StaffingSeasonPainter extends LitElement {
         key,
         new Map(
           [...week].map(([weekday, day]) => {
-            const edited = current && !sameDay(current.get(weekday), before?.get(weekday));
-            return [weekday, edited ? current.get(weekday)! : day.map((block) => ({ ...block }))];
+            const edited = current && !sameBlocks(current.get(weekday), before?.get(weekday));
+            return [weekday, edited ? current.get(weekday)! : copyBlocks(day)];
           }),
         ),
       );
@@ -306,11 +301,11 @@ export class StaffingSeasonPainter extends LitElement {
       const week = this.draft.get(key)!;
       return WEEKDAYS.filter(
         (weekday) =>
-          !sameDay(week.get(String(weekday)), this.baseline.get(key)?.get(String(weekday))),
+          !sameBlocks(week.get(String(weekday)), this.baseline.get(key)?.get(String(weekday))),
       ).map((weekday) => ({
         area: { ...area },
         weekday,
-        blocks: week.get(String(weekday))!.map((block) => ({ ...block })),
+        blocks: copyBlocks(week.get(String(weekday))!),
       }));
     });
   }
@@ -336,10 +331,7 @@ export class StaffingSeasonPainter extends LitElement {
     this.saving = false;
     const baseline = copyDraft(this.baseline);
     for (const { area, weekday, blocks } of edits)
-      baseline.get(areaKey(area))!.set(
-        String(weekday),
-        blocks.map((block) => ({ ...block })),
-      );
+      baseline.get(areaKey(area))!.set(String(weekday), copyBlocks(blocks));
     this.commitBaseline(baseline);
     this.load(true);
   }

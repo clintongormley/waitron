@@ -9,7 +9,33 @@ export const MAX_BLOCK_MINUTES = DAY_MINUTES - STEP_MINUTES;
 /** `staffing_blocks_headcount_ck` (schema/staffing.ts) holds the same bound. */
 export const MAX_HEADCOUNT = 50;
 
-const copyBlocks = (day: readonly StaffingBlock[]) => day.map((b) => ({ ...b }));
+/** A copy of each block; a null day, which follows the season, stays null. */
+export function copyBlocks(day: readonly StaffingBlock[]): StaffingBlock[];
+export function copyBlocks(day: readonly StaffingBlock[] | null): StaffingBlock[] | null;
+export function copyBlocks(day: readonly StaffingBlock[] | null): StaffingBlock[] | null {
+  return day === null ? null : day.map((b) => ({ ...b }));
+}
+
+export function sameBlock(a: StaffingBlock | undefined, b: StaffingBlock | undefined): boolean {
+  return (
+    a !== undefined &&
+    b !== undefined &&
+    a.staffRoleId === b.staffRoleId &&
+    a.headcount === b.headcount &&
+    a.startsAt === b.startsAt &&
+    a.endsAt === b.endsAt
+  );
+}
+
+/** A null day, which follows the season, equals only another null day; a missing day is empty. */
+export function sameBlocks(
+  a: readonly StaffingBlock[] | null | undefined,
+  b: readonly StaffingBlock[] | null | undefined,
+): boolean {
+  if (a === null || b === null) return a === b;
+  const [x, y] = [a ?? [], b ?? []];
+  return x.length === y.length && x.every((block, i) => sameBlock(block, y[i]));
+}
 
 /** The clock time `minute` minutes after the changeover. */
 export function clockAt(minute: number, cutover: string): string {
@@ -87,10 +113,9 @@ export function copyDay<K>(
   from: K,
   to: readonly K[],
 ): Map<K, StaffingBlock[] | null> {
-  const copy = (day: readonly StaffingBlock[] | null) => (day === null ? null : copyBlocks(day));
-  const copied = new Map([...days].map(([key, day]) => [key, copy(day)]));
+  const copied = new Map([...days].map(([key, day]) => [key, copyBlocks(day)]));
   const source = days.get(from) ?? (days.has(from) ? null : []);
-  for (const key of to) copied.set(key, copy(source));
+  for (const key of to) copied.set(key, copyBlocks(source));
   return copied;
 }
 
