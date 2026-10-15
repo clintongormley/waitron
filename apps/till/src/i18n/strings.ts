@@ -2,6 +2,23 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "hours.back": "Back",
+  "hours.mine": "My hours",
+  "hours.refresh": "Refresh",
+  "hours.window": "Period",
+  "hours.week": "Week",
+  "hours.month": "Month",
+  "hours.previous": "Previous",
+  "hours.next": "Next",
+  "hours.total": "Worked time",
+  "hours.open_shift": "Open shift",
+  "hours.breaks": "Breaks",
+  "hours.pending": "Waiting for an answer",
+  "hours.awaiting_acknowledgement": "Waiting for your acknowledgement.",
+  "hours.history": "History",
+  "hours.effective": "Counted time",
+  "hours.frozen": "Frozen pay period",
+  "hours.late_change": "Change after closure",
   "attendance.retry_response": "Retry response",
   "attendance.retry_response_message": "No response was recorded. You can retry the same response.",
   "attendance.check_reason": "Check the reason for the change.",
@@ -1372,6 +1389,23 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "hours.back": "Volver",
+  "hours.mine": "Mis horas",
+  "hours.refresh": "Actualizar",
+  "hours.window": "Período",
+  "hours.week": "Semana",
+  "hours.month": "Mes",
+  "hours.previous": "Anterior",
+  "hours.next": "Siguiente",
+  "hours.total": "Tiempo trabajado",
+  "hours.open_shift": "Jornada abierta",
+  "hours.breaks": "Descansos",
+  "hours.pending": "Pendiente de respuesta",
+  "hours.awaiting_acknowledgement": "Pendiente de tu confirmación.",
+  "hours.history": "Historial",
+  "hours.effective": "Tiempo contabilizado",
+  "hours.frozen": "Período de pago cerrado",
+  "hours.late_change": "Cambio posterior al cierre",
   "attendance.retry_response": "Reintentar respuesta",
   "attendance.retry_response_message":
     "No se registró ninguna respuesta. Puedes reintentar la misma respuesta.",

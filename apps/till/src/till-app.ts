@@ -66,6 +66,9 @@ import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-clock-in-screen.js";
 import "./screens/till-attendance-questions.js";
+import "./screens/till-hours-screen.js";
+import { HoursController, type HoursSnapshot } from "./state/hours.js";
+import type { HoursSelection } from "./api/client.js";
 import { AttendanceController, type AttendanceSnapshot } from "./state/attendance.js";
 import type { AttendanceCommandPayload } from "@waitron/workforce/attendance-contract";
 import {
@@ -1986,6 +1989,8 @@ export class TillApp extends LitElement {
   #clockingAvailable = false;
   #clocking?: ClockingController;
   #attendance?: AttendanceController;
+  #hours?: HoursController;
+  @state() private hoursSnapshot: HoursSnapshot | null = null;
   #attendancePersonId = "";
   #attendanceNeedsInitialRead = false;
   #attendanceGate: "signin" | "in" | null = null;
@@ -2566,6 +2571,13 @@ export class TillApp extends LitElement {
   }
 
   #allowsDestination(destination: TillDestination): boolean {
+    if (destination === "hours")
+      return (
+        !this.deviceMode &&
+        this.operatorName !== "" &&
+        this.#clocking !== undefined &&
+        !this.#clockAccessLost
+      );
     return (
       !this.deviceMode && (destination === "allergens" || this.#affordances().includes(destination))
     );
@@ -2619,6 +2631,11 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("api")) this.#stopHours();
+    if (changed.has("drill")) {
+      if (this.drill?.kind === "hours") this.#startHours();
+      else this.#stopHours();
+    }
     if (changed.has("equipmentOpen")) this.#syncEquipmentNfc();
     if (
       changed.has("errorKey") &&
@@ -2922,6 +2939,7 @@ export class TillApp extends LitElement {
   }
 
   #stopAttendance(): void {
+    this.#stopHours();
     const controller = this.#attendance;
     this.#attendance = undefined;
     this.#attendanceNeedsInitialRead = false;
@@ -2962,6 +2980,7 @@ export class TillApp extends LitElement {
         return;
       }
       if (snapshot.result !== null && snapshot.result.commandId !== this.#lastAttendanceResultId) {
+        void this.#hours?.refresh();
         this.#lastAttendanceResultId = snapshot.result.commandId;
         this.#attendanceRefreshClock = true;
         this.attendanceEditor = null;
@@ -3002,6 +3021,87 @@ export class TillApp extends LitElement {
         void this.#settleAttendanceGate();
     });
     this.#attendance = controller;
+  }
+
+  #stopHours(): void {
+    const controller = this.#hours;
+    this.#hours = undefined;
+    this.hoursSnapshot = null;
+    controller?.stop();
+  }
+
+  #startHours(): void {
+    if (this.#hours || this.drill?.kind !== "hours" || !this.#allowsDestination("hours")) return;
+    const api = this.api,
+      session = this.#operatorSession,
+      signIn = this.#signIns;
+    const clocking = this.#clocking;
+    const current = () =>
+      this.isConnected &&
+      api === this.api &&
+      session === this.#operatorSession &&
+      signIn === this.#signIns &&
+      controller === this.#hours &&
+      clocking === this.#clocking &&
+      this.drill?.kind === "hours";
+    const controller = new HoursController(api, (snapshot) => {
+      if (!current()) return;
+      this.hoursSnapshot = snapshot;
+      const code = snapshot.readError?.code;
+      if (code === "session.required" || code === "session.not_open") {
+        void this.#onLogout();
+        return;
+      }
+      if (
+        code === "device.forbidden_action" ||
+        code === "device.unauthorized" ||
+        code === "attendance.not_permitted"
+      ) {
+        this.#clockAccessLost = true;
+        this.#stopAttendance();
+        this.#clocking = undefined;
+        clocking?.stop();
+        this.clockSnapshot = { ...this.clockSnapshot, refusal: { code } };
+        this.#popDrill();
+      }
+    });
+    this.#hours = controller;
+    const locationId = this.clockSnapshot.state?.locationId;
+    if (locationId) void controller.start(this.operatorPersonId, locationId, { kind: "week" });
+    void this.#attendance?.refresh();
+  }
+
+  #openHours(): void {
+    if (!this.#allowsDestination("hours")) return;
+    this.#pushDrill({ kind: "hours" });
+    if (this.#hours) {
+      void this.#hours.refresh();
+      void this.#attendance?.refresh();
+    } else this.#startHours();
+  }
+
+  #hoursPrompt(
+    event: CustomEvent<{ promptId: string; action: "confirm" | "edit" | "accept" | "disagree" }>,
+  ): void {
+    event.stopPropagation();
+    if (
+      this.drill?.kind !== "hours" ||
+      !this.#allowsDestination("hours") ||
+      this.attendanceSnapshot?.reading
+    )
+      return;
+    const prompt = this.attendanceSnapshot?.inbox?.prompts.find(
+      (p) => p.id === event.detail.promptId,
+    );
+    if (!prompt) return;
+    const action = event.detail.action;
+    if (action === "confirm" && prompt.kind === "automatic-out" && prompt.questionId)
+      void this.#sendAttendance({ action: "confirm", questionId: prompt.questionId });
+    else if (action === "accept" && prompt.kind === "proposal" && prompt.itemId)
+      void this.#sendAttendance({ action: "accept", itemId: prompt.itemId });
+    else if (action === "edit" && prompt.kind !== "proposal") this.#editAttendancePrompt(prompt.id);
+    else if (action === "disagree" && prompt.kind === "proposal")
+      this.#editAttendancePrompt(prompt.id, true);
   }
 
   #attendanceMessage(): string {
@@ -3068,7 +3168,7 @@ export class TillApp extends LitElement {
     else await this.#runAttendance(command);
   }
 
-  async #openAttendanceDay(): Promise<void> {
+  async #openAttendanceDay(scope?: { date: string; locationId: string }): Promise<void> {
     const controller = this.#attendance;
     if (!controller || this.attendanceSnapshot?.busy) return;
     const version = ++this.#attendancePanelVersion;
@@ -3082,17 +3182,21 @@ export class TillApp extends LitElement {
       return;
     const inbox = this.attendanceSnapshot?.inbox;
     if (!inbox) return;
-    const location =
-      inbox.locations.find((candidate) => candidate.id === this.clockSnapshot.state?.locationId) ??
-      inbox.locations[0];
+    const location = scope
+      ? inbox.locations.find((candidate) => candidate.id === scope.locationId)
+      : (inbox.locations.find(
+          (candidate) => candidate.id === this.clockSnapshot.state?.locationId,
+        ) ?? inbox.locations[0]);
     if (!location) return;
     this.attendanceDayLocation = location.id;
-    this.attendanceDayDate = new Intl.DateTimeFormat("en-CA", {
-      timeZone: location.timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
+    this.attendanceDayDate =
+      scope?.date ??
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: location.timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
     await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
   }
 
@@ -10482,6 +10586,45 @@ export class TillApp extends LitElement {
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
+      case "hours":
+        return html`<till-hours-screen
+          slot="drill"
+          .view=${this.hoursSnapshot?.view ?? null}
+          .reading=${this.hoursSnapshot?.reading || this.attendanceSnapshot?.reading || false}
+          .blocked=${this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null || this.attendanceSnapshot?.retryCommand != null || !this.attendanceSnapshot?.inbox || this.attendanceSnapshot?.readError != null}
+          .canRetry=${this.attendanceSnapshot?.retryCommand != null && !this.attendanceSnapshot?.busy}
+          .error=${this.#attendanceMessage() || (this.hoursSnapshot?.readError ? codeMessage(this.hoursSnapshot.readError.code) : "")}
+          .locations=${this.attendanceSnapshot?.inbox?.locations ?? []}
+          @hours-select=${(
+            event: CustomEvent<{ locationId: string; selection: HoursSelection }>,
+          ) => {
+            event.stopPropagation();
+            if (
+              this.attendanceSnapshot?.inbox?.locations.some(
+                (l) => l.id === event.detail.locationId,
+              )
+            )
+              void this.#hours?.select(event.detail.locationId, event.detail.selection);
+          }}
+          @hours-refresh=${(event: Event) => {
+            event.stopPropagation();
+            void this.#hours?.refresh();
+            void this.#attendance?.refresh();
+          }}
+          @hours-day=${(event: CustomEvent<{ date: string; locationId: string }>) => {
+            event.stopPropagation();
+            this.#requestLeave(() => this.#openAttendanceDay(event.detail));
+          }}
+          @hours-prompt=${(event: CustomEvent<{ promptId: string; action: "confirm" | "edit" | "accept" | "disagree" }>) => this.#hoursPrompt(event)}
+          @hours-retry-response=${(event: Event) => {
+            event.stopPropagation();
+            void this.#retryAttendanceCommand();
+          }}
+          @back=${(event: Event) => {
+            event.stopPropagation();
+            this.#requestLeave(() => this.#popDrill());
+          }}
+        ></till-hours-screen>`;
       case "schedule":
         return html`<till-schedule-screen
           slot="drill"
@@ -10573,6 +10716,10 @@ export class TillApp extends LitElement {
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+        @my-hours=${(event: Event) => {
+          event.stopPropagation();
+          this.#requestLeave(() => this.#openHours());
+        }}
         @fix-my-hours=${(event: Event) => {
           event.stopPropagation();
           this.#requestLeave(() => this.#openAttendanceDay());

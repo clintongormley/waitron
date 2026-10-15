@@ -16,9 +16,9 @@ const tabs: TabDef[] = [
 
 describe("till-tab-shell", () => {
   it.each([
-    ["working", ["Start break", "Clock out", "Fix my hours", "Log out"]],
-    ["on_break", ["End break", "Clock out", "Fix my hours", "Log out"]],
-    ["out", ["Clock in", "Fix my hours", "Log out"]],
+    ["working", ["Start break", "Clock out", "My hours", "Fix my hours", "Log out"]],
+    ["on_break", ["End break", "Clock out", "My hours", "Fix my hours", "Log out"]],
+    ["out", ["Clock in", "My hours", "Fix my hours", "Log out"]],
   ] as const)("the name opens the %s clock actions with a text state", async (state, labels) => {
     const locale = currentLocale();
     const width = innerWidth;
@@ -53,7 +53,13 @@ describe("till-tab-shell", () => {
       expect([...menu.querySelectorAll("wt-button")].map((b) => b.textContent?.trim())).toEqual(
         labels,
       );
-      expect(menu.textContent).not.toContain("My hours");
+      expect(menu.textContent).toContain("My hours");
+      const hours = vi.fn();
+      el.addEventListener("my-hours", hours);
+      await userEvent.click(menu.querySelector<HTMLElement>("[data-my-hours]")!);
+      expect(hours).toHaveBeenCalledTimes(1);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+      await userEvent.click(trigger);
       const actions: unknown[] = [];
       el.addEventListener("clock-action", (e) => actions.push((e as CustomEvent).detail));
       el.addEventListener("clock-action", () => {
@@ -93,6 +99,7 @@ describe("till-tab-shell", () => {
       });
       const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
       expect(menu.querySelector("wt-row-actions")).toBeNull();
+      expect(menu.querySelector("[data-my-hours]")?.textContent).toContain("My hours");
       expect(menu.textContent).toContain("Ana");
       expect(menu.querySelector('[data-clock-action="break-end"]')?.textContent).toContain(
         "End break",
