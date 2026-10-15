@@ -467,6 +467,29 @@ describe("suggested drafts", () => {
     drafts.suggest(new Map([["product:one", found({ ids: ["s9"], text: "CLIENT-es again" })]]));
     expect(drafts.value(one, "text")).toBe("CLIENT-es again");
   });
+  it("an edited row compares with the newest suggestion, not the one it was filled from", () => {
+    const one = target("one", { defaultRequired: false });
+    const two = target("two", { defaultRequired: false });
+    const drafts = new TranslationDrafts("es", "en", [one, two]);
+    drafts.suggest(
+      new Map([
+        ["product:one", found({ ids: ["s1"], text: "OLD one" })],
+        ["product:two", found({ ids: ["s2"], text: "OLD two" })],
+      ]),
+    );
+    drafts.edit(one, "text", "Mine");
+    drafts.suggest(
+      new Map([
+        ["product:one", found({ ids: ["s9"], text: "NEW one" })],
+        ["product:two", found({ ids: ["s8"], text: "NEW two" })],
+      ]),
+    );
+    drafts.edit(one, "text", "OLD one");
+    expect(drafts.isSuggested(one)).toBe(false);
+    drafts.edit(one, "text", "NEW one");
+    expect(drafts.isSuggested(one)).toBe(true);
+    expect(drafts.personalSubmission()).toEqual({ edits: [] });
+  });
   it("unsuggest and markStale on a row with no suggestion leave the other rows filled", () => {
     const one = target("one", { defaultRequired: false });
     const bare = target("bare", { defaultRequired: false });

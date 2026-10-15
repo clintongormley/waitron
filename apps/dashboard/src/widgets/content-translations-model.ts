@@ -215,7 +215,7 @@ export class TranslationDrafts {
       ? undefined
       : { text: found.text, defaultText: found.defaultText };
   }
-  // Rows filled before keep their fill, so a refresh never moves the 100 drafts to other rows.
+  // A row filled before keeps its place while its suggestion can still fill it.
   #refill(): void {
     const previous = this.#filled;
     this.#filled = new Map();
@@ -224,8 +224,8 @@ export class TranslationDrafts {
       const key = translationKey(row);
       if (this.#filled.has(key)) return;
       if (this.#values.has(key)) {
-        const kept = previous.get(key);
-        if (kept && this.#fillable(row)) this.#filled.set(key, kept);
+        const values = this.#fillable(row);
+        if (previous.has(key) && values) this.#filled.set(key, values);
         return;
       }
       if (room <= 0) return;
