@@ -194,7 +194,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
   "full-domicile-with-province": fullInvoice(TARGET_LINES, TARGET_VAT, "36.60", "3.40", {
     domicile: `${VENUE_DOMICILE} (Barcelona)`,
   }),
-  // S5 in the plan: 10% off the whole bill, a 21% wine and 10% bread.
+  // 10% off the whole bill, over a 21% wine and 10% bread.
   "full-two-rates-bill-discount": fullInvoice(
     [
       filed(
@@ -253,7 +253,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.00",
     "1.00",
   ),
-  // Owner question Q9's gap: under one kilo, comped. Prints «0,00 0,00» and no «Invitación» until Part 2c.
+  // A comped weighed line, under one kilo.
   "full-comped-weighed": fullInvoice(
     [
       BLOODY_MARY,

@@ -50,7 +50,7 @@ describe("beforeVatFigures", () => {
   });
 
   it("divides a counted line's list total back to its unit price", () => {
-    // S1's Croquetas: 2 × 3,33 with 21% VAT, part of a whole-bill discount.
+    // Croquetas: 2 × 3,33 with 21% VAT, part of a whole-bill discount.
     expect(
       beforeVatFigures(
         filed({
@@ -63,8 +63,8 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "2.75", amount: "5.50", discount: "0.54" });
   });
 
-  it("keeps the filed price and base for less than one priced unit (owner question Q9)", () => {
-    // S1's Jamón: 0.123 kg at 24,00 €/kg; 2,95 ÷ 0.123 would give 23,98 a kilo, not 24,00.
+  it("keeps the filed price and base for less than one priced unit", () => {
+    // Jamón: 0.123 kg at 24,00 €/kg; 2,95 ÷ 0.123 would give 23,98 a kilo, not 24,00.
     expect(
       beforeVatFigures(
         filed({
@@ -86,7 +86,7 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "9.50", amount: "9.50", discount: "0.00" });
   });
 
-  it("prices an extra per its portion (owner, Q4)", () => {
+  it("prices an extra per its portion", () => {
     // Two 0.05 portions at 1,50 with 21% VAT, 10% off: 1,50 a portion is 1,24 before VAT.
     expect(
       beforeVatFigures(

@@ -563,7 +563,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     });
   });
 
-  it("prints an extra priced per portion at its price per portion and nothing after it (owner, Q4)", () => {
+  it("prints an extra priced per portion at its price per portion and nothing after it", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.result.lines.push({
       descriptions: { "es-ES": "Queso extra" },
@@ -583,7 +583,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     expect(rows.some((r) => r.price.includes("/"))).toBe(false);
   });
 
-  it("puts a whole-bill discount under each dish, before VAT, at its rate (owner question Q10)", () => {
+  it("puts a whole-bill discount under each dish, before VAT, at its rate", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.result.lines = [
       {

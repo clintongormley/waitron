@@ -6,7 +6,7 @@ export interface ReceiptTableRow {
   price: string;
   amount: string;
   rate?: string;
-  /** Spaces before the item text: 2 for an extra, an option answer or a discount under its dish. */
+  /** Spaces before the item text. */
   itemIndent?: number;
 }
 

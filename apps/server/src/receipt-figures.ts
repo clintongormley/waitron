@@ -41,7 +41,7 @@ export function beforeVatFigures(line: FiledLine): BeforeVatFigures {
   if (line.listGross === undefined) return filed;
   const quantity = decimal(line.quantity);
   const priceQuantity = decimal(net.priceQuantity);
-  // Under one priced unit the list price cannot be divided back exactly (owner question Q9).
+  // Under one priced unit the list price cannot be divided back exactly.
   if (compareDecimal(quantity, priceQuantity) < 0) return filed;
   const rate = decimal(net.rate);
   const listGross = decimal(line.listGross);

@@ -1202,7 +1202,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // `descriptions` are keyed by, so the receipt must match the tag "es-ES" against the bare key
     // "es"; reading the first entry prints whichever language happens to come first. The first
     // line's pairs are `EACH_UNIT`'s (`packages/catalogue/src/units.ts`), which print as a bare
-    // count (owner, A663 Q8), so a venue's own unit carries the check.
+    // count, so a venue's own unit carries the check.
     const result: TillSaleResult = {
       ...FILED_SALE,
       lines: [
