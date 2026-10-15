@@ -141,8 +141,10 @@ export interface CalendarMonthPlan {
   today: LocalDate | null;
   /** The seasons the returned dates touch, in the order they are first touched. */
   seasons: readonly (Season & { lastDay: string })[];
-  /** As stored; the days' changeovers read a zone this runtime cannot place as UTC. */
+  /** As stored. */
   clock: BusinessDayClock;
+  /** `clock`, with a zone this runtime cannot place read as UTC, as the days' changeovers are. */
+  wallClock: BusinessDayClock;
   place: LocationPlace;
   plan: DayPlan;
   /** The whole Monday-to-Sunday weeks that cover `month`. */
@@ -188,6 +190,7 @@ export async function readCalendarMonthPlan(
     today: venueLocalMoment(at, stored)?.civilDate ?? null,
     seasons: [...touched.values()],
     clock: stored,
+    wallClock: clock,
     place,
     plan,
     days: dates.map((date) => {
@@ -212,8 +215,7 @@ export async function readOpeningHoursMonth(
   at: Date,
 ): Promise<OpeningHoursMonth> {
   const frame = await readCalendarMonthPlan(tx, cfg, month, at);
-  const { plan } = frame;
-  const clock = wallClock(frame.clock);
+  const { plan, wallClock: clock } = frame;
   const dates = frame.days.map(({ date }) => date);
   const status = await readBusinessDayScheduleStatus(tx, cfg, frame.clock, at);
   const departments = await readActiveDepartments(tx, cfg);
@@ -242,10 +244,9 @@ export async function readOpeningHoursMonth(
     month,
     today: frame.today,
     seasons: frame.seasons,
-    days: frame.days.map(({ closedAllDay, ...day }) => ({
+    days: frame.days.map((day) => ({
       ...day,
       holidays: factsOn.get(day.date) ?? [],
-      closedAllDay,
       departments: departments.map(({ id }) => ({
         departmentId: id,
         ranges: hours.get(id)!.get(day.date)!.ranges,
