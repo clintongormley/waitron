@@ -300,7 +300,7 @@ it.each(
         .join(" ")
         .replace(/\s+/g, " ");
     const full = render("F1");
-    // Before VAT (owner, Q5): the dish's list price 12,00 at 21% is 9,92; its own 10% and the
+    // Before VAT: the dish's list price 12,00 at 21% is 9,92; its own 10% and the
     // bill's 0,50 come to one row down to the filed base 8,51; the comped extra's 1,10 at 10% is
     // 1,00, taken off in full.
     const figure = (value: string) => (locale === "en-GB" ? value : value.replace(".", ","));
@@ -425,7 +425,7 @@ it.each([
     expect(lines).toContain(title);
     expect(lines).toContain(priceLabel);
     // 0.32 kg is 3.2 portions of 0.100 kg, not whole, so the row keeps the quantity and unit and
-    // prints the price alone (owner, Q4).
+    // prints the price alone.
     expect(lines).toContain("0.32 kg Jamón 2,50 8,00");
     expect(lines).not.toContain("/ 0.1");
     expect(lines).not.toContain(" / ");
@@ -2422,6 +2422,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Comanda 41",
         day: "17 d’ag. 2026",
         invoice: "Factura simplificada A/1",
+        fullBase: "Base imposable 21% 10,00 €",
         heading: "FACTURA A/1",
         comp: "Invitació -12,00",
         discount: "Descompte 12,5% -1,50",
@@ -2453,6 +2454,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Pedido 41",
         day: "17 de ago. de 2026",
         invoice: "Factura simplificada A/1",
+        fullBase: "Base impoñible 21% 10,00 €",
         heading: "FACTURA A/1",
         comp: "Invitación -12,00",
         discount: "Desconto 12,5% -1,50",
@@ -2484,6 +2486,7 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 · Eskaera 41",
         day: "2026(e)ko abu. 17(a)",
         invoice: "Faktura erraztua A/1",
+        fullBase: "Zerga-oinarria 21% 10,00 €",
         heading: "FAKTURA A/1",
         comp: "Gonbidapena -12,00",
         discount: "Deskontua 12,5% -1,50",
@@ -2509,7 +2512,7 @@ describe("the receipt's fixed words follow its language", () => {
     const sale = printed(LABELLED_SALE, locale);
     const card = printed(CARD_WITH_TIP, locale);
     const cash = printed(FILED_SALE, locale);
-    const { charged, heading, day, order, practice, ...rows } = words;
+    const { charged, heading, day, order, practice, fullBase, ...rows } = words;
     for (const [key, row] of Object.entries(rows)) expect(sale, key).toContain(row);
     expect(sale.filter((line) => line === practice)).toHaveLength(2);
     // Both documents print the issue date with the order, uncaptioned.
@@ -2520,6 +2523,7 @@ describe("the receipt's fixed words follow its language", () => {
     const fullOrderAt = full.findIndex((line) => line.startsWith(order));
     expect(full[fullOrderAt - 1]).toBe(heading);
     expect(full.slice(fullOrderAt, fullOrderAt + 2).join(" ")).toContain(day);
+    expect(full).toContain(fullBase);
     expect(card).toContain(charged);
     expect(card).toContain(single.card);
     expect(card).toContain(single.reference);
@@ -3315,10 +3319,13 @@ describe("the simplified receipt's own layout (A663)", () => {
     },
   );
 
-  const headingRow = (orderNumber: number): [string, string | undefined] => {
+  const headingRow = (
+    orderNumber: number,
+    invoiceType: TillSaleResult["invoiceType"] = ONE_RATE.invoiceType,
+  ): [string, string | undefined] => {
     const lines = printedLines(
       formatReceipt({
-        result: { ...ONE_RATE, orderLabel: null, orderNumber },
+        result: { ...ONE_RATE, orderLabel: null, orderNumber, invoiceType },
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
@@ -3331,6 +3338,17 @@ describe("the simplified receipt's own layout (A663)", () => {
 
   it("puts the date on its own right-aligned line when two spaces would not separate it from the order (58mm)", () => {
     const [heading, next] = headingRow(1234);
+    const together = /^Pedido 1234 {2,}13 oct 2026, \d{1,2}:53$/u.test(heading);
+    const apart =
+      heading === "Pedido 1234" &&
+      next !== undefined &&
+      next.length === 30 &&
+      /^ +13 oct 2026, \d{1,2}:53$/u.test(next);
+    expect(together || apart, JSON.stringify([heading, next])).toBe(true);
+  });
+
+  it("keeps two spaces between the order and the date on a full invoice, or puts the date on its own line (58mm)", () => {
+    const [heading, next] = headingRow(1234, "F1");
     const together = /^Pedido 1234 {2,}13 oct 2026, \d{1,2}:53$/u.test(heading);
     const apart =
       heading === "Pedido 1234" &&

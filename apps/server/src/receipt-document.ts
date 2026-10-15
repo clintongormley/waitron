@@ -198,7 +198,7 @@ export function buildReceiptDocument({
     row(label.simplifiedInvoice, result.invoiceNumber);
   } else {
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(orderText, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes));
+    row(orderText, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes), 0, undefined, 2);
   }
   if (!simplified && result.operationDate !== undefined) {
     row(
@@ -330,7 +330,7 @@ export function buildReceiptDocument({
     }
   }
   endTable();
-  if (tablesPrinted > 0) text(label.pricesExcludeVat, 4);
+  if (tablesPrinted > 0) text(`    ${label.pricesExcludeVat}`, 4);
   if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
   rule();
   const vatRows = (): void => {
