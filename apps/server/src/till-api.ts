@@ -157,7 +157,7 @@ import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
-import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import { joinTables, moveGuests, splitTable, type SplitGuests } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import type { TableActionOptions } from "./table-actions.js";
@@ -764,20 +764,31 @@ export function requirePartyParam(id: string): string {
 }
 
 /** An optional guest count: absent or null records none, otherwise a whole number from 1. */
-function requireGuestCount(value: unknown): number | null {
+function requireGuestCount(value: unknown, field = "guestCount"): number | null {
   if (value === undefined || value === null) return null;
   if (!isValidGuestCount(value)) {
-    throw new AppError("management.request_invalid", { field: "guestCount" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
 }
 
 /** A guest count the wire must carry: null clears it, an absent key is refused. */
-function requireGuestCountOrNull(value: unknown): number | null {
+function requireGuestCountOrNull(value: unknown, field = "guestCount"): number | null {
   if (value === undefined) {
-    throw new AppError("management.request_invalid", { field: "guestCount" });
+    throw new AppError("management.request_invalid", { field });
   }
-  return requireGuestCount(value);
+  return requireGuestCount(value, field);
+}
+
+/** Split a table's counts for the party that stays and the one that leaves, absent for none. */
+function requireSplitGuests(value: unknown): SplitGuests | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("guests");
+  const { staying, leaving } = value as Record<string, unknown>;
+  return {
+    staying: requireGuestCountOrNull(staying, "guests.staying"),
+    leaving: requireGuestCountOrNull(leaving, "guests.leaving"),
+  };
 }
 
 /**
@@ -2946,6 +2957,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
+      const guests = requireSplitGuests(body.guests);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
@@ -2961,6 +2973,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             {
               expectedPartyRevision,
               operatorId: personId,
+              guests,
             },
             deps.attendance === undefined
               ? undefined

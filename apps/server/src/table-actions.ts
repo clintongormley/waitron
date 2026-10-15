@@ -306,6 +306,12 @@ export async function combineParties(
   return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
 }
 
+/** The guest counts the waiter gives each side of Split a table; null leaves one unknown. */
+export interface SplitGuests {
+  staying: number | null;
+  leaving: number | null;
+}
+
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
  * unnamed party starts on it, taking `billId`, or a new empty main bill when none is chosen. The
@@ -318,7 +324,7 @@ export async function splitTable(
   partyId: string,
   tableId: string,
   billId: string | null,
-  options: { expectedPartyRevision: number; operatorId: string },
+  options: { expectedPartyRevision: number; operatorId: string; guests?: SplitGuests },
   attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
@@ -338,8 +344,14 @@ export async function splitTable(
       .select({ zoneId: diningTables.zoneId })
       .from(diningTables)
       .where(eq(diningTables.id, tableId));
+    if (options.guests !== undefined) {
+      await tx
+        .update(parties)
+        .set({ guestCount: options.guests.staying })
+        .where(eq(parties.id, partyId));
+    }
     const { partyId: newParty } = await openParty(tx, {
-      guestCount: null,
+      guestCount: options.guests?.leaving ?? null,
       operatorId: options.operatorId,
       tableId,
     });

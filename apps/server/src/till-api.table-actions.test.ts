@@ -527,3 +527,114 @@ describe("the table action routes", () => {
     expect(revisionOf(luis.partyId)).toBe(luis.revision);
   });
 });
+
+describe("Split a table's guest counts", () => {
+  async function anaOfFive() {
+    const at = await anaAtTwo();
+    const counted = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${at.ana.partyId}/guests`,
+      {
+        guestCount: 5,
+        expectedPartyRevision: revisionOf(at.ana.partyId),
+      },
+    );
+    expect(counted.status).toBe(200);
+    return at;
+  }
+
+  async function floorGuests(tableId: string): Promise<number | null> {
+    const state = await send(venue.app, venue.cookie, "GET", "/api/tables/state");
+    expect(state.status).toBe(200);
+    const tables = state.json as unknown as {
+      id: string;
+      party: { guestCount: number | null } | null;
+    }[];
+    return tables.find((t) => t.id === tableId)!.party!.guestCount;
+  }
+
+  function guestsOf(partyId: string): number | null {
+    const [row] = venue.db.all<{ guest_count: number | null }>(
+      sql`select guest_count from parties where id = ${partyId}`,
+    );
+    return row!.guest_count;
+  }
+
+  it("gives each side the count the waiter sent", async () => {
+    const { ana, second } = await anaOfFive();
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: null,
+      expectedPartyRevision: revisionOf(ana.partyId),
+      guests: { staying: 3, leaving: 2 },
+    });
+
+    expect(answer.status).toBe(200);
+    expect(await floorGuests(ana.tableId)).toBe(3);
+    expect(await floorGuests(second)).toBe(2);
+  });
+
+  it("leaves both sides unknown when both counts are null", async () => {
+    const { ana, second } = await anaOfFive();
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: null,
+      expectedPartyRevision: revisionOf(ana.partyId),
+      guests: { staying: null, leaving: null },
+    });
+
+    expect(answer.status).toBe(200);
+    expect(await floorGuests(ana.tableId)).toBeNull();
+    expect(await floorGuests(second)).toBeNull();
+  });
+
+  it("without guests, the staying party keeps its count and the new party has none", async () => {
+    const { ana, second } = await anaOfFive();
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: null,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+
+    expect(answer.status).toBe(200);
+    expect(await floorGuests(ana.tableId)).toBe(5);
+    expect(await floorGuests(second)).toBeNull();
+  });
+
+  it.each([
+    [{ staying: 0, leaving: 2 }, "guests.staying"],
+    [{ staying: 1000, leaving: 2 }, "guests.staying"],
+    [{ staying: 2.5, leaving: 2 }, "guests.staying"],
+    [{ staying: "2", leaving: 2 }, "guests.staying"],
+    [{ leaving: 2 }, "guests.staying"],
+    [{ staying: 3, leaving: 0 }, "guests.leaving"],
+    [{ staying: 3, leaving: 1000 }, "guests.leaving"],
+    [{ staying: 3, leaving: 2.5 }, "guests.leaving"],
+    [{ staying: 3, leaving: "2" }, "guests.leaving"],
+    [{ staying: 3 }, "guests.leaving"],
+    [null, "guests"],
+    [5, "guests"],
+    [[3, 2], "guests"],
+  ])("refuses guests %j as a bad %s, changing nothing", async (guests, field) => {
+    const { ana, second } = await anaOfFive();
+    const revision = revisionOf(ana.partyId);
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: null,
+      expectedPartyRevision: revision,
+      guests,
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+    expect(tablesOf(ana.partyId).sort()).toEqual([ana.tableId, second].sort());
+    expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(guestsOf(ana.partyId)).toBe(5);
+  });
+});
