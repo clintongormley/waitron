@@ -507,3 +507,15 @@ it("a claimed setup with no live host grant cannot fall back to valid configured
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("refuses a declared public fingerprint that disagrees with the independently compared key", () => {
+  const declared = (fingerprint.startsWith("0") ? "1" : "0") + fingerprint.slice(1);
+  expect(() =>
+    FISCAL_INITIAL_SETUP.enrol(context, { ...trust, fingerprint: declared }, fingerprint),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_untrusted" },
+    }),
+  );
+});

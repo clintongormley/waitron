@@ -101,9 +101,10 @@ it.each([
   { newTaxpayer: true, change: "none", launch: "supervised" },
   { newTaxpayer: false, change: "replacement", launch: "direct" },
   { newTaxpayer: false, change: "missing", launch: "direct" },
+  { newTaxpayer: false, change: "none", launch: "direct", readinessAfterImport: true },
 ])(
-  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change",
-  async ({ newTaxpayer, change, launch }) => {
+  "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport",
+  async ({ newTaxpayer, change, launch, readinessAfterImport }) => {
     const artifact = await configurationArtifact();
     const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
     dirs.push(root);
@@ -246,11 +247,13 @@ it.each([
           from: "owner@example.test",
         },
       };
-      const readiness = await post("/setup-api/fiscal-test", live);
-      expect(readiness).toEqual({
-        status: 200,
-        body: { status: "accepted", testedAt: expect.any(String) },
-      });
+      if (!readinessAfterImport) {
+        const readiness = await post("/setup-api/fiscal-test", live);
+        expect(readiness).toEqual({
+          status: 200,
+          body: { status: "accepted", testedAt: expect.any(String) },
+        });
+      }
       const reconfirm = async (purpose: string) => {
         const response = await post("/setup-api/first-setup/reconfirm", {
           password: PASSWORD,
@@ -296,6 +299,12 @@ it.each([
           })
         ).status,
       ).toBe(200);
+      if (readinessAfterImport) {
+        expect(await post("/setup-api/fiscal-test", live)).toEqual({
+          status: 200,
+          body: { status: "accepted", testedAt: expect.any(String) },
+        });
+      }
       if (change === "replacement") {
         const replacement = decodeConfigurationBundle(artifact, "synthetic import passphrase");
         replacement.createdAt = "2026-10-16T12:00:00.000Z";

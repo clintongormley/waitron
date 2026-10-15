@@ -24,6 +24,14 @@ Keep the original wizard tab. Its saved claim and your administrator password le
 that same attempt after an interruption. A competing tab cannot take it over. Losing both the
 tab's claim and its credential proof needs explicit incident handling.
 
+If a power cut interrupts claiming or abandoning setup, this candidate can refuse the next
+start with `setup.attempt_invalid`, even before you consume an assignment. The wizard has no
+recovery action for that refusal. Stop and preserve the box's state and venue folders together;
+do not delete either setup record or start another event to get past it. You need an incident
+decision against the current outside register before proceeding. The real-boot interruption
+cases in `apps/server/src/first-fiscal-state-write.boot.test.ts` reproduce this limit; a completed
+abandonment starts normally. Recovery policy remains an acceptance decision.
+
 Complete the certificate, separate preproduction readiness check and email steps. That test
 uses a disposable identity in a separate database; it grants no production name.
 

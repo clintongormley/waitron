@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+afterEach(() => vi.restoreAllMocks());
 import { CustodySession } from "./custody-state.js";
 import { custodyPassphrase, custodyRequest } from "../testing/custodian-fixture.js";
 
@@ -97,4 +98,31 @@ it("does not discard a new kit's sole in-memory key before both explicit key out
   expect(receipt.kind).toBe("saved-file");
   expect(session.state).toBe("paper-check-pending");
   session.close();
+});
+
+it("does not repopulate a closed custody session from a late public request parse", async () => {
+  const request = await custodyRequest();
+  const digest = crypto.subtle.digest.bind(crypto.subtle);
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(crypto.subtle, "digest").mockImplementation(async (...args) => {
+    entered();
+    await gate;
+    return digest(...args);
+  });
+  const session = new CustodySession("new");
+  const pending = session.loadRequest(request);
+  const refusedResult = expect(pending).rejects.toMatchObject(refused);
+  await started;
+  session.close();
+  release();
+  await refusedResult;
+  expect(session.request).toBeNull();
+  expect(session.publicKit).toBeNull();
+  expect(() => session.answerMaster(false)).toThrow("Custody material refused");
 });

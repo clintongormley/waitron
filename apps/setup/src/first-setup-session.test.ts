@@ -714,3 +714,41 @@ it("passes import intent only in the owner claim without persisting the wizard d
   expect(requests[0]!.body).toMatchObject({ venue, configurationImport: true, newTaxpayer: true });
   expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("configurationImport");
 });
+
+it("releases a real nonce lock granted after the session was disposed without opening it", async () => {
+  const granted = deferred<void>();
+  const gate = deferred<void>();
+  const locks = {
+    request: ((name: string, options: LockOptions, callback: LockGrantedCallback<unknown>) =>
+      navigator.locks.request(name, options, async (lock) => {
+        if (!lock) throw new Error("expected a real unique nonce grant");
+        granted.resolve();
+        await gate.promise;
+        return callback(lock);
+      })) as LockManager["request"],
+  } as LockManager;
+  const session = new FirstSetupSession(
+    new SetupApi("", async () => {
+      throw new Error("unexpected API request");
+    }),
+    { locks },
+  );
+  sessions.push(session);
+  const opened = session.open().then(
+    () => ({ opened: true }),
+    (error) => ({ opened: false, code: error.code }),
+  );
+  await granted.promise;
+  const name = `waitron:first-setup:nonce:${JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).clientClaimNonce}`;
+  const disposing = session.dispose();
+  gate.resolve();
+  try {
+    expect(await opened).toEqual({ opened: false, code: "setup.attempt_conflict" });
+  } finally {
+    await session.dispose();
+    await disposing;
+  }
+  expect((await navigator.locks.query()).held?.some((lock) => lock.name === name)).toBe(false);
+  expect(session.state).toBeUndefined();
+  await expect(session.claim(venue)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+});

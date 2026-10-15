@@ -230,9 +230,13 @@ offline tool, and readiness separate from production. It specifies durable claim
 resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Compiled browser
 checks exercise both launch paths and custody choices, saved-file reopen, synthetic paper recovery,
 wrong-passphrase/fingerprint refusals, resume and handover/dispute stops with synthetic outside
-responses. Actual-paper acceptance, whole-branch reviews and publication gates remain open. Follow the candidate
+responses. Both whole-branch reviews are complete; their findings, the power-interruption recovery
+decision, actual-paper acceptance and publication gates remain open. Follow the candidate
 [operator procedure](../operations/first-live-fiscal-setup.md); its physical acceptance remains open. Server ownership, activation and interruption
-checks do not replace the real wizard and physical-paper checks. There is no new approval gate or claim of product completion.
+checks do not replace physical-paper acceptance. An interruption between setup's state and marker
+writes can prevent the next boot, including during abandonment; the real-boot cases in
+`apps/server/src/first-fiscal-state-write.boot.test.ts` reproduce that limit. The owner must decide
+whether to require a supported recovery path before acceptance. This is not product completion.
 
 You can use fiscal allocations without a Cloud subscription. The current paper route asks your
 custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,

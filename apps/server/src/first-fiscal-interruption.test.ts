@@ -398,3 +398,74 @@ it("retires an attempt whose saved committed result no longer matches the actual
   expect((await f.host.store.read())?.status).toBe("uncertain");
   expect(f.counts().applied).toBe(1);
 });
+
+it("refuses a never-activated outside statement while a committed result awaits publication", async () => {
+  const f = await fixture("publication");
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  await f.refresh();
+  const proof = await f.post(
+    "/setup-api/first-setup/reconfirm",
+    { password: PASSWORD, purpose: "activation" },
+    f.headers(),
+  );
+  expect(proof.status).toBe(200);
+  const response = await f.post(
+    "/setup-api/first-setup/current-master",
+    {
+      module: MODULE,
+      statement: { ...f.current, priorActivation: "none" },
+      ...(await proof.json()),
+    },
+    f.headers(),
+  );
+  expect({ status: response.status, body: await response.json() }).toMatchObject({
+    status: 400,
+    body: {
+      error: { code: "sif.allocation_invalid", params: { reason: "outside_confirmation_missing" } },
+    },
+  });
+  expect((await f.host.store.read())?.status).toBe("committed");
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+});
+
+it("refuses replay when the independently read current statement says never activated", async () => {
+  const f = await fixture("publication");
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  await f.refresh();
+  vi.spyOn(f.host.evidence, "read").mockResolvedValue({
+    current: { priorActivation: "none" },
+  } as never);
+  const response = await f.activate();
+  expect({ status: response.status, body: await response.json() }).toMatchObject({
+    status: 400,
+    body: {
+      error: { code: "sif.allocation_invalid", params: { reason: "outside_confirmation_missing" } },
+    },
+  });
+  expect((await f.host.store.read())?.status).toBe("committed");
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+});
+
+it("an uncertain attempt with a retained fiscal commit publishes nothing even with a committed statement", async () => {
+  const f = await fixture("publication");
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  const state = (await f.host.store.read())!;
+  await f.host.store.update(state.frozen.attemptId, state.revision, { kind: "uncertain" });
+  await f.refresh();
+  vi.spyOn(f.host.evidence, "read").mockResolvedValue({
+    current: { priorActivation: "committed" },
+  } as never);
+  const before = await f.db.select().from(invoiceSeries);
+  const response = await f.activate();
+  expect({ status: response.status, body: await response.json() }).toMatchObject({
+    status: 409,
+    body: { error: { code: "setup.attempt_uncertain" } },
+  });
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+  expect((await f.host.store.read())?.status).toBe("uncertain");
+  expect(await f.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
+});
