@@ -306,6 +306,22 @@ describe("the house style", () => {
     });
   });
 
+  it("leaves out a menu whose top-level list another menu owns, as the translations dialog does", async () => {
+    await inVenue(async (tx, lunch) => {
+      const terrace = await createCatalogue(tx, {
+        name: "STAFF Terrassa",
+        names: { ca: "CLIENT-CA Terrassa" },
+      });
+      await tx
+        .update(sections)
+        .set({ ownerMenuId: terrace.id })
+        .where(eq(sections.id, lunch.rootId));
+      expect(
+        (await readHouseStyle(tx, THREE.languages)).map((example) => example.staffName),
+      ).toEqual(["STAFF Terrassa"]);
+    });
+  });
+
   it("takes a live menu's section with a saved name", async () => {
     await inVenue(async (tx, lunch) => {
       await section(tx, lunch.menuId, "Postres", { ca: "CLIENT-CA Postres" });

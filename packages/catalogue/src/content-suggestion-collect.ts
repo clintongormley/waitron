@@ -6,6 +6,7 @@ import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 import {
   listTranslationGapRows,
+  liveTranslationRows,
   readTranslationRows,
   readTranslationSettings,
   resolveTranslationRow,
@@ -241,6 +242,7 @@ export const JOB_ITEM_LIMIT = 1000;
 export const JOB_BYTE_LIMIT = 1_048_576;
 export const HOUSE_STYLE_LIMIT = 300;
 export const HOUSE_STYLE_BYTE_LIMIT = 262_144;
+const HOUSE_STYLE_KINDS = KIND_ORDER.filter((kind) => kind !== "included_menu" && kind !== "unit");
 
 type HouseStyleRow = {
   kind: TranslationGapKind;
@@ -260,30 +262,13 @@ export async function readHouseStyle(
   limit: number = HOUSE_STYLE_LIMIT,
 ): Promise<HouseStyleExample[]> {
   const result = await tx.execute<HouseStyleRow>(sql`
-    select * from (
-      select 'product' as kind, p.id, p.name as staff_name, p.customer_name as names,
-          c.name as category
-        from products p left join categories c on c.id = p.category_id
-        where p.parent_id is null and p.active = 1
-      union all select 'variant', v.id, v.name, v.customer_name, c.name
-        from products v join products p on p.id = v.parent_id
-          left join categories c on c.id = p.category_id
-        where v.active = 1 and p.active = 1
-      union all select 'option_list', id, name, customer_name, null
-        from option_lists where active = 1
-      union all select 'option_label', l.id, l.name, l.customer_name, null
-        from option_labels l join option_lists o on o.id = l.list_id where o.active = 1
-      union all select 'extra_list', id, name, customer_name, null
-        from extra_lists where active = 1
-      union all select 'menu', s.id, s.internal_name, s.names, null
-        from sections s join menu_details d on d.root_section_id = s.id
-          join catalogues c on c.id = s.owner_menu_id
-        where s.role = 'menu_root' and c.active = 1
-      union all select 'section', s.id, s.internal_name, s.names, null
-        from sections s join catalogues c on c.id = s.owner_menu_id
-        where s.role = 'section' and c.active = 1
-    ) where names is not null and names <> '{}'
-    order by kind, category, id`);
+    select live.kind, live.id, live.name as staff_name, live.names, c.name as category
+    from (${liveTranslationRows(HOUSE_STYLE_KINDS)}) as live
+      left join products p on p.id = case live.kind when 'product' then live.id
+        when 'variant' then live.owner end
+      left join categories c on c.id = p.category_id
+    where live.names is not null and live.names <> '{}'
+    order by live.kind, category, live.id`);
   const groups = new Map<string, HouseStyleExample[]>();
   for (const row of result.rows) {
     const key = `${row.kind}:${row.category ?? ""}`;

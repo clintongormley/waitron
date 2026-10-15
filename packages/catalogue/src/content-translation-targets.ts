@@ -130,11 +130,16 @@ async function configuration(tx: Transaction, language: string, context: Transla
   return { language, config, required };
 }
 // Each filtered branch binds at most one batch of ids; ownership joins never load an editor's graph.
-function namedRows(refs?: readonly TranslationRef[]): SQL {
+function namedRows(
+  refs?: readonly TranslationRef[],
+  kinds: readonly TranslationGapKind[] = KINDS,
+): SQL {
   const filter = (kind: TranslationGapKind, id: SQL) =>
-    refs
-      ? sql`${id} in (select json_extract(value, '$.id') from json_each(${JSON.stringify(refs)}) where json_extract(value, '$.kind') = ${kind})`
-      : sql`1`;
+    !kinds.includes(kind)
+      ? sql`0`
+      : refs
+        ? sql`${id} in (select json_extract(value, '$.id') from json_each(${JSON.stringify(refs)}) where json_extract(value, '$.kind') = ${kind})`
+        : sql`1`;
   return sql`
     select 'product' as kind, p.id, p.name, p.customer_name as names, null as inherited,
       p.parent_id as owner, null as owner_name, null as container, null as child, null as child_menu,
@@ -172,6 +177,10 @@ function namedRows(refs?: readonly TranslationRef[]): SQL {
       null, null, null, null, 1, 1, 1, null, 1
     from units u where ${filter("unit", sql`u.id`)}
   `;
+}
+/** Every row of `kinds` the translations dialog may list, in any language and gap or not. */
+export function liveTranslationRows(kinds: readonly TranslationGapKind[]): SQL {
+  return sql`select * from (${namedRows(undefined, kinds)}) where ${LIVE_CANDIDATE}`;
 }
 function ownersOf(row: NamedRow): TranslationOwners | null {
   if (
