@@ -80,6 +80,16 @@ export const RECEIPT_LABEL_KEYS = [
   "phone",
   "simplifiedInvoice",
   "vatIncludedAtRate",
+  "invoiceHeading",
+  "customer",
+  "unitsColumn",
+  "itemColumn",
+  "priceColumn",
+  "amountColumn",
+  "rateColumn",
+  "pricesExcludeVat",
+  "taxableBase",
+  "registeredAddress",
 ] as const;
 
 export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number], string>>;
