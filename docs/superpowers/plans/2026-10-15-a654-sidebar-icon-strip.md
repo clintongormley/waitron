@@ -1,6 +1,7 @@
 # A654 — the dashboard sidebar folds to a strip of icons (design, 2026-10-15)
 
-Status: design; four owner questions open (lane C `questions.md`, "A654"). Build after the answers.
+Status: building (lane B, 2026-10-15). The owner answered all four questions (a) on 2026-10-15, adding
+that every sidebar icon is drawn without colour (below).
 Backlog: [A654](../../backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons).
 Drawings: [`docs/backlog/mockups/a654-sidebar-icons/`](../../backlog/mockups/a654-sidebar-icons/)
 (the HTML beside the pictures is their source; it is a drawing, not the product's CSS).
@@ -49,12 +50,39 @@ shows the full sidebar.
 - No shared `wt-*` primitive changes are expected: the strip and its panel live in
   `apps/dashboard`. If a primitive has to change, the review path becomes FULL.
 
-## Build outline (refined once the answers are in)
+## The owner's answers (2026-10-15)
 
-1. The icons: each section's icon in `DASHBOARD_ICONS`, `icon` on every `NAV_GROUPS` entry, and the
-   unfolded sidebar's headers drawing them. Real-Chromium test first: every group a module can fill
-   has a registered icon.
-2. Folding: the fold control, the strip, the current-section mark, the tooltip, single-page sections
-   going straight there, and remembering the choice if question 3 says so.
-3. The panel (or the unfold, per question 2), with its keyboard handling.
-4. LOOK in both themes at 390, 1024 and 1280 px; tokens only for every colour and size.
+All four as recommended: (1) the banner's ☰ at every width; (2) a panel beside the icon; (3)
+remembered in this browser, a tablet-width window opening folded; (4) the icons as drawn. Added:
+**every sidebar icon, in the strip and in the unfolded sidebar, is drawn in the sidebar's ordinary
+text colour (`--wt-color-text`), never the primary colour**; the current section is marked only by
+the highlight behind it (the primary bar on its leading edge and the `--wt-color-surface-lifted`
+fill), not by colouring its icon. This replaces "the primary-coloured bar … with the lifted fill"
+above only in that the icon itself stays uncoloured.
+
+## Build
+
+1. **The icons.** Each section's icon in `DASHBOARD_ICONS` (`section-overview`, `section-reports`,
+   `section-service`, `section-menu`, `section-operations`, `section-team`, `section-purchasing`,
+   the outlined `gear` replacing the solid one, and `search` for the strip's magnifier), converted
+   from the drawings' Material Symbols paths (viewBox `0 -960 960 960`) to `wt-icon`'s 16×16 box.
+   `icon` becomes required on every `NAV_GROUPS` entry, and every unfolded header draws it in
+   `--wt-color-text`. Overview has no header, so its icon shows only in the strip.
+2. **Folding.** A `sidebarFolded` state. The banner's ☰ shows at every width; on a wide screen it
+   folds and unfolds the sidebar and stores the choice in `localStorage`
+   (`waitron-dashboard-sidebar-folded`); on a phone it opens the drawer as today. With no stored
+   choice, a window matching `(48rem < width <= 64rem)` opens folded and any other opens unfolded;
+   read once, when the app connects. On a phone (`DRAWER_BREAKPOINT`) the drawer always shows the
+   full sidebar, whatever was stored. Folded, the sidebar is a strip: the magnifier first (not for
+   staff), which unfolds the sidebar, stores that, and puts the cursor in the search box; then one
+   icon button per section with at least one page the person may open, named by the section
+   (`aria-label`, Overview's from `nav.overview`) with the shared icon tooltip
+   (`trackIconTooltip`) shown beside the icon rather than below it. The section holding the current
+   screen is marked by the highlight. A one-page section's icon opens its page.
+3. **The panel.** A section with more than one page opens a panel beside its icon listing the
+   section's name and its pages, the current page marked as in the sidebar. Picking a page opens it
+   and closes the panel; the strip stays folded. Enter or Space opens it (it is a button), Escape
+   closes it and returns focus to its icon, a click outside it or focus leaving it closes it, and
+   so do unfolding the sidebar and narrowing to a phone. The icon carries `aria-expanded` and
+   `aria-controls`.
+4. **LOOK** in both themes at 390, 1024 and 1280 px; tokens only for every colour and size.
