@@ -67,15 +67,13 @@ async function mount(failedRefresh = false) {
   await vi.waitFor(() =>
     expect(panel.shadowRoot!.querySelector("dashboard-hours-record")?.view).not.toBeNull(),
   );
-  panel
-    .shadowRoot!.querySelector("dashboard-hours-record")!
-    .dispatchEvent(
-      new CustomEvent("hours-day", {
-        detail: { date: "2026-01-05", locationId: "venue" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+  panel.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
+    new CustomEvent("hours-day", {
+      detail: { date: "2026-01-05", locationId: "venue" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await vi.waitFor(() => expect(panel.shadowRoot!.querySelector("[data-retime]")).not.toBeNull());
   await userEvent.click(panel.shadowRoot!.querySelector("[data-retime]")!);
   const editor = panel.shadowRoot!.querySelector("dashboard-attendance-proposal-dialog")!;

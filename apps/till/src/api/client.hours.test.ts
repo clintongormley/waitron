@@ -39,16 +39,14 @@ it.each([selection, { kind: "week" as const }])(
   },
 );
 it("keeps a read refusal structured and never invents a write or a retry", async () => {
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: { code: "attendance.not_permitted", params: { personId: "ana" } },
-        }),
-        { status: 403 },
-      ),
-    );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        error: { code: "attendance.not_permitted", params: { personId: "ana" } },
+      }),
+      { status: 403 },
+    ),
+  );
   const api = new TillApi("", fetcher);
   expect(api).toHaveProperty("getHours", expect.any(Function));
   await expect(api.getHours("venue", { kind: "week" })).rejects.toEqual({
