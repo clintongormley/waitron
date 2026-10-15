@@ -45,6 +45,38 @@ function watch(el: AttendanceCorrectionDialog) {
 }
 
 describe("attendance correction time and reason", () => {
+  it("recovery keeps the draft blocked while offering reads and only an explicit known-absent retry", async () => {
+    const { el } = await mount({ blocked: true, recovery: "uncertain" });
+    const reads: CustomEvent[] = [];
+    const retries: CustomEvent[] = [];
+    el.addEventListener("retry-attendance", (event) => reads.push(event as CustomEvent));
+    el.addEventListener("retry-attendance-command", (event) => retries.push(event as CustomEvent));
+    const sent = watch(el);
+    expect(save(el).hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-retry-command]")).toBeNull();
+    const read = () => el.shadowRoot!.querySelector<HTMLElement>("[data-retry-read]")!;
+    await userEvent.click(read());
+    expect(reads.map((event) => [event.bubbles, event.composed])).toEqual([[true, true]]);
+    expect(retries).toEqual([]);
+    el.recovery = "retry";
+    await el.updateComplete;
+    const retry = el.shadowRoot!.querySelector<HTMLElement>("[data-retry-command]")!;
+    await userEvent.click(retry);
+    expect(retries.map((event) => [event.bubbles, event.composed])).toEqual([[true, true]]);
+    expect(sent).toEqual([]);
+    el.busy = true;
+    await el.updateComplete;
+    read().click();
+    retry.click();
+    expect(reads).toHaveLength(1);
+    expect(retries).toHaveLength(1);
+    el.remove();
+    read().click();
+    retry.click();
+    expect(reads).toHaveLength(1);
+    expect(retries).toHaveLength(1);
+  });
+
   it("opens quiet, retains stored date/time/offset in a changed location zone and does not mutate input", async () => {
     const initial = structuredClone([original]);
     const { el } = await mount({ initialChanges: initial, timeZone: "America/New_York" });

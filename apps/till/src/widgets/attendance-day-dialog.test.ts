@@ -60,6 +60,36 @@ function button(el: AttendanceDayDialog, selector: string) {
 }
 
 describe("chosen-day attendance detail", () => {
+  it("uncertain day actions offer separate receipt reads and explicit response retries", async () => {
+    const { el } = await mount({ blocked: true, canRetry: true, error: "The answer was lost." });
+    const reads = watch(el, "retry-attendance");
+    const retries = watch(el, "retry-attendance-command");
+    const fixes = watch(el, "fix-entry");
+    expect(button(el, "[data-fix-entry]").hasAttribute("disabled")).toBe(true);
+    await userEvent.click(button(el, "[data-retry]"));
+    await userEvent.click(button(el, "[data-retry-command]"));
+    expect(reads.map((event) => [event.bubbles, event.composed])).toEqual([[true, true]]);
+    expect(retries.map((event) => [event.bubbles, event.composed])).toEqual([[true, true]]);
+    expect(fixes).toEqual([]);
+    el.reading = true;
+    await el.updateComplete;
+    expect(button(el, "[data-retry]").hasAttribute("disabled")).toBe(true);
+    expect(button(el, "[data-retry-command]").hasAttribute("disabled")).toBe(true);
+    button(el, "[data-retry]").click();
+    button(el, "[data-retry-command]").click();
+    expect(reads).toHaveLength(1);
+    expect(retries).toHaveLength(1);
+    el.reading = false;
+    el.busy = true;
+    await el.updateComplete;
+    button(el, "[data-retry]").click();
+    expect(reads).toHaveLength(1);
+    const retry = button(el, "[data-retry-command]");
+    el.remove();
+    retry.click();
+    expect(retries).toHaveLength(1);
+  });
+
   it("shows effective stored times and their automatic/worker confirmation separately", async () => {
     const { el } = await mount();
     const time = el.shadowRoot!.querySelector("[data-effective] time")!;
