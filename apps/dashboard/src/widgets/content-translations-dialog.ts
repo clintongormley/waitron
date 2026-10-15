@@ -79,6 +79,13 @@ function editorHref(row: TranslationTarget): string {
   }
 }
 
+/** A run's view carries no id. A press answered with nothing to send found no active run, so an
+ * active one is newer; a finished one is told apart by when it finished. */
+function sameRun(a: SuggestionRunView | null, b: SuggestionRunView | null): boolean {
+  if (a === null || b === null) return a === b;
+  return !runActive(a) && !runActive(b) && a.finishedAt === b.finishedAt;
+}
+
 type SuggestionRunRead = { sequence: number } & (
   { value: ContentSuggestionRead } | { failed: string }
 );
@@ -169,10 +176,14 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private suggestionBusy = false;
   @state() private suggestionError = "";
   @state() private suggestionReadError = "";
+  /** Kept apart from the first-page read's message, so that read answering does not clear it. */
+  @state() private suggestionScanError = "";
   @state() private nothingMissing = false;
   #suggestionReads = 0;
   /** Reads numbered at or below this began before the last press was answered. */
   #runReplacedAt = 0;
+  /** The run shown when a press was answered with nothing to send. */
+  #nothingSaw: SuggestionRunView | null = null;
   #choices = new Map<string, ReviewChoice>();
   /** The last suggestion list a scan read; a scan whose suggestion read fails keeps it, so a refused
    * read never stops the translations loading. */
@@ -224,6 +235,7 @@ export class ContentTranslationsDialog extends LitElement {
       this.suggestionBusy = false;
       this.suggestionError = "";
       this.suggestionReadError = "";
+      this.suggestionScanError = "";
       this.nothingMissing = false;
       this.reviewing = false;
       this.reviewRows = [];
@@ -316,26 +328,31 @@ export class ContentTranslationsDialog extends LitElement {
       check(value);
       retained.push(...value.rows);
     }
-    const suggestions = (
-      await this.#readSuggestions(
-        client,
-        language,
-        () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
-      )
-    ).filter((view) => !this.#deleted.has(view.id));
+    const suggestionRead = await this.#readSuggestions(
+      client,
+      language,
+      () => generation === this.#generation && revision === this.#snapshotRevision && this.open,
+    );
+    const suggestions = suggestionRead.suggestions.filter((view) => !this.#deleted.has(view.id));
     // Under the default language the page leaves out a name stored as null or `{}`
     // (`listTranslationTargets`, packages/catalogue/src/content-translation-targets.ts), so a
-    // suggestion for one is read by reference and becomes a row of its own. Only a suggestion
-    // with text in this page's language could fill such a row; reading the rest every refresh
-    // would fetch items only to drop them.
+    // suggestion for one is read by reference and becomes a row of its own. Such an item has no
+    // name in any language, so text in this page's language, a placeholder or a staff-name fix
+    // can show on its row, and a fix to a name in some language cannot be for it. Another page
+    // lists every unnamed item a Translate all job can send, so there only text is read. Reading
+    // the rest every refresh would fetch items only to drop them.
     const listed = new Set(rows.map(translationKey));
+    const defaultPage = language === first!.config.defaultLanguage;
     const index = indexSuggestions(suggestions, language, first!.config.defaultLanguage);
     const omitted = new Map<string, TranslationRef>();
     for (const view of suggestions) {
       const ref = { kind: view.kind, id: view.itemId };
       const key = translationKey(ref);
       const entry = index.get(key)!;
-      if (!listed.has(key) && !entry.stale && entry.text !== null) omitted.set(key, ref);
+      const shows =
+        entry.text !== null ||
+        (defaultPage && (entry.placeholder || entry.fixes.some((fix) => fix.field === "internal")));
+      if (!listed.has(key) && !entry.stale && shows) omitted.set(key, ref);
     }
     const omittedRefs = [...omitted.values()];
     for (let offset = 0; offset < omittedRefs.length; offset += 50) {
@@ -352,13 +369,21 @@ export class ContentTranslationsDialog extends LitElement {
         ...value.rows.filter((row) => row.eligible && !(row.effectiveSelectedText ?? "").trim()),
       );
     }
-    return { generation, revision, rows, retained, suggestions, config: first!.config };
+    return {
+      generation,
+      revision,
+      rows,
+      retained,
+      suggestions,
+      suggestionsFailed: suggestionRead.failed,
+      config: first!.config,
+    };
   }
   async #readSuggestions(
     client: Pick<DashboardApi, "getContentSuggestions">,
     language: string,
     current: () => boolean,
-  ): Promise<ContentSuggestionView[]> {
+  ): Promise<{ suggestions: ContentSuggestionView[]; failed: string | null }> {
     const suggestions: ContentSuggestionView[] = [];
     let after: string | null = null;
     const pages = new Set<string>();
@@ -374,10 +399,10 @@ export class ContentTranslationsDialog extends LitElement {
         if (after !== null && pages.has(after)) throw new Error("suggestion scan repeated");
         if (after !== null) pages.add(after);
       } while (after !== null && current());
-    } catch {
-      return this.#suggestions;
+    } catch (error) {
+      return { suggestions: this.#suggestions, failed: codeOf(error) };
     }
-    return suggestions;
+    return { suggestions, failed: null };
   }
   /** The first suggestion page only: the bar needs its run, service and Cloud origin. A failed read
    * is told in the bar, because the controller's error callback would put it over the translations. */
@@ -408,7 +433,10 @@ export class ContentTranslationsDialog extends LitElement {
         this.suggestionReadError = "";
         this.service = answer.value.service;
         this.cloudOrigin = answer.value.cloudOrigin;
-        if (answer.sequence > this.#runReplacedAt) this.suggestionRun = answer.value.run;
+        if (answer.sequence <= this.#runReplacedAt) return;
+        if (this.nothingMissing && !sameRun(answer.value.run, this.#nothingSaw))
+          this.nothingMissing = false;
+        this.suggestionRun = answer.value.run;
       },
     );
   }
@@ -445,6 +473,9 @@ export class ContentTranslationsDialog extends LitElement {
               value.rows,
             );
           this.#fill(value.suggestions);
+          this.suggestionScanError = value.suggestionsFailed
+            ? codeMessage(value.suggestionsFailed)
+            : "";
           this.page = Math.min(this.page, Math.max(0, Math.ceil(this.#visible().length / 50) - 1));
           this.readError = "";
           this.loading = false;
@@ -480,6 +511,9 @@ export class ContentTranslationsDialog extends LitElement {
         return;
       this.model.snapshot(value.rows, value.retained, value.config.defaultLanguage);
       this.#fill(value.suggestions);
+      this.suggestionScanError = value.suggestionsFailed
+        ? codeMessage(value.suggestionsFailed)
+        : "";
       this.reviewRows = [
         ...value.rows,
         ...value.retained.filter(
@@ -682,6 +716,7 @@ export class ContentTranslationsDialog extends LitElement {
       const { run } = await this.api.startContentSuggestions();
       if (generation !== this.#generation || !this.open) return;
       this.#runReplacedAt = this.#suggestionReads;
+      this.#nothingSaw = this.suggestionRun;
       this.nothingMissing = run === null;
       if (run !== null) this.suggestionRun = run;
     } catch (error) {
@@ -836,7 +871,7 @@ export class ContentTranslationsDialog extends LitElement {
         .service=${this.service}
         .run=${this.suggestionRun}
         .busy=${this.suggestionBusy}
-        .error=${this.suggestionError || this.suggestionReadError}
+        .error=${this.suggestionError || this.suggestionReadError || this.suggestionScanError}
         .nothing=${this.nothingMissing}
         .cloudOrigin=${this.cloudOrigin}
         @translate-all=${this.#translateAll}

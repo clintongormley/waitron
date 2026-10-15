@@ -187,6 +187,83 @@ describe("Translate all in the translations dialog", () => {
     expect(bar(el).nothing).toBe(false);
   });
 
+  it("keeps the nothing-missing line when a read that began before the press answered shows another run", async () => {
+    setLocale("en-GB");
+    const liveData = new LiveData();
+    const late = deferred<ContentSuggestionRead>();
+    let held: Promise<ContentSuggestionRead> | undefined;
+    const getContentSuggestions = vi.fn(() => {
+      const answer = held ?? Promise.resolve(read());
+      held = undefined;
+      return answer;
+    });
+    const { el } = await mount(
+      { getContentSuggestions, startContentSuggestions: vi.fn(async () => ({ run: null })) },
+      liveData,
+    );
+    await vi.waitFor(() => expect(bar(el).service).toBe("on"));
+    const before = getContentSuggestions.mock.calls.length;
+    held = late.promise;
+    liveData.invalidate([{ type: "content_suggestion_jobs" }]);
+    await vi.waitFor(() => expect(getContentSuggestions).toHaveBeenCalledTimes(before + 1));
+    await drawn(el);
+    await userEvent.click(button(el));
+    await vi.waitFor(() => expect(bar(el).nothing).toBe(true));
+    late.resolve(read({ run: run(), cloudOrigin: "https://later.example.test" }));
+    await vi.waitFor(() => expect(bar(el).cloudOrigin).toBe("https://later.example.test"));
+    await drawn(el);
+    expect(bar(el).run).toBeNull();
+    expect(bar(el).shadowRoot!.textContent).toContain(t("suggestions.nothing"));
+  });
+
+  it("keeps the nothing-missing line while reads show the run the press saw, and replaces it with a newer run", async () => {
+    setLocale("en-GB");
+    const liveData = new LiveData();
+    const finished = run({
+      state: "done",
+      progress: 358,
+      done: 358,
+      waiting: 4,
+      finishedAt: "2026-10-14T10:00:00.000Z",
+    });
+    let current = read({ run: finished });
+    const getContentSuggestions = vi.fn(async () => current);
+    const { el } = await mount(
+      { getContentSuggestions, startContentSuggestions: vi.fn(async () => ({ run: null })) },
+      liveData,
+    );
+    await vi.waitFor(() => expect(bar(el).run?.state).toBe("done"));
+    await drawn(el);
+    await userEvent.click(button(el));
+    await vi.waitFor(() => expect(bar(el).nothing).toBe(true));
+    const reads = getContentSuggestions.mock.calls.length;
+    current = read({ run: { ...finished, waiting: 3, opened: true } });
+    liveData.invalidate([{ type: "content_suggestion_jobs" }]);
+    await vi.waitFor(() => expect(getContentSuggestions.mock.calls.length).toBeGreaterThan(reads));
+    await vi.waitFor(() => expect(bar(el).run?.waiting).toBe(3));
+    await drawn(el);
+    expect(bar(el).shadowRoot!.textContent).toContain(t("suggestions.nothing"));
+    current = read({
+      run: run({
+        state: "refused",
+        total: 1,
+        progress: 0,
+        done: 0,
+        code: "content.suggestion_consent_required",
+        finishedAt: "2026-10-14T10:05:00.000Z",
+      }),
+    });
+    liveData.invalidate([{ type: "content_suggestion_jobs" }]);
+    await vi.waitFor(() => expect(bar(el).run?.state).toBe("refused"));
+    await drawn(el);
+    const text = bar(el).shadowRoot!.textContent!;
+    expect(text).toContain(codeMessage("content.suggestion_consent_required"));
+    expect(text).not.toContain(t("suggestions.nothing"));
+    expect(
+      bar(el).shadowRoot!.querySelector("[data-test=suggestions-consent]")!.getAttribute("href"),
+    ).toBe("https://cloud.example.test/account");
+  });
+
   it("tells a failed suggestion read in the bar, keeps the translations usable, and clears it once a read answers", async () => {
     const liveData = new LiveData();
     const getContentSuggestions = vi
