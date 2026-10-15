@@ -31,3 +31,22 @@ export interface HouseStyleExample {
   staffName: string;
   names: Record<string, string>;
 }
+
+export type SuggestionRunState =
+  "sending" | "running" | "done" | "partly_done" | "failed" | "expired" | "refused";
+
+export interface SuggestionRunView {
+  state: SuggestionRunState;
+  /** Items with languages to write across the run; context heads are never counted. */
+  total: number;
+  /** `done + failed`, so it reaches `total` when the run ends. */
+  progress: number;
+  done: number;
+  failed: number;
+  code: string | null;
+  fits: number | null;
+  /** Suggestions with text waiting in the table. */
+  waiting: number;
+  finishedAt: string | null;
+  opened: boolean;
+}

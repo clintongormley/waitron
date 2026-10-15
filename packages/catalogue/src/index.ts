@@ -160,6 +160,7 @@ export * from "./content-translation-writes.js";
 
 export * from "./content-translations.js";
 export * from "./content-suggestion-collect.js";
+export * from "./content-suggestion-jobs.js";
 export type * from "./content-suggestion-types.js";
 
 export { assertProductWritable } from "./archive.js";
