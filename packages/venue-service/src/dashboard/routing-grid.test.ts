@@ -151,6 +151,24 @@ describe("the single tree control", () => {
     expect(label(el)).toEqual(["Expand all"]);
   });
 
+  it("offers Collapse when the search's categories are already open, leaving the ordinary tree alone", async () => {
+    const { el } = await mount();
+    const input = root(el).querySelector<HTMLElementTagNameMap["wt-input"]>("[name=search]")!;
+    await input.updateComplete;
+    const native = input.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(native, "moj");
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+    expect(label(el)).toEqual(["Collapse all"]);
+    await userEvent.click(controls(el)[0]!);
+    await el.updateComplete;
+    expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
+    expect(label(el)).toEqual(["Expand all"]);
+    await userEvent.fill(native, "");
+    await el.updateComplete;
+    expect(rowLabels(el)[1]).toBe("▸ Drinks");
+  });
+
   it.each([390, 1280])(
     "keeps search and the one button on one full row at %i px",
     async (width) => {

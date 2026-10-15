@@ -1043,7 +1043,13 @@ export class RoutingGrid extends LitElement {
     if (model === null) return nothing;
     const search = this.#search();
     const open = search?.open ?? this.expanded;
-    const allOpen = model.categories.length > 0 && model.categories.every(({ id }) => open.has(id));
+    const categories =
+      search === undefined
+        ? model.categories.map(({ id }) => id)
+        : search.rows.flatMap(({ entry: { row } }) =>
+            row.kind === "category" ? [row.categoryId] : [],
+          );
+    const allOpen = categories.length > 0 && categories.every((id) => open.has(id));
     const rows: readonly { entry: GridRow; found?: SearchRow }[] =
       search === undefined
         ? visibleRoutingRows(model, this.expanded).map((entry) => ({ entry }))
