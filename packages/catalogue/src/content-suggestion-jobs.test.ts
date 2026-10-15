@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { products } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { writeContentLanguages } from "./content-languages.js";
+import { createCatalogue } from "./operations.js";
 import {
   markSuggestionRunOpened,
   readActiveSuggestionJob,
@@ -17,6 +20,7 @@ import {
 import { storeSuggestionResults } from "./content-suggestion-store.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 import {
+  addProduct,
   allJobs,
   context,
   ref,
@@ -74,6 +78,40 @@ it("starts a run as one submitting job holding the body and what it sent", async
     [ref(venue.bread), ref(venue.wine), ref(venue.cheese)].sort(),
   );
   expect((await app(readActiveSuggestionJob))?.id).toBe(jobs[0]!.id);
+});
+
+it("counts a variant but not its complete product, which travels only as context", async () => {
+  await seedTenant(suite.db);
+  const { water, small } = await app(async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
+    const menu = await createCatalogue(tx, {
+      name: "STAFF Carta",
+      names: { ca: "CLIENT-CA Carta", es: "CLIENT-ES Carta", en: "CLIENT-EN Menu" },
+    });
+    const water = await addProduct(tx, menu.id, "Water", {
+      ca: "CLIENT-CA Aigua",
+      es: "CLIENT-ES Agua",
+      en: "CLIENT-EN Water",
+    });
+    const [row] = await tx
+      .insert(products)
+      .values({
+        catalogueId: menu.id,
+        parentId: water,
+        name: "STAFF Water small",
+        kitchenName: "KITCHEN Water small",
+        customerName: { ca: "CLIENT-CA Aigua petita" },
+      })
+      .returning({ id: products.id });
+    return { water, small: row!.id };
+  });
+  const view = await app((tx) => startSuggestionRun(tx, context, at));
+  expect(view).toMatchObject({ total: 1 });
+  const [job] = await app(allJobs);
+  expect(job!.runTotal).toBe(1);
+  expect(job!.sent).toEqual({ [`variant:${small}`]: ["es", "en"] });
+  const body = JSON.parse(job!.body!) as { items: { ref: string }[] };
+  expect(body.items.map((item) => item.ref)).toEqual([ref(water), `variant:${small}`]);
 });
 
 it("refuses a second run while a job is active", async () => {

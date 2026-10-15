@@ -313,6 +313,24 @@ describe("saving a name", () => {
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
+  it("deletes a suggestion that arrived before a retried save", async () => {
+    const venue = await storedVenue();
+    const request = await saveWine(venue.wine);
+    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) =>
+      tx.insert(contentSuggestions).values({
+        kind: "product",
+        itemId: venue.wine,
+        language: "es",
+        text: "CLIENT-ES Vino",
+        expected: "{}",
+      }),
+    );
+    expect(await wineLanguages(venue)).toEqual(["en", "es"]);
+    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    expect(await wineLanguages(venue)).toEqual(["en"]);
+  });
+
   it("puts both suggestions back when the transaction around the save fails after it", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);

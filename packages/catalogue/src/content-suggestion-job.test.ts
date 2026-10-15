@@ -267,6 +267,17 @@ describe("the house style", () => {
     });
   });
 
+  it("takes a live menu's section with a saved name", async () => {
+    await inVenue(async (tx, lunch) => {
+      await section(tx, lunch.menuId, "Postres", { ca: "CLIENT-CA Postres" });
+      expect(await readHouseStyle(tx, THREE.languages)).toContainEqual({
+        kind: "section",
+        staffName: "STAFF Postres",
+        names: { ca: "CLIENT-CA Postres" },
+      });
+    });
+  });
+
   it("leaves out a name Cloud would refuse, a language the venue does not use, and anything gone", async () => {
     await inVenue(async (tx, lunch) => {
       const blankStaff = await product(tx, lunch, "Blank", { ca: "CLIENT-CA Blanc" });

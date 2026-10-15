@@ -726,6 +726,30 @@ describe("collecting what is missing", () => {
     });
   });
 
+  it("sends no blank name as existing when a waiting suggestion covers its language", async () => {
+    await inVenue(THREE, async (tx, lunch) => {
+      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
+      await tx
+        .update(products)
+        .set({ customerName: { ca: "CLIENT-CA Pa", es: "   " } })
+        .where(eq(products.id, pa));
+      await tx.insert(contentSuggestions).values({
+        kind: "product",
+        itemId: pa,
+        language: "es",
+        text: "CLIENT-ES Pan",
+        expected: "{}",
+      });
+      expect(await collectSuggestionItems(tx, context, new Set())).toEqual([
+        expect.objectContaining({
+          ref: `product:${pa}`,
+          existing: { ca: "CLIENT-CA Pa" },
+          missing: ["en"],
+        }),
+      ]);
+    });
+  });
+
   it("walks every page of the listing and resolves past one batch of 100", async () => {
     await inVenue(THREE, async (tx, lunch) => {
       await tx.insert(products).values(
