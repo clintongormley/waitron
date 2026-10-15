@@ -55,15 +55,16 @@ consistent ordinary receipt and till dates; passing the saved offset remains a p
 Existing settings history locks are retained; this decision authorizes no repair bypass.
 No stored fiscal row is to be rewritten.
 
-## No sale over €3,010 can be made at all
+## No sale over €3,000 can be made at all
 
-- **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
+- **No sale over €3,000 can be made at all**: Waitron issues only simplified invoices and no screen
   accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
   simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
   [verifactu-findings.md](../compliance/verifactu-findings.md) and the
-  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)); the
-  branch refuses over €3,010, the limit `@waitron/verifactu`'s validator applies (3,000 plus its
-  10.00 tolerance), as the owner asked.
+  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)). The
+  branch refuses over €3,000, the owner's choice of 2026-10-15 (A741). The 3,010.00 that
+  `@waitron/verifactu`'s validator applies (3,000 plus its 10.00 tolerance) stays a ceiling the
+  limit sits inside.
 
 ## Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale
 
@@ -164,8 +165,10 @@ recipient support remains outside that build; `recordSubstitution` still has no 
 ## `packages/fiscal-verifactu` restates rules the validator owns
 
 - **`packages/fiscal-verifactu` restates rules the validator owns** — `venue-fields.ts` its venue-field
-  patterns and caps, `backend.ts` its simplified-invoice limit — kept honest by drift guards
-  (`record-limits.test.ts` compares the limit and the recipient name cap with the validator's verdict).
+  patterns and caps — kept honest by drift guards (`record-limits.test.ts` compares the recipient
+  name cap with the validator's verdict). `backend.ts`'s simplified-invoice limit no longer restates
+  the validator's rule: it is the owner's €3,000 (A741), and `record-limits.test.ts` checks our
+  verdict against the validator's at six totals.
   Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12) — it
   widens an audited fiscal library's public surface and the drift guard already closes the risk.
   Revisit when something else needs those patterns.

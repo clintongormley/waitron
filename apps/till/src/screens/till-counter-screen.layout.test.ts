@@ -487,6 +487,9 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
         expect(hold.left).toBeGreaterThanOrEqual(card.left);
         expect(hold.right).toBeLessThanOrEqual(card.right);
         expect(hold.bottom).toBeLessThanOrEqual(window.innerHeight);
+        const actions = inShadow(el, ".idle-actions").getBoundingClientRect();
+        expect(hold.left).toBe(actions.left);
+        expect(hold.right).toBeLessThan(actions.left + actions.width / 2);
         await expectNoA11yViolations(host);
       },
     );

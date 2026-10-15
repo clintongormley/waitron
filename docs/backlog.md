@@ -142,20 +142,6 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A741 — one large-bill limit, €3,000, and no Full invoice button that cannot work (owner,
-  2026-10-15; open).** The till refuses a basket over €3,010 without a named customer
-  (`sale.over_simplified_limit`; €3,000 plus the agency's €10 tolerance, `F2_AMOUNT_LIMIT` in
-  `packages/fiscal-verifactu/src/backend.ts`), while two places in `apps/till/src/till-app.ts` (one is
-  `#askInvoiceRecipientForLargeBill`) hard-code €3,000. Owner: use €3,000, in the Veri*Factu
-  module's `simplifiedInvoiceLimit` (already per regime; `refuseOverSimplifiedLimit`,
-  `packages/core/src/simplified-limit.ts`), and read that one value everywhere;
-  `record-limits.test.ts` compares today's value with the validator's verdict and changes with it.
-  While full invoices are switched off at payment (`refuseUnavailableFullInvoice`,
-  `apps/server/src/till-sale.ts`), the till's Full
-  invoice button must not lift the limit (today it does, and payment then fails), and the banner
-  stops saying "take something off" beside it. Read, not run, 2026-10-15. Fiscal-adjacent: owner
-  sign-off at land.
-
 - **A696. Invoice issue dates and record offsets follow the process zone.** The audit measured
   walk-up, bill, card, correction and substitution paths with the venue fixed to Madrid:
   `2026-10-14T23:30Z` stores 14 October under UTC and 15 October under Madrid.
@@ -206,7 +192,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may be
   preferred since a wrong fingerprint is permanent. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
-- **No sale over €3,010 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3010-can-be-made-at-all)
+- **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
 - **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
   shown to happen either way. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
@@ -289,7 +275,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   calls `recordSubstitution`. Asesor Q5(d) remains open for F3 and R5. **Next action:** verify
   physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4
   choice (A555), obtain the asesor's manual-remedy approval and settle applicable B2B delivery
-  before enabling public F1.
+  before enabling public F1. Enabling it also means: the server sends `fullInvoices: true` in
+  `GET /api/till` (`apps/server/src/till-api.ts`), so the till draws its Full invoice buttons again
+  (A741); `sale.over_simplified_limit` is reworded, since it says the till cannot issue a full
+  invoice; and someone decides whether the server should go on accepting a saved F1 choice
+  (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which lifts its check on an
+  order growing past the limit. A741 left that last one unchanged.
   The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 
@@ -2264,8 +2255,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **An unpaid table bill shows two "Full invoice" buttons**: the payment panel's own
   (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
-  `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). **Next action
-  (owner decision):** which one stays.
+  `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). While full
+  invoices are switched off neither is drawn (A741), so the question is for when they are on.
+  **Next action (owner decision):** which one stays.
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
