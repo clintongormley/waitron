@@ -2246,11 +2246,6 @@ answer. Line numbers are from Part 2's branch on 2026-10-15; re-check them on `m
   rate, under TOTAL (the order at `:376-378` stays), from `result.vatBreakdown`: the record's own
   figures, never a sum of the lines. The owner's example: «Base imponible 10% 8,18 €» and «IVA 10%
   0,82 €».
-- **Open for the driver before the tasks are written: the base's label.** The owner's words are
-  «Base imponible», "as a full invoice does". A two-rate simplified receipt prints «Base 10%» today
-  (`label.base`, `:367`). Either the two-rate receipt changes to «Base imponible» too, so a
-  simplified receipt never names the base two ways (this plan's recommendation), or the one-rate
-  receipt alone uses it.
 - The `vatIncludedAtRate` label key (`packages/country/src/country.ts:82`, and its four languages in
   `packages/country-es/src/receipt-labels.ts`) loses its only reader: `git grep vatIncludedAtRate` on
   2026-10-15 found `receipt-document.ts:362` and `packages/country-es/src/spain.test.ts:288, 294`,

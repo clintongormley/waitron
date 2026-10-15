@@ -3446,7 +3446,7 @@ describe("the simplified receipt's own layout (A663)", () => {
     );
   });
 
-  it("keeps a base and a VAT line per rate when there are several", () => {
+  it("prints a base and a VAT line for each of several rates", () => {
     const lines = squeezed(FILED_WITHOUT_TEXT, PRINTER_80);
     expect(lines).toEqual(
       expect.arrayContaining([
