@@ -1687,7 +1687,8 @@ export class TillTableOrderScreen extends LitElement {
       this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message } };
     }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
-    // old party would otherwise save to the new one.
+    // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
+    // a switch, which keeps a refusal the app still holds from reopening its window.
     const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
     if (partySwitched) {
       this.naming = null;

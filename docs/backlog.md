@@ -2188,13 +2188,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   real Chromium; if Save compares against the old name, follow the stored name as the Guests window
   does.
 
-- **A716 — A refused guest count might reopen its window when a handheld's Order card is drawn
-  again (2026-10-15; open, A713 review, found by reading only, not run).** The till keeps a refused
-  Guests or Split count (`guestsRefusal`, `apps/till/src/till-app.ts`) after the window has used it,
-  so a later redraw of the card grid's Order card (`apps/till/src/widgets/card-grid.ts`) may hand it
-  back and reopen the window. The Name window keeps its refusal the same way (since #881). **Next
-  action:** probe it on a handheld layout; if it reopens, clear each refusal once the window takes it.
-
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
   it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill

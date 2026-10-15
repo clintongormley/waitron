@@ -1709,6 +1709,74 @@ describe("till-app: the party on a handheld", () => {
       expect(orderCard(el)!.orderId).toBe("remaining-a");
     });
   });
+
+  it.each([
+    {
+      window: "Name",
+      method: "setPartyName",
+      field: "name",
+      event: "name-party",
+      detail: { name: "Ana" },
+      dialog: "till-party-name-dialog",
+      cancel: "party-name-cancel",
+    },
+    {
+      window: "Guests",
+      method: "setPartyGuests",
+      field: "guestCount",
+      event: "guests-party",
+      detail: { guestCount: 4 },
+      dialog: "till-party-guests-dialog",
+      cancel: "party-guests-cancel",
+    },
+    {
+      window: "Split a table",
+      method: "splitTable",
+      field: "guests.leaving",
+      event: "split-table",
+      detail: { tableId: "t5", billId: null, guests: { staying: 3, leaving: 1000 } },
+      dialog: "till-split-guests-dialog",
+      cancel: "split-guests-cancel",
+    },
+  ])(
+    "does not reopen the $window window a refusal opened when a handheld comes back to its order card",
+    async ({ method, field, event, detail, dialog, cancel }) => {
+      const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+      const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]),
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        [method]: vi.fn().mockRejectedValue({ code: "management.request_invalid", field }),
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      await (el as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+      emit(shell(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const card = () => orderCard(el);
+      emit(card()!, event, detail);
+      await flush(el);
+      expect(card()!.shadowRoot!.querySelector(dialog)).not.toBeNull();
+      card()!
+        .shadowRoot!.querySelector(dialog)!
+        .dispatchEvent(new CustomEvent(cancel, { bubbles: true, composed: true }));
+      await flush(el);
+      expect(card()!.shadowRoot!.querySelector(dialog)).toBeNull();
+
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      expect(card()).toBeNull();
+      emit(shell(el), "tab-select", { key: "order" });
+      await flush(el);
+
+      expect(card()).not.toBeNull();
+      expect(card()!.shadowRoot!.querySelector(dialog)).toBeNull();
+    },
+  );
 });
 
 /** The party's bills read left unanswered until the test settles it. */
