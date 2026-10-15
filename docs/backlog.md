@@ -804,7 +804,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   new place rather than going with it; and deleting the column also deletes the station link to Prep
   stations' routing view (`/manage/prep-stations/view/routing`). Decided with it: the Availability
   column stays as it is, and the table staying wider than its box at desktop width is accepted
-  (there will always be too many columns here; A654 gives it more room).
+  (there will always be too many columns here; folding the sidebar to a strip gives it more room).
 
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
@@ -3926,14 +3926,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
   [screenshots](backlog/mockups/a653-table-scrolling/)
 
-- **A654 — the sidebar folds to a strip of icons (owner, 2026-10-14; open).** A way to narrow the
-  dashboard's left sidebar to a thin column of icons, giving wide tables such as Products the room.
-  Each sidebar section (Overview, Reporting, Service, Products and menus, Venue operations, Team,
-  Purchasing, Settings) needs an icon; only Settings has one today. Phones keep today's drawer. Clicking a section header already folds
-  that section's links away, but nothing narrows the sidebar.
-  [Detail](backlog/dashboard.md#a654--the-sidebar-folds-to-a-strip-of-icons). Design with four
-  owner questions: [plan](superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md),
-  [drawings](backlog/mockups/a654-sidebar-icons/) (2026-10-15).
+- **A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
+  (found building A654, 2026-10-15; open).** design-system.md → "Icon buttons with a tooltip" gives
+  a pressed `.icon-button` a `--wt-color-primary-text` icon, but `wt-icon` sets its own colour.
+  [Detail](backlog/dashboard.md#a728--a-pressed-icon-buttons-icon-may-not-take-the-primary-colour-design-systemmd-gives-it)
 
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
   dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes

@@ -920,6 +920,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **The sidebar folds to a strip of icons (A654, owner 2026-10-15).** Every sidebar icon draws in
+  the text colour, never the primary colour, and the current section is marked by its highlight
+  alone; the folded choice is kept per browser, and with no choice kept, a window wider than 48rem
+  and at most 64rem opens folded. How it works: `docs/developers/design-system.md` → "Dashboard
+  sidebar navigation".
+
 - **An open tab offers to reload after a box update (A491, owner 2026-10-11).** How it works:
   `docs/developers/conventions-ui.md` → "An open page notices a box update from one response
   header". Limits kept on purpose: a signed-out dashboard tab that makes no automatic read sees the
@@ -1089,26 +1095,6 @@ minimised, especially for use on mobiles".
   keep it to one, for example a row that scrolls sideways. Live mode draws no strip, but a venue
   uses Preparation while being set up.
 
-## A654 — the sidebar folds to a strip of icons
-
-Owner, 2026-10-14, while looking at the Products table being wider than its box: "perhaps we need
-to add a way to shrink the left navbar down to a thin column with icons (we need icons for the
-navbar sections)".
-
-- **Today.** The sidebar's groups are `NAV_GROUPS` in `apps/dashboard/src/dashboard-app.ts`; a
-  group may carry an `icon` from `apps/dashboard/src/icons.ts`, and only Settings (`configuration`,
-  `gear`) does. Overview has no header at all, and modules add items to groups, so every group a
-  module can fill needs its icon whether or not core lists items in it. Clicking a group header
-  folds that group's links away; nothing narrows the sidebar itself.
-- **Phones.** At 48rem wide or less the sidebar is already a drawer behind the menu button, so the
-  strip is for wider screens; say in the plan whether a tablet-width window starts folded.
-- **To decide at the plan:** how the strip opens a group's pages (a flyout beside the icon, or
-  unfolding the sidebar), whether the folded state is remembered per browser, and the icon for each
-  group (Overview, Reporting, Service, Products and menus, Venue operations, Team, Purchasing,
-  Settings). Icons follow design-system.md.
-- **Design (2026-10-15):** [the plan](../superpowers/plans/2026-10-15-a654-sidebar-icon-strip.md)
-  and [its drawings](mockups/a654-sidebar-icons/); four questions to the owner, build after the answers.
-
 ## A657 — Cancel leaves without asking
 
 Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just
@@ -1143,3 +1129,15 @@ Calendar › Week, Calendar › Seasons, Calendar › Periods, Prep stations ›
 result says where it lives ("Periods — in Calendar") and opens the page with that tab or window
 showing; page names still rank first. Opening a window from an address is the mechanism A719 point 2
 needs too.
+
+## A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
+
+Found building A654, 2026-10-15; open. design-system.md → "Icon buttons with a tooltip" says a
+pressed or open `.icon-button` draws a `--wt-color-primary-text` icon, but `wt-icon` sets its own
+colour to `--wt-color-text` (`packages/ui-core/src/base-styles.ts`), so a colour on the button
+around it does not reach it. Measured only on A654's sidebar strip, where removing the strip's own
+colour rule left an `aria-expanded="true"` button's icon in the text colour. Look at the Filters,
+Products Select and Structure Select buttons pressed, in both themes, and fix the doc or the style.
+A fix in `wt-icon` must keep every sidebar icon in the text colour (A654): the headers and an open
+strip button set the primary colour around their icons today, and
+`apps/dashboard/src/dashboard-app.sidebar-fold.test.ts` checks both.

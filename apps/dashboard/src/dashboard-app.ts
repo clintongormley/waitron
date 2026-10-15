@@ -6,7 +6,14 @@ import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
+import {
+  baseStyles,
+  iconButtonStyles,
+  trackIconTooltip,
+  UrlStateController,
+  type WtInput,
+  type WtToast,
+} from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import { navMatches } from "./nav-search.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -140,9 +147,30 @@ type CoreScreen = (typeof CORE_SCREENS)[number];
 /** The `& {}` keeps the `CoreScreen` literal autocomplete while admitting any module id. */
 type ScreenId = CoreScreen | (string & {});
 
-/** Also written as a literal in the CSS `@media` block below: a media query cannot read a custom
- * property. */
+/** Repeated as a literal in this file's CSS and in widgets/alerts-bell.ts, since a media query
+ * cannot read a custom property, and in FOLDED_BY_DEFAULT below. */
 const DRAWER_BREAKPOINT = "(max-width: 48rem)";
+
+/** A tablet-width window, whose sidebar opens folded while no choice is stored. */
+const FOLDED_BY_DEFAULT = "(48rem < width <= 64rem)";
+const SIDEBAR_FOLDED_KEY = "waitron-dashboard-sidebar-folded";
+
+function readStoredFold(): boolean | undefined {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_FOLDED_KEY);
+    return stored === "true" ? true : stored === "false" ? false : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeFold(folded: boolean): void {
+  try {
+    window.localStorage.setItem(SIDEBAR_FOLDED_KEY, String(folded));
+  } catch {
+    // Remembering the choice is a convenience; the sidebar works without it.
+  }
+}
 
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
@@ -160,7 +188,7 @@ type NavItem = ScreenRule & { labelKey: StringKey };
 type NavGroup = {
   id: NavGroupId;
   headerKey?: StringKey;
-  icon?: string;
+  icon: string;
   items: NavItem[];
   itemsAfterModules?: NavItem[];
 };
@@ -173,10 +201,15 @@ const coreItems = (group: NavGroup): NavItem[] => [
 type NavPage = { screen: ScreenId; label: string };
 
 const NAV_GROUPS: NavGroup[] = [
-  { id: "overview", items: [{ screen: "overview", labelKey: "nav.overview" }] },
+  {
+    id: "overview",
+    icon: "section-overview",
+    items: [{ screen: "overview", labelKey: "nav.overview" }],
+  },
   {
     id: "reports",
     headerKey: "nav.group.reports",
+    icon: "section-reports",
     items: [
       { screen: "sales", labelKey: "nav.sales" },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
@@ -186,11 +219,13 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "service",
     headerKey: "nav.group.service",
+    icon: "section-service",
     items: [],
   },
   {
     id: "menu",
     headerKey: "nav.group.menu",
+    icon: "section-menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
@@ -206,12 +241,14 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "operations",
     headerKey: "nav.group.operations",
+    icon: "section-operations",
     items: [],
     itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
     id: "team",
     headerKey: "nav.group.team",
+    icon: "section-team",
     items: [
       { screen: "staff", labelKey: "nav.staff" },
       { screen: "roster", labelKey: "nav.roster" },
@@ -222,6 +259,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "purchasing",
     headerKey: "nav.group.purchasing",
+    icon: "section-purchasing",
     items: [{ screen: "purchases", labelKey: "nav.purchases" }],
   },
   {
@@ -314,6 +352,7 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
 export class DashboardApp extends LitElement {
   static override styles = [
     baseStyles,
+    iconButtonStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -321,6 +360,7 @@ export class DashboardApp extends LitElement {
         display: block;
         height: 100%;
         --dashboard-sidebar-width: 34ch;
+        --dashboard-strip-panel-width: 24ch;
       }
 
       /* The banner owns the first full-width row; navigation and content share the row below it.
@@ -353,6 +393,84 @@ export class DashboardApp extends LitElement {
         box-shadow: var(--wt-shadow-1);
       }
 
+      .sidebar.folded {
+        flex-basis: calc(var(--wt-tap-min) + 2 * var(--wt-space-2) + 1px);
+        /* The tooltips lie outside the strip, beside its buttons. */
+        overflow: visible;
+        padding: var(--wt-space-2);
+      }
+
+      /* A phone held sideways is wider than the drawer's breakpoint and too short for every icon,
+         so there the strip scrolls, and clips its tooltips; each button keeps its name. */
+      @media (max-height: 40rem) {
+        .sidebar.folded {
+          overflow-y: auto;
+        }
+      }
+
+      .strip {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
+      .icon-button.strip-button,
+      .icon-button.strip-button:is([aria-pressed="true"], [aria-expanded="true"]) {
+        border: none;
+        border-inline-start: 3px solid transparent;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .icon-button.strip-button:hover {
+        background: var(--wt-color-surface);
+      }
+
+      .icon-button.strip-button[aria-current="true"] {
+        border-inline-start-color: var(--wt-color-primary);
+        background: var(--wt-color-surface-lifted);
+      }
+
+      .strip-button > .icon-tooltip {
+        inset-block-start: 50%;
+        inset-inline-start: calc(100% + var(--wt-space-1));
+        transform: translateY(-50%);
+      }
+
+      /* As specific as the shared hover rule, which would otherwise show it under the open panel. */
+      .icon-button.strip-button[aria-expanded="true"] > .icon-tooltip {
+        display: none;
+      }
+
+      /* Over the content column, under the phone drawer's layers, which never show with the strip. */
+      .strip-panel {
+        position: absolute;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        max-height: 100%;
+        overflow-y: auto;
+        min-width: var(--dashboard-strip-panel-width);
+        padding: var(--wt-space-2) 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-bg);
+        box-shadow: var(--wt-shadow-1);
+      }
+
+      .strip-panel-label {
+        padding: var(--wt-space-1) var(--wt-space-3);
+      }
+
+      .strip-button > .icon-tooltip::before {
+        inset-block: 0;
+        inset-inline: auto 100%;
+        block-size: auto;
+        inline-size: var(--wt-space-1);
+      }
+
       .nav {
         display: flex;
         flex-direction: column;
@@ -383,15 +501,20 @@ export class DashboardApp extends LitElement {
         border: none;
         border-inline-start: 3px solid transparent;
         background: transparent;
-        color: var(--wt-color-primary-text);
         font: inherit;
-        font-size: var(--wt-font-size-sm);
         line-height: var(--wt-font-size-lg);
+        text-align: start;
+        cursor: pointer;
+      }
+
+      /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */
+      .nav-group,
+      .strip-panel-label {
+        color: var(--wt-color-primary-text);
+        font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        text-align: start;
-        cursor: pointer;
       }
 
       button.nav-group:hover {
@@ -405,7 +528,7 @@ export class DashboardApp extends LitElement {
       .nav-group .group-icon {
         position: absolute;
         inset-inline-start: calc(-1 * var(--wt-space-1));
-        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-md)) / 2);
+        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-sm)) / 2);
       }
 
       .nav-group-label {
@@ -578,12 +701,6 @@ export class DashboardApp extends LitElement {
         max-width: calc(100% - 2 * var(--wt-space-3));
       }
 
-      /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
-         in-flow there); the narrow-screen media query below reveals it at the banner's leading edge. */
-      .nav-toggle {
-        display: none;
-      }
-
       /* The veil behind the open drawer: it covers the content row below the banner and closes the
          drawer on a tap. It sits under the sliding sidebar but over the main content. */
       .scrim {
@@ -606,7 +723,7 @@ export class DashboardApp extends LitElement {
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
          content row, below the banner. It leaves the flow and slides in when the layout gains
-         the drawer-open class; the hamburger appears to toggle it. A CSS media query cannot read a
+         the drawer-open class. A CSS media query cannot read a
          --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
          constant that drives the narrow state). */
       @media (max-width: 48rem) {
@@ -626,7 +743,6 @@ export class DashboardApp extends LitElement {
           display: contents;
         }
         .nav-toggle {
-          display: inline-block;
           grid-area: toggle;
           margin-inline-end: var(--wt-space-3);
         }
@@ -755,12 +871,29 @@ export class DashboardApp extends LitElement {
    * and the accessibility tree while off-screen. */
   @state() private narrow = false;
 
+  /** Ignored on a phone, whose drawer always holds the full sidebar. */
+  @state() private sidebarFolded = false;
+
+  /** The section whose panel is open beside its strip icon. */
+  @state() private stripPanel: NavGroupId | null = null;
+  #stripPanelIconTop: number | null = null;
+
+  #setFolded(folded: boolean): void {
+    this.sidebarFolded = folded;
+    storeFold(folded);
+  }
+
+  #onNavToggle(): void {
+    if (this.narrow) this.drawerOpen = !this.drawerOpen;
+    else this.#setFolded(!this.sidebarFolded);
+  }
+
   #breakpoint?: MediaQueryList;
 
   readonly #onBreakpointChange = (e: MediaQueryListEvent): void => {
     this.narrow = e.matches;
-    // At desktop there is no hamburger to reopen the drawer, so one left open would leave its scrim
-    // over the whole layout.
+    // Wider than a phone the toggle folds the sidebar instead, so a drawer left open would leave its
+    // scrim over the whole layout.
     if (!e.matches) this.drawerOpen = false;
   };
 
@@ -868,6 +1001,7 @@ export class DashboardApp extends LitElement {
     // matchMedia fires `change` only on a transition, so read the initial match first.
     this.#breakpoint = window.matchMedia(DRAWER_BREAKPOINT);
     this.narrow = this.#breakpoint.matches;
+    this.sidebarFolded = readStoredFold() ?? window.matchMedia(FOLDED_BY_DEFAULT).matches;
     this.#breakpoint.addEventListener("change", this.#onBreakpointChange);
     this.addEventListener("click", this.#onAppLink, true);
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
@@ -888,6 +1022,7 @@ export class DashboardApp extends LitElement {
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     window.removeEventListener("storage", this.#onSessionStorage);
     document.removeEventListener("visibilitychange", this.#onVisibilityChange);
+    document.removeEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
     super.disconnectedCallback();
@@ -1114,6 +1249,8 @@ export class DashboardApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("screen")) this.#openGroupOf(this.screen);
+    if (this.stripPanel !== null && (changed.has("screen") || !this.#folded()))
+      this.stripPanel = null;
   }
 
   #openGroupOf(screen: ScreenId): void {
@@ -1127,6 +1264,12 @@ export class DashboardApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    if (changed.has("stripPanel")) {
+      if (this.stripPanel === null)
+        document.removeEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
+      else document.addEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
+    }
+    this.#placeStripPanel();
     // An open pop-up whose new text equals the old changes no toast property, so its countdown
     // would not restart on its own.
     if (changed.has("alertToast") && this.alertToast !== null)
@@ -1425,7 +1568,13 @@ export class DashboardApp extends LitElement {
                off-canvas AND closed (narrow && not drawerOpen) it is inert, so its nav buttons
                leave the tab order + a11y tree rather than lurking off-screen ahead of every visible
                control; it is interactive at desktop width and whenever the drawer is open. -->
-          <aside class="sidebar" ?inert=${this.narrow && !this.drawerOpen}>${this.#nav()}</aside>
+          <aside
+            class=${classMap({ sidebar: true, folded: this.#folded() })}
+            ?inert=${this.narrow && !this.drawerOpen}
+            @scroll=${() => this.#onSidebarScroll()}
+          >
+            ${this.#folded() ? this.#strip() : this.#nav()}
+          </aside>
           <!-- The scrim behind the open drawer — a tap on it closes the drawer. Rendered only while open;
                the drawer is force-closed on the transition
                to desktop (#onBreakpointChange), so this never renders at desktop width.
@@ -1550,7 +1699,8 @@ export class DashboardApp extends LitElement {
                 variant="ghost"
                 data-test="nav-toggle"
                 aria-label=${t("nav.toggle")}
-                @click=${() => (this.drawerOpen = !this.drawerOpen)}
+                aria-expanded=${String(this.narrow ? this.drawerOpen : !this.sidebarFolded)}
+                @click=${() => this.#onNavToggle()}
                 ><wt-icon name="hamburger"></wt-icon
               ></wt-button>`
             : nothing
@@ -1831,8 +1981,8 @@ export class DashboardApp extends LitElement {
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
-   * language; `pages` is undefined when no page is permitted or no page matches the search. */
-  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
+   * language. */
+  #permittedNav(): { group: NavGroup; pages: NavPage[] }[] {
     if (this.sessionRole === "staff")
       return [
         {
@@ -1851,15 +2001,192 @@ export class DashboardApp extends LitElement {
       const among = [...(this.#navGroups.get(group.id) ?? [])]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((screen) => ({ screen: screen.id, label: tKit(screen.navLabelKey) }));
-      const permitted: NavPage[] = [
-        ...shown(group.items),
-        ...among,
-        ...shown(group.itemsAfterModules),
-      ];
-      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
-      const pages = navMatches(this.navSearch, permitted, heading);
-      return { group, pages: pages.length > 0 ? pages : undefined };
+      return {
+        group,
+        pages: [...shown(group.items), ...among, ...shown(group.itemsAfterModules)],
+      };
     });
+  }
+
+  /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
+  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
+    const permitted = this.#permittedNav();
+    if (this.sessionRole === "staff") return permitted;
+    return permitted.map(({ group, pages }) => {
+      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
+      const matched = navMatches(this.navSearch, pages, heading);
+      return { group, pages: matched.length > 0 ? matched : undefined };
+    });
+  }
+
+  #folded(): boolean {
+    return !this.narrow && this.sidebarFolded;
+  }
+
+  async #searchFromStrip(): Promise<void> {
+    this.#setFolded(false);
+    await this.updateComplete;
+    const search = this.renderRoot.querySelector<WtInput>("wt-input[data-test=nav-search]");
+    await search?.updateComplete;
+    search?.focus();
+  }
+
+  #openSectionFromStrip(group: NavGroup, pages: NavPage[], event: MouseEvent): void {
+    if (pages.length === 1) {
+      this.#openFromNav(pages[0]!.screen);
+      return;
+    }
+    if (this.stripPanel === group.id) {
+      this.stripPanel = null;
+      return;
+    }
+    this.stripPanel = group.id;
+    // A click a key made reports no pointer clicks.
+    if (event.detail === 0)
+      void this.updateComplete.then(() =>
+        this.renderRoot.querySelector<HTMLElement>("[data-test=strip-panel] .nav-item")?.focus(),
+      );
+  }
+
+  #stripPanelParts(): { panel: HTMLElement; icon: HTMLElement } | null {
+    const panel = this.renderRoot.querySelector<HTMLElement>("[data-test=strip-panel]");
+    const icon = this.renderRoot.querySelector<HTMLElement>(`[aria-controls="${panel?.id}"]`);
+    return panel && icon ? { panel, icon } : null;
+  }
+
+  readonly #onPointerDownOutsidePanel = (event: PointerEvent): void => {
+    const parts = this.#stripPanelParts();
+    const path = event.composedPath();
+    if (parts && !path.includes(parts.panel) && !path.includes(parts.icon)) this.stripPanel = null;
+  };
+
+  /** Only focus moving to somewhere else closes it: a click on the panel's text moves it nowhere. */
+  #onStripPanelFocusOut(event: FocusEvent): void {
+    const parts = this.#stripPanelParts();
+    const next = event.relatedTarget as Node | null;
+    if (parts && next && !parts.panel.contains(next) && !parts.icon.contains(next))
+      this.stripPanel = null;
+  }
+
+  #onStripPanelKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || event.isComposing || this.stripPanel === null) return;
+    event.stopPropagation();
+    const icon = this.#stripPanelParts()?.icon;
+    this.stripPanel = null;
+    icon?.focus();
+  }
+
+  /** Focusing an icon scrolls the strip, and that scroll's event can arrive after the panel opened,
+   * so only a scroll that moved the icon since the panel was placed closes it. */
+  #onSidebarScroll(): void {
+    if (this.stripPanel === null) return;
+    const icon = this.#stripPanelParts()?.icon;
+    if (icon && icon.getBoundingClientRect().top !== this.#stripPanelIconTop)
+      this.stripPanel = null;
+  }
+
+  /** Placed before its first paint: `updated` runs before the frame is drawn. */
+  #placeStripPanel(): void {
+    const parts = this.#stripPanelParts();
+    if (parts === null) return;
+    const layout = this.renderRoot.querySelector<HTMLElement>(".layout")!;
+    const area = layout.getBoundingClientRect();
+    const icon = parts.icon.getBoundingClientRect();
+    this.#stripPanelIconTop = icon.top;
+    const strip = this.renderRoot.querySelector<HTMLElement>("aside.sidebar")!;
+    const top = Math.min(icon.top - area.top, area.height - parts.panel.offsetHeight);
+    parts.panel.style.top = `${Math.max(0, top)}px`;
+    parts.panel.style.left = `${strip.getBoundingClientRect().right - area.left}px`;
+  }
+
+  #stripButton(
+    test: string,
+    label: string,
+    icon: string,
+    onClick: (event: MouseEvent) => void,
+    current = false,
+    controls?: { id: string; open: boolean },
+  ): TemplateResult {
+    return html`<button
+      type="button"
+      class="icon-button strip-button"
+      data-test="strip-${test}"
+      aria-label=${label}
+      aria-current=${current ? "true" : nothing}
+      aria-expanded=${controls ? String(controls.open) : nothing}
+      aria-controls=${controls?.open ? controls.id : nothing}
+      @click=${onClick}
+      @keydown=${controls ? (e: KeyboardEvent) => this.#onStripPanelKeydown(e) : nothing}
+      @focusout=${controls?.open ? (e: FocusEvent) => this.#onStripPanelFocusOut(e) : nothing}
+      @pointerenter=${trackIconTooltip}
+      @pointerleave=${trackIconTooltip}
+      @focus=${trackIconTooltip}
+      @blur=${trackIconTooltip}
+    >
+      <wt-icon name=${icon}></wt-icon><span class="icon-tooltip" aria-hidden="true">${label}</span>
+    </button>`;
+  }
+
+  #stripPanel(id: string, label: string, pages: NavPage[]): TemplateResult {
+    return html`<div
+      class="strip-panel"
+      id=${id}
+      role="group"
+      aria-labelledby="${id}-label"
+      data-test="strip-panel"
+      @keydown=${(e: KeyboardEvent) => this.#onStripPanelKeydown(e)}
+      @focusout=${(e: FocusEvent) => this.#onStripPanelFocusOut(e)}
+    >
+      <div class="strip-panel-label" id="${id}-label">${label}</div>
+      ${pages.map(
+        (page) =>
+          html`<button
+            type="button"
+            class="nav-item"
+            aria-current=${this.screen === page.screen ? "page" : nothing}
+            data-test="strip-panel-${page.screen}"
+            @click=${() => {
+              const icon = this.screen === page.screen ? this.#stripPanelParts()?.icon : undefined;
+              this.stripPanel = null;
+              this.#openFromNav(page.screen);
+              icon?.focus();
+            }}
+          >
+            ${page.label}
+          </button>`,
+      )}
+    </div>`;
+  }
+
+  /** The folded sidebar: one icon per section with a page this person may open. The search does
+   * not narrow it. A section's panel follows its icon, so Tab moves from the icon into it. */
+  #strip(): TemplateResult {
+    const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
+    return html`<nav class="strip" aria-label=${t("nav.sections")}>
+      ${
+        this.sessionRole === "staff"
+          ? nothing
+          : this.#stripButton(
+              "search",
+              t("nav.search"),
+              "search",
+              () => void this.#searchFromStrip(),
+            )
+      }
+      ${sections.map(({ group, pages }) => {
+        const label = group.headerKey === undefined ? t("nav.overview") : t(group.headerKey);
+        const id = `strip-panel-${group.id}`;
+        const open = this.stripPanel === group.id;
+        return html`${this.#stripButton(
+          group.id,
+          label,
+          group.icon,
+          (e) => this.#openSectionFromStrip(group, pages, e),
+          pages.some((page) => page.screen === this.screen),
+          pages.length > 1 ? { id, open } : undefined,
+        )}${open ? this.#stripPanel(id, label, pages) : nothing}`;
+      })}
+    </nav>`;
   }
 
   #openFromNav(screen: ScreenId): void {
@@ -1915,7 +2242,7 @@ export class DashboardApp extends LitElement {
                 ? nothing
                 : searching
                   ? html`<div class="nav-group" data-test="nav-group-${group.id}">
-                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <span class="chevron-space"></span>
                     </div>`
@@ -1928,7 +2255,7 @@ export class DashboardApp extends LitElement {
                       @click=${(e: MouseEvent) =>
                         this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                     >
-                      ${group.icon ? html`<wt-icon class="group-icon" name=${group.icon}></wt-icon>` : nothing}
+                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
                     </button>`

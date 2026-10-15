@@ -783,20 +783,25 @@ describe("dashboard-app", () => {
     }
   });
 
-  it("starts the banner's logo at the identity row's leading edge, with nothing laid out before it", async () => {
+  it("starts the banner's identity row with the navigation toggle, then the logo, with nothing else laid out before it", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
 
     const identity = brandBanner(el)!.querySelector<HTMLElement>(".brand-identity")!;
     const logo = identity.querySelector<HTMLImageElement>(".brand-logo")!;
+    const toggle = identity.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
       await page.viewport(1280, 800);
       expect(window.innerWidth).toBe(1280);
       expect(identity.querySelector("source")!.getClientRects()).toHaveLength(0);
-      expect(logo.getBoundingClientRect().left).toBeCloseTo(
+      expect(toggle.getBoundingClientRect().left).toBeCloseTo(
         identity.getBoundingClientRect().left,
+        0,
+      );
+      expect(logo.getBoundingClientRect().left).toBeCloseTo(
+        toggle.getBoundingClientRect().right + parseFloat(getComputedStyle(identity).columnGap),
         0,
       );
     } finally {
@@ -3209,7 +3214,7 @@ describe("dashboard-app", () => {
     expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
   });
 
-  it("shows the gear icon on the Settings group header, and no other group header", async () => {
+  it("shows the gear icon on the Settings group header and the team icon on the Team header", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3218,7 +3223,10 @@ describe("dashboard-app", () => {
     expect(settingsHeader.textContent).toContain(t("nav.group.configuration"));
     expect(settingsHeader.querySelector('wt-icon[name="gear"]')).not.toBeNull();
     const teamHeader = el.shadowRoot!.querySelector('[data-test="nav-group-team"]')!;
-    expect(teamHeader.querySelectorAll("wt-icon")).toHaveLength(1); // only the chevron, no gear
+    expect([...teamHeader.querySelectorAll("wt-icon")].map((i) => i.getAttribute("name"))).toEqual([
+      "section-team",
+      "chevron-down",
+    ]);
   });
   it("shows the hamburger icon on the drawer toggle, not the kebab", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3400,6 +3408,8 @@ describe("dashboard-app", () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1000, 600);
+    // A window this wide opens folded unless a choice is stored; this case is about the full sidebar.
+    localStorage.setItem("waitron-dashboard-sidebar-folded", "false");
     try {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
