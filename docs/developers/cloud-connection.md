@@ -90,7 +90,7 @@ fourth entry it was given when a renewal or report answers three. A Cloud that p
 refuses any `configuration` body other than `{}` as an invalid proof (401) (Cloud's
 `packages/registration/src/installations.ts:28`), and the box answers that by dropping its lease
 (`apps/server/src/cloud-installation.ts:295-303`). Cloud must therefore support version 2 before
-any box running this code talks to it, including one paired before the upgrade. Stopping access permanently retires the key. A stop
+any box running this code talks to it, including a box paired before it was upgraded to this version. Stopping access permanently retires the key. A stop
 request waits for the local worker, rechecks your permission, and saves the stop intent before
 contacting Cloud. Do not delete the state file to reconnect: pairing again with a new key does
 not take over the existing venue. A test server restored from a Cloud snapshot reconnects to its

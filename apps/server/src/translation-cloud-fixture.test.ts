@@ -282,6 +282,18 @@ it.each([
     "a house-style entry with a key the contract does not name",
     job(pinta, { houseStyle: [{ ...house, note: "x" }] }),
   ],
+  [
+    "a house-style entry with a kind outside the nine",
+    job(pinta, { houseStyle: [{ ...house, kind: "telepathy" }] }),
+  ],
+  [
+    "a house-style entry with a staff name over 500 characters",
+    job(pinta, { houseStyle: [{ ...house, staffName: "C".repeat(501) }] }),
+  ],
+  [
+    "a house-style entry with a name in a language that is not enabled",
+    job(pinta, { houseStyle: [{ ...house, names: { fr: "Café arrosé" } }] }),
+  ],
   ["301 house-style entries", job(pinta, { houseStyle: Array.from({ length: 301 }, () => house) })],
 ])("a job with %s is 400 invalid_request", (_name, body) =>
   withCloud(async (f) => {
@@ -403,6 +415,24 @@ it("a configuration body other than {} or the version-2 one is an invalid proof"
     await expect(f.client.refresh()).rejects.toThrow();
     for (const body of ['{"servicesVersion":2,"extra":1}', '{"servicesVersion":3}', "not json"])
       expect(await postConfiguration(f, body)).toEqual(refused(401, "invalid_proof"));
+  }));
+
+it("a configuration body of {} is answered with the original three services", () =>
+  withCloud(async (f) => {
+    let reply: { status: number; json: unknown } | undefined;
+    // While the box's configuration request waits, its operation ID is sent first with `{}`.
+    f.delay(async () => {
+      f.delay(async () => {});
+      reply = await postConfiguration(f, "{}");
+    });
+    await f.client.refresh();
+    expect(f.requests.at(-1)![7]).toBe("{}");
+    expect(reply!.status).toBe(200);
+    const services = (reply!.json as { services: { service: string }[] }).services.map(
+      (s) => s.service,
+    );
+    expect(services).toHaveLength(3);
+    expect(services).not.toContain("content_translation");
   }));
 
 it("a Cloud before version 2 refuses the version-2 configuration, and the box renews to three services", () =>

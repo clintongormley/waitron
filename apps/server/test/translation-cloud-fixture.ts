@@ -219,11 +219,14 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  * Where the contract is silent, this fake chooses:
  * - for status, collect and release, `permission_denied` comes after the signed-body check and
  *   before the job lookup;
- * - `revoked` (403) comes straight after the proof checks, for all four actions;
+ * - `revoked` (403) comes after the envelope, proof and lease checks, for all four actions: before
+ *   submit's fingerprint check and the other three's signed-body check;
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
  * - a language tag matches `[a-z]{2,3}` with an optional `-` and two capitals;
- * - `expire()` expires a job in any state, a `collected` one included;
- * - a `translator` answer is returned as written, not limited to `missing`.
+ * - `expire()` expires a job in any state, a `collected` one included.
+ * A `translator` answer is returned as written, not limited to `missing`: the contract says `names`
+ * holds only the item's `missing` languages, and the fake lets a test break that so the box's
+ * dropping of extra names can be tested.
  */
 export async function translationCloudFixture(options: { cloudBeforeVersion2?: boolean } = {}) {
   const jobs = new Map<string, FakeJob>();
@@ -244,7 +247,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
   let override: Record<string, unknown> = {};
   let translate: (item: FakeItem) => Omit<FakeResult, "ref"> = defaultTranslator;
 
-  /** Any unexpired lease this fake issued, as Cloud accepts any live lease it signed. */
+  /** Any unexpired lease this fake issued: the fake's own choice, listed above. */
   function leaseIssued(lease: unknown): boolean {
     for (const reply of base.replies.values()) {
       const issued = (reply as { lease?: { payload: string } }).lease;
