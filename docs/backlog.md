@@ -4602,7 +4602,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and drops to
   its own line on 58 mm paper; on a simplified receipt it also drops below the order line on 80 mm
-  when a table's name heads that line.
+  when that line is long, as «Mesa 6 · Eskaera 41» is.
 
 - The sample receipt the preview draws keeps its Spanish content («Mesa 6», «MUESTRA/1»,
   «Café y tostada») in every language; only its fixed words change.

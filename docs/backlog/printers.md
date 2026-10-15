@@ -568,7 +568,7 @@ returns `null`. This checks those readers, not every sale path.
   a los del resto de datos de la factura» (quoted from the BOE in
   `docs/compliance/regional-language-rules.md`); with only the TOTAL enlarged, the rest of the data
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
-  `docs/compliance/verifactu-findings.md`).
+  `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.

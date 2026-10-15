@@ -233,7 +233,7 @@ export class EscBuilder {
     return Uint8Array.from(this.parts);
   }
 
-  /** The `GS v 0` pictures sent so far: each line of text, bitmap and QR code is one. */
+  /** The `GS v 0` pictures sent so far: each `line`, `raster`, `bitmap` and `qrRaster` is one; a native `qr()` code is not. */
   get pictures(): number {
     return this.drawn;
   }

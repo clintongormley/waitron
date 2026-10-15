@@ -101,7 +101,10 @@ function addedBlocks(
   return { start, end };
 }
 
-/** The indexes of `preview`'s blocks that show the job's pictures numbered `pictures`. */
+/**
+ * The indexes of `preview`'s blocks that show the job's pictures numbered `pictures`. Holds while
+ * the receipt sends no native `qr()` and the preview drops no picture (`omittedGraphics`).
+ */
 function pictureBlocks(preview: PrintJobPreview, pictures: number[]): Set<number> {
   const wanted = new Set(pictures);
   const blocks = new Set<number>();
