@@ -159,13 +159,10 @@ test("the modal sizes run compact, then standard, then wide", () => {
   expect(standard).toBeLessThan(wide);
 });
 
-test("the medium modal height is 32rem, shorter than a full-height modal in a 1280 × 800 window", () => {
-  // At 1280px wide a full-height modal leaves 24px (--wt-space-5) above and below: 800 - 48 = 752.
+test("the medium modal height is 32rem, 512px", () => {
   const el = mount();
   expect(token(el, "--wt-modal-medium-height")).toBe("32rem");
-  const medium = lengthPx(el, "var(--wt-modal-medium-height)");
-  expect(medium).toBe(512);
-  expect(medium).toBeLessThan(752);
+  expect(lengthPx(el, "var(--wt-modal-medium-height)")).toBe(512);
 });
 
 test("a standard modal holds a form at the form width beside a classic scrollbar", () => {

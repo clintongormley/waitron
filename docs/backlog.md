@@ -3948,9 +3948,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
 - **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
-  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height
-  (`packages/ui/src/components/wt-modal.ts:17`) and `wt-dialog` puts the form's message at the end
-  of the body (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
+  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height unless
+  given `height="medium"` (`packages/ui/src/components/wt-modal.ts`, the `dialog` rule) and
+  `wt-dialog` puts the form's message at the end of the body
+  (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
   150 px between the message and the buttons (seen in the Prep stations station editor; the same at
   main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
   buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
@@ -3958,23 +3959,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
   this stays open.
 
-- **Which other dialogs take the medium height (owner to approve)** (A734 follow-up). `wt-modal`'s
-  `height="medium"` (design-system.md → "Use `wt-modal` for an add or edit form") is used only by
-  the Routes tab's cell editor (before:
-  [screenshot](backlog/mockups/a656-routes-tab/1-editor-no-period-route.png)). Candidates, each a
-  non-compact modal with short content:
-  `packages/venue-service/src/dashboard/department-dialogs.ts:449` (add department or add zone: one
-  field); `apps/dashboard/src/screens/floor-plan-add-joined-table.ts:215` and
-  `floor-plan-add-tables.ts:245` (the floor plan's add dialogs);
-  `apps/dashboard/src/widgets/include-folder-form.ts:331` (a menu's included folder);
-  `packages/venue-service/src/dashboard/prep-stations-screen.ts:1428` (`#previewDialog`, the
-  route-change notice, wide: the case that started this);
-  `apps/dashboard/src/screens/printers-screen.ts:3432` (the calibrate dialog) and `:2247` (Add
-  agent); `apps/dashboard/src/screens/devices-screen.ts:2644` (Pair device);
-  `apps/dashboard/src/screens/profile-screen.ts:1090` (the two-step code dialog, standard in that
-  mode, whose first step is short). Depending on the data, a table or nothing, so a fixed height
-  could squeeze the table: `apps/dashboard/src/screens/modifiers-screen.ts:682` (delete) and
-  `apps/dashboard/src/screens/units-screen.ts:593` (delete).
+- **Which other dialogs take the medium height (owner to approve)** — left open by A734. OPEN,
+  waiting for the owner. `wt-modal`'s `height="medium"` is used only by the Routes tab's cell
+  editor; the other candidates are listed in the detail.
+  [Detail](backlog/dashboard.md#which-other-dialogs-take-the-medium-height-owner-to-approve)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
