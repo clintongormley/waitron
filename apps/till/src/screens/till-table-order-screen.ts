@@ -4656,6 +4656,7 @@ export class TillTableOrderScreen extends LitElement {
       )}
       .leavingLabel=${leaving === undefined ? "" : tableShownName(leaving)}
       .staying=${splitting.staying}
+      .savedStaying=${this.#savedGuests()}
       @split-guests-confirm=${(event: Event) => {
         event.stopPropagation();
         this.splitGuests = null;

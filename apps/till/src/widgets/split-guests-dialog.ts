@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
@@ -6,7 +6,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, draftScopeFor } from "@wa
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { parseGuestCount } from "./guest-count.js";
+import { parseGuestCount, sameGuestCount } from "./guest-count.js";
 import { t } from "../i18n/t.js";
 
 /** null records no count for that side. */
@@ -21,11 +21,6 @@ interface Draft {
 }
 
 type Side = keyof Draft;
-
-function canonical(value: string): string {
-  const parsed = parseGuestCount(value);
-  return parsed === undefined ? `invalid:${value.trim()}` : String(parsed.guestCount);
-}
 
 @customElement("till-split-guests-dialog")
 export class TillSplitGuestsDialog extends LitElement {
@@ -45,6 +40,9 @@ export class TillSplitGuestsDialog extends LitElement {
   @property() stayingLabel = "";
   @property() leavingLabel = "";
   @property() staying = "";
+  /** The party's count as stored now; the staying side opens from it and follows it while the
+   * waiter has not changed that side. */
+  @property({ attribute: false }) savedStaying: string | undefined;
   @property() leaving = "";
 
   @state() private attempted = false;
@@ -61,16 +59,19 @@ export class TillSplitGuestsDialog extends LitElement {
     this.requestUpdate();
   }
 
-  override willUpdate(): void {
-    if (!this.isConnected || !this.active || this.#scope) return;
-    this.#baseline ??= this.#draft();
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (changed.has("savedStaying")) this.#followStored();
+  }
+
+  #track(): void {
+    this.#baseline ??= { staying: this.savedStaying ?? this.staying, leaving: "" };
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
       id: this,
       current: () => this.#draft(),
       snapshot: (draft) => ({ ...draft }),
-      equal: (a, b) =>
-        canonical(a.staying) === canonical(b.staying) &&
-        canonical(a.leaving) === canonical(b.leaving),
+      equal: (a, b) => sameGuestCount(a.staying, b.staying) && sameGuestCount(a.leaving, b.leaving),
       restore: (draft) => {
         this.staying = draft.staying;
         this.leaving = draft.leaving;
@@ -79,6 +80,15 @@ export class TillSplitGuestsDialog extends LitElement {
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+  }
+
+  #followStored(): void {
+    const stored = this.savedStaying;
+    const baseline = this.#baseline!;
+    if (stored === undefined || sameGuestCount(stored, baseline.staying)) return;
+    if (sameGuestCount(this.staying, baseline.staying)) this.staying = stored;
+    this.#baseline = { ...baseline, staying: stored };
+    this.#scope!.commit(this.#baseline);
   }
 
   override disconnectedCallback(): void {

@@ -214,3 +214,27 @@ it("a refused submitted count starts dirty against the stored count", async () =
   await fill(form, " 2 ");
   expect(unload()).toBe(false);
 });
+it("a stored count changed elsewhere moves an untouched window with it, and leaves a typed one unsaved", async () => {
+  const { app, form } = await mount();
+  app.savedValue = "6";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.value).toBe("6");
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a count typed before the stored one changes elsewhere stays unsaved against the new stored count", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "4");
+  app.savedValue = "6";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(input.value).toBe("4");
+  expect(unload()).toBe(true);
+  await fill(form, "6");
+  expect(unload()).toBe(false);
+});

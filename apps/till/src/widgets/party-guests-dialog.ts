@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
@@ -12,17 +12,12 @@ import {
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { parseGuestCount } from "./guest-count.js";
+import { parseGuestCount, sameGuestCount } from "./guest-count.js";
 import { t } from "../i18n/t.js";
 
 export interface PartyGuestsDetail {
   /** null clears the count. */
   guestCount: number | null;
-}
-
-function canonical(value: string): string {
-  const parsed = parseGuestCount(value);
-  return parsed === undefined ? `invalid:${value.trim()}` : String(parsed.guestCount);
 }
 
 @customElement("till-party-guests-dialog")
@@ -60,19 +55,34 @@ export class TillPartyGuestsDialog extends LitElement {
     this.requestUpdate();
   }
 
-  override willUpdate(): void {
-    if (!this.isConnected || !this.active || this.#scope) return;
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (changed.has("savedValue")) this.#followStored();
+  }
+
+  #track(): void {
     this.#baseline ??= this.savedValue ?? this.value;
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: this,
       current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => canonical(a) === canonical(b),
+      equal: sameGuestCount,
       restore: (value) => (this.value = value),
     });
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+  }
+
+  /** A count stored elsewhere while the window is open becomes what Save compares against, and
+   * replaces the field only where the waiter has not changed it. */
+  #followStored(): void {
+    const stored = this.savedValue;
+    if (stored === undefined || sameGuestCount(stored, this.#baseline!)) return;
+    if (sameGuestCount(this.value, this.#baseline!)) this.value = stored;
+    this.#baseline = stored;
+    this.#scope!.commit(stored);
   }
 
   override disconnectedCallback(): void {

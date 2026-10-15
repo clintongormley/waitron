@@ -10,6 +10,7 @@ import type { SplitGuestsDetail, TillSplitGuestsDialog } from "./split-guests-di
 class SplitGuestsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   staying = "5";
+  savedStaying = "5";
   leaving = "";
   closes = 0;
   submitted: SplitGuestsDetail[] = [];
@@ -18,6 +19,7 @@ class SplitGuestsLeaveApp extends LitElement {
         stayingLabel="Mesa 5"
         leavingLabel="Mesa 4"
         .staying=${this.staying}
+        .savedStaying=${this.savedStaying}
         .leaving=${this.leaving}
         @split-guests-cancel=${() => this.closes++}
         @split-guests-confirm=${(event: CustomEvent<SplitGuestsDetail>) => this.submitted.push(event.detail)}
@@ -192,4 +194,34 @@ it("a parent rerender does not reset the typed counts or pending warning", async
   await expect.poll(() => q.open).toBe(false);
   expect(input.value).toBe("2");
   expect(unload()).toBe(true);
+});
+it("a stored count changed elsewhere moves an untouched staying side with it, and leaves the window unsaved only for what was typed", async () => {
+  const { app, form } = await mount();
+  app.savedStaying = "6";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.staying).toBe("6");
+  expect(unload()).toBe(false);
+  await fill(form, "leavingGuests", "2");
+  app.savedStaying = "7";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(form.staying).toBe("7");
+  expect(unload()).toBe(true);
+  await fill(form, "leavingGuests", "");
+  expect(unload()).toBe(false);
+});
+it("a staying count typed before the stored one changes elsewhere stays, unsaved against the new stored count", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "stayingGuests", "3");
+  app.savedStaying = "6";
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(input.value).toBe("3");
+  expect(unload()).toBe(true);
+  await fill(form, "stayingGuests", "6");
+  expect(unload()).toBe(false);
 });

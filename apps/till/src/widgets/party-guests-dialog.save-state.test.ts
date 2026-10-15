@@ -105,3 +105,29 @@ it("after a save that leaves the dialog open, Save is quiet again", async () => 
   saveButton(el).click();
   expect(await saveState(el)).toEqual(quiet);
 });
+
+it("when the stored count changes elsewhere, an untouched field follows it and Save compares against it", async () => {
+  const el = await mount({ value: "3", savedValue: "3" });
+  el.savedValue = "6";
+  expect(await saveState(el)).toEqual(quiet);
+  const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  expect(el.value).toBe("6");
+  expect(input.value).toBe("6");
+  await type(el, "4");
+  expect(await saveState(el)).toEqual(ready);
+  await type(el, "3");
+  expect(await saveState(el)).toEqual(ready);
+  await type(el, "6");
+  expect(await saveState(el)).toEqual(quiet);
+});
+
+it("when the stored count changes elsewhere, a count the waiter typed stays and Save compares against the new one", async () => {
+  const el = await mount({ value: "3", savedValue: "3" });
+  await type(el, "4");
+  el.savedValue = "6";
+  expect(await saveState(el)).toEqual(ready);
+  expect(el.value).toBe("4");
+  el.savedValue = "4";
+  expect(await saveState(el)).toEqual(quiet);
+  expect(el.value).toBe("4");
+});

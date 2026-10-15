@@ -4544,6 +4544,24 @@ describe("till-table-order-screen", () => {
       expect(split).toEqual([{ tableId: "t5", billId: null, guests: { staying: 4, leaving: 2 } }]);
     });
 
+    it("moves an untouched staying side of Split a table's guests window to a count stored elsewhere, and splits with it", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const split = heard(el, "split-table");
+      const dialog = await toSplitGuests(el, "t5", "none");
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      expect(splitGuestsInput(dialog, "stayingGuests").value).toBe("6");
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
+      await el.updateComplete;
+      expect(split).toEqual([
+        { tableId: "t5", billId: null, guests: { staying: 6, leaving: null } },
+      ]);
+    });
+
     it("closes Split a table's guests window, sending nothing, when the screen switches to another party", async () => {
       const floor = partyTables(true);
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
@@ -4708,6 +4726,39 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBe(dialog);
+    });
+
+    it("moves an untouched Guests window to a count stored elsewhere, so the opening count can still be saved", async () => {
+      const floor = partyTables(true);
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...floor });
+      const counted = heard(el, "guests-party");
+      await toMenu(el);
+      click(el, '[data-action="guests"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-party-guests-dialog")!;
+      await dialog.updateComplete;
+
+      el.party = { ...floor.party, revision: floor.party.revision + 1, guestCount: 6 };
+      await el.updateComplete;
+      await dialog.updateComplete;
+
+      const field = dialog.shadowRoot!.querySelector("wt-input")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(input.value).toBe("6");
+      const save = dialog.shadowRoot!.querySelector("wt-button[data-guests-save]")!;
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      for (const value of ["4", "3"]) {
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await dialog.updateComplete;
+      }
+      await save.updateComplete;
+      expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+      save.click();
+      await el.updateComplete;
+      expect(counted).toEqual([{ guestCount: 3 }]);
     });
 
     it("merge lists the party's other untouched bills only, and dispatches merge-bills { fromBillId }", async () => {
