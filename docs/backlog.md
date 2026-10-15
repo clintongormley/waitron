@@ -2162,7 +2162,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   invoices and refunds, today by default. Both use the shared table's search, Filters and
   Customise, with a new date range (Today… This month, or From–To) at the top of Filters and shown
   as a chip. The first server-paged table: 50 rows a page, search, filters and sort on the server,
-  never every row in memory. [Detail](backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+  never every row in memory. [Detail](backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [mockups](backlog/mockups/a737-a740-till-counter-redesign/), [implementation plan](superpowers/plans/2026-10-15-a737-find-bill-page.md)
 
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰

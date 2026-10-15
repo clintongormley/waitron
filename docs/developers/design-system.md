@@ -1496,6 +1496,32 @@ visibility is remembered per browser in local storage under `<viewKey>:columns` 
 stored keys are ignored and newly added columns take their declared place. Sort and filter memory
 remains in session storage. Blocked storage and malformed JSON leave the defaults in place.
 
+For a list searched and paged by the server, pass `serverPaging` with a zero-based `page`,
+positive `pageSize` and `total`. For example, `{ page: 1, pageSize: 50, total: 2314 }` draws
+“51–100 of 2,314”. Pass only that page's flat rows. The table keeps their order and leaves their
+searching, filtering and sorting to the server. Existing tables leave `serverPaging` unset.
+
+The server mode emits `wt-query-change` after its columns and remembered choices are ready,
+then when its effective query changes. Its detail carries `search` (including trailing spaces),
+`sortKey`, `sortDirection` and `filters`. A hidden or unavailable sort column gives an empty
+`sortKey`; the caller chooses its fallback. Filters carry their effective single value or list,
+including an initial choice. Receiving rows, a total or a loading state does not request another
+query. The existing sort and filter events continue too. Listen to one query path to fetch pages,
+and reset the page when that query changes.
+
+Previous and Next emit `wt-page-change` with `{ page }`. Update `serverPaging` when you receive
+the requested page; the table neither changes it optimistically nor remembers it in storage.
+`pageRangeLabel(from, to, total)`, `previousPageLabel` and `nextPageLabel` supply localized words.
+Both buttons wait while `loading`; the first and last page disable their unavailable direction.
+
+Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
+`toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also
+offers Filters when no column has a filter. Clear all emits `wt-filters-clear` with an empty detail
+object, so you can clear those controls along with the column choices. The toolbar and filter
+panel remain available during loading, errors and empty results. At phone width, opening Filters
+focuses its first slotted field when present, and Tab stays within the panel, including native date
+fields' own segments.
+
 Every list a dashboard screen or dashboard module shows as its main content with `wt-data-table`
 offers customisation for every column except the one that names the row and the one holding the row's
 buttons, which are always shown. A column starts shown unless the screen has a reason to hide it

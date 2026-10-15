@@ -169,6 +169,35 @@ export class WtDataTable<Row = unknown> extends LitElement {
         min-width: 0;
       }
 
+      .pagination {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-3);
+      }
+      .pagination p {
+        margin: 0;
+        margin-inline-end: auto;
+      }
+      .pagination button {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+      .pagination button:disabled {
+        cursor: default;
+      }
+      .pagination button:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
       .scroll {
         max-width: 100%;
         overflow-x: auto;
@@ -875,6 +904,28 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @property() sortKey: string | null = null;
   @property() sortDirection: SortDirection = "ascending";
+  @property({ attribute: false }) serverPaging?: { page: number; pageSize: number; total: number };
+  @property({ attribute: false }) pageRangeLabel = (
+    from: number,
+    to: number,
+    total: number,
+  ): string => `${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}`;
+  @property() previousPageLabel = "Previous page";
+  @property() nextPageLabel = "Next page";
+  @property({ type: Number }) externalFilterCount = 0;
+  #serverQuery = "";
+  #filterBackwards = false;
+  readonly #containFilterFocus = (event: Event): void => {
+    if (
+      this.serverPaging === undefined ||
+      !this.filtersOpen ||
+      this.sideFilters ||
+      event.composedPath().includes(this.filtersPanel)
+    )
+      return;
+    const stops = this.#filterStops(this.filtersPanel);
+    (this.#filterBackwards ? stops.at(-1) : stops[0])?.focus();
+  };
   @property({ type: Boolean }) searchable = false;
   @property() searchLabel = "Search";
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
@@ -1089,7 +1140,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #hasFilters(): boolean {
-    return this.columns.some((column) => column.filter);
+    return (
+      this.columns.some((column) => column.filter) ||
+      (this.serverPaging !== undefined &&
+        (this.externalFilterCount > 0 ||
+          this.querySelector(':scope > [slot="filters-start"]') !== null))
+    );
   }
 
   #hasToolbarSearch(): boolean {
@@ -1124,6 +1180,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    document.addEventListener("focusin", this.#containFilterFocus);
+    this.renderRoot.addEventListener("focusin", this.#containFilterFocus);
     this.#observeHost();
     if (this.hasUpdated) {
       this.#observeScroll();
@@ -1133,6 +1191,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    document.removeEventListener("focusin", this.#containFilterFocus);
+    this.renderRoot.removeEventListener("focusin", this.#containFilterFocus);
     this.#endColumnDrag();
     // Removal hides an open popover without firing beforetoggle, so `placed` never records the close.
     if (!this.sideFilters) this.filtersOpen = false;
@@ -1153,6 +1213,35 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (changed.has("columns") || changed.has("searchable")) this.#observeHost();
     if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("columns"))
       this.#placeFilters();
+    this.#reportServerQuery();
+  }
+
+  #reportServerQuery(): void {
+    if (!this.isConnected) return;
+    if (this.serverPaging === undefined) {
+      this.#serverQuery = "";
+      return;
+    }
+    if (this.columns.length === 0) return;
+    const detail = {
+      search: this.searchable ? this.searchText : this.searchTerm,
+      sortKey: this.#sortColumn(this.#shownColumns())?.key ?? "",
+      sortDirection: this.sortDirection,
+      filters: Object.fromEntries(
+        this.columns.flatMap((column) => {
+          const values = this.#activeValues(column);
+          return values.length === 0
+            ? []
+            : [[column.key, column.filter?.multiple ? [...values] : values[0]]];
+        }),
+      ),
+    };
+    const next = JSON.stringify(detail);
+    if (next === this.#serverQuery) return;
+    this.#serverQuery = next;
+    this.dispatchEvent(
+      new CustomEvent("wt-query-change", { detail, bubbles: true, composed: true }),
+    );
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1172,10 +1261,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
       this.#releaseColumnWidths();
     if (
-      this.rows.length === 0 ||
-      this.loading ||
-      this.errorMessage !== "" ||
-      !this.columns.some((column) => column.filter)
+      !this.#hasFilters() ||
+      (this.serverPaging === undefined &&
+        (this.rows.length === 0 || this.loading || this.errorMessage !== ""))
     )
       this.filtersOpen = false;
     if (!this.#offersChooser()) this.chooserOpen = false;
@@ -1650,7 +1738,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
-  #clearAllFilters(): void {
+  #clearAllFilters(event: Event): void {
+    if (this.serverPaging !== undefined) {
+      event.stopPropagation();
+      this.dispatchEvent(
+        new CustomEvent("wt-filters-clear", { detail: {}, bubbles: true, composed: true }),
+      );
+    }
     const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
     const next = Object.fromEntries(
       this.columns
@@ -1705,10 +1799,38 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #focusFirstFilter(): void {
+    if (this.serverPaging !== undefined) {
+      const slot = this.filtersPanel.querySelector<HTMLSlotElement>('slot[name="filters-start"]')!;
+      const first = this.#filterStops(slot)[0];
+      if (first) {
+        first.focus();
+        return;
+      }
+    }
     this.filtersPanel
       .querySelector<HTMLElement>(".filter-section .table-filter")
       ?.shadowRoot?.querySelector<HTMLElement>(".trigger")
       ?.focus();
+  }
+
+  #filterStops(root: Element): HTMLElement[] {
+    const stops: HTMLElement[] = [];
+    const visit = (element: Element): void => {
+      if (
+        element instanceof HTMLElement &&
+        element.tabIndex >= 0 &&
+        !element.matches(":disabled") &&
+        element.getClientRects().length > 0
+      )
+        stops.push(element);
+      const children =
+        element instanceof HTMLSlotElement
+          ? element.assignedElements({ flatten: true })
+          : [...(element.shadowRoot ?? element).children];
+      for (const child of children) visit(child);
+    };
+    visit(root);
+    return stops;
   }
 
   #persistView(): void {
@@ -1917,6 +2039,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #searched(): Searched<Row> {
+    if (this.serverPaging !== undefined)
+      return { inputs: [], visible: this.rows, ranks: undefined };
     const inputs = [
       this.rows,
       this.columns,
@@ -1989,6 +2113,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     column: DataTableColumn<Row> | undefined,
     ranks: ReadonlyMap<Row, SearchRank> | undefined,
   ): Row[] {
+    if (this.serverPaging !== undefined) return [...rows];
     const indexOf = new Map<Row, number>();
     rows.forEach((row, index) => indexOf.set(row, index));
     return this.#sortByColumn(rows, column, indexOf, ranks);
@@ -2542,10 +2667,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #renderToolbar() {
-    const hasFilters = this.columns.some((column) => column.filter);
-    const activeCount = this.columns.filter(
-      (column) => column.filter && this.#activeValues(column).length > 0,
-    ).length;
+    const hasFilters = this.#hasFilters();
+    const activeCount =
+      this.columns.filter((column) => column.filter && this.#activeValues(column).length > 0)
+        .length + (this.serverPaging === undefined ? 0 : this.externalFilterCount);
     const chooser = this.#offersChooser();
     const slotted = (name: string) => this.querySelector(`:scope > [slot="${name}"]`) !== null;
     const start = slotted("toolbar-start");
@@ -2586,6 +2711,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 placeholder=${this.searchPlaceholder || this.searchLabel}
                 .value=${this.searchText}
                 @input=${(event: Event) => {
+                  if (this.serverPaging !== undefined) event.stopPropagation();
                   this.searchText = (event.target as HTMLInputElement).value;
                 }}
               />`
@@ -2627,6 +2753,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #filtersKeydown(event: KeyboardEvent): void {
+    if (event.key === "Tab" && this.serverPaging !== undefined) {
+      this.#filterBackwards = event.shiftKey;
+      return;
+    }
     if (event.key === "Tab" && this.filtersPanel.hasAttribute("data-fullscreen")) {
       const first = this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all");
       const last = [
@@ -2739,7 +2869,41 @@ export class WtDataTable<Row = unknown> extends LitElement {
         this.#hasFilters()
           ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>`
           : content
-      }`;
+      }${this.#renderPaging()}`;
+  }
+
+  #renderPaging() {
+    const paging = this.serverPaging;
+    if (paging === undefined) return nothing;
+    const offset = paging.page * paging.pageSize;
+    const hasRows = offset < paging.total;
+    const move = (event: Event, page: number) => {
+      event.stopPropagation();
+      this.dispatchEvent(
+        new CustomEvent("wt-page-change", { detail: { page }, bubbles: true, composed: true }),
+      );
+    };
+    return html`<div class="pagination" part="pagination">
+      <p role="status">
+        ${this.pageRangeLabel(hasRows ? offset + 1 : 0, hasRows ? Math.min(offset + paging.pageSize, paging.total) : 0, paging.total)}
+      </p>
+      <button
+        type="button"
+        data-previous-page
+        ?disabled=${this.loading || paging.page <= 0}
+        @click=${(event: Event) => move(event, paging.page - 1)}
+      >
+        ${this.previousPageLabel}
+      </button>
+      <button
+        type="button"
+        data-next-page
+        ?disabled=${this.loading || offset + paging.pageSize >= paging.total}
+        @click=${(event: Event) => move(event, paging.page + 1)}
+      >
+        ${this.nextPageLabel}
+      </button>
+    </div>`;
   }
 
   /** Whether the chooser could change anything: a table opts in with a `choosable` column, and
@@ -2861,15 +3025,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   override render() {
-    if (this.loading) return html`<p class="message" role="status">${this.loadingMessage}</p>`;
-    if (this.errorMessage !== "")
-      return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
+    if (this.loading) {
+      const message = html`<p class="message" role="status">${this.loadingMessage}</p>`;
+      return this.serverPaging === undefined ? message : this.#withToolbar(message);
+    }
+    if (this.errorMessage !== "") {
+      const message = html`<p class="message error" role="alert">${this.errorMessage}</p>`;
+      return this.serverPaging === undefined ? message : this.#withToolbar(message);
+    }
     const { visible, ranks: searchRanks } = this.#searched();
-    if (this.rows.length === 0)
-      return html`<div class="empty">
+    if (this.rows.length === 0) {
+      const empty = html`<div class="empty">
         <p class="message" role="status">${this.emptyMessage}</p>
         <slot name="empty-action"></slot>
       </div>`;
+      return this.serverPaging === undefined ? empty : this.#withToolbar(empty);
+    }
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
