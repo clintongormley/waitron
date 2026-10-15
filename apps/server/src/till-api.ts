@@ -780,7 +780,6 @@ function requireGuestCountOrNull(value: unknown, field = "guestCount"): number |
   return requireGuestCount(value, field);
 }
 
-/** Split a table's counts for the party that stays and the one that leaves, absent for none. */
 function requireSplitGuests(value: unknown): SplitGuests | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("guests");

@@ -221,7 +221,6 @@ export async function setPartyName(
   return { revision, name };
 }
 
-/** Set the party's guest count, or with null clear it; a party command guarded by its revision. */
 export async function setPartyGuests(
   tx: Transaction,
   args: { partyId: string; guestCount: number | null; expectedPartyRevision: number },

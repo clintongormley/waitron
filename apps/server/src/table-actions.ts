@@ -306,7 +306,6 @@ export async function combineParties(
   return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
 }
 
-/** The guest counts the waiter gives each side of Split a table; null leaves one unknown. */
 export interface SplitGuests {
   staying: number | null;
   leaving: number | null;
