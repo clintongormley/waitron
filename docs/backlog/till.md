@@ -1475,6 +1475,17 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **Guests: the waiter changes the count at any time, joined tables add their counts, and only Split
+  a table asks again (A713, owner 2026-10-15).** Owner's words: "add joined counts. the waiter should
+  always be able to update the number of people sitting at a table. when they split, the waiter
+  should update each table's seats as well", then, asked which split: "only splitting a table". So the
+  order screen's Guests sets or clears a party's count (`PUT /api/parties/:id/guests`); when one
+  party combines into another (Join, or Move guests onto a seated table) the survivor's count becomes
+  the two added together, or none when either is unknown or the sum is over 999 (`combineParties`,
+  `apps/server/src/table-actions.ts`); and Split a table opens a window asking each side's count
+  before the split goes through. A bill split by item has no count of its own, so it prints no guests
+  line. A bill moved to a free table still starts a party with no count; the waiter sets it with
+  Guests.
 - **An emptied name field says what it goes back to only as its placeholder (A665, owner
   2026-10-14: "leave it").** Owner 2026-10-14: the name windows show what an emptied field goes back
   to as the placeholder only; no hidden description for screen readers. The windows are the till's
