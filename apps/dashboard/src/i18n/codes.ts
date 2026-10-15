@@ -2,6 +2,31 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "attendance.state_changed": {
+    en: "The attendance record changed. Read its latest history before responding.",
+    es: "El registro de horas ha cambiado. Consulta el historial actual antes de responder.",
+  },
+  "correction.not_pending": {
+    en: "This request has changed. Read its latest history before responding.",
+    es: "Esta solicitud ha cambiado. Consulta el historial actual antes de responder.",
+  },
+  "correction.not_permitted": {
+    en: "You cannot authorise this change. Ask another eligible manager.",
+    es: "No puedes autorizar este cambio. Pide ayuda a otro responsable autorizado.",
+  },
+  "correction.invalid": {
+    en: "These times cannot be applied to the current attendance record. Check the day and times.",
+    es: "Estas horas no se pueden aplicar al registro actual. Revisa la jornada y las horas.",
+  },
+  "correction.target_not_found": {
+    en: "This time entry could not be found. Read the day again.",
+    es: "No se ha encontrado este fichaje. Vuelve a consultar la jornada.",
+  },
+  "attendance.not_pending": {
+    en: "This question no longer needs an answer. Read the day again.",
+    es: "Esta pregunta ya no necesita respuesta. Vuelve a consultar la jornada.",
+  },
+
   "ticket.extra_not_movable": {
     en: "Extras cannot be moved separately",
     es: "Los extras no se pueden pasar por separado",

@@ -65,12 +65,18 @@ import {
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-clock-in-screen.js";
+import "./screens/till-attendance-questions.js";
+import { AttendanceController, type AttendanceSnapshot } from "./state/attendance.js";
+import type { AttendanceCommandPayload } from "@waitron/workforce/attendance-contract";
 import {
   ClockingController,
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
-import type { TillClockState } from "./api/client.js";
+import type { TillClockState, AttendanceChange, AttendanceCommand } from "./api/client.js";
+import "./widgets/attendance-correction-dialog.js";
+import "./widgets/attendance-day-dialog.js";
+import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
@@ -1979,6 +1985,38 @@ export class TillApp extends LitElement {
   #signIns = 0;
   #clockingAvailable = false;
   #clocking?: ClockingController;
+  #attendance?: AttendanceController;
+  #attendancePersonId = "";
+  #attendanceNeedsInitialRead = false;
+  #attendanceGate: "signin" | "in" | null = null;
+  #attendanceGateVersion = 0;
+  #attendanceSettling = false;
+  #attendanceRefreshClock = false;
+  #lastAttendanceResultId: string | null = null;
+  #lastAttendanceCommand: AttendanceCommand | null = null;
+  #attendancePanelVersion = 0;
+  @state() private attendanceDayOpen = false;
+  @state() private attendanceDayDate = "";
+  @state() private attendanceDayLocation = "";
+  @state() private attendancePinReading = false;
+  @state() private attendancePin: {
+    itemId: string;
+    action: "approve" | "decline";
+    revision: string;
+    people: StaffMember[];
+    command?: AttendanceCommand;
+  } | null = null;
+  @state() private attendanceEditor: {
+    kind: "request" | "disagree";
+    changes: AttendanceChange[];
+    locationId: string;
+    questionId: string | null;
+    itemId: string | null;
+    timeZone: string;
+    revision: string;
+  } | null = null;
+  @state() private attendancePage = false;
+  @state() private attendanceSnapshot: AttendanceSnapshot | null = null;
   #clockNeedsInitialRead = false;
   #clockAccessLost = false;
   @state() private clockPage = false;
@@ -2822,6 +2860,7 @@ export class TillApp extends LitElement {
   }
 
   #stopClocking(): void {
+    this.#stopAttendance();
     const controller = this.#clocking;
     this.#clocking = undefined;
     this.#clockIntent = undefined;
@@ -2856,6 +2895,7 @@ export class TillApp extends LitElement {
           code === "attendance.not_permitted" ||
           code === "device.unauthorized"
         ) {
+          this.#stopAttendance();
           this.#clockAccessLost = true;
           this.#clocking = undefined;
           this.#clockIntent = undefined;
@@ -2863,6 +2903,10 @@ export class TillApp extends LitElement {
           this.clockPage = false;
           controller.stop();
           return;
+        }
+        if (this.#attendanceNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
+          this.#attendanceNeedsInitialRead = false;
+          void this.#attendance?.start(this.#attendancePersonId);
         }
         if (this.#clockNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
           this.#clockNeedsInitialRead = false;
@@ -2875,6 +2919,488 @@ export class TillApp extends LitElement {
     );
     this.#clocking = controller;
     void controller.start(personId);
+  }
+
+  #stopAttendance(): void {
+    const controller = this.#attendance;
+    this.#attendance = undefined;
+    this.#attendanceNeedsInitialRead = false;
+    this.#attendanceGate = null;
+    ++this.#attendanceGateVersion;
+    this.#attendanceSettling = false;
+    this.#attendanceRefreshClock = false;
+    this.#lastAttendanceResultId = null;
+    this.#lastAttendanceCommand = null;
+    this.attendancePage = false;
+    this.attendanceSnapshot = null;
+    ++this.#attendancePanelVersion;
+    this.attendanceDayOpen = false;
+    this.attendanceEditor = null;
+    this.attendancePin = null;
+    this.attendancePinReading = false;
+    controller?.stop();
+  }
+
+  #startAttendance(personId: string, signIn: number, session: number, prompt: boolean): void {
+    this.#attendancePersonId = personId;
+    this.#attendanceNeedsInitialRead = true;
+    this.#attendanceGate = prompt ? "signin" : null;
+    this.attendancePage = prompt;
+    const api = this.api;
+    const current = () =>
+      this.isConnected &&
+      api === this.api &&
+      signIn === this.#signIns &&
+      session === this.#operatorSession &&
+      controller === this.#attendance;
+    const controller = new AttendanceController(api, (snapshot) => {
+      if (!current()) return;
+      this.attendanceSnapshot = snapshot;
+      const refusal = snapshot.actionError ?? snapshot.readError;
+      if (refusal?.code === "session.required" || refusal?.code === "session.not_open") {
+        void this.#onLogout();
+        return;
+      }
+      if (snapshot.result !== null && snapshot.result.commandId !== this.#lastAttendanceResultId) {
+        this.#lastAttendanceResultId = snapshot.result.commandId;
+        this.#attendanceRefreshClock = true;
+        this.attendanceEditor = null;
+        this.attendancePin = null;
+        const command = this.#lastAttendanceCommand;
+        const panelVersion = this.#attendancePanelVersion;
+        queueMicrotask(async () => {
+          if (!current()) return;
+          await controller.refresh();
+          if (current() && this.attendanceDayOpen)
+            await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+          if (
+            current() &&
+            panelVersion === this.#attendancePanelVersion &&
+            command?.action === "request" &&
+            this.attendanceSnapshot?.readError === null
+          ) {
+            const fresh = this.attendanceSnapshot.inbox;
+            const item = fresh?.items.find(
+              (item) =>
+                item.status === "waiting-manager" &&
+                item.direction === "worker_request" &&
+                snapshot.result!.entryIds.some((id) => item.requestEntryIds.includes(id)),
+            );
+            if (item && fresh) await this.#openAttendancePin(item.id, "approve", fresh.revision);
+          }
+        });
+        return;
+      }
+      if (
+        this.#attendanceGate !== null &&
+        !snapshot.reading &&
+        !snapshot.busy &&
+        snapshot.uncertainCommandId === null &&
+        snapshot.inbox !== null &&
+        snapshot.inbox.prompts.length === 0
+      )
+        void this.#settleAttendanceGate();
+    });
+    this.#attendance = controller;
+  }
+
+  #attendanceMessage(): string {
+    const snapshot = this.attendanceSnapshot;
+    if (snapshot?.uncertainCommandId) return t("attendance.uncertain");
+    if (snapshot?.retryCommand) return t("attendance.retry_response_message");
+    const error =
+      snapshot?.actionError ??
+      snapshot?.readError ??
+      snapshot?.dayError ??
+      snapshot?.approversError;
+    return error ? codeMessage(error.code) : this.#clockMessage();
+  }
+
+  async #retryAttendance(): Promise<void> {
+    if (this.#attendanceNeedsInitialRead) await this.#clocking?.refresh();
+    else await this.#attendance?.retryRead();
+    if (
+      this.attendanceDayOpen &&
+      this.attendanceSnapshot?.inbox &&
+      !this.attendanceSnapshot.uncertainCommandId
+    )
+      await this.#attendance?.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+  }
+
+  async #sendAttendance(
+    payload: AttendanceCommandPayload,
+    revision?: string,
+    override?: { personId: string; pin: string },
+  ): Promise<void> {
+    const snapshot = this.attendanceSnapshot;
+    if (!this.#attendance || !snapshot?.inbox || snapshot.busy || snapshot.uncertainCommandId)
+      return;
+    await this.#runAttendance(
+      {
+        ...payload,
+        commandId: crypto.randomUUID(),
+        expectedRevision: revision ?? snapshot.inbox.revision,
+      },
+      override,
+    );
+  }
+
+  async #runAttendance(
+    command: AttendanceCommand,
+    override?: { personId: string; pin: string },
+  ): Promise<void> {
+    const controller = this.#attendance;
+    if (!controller) return;
+    this.#lastAttendanceCommand = command;
+    await controller.act(command, override);
+  }
+
+  async #retryAttendanceCommand(): Promise<void> {
+    const command = this.attendanceSnapshot?.retryCommand;
+    if (!command || this.attendanceSnapshot?.busy) return;
+    if (command.action === "approve" || command.action === "decline")
+      await this.#openAttendancePin(
+        command.itemId,
+        command.action,
+        command.expectedRevision,
+        command,
+      );
+    else await this.#runAttendance(command);
+  }
+
+  async #openAttendanceDay(): Promise<void> {
+    const controller = this.#attendance;
+    if (!controller || this.attendanceSnapshot?.busy) return;
+    const version = ++this.#attendancePanelVersion;
+    this.attendanceDayOpen = true;
+    await controller.refresh();
+    if (
+      version !== this.#attendancePanelVersion ||
+      controller !== this.#attendance ||
+      !this.isConnected
+    )
+      return;
+    const inbox = this.attendanceSnapshot?.inbox;
+    if (!inbox) return;
+    const location =
+      inbox.locations.find((candidate) => candidate.id === this.clockSnapshot.state?.locationId) ??
+      inbox.locations[0];
+    if (!location) return;
+    this.attendanceDayLocation = location.id;
+    this.attendanceDayDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: location.timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+  }
+
+  #closeAttendanceDay(): void {
+    ++this.#attendancePanelVersion;
+    this.attendancePinReading = false;
+    this.attendanceDayOpen = false;
+    this.attendanceEditor = null;
+    this.attendancePin = null;
+  }
+
+  #selectAttendanceDay(event: CustomEvent<{ date: string; locationId: string }>): void {
+    event.stopPropagation();
+    if (!this.attendanceDayOpen || !this.#attendance) return;
+    ++this.#attendancePanelVersion;
+    this.attendancePinReading = false;
+    this.attendanceDayDate = event.detail.date;
+    this.attendanceDayLocation = event.detail.locationId;
+    void this.#attendance.readDay(event.detail.date, event.detail.locationId);
+  }
+
+  #editAttendancePrompt(promptId: string, disagree = false): void {
+    const inbox = this.attendanceSnapshot?.inbox;
+    const prompt = inbox?.prompts.find((candidate) => candidate.id === promptId);
+    if (
+      !prompt ||
+      !inbox ||
+      this.attendanceSnapshot?.busy ||
+      this.attendanceSnapshot?.uncertainCommandId
+    )
+      return;
+    const changes: AttendanceChange[] = [];
+    if (!disagree) {
+      if (prompt.kind === "automatic-out") {
+        const entry = prompt.history.find((entry) => entry.entryId === prompt.automaticEntryId);
+        if (!entry) return;
+        changes.push({
+          target: { entryId: entry.entryId },
+          at: entry.eventAt,
+          offsetMinutes: entry.offsetMinutes,
+        });
+      } else if (prompt.kind === "missing-times") {
+        for (const missingKind of prompt.missingKinds)
+          changes.push({ target: { missingKind }, at: "", offsetMinutes: 0 });
+      } else return;
+    }
+    ++this.#attendancePanelVersion;
+    this.attendancePinReading = false;
+    this.attendanceEditor = {
+      kind: disagree ? "disagree" : "request",
+      changes,
+      locationId: prompt.locationId,
+      questionId: prompt.questionId,
+      itemId: prompt.itemId,
+      timeZone: prompt.timeZone,
+      revision: inbox.revision,
+    };
+  }
+
+  #fixAttendanceEntry(event: CustomEvent<FixEntryDetail>): void {
+    event.stopPropagation();
+    const day = this.attendanceSnapshot?.day;
+    if (
+      !day ||
+      !this.attendanceDayOpen ||
+      this.attendanceSnapshot?.busy ||
+      this.attendanceSnapshot?.uncertainCommandId ||
+      day.date !== this.attendanceDayDate ||
+      day.locationId !== this.attendanceDayLocation
+    )
+      return;
+    const targets = "target" in event.detail ? [event.detail.target] : event.detail.targets;
+    const changes: AttendanceChange[] = [];
+    for (const target of targets) {
+      if ("missingKind" in target) changes.push({ target, at: "", offsetMinutes: 0 });
+      else {
+        const entry = day.record.entries.find(
+          (row) => row.effective && row.entry.entryId === target.entryId,
+        )?.entry;
+        if (!entry) return;
+        changes.push({ target, at: entry.eventAt, offsetMinutes: entry.offsetMinutes });
+      }
+    }
+    ++this.#attendancePanelVersion;
+    this.attendancePinReading = false;
+    this.attendanceEditor = {
+      kind: "request",
+      changes,
+      locationId: day.locationId,
+      questionId: null,
+      itemId: null,
+      timeZone: day.timeZone,
+      revision: day.revision,
+    };
+  }
+
+  #saveAttendanceCorrection(
+    event: CustomEvent<{ changes: AttendanceChange[]; reason: string }>,
+  ): void {
+    event.stopPropagation();
+    const editor = this.attendanceEditor;
+    if (!editor) return;
+    const payload: AttendanceCommandPayload =
+      editor.kind === "disagree"
+        ? { action: "disagree", itemId: editor.itemId!, reason: event.detail.reason }
+        : {
+            action: "request",
+            questionId: editor.questionId,
+            locationId: editor.locationId,
+            changes: event.detail.changes,
+            reason: event.detail.reason,
+          };
+    void this.#sendAttendance(payload, editor.revision);
+  }
+
+  async #openAttendancePin(
+    itemId: string,
+    action: "approve" | "decline",
+    revision: string,
+    command?: AttendanceCommand,
+  ): Promise<void> {
+    const controller = this.#attendance;
+    const item =
+      this.attendanceSnapshot?.day?.items.find((item) => item.id === itemId) ??
+      this.attendanceSnapshot?.inbox?.items.find((item) => item.id === itemId);
+    if (
+      !controller ||
+      !item ||
+      item.direction !== "worker_request" ||
+      item.status !== "waiting-manager" ||
+      (action === "approve" && !item.readyToApply) ||
+      this.attendanceSnapshot?.busy ||
+      this.attendanceSnapshot?.uncertainCommandId
+    )
+      return;
+    const version = ++this.#attendancePanelVersion;
+    this.attendancePinReading = true;
+    const people = await controller.readApprovers(itemId, action);
+    if (
+      controller !== this.#attendance ||
+      version !== this.#attendancePanelVersion ||
+      !this.isConnected
+    )
+      return;
+    this.attendancePinReading = false;
+    if (people !== null) this.attendancePin = { itemId, action, revision, people, command };
+  }
+
+  #confirmAttendancePin(event: CustomEvent<{ personId: string; pin: string }>): void {
+    event.stopPropagation();
+    const context = this.attendancePin;
+    if (
+      !context ||
+      this.attendanceSnapshot?.busy ||
+      !context.people.some((person) => person.personId === event.detail.personId)
+    )
+      return;
+    this.attendancePin = null;
+    ++this.#attendancePanelVersion;
+    if (context.command) void this.#runAttendance(context.command, event.detail);
+    else
+      void this.#sendAttendance(
+        { action: context.action, itemId: context.itemId },
+        context.revision,
+        event.detail,
+      );
+  }
+
+  #renderAttendanceEditors() {
+    const snapshot = this.attendanceSnapshot;
+    const blocked = snapshot?.uncertainCommandId != null || snapshot?.retryCommand != null;
+    const recovery = snapshot?.uncertainCommandId
+      ? "uncertain"
+      : snapshot?.retryCommand
+        ? "retry"
+        : null;
+    return html`
+      ${
+        this.attendanceDayOpen
+          ? html`<till-attendance-day-dialog
+              .open=${true}
+              .view=${snapshot?.day ?? null}
+              .locations=${snapshot?.inbox?.locations ?? []}
+              .date=${this.attendanceDayDate}
+              .locationId=${this.attendanceDayLocation}
+              .reading=${snapshot?.dayReading || snapshot?.reading || this.attendancePinReading}
+              .busy=${snapshot?.busy ?? false}
+              .blocked=${blocked}
+              .canRetry=${snapshot?.retryCommand != null}
+              .error=${this.#attendanceMessage()}
+              @retry-attendance=${(event: Event) => {
+                event.stopPropagation();
+                void this.#retryAttendance();
+              }}
+              @retry-attendance-command=${(event: Event) => {
+                event.stopPropagation();
+                void this.#retryAttendanceCommand();
+              }}
+              @attendance-day=${this.#selectAttendanceDay}
+              @fix-entry=${this.#fixAttendanceEntry}
+              @decide-item=${(
+                event: CustomEvent<{ itemId: string; action: "approve" | "decline" }>,
+              ) => {
+                event.stopPropagation();
+                const day = this.attendanceSnapshot?.day;
+                if (day)
+                  void this.#openAttendancePin(
+                    event.detail.itemId,
+                    event.detail.action,
+                    day.revision,
+                  );
+              }}
+              @attendance-day-close=${(event: Event) => {
+                event.stopPropagation();
+                this.#closeAttendanceDay();
+              }}
+            ></till-attendance-day-dialog>`
+          : nothing
+      }
+      ${
+        this.attendanceEditor
+          ? html`<till-attendance-correction-dialog
+              .open=${true}
+              .initialChanges=${this.attendanceEditor.changes}
+              .timeZone=${this.attendanceEditor.timeZone}
+              .reasonOnly=${this.attendanceEditor.kind === "disagree"}
+              .busy=${snapshot?.busy ?? false}
+              .blocked=${blocked}
+              .recovery=${recovery}
+              .error=${this.#attendanceMessage()}
+              .reasonRefusal=${snapshot?.actionError?.params?.field === "reason" ? t("attendance.check_reason") : ""}
+              @retry-attendance=${(event: Event) => {
+                event.stopPropagation();
+                void this.#retryAttendance();
+              }}
+              @retry-attendance-command=${(event: Event) => {
+                event.stopPropagation();
+                void this.#retryAttendanceCommand();
+              }}
+              @correction-save=${this.#saveAttendanceCorrection}
+              @correction-cancel=${(event: Event) => {
+                event.stopPropagation();
+                ++this.#attendancePanelVersion;
+                this.attendanceEditor = null;
+              }}
+            ></till-attendance-correction-dialog>`
+          : nothing
+      }
+      ${
+        this.attendancePin
+          ? html`<till-supervisor-override-dialog
+              data-attendance-pin
+              .authorizers=${this.attendancePin.people}
+              .error=${null}
+              @override-confirm=${this.#confirmAttendancePin}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                ++this.#attendancePanelVersion;
+                this.attendancePin = null;
+              }}
+            ></till-supervisor-override-dialog>`
+          : nothing
+      }
+    `;
+  }
+
+  async #settleAttendanceGate(): Promise<void> {
+    if (this.#attendanceSettling || this.#attendanceGate === null) return;
+    this.#attendanceSettling = true;
+    const version = this.#attendanceGateVersion;
+    const gate = this.#attendanceGate;
+    const controller = this.#attendance;
+    try {
+      if (this.#attendanceRefreshClock) await this.#clocking?.refresh();
+      if (
+        version !== this.#attendanceGateVersion ||
+        controller !== this.#attendance ||
+        !this.isConnected
+      )
+        return;
+      const state = this.clockSnapshot.state;
+      if (
+        state === null ||
+        this.clockSnapshot.error !== null ||
+        this.clockSnapshot.refusal !== null
+      )
+        return;
+      this.#attendanceGate = null;
+      this.attendancePage = false;
+      this.#attendanceRefreshClock = false;
+      this.#clockNeedsInitialRead = false;
+      this.clockPage = gate === "signin" && state.state === "out" && state.firstClockIn;
+      if (gate === "in" && state.state === "out") await this.#performClockAction("in");
+      else if (!this.clockPage) await this.#continueAfterClockIn();
+    } finally {
+      if (version === this.#attendanceGateVersion) this.#attendanceSettling = false;
+    }
+  }
+
+  async #cancelAttendance(): Promise<void> {
+    if (this.attendanceSnapshot?.busy) return;
+    this.#attendanceGate = null;
+    ++this.#attendanceGateVersion;
+    ++this.#attendancePanelVersion;
+    this.attendancePinReading = false;
+    this.#attendanceSettling = false;
+    this.attendancePage = false;
+    await this.#continueAfterClockIn();
   }
 
   #clockMessage(): string {
@@ -2893,9 +3419,36 @@ export class TillApp extends LitElement {
 
   async #onClockAction(event: CustomEvent<{ action: TillClockAction }>): Promise<void> {
     const controller = this.#clocking;
-    if (controller === undefined || this.clockSnapshot.busy || this.clockSnapshot.state === null)
+    if (
+      controller === undefined ||
+      this.clockSnapshot.busy ||
+      this.clockSnapshot.state === null ||
+      this.attendanceSnapshot?.busy ||
+      this.attendanceSnapshot?.uncertainCommandId
+    )
       return;
     const action = event.detail.action;
+    if (action === "in" && !this.clockPage && this.#attendance !== undefined) {
+      this.#attendanceGate = "in";
+      this.#attendanceGateVersion++;
+      this.#attendanceRefreshClock = true;
+      this.attendancePage = true;
+      await this.#attendance.refresh();
+      return;
+    }
+    await this.#performClockAction(action);
+  }
+
+  async #performClockAction(action: TillClockAction): Promise<void> {
+    const controller = this.#clocking;
+    if (
+      controller === undefined ||
+      this.clockSnapshot.busy ||
+      this.clockSnapshot.state === null ||
+      this.attendanceSnapshot?.busy ||
+      this.attendanceSnapshot?.uncertainCommandId
+    )
+      return;
     this.#clockIntent = {
       action,
       signIn: this.#signIns,
@@ -2988,6 +3541,7 @@ export class TillApp extends LitElement {
       this.operatorPersonId = personId;
       this.permissions = permissions;
       this.#configureSessionActivity();
+      this.#startAttendance(personId, signIn, session, !switched);
       this.#startClocking(personId, signIn, session, !switched);
     }
     this.#polledDefaults.clear();
@@ -9693,7 +10247,12 @@ export class TillApp extends LitElement {
   /** The front-door screens are handled ahead of this in {@link render}, and guarded here too so the
    * predicate does not depend on render order. */
   #shellActive(): boolean {
-    return this.screen !== "lock" && this.frontDoor === undefined && !this.clockPage;
+    return (
+      this.screen !== "lock" &&
+      this.frontDoor === undefined &&
+      !this.clockPage &&
+      !this.attendancePage
+    );
   }
 
   /** Falls back to the first tab, so a stale key never leaves the shell without a body. */
@@ -10010,9 +10569,14 @@ export class TillApp extends LitElement {
       : nothing;
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
+      ${this.#renderAttendanceEditors()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+        @fix-my-hours=${(event: Event) => {
+          event.stopPropagation();
+          this.#requestLeave(() => this.#openAttendanceDay());
+        }}
         @clock-action=${(event: CustomEvent<{ action: TillClockAction }>) => void this.#onClockAction(event)}
         @clock-in=${() => void this.#onClockAction(new CustomEvent("clock-action", { detail: { action: "in" } }))}
         @cancel-clock-in=${() => void this.#cancelClockIn()}
@@ -10386,79 +10950,130 @@ export class TillApp extends LitElement {
               ></till-device-chooser>`
             : this.frontDoor === "enrol"
               ? html`<till-enrol-screen .api=${this.api}></till-enrol-screen>`
-              : this.clockPage
-                ? html`<till-clock-in-screen
-                    .busy=${this.clockSnapshot.busy}
-                    .reading=${this.clockSnapshot.reading}
-                    .canClockIn=${this.clockSnapshot.state?.state === "out"}
-                    .error=${this.#clockMessage()}
-                  ></till-clock-in-screen>`
-                : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
-                  // screen also shows after a boot failure, rather than an empty shell.
-                  shellCanvas !== undefined
-                  ? keyed(
-                      currentLocale(),
-                      html`<till-tab-shell
-                        .tabs=${shellCanvas.tabs}
-                        .activeTabKey=${this.activeTabKey}
-                        .operatorName=${this.operatorName}
-                        .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
-                        .clockState=${this.clockSnapshot.state}
-                        .clockBusy=${this.clockSnapshot.busy}
-                        .clockError=${this.#clockMessage()}
-                        .affordances=${this.#affordanceList}
-                        .kiosk=${this.deviceMode}
-                        .canSwitchProfile=${this.approvedProfiles.length > 1}
-                        .transferAvailable=${this.transferSnapshot !== undefined}
-                        @open-transfers=${() => {
-                          this.transferQueueOpen = true;
-                        }}
-                        .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
-                        .loadLocales=${this.#loadLocales}
-                        @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                          if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
-                          if (e.detail.key === this.activeTabKey && this.drill === undefined)
-                            return;
-                          this.#requestLeave(() => this.#onTabSelect(e.detail.key));
-                        }}
-                      >
-                        ${
-                          this.transferSnapshot === undefined
-                            ? nothing
-                            : html`<till-department-transfers
-                                .currentTabId=${this.#currentTransferTabId()}
-                                .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
-                                .serviceZones=${this.counterServiceZones}
-                                @transfer-changed=${() => this.#departmentTransfers?.refresh()}
-                                .api=${this.api}
-                                .snapshot=${this.transferSnapshot}
-                                .open=${this.transferQueueOpen}
-                                @close-transfers=${() => {
-                                  this.transferQueueOpen = false;
-                                }}
-                                @dismiss-transfer=${(event: CustomEvent<{ requestId: string }>) => {
-                                  event.stopPropagation();
-                                  this.#departmentTransfers?.dismiss(event.detail.requestId);
-                                }}
-                              ></till-department-transfers>`
-                        }
-                        ${this.#activeTabBody()}
-                        ${this.#drillBody() /* the drill overlay, when one is open */}
-                      </till-tab-shell>`,
-                    )
-                  : keyed(
-                      `${currentLocale()}:${this.#operatorSession}`,
-                      html`<till-lock-screen
-                        .api=${this.api}
-                        .deviceName=${this.deviceName}
-                        .deviceId=${this.deviceId}
-                        .devMode=${this.devTab}
-                        .serverStatuses=${this.router?.statuses() ?? []}
-                        .serverCurrent=${this.router?.current ?? ""}
-                        .serverWaiting=${this.router?.waiting ?? false}
-                        @check-again=${() => void this.router?.probeNow()}
-                      ></till-lock-screen>`,
-                    )
+              : this.attendancePage
+                ? html`<till-attendance-questions
+                    .inbox=${this.attendanceSnapshot?.inbox ?? null}
+                    .busy=${this.attendanceSnapshot?.busy ?? false}
+                    .blocked=${this.attendanceSnapshot?.uncertainCommandId != null || this.attendanceSnapshot?.retryCommand != null}
+                    .canRetry=${this.attendanceSnapshot?.retryCommand != null}
+                    @retry-attendance-command=${(event: Event) => {
+                      event.stopPropagation();
+                      void this.#retryAttendanceCommand();
+                    }}
+                    .reading=${this.attendanceSnapshot?.reading || this.clockSnapshot.reading}
+                    .error=${this.#attendanceMessage()}
+                    @attendance-edit=${(event: CustomEvent<{ prompt: { id: string } }>) => {
+                      event.stopPropagation();
+                      this.#editAttendancePrompt(event.detail.prompt.id);
+                    }}
+                    @attendance-confirm=${(event: CustomEvent<{ questionId: string }>) => {
+                      event.stopPropagation();
+                      void this.#sendAttendance({
+                        action: "confirm",
+                        questionId: event.detail.questionId,
+                      });
+                    }}
+                    @attendance-decide=${(
+                      event: CustomEvent<{ itemId: string; action: "accept" | "disagree" }>,
+                    ) => {
+                      event.stopPropagation();
+                      if (event.detail.action === "accept")
+                        void this.#sendAttendance({
+                          action: "accept",
+                          itemId: event.detail.itemId,
+                        });
+                      else {
+                        const prompt = this.attendanceSnapshot?.inbox?.prompts.find(
+                          (prompt) => prompt.itemId === event.detail.itemId,
+                        );
+                        if (prompt) this.#editAttendancePrompt(prompt.id, true);
+                      }
+                    }}
+                    @cancel-attendance=${(event: Event) => {
+                      event.stopPropagation();
+                      void this.#cancelAttendance();
+                    }}
+                    @retry-attendance=${(event: Event) => {
+                      event.stopPropagation();
+                      void this.#retryAttendance();
+                    }}
+                  ></till-attendance-questions>`
+                : this.clockPage
+                  ? html`<till-clock-in-screen
+                      .busy=${this.clockSnapshot.busy}
+                      .reading=${this.clockSnapshot.reading}
+                      .canClockIn=${this.clockSnapshot.state?.state === "out"}
+                      .error=${this.#clockMessage()}
+                    ></till-clock-in-screen>`
+                  : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
+                    // screen also shows after a boot failure, rather than an empty shell.
+                    shellCanvas !== undefined
+                    ? keyed(
+                        currentLocale(),
+                        html`<till-tab-shell
+                          .tabs=${shellCanvas.tabs}
+                          .activeTabKey=${this.activeTabKey}
+                          .operatorName=${this.operatorName}
+                          .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
+                          .clockState=${this.clockSnapshot.state}
+                          .clockBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null}
+                          .hoursBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true}
+                          .clockError=${this.#attendanceMessage()}
+                          .affordances=${this.#affordanceList}
+                          .kiosk=${this.deviceMode}
+                          .canSwitchProfile=${this.approvedProfiles.length > 1}
+                          .transferAvailable=${this.transferSnapshot !== undefined}
+                          @open-transfers=${() => {
+                            this.transferQueueOpen = true;
+                          }}
+                          .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
+                          .loadLocales=${this.#loadLocales}
+                          @tab-select=${(e: CustomEvent<{ key: string }>) => {
+                            if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
+                            if (e.detail.key === this.activeTabKey && this.drill === undefined)
+                              return;
+                            this.#requestLeave(() => this.#onTabSelect(e.detail.key));
+                          }}
+                        >
+                          ${
+                            this.transferSnapshot === undefined
+                              ? nothing
+                              : html`<till-department-transfers
+                                  .currentTabId=${this.#currentTransferTabId()}
+                                  .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
+                                  .serviceZones=${this.counterServiceZones}
+                                  @transfer-changed=${() => this.#departmentTransfers?.refresh()}
+                                  .api=${this.api}
+                                  .snapshot=${this.transferSnapshot}
+                                  .open=${this.transferQueueOpen}
+                                  @close-transfers=${() => {
+                                    this.transferQueueOpen = false;
+                                  }}
+                                  @dismiss-transfer=${(
+                                    event: CustomEvent<{ requestId: string }>,
+                                  ) => {
+                                    event.stopPropagation();
+                                    this.#departmentTransfers?.dismiss(event.detail.requestId);
+                                  }}
+                                ></till-department-transfers>`
+                          }
+                          ${this.#activeTabBody()}
+                          ${this.#drillBody() /* the drill overlay, when one is open */}
+                        </till-tab-shell>`,
+                      )
+                    : keyed(
+                        `${currentLocale()}:${this.#operatorSession}`,
+                        html`<till-lock-screen
+                          .api=${this.api}
+                          .deviceName=${this.deviceName}
+                          .deviceId=${this.deviceId}
+                          .devMode=${this.devTab}
+                          .serverStatuses=${this.router?.statuses() ?? []}
+                          .serverCurrent=${this.router?.current ?? ""}
+                          .serverWaiting=${this.router?.waiting ?? false}
+                          @check-again=${() => void this.router?.probeNow()}
+                        ></till-lock-screen>`,
+                      )
         }
       </div>
     `;

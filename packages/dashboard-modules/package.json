@@ -15,11 +15,12 @@
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/media": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",
     "@waitron/staffing": "workspace:*",
     "@waitron/venue-service": "workspace:*",
-    "@waitron/media": "workspace:*"
+    "@waitron/workforce": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

@@ -22,11 +22,14 @@
     "@waitron/diagnostics": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
+    "@waitron/workforce": "workspace:*",
     "jsqr": "^1.4.0",
     "lit": "^3.2.0",
     "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
+    "@types/node": "^26.0.0",
     "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
     "axe-core": "^4.13.0",

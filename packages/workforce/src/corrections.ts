@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
 import { assertLocationExists, assertPersonExists } from "./body-ids.js";
-import { appendToChain } from "./chain.js";
+import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { compareEvents, effectiveClockEntries, isClockEntry } from "./effective-entries.js";
 import type { ClockEntryKind, RecordExtension } from "./record-types.js";
@@ -112,6 +112,88 @@ function validateSequence(entries: readonly TimeEntryRecord[]): void {
     }
   }
 }
+function isMissingPair(requests: readonly TimeEntryRecord[]): boolean {
+  if (requests.length !== 2) return false;
+  const [start, end] = requests as readonly [TimeEntryRecord, TimeEntryRecord];
+  return (
+    !start.correctsEntryId &&
+    !end.correctsEntryId &&
+    start.eventAt < end.eventAt &&
+    ((start.extension?.missingEntryKind === "in" && end.extension?.missingEntryKind === "out") ||
+      (start.extension?.missingEntryKind === "break_start" &&
+        end.extension?.missingEntryKind === "break_end"))
+  );
+}
+function assertDecisionPair(requests: readonly TimeEntryRecord[]): void {
+  const first = requests[0];
+  if (
+    !first ||
+    !isMissingPair(requests) ||
+    new Set(requests.map((r) => r.entryId)).size !== 2 ||
+    requests.some(
+      (r) =>
+        r.personId !== first.personId ||
+        r.locationId !== first.locationId ||
+        r.nodeId !== first.nodeId ||
+        r.recordedByPersonId !== first.recordedByPersonId ||
+        r.extension?.direction !== first.extension?.direction,
+    )
+  )
+    correctionInvalid("invalid_group");
+}
+export function correctionGroupCanApply(
+  entries: readonly TimeEntryRecord[],
+  requests: readonly TimeEntryRecord[],
+): boolean {
+  const first = requests[0];
+  if (
+    !first ||
+    requests.length > 2 ||
+    new Set(requests.map((r) => r.entryId)).size !== requests.length
+  )
+    return false;
+  if (
+    requests.some(
+      (r) =>
+        r.entryKind !== "correction" ||
+        r.correctionStatus !== "requested" ||
+        r.personId !== first.personId ||
+        r.locationId !== first.locationId ||
+        r.extension?.direction !== first.extension?.direction ||
+        entries.some(
+          (e) =>
+            e.personId === r.personId &&
+            e.locationId === r.locationId &&
+            e.entryKind === "correction" &&
+            e.extension?.respondsToEntryId === r.entryId,
+        ),
+    )
+  )
+    return false;
+  if (requests.length === 2 && !isMissingPair([...requests].sort(compareEvents))) return false;
+  const effective = effectiveClockEntries(entries).filter((e) => e.personId === first.personId);
+  const targets = new Set<string>();
+  const additions: TimeEntryRecord[] = [];
+  for (const request of requests) {
+    const target = request.correctsEntryId
+      ? effective.find(
+          (e) => e.entryId === request.correctsEntryId && e.locationId === request.locationId,
+        )
+      : undefined;
+    if (request.correctsEntryId && (!target || targets.has(request.correctsEntryId))) return false;
+    const kind = target?.entryKind ?? request.extension?.missingEntryKind;
+    if (!kind) return false;
+    if (target) targets.add(target.entryId);
+    additions.push({ ...request, entryKind: kind });
+  }
+  try {
+    validateSequence([...effective.filter((e) => !targets.has(e.entryId)), ...additions]);
+    return true;
+  } catch (error) {
+    if (error instanceof AppError && error.code === "correction.invalid") return false;
+    throw error;
+  }
+}
 function validateChange(
   entries: readonly TimeEntryRecord[],
   change: TimeEntryRecord,
@@ -145,6 +227,7 @@ function validateChange(
           (e) =>
             e.entryKind === "correction" &&
             e.correctionStatus === "requested" &&
+            !entries.some((answer) => answer.extension?.respondsToEntryId === e.entryId) &&
             e.personId === change.personId &&
             e.locationId === change.locationId &&
             !e.correctsEntryId &&
@@ -158,11 +241,11 @@ function validateChange(
     }
   }
 }
-export async function requestCorrection(
+async function prepareRequest(
   tx: Transaction,
   input: CorrectionRequestInput,
   explicitProposal = false,
-): Promise<string> {
+): Promise<{ change: TimeEntryRecord; entry: TimeEntryAppend }> {
   const eventAt = recordInstant(input.at, input.offsetMinutes, "correction");
   const reason = reasonFor(input.reason);
   await assertPersonExists(tx, input.actorPersonId, "actorPersonId");
@@ -225,14 +308,13 @@ export async function requestCorrection(
     offsetMinutes: input.offsetMinutes,
     recordedAt: eventAt,
     sequenceNo: 0,
+    correctionStatus: "requested",
     correctsEntryId,
     extension,
   };
-  validateChange(await readRecordedEntries(tx, { personId }), change, false);
-  const { id } = await appendToChain(
-    tx,
-    { nodeId: input.nodeId, locationId },
-    {
+  return {
+    change,
+    entry: {
       personId,
       entryKind: "correction",
       eventAt,
@@ -245,14 +327,23 @@ export async function requestCorrection(
       correctionActorId: input.actorPersonId,
       extension,
     },
-  );
-  return id;
+  };
 }
-export async function decideCorrection(
+export async function requestCorrection(
+  tx: Transaction,
+  input: CorrectionRequestInput,
+  explicitProposal = false,
+): Promise<string> {
+  const { change, entry } = await prepareRequest(tx, input, explicitProposal);
+  validateChange(await readRecordedEntries(tx, { personId: change.personId }), change, false);
+  return (await appendToChain(tx, { nodeId: input.nodeId, locationId: change.locationId }, entry))
+    .id;
+}
+async function prepareDecision(
   tx: Transaction,
   input: CorrectionDecisionInput,
   action: "approve" | "accept" | "disagree" | "decline",
-): Promise<string> {
+): Promise<{ request: TimeEntryRecord; entry: TimeEntryAppend }> {
   const request = await recordEntryById(tx, input.correctionId);
   const entries = await readRecordedEntries(tx, { personId: request.personId });
   if (
@@ -283,11 +374,9 @@ export async function decideCorrection(
   const reason = action === "disagree" ? reasonFor(input.reason) : request.correctionReason!;
   const status: CorrectionStatus =
     action === "disagree" ? "disputed" : action === "decline" ? "declined" : "approved";
-  if (status === "approved") validateChange(entries, request, true);
-  const { id } = await appendToChain(
-    tx,
-    { nodeId: input.nodeId, locationId: request.locationId },
-    {
+  return {
+    request,
+    entry: {
       personId: request.personId,
       entryKind: "correction",
       eventAt: request.eventAt,
@@ -305,8 +394,18 @@ export async function decideCorrection(
         respondsToEntryId: request.entryId,
       },
     },
-  );
-  return id;
+  };
+}
+export async function decideCorrection(
+  tx: Transaction,
+  input: CorrectionDecisionInput,
+  action: "approve" | "accept" | "disagree" | "decline",
+): Promise<string> {
+  const { request, entry } = await prepareDecision(tx, input, action);
+  if (entry.correctionStatus === "approved")
+    validateChange(await readRecordedEntries(tx, { personId: request.personId }), request, true);
+  return (await appendToChain(tx, { nodeId: input.nodeId, locationId: request.locationId }, entry))
+    .id;
 }
 export function approveCorrection(
   tx: Transaction,
@@ -322,4 +421,86 @@ export function approveCorrection(
     },
     "approve",
   );
+}
+
+export async function requestCorrectionGroup(
+  tx: Transaction,
+  inputs: readonly CorrectionRequestInput[],
+  mode: "request" | "propose",
+): Promise<string[]> {
+  if (inputs.length === 1) return [await requestCorrection(tx, inputs[0]!, mode === "propose")];
+  const firstInput = inputs[0];
+  if (
+    !firstInput ||
+    inputs.length !== 2 ||
+    inputs.some(
+      (input) =>
+        input.nodeId !== firstInput.nodeId ||
+        input.actorPersonId !== firstInput.actorPersonId ||
+        input.origin.source !== firstInput.origin.source ||
+        input.origin.deviceId !== firstInput.origin.deviceId,
+    )
+  )
+    correctionInvalid("invalid_group");
+  const prepared = [];
+  for (const [index, input] of inputs.entries()) {
+    const next = await prepareRequest(tx, input, mode === "propose");
+    next.change.entryId = `pending:${index}`;
+    prepared.push(next);
+  }
+  const first = prepared[0]!;
+  if (!isMissingPair(prepared.map((p) => p.change))) correctionInvalid("invalid_group");
+  const entries = await readRecordedEntries(tx, { personId: first.change.personId });
+  if (
+    !correctionGroupCanApply(
+      entries,
+      prepared.map((p) => p.change),
+    )
+  )
+    correctionInvalid("invalid_group");
+  const ids: string[] = [];
+  for (const [index, { change, entry }] of prepared.entries())
+    ids.push(
+      (
+        await appendToChain(
+          tx,
+          { nodeId: inputs[index]!.nodeId, locationId: change.locationId },
+          entry,
+        )
+      ).id,
+    );
+  return ids;
+}
+
+export async function decideCorrectionGroup(
+  tx: Transaction,
+  input: Omit<CorrectionDecisionInput, "correctionId"> & { correctionIds: readonly string[] },
+  action: "approve" | "accept" | "decline" | "disagree",
+): Promise<string[]> {
+  if (input.correctionIds.length === 1)
+    return [
+      await decideCorrection(tx, { ...input, correctionId: input.correctionIds[0]! }, action),
+    ];
+  if (input.correctionIds.length !== 2 || new Set(input.correctionIds).size !== 2)
+    correctionInvalid("invalid_group");
+  const prepared = [];
+  for (const correctionId of input.correctionIds)
+    prepared.push(await prepareDecision(tx, { ...input, correctionId }, action));
+  assertDecisionPair(prepared.map((p) => p.request));
+  const first = prepared[0]!;
+  const entries = await readRecordedEntries(tx, { personId: first.request.personId });
+  if (
+    (action === "approve" || action === "accept") &&
+    !correctionGroupCanApply(
+      entries,
+      prepared.map((p) => p.request),
+    )
+  )
+    correctionInvalid("invalid_group");
+  const ids: string[] = [];
+  for (const { request, entry } of prepared)
+    ids.push(
+      (await appendToChain(tx, { nodeId: input.nodeId, locationId: request.locationId }, entry)).id,
+    );
+  return ids;
 }

@@ -45,6 +45,11 @@ type ClockTestApi = {
       | "getTablesState"
       | "getDeviceIdentity"
       | "listDefaultZoneOffers"
+      | "getAttendanceInbox"
+      | "getAttendanceDay"
+      | "getAttendanceCommand"
+      | "listAttendanceApprovers"
+      | "sendAttendanceCommand"
   ]: Mock<TillApi[K]>;
 };
 export interface ClockAppFixture {
@@ -166,6 +171,31 @@ export async function clockApp(
     listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
+    getAttendanceInbox: vi.fn().mockImplementation(async () => ({
+      personId: state.personId,
+      revision: "revision",
+      prompts: [],
+      items: [],
+      locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    })),
+    getAttendanceDay: vi.fn().mockImplementation(async (date: string, locationId: string) => ({
+      personId: state.personId,
+      locationId,
+      date,
+      revision: "revision",
+      timeZone: "Europe/Madrid",
+      record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
+      items: [],
+    })),
+    getAttendanceCommand: vi.fn().mockResolvedValue(null),
+    listAttendanceApprovers: vi
+      .fn()
+      .mockResolvedValue([{ personId: "manager", displayName: "Marta" }]),
+    sendAttendanceCommand: vi.fn().mockImplementation(async (command) => ({
+      commandId: command.commandId,
+      entryIds: ["answer"],
+      replayed: false,
+    })),
     getClockState: vi.fn().mockImplementation(async () => state),
     clockIn: vi.fn().mockImplementation(async () => write("working")),
     clockOut: vi.fn().mockImplementation(async () => write("out")),
@@ -221,8 +251,13 @@ export async function signIn(el: TillApp, personId = "p1") {
 export const clockPage = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("till-clock-in-screen");
 export async function pageButton(el: TillApp, selector: string) {
-  await vi.waitFor(() => expect(clockPage(el)).not.toBeNull());
-  await userEvent.click(clockPage(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!);
+  const surface = () =>
+    clockPage(el) ??
+    (selector === "[data-cancel]"
+      ? el.shadowRoot!.querySelector<HTMLElement>("till-attendance-questions")
+      : null);
+  await vi.waitFor(() => expect(surface()).not.toBeNull());
+  await userEvent.click(surface()!.shadowRoot!.querySelector<HTMLElement>(selector)!);
 }
 export async function shellAction(el: TillApp, selector: string) {
   const shell = el.shadowRoot!.querySelector("till-tab-shell")!;

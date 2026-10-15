@@ -24,6 +24,7 @@ const OWNED = [
   "attendance_operation_facts",
   "attendance_questions",
   "attendance_mail",
+  "attendance_response_commands",
 ];
 
 /** Core tables: none may appear in this package's generated SQL. */

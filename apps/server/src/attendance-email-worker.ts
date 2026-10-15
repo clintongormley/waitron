@@ -8,6 +8,7 @@ import {
   expireAttendanceMailClaims,
   reportAttendanceMail,
   retireObsoleteRotaQuestions,
+  reconcileAttendanceResponses,
 } from "@waitron/workforce";
 import { reconcileAttendanceDay } from "./attendance-discovery.js";
 import type { EmailDelivery } from "./email-delivery.js";
@@ -89,6 +90,7 @@ export async function runAttendanceEmailPass(
       .orderBy(asc(attendanceMail.nextAttemptAt), asc(attendanceMail.id))
       .limit(1);
     if (!candidate) return null;
+    await reconcileAttendanceResponses(tx, candidate.person.id);
     const day = {
       locationId: candidate.question.locationId,
       businessDay: candidate.question.businessDay,

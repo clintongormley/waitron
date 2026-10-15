@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -17,6 +18,9 @@ import {
   shifts,
   timeEntries,
   claimAttendanceMail,
+  reportAttendanceMail,
+  executeAttendanceCommand,
+  readAttendanceInbox,
 } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
@@ -160,6 +164,95 @@ beforeEach(async () => {
 });
 
 describe("missing-attendance delivery worker", () => {
+  it.each(["pending", "sending", "sent", "unknown"] as const)(
+    "reopens a declined submitted pair before a split-shift claim and preserves %s mail",
+    async (status) => {
+      const { versionId, shiftId } = await seedRota();
+      await suite.db.insert(shifts).values({
+        locationId,
+        personId,
+        rosterVersionId: versionId,
+        startsAt: "2026-01-05T18:00:00.000Z",
+        endsAt: "2026-01-05T22:00:00.000Z",
+        startsOffsetMinutes: 60,
+        endsOffsetMinutes: 60,
+      });
+      await process();
+      const originalQuestions = (await questions()).sort(
+        (a, b) =>
+          Number(b.shiftKey === `rota:${shiftId}`) - Number(a.shiftKey === `rota:${shiftId}`),
+      );
+      expect(originalQuestions).toHaveLength(2);
+      const [first] = originalQuestions;
+      if (status !== "pending")
+        await run(async (tx) => {
+          const pending = (await mail()).find((m) => m.questionId === first!.id)!;
+          const claim = await claimAttendanceMail(tx, {
+            id: pending.id,
+            holder: "previous-sender",
+            recipient: "saved@example.test",
+            now,
+          });
+          expect(claim).not.toBeNull();
+          if (status !== "sending") await reportAttendanceMail(tx, claim!, status, now);
+        });
+      const [manager] = await suite.db
+        .insert(persons)
+        .values({ displayName: "Approver", role: "admin" })
+        .returning();
+      const result = await run(async (tx) =>
+        executeAttendanceCommand(tx, {
+          nodeId,
+          requestedByPersonId: personId,
+          authorizedByPersonId: personId,
+          origin: jobOrigin("dashboard"),
+          now,
+          command: {
+            commandId: randomUUID(),
+            expectedRevision: (await readAttendanceInbox(tx, personId)).revision,
+            action: "request",
+            questionId: first!.id,
+            locationId,
+            reason: "Missing shift",
+            changes: [
+              { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 60 },
+              { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 60 },
+            ],
+          },
+        }),
+      );
+      expect(result.entryIds).toHaveLength(2);
+      const submitted = (await questions()).find((q) => q.id === first!.id)!;
+      expect(submitted.resolvedByEntryId).toBe(result.entryIds[0]);
+      const cancelled = (await mail()).find((m) => m.questionId === first!.id)!;
+      expect(cancelled.status).toBe(status === "pending" ? "cancelled" : status);
+      await pass({
+        resolveDelivery: async () => {
+          await run(async (tx) => {
+            for (const correctionId of result.entryIds)
+              await backend.declineCorrection(tx, {
+                nodeId,
+                correctionId,
+                actorPersonId: manager!.id,
+                origin: jobOrigin("dashboard"),
+              });
+          });
+          return { mode: "smtp", smtp };
+        },
+      });
+      expect((await questions()).find((q) => q.id === first!.id)!.resolvedByEntryId).toBeNull();
+      expect((await mail()).find((m) => m.questionId === first!.id)).toEqual(cancelled);
+      const second = originalQuestions[1]!;
+      expect((await questions()).find((q) => q.id === second.id)!.resolvedByEntryId).toBeNull();
+      expect((await mail()).find((m) => m.questionId === second.id)).toMatchObject({
+        status: "sent",
+        recipient: "worker@example.test",
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+      await pass();
+      expect(send).toHaveBeenCalledTimes(1);
+    },
+  );
   it.each([
     ["es-ES", "en", "es"],
     ["en-GB", "es", "en"],

@@ -15,6 +15,7 @@ declare module "@waitron/shared" {
     /** A clock-in while clocked in, or a break-start while already on break. */
     "attendance.already_open": { personId: string };
     "attendance.invalid": { reason: string };
+    "attendance.state_changed": Record<string, never>;
     "attendance.not_permitted": { personId: string };
     "attendance.not_pending": { entryId: string };
     "correction.invalid": { reason: string };

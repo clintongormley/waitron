@@ -31,6 +31,7 @@ export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "attendance_operation_facts",
     "attendance_questions",
     "attendance_mail",
+    "attendance_response_commands",
   ].map((name) =>
     classify(
       name,

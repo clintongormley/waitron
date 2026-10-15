@@ -339,6 +339,20 @@ forced-failure probe used the command-line flag and passed, which is how this wa
 that raises the limit belongs in the outer `test.browser` block, and a test of that change needs
 that block's failure as its control.
 
+## A disposable browser checkout keeps the lockfile's dependency versions
+
+On 2026-10-15, A10-4's disposable checkout installed with `pnpm install --lockfile=false` while
+its till manifest had a new workspace dependency. The install resolved Playwright 1.64.1; the
+feature checkout's `pnpm --filter @waitron/till exec playwright --version` returned 1.63.0.
+The candidate's baseline ran no tests because the newer browser executable was absent.
+
+For that candidate, `pnpm install --lockfile-only --offline --ignore-scripts` added exactly the
+new workspace link to its own lockfile. After checking that three-line diff, a frozen install
+and the baseline passed. Keep such candidate-only dependency changes explicit, check their diff,
+and preserve the feature checkout's lockfile when another lane reserves it. The candidate then
+caught thirteen separate guard omissions and passed after their restoration; the first failed
+baseline supplied no behavioral evidence.
+
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
 It is tempting to read a suite's two timeouts as one overriding the other. They do different things,
@@ -1072,6 +1086,19 @@ what else is running — before the filter. Not every reporter prints the count:
 `packages/shared`), and it is not the only one (a reviewer of #1139 ran other built-in reporters
 that day that printed none), so with a reporter that does not print a count, read that reporter's
 own result.
+
+## An array value in `it.each` needs a wrapper
+
+If your test's input is an array, wrap it in an object or a one-element row. Otherwise `it.each`
+passes the array's members as separate callback arguments. A rejection test can then pass because
+it sent one change instead of the invalid pair it meant to exercise.
+
+Measured 2026-10-15 with Vitest 4.1.11 in the server package: `it.each([["in", "out"]])`
+passed `"in"` and `"out"` as two arguments; `it.each([[["in", "out"]]])` passed the complete
+array as one argument. The disposable `attendance-table.probe.test.ts` asserted both values through
+`pnpm --filter @waitron/server exec vitest run src/attendance-table.probe.test.ts --reporter=verbose`
+and reported `2 passed (2)`. The attendance parser's tables use one-element rows, including their
+valid-pair controls.
 
 **Shelling out to git from a test**
 
@@ -1814,3 +1841,27 @@ Deployment does not set a process time zone in `deploy/Dockerfile`'s runtime `EN
 `docker run --rm --network none node:26.11.1-slim node -e
 'console.log(Intl.DateTimeFormat().resolvedOptions().timeZone)'` printed `UTC`.
 That base-image probe does not measure an operator's configured appliance.
+
+## Wait for a resolved response to reach the screen before checking its late effect
+
+Resolving a deferred request does not mean its consumer has published a snapshot yet. When your
+assertion concerns the resulting screen, let that publication and its render finish before you
+inspect the page.
+
+Measured in A10-4 on Node v26.11.1, Vitest 4.1.11 and Playwright 1.63.0: awaiting one
+`Promise.resolve()` and the app's current `updateComplete` missed two late effects in
+`apps/till/src/till-app.attendance.test.ts`. Removing the Cancel handler's gate reset reached a
+later click timeout instead of the intended page assertion. Removing the approver-opening version
+check still passed its case. Each request had already been resolved by the test.
+
+The cases now await a rendered frame after resolving their held request, then inspect the page.
+In independently installed disposable checkouts, removing the gate reset failed the empty-inbox
+case's page assertion, and removing the opening-version check failed the late-PIN assertion.
+The restored six attendance behavior suites passed 64 cases. You can run the two owning cases with:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app.attendance.test.ts \
+  -t 'late answer never reopens the gate|closing during an approver read' --reporter=dot
+```
+
+The controls removed one guard at a time; the command above runs the restored behavior.

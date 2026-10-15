@@ -5,6 +5,21 @@ import { attendanceMail } from "./schema/attendance.js";
 type MailClaim = { id: string; token: string };
 type MailOutcome = "sent" | "rejected" | "unknown";
 
+export async function cancelUnclaimedAttendanceMail(
+  tx: Transaction,
+  questionId: string,
+): Promise<void> {
+  await tx
+    .update(attendanceMail)
+    .set({ status: "cancelled" })
+    .where(
+      and(
+        eq(attendanceMail.questionId, questionId),
+        inArray(attendanceMail.status, ["pending", "rejected"]),
+      ),
+    );
+}
+
 export async function claimAttendanceMail(
   tx: Transaction,
   input: { id: string; holder: string; recipient: string; now: Date },

@@ -189,6 +189,7 @@ import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { mountOrdersApi } from "./orders-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
+import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
@@ -1529,6 +1530,7 @@ async function bootServer(
       devMode: config.devMode,
       invoiceEmailAvailable,
       workforceEnabled,
+      attendanceResponsesEnabled: isSingletonPrimary,
       attendance: attendanceRecorder,
     },
     log,
@@ -1812,6 +1814,8 @@ async function bootServer(
     log,
   );
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
+  if (workforceEnabled && isSingletonPrimary)
+    mountManagementAttendanceApi(app, { db, cfg: { nodeId: till.nodeId }, now }, log);
   mountScheduleApi(app, { db }, log);
   mountMeApi(
     app,

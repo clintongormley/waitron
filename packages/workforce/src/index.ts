@@ -1,4 +1,6 @@
 export { WORKFORCE_MIGRATIONS } from "./migrations.js";
+export { executeAttendanceCommand, readAttendanceCommand } from "./attendance-response-commands.js";
+export { reconcileAttendanceResponses } from "./attendance-question-responses.js";
 export {
   attendanceDayWork,
   attendanceSourceState,
@@ -149,3 +151,26 @@ export type {
   PayPeriodClosureView,
   TimeRecord,
 } from "./record-types.js";
+export { projectCorrectionItems } from "./attendance-responses.js";
+export type {
+  AttendanceChange,
+  AttendanceCommandPayload,
+  AttendanceCommand,
+  AttendanceCommandResult,
+  AttendanceResponseReceipt,
+  CorrectionItem,
+} from "./attendance-contract.js";
+
+export {
+  readAttendanceInbox,
+  readAttendanceDay,
+  readAttendanceManagerQueue,
+} from "./attendance-reads.js";
+export type {
+  AttendancePrompt,
+  AttendanceInbox,
+  AttendanceDayView,
+  AttendanceManagerQueue,
+  AttendanceLookups,
+} from "./attendance-contract.js";
+export { WORKFORCE_PERMISSIONS } from "./permissions.js";

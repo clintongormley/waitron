@@ -3,6 +3,30 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "attendance.read_failed": {
+    en: "Your hours could not be read. Retry read.",
+    es: "No se han podido consultar tus horas. Vuelve a consultarlas.",
+  },
+  "attendance.write_failed": {
+    en: "Your response could not be recorded. Try again.",
+    es: "No se ha podido registrar tu respuesta. Reinténtalo.",
+  },
+  "attendance.not_pending": {
+    en: "This question no longer needs an answer. Read your hours again.",
+    es: "Esta pregunta ya no necesita respuesta. Vuelve a consultar tus horas.",
+  },
+  "correction.not_pending": {
+    en: "This request has changed. Read its latest history before responding.",
+    es: "Esta solicitud ha cambiado. Consulta el historial actual antes de responder.",
+  },
+  "correction.not_permitted": {
+    en: "You cannot authorise this change. Choose another eligible manager.",
+    es: "No puedes autorizar este cambio. Elige a otro responsable autorizado.",
+  },
+  "correction.target_not_found": {
+    en: "This time entry could not be found. Read your hours again.",
+    es: "No se ha encontrado este fichaje. Vuelve a consultar tus horas.",
+  },
   "attendance.state_changed": {
     en: "Your clock changed. Check its latest state and try again.",
     es: "Tu fichaje ha cambiado. Consulta el estado actual y reinténtalo.",

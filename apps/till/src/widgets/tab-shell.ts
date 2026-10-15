@@ -240,6 +240,7 @@ export class TillTabShell extends LitElement {
   @property() operatorName = "";
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
+  @property({ type: Boolean }) hoursBusy = false;
   @property({ type: Boolean }) clockBusy = false;
   @property() clockError = "";
   @property({ attribute: false }) transferCount?: number;
@@ -587,6 +588,14 @@ export class TillTabShell extends LitElement {
                     : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
                       ${action("out", t("clock.out"))}`
               }
+              <wt-button
+                data-fix-hours
+                variant="secondary"
+                align="start"
+                .disabled=${this.hoursBusy}
+                @click=${() => this.#emit("fix-my-hours")}
+                >${t("attendance.fix_hours")}</wt-button
+              >
             `
           : nothing
       }<wt-button

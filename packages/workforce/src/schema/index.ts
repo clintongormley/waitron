@@ -20,3 +20,5 @@ export {
   attendanceQuestions,
   attendanceMail,
 } from "./attendance.js";
+
+export { attendanceResponseCommands } from "./attendance-responses.js";

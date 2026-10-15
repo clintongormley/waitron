@@ -50,6 +50,12 @@ import {
  * | POST /api/clock/break-start                             | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
  * | POST /api/clock/break-end                               | clock-in | clock-in; till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
  * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
+ * | GET /api/attendance/inbox | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
+ * | GET /api/attendance/day | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on day?date=2026-01-05&locationId=LOCATION" |
+ * | GET /api/attendance/commands/:commandId | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on commands/ID" |
+ * | GET /api/attendance/items/:itemId/approvers | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on items/ID/approvers?action=approve" |
+ * | POST /api/attendance/commands | clock-in | till-attendance-api.test.ts "rejects a profile without clock-in on commands" |
+ * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
  * | POST /api/sales (tender checked first)                    | take-cash / hand-keyed-card-payment, then take-orders | (cash code) / hand-keyed-card-payment, take-orders |
  * | POST /api/pay                                             | integrated-card-payment, then take-orders | pay, take-orders |
  * | POST /api/working-orders                                  | take-orders                | take-orders           |
