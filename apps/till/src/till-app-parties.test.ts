@@ -15,7 +15,7 @@ import {
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { formatMoney } from "@waitron/shared";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -208,6 +208,7 @@ const till = {
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [],
+  simplifiedInvoiceLimit: "3000.00" as string | null,
 };
 
 const offers: ZoneOfferCatalogue = {
@@ -3802,7 +3803,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     await flush(el);
 
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
-    expect(dialog?.textContent).toContain(t("table.confirm_different_people"));
+    expect(dialog?.textContent).toContain(differentPeopleText("3000.00"));
     expect(api.splitBill).not.toHaveBeenCalled();
 
     dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
@@ -3841,6 +3842,42 @@ describe("till-app: every table move sends the party revision it last read", () 
       getPartyBills: vi
         .fn()
         .mockResolvedValue([{ ...tabBill, total: "3000.00", outstanding: "3000.00" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+    });
+  });
+
+  it("asks before splitting a bill over the server's limit, naming it", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, simplifiedInvoiceLimit: "3.00" }),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3.01", outstanding: "3.01" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+    expect(dialog?.textContent).toContain(formatMoney("3.00", currentLocale()));
+    expect(api.splitBill).not.toHaveBeenCalled();
+  });
+
+  it("splits a bill of any size without asking for a server that sends no limit", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, simplifiedInvoiceLimit: null }),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3500.00", outstanding: "3500.00" }, checkBill]),
     });
     const order = await openMesa(el);
 

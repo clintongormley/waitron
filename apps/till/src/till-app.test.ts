@@ -263,6 +263,7 @@ const till = {
     url: string;
     standing: "serving-primary" | "serving-secondary" | "sell-only";
   }[],
+  simplifiedInvoiceLimit: "3000.00" as string | null,
 };
 
 const phoneCanvasDef: CanvasDef = {

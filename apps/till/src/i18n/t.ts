@@ -44,6 +44,10 @@ export function overLimitText(limit: string): string {
   return t("sale.over_simplified_limit").replace("{amount}", () => formatMoney(limit, locale));
 }
 
+export function differentPeopleText(limit: string): string {
+  return t("table.confirm_different_people").replace("{amount}", () => formatMoney(limit, locale));
+}
+
 /** A sentence about `item` and the device carrying it: `withPerson` naming who is signed in there,
  * or `withDevice` when nobody is. Each `{item}`, `{device}` and `{person}` is filled in one pass,
  * so a name containing one of them is written as it is. */
