@@ -1629,6 +1629,26 @@ describe("dashboard-app", () => {
   });
 
   it("reaches rota planning through Calendar without a second Rota entry in Team", async () => {
+    const request: DashboardRequest = async (path) =>
+      path === "/management-api/venue-service/opening-hours"
+        ? ({
+            businessDayClock: {
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00",
+              cutoverChanges: [],
+            },
+            clockRevision: 0,
+            currentBusinessDay: "2026-10-12",
+            pending: null,
+            timeZone: "Europe/Madrid",
+            clockReadable: true,
+            dayCutover: "06:00",
+            menus: [],
+            seasons: [],
+            currentSeasonId: null,
+            departments: [],
+          } as never)
+        : new Promise<never>(() => {});
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -1636,7 +1656,7 @@ describe("dashboard-app", () => {
         permissions: ["venue.view", "schedule.manage"],
       }),
     });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
     expect(navItem(el, "opening-hours")).not.toBeNull();
     expect(navRoster(el)).toBeNull();
@@ -1646,6 +1666,14 @@ describe("dashboard-app", () => {
     expect(roster(el)).toBeNull();
     expect(mountedScreens(el)).toEqual([]);
     expect(allH1(el.shadowRoot!)).toHaveLength(1);
+    const calendar = el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const rotaChoice = calendar.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="calendarView"][value="rota"]',
+    );
+    expect(rotaChoice).not.toBeNull();
+    await userEvent.click(rotaChoice!);
+    await expect.poll(() => calendar.shadowRoot!.querySelector("staffing-rota")).not.toBeNull();
+    expect(new URL(location.href).pathname).toBe("/manage/opening-hours/view/rota");
   });
 
   it("navigates to the approvals screen", async () => {
