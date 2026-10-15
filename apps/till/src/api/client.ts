@@ -6,6 +6,8 @@ import type {
   AttendanceCommandResult,
   AttendanceDayView,
   AttendanceInbox,
+  HoursSelection,
+  PersonHours,
 } from "@waitron/workforce/attendance-contract";
 export type {
   AttendanceChange,
@@ -15,6 +17,11 @@ export type {
   AttendanceInbox,
   AttendancePrompt,
   CorrectionItem,
+  HoursSelection,
+  HoursDay,
+  HoursOpenShift,
+  HoursClosure,
+  PersonHours,
 } from "@waitron/workforce/attendance-contract";
 
 import type { CanvasDef, CapabilityFlag, NavigationScreen } from "../layout.js";
@@ -2380,6 +2387,19 @@ export class TillApi {
 
   getAttendanceInbox(options: ReadOptions = {}): Promise<AttendanceInbox> {
     return this.#request("/api/attendance/inbox", "GET", undefined, options.signal);
+  }
+
+  getHours(
+    locationId: string,
+    selection: HoursSelection,
+    options: ReadOptions = {},
+  ): Promise<PersonHours> {
+    const query = new URLSearchParams({
+      locationId,
+      kind: selection.kind,
+      ...(selection.date === undefined ? {} : { date: selection.date }),
+    });
+    return this.#request(`/api/attendance/hours?${query}`, "GET", undefined, options.signal);
   }
 
   getAttendanceDay(
