@@ -5294,12 +5294,6 @@ the tree. What remains, largest first:
   `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
   (2026-10-15), not measured against a real Cloud.
 
-- **A Translate all call that Cloud answers `revoked` or `invalid_proof` does not record the
-  revocation or drop the lease.** `apps/server/src/cloud-translation.ts` maps Cloud's translation
-  refusals but has no case for a 401; the configuration refresh in `cloud-installation.ts` does.
-  Due with A689's job runner (plan Tasks 11–12), which the plan does not yet say. Found by A689's
-  first PR review (#1729, 2026-10-15).
-
 - **A box that is not connected, or is revoked, refuses Translate all with `cloud.not_configured`,
   whose dashboard wording was written for a server with no Cloud set up at all** ("Cloud services
   are not available on this server yet"). The neighbouring Cloud calls use

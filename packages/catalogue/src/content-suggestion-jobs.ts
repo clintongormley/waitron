@@ -123,7 +123,6 @@ export async function recordSuggestionJobEnded(
   failure: SuggestionFailure | null,
   now: Date = new Date(),
 ): Promise<void> {
-  // None of these is sent a release, so each is marked released.
   const nothingToRelease =
     state === "expired" || failure === "not_connected" || failure === "rejected";
   await tx

@@ -245,6 +245,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
   let capStops = false;
   let consentGone = false;
   let isOffline = false;
+  let proofRefused = false;
   let override: Record<string, unknown> = {};
   let translate: (item: FakeItem) => Omit<FakeResult, "ref"> = defaultTranslator;
 
@@ -305,7 +306,8 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
       typeof signedBody !== "string" ||
       signedBody.length > 4096 ||
       !keysAre(sent, submitting ? ["payload", "signature", "body"] : ["payload", "signature"]) ||
-      (submitting && typeof sent.body !== "string")
+      (submitting && typeof sent.body !== "string") ||
+      proofRefused
     )
       return answer(401, { error: "invalid_proof" });
     if (base.isRevoked()) return answer(403, { error: "revoked" });
@@ -546,6 +548,9 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     online: () => {
       isOffline = false;
       base.online();
+    },
+    refuseProof: (on: boolean) => {
+      proofRefused = on;
     },
     loseNext: (action: TranslationAction) => {
       lost.add(action);

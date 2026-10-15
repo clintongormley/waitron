@@ -500,6 +500,54 @@ it("a job Cloud took but whose reply was lost, ended on the box as not connected
   }
 });
 
+it("a job Cloud took but whose reply was lost, ended by the box's own 24-hour clock, is marked released while Cloud still holds it", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    f.loseNext(SUBMIT);
+    await expect(createContentSuggestionRunner(deps(f)).step()).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    const before = f.calls.length;
+
+    expect(await later(f, JOB_LIFETIME_MS).step()).toBe("again");
+    expect(f.calls).toHaveLength(before);
+    expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
+    const [job] = await inTx((tx) =>
+      tx
+        .select({
+          released: contentSuggestionJobs.released,
+          cloudJobId: contentSuggestionJobs.cloudJobId,
+        })
+        .from(contentSuggestionJobs),
+    );
+    expect(job).toEqual({ released: true, cloudJobId: null });
+    expect([...f.jobs.values()].map((held) => held.state)).toEqual(["queued"]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("a job whose call meets a revoked connection ends on the next step as not connected, without a call", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    f.revoke();
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(actions(f)).toEqual([SUBMIT, STATUS]);
+
+    expect(await runner.step()).toBe("again");
+    expect(actions(f)).toEqual([SUBMIT, STATUS]);
+    expect(await runView()).toMatchObject({ state: "failed", code: "cloud.not_configured" });
+  } finally {
+    await f.close();
+  }
+});
+
 it("an empty job, past Cloud's 20 languages, ends failed as a request Cloud refused", async () => {
   const f = await connected();
   try {
@@ -512,6 +560,9 @@ it("an empty job, past Cloud's 20 languages, ends failed as a request Cloud refu
 
     expect(await runToIdle(createContentSuggestionRunner(deps(f)))).toEqual(["again", "idle"]);
     expect(actions(f)).toEqual([SUBMIT]);
+    const [sent] = f.submissions.map((s) => JSON.parse(s.body) as FakeJobBody);
+    expect(sent!.items).toEqual([]);
+    expect(sent!.languages.enabled.length).toBeGreaterThan(20);
     expect(f.jobs.size).toBe(0);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {

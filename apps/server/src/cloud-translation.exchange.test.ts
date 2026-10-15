@@ -571,3 +571,100 @@ it("carries the number that would fit", () => {
     fits: 6,
   });
 });
+
+const saved = async (f: Fake) =>
+  JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")) as SavedCloudState;
+
+it.each(["submit", "status", "collect", "release"] as const)(
+  "a %s Cloud refuses as revoked records the revocation and is cloud.unavailable",
+  (call) =>
+    withFake(async (f) => {
+      const job = await f.client.translation.submit(op(), body(1));
+      f.revoke();
+      const calls = f.calls.length;
+      await expect(
+        call === "submit"
+          ? f.client.translation.submit(op(), body(1))
+          : f.client.translation[call](job.jobId),
+      ).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(f.calls).toHaveLength(calls + 1);
+      const { lifecycle } = await saved(f);
+      expect(lifecycle).toMatchObject({ revoked: true, unavailable: false });
+      expect(lifecycle && Object.hasOwn(lifecycle, "lease")).toBe(false);
+      expect(lifecycle && Object.hasOwn(lifecycle, "pending")).toBe(false);
+      await expect(f.client.translationService()).resolves.toBe("not_connected");
+    }),
+);
+
+it("a revocation met by a translation call leaves what a refresh's revoked answer leaves", async () => {
+  const lifecycles = [];
+  for (const meet of [
+    (f: Fake) => f.client.translation.status(JOB),
+    (f: Fake) => f.client.refresh(),
+  ]) {
+    const f = await translationCloudFixture();
+    try {
+      await f.client.refresh();
+      await f.client.refresh(); // configuration: the reply carries the translation service
+      f.revoke();
+      await meet(f).catch(() => {});
+      const { lifecycle } = await saved(f);
+      lifecycles.push({ ...lifecycle, view: undefined });
+    } finally {
+      await f.close();
+    }
+  }
+  expect(lifecycles[0]).toEqual(lifecycles[1]);
+});
+
+it("a call Cloud refuses as invalid_proof drops the lease it used, and the next call renews", () =>
+  withFake(async (f) => {
+    const job = await f.client.translation.submit(op(), body(1));
+    const renewals = () => f.requests.filter((r) => r[2] === "renew").length;
+    const before = renewals();
+    f.refuseProof(true);
+    await expect(f.client.translation.status(job.jobId)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    const { lifecycle } = await saved(f);
+    expect(lifecycle && Object.hasOwn(lifecycle, "lease")).toBe(false);
+    expect(lifecycle?.revoked).toBe(false);
+    f.refuseProof(false);
+    await expect(f.client.translation.status(job.jobId)).resolves.toMatchObject({
+      jobId: job.jobId,
+    });
+    expect(renewals()).toBe(before + 1);
+  }));
+
+it("an invalid_proof refusal keeps a lease renewed while the call waited on Cloud", () =>
+  withFake(async (f) => {
+    const job = await f.client.translation.submit(op(), body(1));
+    const used = (await saved(f)).lifecycle?.lease;
+    const held = f.stall("translation-status");
+    const status = f.client.translation.status(job.jobId);
+    await held.reached;
+    // 51 minutes on, the held call's proof is out of its window and its lease is near expiry.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 51 * 60_000 });
+    await f.client.refresh();
+    const renewed = (await saved(f)).lifecycle?.lease;
+    expect(renewed).toBeDefined();
+    expect(renewed).not.toEqual(used);
+    held.release();
+    await expect(status).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect((await saved(f)).lifecycle?.lease).toEqual(renewed);
+  }));
+
+it("a refusal met after the connection's saved state was removed writes nothing back", () =>
+  withFake(async (f) => {
+    const job = await f.client.translation.submit(op(), body(1));
+    const held = f.stall("translation-status");
+    const status = f.client.translation.status(job.jobId);
+    await held.reached;
+    f.revoke();
+    await rm(join(f.stateDir, "cloud-connection.json"));
+    held.release();
+    await expect(status).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await expect(readFile(join(f.stateDir, "cloud-connection.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  }));
