@@ -328,13 +328,16 @@ offline tool, and readiness separate from production. It specifies durable claim
 resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Compiled browser
 checks exercise both launch paths and custody choices, saved-file reopen, synthetic paper recovery,
 wrong-passphrase/fingerprint refusals, resume and handover/dispute stops with synthetic outside
-responses. Both whole-branch reviews are complete; their findings, the power-interruption recovery
-decision, actual-paper acceptance and publication gates remain open. Follow the candidate
-[operator procedure](../operations/first-live-fiscal-setup.md); its physical acceptance remains open. Server ownership, activation and interruption
-checks do not replace physical-paper acceptance. An interruption between setup's state and marker
-writes can prevent the next boot, including during abandonment; the real-boot cases in
-`apps/server/src/first-fiscal-state-write.boot.test.ts` reproduce that limit. The owner must decide
-whether to require a supported recovery path before acceptance. This is not product completion.
+responses. Both original whole-branch reviews are complete. At about 17:15 on 2026-10-15 the
+owner approved the core [repair addendum](../superpowers/plans/2026-10-15-a679-first-setup-repair.md):
+password recovery from any browser, separately guarded marker repair and ownership rebind,
+retirement and isolated-workspace selection, current-register answers and publication-only completion.
+That redesign still needs implementation and qualification. The original review results do not
+qualify it. Actual-paper acceptance remains separate; automated server/browser checks do not
+replace it. The raw strict-boot refusals reproduced in
+`apps/server/src/first-fiscal-state-write.boot.test.ts` remain intentional. A731–A733 below are
+separate requirements before go-live. Follow the candidate
+[operator procedure](../operations/first-live-fiscal-setup.md); this is not product completion.
 
 You can use fiscal allocations without a Cloud subscription. The current paper route asks your
 custodian to run `paper-custodian.js` from a repository checkout, create and retain the signing key,
@@ -1526,3 +1529,31 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
   [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
   (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
   open.
+
+
+## A731. Recover from backup from the first-setup repair page
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, connect the repair
+page to existing archive, bucket and managed-Cloud recovery, retaining real owner proof and the
+selected backup’s named node recovery key, archive encryption key where applicable and current
+outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
+Unresolved first-setup guards currently block restore; the page must say this path is not yet
+available until this item lands. Do not expose retained business records without proof.
+
+## A732. Keep old data and start fresh on this box
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, support a fresh
+isolated deployment when business data exists or may exist and the old password is lost. Propose
+the exact new custodian-signed authorisation format for owner approval before building. Bind it to
+the box’s fresh recovery request and obtain a fresh signed assignment. Preserve the old workspace
+offline; the new account cannot read it. A possibly activated scope requires an explicit
+recovery/replacement declaration. A public file-check receipt, snapshot or fresh assignment alone
+cannot authorise this action. Until this item lands, explain that it is not yet available.
+
+## A733. Set up secure connection from the first-setup repair page
+
+Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, guide restoration
+when the box’s certificate is missing or unusable. Preserve old material, prefer the retained CA
+when usable and guide installation/trust of the new public certificate. HTTP serves public
+connection/bootstrap information only and accepts no password or key. Until this item lands,
+explain that secure-connection restoration is not yet available from the repair page.

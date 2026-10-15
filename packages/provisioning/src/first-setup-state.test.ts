@@ -81,6 +81,10 @@ async function fixture() {
 }
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.mocked(durable.writeDurableHostJson).mockImplementation(
+    (await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js"))
+      .writeDurableHostJson,
+  );
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -387,6 +391,64 @@ it("records valid public imports/checks and keeps them through a resume without 
   expect(state.inputs).toEqual({ probe: { signed: "public", list: [true, 2, null] } });
   expect(state.status).toBe("claimed");
   expect(state.history.map((event) => event.kind)).toEqual(["claim", "input", "checked", "resume"]);
+});
+
+it("records a recovery as a new owner generation with a replacement browser proof", async () => {
+  const f = await fixture();
+  const before = await f.claim();
+  const recovered = await f.store.update(before.frozen.attemptId, before.revision, {
+    kind: "recover",
+    capabilityHash: digest("recovered-capability"),
+    claimNonceHash: digest("new-browser-proof"),
+  } as never);
+  expect(recovered.frozen).toEqual(before.frozen);
+  expect(recovered.ownerVerifier).toBe(before.ownerVerifier);
+  expect(recovered.claimNonceHash).toBe(digest("new-browser-proof"));
+  expect(recovered.capabilityHash).toBe(digest("recovered-capability"));
+  expect(recovered.ownerGeneration).toBe(2);
+  expect(recovered.revision).toBe(2);
+  expect(recovered.history).toEqual([
+    { kind: "claim", revision: 1, ownerGeneration: 1 },
+    { kind: "recover", revision: 2, ownerGeneration: 2 },
+  ]);
+  expect(await createFirstSetupStore(f.options).read()).toEqual(recovered);
+});
+
+it.each(["capabilityHash", "claimNonceHash"])(
+  "rejects a malformed recovery %s without writing",
+  async (field) => {
+    const f = await fixture();
+    const before = await f.claim();
+    const bytes = await readFile(f.statePath);
+    await expect(
+      f.store.update(before.frozen.attemptId, before.revision, {
+        kind: "recover",
+        capabilityHash: digest("new-capability"),
+        claimNonceHash: digest("new-proof"),
+        [field]: "bad",
+      } as never),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(await readFile(f.statePath)).toEqual(bytes);
+  },
+);
+
+it("rebinds an abandoned attempt without reviving it or admitting another mutation", async () => {
+  const f = await fixture();
+  const before = await f.claim();
+  await f.store.update(before.frozen.attemptId, 1, { kind: "abandoned" });
+  const bytes = await readFile(f.statePath);
+  const recovered = await f.store.update(before.frozen.attemptId, 2, {
+    kind: "recover",
+    capabilityHash: digest("new-capability"),
+    claimNonceHash: digest("new-proof"),
+  });
+  expect(recovered.status).toBe("abandoned");
+  expect(recovered.ownerGeneration).toBe(2);
+  expect(recovered.history.slice(0, 2)).toEqual(JSON.parse(bytes.toString()).history);
+  await expect(
+    f.store.update(before.frozen.attemptId, 3, { kind: "consumption-intent" }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect((await f.store.read())?.status).toBe("abandoned");
 });
 it("rejects unknown modules, duplicate consumption, wrong IDs and backward phases", async () => {
   const f = await fixture();
@@ -696,6 +758,125 @@ it("retains the exact configuration import binding and refuses a changed digest 
   await writeFile(f.statePath, JSON.stringify(disk));
   await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
     code: "setup.attempt_invalid",
+  });
+});
+
+it.each(["claim", "abandon"])(
+  "repairs only the %s marker after checking the unused venue",
+  async (phase) => {
+    const f = await fixture();
+    const original = (
+      await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
+    ).writeDurableHostJson;
+    const interrupt = (status: string) =>
+      vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (path, value, ...rest) => {
+        if (
+          path.endsWith("first-setup-claim.json") &&
+          (value as { status: string }).status === status
+        )
+          throw new Error("interrupted marker");
+        return original(path, value, ...rest);
+      });
+    if (phase === "claim") {
+      interrupt("active");
+      await expect(f.claim()).rejects.toThrow("interrupted marker");
+    } else {
+      const state = await f.claim();
+      interrupt("abandoned");
+      await expect(
+        f.store.update(state.frozen.attemptId, 1, { kind: "abandoned" }),
+      ).rejects.toThrow("interrupted marker");
+    }
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(original);
+    const bytes = await readFile(f.statePath);
+    await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    const inspection = await f.store.readForRepair();
+    expect(inspection?.repairMarker).toBe(phase === "claim" ? "active" : "abandoned");
+    expect(await readFile(f.statePath)).toEqual(bytes);
+    let checked = 0;
+    await f.store.repairMarker(inspection!, async () => {
+      checked++;
+    });
+    expect(checked).toBe(1);
+    expect(await readFile(f.statePath)).toEqual(bytes);
+    expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
+    expect(JSON.parse(await readFile(f.markerPath, "utf8")).status).toBe(
+      phase === "claim" ? "active" : "abandoned",
+    );
+  },
+);
+
+it("leaves both files untouched when the unused-venue check refuses marker repair", async () => {
+  const f = await fixture();
+  await f.claim();
+  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+  marker.status = "claiming";
+  await writeFile(f.markerPath, JSON.stringify(marker));
+  const stateBytes = await readFile(f.statePath),
+    markerBytes = await readFile(f.markerPath);
+  const observed = await f.store.readForRepair();
+  await expect(
+    f.store.repairMarker(observed!, async () => {
+      throw Object.assign(new Error(), { code: "setup.attempt_conflict" });
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(f.statePath)).toEqual(stateBytes);
+  expect(await readFile(f.markerPath)).toEqual(markerBytes);
+});
+
+it("rejects a marker repair when the observed ownership changed before exclusion", async () => {
+  const f = await fixture();
+  await f.claim();
+  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+  marker.status = "claiming";
+  await writeFile(f.markerPath, JSON.stringify(marker));
+  const observed = (await f.store.readForRepair())!;
+  const changed = JSON.parse(await readFile(f.statePath, "utf8"));
+  changed.revision = 2;
+  changed.ownerGeneration = 2;
+  changed.capabilityHash = digest("replacement-owner");
+  changed.history.push({ kind: "recover", revision: 2, ownerGeneration: 2 });
+  await writeFile(f.statePath, JSON.stringify(changed));
+  const before = await readFile(f.markerPath);
+  await expect(f.store.repairMarker(observed, async () => {})).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  expect(await readFile(f.markerPath)).toEqual(before);
+  expect((await f.store.readForRepair())?.state.ownerGeneration).toBe(2);
+});
+
+it.each([
+  "consumption",
+  "input",
+  "history",
+  "identity",
+  "missing-state",
+  "missing-marker",
+  "corrupt",
+  "root",
+])("refuses marker repair for %s", async (kind) => {
+  const f = await fixture();
+  const state = await f.claim();
+  if (kind === "consumption" || kind === "history") {
+    await f.store.update(state.frozen.attemptId, 1, { kind: "consumption-intent" });
+    if (kind === "history") await f.store.update(state.frozen.attemptId, 2, { kind: "abandoned" });
+  }
+  if (kind === "input")
+    await f.store.update(state.frozen.attemptId, 1, {
+      kind: "input",
+      module: "probe",
+      input: { public: "receipt" },
+    });
+  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+  marker.status = kind === "history" ? "active" : "claiming";
+  if (kind === "identity") marker.attemptId = randomUUID();
+  if (kind === "root") marker.stateDir = join(f.dir, "foreign");
+  await writeFile(f.markerPath, JSON.stringify(marker));
+  if (kind === "missing-state") await unlink(f.statePath);
+  if (kind === "missing-marker") await unlink(f.markerPath);
+  if (kind === "corrupt") await writeFile(f.statePath, "{");
+  await expect(f.store.readForRepair()).rejects.toMatchObject({
+    code: kind === "root" ? "setup.attempt_conflict" : "setup.attempt_invalid",
   });
 });
 it.each([

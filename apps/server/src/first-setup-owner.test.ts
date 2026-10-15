@@ -287,3 +287,181 @@ it("freezes the selected staged file only after earlier setup work releases the 
     newTaxpayer: false,
   });
 });
+
+it("recovers ownership from a new browser with the original password and revokes old proofs", async () => {
+  const f = await fixture();
+  const first = await f.claim();
+  const oldOwner = { ...first.state, capability: first.capability };
+  const grant = await f.owner.reconfirm(oldOwner, payload.request.admin.password, "activation");
+  const before = (await f.store.read())!;
+  const newNonce = randomBytes(32).toString("base64url");
+  const recovered = await f.owner.recoverFirstSetup(newNonce, {
+    password: payload.request.admin.password,
+  });
+  const after = (await f.store.read())!;
+  expect(after.frozen).toEqual(before.frozen);
+  expect(after.ownerVerifier).toBe(before.ownerVerifier);
+  expect(after.inputs).toEqual(before.inputs);
+  expect(after.consumptionIntent).toBe(false);
+  expect(after.revision).toBe(2);
+  expect(after.ownerGeneration).toBe(2);
+  expect(after.history.map((event) => event.kind)).toEqual(["claim", "recover"]);
+  expect(recovered.state.attemptId).toBe(first.state.attemptId);
+  await expect(f.owner.authorize(oldOwner)).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    f.owner.consumeReconfirmation(
+      { ...recovered.state, capability: recovered.capability },
+      grant,
+      "activation",
+    ),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    f.owner.resumeFirstSetup(f.nonce, { password: payload.request.admin.password }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  const resumed = await createFirstSetupOwner(f.options).resumeFirstSetup(newNonce, {
+    password: payload.request.admin.password,
+  });
+  expect(resumed.ownerGeneration).toBe(3);
+  const bytes = await readFile(join(f.dir, "state", "first-setup.json"), "utf8");
+  for (const secret of [newNonce, recovered.capability, payload.request.admin.password])
+    expect(bytes).not.toContain(secret);
+});
+
+it.each(["password", "nonce"])(
+  "refuses a wrong recovery %s without changing the attempt",
+  async (wrong) => {
+    const f = await fixture();
+    await f.claim();
+    const before = await readFile(join(f.dir, "state", "first-setup.json"));
+    await expect(
+      f.owner.recoverFirstSetup(wrong === "nonce" ? "bad" : randomBytes(32).toString("base64url"), {
+        password: wrong === "password" ? "WRONG-PASSWORD" : payload.request.admin.password,
+      }),
+    ).rejects.toMatchObject({ code: "setup.owner_required", params: {} });
+    expect(await readFile(join(f.dir, "state", "first-setup.json"))).toEqual(before);
+  },
+);
+
+it("rebinds a consumed unfinished attempt without clearing any consumed facts", async () => {
+  const f = await fixture();
+  const first = await f.claim();
+  const consumed = await f.store.update(first.state.attemptId, 1, { kind: "consumption-intent" });
+  const recovered = await f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+    password: payload.request.admin.password,
+  });
+  expect(recovered.state.status).toBe("consumption-intent");
+  expect(recovered.state.consumptionIntent).toBe(true);
+  const after = (await f.store.read())!;
+  expect(after.frozen).toEqual(consumed.frozen);
+  expect(after.history.slice(0, 2)).toEqual(consumed.history);
+  expect(after.ownerGeneration).toBe(2);
+});
+
+it.each(["claim", "abandon"])(
+  "authenticates before repairing an interrupted %s then separately rebinds",
+  async (phase) => {
+    const f = await fixture();
+    const first = await f.claim();
+    if (phase === "abandon") await f.store.update(first.state.attemptId, 1, { kind: "abandoned" });
+    const markerPath = join(f.dir, "venue", "first-setup-claim.json");
+    const statePath = join(f.dir, "state", "first-setup.json");
+    const marker = JSON.parse(await readFile(markerPath, "utf8"));
+    marker.status = phase === "claim" ? "claiming" : "active";
+    await writeFile(markerPath, JSON.stringify(marker));
+    const beforeState = await readFile(statePath),
+      beforeMarker = await readFile(markerPath);
+    let checked = 0;
+    const host = createFirstSetupOwner({
+      ...f.options,
+      assertRepairAllowed: async () => {
+        checked++;
+        expect(await readFile(statePath)).toEqual(beforeState);
+        expect(await readFile(markerPath)).toEqual(beforeMarker);
+      },
+    });
+    await expect(
+      host.recoverFirstSetup(randomBytes(32).toString("base64url"), { password: "WRONG-PASSWORD" }),
+    ).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(checked).toBe(0);
+    expect(await readFile(markerPath)).toEqual(beforeMarker);
+    const recovered = await host.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+      password: payload.request.admin.password,
+    });
+    expect(checked).toBe(1);
+    const state = (await f.store.read())!;
+    expect(state.frozen).toEqual(JSON.parse(beforeState.toString()).frozen);
+    expect(state.ownerGeneration).toBe(2);
+    expect(state.status).toBe(phase === "claim" ? "claimed" : "abandoned");
+    if (phase === "abandon") {
+      await expect(
+        host.authorize({ ...recovered.state, capability: recovered.capability }),
+      ).rejects.toMatchObject({ code: "setup.owner_required" });
+      await expect(
+        host.status({ ...recovered.state, capability: recovered.capability }),
+      ).resolves.toMatchObject({ status: "abandoned" });
+    }
+  },
+);
+
+it("refuses a torn-pair recovery when the host has not supplied an unused-venue check", async () => {
+  const f = await fixture();
+  await f.claim();
+  const path = join(f.dir, "venue", "first-setup-claim.json");
+  const marker = JSON.parse(await readFile(path, "utf8"));
+  marker.status = "claiming";
+  await writeFile(path, JSON.stringify(marker));
+  const bytes = await readFile(path);
+  await expect(
+    f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+      password: payload.request.admin.password,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await readFile(path)).toEqual(bytes);
+});
+
+it("refuses recovery when another owner advances after password inspection but before exclusion", async () => {
+  const f = await fixture();
+  const first = await f.claim();
+  let entered!: () => void, release!: () => void, observed!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const inspected = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const original = f.store.readForRepair.bind(f.store);
+  const spy = vi.spyOn(f.store, "readForRepair").mockImplementation(async () => {
+    const value = await original();
+    observed();
+    return value;
+  });
+  const other = f.options.coordinator.run(async (hold) => {
+    entered();
+    await wait;
+    await f.store.update(
+      first.state.attemptId,
+      1,
+      { kind: "resume", capabilityHash: "a".repeat(64) },
+      hold,
+    );
+  });
+  await started;
+  const recovery = f.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+    password: payload.request.admin.password,
+  });
+  const refused = expect(recovery).rejects.toMatchObject({ code: "setup.owner_required" });
+  try {
+    await inspected;
+    release();
+    await other;
+    await refused;
+    expect((await f.store.read())?.history.map((event) => event.kind)).toEqual(["claim", "resume"]);
+  } finally {
+    release();
+    await other;
+    spy.mockRestore();
+  }
+});

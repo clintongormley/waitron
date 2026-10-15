@@ -46,4 +46,5 @@ export type {
   FirstSetupFrozen,
   FirstSetupChange,
   FirstSetupMarker,
+  FirstSetupRepair,
 } from "./first-setup-state.js";

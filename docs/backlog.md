@@ -331,6 +331,21 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
+- **A731. Recover from backup from the first-setup repair page.** Required before go-live.
+  Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
+  with the selected backup’s recovery key and current outside evidence. Depends on A679.
+  [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page).
+
+- **A732. Keep old data and start fresh on this box.** Required before go-live. When business
+  data exists or may exist and the password is lost, require a new custodian-signed authorisation
+  for a separate empty workspace, preserving the old data. Propose the exact authorisation format
+  before building. Depends on A679. [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
+
+- **A733. Set up secure connection from the first-setup repair page.** Required before go-live.
+  Guide certificate restoration when the box’s certificate is missing or unusable. Keep secrets
+  off HTTP and preserve existing trust material. Depends on A679.
+  [Detail](backlog/fiscal.md#a733-set-up-secure-connection-from-the-first-setup-repair-page).
+
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
   corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
   old-backup/new-hardware operational exercise remain queued. Cloud allocation production

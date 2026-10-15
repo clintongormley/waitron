@@ -9,6 +9,7 @@ import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
 import { isDeepStrictEqual } from "node:util";
+import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import type { VenueRequest } from "@waitron/provisioning";
@@ -283,6 +284,19 @@ export function mountSetupFirstFiscalApi(
           password: text(body.password),
         }),
       );
+    }),
+  );
+  app.post(`${root}/recover`, (c) =>
+    boundary(c, log, async () => {
+      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+      if (!(socket instanceof TLSSocket) || !socket.encrypted)
+        throw new AppError("setup.owner_required", {});
+      const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "password"]);
+      const recovered = await host.owner.recoverFirstSetup(text(body.clientClaimNonce), {
+        password: text(body.password),
+      });
+      host.evidence.invalidate(recovered.state.attemptId);
+      return c.json(recovered);
     }),
   );
   app.get(`${root}/status`, (c) =>

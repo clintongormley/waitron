@@ -30,6 +30,8 @@ old actual-paper procedure and FOLLOW-UP are superseded.
 
 **Spec:** [complete A679 design](../specs/2026-10-14-a679-first-fiscal-setup-design.md), read in full. The owner's **2026-10-15 06:35 “A — Approve, plan and build”** approves its complete scope and native inline implementation. That instruction supersedes the spec/backlog's earlier pending-approval wording. Preserve their dated reproduction; this plan does not rewrite it.
 
+**Repair scope update, 2026-10-15 at about 17:15:** the owner approved the V2 core repair flow inside A679. Follow the [reviewed repair addendum](2026-10-15-a679-first-setup-repair.md), which supersedes the original-tab recovery requirement below. A731, A732 and A733 are separate before-go-live requirements. Actual-paper acceptance remains separate.
+
 ## Global constraints
 
 - BOTH new-kit and existing-custodian routes converge on public import and the same authority checks. Subscribers use public import too; C3 does not supply wizard fetching.

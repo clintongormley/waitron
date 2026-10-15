@@ -20,6 +20,13 @@ If you imported a prepared configuration, make the same-taxpayer or different-ta
 before continuing. The claimed attempt retains that choice and the selected export. Replacing
 that staged export later refuses activation; it does not silently import a different menu.
 
+**Repair work in progress, 2026-10-15:** the owner approved password recovery from any browser
+and the [core repair flow](../superpowers/plans/2026-10-15-a679-first-setup-repair.md). The original-tab
+and interruption limits in the next two paragraphs describe the earlier candidate. The new
+repair page and complete entry-path qualification are still outstanding. A731, A732 and A733
+remain required before go-live; no repair-page action described in that addendum is accepted
+merely because its design was approved.
+
 Keep the original wizard tab. Its saved claim and your administrator password let you resume
 that same attempt after an interruption. A competing tab cannot take it over. Losing both the
 tab's claim and its credential proof needs explicit incident handling.

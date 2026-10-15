@@ -1,6 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -67,6 +68,7 @@ interface OwnerOptions {
     intent?: Pick<FirstSetupClaimPayload, "configurationImport" | "newTaxpayer">,
   ): Promise<FirstSetupFrozen>;
   assertClaimAllowed?(hold: FirstSetupHold): Promise<void>;
+  assertRepairAllowed?(state: FirstSetupState, hold: FirstSetupHold): Promise<void>;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const token = () => randomBytes(32).toString("base64url");
@@ -153,6 +155,71 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       refuse();
     return state;
   };
+  const restoreOwnership = (
+    clientClaimNonce: string,
+    proof: { password: string },
+    recovery: boolean,
+  ) => {
+    return inTurn(throttle, "resume", async () => {
+      const repair = recovery ? await store.readForRepair() : null;
+      const resumable = recovery
+        ? repair === null
+          ? null
+          : { state: repair.state, publicationComplete: repair.marker.status === "complete" }
+        : await store.readResumable();
+      const before = resumable?.state ?? null;
+      if (before?.status === "complete" && resumable?.publicationComplete) refuse();
+      if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024) refuse();
+      const correct = await verifyPassword(proof.password, before?.ownerVerifier ?? dummyVerifier);
+      if (
+        before === null ||
+        !correct ||
+        !validToken(clientClaimNonce) ||
+        (!recovery && !matches(clientClaimNonce, before.claimNonceHash))
+      )
+        refuse();
+      const capability = token();
+      const state = await coordinator.run(async (hold) => {
+        let current;
+        if (recovery) {
+          const retained = await store.readForRepair();
+          if (retained === null || !isDeepStrictEqual(retained, repair)) refuse();
+          if (retained.repairMarker !== null) {
+            if (options.assertRepairAllowed === undefined)
+              throw new AppError("setup.not_ready", {});
+            const assertAllowed = options.assertRepairAllowed;
+            await store.repairMarker(retained, () => assertAllowed(retained.state, hold), hold);
+          }
+          current = retained.state;
+        } else current = (await store.readResumable())?.state ?? null;
+        if (
+          current?.revision !== before.revision ||
+          current.frozen.attemptId !== before.frozen.attemptId ||
+          current.ownerGeneration !== before.ownerGeneration
+        )
+          refuse();
+        const updated = await store.update(
+          current.frozen.attemptId,
+          current.revision,
+          recovery
+            ? {
+                kind: "recover",
+                capabilityHash: hash(capability),
+                claimNonceHash: hash(clientClaimNonce),
+              }
+            : { kind: "resume", capabilityHash: hash(capability) },
+          hold,
+        );
+        invalidate(current.frozen.attemptId);
+        return updated;
+      });
+      return {
+        state: publicFirstSetupState(state),
+        capability,
+        ownerGeneration: state.ownerGeneration,
+      };
+    });
+  };
   return {
     authorize,
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
@@ -221,47 +288,10 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       };
     },
     resumeFirstSetup(clientClaimNonce: string, proof: { password: string }) {
-      return inTurn(throttle, "resume", async () => {
-        const resumable = await store.readResumable();
-        const before = resumable?.state ?? null;
-        if (before?.status === "complete" && resumable?.publicationComplete) refuse();
-        if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024)
-          refuse();
-        const correct = await verifyPassword(
-          proof.password,
-          before?.ownerVerifier ?? dummyVerifier,
-        );
-        if (
-          before === null ||
-          !correct ||
-          !validToken(clientClaimNonce) ||
-          !matches(clientClaimNonce, before.claimNonceHash)
-        )
-          refuse();
-        const capability = token();
-        const state = await coordinator.run(async (hold) => {
-          const current = (await store.readResumable())?.state ?? null;
-          if (
-            current?.revision !== before.revision ||
-            current.frozen.attemptId !== before.frozen.attemptId ||
-            current.ownerGeneration !== before.ownerGeneration
-          )
-            refuse();
-          const updated = await store.update(
-            current.frozen.attemptId,
-            current.revision,
-            { kind: "resume", capabilityHash: hash(capability) },
-            hold,
-          );
-          invalidate(current.frozen.attemptId);
-          return updated;
-        });
-        return {
-          state: publicFirstSetupState(state),
-          capability,
-          ownerGeneration: state.ownerGeneration,
-        };
-      });
+      return restoreOwnership(clientClaimNonce, proof, false);
+    },
+    recoverFirstSetup(clientClaimNonce: string, proof: { password: string }) {
+      return restoreOwnership(clientClaimNonce, proof, true);
     },
     reconfirm(owner: FirstSetupOwnerAttempt, password: string, purpose: ReconfirmationPurpose) {
       return inTurn(throttle, "reconfirm", async () => {

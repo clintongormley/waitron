@@ -22,6 +22,13 @@ You must be able to finish Live fiscal setup without a repository checkout, shel
 Cloud subscription. An allocation is a signed assignment of an installation identity and its
 invoice series. Your custodian keeps the signing key and current master register outside the box.
 
+**Repair decision, 2026-10-15 at about 17:15:** the owner approved V2’s core recovery flow
+inside A679. The [repair addendum](../plans/2026-10-15-a679-first-setup-repair.md) supersedes the
+original-tab and generic incident-resolution limits below. A731 (backup from the repair page),
+A732 (custodian-authorised fresh deployment with possible business data) and A733 (certificate
+restoration from that page) are separate requirements before go-live. Actual-paper acceptance
+remains a separate gate. This decision does not qualify the new repair implementation.
+
 ## Settled scope and order
 
 The owner's 2026-10-14 Lane E decisions supersede the earlier scope and order:
