@@ -184,7 +184,7 @@ Quotes are copied from that text.
 
 | Layout point | What the regulation says | Article |
 | ------------ | ------------------------ | ------- |
-| Simplified: one rate prints only the rate and «IVA incluido»; several rates print a base per rate | «f) Tipo impositivo aplicado y, opcionalmente, también la expresión «IVA incluido». Asimismo, cuando una misma factura comprenda operaciones sujetas a diferentes tipos impositivos del Impuesto sobre el Valor Añadido deberá especificarse por separado, además, la parte de base imponible correspondiente a cada una de las operaciones.» | 7.1.f |
+| Simplified: one rate may print only the rate and «IVA incluido»; several rates print a base per rate (the owner chose base and VAT for one rate too, Q11, 2026-10-15: Part 2b) | «f) Tipo impositivo aplicado y, opcionalmente, también la expresión «IVA incluido». Asimismo, cuando una misma factura comprenda operaciones sujetas a diferentes tipos impositivos del Impuesto sobre el Valor Añadido deberá especificarse por separado, además, la parte de base imponible correspondiente a cada una de las operaciones.» | 7.1.f |
 | Simplified: the number and its series | «a) Número y, en su caso, serie.» | 7.1.a |
 | Simplified: the issuer block needs name and NIF, not an address | «d) Número de Identificación Fiscal, así como el nombre y apellidos, razón o denominación social completa del obligado a su expedición.» | 7.1.d |
 | Simplified: items | «e) La identificación del tipo de bienes entregados o de servicios prestados.» | 7.1.e |
@@ -2265,7 +2265,9 @@ answer. Line numbers are from Part 2's branch on 2026-10-15; re-check them on `m
   change: regenerate them and check they come out byte for byte the same. If they differ, the part
   has reached the full invoice; stop.
 - LOOK: the one-rate simplified receipt in `apps/server/scripts/receipt-look.ts` (the mockup's sale)
-  shows the two rows under TOTAL on 58 mm, 80 mm and A4.
+  shows the two rows under TOTAL on 58 mm and 80 mm. (No A4 picture: the A4 page is drawn only for a
+  full invoice, `invoice-document.ts:133` sets `invoiceType: "F1"`, and `receipt-look.ts:350-351`
+  renders A4 only for full invoices.)
 - The till's on-screen copy (`apps/till/src/screens/till-ticket-view.ts`) stays outside A663: add
   this difference to the backlog entry "The till's on-screen receipt is a second copy of the layout".
 - Fiscal: this part reads the filed `vatBreakdown` and writes nothing. Fiscal gate (Global
@@ -2323,13 +2325,16 @@ Line numbers below were read on `main` at `dff9f53db` (2026-10-15).
 ### Task 2b.2: The suites that read a printed simplified receipt back
 
 **Files:** the suites the Global Constraints' receipt-suite command selects; `git grep -n -E
-'incluido|inclòs|incluído|barne|"Base [0-9]|Base [0-9]+%' -- 'apps/server/src/*.test.ts'` on
+'incluido|inclòs|incluído|barne|"Base [0-9]|Base [0-9]+%|Oinarria' -- 'apps/server/src/*.test.ts'` on
 `main` at `dff9f53db` lists the lines in `receipt-ticket.test.ts`, `receipt-language.test.ts`,
 `receipt-preview-api.test.ts`, `adjustments-bill-payments.test.ts`, `bill-payments-api.test.ts`
 and `bill-refunds.card.test.ts`.
 
 - [ ] **Step 1: Run the receipt suites** (Global Constraints command; check memory first) and list
-  every failure.
+  every failure. A fresh-context reviewer made this part's code change in a throwaway copy on
+  2026-10-15 and ran the command: 34 failed in 7 files, 3153 passed. Checks that the removed row is
+  ABSENT keep passing and do not show up here, so Step 2's list is worked from the grep above, not
+  from the failures alone.
 - [ ] **Step 2: Update each failing assertion, keeping the fact it checks.** Read each case before
   editing it. Three shapes:
   - A one-rate receipt asserting «IVA x% incluido A €»: it now prints «Base imponible x% B €» then
@@ -2337,25 +2342,37 @@ and `bill-refunds.card.test.ts`.
     record, never worked out by hand). Keep any order check (TOTAL before it, it before
     «Efectivo»), aimed at the new rows.
   - A case that uses «IVA 21% incluido» against «IVA 21% inclòs» to tell the receipt's LANGUAGE
-    (`receipt-language.test.ts`, e.g. `:332`, `:395`, `:480-487`, `:647`, `:962-967`, `:995-998`,
-    `:1135`, `:1150-1152`, `:1171`): use the base row, «Base imponible 21%» against «Base imposable
-    21%», which still differ by language. «IVA 21%» alone does NOT: es-ES and ca-ES both print
+    (`receipt-language.test.ts`, e.g. `:332`, `:395`, `:480-487`, `:647`, `:651`, `:962-967`,
+    `:995-998`, `:1135`, `:1150-1152`, `:1171`; and `receipt-ticket.test.ts:2690` with its pair
+    `:2706`, which is a language check, not an absence check): use the base row, «Base imponible
+    21%» against «Base imposable 21%», which still differ by language — the present half on the
+    language printed, the absent half on the other language's base. «IVA 21%» alone does NOT: es-ES and ca-ES both print
     «IVA», so a check on it passes in either language. Never replace one of these with a label the
     two languages share.
   - A case asserting a one-rate simplified receipt prints NO base (`receipt-ticket.test.ts:3337`,
     `lines.some((line) => line.startsWith("Base"))` is false): its subject is what the owner changed
     (Q11). It now asserts the base row IS printed, under TOTAL and before «Efectivo». Name it in the
     commit body as a check the owner's answer changed (owner decision 2026-10-05).
-  - A two-rate «Base x%» row becomes «Base imponible x%»; a padded 58 mm line
+  - `receipt-language.test.ts:662-667` compares the Catalan and Spanish copies line by line and
+    lists the first word of each differing line: its `["IVA", "IVA"]` entry goes (the VAT row is now
+    the same words in both languages) and a `["Base", "Base"]` entry comes (the base row differs,
+    «imponible» against «imposable»). Name it in the commit body.
+  - A two-rate «Base x%» row becomes «Base imponible x%» in Spanish, and each language's
+    `taxableBase` in the others (`receipt-ticket.test.ts:2461, 2496, 2531`: gl-ES «Base impoñible»,
+    eu-ES «Oinarria» becomes «Zerga-oinarria»); a padded 58 mm line
     (`receipt-ticket.test.ts:1924`, `` `Base 21%${" ".repeat(15)}10,00 €` ``) is re-padded to the
     30 columns the line still fills.
   - Cases asserting «incluido» is ABSENT (`receipt-ticket.test.ts:2706`, `:3450`,
     `receipt-preview-api.test.ts:669`, `receipt-document.test.ts:115`, `:532`) still pass. Read each:
     where the absence was the point (a full invoice prints no «IVA … incluido» row), keep it as it
-    is; where the case toggled the row on and off to prove a setting reached the printout
-    (`receipt-preview-api.test.ts:669` against `:681`), aim both halves at a row that the setting
-    still turns on and off (if the base row is printed in both halves, it proves nothing — pick one
-    that differs, and say which in the commit body).
+    is; where the case uses the row to prove the receipt LANGUAGE reached the preview
+    (`receipt-preview-api.test.ts:665-669` and `:681`, gl-ES against es-ES), use the base row: gl
+    «Base impoñible 10%» against es «Base imponible 10%» (the VAT row differs too, «IVE» against
+    «IVA», which the case already checks).
+- [ ] **Step 2b: Sweep.** After the edits,
+  `git grep -n -E 'incluido|inclòs|incluído|barne' -- 'apps/server/src/*.test.ts'` lists only the
+  «(IVA incluido)» adjustment-row checks and the full-invoice absences; the commit body says why each
+  remaining one stays.
 - [ ] **Step 3: Regenerate the two `.bin` files** the way Task 2.3c-1 did (its commit `882bfd727`
   says how) and check `git diff --stat -- apps/server/src/testing/*.bin` is empty: they hold a
   full invoice, which this part must not change. If they differ, STOP and report.
@@ -2365,15 +2382,19 @@ and `bill-refunds.card.test.ts`.
 ### Task 2b.3: LOOK, the fiscal gate and the backlog
 
 - [ ] **Step 1: LOOK.** Run `apps/server/scripts/receipt-look.ts` (Task 1.8 says how) and open the
-  `simplified-one-rate` pictures (58 mm, 80 mm, A4) and the `simplified-two-rates` ones: TOTAL,
+  `simplified-one-rate` pictures (58 mm and 80 mm; there is no A4 simplified receipt, see the scope
+  above) and the `simplified-two-rates` ones: TOTAL,
   then «Base imponible 10%» and «IVA 10%» under it, amounts on the right edge, nothing cut off on
   58 mm. Add one case to the script if none prints a one-rate receipt with an amount of four
   digits before the comma (e.g. a 1.234,56 € base), to see the 58 mm row wrap. Write the result to
   `~/waitron-campaign-c/a663-2b-look-report.md`.
 - [ ] **Step 2: Fiscal gate**, unedited (Global Constraints command): PASS.
-- [ ] **Step 3: Backlog.** In `docs/backlog/printers.md`: take Part 2b out of the A663 entry's
-  list of what is left; add to "The till's on-screen receipt is a second copy of the layout" that
-  the till labels each rate's base «Base» (`labels.base`, `till-ticket-view.ts:824`) where paper now
+- [ ] **Step 3: Backlog.** In `docs/backlog.md` (the A663 summary, about `:3490-3494`) and
+  `docs/backlog/printers.md`: take Part 2b out of the A663 entry's list of what is left, and replace
+  Part 2c's "default «1.5» portions" with the owner's answer of 2026-10-15 ~21:15 ("we don't offer
+  half portions": Part 2c, or its own small PR, finds where a part portion of an extra is stored and
+  refuses it at the source); in both files' entry "The till's on-screen receipt is a second copy of
+  the layout" (`docs/backlog.md` about `:3518`), add that the till labels each rate's base «Base» (`labels.base`, `till-ticket-view.ts:824`) where paper now
   prints «Base imponible». (Read on `dff9f53db`: the till already prints a base and a VAT row for
   every rate, one rate included, so only the word differs.)
 - [ ] **Step 4: Commit, then `/finish-branch`** (FULL, Codex twice).
