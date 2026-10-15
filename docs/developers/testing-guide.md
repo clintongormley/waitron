@@ -1073,6 +1073,19 @@ what else is running — before the filter. Not every reporter prints the count:
 that day that printed none), so with a reporter that does not print a count, read that reporter's
 own result.
 
+## An array value in `it.each` needs a wrapper
+
+If your test's input is an array, wrap it in an object or a one-element row. Otherwise `it.each`
+passes the array's members as separate callback arguments. A rejection test can then pass because
+it sent one change instead of the invalid pair it meant to exercise.
+
+Measured 2026-10-15 with Vitest 4.1.11 in the server package: `it.each([["in", "out"]])`
+passed `"in"` and `"out"` as two arguments; `it.each([[["in", "out"]]])` passed the complete
+array as one argument. The disposable `attendance-table.probe.test.ts` asserted both values through
+`pnpm --filter @waitron/server exec vitest run src/attendance-table.probe.test.ts --reporter=verbose`
+and reported `2 passed (2)`. The attendance parser's tables use one-element rows, including their
+valid-pair controls.
+
 **Shelling out to git from a test**
 
 ## A test that shells out to `git` must clear `GIT_DIR` and its family
