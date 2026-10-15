@@ -1746,15 +1746,15 @@ describe("Month view", () => {
 
     it("Year from the Month opens that month's year, keeping the department", async () => {
       const { el, view } = await monthMount(
-        "/manage/opening-hours/view/month/department/bar/month/2026-12",
+        "/manage/opening-hours/view/month/department/bar/month/2027-03",
       );
-      await shown(view);
+      await shown(view, "2027-03");
       expect(checkedView(el)).toBe("month");
       await chooseView(el, "year");
       await expect
         .poll(() => location.pathname)
-        .toBe("/manage/opening-hours/view/year/department/bar/year/2026");
-      await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-year")?.year).toBe(2026);
+        .toBe("/manage/opening-hours/view/year/department/bar/year/2027");
+      await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-year")?.year).toBe(2027);
       expect(checkedView(el)).toBe("year");
     });
 

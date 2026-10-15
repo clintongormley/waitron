@@ -533,14 +533,19 @@ export class OpeningHoursScreen extends LitElement {
     saveHolidayArea: (areaKey: string) => this.api.specialDays.saveHolidayArea(areaKey),
     rereadWatches: () => this.api.rereadWithSpecialDays(),
   };
-  private openMonth(event: CustomEvent<{ date: string }>) {
-    event.stopPropagation();
+  private openMonth(month: string) {
+    void Promise.resolve(
+      this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
+    ).then(() => this.followUrl());
+  }
+  private openYear(year: number | string) {
     void Promise.resolve(
       this.url.write({
         dashboard: "opening-hours",
-        view: "month",
-        month: event.detail.date.slice(0, 7),
-        year: null,
+        view: "year",
+        year: String(year).padStart(4, "0"),
+        month: null,
+        date: null,
       }),
     ).then(() => this.followUrl());
   }
@@ -972,13 +977,8 @@ export class OpeningHoursScreen extends LitElement {
     </div>`;
   }
   private chooseSpan(view: View) {
-    const changes: Record<string, string | null> =
-      view === "year"
-        ? { view, year: this.shownMonth().slice(0, 4), month: null, date: null }
-        : { view, month: this.monthOfShownYear(), year: null };
-    void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
-      this.followUrl(),
-    );
+    if (view === "year") this.openYear(this.shownMonth().slice(0, 4));
+    else this.openMonth(this.monthOfShownYear());
   }
   private monthOfShownYear() {
     const year = String(this.shownYear()).padStart(4, "0");
@@ -1013,12 +1013,7 @@ export class OpeningHoursScreen extends LitElement {
         }}
         @month-year-open=${(event: CustomEvent<{ year: number }>) => {
           event.stopPropagation();
-          write({
-            view: "year",
-            year: String(event.detail.year).padStart(4, "0"),
-            month: null,
-            date: null,
-          });
+          this.openYear(event.detail.year);
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
@@ -1060,7 +1055,10 @@ export class OpeningHoursScreen extends LitElement {
                       }),
                     ).then(() => this.followUrl());
                   }}
-                  @year-month-open=${this.openMonth}
+                  @year-month-open=${(event: CustomEvent<{ date: string }>) => {
+                    event.stopPropagation();
+                    this.openMonth(event.detail.date.slice(0, 7));
+                  }}
                   >${this.viewSwitch()}</opening-hours-year
                 >`
             : this.shownMonth()
