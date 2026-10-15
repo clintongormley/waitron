@@ -951,7 +951,9 @@ describe("roster warnings while planning", () => {
   });
   it("refuses staff and unauthenticated reads", async () => {
     const loc = await warningLocation();
-    expect(await refusal(await read(loc, "2026-03-02", staffCookie))).toEqual([
+    const denied = await read(loc, "2026-03-02", staffCookie);
+    expect(denied.status).toBe(403);
+    expect(await refusal(denied)).toEqual([
       403,
       "authorization.not_permitted",
       { permission: "schedule.manage" },
