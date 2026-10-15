@@ -125,8 +125,7 @@ match.
 
 When your module owns a shift's area or staff role, contribute `describeShifts(tx, shiftIds)` on
 `WaitronModule`. Return a map only for the ids you can label. The host calls the enabled modules
-in their composition order inside the own-shift read's transaction; a later contribution replaces
-an earlier label for the same id. Both own-shift routes return `description`, falling back to the
+inside the own-shift read's transaction. Both own-shift routes return `description`, falling back to the
 shift's free-text `role` when no contribution labels it. The till and My schedule render that
 field. See `apps/server/src/boot.shift-descriptions.test.ts` for enabled and disabled boot cases.
 

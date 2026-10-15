@@ -4721,6 +4721,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [plan](superpowers/plans/2026-10-13-a585-staffing-and-rota.md). The agreed
   [spec](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) and
   [mockups](backlog/mockups/a585-staffing/) define the remaining views.
+- **Rota warnings: pin the outer query's local-date boundaries.** The offset-aware in-week filter
+  is covered, but replacing the unattached-shift query's local date with UTC leaves the warnings
+  cases green. Add cases at the outer edges of its three-week window; see
+  [workforce detail](backlog/workforce.md#rota-warning-query-boundaries).
+- **Roster browser-entry guard: reject server-only re-exports.** It rejects a Node import but
+  accepts `export … from "node:fs"`. Cover re-exports as well as imports; see
+  [workforce detail](backlog/workforce.md#roster-browser-entry-re-exports).
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
   formatting.** `stepMonth` and the first and last month in
   `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside

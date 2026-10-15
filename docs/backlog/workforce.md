@@ -147,6 +147,23 @@ Coordinate with A585 parts 5–8 on the same files.
    {special day} staffing" or "Edit {season}'s standard week"; no seasons or special-days row.
 4. **"Autumn: standard week"** as A723 point 1.
 
+## Rota warning query boundaries
+
+The A585-5 review replaced the unattached-shift SQL date with the UTC date and all nine warnings
+cases passed. Those cases exercise the separate JavaScript filter's local dates. Add fixtures at
+the previous week's first local Monday and the next week's last local Sunday, where the SQL
+selection decides whether the neighboring week is represented for weekly rest. Retain the existing
+offset and location assertions; require the UTC-query mutation to fail. The route currently keeps
+the offset-aware query. This is a test gap, not an observed wrong answer from that query.
+
+## Roster browser-entry re-exports
+
+The A585-5 review added `export { readFileSync } from "node:fs"` to the browser entry in a
+disposable installed candidate; both browser-entry checks still passed. A direct Node import fails
+the source guard. Extend the guard to runtime re-exports and test that negative control. The current
+entry was separately bundled for a browser and executed in Chromium; this follow-up concerns what
+the text guard would fail to catch in a later edit.
+
 ## Decisions and deliberate limits
 
 ### A10. Clocking in and out — the working-time record
@@ -179,3 +196,14 @@ check above. Inspector remote access and payroll export remain separate work.
 
 Old workforce folders from before part 1 must be reset/reseeded for the nullable-recorder constraint
 migration (owner, 2026-10-13). No backwards conversion was added.
+
+
+### A585. Pending swaps follow a copied draft
+
+The owner's 2026-10-13 decision is to warn that a request exists rather than block changing the
+week. Pending requests follow the copies immediately; decided requests stay on the old shifts.
+Deleting the copied offered shift cascades its pending request while the published original stays
+visible. Part 7's approved plan requires a marker and confirmation saying that deletion cancels the
+request, and warns before changing its person or time. Build those controls with the first
+application caller of `copyPublishedToDraft`; part 5 adds only the library method. See
+[Task 7.2](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
