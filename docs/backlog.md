@@ -142,6 +142,20 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
+- **A741 — one large-bill limit, €3,000, and no Full invoice button that cannot work (owner,
+  2026-10-15; open).** The till refuses a basket over €3,010 without a named customer
+  (`sale.over_simplified_limit`; €3,000 plus the agency's €10 tolerance, `F2_AMOUNT_LIMIT` in
+  `packages/fiscal-verifactu/src/backend.ts`), while two places in `apps/till/src/till-app.ts` (one is
+  `#askInvoiceRecipientForLargeBill`) hard-code €3,000. Owner: use €3,000, in the Veri*Factu
+  module's `simplifiedInvoiceLimit` (already per regime; `refuseOverSimplifiedLimit`,
+  `packages/core/src/simplified-limit.ts`), and read that one value everywhere;
+  `record-limits.test.ts` compares today's value with the validator's verdict and changes with it.
+  While full invoices are switched off at payment (`refuseUnavailableFullInvoice`,
+  `apps/server/src/till-sale.ts`), the till's Full
+  invoice button must not lift the limit (today it does, and payment then fails), and the banner
+  stops saying "take something off" beside it. Read, not run, 2026-10-15. Fiscal-adjacent: owner
+  sign-off at land.
+
 - **A696. Invoice issue dates and record offsets follow the process zone.** The audit measured
   walk-up, bill, card, correction and substitution paths with the venue fixed to Madrid:
   `2026-10-14T23:30Z` stores 14 October under UTC and 15 October under Madrid.
@@ -752,6 +766,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   and a header link for the variants' unit. Which sections start open: Kitchen and Pricing; Modifiers
   when the product has any; with variants, Variants open and Pricing closed; Selling always closed,
   its summary showing "Unavailable" in the warning colour. Needs a new shared three-way toggle.
+  Added 2026-10-15: the Pricing unit dialog names units in the dashboard's language, sorted (point 7).
   [Detail](backlog/catalogue.md#a647--tidy-the-product-editor),
   [mockups](backlog/mockups/a647-product-editor/)
 
@@ -1822,6 +1837,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Today a note
+  belongs to one line (`orders.note`, `packages/db/src/schema/orders.ts`); nothing holds a note
+  for the order ("all together, they have a train at 14:30"). Add one: a row at the top of the order
+  on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at
+  the top of every kitchen ticket the order sends and shown on the kitchen screens. A change after
+  sending reaches the kitchen as the other corrections do (kitchen notices). Needs a migration. A669's
+  table allergy note belongs in the same place, so whichever lands second reuses it. Drawn on
+  [board 1](backlog/mockups/a737-a740-till-counter-redesign/1-counter-screen.png).
+
 - **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
   station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
@@ -2127,6 +2151,38 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   notice; the floor plan marks the table. Every table send path runs it; the counter does not.
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
+
+- **A737 — Find a bill becomes a page with Bills and Transactions tabs (owner, 2026-10-15; open).**
+  Today a dialog with one search box. Bills lists every open order; Transactions lists sales, full
+  invoices and refunds, today by default. Both use the shared table's search, Filters and
+  Customise, with a new date range (Today… This month, or From–To) at the top of Filters and shown
+  as a chip. The first server-paged table: 50 rows a page, search, filters and sort on the server,
+  never every row in memory. [Detail](backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+
+- **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
+  counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
+  and Kitchen only under Testing; a status bar for the period and printer; a Filter button (diets
+  include, allergens and their cereal and nut kinds exclude); one-row order lines with extras and
+  the note as their own lines and every amount aligned; the line window is today's modifiers window
+  plus allergens and the note, opened by ⓘ, long press or double click; product info the same way;
+  a Hold window; a custom item. After A182 part 2 (retire canvases, not yet queued) and A668's data
+  shape. [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+
+- **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
+  window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,
+  Scan a QR sticker, or tap NFC), the receipt (print, email or none, language, full invoice),
+  then Cash or Card. Paying part of a counter order is new and follows the bill payments design
+  (one receipt when the bill is fully paid). The simulator asks Declined/Approved at Card; Decline
+  not declining is reproduced and fixed; the Demo card reader goes; no receipt screen after paying.
+  After A738. [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+
+- **A740 — zones on a device (owner, 2026-10-15; open).** A zone's menus, prices and trading name
+  come from its department; what differs per zone is how it is paid, collection numbers, receipt
+  printing and kitchen routing. The counter's zone dropdown goes: Counter is a tab, or a list with
+  several counter zones; Floor shows only with a table zone, its floor plans as pills; ☰ → Settings
+  → Zones on this device picks which of the profile's zones the device shows and where it starts.
+  The menu follows the service period and is remembered per zone within it. After A182 part 2.
+  [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
@@ -3022,7 +3078,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
   Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list of
   tabs, each tab a grid of cards, chosen per device profile. **Decided the same day: delete now**,
-  before the redesign.
+  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A737–A740**, which
+  wait on part 2.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268
@@ -3715,6 +3772,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
+- **A742 — the guest types what they pay, and a tip (owner, 2026-10-15; on the backlog, NOT to be
+  queued yet).** A flow where staff hand the device to the customer, who enters how much they want
+  to pay of the bill and optionally adds a tip, then hands it back or pays on the reader. Builds on
+  A739's payment window (An amount) and the bill payments design's tips. Not designed.
+
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
   `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
@@ -3854,7 +3916,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **If demos use multiple tills at once, add a till label to each pending amount so the manager can
   choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
-  connected card reader in Demo mode, W38, #1172).
+  connected card reader in Demo mode, W38, #1172). A739 removes the pretend reader (owner,
+  2026-10-15); delete this entry when it lands.
 
 - **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
   left open by A519 (#1566). The add-reader route answers `reader.reference_unknown` when Stripe's

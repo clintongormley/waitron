@@ -1697,3 +1697,168 @@ the menu was published or is published as not sold separately still leaves the s
 shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). A section
 whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
 are.
+
+## A737–A740: the counter till redesigned (owner, 2026-10-15)
+
+Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
+boards are in [mockups/a737-a740-till-counter-redesign/](mockups/a737-a740-till-counter-redesign/):
+1 the counter screen, 2 the windows opened from the order, 3 paying, 4 Find a bill, 5 zones on a
+device. Where a board and this text differ, this text wins. This is A182 part 1 for the counter
+till (the handheld, kitchen screen and pass are not covered). **A182 part 2, retiring canvases,
+runs first** (owner, 2026-10-08), and it was not in any lane's queue on 2026-10-15. A738 also
+waits on A668's data shape (allergen icons, cereal and nut kinds, the product info window); A668's
+spec was awaiting the owner's review on 2026-10-15.
+
+What the code does today, read on 2026-10-15 (read, not run), so the entries below can be checked
+against it: the Counter/Floor header buttons are canvas tabs (`apps/till/src/widgets/tab-shell.ts`);
+Kitchen, Pass and My schedule follow the profile's `show-station`, `show-expo` and `show-schedule`;
+Find a bill, Allergens and Equipment always show. "Refresh menus" re-sends the zone choice
+(`apps/till/src/screens/till-counter-screen.ts`), while `MenuStatePoll` already checks every 15 s
+(`apps/till/src/state/menu-state-poll.ts`). A line's Note opens an inline field that closes only
+when Note is pressed again (`apps/till/src/widgets/basket.ts`). "Make at…" picks the preparation
+station and shows only with two or more stations. "Modifiers" under a line is the button that opens
+the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading. After every sale
+the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
+order off a short screen.
+
+### A737. Find a bill becomes a page with Bills and Transactions tabs
+
+Today Find a bill is a dialog with a "Search for" dropdown and one text box. It becomes a full
+page, opened from ☰, with Back to the counter (board 4):
+
+- **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
+  total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
+  day marked). Filters: zone, staff, state. Tapping a row opens the order where it can be paid.
+- **Transactions** lists paid sales, full invoices and refunds, newest first, today by default:
+  when, invoice number, type, table or name, method (card with its last four digits), staff,
+  amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
+  card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,
+  and Refund.
+- **The same table as everywhere else** (owner): `wt-data-table`'s toolbar, search, Filters panel
+  and Customise. The date range is new: a quick list (Today, Yesterday, This business day, Last 7
+  days, This month) plus From and To, as the first control in the Filters panel (its
+  `filters-start` slot). Each active filter also shows as a chip above the table, so the chosen
+  dates stay visible.
+- **Paging, which no table has today** (owner: there could be thousands of rows, never all loaded
+  into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
+  plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
+  table keeps loading everything.
+
+### A738. The counter screen: fewer distractions
+
+Board 1 is the target; board 2 the windows.
+
+- **Top bar:** Counter, Floor | Held, Waiting, Transfers, Pass | operator name, ☰. Held and
+  Waiting become tabs with counts (today they are lists under the menu); Waiting flashes while it
+  holds an order. Everything else moves into ☰ for good, not only when the bar runs out of room as
+  A395 does today: Find a bill, My schedule, Profile (two or more profiles), Language, Settings
+  (Equipment; Zones on this device, A740), Log out. Allergens is deleted (A668 already deletes the
+  screen). **Kitchen never shows on a till** (owner: it belongs to the kitchen device), except under
+  ☰ → Testing on Demo and Preparation installs, which the owner needs for now.
+- **A status bar under the top bar:** the service period ("Open · until 02:00", tapping it opens
+  today's keep-open window, replacing the "Keep Open open later" button), the zone, and the
+  printer's state.
+- **Gone from the screen:** Refresh menus, the zone dropdown (A740), the Vegan/Vegetarian/No
+  meat/No fish buttons, Make at…, the Modifiers and Note buttons on each line, "As served",
+  "Allergens not fully reviewed" (A668 drops it), Approve/Decline (A739), Full invoice and
+  "Receipt: <language>" (A739), and the on-screen receipt after a sale (A739).
+- **Filter**, a button beside the search box like the dashboard tables' Filters, showing how many
+  are on: "Only show dishes that are" (Vegan, Vegetarian, No meat, No fish: include) and "Hide
+  dishes that contain" (the 14 allergens: exclude). Gluten and Nuts open a second step, All or the
+  kinds A668 records (wheat, barley…; almonds, walnuts…), so a guest allergic only to walnuts still
+  sees the almond dishes. A dish whose nuts are recorded without their kind counts as containing
+  every kind.
+- **The order:** each line one row (name, allergen icons after it, − n +, price, ⓘ, ×). Its extras
+  and its note are their own indented lines under it, each with its quantity, price and ×, and
+  every amount in the order lines up in one column (owner). Adding a product scrolls the order to
+  it (nothing scrolls today). The order sits on white with a heavier divider so it reads apart from
+  the menu. A dashed "+ Custom item" tile sits in the menu grid.
+- **The line window** (board 2a) opens from ⓘ, a long press on the line, or a double click with a
+  mouse. It is **today's modifiers window, reused** (owner), with the line's quantity, its extras
+  lists (choose-one as radio buttons, choose-several with − n + per item inside the item's and the
+  list's limits, as the picker does now), plus two sections added: the dish's allergens and diets,
+  and its note or "+ Add a note". A sent line shows its extras and note read-only. Tapping a note
+  line in the order opens the same window.
+- **Product info** (board 2b) opens from an ⓘ on a product button, a long press or a double click:
+  description, allergens and diets, Add to order. A668 plans the same for product buttons; build
+  it once.
+- **Hold** opens a small window asking for a name (optional; empty names the order "Held 14:32")
+  instead of today's inline field.
+- **Custom item** (board 2d): name, price, VAT rate (required, the invoice needs it) and where to
+  send it (nowhere, or a station). Nothing like it exists today; the nearest is a weighed item. It
+  likely needs its own permission, since a typed price is a way to under-charge. **Open:** whether
+  it needs a product behind it for reports and the invoice line.
+
+### A739. Paying: Hold · Pay, and one payment window
+
+Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
+
+- **Pay opens one window.** Its top row says how much: An amount | Split equally | Items | Whole
+  bill, with Whole bill chosen and on the right (owner, earlier; the owner's last message listed it
+  first, so confirm the order when building). Under it, "To pay now", then the devices line and the
+  receipt, the same whichever way is chosen, then **Cash** and **Card**. Cash asks for the cash
+  handed over with quick amounts and shows the change; Card waits on the reader. The cost, accepted:
+  a quick cash sale is one tap longer.
+- **Paying part of a counter order is new.** Today the counter takes one payment for the whole
+  total (`apps/till/src/widgets/tender-pay.ts`), and the bill payments design said partial payment
+  at the counter was not asked for (`docs/superpowers/specs/2026-09-26-bill-payments-design.md` §9).
+  Tables already have Pay items, Contribute and Split equally (`apps/till/src/widgets/bill-pay-dialog.ts`);
+  the counter takes the same path. What is printed follows that design: a payment that leaves
+  something to pay prints nothing of Waitron's (the reader prints its slip) and the window says
+  "Receipt: printed when the bill is fully paid"; the last payment issues one receipt for the whole
+  bill. Separate receipts need the bill split into two bills first. Asesor Q27 is still open.
+- **The receipt choices are on this window** (owner): Print, Email or None; the language (replaces
+  the "Receipt: Catalan" button); the printer; and "Full invoice (customer's name and NIF)". They
+  are chosen before paying because once paid the sale is filed as a simplified invoice: a full
+  invoice afterwards is a replacement (F3), which nothing issues today and asesor Q5(d) has not
+  answered. While full invoices are switched off (A741), the Full invoice box is not offered.
+- **The reader and the printer:** one line, "💳 Bar reader · 🖨 Bar printer", with **Change**
+  (the two dropdowns), **Scan** (the camera; one button for both, the QR sticker says what it is on)
+  and **NFC** (with the Pay window open, tapping a device's tag switches to it without opening
+  anything). With only one of each, the line just names them. The choice is remembered on the
+  device. One printer takes both the receipt and Waitron's card slip (`payment_slip` role,
+  `apps/server/src/payment-slip-print.ts`; printed for readers that print nothing), since both go
+  to the same guest. **To check before building:** which browsers let a page read NFC; the
+  belief, unchecked, is Chrome on Android only.
+- **The simulator asks at Card:** on Demo and Preparation installs, Card opens "Test card payment:
+  Declined / Approved"; today's Approve/Decline toggle on the screen goes.
+- **Decline does not decline** (owner, 2026-10-15, seen on the Santet data). A read of the code
+  found the outcome passed along at every step (`tender-pay.ts` → `till-app.ts` →
+  `apps/till/src/api/client.ts` → `till-api.ts` → `till-sale.ts` → `packages/payments/src/simulator.ts`)
+  and no cause. Two suspects, neither confirmed: the Demo card reader chosen, which deliberately
+  ignores the toggle; or the draft restore putting `simulationOutcome` back to "captured". Reproduce
+  in a browser test first.
+- **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
+  data and nothing on the till says the decision is made on the dashboard). It came from A247
+  (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry
+  and the simulator's ten-minute wait. Its open follow-up in `docs/backlog.md` (a till label on
+  each pending amount) goes with it.
+- **No receipt screen after paying** (owner). The counter goes straight to a new order; a strip
+  "✓ Paid €30.00 · receipt printed · Reprint" stays until the next product goes in, with the change
+  in large type after cash.
+- **Parked, not part of this:** A742.
+
+### A740. Zones on a device
+
+Board 5. Read on 2026-10-15: a zone's menus, prices, trading name and default menu all come from
+its **department** (`zonePeriodMembership`, `packages/venue-service/src/operations.ts`), so every
+zone of a department shows the same menus at the same prices. What a zone sets itself: its sale
+policy (pay first or after, collection numbers, receipt printing; `zone_sale_policies`), its
+kitchen routing (`routing_cells` by zone), and the zone the order records. The device profile
+already holds a zone list and a starting zone (`device_profile_service_access`,
+`device_profile_zones`). Floor plans hold only table zones, which today's zone dropdown leaves out.
+
+- **The zone dropdown on the counter screen goes.** Counter is a plain tab when the device keeps
+  one counter zone, and a list ("Counter: Bar ▾") when it keeps several; switching is refused while
+  the order has lines, as today.
+- **Floor** shows only when the device keeps a table zone; its floor plans are a row of pills under
+  the bar, none with one plan.
+- **☰ → Settings → Zones on this device:** which of the zones the profile allows this device shows,
+  and which it opens first. A manager who wants to look at the floor plans now and then turns one on
+  here (owner: a till is set once and rarely changed).
+- **Which menu shows first is not a setting** (owner, after a per-zone menu setting was drawn and
+  dropped): at the start of each service period a zone opens on that period's menu, as the
+  department's timetable decides today (`resolveDefaultMenu`,
+  `packages/venue-service/src/menu-timetable.ts`); within the period the till remembers the last
+  menu looked at in each zone on this device. Example: Lunch starts, the Bar counter shows the Lunch
+  menu, the bartender switches to Drinks, it stays on Drinks until Afternoon starts at 16:00.

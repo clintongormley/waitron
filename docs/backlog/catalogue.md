@@ -752,6 +752,15 @@ text differ, this text wins. The editor is `apps/dashboard/src/widgets/product-e
    "Price · Each ▾", in place of the bordered button; it opens the same unit dialog. The base
    price field's own unit button stays as it is.
 
+7. **Added 2026-10-15 (owner): the Pricing unit dialog's units read in the dashboard's language,
+   sorted.** Today they read in the venue's first content language (`locales[0]`,
+   `apps/dashboard/src/widgets/product-editor.ts`), which is Catalan for a Catalan venue even with
+   the dashboard in English, while "Each" comes from the dashboard's own strings
+   (`editor.unit_each`); and after Each they come in the order of their random ids
+   (`packages/catalogue/src/units.ts`). Show each unit's name in the dashboard's language (falling
+   back as other content does when a unit has none), Each first, the rest alphabetical. Read, not
+   run, 2026-10-15.
+
 **The three-way toggle is a new shared primitive** (`packages/ui`; nothing like it exists — only
 `wt-switch` and `wt-combobox`), so it needs the two tests a new `wt-*` primitive needs (CLAUDE.md
 §3): a token-painting test and an axe test for each state in both themes. It is a single-choice
