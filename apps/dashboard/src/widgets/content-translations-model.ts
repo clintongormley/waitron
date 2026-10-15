@@ -203,17 +203,17 @@ export class TranslationDrafts {
   }
   /** `deleted` defaults to every id of the row's current suggestion. `discarded` is the row's
    * suggestion ids when its discard began: no suggestion that includes any of them fills the row
-   * again, and an edit's untouched text borrowed from one is taken back. */
+   * again, and an edit's untouched text borrowed from a suggestion that includes any of them is
+   * taken back. */
   unsuggest(ref: TranslationRef, deleted?: readonly string[], discarded?: readonly string[]): void {
     const key = translationKey(ref);
     const current = this.#suggestions.get(key)?.ids ?? [];
     const gone = new Set(deleted ?? current);
     const group = new Set([...(discarded ?? []), ...gone]);
     for (const id of group) this.#dismissed.add(id);
-    if (current.some((id) => group.has(id))) for (const id of current) this.#dismissed.add(id);
     const values = this.#values.get(key);
     const borrowed = this.#borrowed.get(key);
-    if (borrowed && [...current, ...borrowed.ids].some((id) => group.has(id))) {
+    if (borrowed?.ids.some((id) => group.has(id))) {
       if (values) {
         if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
         if (values.defaultText === borrowed.defaultText) values.defaultText = "";

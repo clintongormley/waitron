@@ -1148,9 +1148,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   by reference showed should not be listed is skipped for the rest of that opening, so an item that
   becomes listable again while the dialog is open shows only from the next opening
   (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`). And after a Discard
-  whose first deletion went through and whose next was refused, the row stays empty, with no
-  Discard, for the rest of the dialog opening that next shows it; the refused suggestion is still
-  stored and fills the row again at the following opening.
+  that deleted some of a row's suggestions before one was refused, that language's row takes no
+  suggestion including any of them, and shows no Discard, for the rest of the opening the refusal
+  lands in (or, if the dialog was closed then, the next opening when it is on the same language);
+  the refused suggestion is still stored and fills the row again at that language's opening after
+  that.
 
 - **The translations dialog capitalises a language name mid-sentence in Spanish in two older
   places** — `translations.default_needed` ("…predeterminado en Inglés…") and the table's
