@@ -1,5 +1,5 @@
 import { css, html, nothing } from "lit";
-import { codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import { codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { conjunctionList } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
@@ -7,6 +7,7 @@ import { MAX_HEADCOUNT } from "../block-model.js";
 import { areaKey, type AreaRef } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import { formatLocale } from "./format.js";
 import type { StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
 import "./staff-role-dialog.js";
@@ -60,8 +61,7 @@ export const painterStyles = css`
   }
 `;
 
-const listOf = (names: readonly string[]) =>
-  conjunctionList(names, currentLocale().startsWith("es") ? "es-ES" : "en-GB");
+const listOf = (names: readonly string[]) => conjunctionList(names, formatLocale());
 
 /** What a painter says beside Save when a re-read dropped edits: the areas, then the dates, that
  *  are gone. Empty when it dropped none. */

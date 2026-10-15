@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -10,6 +10,7 @@ import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import { dateFormat, mondayFirst, monthDay, utc } from "./format.js";
 import { t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -17,31 +18,12 @@ type Day = StaffingMonth["days"][number];
 /** The months `parseCalendarMonth` accepts. */
 const FIRST_MONTH = `${String(CALENDAR_YEAR_MIN).padStart(4, "0")}-02`;
 const LAST_MONTH = `${String(CALENDAR_YEAR_MAX).padStart(4, "0")}-12`;
-/** A Monday, so its week names the columns Monday first. */
-const A_MONDAY = Date.UTC(2024, 0, 1);
-const DAY_MS = 86_400_000;
 const ALL = "all";
 
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
   return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
-
-const formatters = new Map<string, Intl.DateTimeFormat>();
-function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const locale = currentLocale().startsWith("es") ? "es-ES" : "en-GB";
-  const key = `${locale} ${JSON.stringify(options)}`;
-  let formatter = formatters.get(key);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" });
-    formatters.set(key, formatter);
-  }
-  return formatter;
-}
-const utc = (date: string) => new Date(`${date}T00:00:00Z`);
-/** A leap year, so a season ending 29 February reads as itself. */
-const monthDay = (md: string) =>
-  dateFormat({ day: "numeric", month: "short" }).format(utc(`2000-${md}`));
 
 /** The Calendar's Staffing view: one month of whole Monday-to-Sunday weeks, each day listing the
  *  people needed per area as a bar and a number. ‹ › and the area picker move the Calendar's address
@@ -450,8 +432,7 @@ export class StaffingMonthView extends LitElement {
       month.days.slice(row * 7, row * 7 + 7),
     );
     // A reader reaches a season through its chip; a special day has no chip, so its date opens it.
-    const opens = (day: Day) =>
-      day.specialDay !== null || (this.canWrite && day.seasonId !== null);
+    const opens = (day: Day) => day.specialDay !== null || (this.canWrite && day.seasonId !== null);
     const stop =
       [this.focusDate, month.today].find((date) =>
         month.days.some((day) => day.date === date && opens(day)),
@@ -474,7 +455,7 @@ export class StaffingMonthView extends LitElement {
         <thead>
           <tr>
             ${Array.from({ length: 7 }, (_, index) => {
-              const date = new Date(A_MONDAY + index * DAY_MS);
+              const date = mondayFirst(index);
               return html`<th scope="col" abbr=${dateFormat({ weekday: "long" }).format(date)}>
                 ${dateFormat({ weekday: "short" }).format(date)}
               </th>`;

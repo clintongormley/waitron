@@ -13,6 +13,7 @@ import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SpecialDayStaffing, SpecialDayStaffingEdit, StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import { dateLabel } from "./format.js";
 import {
   NOTHING_BY_KEY,
   areaPicker,
@@ -54,19 +55,6 @@ function seed(read: SpecialDayStaffing): Draft {
       new Map(dates.map(({ dateId, blocks }) => [dateId, copyBlocks(blocks)])),
     ]),
   );
-}
-
-function dateLabel(date: string): string {
-  return new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  })
-    .formatToParts(new Date(`${date}T00:00:00Z`))
-    .filter(({ type }) => type !== "literal")
-    .map(({ value }) => value)
-    .join(" ");
 }
 
 /**

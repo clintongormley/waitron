@@ -15,6 +15,7 @@ import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit, StaffRole } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import { dateFormat, monthDay, weekdayDate } from "./format.js";
 import {
   NOTHING_BY_KEY,
   areaPicker,
@@ -41,9 +42,6 @@ interface Refused {
 }
 
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0] as const;
-/** A Monday, so its week names the columns Monday first. */
-const A_MONDAY = Date.UTC(2024, 0, 1);
-const DAY_MS = 86_400_000;
 
 const copyWeek = (week: ReadonlyMap<string, readonly StaffingBlock[]>): Week =>
   new Map([...week].map(([key, day]) => [key, copyBlocks(day)]));
@@ -62,18 +60,6 @@ function seed(read: SeasonStaffing): Draft {
     ]),
   );
 }
-
-function weekdayFormat(): Intl.DateTimeFormat {
-  const locale = currentLocale().startsWith("es") ? "es-ES" : "en-GB";
-  return new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" });
-}
-const weekdayDate = (weekday: number) => new Date(A_MONDAY + ((weekday + 6) % 7) * DAY_MS);
-const monthDay = (md: string) =>
-  new Intl.DateTimeFormat(currentLocale().startsWith("es") ? "es-ES" : "en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(`2000-${md}T00:00:00Z`));
 
 /**
  * One season's staffing week, per department and prep station, painted in venue-service's frame.
@@ -350,7 +336,7 @@ export class StaffingSeasonPainter extends LitElement {
     this.refused = {
       message: tf("staffing.painter.refused_on", {
         area: read.areas.find(({ area }) => areaKey(area) === key)!.name,
-        day: weekdayFormat().format(weekdayDate(edit.weekday)),
+        day: dateFormat({ weekday: "long" }).format(weekdayDate(edit.weekday)),
         message,
       }),
       area: key,
@@ -362,7 +348,7 @@ export class StaffingSeasonPainter extends LitElement {
   private columns(): readonly StaffingColumn[] {
     const locale = currentLocale();
     if (this.weekColumns?.locale !== locale) {
-      const format = weekdayFormat();
+      const format = dateFormat({ weekday: "long" });
       this.weekColumns = {
         locale,
         columns: WEEKDAYS.map((weekday) => ({
