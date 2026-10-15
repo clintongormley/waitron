@@ -2105,7 +2105,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the server's refusal is the backstop.
 
 - **A660 — Moving an open counter order with nothing sent into a party sends its dishes to the
-  kitchen (2026-10-14; traced 2026-10-15; next action: owner decision).** Found by A650's probe. It
+  kitchen (2026-10-14; traced 2026-10-15; owner chose 2026-10-15: they arrive held — queued as
+  A660b, not started).** Found by A650's probe. It
   is a deliberate rule, not a defect: a bill entering table service from another service mode sends
   its unsent dishes at the move, "as a round is sent" (`adoptZone` and `moveWouldSend`,
   `apps/server/src/move-bill.ts`), added by #864 because a pay-first counter order moved to a table
@@ -2116,7 +2117,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   held group and those five cases failed; a placed counter order whose dish was already sent kept
   its one kitchen item. Held groups for arriving dishes (#874) landed after #864, so the other
   option — the dishes arrive held and the waiter releases them — did not exist when the rule was
-  made. The question is in lane A's questions file.
+  made. The owner picked that option: the dishes join the table as a held course.
 
 - **A559. The till's full-invoice dialog changes width when an error appears.** It takes the width
   of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
@@ -5403,6 +5404,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **The pre-push hook's `scripts/migrations-match-schema.test.ts` can time out under load
+  (2026-10-15; open).** On A677's first push (#1737) its `packages/staffing` case hit the 30-second
+  limit on drizzle-kit's generate (`GENERATE_TIMEOUT_MS`) with the machine's load average around 14;
+  the branch changed no schema, the case passed alone and the retried push passed. Not measured how
+  long a generate takes on an idle machine, so the right bound is unknown.
 
 - **A674. `ci` can fail on a job GitHub has finished but not yet marked finished.** Its second
   step reads the jobs API and gives up after six tries ten seconds apart (`docs/developers/ci-and-gates.md`,
