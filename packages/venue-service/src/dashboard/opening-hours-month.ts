@@ -10,7 +10,6 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
-import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import type { SpecialDayAction } from "./special-day-action.js";
@@ -65,7 +64,7 @@ interface Row {
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
  *  per department (or one department and its zones), from the server's month read alone. A date sends
  *  `special-day-action` on a special day or public holiday and `ordinary-date-open` otherwise; ‹ ›
- *  send `month-change`, "‹ year" `month-year-open` and the picker `month-department-change`. */
+ *  send `month-change` and the picker `month-department-change`. */
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
@@ -76,15 +75,6 @@ export class OpeningHoursMonthView extends LitElement {
         display: block;
         min-width: 0;
         container: month / inline-size;
-      }
-      .year-back {
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-primary-text);
-        font: inherit;
-        cursor: pointer;
-        min-height: var(--wt-tap-min);
       }
       .head {
         display: flex;
@@ -99,9 +89,6 @@ export class OpeningHoursMonthView extends LitElement {
       }
       .head h2::first-letter {
         text-transform: uppercase;
-      }
-      .head .add {
-        margin-inline-start: auto;
       }
       .sub {
         display: flex;
@@ -164,8 +151,7 @@ export class OpeningHoursMonthView extends LitElement {
       .day[aria-current="date"] {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
       }
-      button.day:focus-visible,
-      .year-back:focus-visible {
+      button.day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
@@ -299,9 +285,6 @@ export class OpeningHoursMonthView extends LitElement {
   @property() departmentId = "";
   /** The departments' names, zones' names and periods' colours. */
   @property({ attribute: false }) departments: readonly MonthDepartment[] = [];
-  /** The season writes the chips send. */
-  @property({ attribute: false }) api?: SeasonWrites;
-  @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
@@ -327,13 +310,14 @@ export class OpeningHoursMonthView extends LitElement {
     target.focus();
   }
 
-  #action(date: LocalDate, day: Day | undefined, trigger: HTMLElement): void {
+  #action(day: Day, trigger: HTMLElement): void {
     const model = this.model!;
+    const date = day.date;
     this.#emit<SpecialDayAction>("special-day-action", {
       kind: "open",
       date,
-      specialDay: day?.specialDay ? { ...day.specialDay } : null,
-      holidays: structuredClone(day?.holidays ?? []),
+      specialDay: day.specialDay ? { ...day.specialDay } : null,
+      holidays: structuredClone(day.holidays),
       visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
       returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
     });
@@ -341,7 +325,7 @@ export class OpeningHoursMonthView extends LitElement {
 
   #open(day: Day, trigger: HTMLElement): void {
     if (day.specialDay || day.holidays.length) {
-      this.#action(day.date, day, trigger);
+      this.#action(day, trigger);
       return;
     }
     const date = day.date;
@@ -582,20 +566,7 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
-    return html`${
-        this.stationMode
-          ? nothing
-          : html`<button
-              type="button"
-              class="year-back"
-              data-test="year-back"
-              aria-label=${format("month.year_back", { year: String(year) })}
-              @click=${() => this.#emit("month-year-open", { year })}
-            >
-              ‹ ${year}
-            </button>`
-      }
-      <div class="head">
+    return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
         <h2 data-test="month" aria-live="polite">
           ${formatMonthName(Number(current.slice(5, 7)))} ${year}
@@ -625,19 +596,7 @@ export class OpeningHoursMonthView extends LitElement {
 
   #tools(model: OpeningHoursMonth) {
     if (this.stationMode) return nothing;
-    return html`${this.#picker(model, this.#chosen(model), this.#names())}
-    ${
-      this.readOnly
-        ? nothing
-        : html`<wt-button
-            class="add"
-            variant="secondary"
-            data-test="add-special-day"
-            @click=${(event: Event) =>
-              this.#action("", undefined, event.currentTarget as HTMLElement)}
-            >${t("year.add_special")}</wt-button
-          >`
-    }`;
+    return this.#picker(model, this.#chosen(model), this.#names());
   }
 
   #grid(model: OpeningHoursMonth) {
@@ -652,24 +611,26 @@ export class OpeningHoursMonthView extends LitElement {
     const weeks = Array.from({ length: model.days.length / 7 }, (_, row) =>
       model.days.slice(row * 7, row * 7 + 7),
     );
-    return html`<div class="sub">
-        <season-chips
-          .seasons=${model.seasons}
-          .clockRevision=${model.clockRevision}
-          .api=${this.api}
-          .specialDays=${this.specialDays}
-          .readOnly=${this.readOnly}
-          .keyOnly=${this.stationMode}
-        ></season-chips>
-        ${
-          this.stationMode && legend.length < 2
-            ? nothing
-            : html`<p class="rows" data-test="rows">
-                ${t("month.rows")}
-                ${legend.map((name, index) => html`${index ? " · " : ""}<strong>${name}</strong>`)}
-              </p>`
-        }
-      </div>
+    return html`${
+        this.stationMode
+          ? html`<div class="sub">
+              <season-chips
+                .seasons=${model.seasons}
+                .clockRevision=${model.clockRevision}
+                .readOnly=${this.readOnly}
+                .keyOnly=${true}
+              ></season-chips>
+              ${
+                legend.length < 2
+                  ? nothing
+                  : html`<p class="rows" data-test="rows">
+                      ${t("month.rows")}
+                      ${legend.map((name, index) => html`${index ? " · " : ""}<strong>${name}</strong>`)}
+                    </p>`
+              }
+            </div>`
+          : nothing
+      }
       <table @keydown=${this.#keydown}>
         <thead>
           <tr>

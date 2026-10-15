@@ -1337,7 +1337,6 @@ describe("Month view", () => {
     expect(month.departments).toEqual(data.departments);
     expect(month.departmentId).toBe("");
     expect(month.readOnly).toBe(false);
-    expect(month.api).toBe(el.api);
     expect(checkedView(el)).toBe("month");
     expect(switchViews(el)).toEqual(["year", "month"]);
     expect(el.shadowRoot!.querySelector("opening-hours-month")).toBe(month);
@@ -1356,7 +1355,7 @@ describe("Month view", () => {
   });
 
   it("steps months through the address, goes back to the year, and writes the chosen department", async () => {
-    const { view, months } = await monthMount(
+    const { el, view, months } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12?keep=yes",
     );
     await shown(view);
@@ -1389,7 +1388,11 @@ describe("Month view", () => {
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/month/month/2026-12");
     await expect.poll(() => view()?.departmentId).toBe("");
-    view()!.shadowRoot!.querySelector<HTMLElement>("[data-test=year-back]")!.click();
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="year"]',
+      )!,
+    );
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
     await expect.poll(view).toBeNull();
     expect(months).toEqual(["2026-12", "2027-01", "2026-12"]);

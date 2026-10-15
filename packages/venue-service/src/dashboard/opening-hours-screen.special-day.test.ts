@@ -523,31 +523,6 @@ describe("links into the special-day painter", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
   });
 
-  it.each([["Month", "/manage/opening-hours/view/month/month/2026-12"]])(
-    "+ Special day in the %s opens a new empty special day",
-    async (_, address) => {
-      const { el } = await mount(address);
-      const view = await expect
-        .poll(() =>
-          el
-            .shadowRoot!.querySelector("opening-hours-year, opening-hours-month")
-            ?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-special-day]"),
-        )
-        .toBeTruthy()
-        .then(() =>
-          el
-            .shadowRoot!.querySelector("opening-hours-year, opening-hours-month")!
-            .shadowRoot!.querySelector<HTMLElement>("[data-test=add-special-day]")!,
-        );
-      view.click();
-      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/special-day");
-      const painter = await shownPainter(el);
-      expect([painter.specialDayId, painter.date]).toEqual([null, null]);
-      await cancel(painter);
-      await expect.poll(() => location.pathname).toBe(address);
-    },
-  );
-
   it("the Month's special date opens the painter on its special day, and its public holiday a new day pre-filled", async () => {
     const { el } = await mount("/manage/opening-hours/view/month/month/2026-12");
     dateButton(await shownMonth(el), "2026-12-14").click();

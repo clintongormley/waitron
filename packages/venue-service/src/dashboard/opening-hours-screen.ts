@@ -996,24 +996,12 @@ export class OpeningHoursScreen extends LitElement {
         .month=${this.shownMonth()}
         .departmentId=${this.departmentId}
         .departments=${this.model!.departments}
-        .api=${this.api}
-        .specialDays=${this.knownSpecialDays}
         .readOnly=${this.readOnly}
         @special-day-action=${this.openNamedDay}
         @ordinary-date-open=${this.openOrdinary}
-        @season-dialog-open=${() => this.readKnownSpecialDays()}
-        @season-week-open=${this.openSeasonWeek}
-        @season-changed=${(event: Event) => {
-          event.stopPropagation();
-          this.api.rereadWithSpecialDays();
-        }}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
           write({ view: "month", month: event.detail.month, date: null });
-        }}
-        @month-year-open=${(event: CustomEvent<{ year: number }>) => {
-          event.stopPropagation();
-          this.openYear(event.detail.year);
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
