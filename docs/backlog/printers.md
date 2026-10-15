@@ -390,7 +390,7 @@ just a green typecheck.
 - **The till's on-screen receipt is a second copy of the layout.** The till draws a sale's receipt
   itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
   … / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
-  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and later its item table, do not reach it. It
+  for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
   also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), and a full
   invoice's discounts with VAT where paper now prints them before VAT. Bring it
   into line with the printed receipt; A661 (#1745), which changed that file, has landed.
@@ -417,8 +417,8 @@ just a green typecheck.
 
 - **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt).
   `buildReceiptDocument` (`apps/server/src/receipt-document.ts`) writes quantities into the
-  receipt as their digits: an item's quantity in its line, an option's quantity in its caption,
-  and the quantity in `netFacts`' unit-price line. Print the language's decimal mark there
+  receipt as their digits: an item's quantity in its line or in the full invoice's table, and an
+  option's quantity in its caption. Print the language's decimal mark there
   («0,35 kg»). A663 keeps today's form. The till has the same gap: "Quantity-display follow-ups
   found while tracing A313" in
   [backlog.md → Users, sign-in and the dashboard shell](../backlog.md#users-sign-in-and-the-dashboard-shell).

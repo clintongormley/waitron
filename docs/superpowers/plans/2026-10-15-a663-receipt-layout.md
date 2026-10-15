@@ -70,7 +70,7 @@ Point 2's "Fecha de operación only when it differs from the issue date" is alre
 behaves: both readers that feed a full invoice drop the operation date when it equals the issue day
 (`apps/server/src/receipt-issuer.ts:29-35`, `apps/server/src/invoice-document.ts:146-148`; both
 since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `2d9726855` and
-`eb6403150`). Part 2 adds a test that pins it rather than new code.
+`eb6403150`). Two existing cases in `invoice-document.test.ts` pin it (named in commit `1bf7567a6`); Part 2 adds no code.
 
 ---
 
@@ -1307,8 +1307,8 @@ For a dish group whose every line has `net`, each line gets four cells, the figu
    by the dish quantity in `grossBasketWithOptions`, `packages/catalogue/src/pricing.ts:319-323`),
    so two 0.05 kg portions are stored as 0.100: the row prints «2 · Queso extra · 1,24 · 2,48», which
    adds up, where «0.100 kg» beside a price per 0.05 would not. When the division is not a whole
-   number (an extra on a weighed dish of 0.35 kg would store 0.35 × the portion; a hand-built test
-   line can store anything), the cell falls back to the quantity and unit name as for
+   number (no till path stores such a line: an extra on a dish whose `pricingUnit` is not `each` is refused,
+   `extras.unsupported_product`, `apps/server/src/working-order.ts`; a hand-built test line can store anything), the cell falls back to the quantity and unit name as for
    any other line (`quantityText`, Task 2.3a). This follows the owner's Q4 answer, «we don't need
    the portion size».
 
@@ -2217,7 +2217,7 @@ existing A4 check: the QR first and 35 mm, the logo, pagination without clipping
   its own: the A663 entry stays open and names what is left — Part 2b (base and VAT on a one-rate
   simplified receipt), Part 2c (each line's price before any discount; the whole-bill discount once
   per rate) and Part 3 (guests). Add a short entry under the fiscal
-  area (`docs/backlog/fiscal.md`): "Check whether a simplified invoice can carry an operation date
+  area (it went to `docs/backlog.md`'s fiscal area, whose rules keep an entry of four lines or fewer there): "Check whether a simplified invoice can carry an operation date
   different from its issue date; art. 7.1.c then requires it on the receipt, and the document
   builder prints one only on a full invoice (`receipt-document.ts`)".
 - [ ] **Step 5: Commit, then `/finish-branch`.**
@@ -2234,19 +2234,19 @@ This section states the scope only. The part's test-first tasks are written at i
 anything is built, and reviewed by a fresh-context reader against this section and the owner's Q11
 answer. Line numbers are from Part 2's branch on 2026-10-15; re-check them on `main` first.
 
-- `vatRows` (`apps/server/src/receipt-document.ts:350-365`) loses its one-rate branch (`:353-359`,
+- `vatRows` (`apps/server/src/receipt-document.ts:357-372`) loses its one-rate branch (`:360-366`,
   the «IVA x% incluido» row). Every simplified receipt then prints a base row and a VAT row per
-  rate, under TOTAL (the order at `:369-371` stays), from `result.vatBreakdown`: the record's own
+  rate, under TOTAL (the order at `:376-378` stays), from `result.vatBreakdown`: the record's own
   figures, never a sum of the lines. The owner's example: «Base imponible 10% 8,18 €» and «IVA 10%
   0,82 €».
 - **Open for the driver before the tasks are written: the base's label.** The owner's words are
   «Base imponible», "as a full invoice does". A two-rate simplified receipt prints «Base 10%» today
-  (`label.base`, `:360`). Either the two-rate receipt changes to «Base imponible» too, so a
+  (`label.base`, `:367`). Either the two-rate receipt changes to «Base imponible» too, so a
   simplified receipt never names the base two ways (this plan's recommendation), or the one-rate
   receipt alone uses it.
 - The `vatIncludedAtRate` label key (`packages/country/src/country.ts:82`, and its four languages in
   `packages/country-es/src/receipt-labels.ts`) loses its only reader: `git grep vatIncludedAtRate` on
-  2026-10-15 found `receipt-document.ts:355` and `packages/country-es/src/spain.test.ts:289, 295`,
+  2026-10-15 found `receipt-document.ts:362` and `packages/country-es/src/spain.test.ts:289, 295`,
   and nothing in `apps/till`. The tasks remove it with its test lines.
 - Tests: `git grep -n 'incluido' -- apps packages` on 2026-10-15 lists the suites that name the
   row — `receipt-document.test.ts`, `receipt-ticket.test.ts`, `receipt-language.test.ts`,

@@ -159,7 +159,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
   Fiscal: the owner lands it.
 
-- **Can a simplified invoice carry an operation date different from its issue date?** If it can,
+- **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2. If it can,
   art. 7.1.c requires that date on the receipt, and the document builder prints one only on a full
   invoice (`apps/server/src/receipt-document.ts`). Check, then print it there too if needed.
 
