@@ -2082,6 +2082,26 @@ describe("till-app simplified-invoice limit", () => {
     );
   });
 
+  it.each([
+    ["en-GB", "No department was found for this sale. Ask a manager."],
+    ["es-ES", "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable."],
+  ])("explains a sale's missing department in %s and keeps its basket", async (locale, message) => {
+    try {
+      const { el } = await mountApp({
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.department_missing", status: 400 }),
+      });
+      const c = await toCounter(el);
+      setLocale(locale);
+      c.store.addProduct(c.products[0]!, "1");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(banner(el)!.textContent!.trim()).toBe(message);
+      expect(c.store.lines).toHaveLength(1);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
   it("says the department needs a tax-agency description when the server refuses the sale for it", async () => {
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({

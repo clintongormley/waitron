@@ -28,7 +28,7 @@ export async function readSaleOperationDescription(
         : (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).departmentId;
   }
   if (departmentId === null) {
-    throw new AppError("department.operation_description_required", { departmentId });
+    throw new AppError("sale.department_missing", {});
   }
   const scope = { ...cfg, receiptLanguages: [] };
   const receipt =

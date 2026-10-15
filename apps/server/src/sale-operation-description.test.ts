@@ -172,19 +172,23 @@ describe("department operation description", () => {
       await authored(f.fallback, { operationDescription: "Fallback drinks" });
       const source =
         kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
-      await expect(read(f.cfg, source)).rejects.toMatchObject({
-        code: "department.operation_description_required",
-        params: { departmentId: null },
-      });
+      await expect(read(f.cfg, source)).rejects.toEqual(
+        expect.objectContaining({
+          code: "sale.department_missing",
+          params: {},
+        }),
+      );
     },
   );
   it("refuses a sale's null department header", async () => {
     const f = await fixture(true);
     await authored(f.fallback, { operationDescription: "Fallback drinks" });
-    await expect(read(f.cfg, { kind: "sale", saleId: f.saleId })).rejects.toMatchObject({
-      code: "department.operation_description_required",
-      params: { departmentId: null },
-    });
+    await expect(read(f.cfg, { kind: "sale", saleId: f.saleId })).rejects.toEqual(
+      expect.objectContaining({
+        code: "sale.department_missing",
+        params: {},
+      }),
+    );
   });
   it.each(["order", "sale"] as const)("refuses another location's %s context", async (kind) => {
     const f = await fixture();
@@ -193,10 +197,12 @@ describe("department operation description", () => {
     await authored(other.primary, { operationDescription: "Other meals" });
     await authored(other.fallback, { operationDescription: "Other default drinks" });
     const source = kind === "order" ? { kind, orderId: f.orderId } : { kind, saleId: f.saleId };
-    await expect(read(other.cfg, source)).rejects.toMatchObject({
-      code: "department.operation_description_required",
-      params: { departmentId: null },
-    });
+    await expect(read(other.cfg, source)).rejects.toEqual(
+      expect.objectContaining({
+        code: "sale.department_missing",
+        params: {},
+      }),
+    );
     expect(await read(f.cfg, source)).toBe("Deli meals");
   });
 });

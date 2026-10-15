@@ -20,6 +20,7 @@ import type { AllocationPreview } from "./bill-allocation.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "attendance.state_changed": Record<string, never>;
+    "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };
     "table.delivery_in_progress": { tableId: string; workingOrderId: string };
     "invoice_delivery.email_unavailable": Record<string, never>;

@@ -477,3 +477,18 @@ it("missing description leaves an unfiled capture recoverable without touching t
   expect(facts()).toEqual(before);
   expect(collect).not.toHaveBeenCalled();
 });
+
+it.each(["cash", "card"] as const)(
+  "a missing department refuses a %s bill payment with its own code before money or drawer work",
+  async (method) => {
+    const id = await tabWith(venue, "Caña");
+    await venue.db.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    const before = facts();
+    const calls = venue.card.collectCalls.length;
+    const answer = await payBill(id, method, method === "card" ? "reader" : undefined);
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual({ code: "sale.department_missing", params: {} });
+    expect(facts()).toEqual(before);
+    expect(venue.card.collectCalls).toHaveLength(calls);
+  },
+);

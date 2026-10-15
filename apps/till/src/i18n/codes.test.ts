@@ -650,3 +650,12 @@ it("tells staff a department without a tax-agency description cannot sell, and w
     "Este departamento aún no tiene descripción para Hacienda, así que no puede vender. Un responsable puede añadirla en el panel, en Departamentos y zonas.",
   );
 });
+
+it("asks for a manager when a sale has no department, without directing staff to edit its description", () => {
+  expect(codeMessage("sale.department_missing", "en")).toBe(
+    "No department was found for this sale. Ask a manager.",
+  );
+  expect(codeMessage("sale.department_missing", "es")).toBe(
+    "No se ha encontrado un departamento para esta venta. Pide ayuda a un responsable.",
+  );
+});
