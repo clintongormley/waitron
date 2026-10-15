@@ -325,8 +325,10 @@ A679 design: **“A — Approve, plan and build”**. This supersedes the histor
 approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
 keeps real candidate validation on the host before public request export, custody secrets in the
 offline tool, and readiness separate from production. It specifies durable claim discovery and
-resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Jointly qualify both
-custody routes, file and actual-paper recovery, handover and loss. Follow the candidate
+resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Compiled browser
+checks exercise both launch paths and custody choices, saved-file reopen, synthetic paper recovery,
+wrong-passphrase/fingerprint refusals, resume and handover/dispute stops with synthetic outside
+responses. Actual-paper acceptance, whole-branch reviews and publication gates remain open. Follow the candidate
 [operator procedure](../operations/first-live-fiscal-setup.md); its physical acceptance remains open. Server ownership, activation and interruption
 checks do not replace the real wizard and physical-paper checks. There is no new approval gate or claim of product completion.
 

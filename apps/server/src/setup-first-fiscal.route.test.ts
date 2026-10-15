@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { mountSetup } from "./setup-api.js";
+import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -16,7 +16,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture() {
+async function fixture(sendEmailTest?: SetupDeps["sendEmailTest"]) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
   const stateDir = join(root, "state"),
@@ -32,6 +32,7 @@ async function fixture() {
     app,
     {
       environment: "production",
+      sendEmailTest,
       firstFiscal: host,
       firstSetup: {
         coordinator: host.coordinator,
@@ -522,3 +523,46 @@ it.each([
     expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(before);
   },
 );
+
+it("keeps email testing inside the claimed owner and uses its frozen administrator recipient", async () => {
+  const sent: string[] = [];
+  const f = await fixture(async (_settings, recipient) => {
+    sent.push(recipient);
+    return { accepted: true };
+  });
+  const email = {
+    server: "smtp.example.test",
+    port: 465,
+    encryption: "tls",
+    from: "owner@example.test",
+  };
+  const response = await f.post("/setup-api/email-test", { email }, f.headers());
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 200,
+    body: { accepted: true },
+  });
+  expect(sent).toEqual([request.admin.email]);
+  for (const headers of [{}, { ...f.headers(), "X-Waitron-Setup-Revision": "999" }]) {
+    const refused = await f.post("/setup-api/email-test", { email }, headers);
+    expect({ status: refused.status, body: await refused.json() }).toMatchObject({
+      status: Object.keys(headers).length ? 403 : 409,
+      body: {
+        error: {
+          code: Object.keys(headers).length ? "setup.owner_required" : "setup.attempt_conflict",
+        },
+      },
+    });
+  }
+  for (const body of [
+    { email, venue: { admin: { email: "other@example.test" } } },
+    { email, recipient: "other@example.test" },
+    { email: null },
+  ]) {
+    const refused = await f.post("/setup-api/email-test", body, f.headers());
+    expect({ status: refused.status, body: await refused.json() }).toMatchObject({
+      status: 400,
+      body: { error: { code: "setup.request_invalid" } },
+    });
+  }
+  expect(sent).toEqual([request.admin.email]);
+});

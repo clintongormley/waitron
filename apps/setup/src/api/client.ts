@@ -528,6 +528,13 @@ export class SetupApi {
     return this.#request("/setup-api/first-setup/abandon", "POST", {}, firstSetupHeaders(owner));
   }
 
+  runFirstSetupEmailTest(
+    owner: FirstSetupOwner,
+    email: EmailSettingsDraft,
+  ): Promise<EmailTestResult> {
+    return this.#request("/setup-api/email-test", "POST", { email }, firstSetupHeaders(owner));
+  }
+
   runFirstSetupFiscalTest(
     owner: FirstSetupOwner,
     body: FirstSetupProvisionBody,

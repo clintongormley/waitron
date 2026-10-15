@@ -36,6 +36,7 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
 import type {
   RecoveryRestoreCredentials,
+  EmailSettingsDraft,
   AdoptBody,
   ApiError,
   ConfigurationPreview,
@@ -822,6 +823,7 @@ export class SetupApp extends LitElement {
     const owner = this.shadowRoot?.querySelector("setup-live-source-screen");
     if (!this.isConnected || this.screen !== "live-source" || !owner) return;
     const generation = this.#rootGeneration;
+    const mode = this.draft.mode;
     if (!this.leave.coordinator.isDirty([this, owner])) {
       proceed();
       return;
@@ -843,6 +845,8 @@ export class SetupApp extends LitElement {
           !owner.isConnected
         )
           return;
+        // Discarding the previous venue draft preserves the mode selected for this setup.
+        if (mode !== undefined) this.draft = { ...this.draft, mode };
         proceed();
       });
   }
@@ -1882,6 +1886,7 @@ export class SetupApp extends LitElement {
   }
 
   #renderScreen(): TemplateResult {
+    const firstSession = this.#firstSession;
     switch (this.screen) {
       case "first-owner":
         return this.#renderFirstOwner();
@@ -1965,7 +1970,7 @@ export class SetupApp extends LitElement {
           data-test="screen-email"
           .email=${this.draft.email}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
-          .api=${this.api}
+          .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
           .backScreen=${this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;

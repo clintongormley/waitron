@@ -170,7 +170,9 @@ For A679's candidate first-Live journey, follow the [operator procedure](../oper
 Use the production-shaped isolated test host for Live ownership and activation when the managed
 development stack sets dev mode. Keep the physical-paper receipt separate from browser automation:
 a saved file, synthetic transcription or print preview does not establish the actual-paper check.
-The candidate's joint wizard/tool and physical acceptance remain outstanding as of 2026-10-15.
+As of 2026-10-15, the candidate's compiled wizard/local host/saved-tool checks cover both launch
+paths and custody choices with synthetic outside responses. Actual-paper acceptance, whole-branch
+reviews and publication gates remain outstanding.
 
 ## Documentation rules
 

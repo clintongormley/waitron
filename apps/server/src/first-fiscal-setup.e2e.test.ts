@@ -306,6 +306,14 @@ it.each([
       } else if (change === "missing") {
         await rm(join(stateDir, "configuration-import.json"));
       }
+      if (change === "none" && launch === "direct" && !newTaxpayer) {
+        const { email: _email, ...beforeEmail } = live;
+        void _email;
+        expect(await post("/setup-api/provision", beforeEmail)).toMatchObject({
+          status: 400,
+          body: { error: { code: "setup.email_required", params: { field: "email" } } },
+        });
+      }
       const activated = await post("/setup-api/provision", live);
       if (change !== "none") {
         expect(activated).toMatchObject({
@@ -408,3 +416,65 @@ it.each([
     }
   },
 );
+
+it("accepts real retained readiness before the wizard collects email settings", async () => {
+  const root = await mkdtemp(join(tmpdir(), "first-fiscal-before-email-"));
+  dirs.push(root);
+  const stateDir = join(root, "state"),
+    venueDir = join(root, "venue"),
+    migrations = join(root, "migrations");
+  await copyMigrationsRoot(migrations);
+  const [port] = await freePorts(1);
+  const server = await startServer({
+    WAITRON_ENV: "production",
+    WAITRON_STATE_DIR: stateDir,
+    WAITRON_VENUE_DIR: venueDir,
+    WAITRON_MIGRATIONS_DIR: migrations,
+    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_MANAGEMENT_RP_ID: "localhost",
+    WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
+  });
+  const agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+  try {
+    const url = `https://127.0.0.1:${port}`;
+    const claimed = await fetch(url + "/setup-api/first-setup/claim", {
+      dispatcher: agent,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientClaimNonce: randomBytes(32).toString("base64url"),
+        venue: request,
+      }),
+    } as RequestInit);
+    expect(claimed.status).toBe(200);
+    const claim = await claimed.json();
+    const response = await fetch(url + "/setup-api/fiscal-test", {
+      dispatcher: agent,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Waitron-Setup-Owner": claim.capability,
+        "X-Waitron-Setup-Attempt": claim.state.attemptId,
+        "X-Waitron-Setup-Revision": String(claim.state.revision),
+        "X-Waitron-Setup-Generation": String(claim.state.ownerGeneration),
+      },
+      body: JSON.stringify({
+        mode: "live",
+        firstSetup: { attemptId: claim.state.attemptId, revision: claim.state.revision },
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+      }),
+    } as RequestInit);
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: { status: "accepted", testedAt: expect.any(String) },
+    });
+    const retained = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+    expect(retained.status).toBe("claimed");
+    expect(retained.consumptionIntent).toBe(false);
+  } finally {
+    await server.close();
+    await agent.close();
+  }
+});
