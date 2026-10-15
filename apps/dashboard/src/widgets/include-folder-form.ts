@@ -330,6 +330,7 @@ export class IncludeFolderForm extends LitElement {
     const action = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
+      height="medium"
       .open=${this.open}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${fill("menus.include_edit_heading", { name: this.menuName })}

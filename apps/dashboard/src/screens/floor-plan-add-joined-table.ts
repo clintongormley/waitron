@@ -215,6 +215,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     return html`<wt-modal
       data-dialog="add-joined-table"
       size="standard"
+      height="medium"
       heading=${t("floor_plan_editor.add_joined_table")}
       .open=${form !== null}
       .beforeClose=${this.#beforeClose}

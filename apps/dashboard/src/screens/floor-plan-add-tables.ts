@@ -245,6 +245,7 @@ export class FloorPlanAddTables extends LitElement {
     return html`<wt-modal
       data-dialog="add-tables"
       size="standard"
+      height="medium"
       heading=${t("floor_plan_editor.add_tables")}
       .open=${form !== null}
       .beforeClose=${this.#beforeAddClose}

@@ -449,6 +449,7 @@ export class DepartmentDialogs extends LitElement {
       html`<wt-modal
         open
         size=${"standard"}
+        height="medium"
         heading=${this.heading(dialog)}
         .dismissible=${!this.busy && !this.refreshing}
         .beforeClose=${this.beforeClose}

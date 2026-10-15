@@ -1049,6 +1049,20 @@ describe("printer configuration tabs", () => {
     expect(api.takePairingHold).toHaveBeenCalledOnce();
   });
 
+  it("Add agent opens a standard-width modal at the medium height", async () => {
+    const api = stubApi({ listAgents: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    q(el, '[data-test="agents-table"]')!
+      .querySelector<HTMLElement>(":scope > [slot=empty-action]")!
+      .click();
+    await flush(el);
+    const modal = q(el, "[data-test=new-agent-modal]")!;
+    expect(modal.getAttribute("size")).toBe("standard");
+    expect(modal.getAttribute("height")).toBe("medium");
+  });
+
   /** Focuses and presses the empty table's Add button, as a person's click leaves it. */
   async function pressEmptyAction(el: PrintersScreen, tableId: string): Promise<HTMLElement> {
     const button = q(el, `[data-test="${tableId}"]`)!.querySelector<HTMLElement>(
@@ -6206,6 +6220,20 @@ describe("printers-screen printer editor edges", () => {
       expect(isDisabled(el, "[data-test=calibration-next]")).toBe(false);
     },
   );
+
+  it("Calibrate opens a standard-width modal at the medium height and keeps it on the next step", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openCalibration(el);
+    const modal = q(el, "[data-test=edit-printer-modal]")!;
+    expect(modal.getAttribute("size")).toBe("standard");
+    expect(modal.getAttribute("height")).toBe("medium");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=edit-printer-modal]")!.getAttribute("height")).toBe("medium");
+  });
 
   it("refuses a sample receipt while the printer has no name", async () => {
     const api = stubApi({

@@ -130,6 +130,12 @@ it("Add tables opens with one table, four seats and the zone's name as prefix", 
   expect(addAction(el, "add-confirm").textContent!.trim()).toBe("Save");
 });
 
+it("Add tables opens a standard-width modal at the medium height", async () => {
+  const el = await openAdd();
+  expect(addDialog(el).getAttribute("size")).toBe("standard");
+  expect(addDialog(el).getAttribute("height")).toBe("medium");
+});
+
 it("the preview gives the first and last names for more than one table", async () => {
   const el = await openAdd();
   await set(el, addField(el, "table-count"), "5");
