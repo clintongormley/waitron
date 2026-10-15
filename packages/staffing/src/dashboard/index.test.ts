@@ -4,7 +4,7 @@ import type { CalendarViewHost, DashboardRequest } from "@waitron/dashboard-kit"
 import { STAFFING_DASHBOARD } from "./index.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
 import type { StaffingMonthView } from "./staffing-month.js";
-import { staffingMonth } from "./staffing-month.fixture.js";
+import { staffingMonth } from "../testing/staffing-month-fixture.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {

@@ -5,21 +5,22 @@ import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/da
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
+import { seasonTints, seasonTintStyles } from "@waitron/venue-service/season-tint";
 import { areaKey } from "../slots.js";
-import type { StaffingArea, StaffingMonth, StaffingSeason } from "../staffing-types.js";
+import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
 
-/** The months the month read serves, as the Opening hours month bounds them. */
-const FIRST_MONTH = "0100-02";
-const LAST_MONTH = "9998-12";
+/** The months `parseCalendarMonth` accepts. */
+const FIRST_MONTH = `${String(CALENDAR_YEAR_MIN).padStart(4, "0")}-02`;
+const LAST_MONTH = `${String(CALENDAR_YEAR_MAX).padStart(4, "0")}-12`;
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = Date.UTC(2024, 0, 1);
 const DAY_MS = 86_400_000;
 const ALL = "all";
-const TINTS = ["1", "2", "3", "4"];
 
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
@@ -42,15 +43,6 @@ const utc = (date: string) => new Date(`${date}T00:00:00Z`);
 const monthDay = (md: string) =>
   dateFormat({ day: "numeric", month: "short" }).format(utc(`2000-${md}`));
 
-/** Each season's tint by its place in start order, as the Opening hours month tints it. */
-function seasonTints(seasons: readonly StaffingSeason[]): Map<string, string> {
-  return new Map(
-    [...seasons]
-      .sort((a, b) => a.startsOn.localeCompare(b.startsOn))
-      .map((season, index) => [season.id, TINTS[index % TINTS.length]!]),
-  );
-}
-
 /** The Calendar's Staffing view: one month of whole Monday-to-Sunday weeks, each day listing the
  *  people needed per area as a bar and a number. ‹ › and the area picker move the Calendar's address
  *  through `open`; the host passes the address back as `month` and `params`. */
@@ -58,31 +50,12 @@ function seasonTints(seasons: readonly StaffingSeason[]): Map<string, string> {
 export class StaffingMonthView extends LitElement {
   static override styles = [
     baseStyles,
+    seasonTintStyles,
     css`
       :host {
         display: block;
         min-width: 0;
         container: staffing-month / inline-size;
-      }
-      [data-tint="1"] {
-        --tint: var(--wt-color-season-1);
-        --on-tint: var(--wt-color-on-season-1);
-        --tint-line: var(--wt-color-season-1-line);
-      }
-      [data-tint="2"] {
-        --tint: var(--wt-color-season-2);
-        --on-tint: var(--wt-color-on-season-2);
-        --tint-line: var(--wt-color-season-2-line);
-      }
-      [data-tint="3"] {
-        --tint: var(--wt-color-season-3);
-        --on-tint: var(--wt-color-on-season-3);
-        --tint-line: var(--wt-color-season-3-line);
-      }
-      [data-tint="4"] {
-        --tint: var(--wt-color-season-4);
-        --on-tint: var(--wt-color-on-season-4);
-        --tint-line: var(--wt-color-season-4-line);
       }
       .head,
       .sub {
@@ -117,14 +90,16 @@ export class StaffingMonthView extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .chip {
+        max-width: 100%;
         padding: var(--wt-space-1) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-full);
+        overflow-wrap: anywhere;
       }
       .chip[data-tint] {
-        background: var(--tint);
-        color: var(--on-tint);
-        border-color: var(--tint-line);
+        background: var(--season-tint);
+        color: var(--season-on-tint);
+        border-color: var(--season-tint-line);
       }
       .alert {
         margin: 0 0 var(--wt-space-2);
@@ -174,7 +149,7 @@ export class StaffingMonthView extends LitElement {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
       }
       td[data-tint] .day {
-        border-block-start-color: var(--tint-line);
+        border-block-start-color: var(--season-tint-line);
       }
       td[data-outside] .day {
         background: var(--wt-color-bg);
@@ -229,6 +204,9 @@ export class StaffingMonthView extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-palette-purple);
       }
+      .bar[data-none] {
+        min-width: 0;
+      }
       .label {
         display: flex;
         min-width: 0;
@@ -277,7 +255,6 @@ export class StaffingMonthView extends LitElement {
   @property() month = "";
   /** The address's words after `view/staffing`; `area` holds the chosen area's key. */
   @property({ attribute: false }) params: Readonly<Record<string, string>> = {};
-  /** Nothing in the month writes yet; the painters of A585-4 will read it. */
   @property({ type: Boolean }) canWrite = false;
   /** Moves the Calendar's address. */
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
@@ -402,8 +379,7 @@ export class StaffingMonthView extends LitElement {
     const { areas } = month;
     const chosen = this.#chosen(areas);
     const names = new Map(areas.map(({ area, name }) => [areaKey(area), name]));
-    const shown = (day: Day) =>
-      day.areas.filter(({ area }) => chosen === ALL || areaKey(area) === chosen);
+    const cellLabel = dateFormat({ weekday: "long", day: "numeric", month: "long" });
     const largest = Math.max(1, ...month.days.flatMap((day) => day.areas.map((a) => a.needed)));
     const tints = seasonTints(month.seasons);
     const weeks = Array.from({ length: month.days.length / 7 }, (_, row) =>
@@ -440,7 +416,9 @@ export class StaffingMonthView extends LitElement {
           ${weeks.map(
             (week) =>
               html`<tr>
-                ${week.map((day) => this.#cell(day, month.today, shown(day), names, largest, tints))}
+                ${week.map((day) =>
+                  this.#cell(day, month.today, chosen, names, largest, tints, cellLabel),
+                )}
               </tr>`,
           )}
         </tbody>
@@ -450,15 +428,14 @@ export class StaffingMonthView extends LitElement {
   #cell(
     day: Day,
     today: string | null,
-    areas: Day["areas"],
+    chosen: string,
     names: Map<string, string>,
     largest: number,
     tints: Map<string, string>,
+    cellLabel: Intl.DateTimeFormat,
   ) {
     const isToday = day.date === today;
-    const label = dateFormat({ weekday: "long", day: "numeric", month: "long" }).format(
-      utc(day.date),
-    );
+    const label = cellLabel.format(utc(day.date));
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
@@ -482,22 +459,24 @@ export class StaffingMonthView extends LitElement {
             ? html`<span data-test="closed">${t("staffing.month.closed")}</span>`
             : nothing
         }
-        ${areas.map(
-          ({ area, needed }) =>
-            html`<span class="line" data-test="area-line">
-              <span
-                class="bar"
-                aria-hidden="true"
-                data-test="bar"
-                style=${styleMap({ "--share": String(needed / largest) })}
-              ></span>
-              <span class="label"
-                ><span class="name" data-test="area-name" title=${names.get(areaKey(area)) ?? ""}
-                  >${names.get(areaKey(area)) ?? ""}</span
-                ><span class="count" data-test="area-count"> ${needed}</span></span
-              >
-            </span>`,
-        )}
+        ${day.areas.map(({ area, needed }) => {
+          const key = areaKey(area);
+          if (chosen !== ALL && key !== chosen) return nothing;
+          const name = names.get(key) ?? "";
+          return html`<span class="line" data-test="area-line">
+            <span
+              class="bar"
+              aria-hidden="true"
+              data-test="bar"
+              ?data-none=${needed === 0}
+              style=${styleMap({ "--share": String(needed / largest) })}
+            ></span>
+            <span class="label"
+              ><span class="name" data-test="area-name" title=${name}>${name}</span
+              ><span class="count" data-test="area-count"> ${needed}</span></span
+            >
+          </span>`;
+        })}
       </div>
     </td>`;
   }

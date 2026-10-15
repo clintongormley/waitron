@@ -24,7 +24,6 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
       readPermission: "venue.view",
       create(ctx, host) {
         const api = new StaffingApi(ctx.request, ctx.liveData);
-        const open = (view: string, params: Record<string, string>) => host.open(view, params);
         return {
           render: () =>
             html`<staffing-month
@@ -32,7 +31,7 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
               .month=${host.month}
               .params=${host.params}
               .canWrite=${host.canWrite}
-              .open=${open}
+              .open=${host.open}
             ></staffing-month>`,
         };
       },

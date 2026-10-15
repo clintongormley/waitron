@@ -2,7 +2,7 @@ import { vi } from "vitest";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { AreaRef } from "../slots.js";
 import type { StaffingMonth } from "../staffing-types.js";
-import { StaffingApi } from "./client.js";
+import { StaffingApi } from "../dashboard/client.js";
 
 export const kitchen: AreaRef = { kind: "station", id: "st-kitchen" };
 export const restaurant: AreaRef = { kind: "department", id: "dep-restaurant" };

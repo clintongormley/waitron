@@ -5,7 +5,7 @@ import type { StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import type { StaffingMonthView } from "./staffing-month.js";
 import "./staffing-month.js";
-import { fakeApi, staffingMonth } from "./staffing-month.fixture.js";
+import { fakeApi, staffingMonth } from "../testing/staffing-month-fixture.js";
 
 const frames: HTMLElement[] = [];
 afterEach(() => {
@@ -286,11 +286,6 @@ describe("the Staffing view's month", () => {
     expect(lines(el, "2026-12-02")).toEqual(["3"]);
   });
 
-  it("hides the rota button until the Rota view exists", async () => {
-    const { el } = await mount();
-    expect(root(el).textContent).not.toContain("Rota");
-  });
-
   it("shows why the month could not be read", async () => {
     const { api } = fakeApi(() => Promise.reject({ code: "connection.failed" }));
     const { el } = await mount({ api });
@@ -341,6 +336,43 @@ describe("the Staffing view's month", () => {
       expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
         el.parentElement!.getBoundingClientRect().right + 0.5,
       );
+  });
+
+  it("wraps a long unbroken season name inside a phone's width, keeping the whole name", async () => {
+    const name = "W".repeat(80);
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      read.seasons = [{ ...read.seasons[0]!, name }, ...read.seasons.slice(1)];
+      return read;
+    });
+    const { el } = await mount({ api, width: "390px" });
+    const chip = root(el).querySelector<HTMLElement>("[data-test=season]")!;
+    expect(chip.textContent).toContain(name);
+    expect(el.scrollWidth).toBeLessThanOrEqual(390);
+    expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
+      el.parentElement!.getBoundingClientRect().right + 0.5,
+    );
+  });
+
+  it("draws no bar for an area that needs nobody, beside its 0", async () => {
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      const day = read.days.findIndex(({ date }) => date === "2026-12-01");
+      read.days[day] = {
+        ...read.days[day]!,
+        areas: read.days[day]!.areas.map((line, index) =>
+          index === 0 ? { ...line, needed: 0 } : line,
+        ),
+      };
+      return read;
+    });
+    for (const width of ["1280px", "390px"]) {
+      const { el } = await mount({ api, width });
+      expect(lines(el, "2026-12-01")[0]).toBe("Restaurant 0");
+      const bars = cell(el, "2026-12-01").querySelectorAll<HTMLElement>("[data-test=bar]");
+      expect(bars[0]!.getBoundingClientRect().width).toBe(0);
+      expect(bars[1]!.getBoundingClientRect().width).toBeGreaterThan(0);
+    }
   });
 
   it("puts each bar above its label on a phone, and beside it on a wide screen", async () => {

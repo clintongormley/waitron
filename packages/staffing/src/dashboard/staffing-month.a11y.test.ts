@@ -5,7 +5,7 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { StaffingMonth } from "../staffing-types.js";
 import type { StaffingMonthView } from "./staffing-month.js";
 import "./staffing-month.js";
-import { fakeApi, staffingMonth } from "./staffing-month.fixture.js";
+import { fakeApi, staffingMonth } from "../testing/staffing-month-fixture.js";
 
 afterEach(() => {
   cleanup();
