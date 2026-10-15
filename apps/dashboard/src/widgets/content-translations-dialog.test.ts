@@ -221,6 +221,8 @@ describe("staged translation dialog", () => {
     expect(field(el, "one")).not.toBeNull();
     expect(api.getContentTranslationTargets).not.toHaveBeenCalled();
     expect(passive.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith("es", {});
+    await vi.waitFor(() => expect(passive.getContentSuggestions).toHaveBeenCalledWith("es"));
+    expect(api.getContentSuggestions).not.toHaveBeenCalled();
     await edit(el, "one", "Croqueta");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));

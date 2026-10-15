@@ -244,7 +244,7 @@ it("asks nothing when its button is clicked while it cannot act", async () => {
 it("announces progress and refusals", async () => {
   const { el } = await mount({ run: RUNNING, error: "Refused." });
   expect(q(el, ".lines > p[role=status]")!.textContent).toContain("180");
-  expect(q(el, "[data-test=suggestions-error]")!.getAttribute("role")).toBe("alert");
+  expect(q(el, "[data-error]")!.getAttribute("role")).toBe("alert");
   el.run = SENDING;
   await el.updateComplete;
   expect(q(el, ".lines > p[role=status]")).not.toBeNull();
@@ -252,6 +252,14 @@ it("announces progress and refusals", async () => {
   el.nothing = true;
   await el.updateComplete;
   expect(q(el, ".lines > p[role=status]")).not.toBeNull();
+});
+
+it("paints a refusal in the danger colour, like a form's own message", async () => {
+  const { el, host } = await mount({ error: "Refused." });
+  host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
+  const message = q(el, "[data-error]")!;
+  expect(message.textContent).toBe("Refused.");
+  expect(getComputedStyle(message).color).toBe("rgb(13, 14, 15)");
 });
 
 it("links a consent refusal to the Cloud account page in a new tab", async () => {

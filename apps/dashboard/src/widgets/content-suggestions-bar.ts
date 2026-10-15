@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formMessage, formMessageStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { SuggestionRunView } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -16,6 +16,7 @@ export function runActive(run: SuggestionRunView | null): boolean {
 export class ContentSuggestionsBar extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -125,14 +126,7 @@ export class ContentSuggestionsBar extends LitElement {
   override render(): TemplateResult {
     const ready = this.#ready();
     return html`<div class="bar">
-      <div class="lines">
-        ${this.#lines()}
-        ${
-          this.error
-            ? html`<p role="alert" data-test="suggestions-error">${this.error}</p>`
-            : nothing
-        }
-      </div>
+      <div class="lines">${this.#lines()} ${formMessage(this.error)}</div>
       <wt-button
         data-test="translate-all"
         variant=${ready || this.busy ? "primary" : "secondary"}
