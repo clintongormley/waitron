@@ -436,7 +436,7 @@ export class StaffingMonthView extends LitElement {
     const stop =
       [this.focusDate, month.today].find((date) =>
         month.days.some((day) => day.date === date && opens(day)),
-      ) ?? month.days.find((day) => day.inMonth && opens(day))?.date;
+      ) ?? (month.days.find((day) => day.inMonth && opens(day)) ?? month.days.find(opens))?.date;
     return html`<div class="sub">
         <span class="seasons-label">${t("staffing.month.seasons")}</span>
         <ul class="seasons" data-test="seasons" aria-label=${t("staffing.month.seasons")}>

@@ -678,6 +678,23 @@ describe("the Staffing view's month", () => {
       ).toBe("2026-12-01");
     });
 
+    it("puts a person who may only look's Tab stop on a special day shown from the next month when the month has none", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        read.days = read.days.map((day) => ({
+          ...day,
+          specialDay:
+            day.date === "2027-01-01" ? { id: "sd-new-year", name: "New Year's Day" } : null,
+        }));
+        return read;
+      });
+      const { el } = await mount({ api });
+      const buttons = [...root(el).querySelectorAll<HTMLButtonElement>("button.day")];
+      expect(
+        buttons.map((button) => [button.closest("td")!.dataset.date, button.tabIndex]),
+      ).toEqual([["2027-01-01", 0]]);
+    });
+
     it("leaves the painter's words behind when the month or area changes", async () => {
       const { el, open } = await mount({
         canWrite: true,
