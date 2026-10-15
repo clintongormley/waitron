@@ -755,7 +755,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
   spec approved 2026-10-15).** A "Contains none of the 14" choice, so a dish stops
-  reading "not reviewed" for ever; "may contain" dropped; Gluten and Nuts say which cereals and nuts;
+  reading "not reviewed" for ever;
   one wording per state, a variant's inherited values in italic, implied diets shown, the Products
   list reading a variant's allergens; unreviewed dishes warned about (never blocked) when a menu is
   published now or scheduled, each linking to its product. On the till the Allergens screen is

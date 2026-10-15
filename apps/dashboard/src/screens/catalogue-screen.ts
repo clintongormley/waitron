@@ -25,7 +25,7 @@ import type {
   UnitInput,
 } from "../api/client.js";
 import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
+import { codeMessage, codeOf, allergenRefusalText } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
@@ -539,6 +539,8 @@ export class CatalogueScreen extends LitElement {
    * choice that no longer exists; one that points at no field reaches the screen's banner.
    */
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
+    if (codeOf(error) === "allergen.kinds_required" || codeOf(error) === "allergen.invalid_kind")
+      return { allergens: allergenRefusalText(error) };
     const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
     if (typeof params.field === "string") {
       const name = productEditorField(params.field, this.contentLanguages?.defaultLanguage ?? "");

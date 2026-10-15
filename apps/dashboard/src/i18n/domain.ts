@@ -57,6 +57,23 @@ const ALLERGEN_NAMES: NameTable = {
   molluscs: { en: "Molluscs", es: "Moluscos" },
 };
 
+const ALLERGEN_KIND_NAMES: NameTable = {
+  wheat: { en: "Wheat", es: "Trigo" },
+  rye: { en: "Rye", es: "Centeno" },
+  barley: { en: "Barley", es: "Cebada" },
+  oats: { en: "Oats", es: "Avena" },
+  spelt: { en: "Spelt", es: "Espelta" },
+  kamut: { en: "Khorasan wheat", es: "Trigo khorasan" },
+  almonds: { en: "Almonds", es: "Almendras" },
+  hazelnuts: { en: "Hazelnuts", es: "Avellanas" },
+  walnuts: { en: "Walnuts", es: "Nueces" },
+  cashews: { en: "Cashews", es: "Anacardos" },
+  pecans: { en: "Pecans", es: "Pacanas" },
+  brazil_nuts: { en: "Brazil nuts", es: "Nueces de Brasil" },
+  pistachios: { en: "Pistachios", es: "Pistachos" },
+  macadamia: { en: "Macadamia or Queensland nuts", es: "Nueces macadamia o nueces de Australia" },
+};
+
 const BREACH_KIND_NAMES: NameTable = {
   rest_too_short: {
     en: "Too little rest between shifts",
@@ -204,6 +221,21 @@ export function allergenStateName(value: string, locale: string = currentLocale(
 
 export function allergenName(code: string, locale: string = currentLocale()): string {
   return resolveNameTable(ALLERGEN_NAMES, code, locale);
+}
+
+export function allergenKindName(kind: string, locale: string = currentLocale()): string {
+  return resolveNameTable(ALLERGEN_KIND_NAMES, kind, locale);
+}
+
+export function allergenLabel(
+  code: string,
+  entry: { kinds?: readonly string[] },
+  locale: string = currentLocale(),
+): string {
+  const name = allergenName(code, locale);
+  return entry.kinds?.length
+    ? `${name} (${entry.kinds.map((kind) => allergenKindName(kind, locale)).join(", ")})`
+    : name;
 }
 
 // Key order in ALLERGEN_NAMES is the option order in allergen-dietary-picker.ts.

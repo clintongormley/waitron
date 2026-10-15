@@ -9,7 +9,7 @@ it("shows only selected allergens without source authoring", async () => {
   const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
     declaration: { milk: {} },
   });
-  expect(el.shadowRoot!.querySelectorAll("[data-test^=presence-]")).toHaveLength(1);
+  expect(el.shadowRoot!.querySelectorAll(".row")).toHaveLength(1);
   expect(el.shadowRoot!.querySelector("[data-test^=source-]")).toBeNull();
   expect(el.value).toEqual({ milk: {} });
 });

@@ -31,3 +31,31 @@ export function allergenName(code: string, locale: string): string {
   const entry = (ALLERGEN_NAMES as Record<string, { en: string; es: string }>)[code];
   return pickLocale(entry, locale);
 }
+
+const ALLERGEN_KIND_NAMES: Record<string, { en: string; es: string }> = {
+  wheat: { en: "Wheat", es: "Trigo" },
+  rye: { en: "Rye", es: "Centeno" },
+  barley: { en: "Barley", es: "Cebada" },
+  oats: { en: "Oats", es: "Avena" },
+  spelt: { en: "Spelt", es: "Espelta" },
+  kamut: { en: "Khorasan wheat", es: "Trigo khorasan" },
+  almonds: { en: "Almonds", es: "Almendras" },
+  hazelnuts: { en: "Hazelnuts", es: "Avellanas" },
+  walnuts: { en: "Walnuts", es: "Nueces" },
+  cashews: { en: "Cashews", es: "Anacardos" },
+  pecans: { en: "Pecans", es: "Pacanas" },
+  brazil_nuts: { en: "Brazil nuts", es: "Nueces de Brasil" },
+  pistachios: { en: "Pistachios", es: "Pistachos" },
+  macadamia: { en: "Macadamia or Queensland nuts", es: "Nueces macadamia o nueces de Australia" },
+};
+
+export function allergenLabel(
+  code: string,
+  entry: { kinds?: readonly string[] },
+  locale: string,
+): string {
+  const name = allergenName(code, locale);
+  return entry.kinds?.length
+    ? `${name} (${entry.kinds.map((kind) => (Object.hasOwn(ALLERGEN_KIND_NAMES, kind) ? pickLocale(ALLERGEN_KIND_NAMES[kind]!, locale) : kind)).join(", ")})`
+    : name;
+}

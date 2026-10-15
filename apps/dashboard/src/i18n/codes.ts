@@ -1,4 +1,5 @@
 import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-kit";
+import { t } from "./t.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
@@ -867,6 +868,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That print agent no longer exists",
     es: "Ese agente de impresión ya no existe",
   },
+  "allergen.kinds_required": {
+    en: "Choose which cereals",
+    es: "Elige los cereales",
+  },
+  "allergen.invalid_kind": {
+    en: "Choose a valid cereal or nut",
+    es: "Elige un cereal o fruto de cáscara válido",
+  },
   "allergen.invalid_code": {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",
@@ -1298,3 +1307,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
 registerCodeMessages(CODE_MESSAGES);
 
 export { codeMessage, codeOf };
+
+export function allergenRefusalText(error: unknown): string {
+  const params = (error as { params?: { code?: unknown } }).params;
+  return codeOf(error) === "allergen.kinds_required" && params?.code === "nuts"
+    ? t("allergen.choose_nuts")
+    : codeMessage(codeOf(error));
+}

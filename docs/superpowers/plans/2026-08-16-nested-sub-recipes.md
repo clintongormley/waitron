@@ -1,5 +1,9 @@
 # Nested sub-recipes Implementation Plan
 
+> 2026-10-16: A668 replaces allergen presence/source declarations with explicit cereal and nut
+> kinds. The historical examples below describe the earlier shape; see
+> [A668's data contract](../specs/2026-10-14-a668-allergen-info-editor-and-till-design.md#what-it-stores).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a recipe line reference another composed product (a sub-recipe), with allergen derivation propagating UP the tree (add-only, PENDING-contagious, same as #89) and cycle detection.

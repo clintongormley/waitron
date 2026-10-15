@@ -87,3 +87,10 @@ describe("allergen kinds", () => {
     expect({ manual, recipe }).toEqual(original);
   });
 });
+
+it.each(["gluten", "nuts"])("requires %s kinds on the declaration itself", (code) => {
+  const declaration = Object.create({ kinds: [code === "gluten" ? "wheat" : "walnuts"] }) as object;
+  expect(() => validateAllergens({ [code]: declaration })).toThrowError(
+    expect.objectContaining({ code: "allergen.kinds_required", params: { code } }),
+  );
+});

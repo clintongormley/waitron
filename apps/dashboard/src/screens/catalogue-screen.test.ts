@@ -3789,3 +3789,22 @@ it("A462 Products root closure clears category URL through native tree events", 
   expect(api.createProductEditor).not.toHaveBeenCalled();
   expect(api.updateProductEditor).not.toHaveBeenCalled();
 });
+
+it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
+  "places %s beside the product allergen picker",
+  async (code) => {
+    const api = stubApi({
+      updateProductEditor: vi
+        .fn()
+        .mockRejectedValue({ code, params: { code: "gluten" }, status: 400 }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({ allergens: codeMessage(code) });
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  },
+);

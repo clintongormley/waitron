@@ -520,3 +520,35 @@ describe("ingredient-form — a server refusal", () => {
     );
   });
 });
+
+it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
+  "places %s beside the picker and allows a retry",
+  async (code) => {
+    const error = Object.assign(new Error(code), { code, params: { code: "gluten" } });
+    expect(ingredientRefusalErrors(error)).toEqual({ allergens: codeMessage(code) });
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Flour");
+    el.fieldErrors = ingredientRefusalErrors(error);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")!.textContent).toBe(
+      codeMessage(code),
+    );
+    expect((await bottomOf(el))!.textContent).toBe(t("form.fix_fields"));
+    expect((confirmOf(el) as HTMLElementTagNameMap["wt-button"]).disabled).toBe(false);
+    await emitAllergens(el, { gluten: { kinds: ["wheat"] } });
+    expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")).toBeNull();
+  },
+);
+
+it("asks for nuts by the allergen named in the refusal", () => {
+  const before = currentLocale();
+  setLocale("es-ES");
+  try {
+    expect(
+      ingredientRefusalErrors({ code: "allergen.kinds_required", params: { code: "nuts" } }),
+    ).toEqual({ allergens: "Elige los frutos de cáscara" });
+    expect(codeMessage("allergen.invalid_kind")).toBe("Elige un cereal o fruto de cáscara válido");
+  } finally {
+    setLocale(before);
+  }
+});

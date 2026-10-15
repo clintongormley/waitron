@@ -89,7 +89,7 @@ describe("archived product details", () => {
       "€4.00",
       "Archived",
       "Milk",
-      "May contain",
+      "Contains",
       "Sauces staff",
       "Cooked staff",
     ])
@@ -198,4 +198,12 @@ describe("archived product details", () => {
       expect(closed).toHaveBeenCalledOnce();
     },
   );
+});
+
+it("names every cereal and nut kind on archived product details", async () => {
+  const { el } = await mount({
+    allergens: { gluten: { kinds: ["wheat", "barley"] }, nuts: { kinds: ["walnuts"] } },
+  });
+  expect(el.shadowRoot!.textContent).toContain("Cereals containing gluten (Wheat, Barley)");
+  expect(el.shadowRoot!.textContent).toContain("Nuts (Walnuts)");
 });

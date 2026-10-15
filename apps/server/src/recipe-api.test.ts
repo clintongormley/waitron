@@ -524,3 +524,27 @@ it("refuses replacing an archived product recipe with 409 product.archived and p
   });
   expect(await (await send(app, "GET", path)).json()).toEqual(before);
 });
+
+it.each([
+  [{ gluten: {} }, "allergen.kinds_required", "gluten"],
+  [{ nuts: { kinds: ["wheat"] } }, "allergen.invalid_kind", "nuts"],
+] as const)(
+  "refuses ingredient declarations %j with HTTP 400 %s",
+  async (allergens, code, allergen) => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/ingredients", {
+      body: { name: "kind refusal", allergens },
+    });
+    expect(created.status).toBe(400);
+    expect(await created.json()).toEqual({ error: { code, params: { code: allergen } } });
+    const valid = await send(app, "POST", "/management-api/ingredients", {
+      body: { name: `valid ${code}` },
+    });
+    const ingredient = (await valid.json()) as { id: string };
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${ingredient.id}`, {
+      body: { allergens },
+    });
+    expect(patched.status).toBe(400);
+    expect(await patched.json()).toEqual({ error: { code, params: { code: allergen } } });
+  },
+);

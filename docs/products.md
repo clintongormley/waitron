@@ -165,6 +165,10 @@ and which settings still need your decision.
 what you have chosen, or "None specified". Click a line, or press Enter on it, to choose from the
 full list; press Escape or move on when you are done.
 
+Choose each cereal or nut by name, such as **Cereals containing gluten (Wheat)** and
+**Cereals containing gluten (Barley)**. You can choose more than one. Choosing an allergen means
+the dish contains it; there is no separate “may contain” choice.
+
 Each product states its own dietary suitability — a positive `suitableFor` list over vegan,
 vegetarian, halal and kosher — and its own allergens. An empty reviewed allergen list means you
 checked the product and declared none; a pending declaration means it has not been reviewed. An

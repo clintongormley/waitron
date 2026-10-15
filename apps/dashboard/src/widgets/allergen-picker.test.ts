@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
@@ -13,74 +12,38 @@ async function setReviewed(el: AllergenPicker, checked: boolean): Promise<void> 
   await el.updateComplete;
 }
 
-async function setPresence(el: AllergenPicker, code: string, presence: string): Promise<void> {
-  await chooseOption(el.shadowRoot!.querySelector(`[data-test=presence-${code}]`)!, presence);
-  await el.updateComplete;
-}
-
 async function addAllergen(el: AllergenPicker, code: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=choose-${code}]`)!.click();
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="choose-${code}"]`)!.click();
   await el.updateComplete;
 }
 
-type PresenceBox = HTMLElement & {
-  value: string;
-  label: string;
-  hideLabel: boolean;
-  search: string;
-  disabled: boolean;
-  options: { value: string; label: string }[];
-  updateComplete: Promise<unknown>;
-};
-
-const presenceBox = (el: AllergenPicker, code: string): PresenceBox =>
-  el.shadowRoot!.querySelector<PresenceBox>(`wt-combobox[name="allergen-${code}-presence"]`)!;
-
-/** What the closed dropdown shows on its trigger, not what its properties say it holds. */
-async function shownPresence(el: AllergenPicker, code: string): Promise<string | undefined> {
-  const box = presenceBox(el, code);
-  await box.updateComplete;
-  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
-}
-
 describe("allergen-picker", () => {
-  it("picks each allergen's presence from a shared dropdown named by the allergen", async () => {
+  it("shows a selected allergen by name without a precautionary presence control", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
       declaration: { milk: {} },
     });
-    const box = presenceBox(el, "milk");
-    expect(box).not.toBeNull();
-    expect(box.label).toBe(allergenName("milk", "es-ES"));
-    expect(box.hideLabel).toBe(true);
-    expect(box.search).toBe("auto");
-    expect(box.options).toEqual([
-      { value: "contains", label: t("allergen.contains", "es-ES") },
-      { value: "may_contain", label: t("allergen.may_contain", "es-ES") },
-    ]);
-    expect(box.value).toBe("may_contain");
-    expect(await shownPresence(el, "milk")).toBe(t("allergen.may_contain", "es-ES"));
-    const changes: unknown[] = [];
-    el.addEventListener("wt-allergens-change", (event) =>
-      changes.push((event as CustomEvent).detail.value),
+    expect(el.shadowRoot!.querySelector("#name-milk")!.textContent).toBe(
+      allergenName("milk", "es-ES"),
     );
-    await chooseOption(box, "contains");
-    expect(changes).toEqual([{ milk: {} }]);
+    expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+    expect(el.value).toEqual({ milk: {} });
   });
 
-  it("draws every row's dropdown the same width, whichever choice it shows, without cutting the longer one", async () => {
+  it("names a selected kind in its row and remove action", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { gluten: { kinds: ["wheat" as const] }, milk: {} },
+      declaration: { gluten: { kinds: ["wheat"] }, milk: {} },
     });
-    const gluten = presenceBox(el, "gluten");
-    const milk = presenceBox(el, "milk");
-    await Promise.all([gluten.updateComplete, milk.updateComplete]);
-    expect(await shownPresence(el, "milk")).toBe(t("allergen.may_contain", "es-ES"));
-    expect(gluten.getBoundingClientRect().width).toBeGreaterThan(0);
-    expect(gluten.getBoundingClientRect().width).toBeCloseTo(milk.getBoundingClientRect().width, 0);
-    const longer = milk.shadowRoot!.querySelector<HTMLElement>(".trigger .value")!;
-    expect(longer.scrollWidth).toBeLessThanOrEqual(longer.clientWidth);
+    expect(el.shadowRoot!.querySelector('[id="name-gluten:wheat"]')!.textContent).toBe(
+      "Cereales con gluten (Trigo)",
+    );
+    expect(
+      el.shadowRoot!.querySelector('[data-test="remove-gluten:wheat"]')!.getAttribute("aria-label"),
+    ).toContain("Trigo");
+    expect(
+      el.shadowRoot!.querySelector('[data-test="remove-milk"]')!.getAttribute("aria-label"),
+    ).toContain("Leche");
   });
 
   it("is null (PENDING) while Revisado is off", async () => {
@@ -103,35 +66,35 @@ describe("allergen-picker", () => {
     expect(el.value).toEqual({});
   });
 
-  it("enables the per-code controls once Revisado is on", async () => {
+  it("enables removal once Revisado is on", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
-    await addAllergen(el, "gluten");
-    const select = presenceBox(el, "gluten");
-    expect(select.disabled).toBe(false);
+    await addAllergen(el, "gluten:wheat");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="remove-gluten:wheat"]',
+      )!.disabled,
+    ).toBe(false);
   });
 
-  it("declares a selected allergen with its presence", async () => {
+  it("declares the cereal selected explicitly", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
-    await addAllergen(el, "gluten");
-    await setPresence(el, "gluten", "contains");
-    expect(el.value).toEqual({ gluten: { kinds: ["wheat" as const] } });
+    await addAllergen(el, "gluten:wheat");
+    expect(el.value).toEqual({ gluten: { kinds: ["wheat"] } });
   });
 
-  it("omits an empty source", async () => {
+  it("stores an ordinary allergen as an empty entry", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
     await addAllergen(el, "milk");
-    await setPresence(el, "milk", "may_contain");
     expect(el.value).toEqual({ milk: {} });
   });
 
   it("returns to null when Revisado is switched back off", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
     await setReviewed(el, true);
-    await addAllergen(el, "gluten");
-    await setPresence(el, "gluten", "contains");
+    await addAllergen(el, "gluten:wheat");
     await setReviewed(el, false);
     expect(el.value).toBe(null);
   });
@@ -190,9 +153,9 @@ describe("allergen-picker", () => {
       "[data-test=reviewed]",
     )!;
     expect(sw.checked).toBe(true);
-    const gluten = presenceBox(el, "gluten");
-    expect(gluten.value).toBe("contains");
-    expect(await shownPresence(el, "gluten")).toBe(t("allergen.contains", "es-ES"));
+    expect(el.shadowRoot!.querySelector('[id="name-gluten:wheat"]')!.textContent).toBe(
+      "Cereales con gluten (Trigo)",
+    );
     expect(el.shadowRoot!.querySelector("[data-test=source-gluten]")).toBeNull();
     expect(el.value).toEqual({
       gluten: { kinds: ["wheat" as const] },
@@ -204,7 +167,7 @@ describe("allergen-picker", () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
       declaration: { gluten: { kinds: ["wheat" as const] } },
     });
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-gluten]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-gluten:wheat"]')!.click();
     await el.updateComplete;
     expect(el.value).toEqual({});
   });
@@ -221,17 +184,17 @@ describe("allergen-picker", () => {
     expect(milk.textContent!.trim()).toBe(allergenName("milk", "es-ES"));
   });
 
-  it("labels the presence options with localised text, keeping the wire values", async () => {
-    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
-    await setReviewed(el, true);
-    await addAllergen(el, "gluten");
-    const options = presenceBox(el, "gluten").options;
-    const byValue = (v: string) => options.find((o) => o.value === v)!;
-    expect(byValue("contains").label).toBe(t("allergen.contains", "es-ES"));
-    expect(byValue("may_contain").label).toBe(t("allergen.may_contain", "es-ES"));
-    expect(byValue("contains").value).toBe("contains");
-    expect(byValue("may_contain").value).toBe("may_contain");
-    expect(options.map((o) => o.value)).toEqual(["contains", "may_contain"]);
+  it("labels kinds with localised text while keeping their wire values", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    await openPicker(el);
+    expect(
+      el.shadowRoot!.querySelector('[data-test="choose-gluten:kamut"]')!.textContent!.trim(),
+    ).toBe("Cereales con gluten (Trigo khorasan)");
+    expect(
+      el.shadowRoot!.querySelector('[data-test="choose-nuts:pistachios"]')!.textContent!.trim(),
+    ).toBe("Frutos de cáscara (Pistachos)");
   });
 
   it("offers all fourteen EU allergen codes", async () => {
@@ -239,9 +202,13 @@ describe("allergen-picker", () => {
     await setReviewed(el, true);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
     await el.updateComplete;
-    const codes = [...el.shadowRoot!.querySelectorAll("[data-test^=choose-]")].map((s) =>
-      s.getAttribute("data-test")!.replace("choose-", ""),
-    );
+    const codes = [
+      ...new Set(
+        [...el.shadowRoot!.querySelectorAll("[data-test^=choose-]")].map(
+          (s) => s.getAttribute("data-test")!.replace("choose-", "").split(":")[0],
+        ),
+      ),
+    ];
     expect(codes).toEqual([
       "gluten",
       "crustaceans",
@@ -275,30 +242,31 @@ async function openPicker(el: AllergenPicker): Promise<void> {
 }
 
 describe("allergen-picker guards", () => {
-  it("ignores presence changes and removals while Revisado is off, and keeps the entry", async () => {
+  it("ignores removals while Revisado is off and keeps all kinds", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { milk: {} },
+      declaration: { gluten: { kinds: ["wheat", "barley"] }, milk: {} },
     });
     await setReviewed(el, false);
     const changes = trackChanges(el);
-    await setPresence(el, "milk", "may_contain");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-milk]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-gluten:wheat"]')!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
     await el.updateComplete;
     expect(changes).toEqual([]);
     await setReviewed(el, true);
-    expect(el.value).toEqual({ milk: {} });
+    expect(el.value).toEqual({ gluten: { kinds: ["wheat", "barley"] }, milk: {} });
   });
 
-  it("shows the stored presence again after a change refused while Revisado is off", async () => {
+  it("shows the stored kinds again after switching review off and on", async () => {
     const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
-      declaration: { milk: {} },
+      declaration: { nuts: { kinds: ["walnuts"] } },
     });
     await setReviewed(el, false);
-    await setPresence(el, "milk", "may_contain");
     await setReviewed(el, true);
-    expect(el.value).toEqual({ milk: {} });
-    expect(presenceBox(el, "milk").value).toBe("contains");
-    expect(await shownPresence(el, "milk")).toBe(t("allergen.contains", "es-ES"));
+    expect(el.value).toEqual({ nuts: { kinds: ["walnuts"] } });
+    expect(el.shadowRoot!.querySelector('[id="name-nuts:walnuts"]')!.textContent).toBe(
+      "Frutos de cáscara (Nueces)",
+    );
   });
 
   it("does not open the picker while Revisado is off", async () => {
@@ -354,12 +322,41 @@ describe("allergen-picker guards", () => {
       );
     };
     setLocale("es-ES");
-    expect(await offered("cascara frutos")).toEqual(["nuts"]);
+    expect(await offered("cascara frutos")).toEqual([
+      "nuts:walnuts",
+      "nuts:pecans",
+      "nuts:almonds",
+      "nuts:hazelnuts",
+      "nuts:cashews",
+      "nuts:pistachios",
+      "nuts:brazil_nuts",
+      "nuts:macadamia",
+    ]);
     expect(await offered("&")).toEqual([]);
     setLocale("en-GB");
     expect(await offered("frutos")).toEqual([]);
-    expect(await offered("nuts")).toEqual(["nuts", "peanuts"]);
-    expect(await offered("nut")).toEqual(["nuts", "peanuts"]);
+    expect((await offered("nuts")).map((x) => x.split(":")[0])).toEqual([
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "peanuts",
+    ]);
+    expect((await offered("nut")).map((x) => x.split(":")[0])).toEqual([
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "nuts",
+      "peanuts",
+    ]);
     expect(await offered("nut ")).toEqual([]);
   });
 

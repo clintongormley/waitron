@@ -1,5 +1,9 @@
 # Recipes / BOM — slice 3: nested sub-recipes (sub-project 18)
 
+> 2026-10-16: A668 replaces allergen presence/source declarations with explicit cereal and nut
+> kinds. The historical examples below describe the earlier shape; see
+> [A668's data contract](../specs/2026-10-14-a668-allergen-info-editor-and-till-design.md#what-it-stores).
+
 **Date:** 2026-08-16. **Status:** design; plan alongside. **Builds on:** #89 (recipes/BOM allergen-inheritance
 BACKEND) and the recipe-authoring UI slice (`2026-08-16-recipe-authoring-ui-design.md`).
 

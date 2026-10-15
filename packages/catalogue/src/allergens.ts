@@ -34,11 +34,7 @@ export type Kind = (typeof CEREAL_KINDS)[number] | (typeof NUT_KINDS)[number];
 export interface AllergenDeclaration {
   kinds?: Kind[];
 }
-// A plain string-keyed record, NOT `Partial<Record<AllergenCode, …>>`: it must be byte-identical to
-// the db column's `$type` and `TillProduct.allergens` so allergens flow db↔catalogue↔till with no
-// cast. A `Partial<Record<AllergenCode, …>>` makes every key `X | undefined`, which the db's
-// `Record<string, …>` index signature rejects on insert. Keys are `AllergenCode`s, enforced at
-// runtime by `validateAllergens` rather than at compile time.
+// Keep the record string-keyed to match the database JSON type; validateAllergens checks codes.
 export type ProductAllergens = Record<string, AllergenDeclaration>;
 
 const CODES = new Set<string>(ALLERGEN_CODES);
@@ -49,7 +45,6 @@ export function allergenKinds(code: string): readonly string[] {
   return [];
 }
 
-/** Validate a caller/JSON-supplied allergen map. Returns it narrowed; throws AppError on any fault. */
 export function validateAllergens(value: unknown): ProductAllergens {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new AppError("allergen.invalid_code", { code: String(value) });
@@ -66,7 +61,9 @@ export function validateAllergens(value: unknown): ProductAllergens {
     const allowed = allergenKinds(code);
     if (
       allowed.length > 0 &&
-      (kinds === undefined || (Array.isArray(kinds) && kinds.length === 0))
+      (!Object.hasOwn(decl, "kinds") ||
+        kinds === undefined ||
+        (Array.isArray(kinds) && kinds.length === 0))
     ) {
       throw new AppError("allergen.kinds_required", { code });
     }
