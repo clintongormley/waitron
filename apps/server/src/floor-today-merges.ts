@@ -21,7 +21,8 @@ import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-to
 import type { Placement } from "./floor-reset-plan.js";
 import { partPlaces } from "./joined-split-layout.js";
 import { holderOf, partyRevision } from "./parties.js";
-import { joinTables, type SlipsLater } from "./table-actions.js";
+import type { SlipsLater } from "./moved-slips.js";
+import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
 

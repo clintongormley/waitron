@@ -16,7 +16,7 @@ import { partsOf, type Part } from "./floor-today-parts.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
 import { todayOf, type Today } from "./floor-today-table.js";
-import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
+import { withMovedSlips } from "./moved-slips.js";
 import {
   checkAndBumpParty,
   holdersOf,
@@ -104,17 +104,29 @@ async function splitGroup(
     if (!rejoin.whole) throw new AppError("joined_table.seats_required", {});
   }
 
-  const before = await readPartiesSentWork(tx, [...new Set(holders.values())], members);
-  if (rejoin === null) {
-    for (const partyId of losing) {
-      await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
-    }
-    if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
-    await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
-  } else {
-    await putBack(tx, cfg, removals, now, { zoneId, merge, staying, rejoin }, { partIds, seats });
-  }
-  await enqueueMovedSlipsFor(tx, cfg, before);
+  await withMovedSlips(
+    tx,
+    cfg,
+    { parties: [...new Set(holders.values())], deliveredTo: members },
+    async () => {
+      if (rejoin === null) {
+        for (const partyId of losing) {
+          await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+        }
+        if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
+        await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
+      } else {
+        await putBack(
+          tx,
+          cfg,
+          removals,
+          now,
+          { zoneId, merge, staying, rejoin },
+          { partIds, seats },
+        );
+      }
+    },
+  );
 }
 
 /** `partIds` leave the group and `rejoin`'s joined table is put back over `staying`. */

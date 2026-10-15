@@ -155,7 +155,8 @@ import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
-import type { SlipsLater, TableActionOptions } from "./table-actions.js";
+import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
+import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -190,13 +191,7 @@ import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
-import {
-  enqueueMovedSlipsFor,
-  listPrintProblems,
-  readPartiesSentWork,
-  reprintOrderTickets,
-  type SentWork,
-} from "./kitchen-print.js";
+import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
   clearSessionCookie,
@@ -2792,39 +2787,42 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const heldBefore = await memberTables(tx, partyId);
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
-            // A merge can pass guests on after the join, so the kitchen is told once, at the end.
-            let later: { slips: SlipsLater; before: ReadonlyMap<string, SentWork> } | undefined;
-            if (merge !== null) {
+            const actAndMerge = async (slipsLater?: SlipsLater) => {
+              const acted = await act(
+                tx,
+                sendCfg,
+                partyId,
+                tableId,
+                { ...command, slipsLater },
+                deps.attendance === undefined
+                  ? undefined
+                  : { recorder: deps.attendance, clock: deps.clock },
+              );
+              await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
+              if (merge !== null) {
+                const held = merge.moving === tableId ? merge.target : merge.moving;
+                if (!heldBefore.includes(held)) throw invalid("merge");
+                await writeMerge(tx, cfg, {
+                  movingId: merge.moving,
+                  targetId: merge.target,
+                  side: merge.side,
+                  seats: merge.seats,
+                  free: false,
+                });
+              }
+              return acted;
+            };
+            let acted: Awaited<ReturnType<typeof actAndMerge>>;
+            if (merge === null) {
+              acted = await actAndMerge();
+            } else {
+              // A merge can pass guests on after the join, so the kitchen is told once, at the end.
+              // Not widened to the target group's members as the floor's merge is, yet:
+              // docs/backlog.md, A704.
               const holder = await holderOf(tx, tableId);
               const parties = holder === null ? [partyId] : [partyId, holder];
-              const before = await readPartiesSentWork(tx, parties, [merge.moving, merge.target]);
-              later = { slips: { mergedInto: new Map<string, string>() }, before };
-            }
-            const slipsLater = later?.slips;
-            const acted = await act(
-              tx,
-              sendCfg,
-              partyId,
-              tableId,
-              { ...command, slipsLater },
-              deps.attendance === undefined
-                ? undefined
-                : { recorder: deps.attendance, clock: deps.clock },
-            );
-            await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
-            if (merge !== null) {
-              const held = merge.moving === tableId ? merge.target : merge.moving;
-              if (!heldBefore.includes(held)) throw invalid("merge");
-              await writeMerge(tx, cfg, {
-                movingId: merge.moving,
-                targetId: merge.target,
-                side: merge.side,
-                seats: merge.seats,
-                free: false,
-              });
-            }
-            if (later !== undefined) {
-              await enqueueMovedSlipsFor(tx, sendCfg, later.before, later.slips.mergedInto);
+              const deliveredTo = [merge.moving, merge.target];
+              acted = await withMovedSlips(tx, sendCfg, { parties, deliveredTo }, actAndMerge);
             }
             // Last, so the route's own refusals answer first.
             await refuseTakenOff(tx, [tableId]);

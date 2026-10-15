@@ -30,7 +30,7 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import { enqueueMovedSlipsFor, readSentWorkAt } from "./kitchen-print.js";
+import { withMovedSlips } from "./moved-slips.js";
 import { holdersOf } from "./parties.js";
 import {
   refuseInJoinedTable,
@@ -745,16 +745,16 @@ export async function backToSaved(
     throw new AppError("table.not_on_today_plan", { tableId });
   }
   const members = merge?.members.map((member) => member.tableId) ?? [];
-  const before = members.length === 0 ? null : await readSentWorkAt(tx, members);
-  await leaveMerges(tx, [tableId]);
-  await tx
-    .update(floorTodayTables)
-    .set({
-      seats: saved.seats,
-      fixed: saved.fixed,
-      ...placementColumns(placementOf(saved)),
-      takenOff: false,
-    })
-    .where(eq(floorTodayTables.id, row.id));
-  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
+  await withMovedSlips(tx, cfg, members.length === 0 ? null : { tables: members }, async () => {
+    await leaveMerges(tx, [tableId]);
+    await tx
+      .update(floorTodayTables)
+      .set({
+        seats: saved.seats,
+        fixed: saved.fixed,
+        ...placementColumns(placementOf(saved)),
+        takenOff: false,
+      })
+      .where(eq(floorTodayTables.id, row.id));
+  });
 }

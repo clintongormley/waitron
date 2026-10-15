@@ -2045,13 +2045,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A677 — Every path that can move sent work snapshots it, writes, then queues MOVED slips by hand
-  (2026-10-14; open).** Each chooses its own tables to snapshot (`readSentWorkAt`,
-  `readPartiesSentWork`, then `enqueueMovedSlipsFor`, `apps/server/src/kitchen-print.ts`), and the
-  floor's merge route (`apps/server/src/floor-today-api.ts`) adds the target group's members while
-  the till's join route (`apps/server/src/till-api.ts`) does not. One wrapper owning the snapshot
-  and the widening would end the hand copies; the owner decides whether the two routes should
-  differ. Left open by A650 Part 1.
+- **A704 — The till's join should read the target group's tables, as the floor's merge does
+  (2026-10-15; owner decided; not started).** Only the floor's merge passes `targetGroupOf` to
+  `withMovedSlips` (`apps/server/src/moved-slips.ts`); the owner chose on 2026-10-15 that the till's
+  join, when it pushes tables together, does too. Left open by A677.
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery

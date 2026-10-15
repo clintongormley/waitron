@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
 import type { LaidPart } from "./joined-split-layout.js";
-import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
+import { withMovedSlips } from "./moved-slips.js";
 import { checkAndBumpParty, holderOf, leaveTables, partyRevision } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -85,20 +85,20 @@ export async function passGuests(
     .update(diningTables)
     .set({ needsClearingSince: null })
     .where(inArray(diningTables.id, [...toTableIds]));
-  const before = slips === "now" ? await readPartiesSentWork(tx, [partyId]) : null;
-  await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
-  const [latest] = await tx
-    .select({ joinedAt: max(partyTables.joinedAt) })
-    .from(partyTables)
-    .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)));
-  const now = nowIso();
-  const from = Date.parse(
-    latest?.joinedAt != null && latest.joinedAt > now ? latest.joinedAt : now,
-  );
-  await leaveTables(tx, [fromTableId]);
-  for (const [index, tableId] of toTableIds.entries()) {
-    const joinedAt = new Date(from + index + 1).toISOString();
-    await tx.insert(partyTables).values({ partyId, tableId, joinedAt });
-  }
-  if (before !== null) await enqueueMovedSlipsFor(tx, cfg, before);
+  await withMovedSlips(tx, cfg, slips === "now" ? { parties: [partyId] } : null, async () => {
+    await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+    const [latest] = await tx
+      .select({ joinedAt: max(partyTables.joinedAt) })
+      .from(partyTables)
+      .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt)));
+    const now = nowIso();
+    const from = Date.parse(
+      latest?.joinedAt != null && latest.joinedAt > now ? latest.joinedAt : now,
+    );
+    await leaveTables(tx, [fromTableId]);
+    for (const [index, tableId] of toTableIds.entries()) {
+      const joinedAt = new Date(from + index + 1).toISOString();
+      await tx.insert(partyTables).values({ partyId, tableId, joinedAt });
+    }
+  });
 }

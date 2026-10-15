@@ -827,4 +827,27 @@ describe("a counter order delivered to a table an action brings into or takes ou
       expect(slips.filter((slip) => slip.includes(to))).toHaveLength(1);
     }
   });
+
+  it("Long table, renamed for today, pushed by the floor's merge route onto Counter 6 of an unnamed group with Table 9 prints one MOVED slip for the counter order delivered to Table 9, from Table 9 to the name", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    await post(
+      `/api/tables/${table.t9!}/today/merge`,
+      await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
+    );
+    await deliveredCounterOrder(zoneId, table.t9!);
+    const name = suffixed("Fiesta");
+    await rename(table.long!, name);
+
+    const printed = await jobsFrom(async () =>
+      post(
+        `/api/tables/${table.long!}/today/merge`,
+        await withRevision(v, table.long!, { targetId: table.c6!, side: "right", seats: 16 }),
+      ),
+    );
+
+    expect((await floorRow(v, table.t9!)).today?.joinName).toBe(name);
+    const slips = printed.filter(isMovedSlip);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.t9!), name));
+  });
 });
