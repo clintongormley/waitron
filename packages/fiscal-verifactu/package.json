@@ -54,6 +54,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./paper-protocol": "./src/paper-protocol.ts",
+    "./custodian": "./src/custodian/index.ts",
     "./src/*": "./src/*",
     "./test/*": "./test/*",
     "./package.json": "./package.json"
