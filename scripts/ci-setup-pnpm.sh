@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs the pnpm that package.json's packageManager names, each attempt under a time limit,
 # three attempts. Why not pnpm/action-setup: docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded
+# Called by every workflow's "Set up pnpm" step; its suite is scripts/ci-setup-pnpm.test.mjs.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"

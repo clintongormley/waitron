@@ -1105,9 +1105,13 @@ Every workflow step that sets pnpm up runs `bash scripts/ci-setup-pnpm.sh` under
 `packageManager`, installs it with `npm install --global --prefix "$RUNNER_TEMP/pnpm-setup"`, checks
 that the installed `pnpm --version` prints that version, and puts the prefix's `bin` on
 `GITHUB_PATH`. Each npm attempt runs under `timeout` (60 s, `PNPM_SETUP_ATTEMPT_SECONDS`) with a
-forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its own 10 s limit with a
-2 s kill. Three attempts, then the step fails. Worst case 3 × (60 + 10) + 3 × (10 + 2) = 246 s, under
-the step's 300 s.
+forced kill 10 s later (`PNPM_SETUP_KILL_SECONDS`); the version check has its own 10 s limit
+(`PNPM_SETUP_VERSION_SECONDS`) with a 2 s kill, and a check that fails or is stopped fails the
+attempt even when it printed the right version. Three attempts, then the step fails. Worst case
+3 × (60 + 10) + 3 × (10 + 2) = 246 s, under the step's 300 s. In the jobs whose own limit is also
+5 minutes (`changes`, `typecheck`, the five `-merge` jobs and `stripe-sandbox`), that job limit
+covers every other step too, so there a setup that needs its third attempt can still end with the
+job cancelled.
 
 The stall: main run `38799624567`, job `test-dashboard (2)`. `pnpm/action-setup@v6` printed
 "Running self-installer..." and then nothing for 260 s; the next main run did the same shard in
@@ -1139,18 +1143,18 @@ puts its store under `$PNPM_HOME/store/v3` when that is set (`PNPM_HOME=/tmp/fak
 path` printed `/tmp/fakehome/store/v3`, run 2026-10-15 on macOS). The script exports no `PNPM_HOME`,
 so the store is at pnpm's default path, and `actions/setup-node`'s `cache: pnpm` entries saved under
 the old path will most likely miss once per job until `main` has saved new ones; that was not
-measured. No new cache entry is added; the old ones age out under the cache's least-recently-used
-eviction.
+measured. The old entries are left for the cache's least-recently-used eviction.
 
 Out of scope: `deploy/Dockerfile` installs pnpm with `npm install --global pnpm@9.15.0` while
-building an image, not in a workflow setup step, and is not bounded by this.
+building an image, not in a workflow setup step, and is not bounded by this; backlog A745.
 
-Guards: "every pnpm setup is bounded" in `scripts/ci-workflow.test.mjs`, weaker than its name — it
+Guards: "the workflows' pnpm setups" in `scripts/ci-workflow.test.mjs`, weaker than its name — it
 reads every workflow as TEXT and does not run it: no non-comment `uses: pnpm/action-setup`, a
 `timeout-minutes` on every step running the script, and the setup before each job's first step that
 runs `pnpm`. A setup in a composite action or a reusable workflow is invisible to it, and a `pnpm`
-run by a script the step calls is not seen. `scripts/setup-node-pnpm.test.mjs` finds the setup by
-the same `run: bash scripts/ci-setup-pnpm.sh` line. The script's behaviour — the bound, the kill
+run by a script the step calls is not seen, and the step's `timeout-minutes` is not compared with
+the script's worst case. `scripts/setup-node-pnpm.test.mjs` finds the setup only by a one-line
+`run: bash scripts/ci-setup-pnpm.sh`. The script's behaviour — the bound, the kill
 grace, the retries, the version check, refusing an empty `RUNNER_TEMP` or `GITHUB_PATH` and a
 `packageManager` that is not an exact version — is run under a stubbed npm by
 `scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted by it.

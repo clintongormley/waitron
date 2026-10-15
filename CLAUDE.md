@@ -167,7 +167,7 @@ hook, or how tests are scheduled:
   waitron.sh's retries under stubs. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
 - **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`,
-  three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit.**
+  three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of its own.**
   Cost: main run 38799624567's `test-dashboard (2)` sat 260 s in it. Guards: the pnpm-setup cases in
   `scripts/ci-workflow.test.mjs`, weaker than their names — they read text — and
   `scripts/ci-setup-pnpm.test.mjs`, which runs the script under a stubbed npm. Receipt:
