@@ -206,7 +206,10 @@ export class StaffingMonthView extends LitElement {
       .special {
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-palette-purple);
-        overflow-wrap: anywhere;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       td[data-closed] .special {
         color: inherit;
@@ -227,10 +230,18 @@ export class StaffingMonthView extends LitElement {
         background: var(--wt-color-palette-purple);
       }
       .label {
+        display: flex;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .name {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+      .count {
+        flex: none;
+        white-space: pre;
       }
       /* A phone's width: the bar sits above its label, and today is marked on the number. */
       @container staffing-month (width < 560px) {
@@ -247,11 +258,6 @@ export class StaffingMonthView extends LitElement {
         }
         .bar {
           width: calc(var(--share) * 100%);
-        }
-        .label {
-          white-space: normal;
-          overflow-wrap: anywhere;
-          hyphens: auto;
         }
         .day[aria-current="date"] .date {
           padding: 0 calc(var(--wt-space-1) / 2);
@@ -352,7 +358,7 @@ export class StaffingMonthView extends LitElement {
         ${step(-1, "previous-month", "staffing.month.previous", "‹")}
         <h2 data-test="month" aria-live="polite">${title}</h2>
         ${step(1, "next-month", "staffing.month.next", "›")}
-        ${read ? this.#picker(read.areas) : nothing}
+        ${this.read ? this.#picker(this.read.areas) : nothing}
       </div>
       ${
         this.loadError
@@ -466,7 +472,9 @@ export class StaffingMonthView extends LitElement {
         </span>
         ${
           day.specialDay
-            ? html`<span class="special" data-test="special">${day.specialDay.name}</span>`
+            ? html`<span class="special" data-test="special" title=${day.specialDay.name}
+                >${day.specialDay.name}</span
+              >`
             : nothing
         }
         ${
@@ -483,7 +491,11 @@ export class StaffingMonthView extends LitElement {
                 data-test="bar"
                 style=${styleMap({ "--share": String(needed / largest) })}
               ></span>
-              <span class="label">${names.get(areaKey(area)) ?? ""} ${needed}</span>
+              <span class="label"
+                ><span class="name" data-test="area-name" title=${names.get(areaKey(area)) ?? ""}
+                  >${names.get(areaKey(area)) ?? ""}</span
+                ><span class="count" data-test="area-count"> ${needed}</span></span
+              >
             </span>`,
         )}
       </div>

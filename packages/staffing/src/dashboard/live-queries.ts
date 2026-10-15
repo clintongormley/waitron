@@ -16,6 +16,7 @@ export const QUERY_DEPENDENCIES = {
     "seasons",
     "special_days",
     "special_day_dates",
+    "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",
   ],

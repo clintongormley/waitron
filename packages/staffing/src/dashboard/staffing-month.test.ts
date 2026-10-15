@@ -342,4 +342,63 @@ describe("the Staffing view's month", () => {
         el.parentElement!.getBoundingClientRect().right + 0.5,
       );
   });
+
+  it("puts each bar above its label on a phone, and beside it on a wide screen", async () => {
+    const { el: wide } = await mount({ width: "1280px" });
+    const wideLine = cell(wide, "2026-12-01").querySelector<HTMLElement>("[data-test=area-line]")!;
+    const wideBar = wideLine.querySelector("[data-test=bar]")!.getBoundingClientRect();
+    const wideLabel = wideLine.querySelector(".label")!.getBoundingClientRect();
+    expect(wideBar.right).toBeLessThanOrEqual(wideLabel.left);
+    expect(wideBar.bottom).toBeGreaterThan(wideLabel.top);
+
+    const { el: phone } = await mount({ width: "390px" });
+    const line = cell(phone, "2026-12-01").querySelector<HTMLElement>("[data-test=area-line]")!;
+    const bar = line.querySelector("[data-test=bar]")!.getBoundingClientRect();
+    const label = line.querySelector(".label")!.getBoundingClientRect();
+    expect(getComputedStyle(line).flexDirection).toBe("column");
+    expect(bar.bottom).toBeLessThanOrEqual(label.top);
+  });
+
+  it("keeps an area's and a special day's name on one line on a phone, the number always shown", async () => {
+    const { el } = await mount({ width: "390px" });
+    const day = cell(el, "2026-12-24");
+    const dayBox = day.querySelector(".day")!.getBoundingClientRect();
+    const lineHeight = day.querySelector<HTMLElement>(".date")!.getBoundingClientRect().height;
+    for (const line of day.querySelectorAll<HTMLElement>("[data-test=area-line]")) {
+      const name = line.querySelector<HTMLElement>("[data-test=area-name]")!;
+      const count = line.querySelector<HTMLElement>("[data-test=area-count]")!;
+      expect(name.title).toBe(name.textContent);
+      expect(name.getBoundingClientRect().height).toBeLessThanOrEqual(lineHeight + 0.5);
+      expect(count.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(count.getBoundingClientRect().right).toBeLessThanOrEqual(dayBox.right + 0.5);
+    }
+    const special = day.querySelector<HTMLElement>("[data-test=special]")!;
+    expect(special.title).toBe("Christmas Eve");
+    expect(special.getBoundingClientRect().height).toBeLessThanOrEqual(lineHeight + 0.5);
+  });
+
+  it("keeps the area picker in place while the next month is read", async () => {
+    let answer: (month: StaffingMonth) => void = () => undefined;
+    const { api } = fakeApi(async (month) =>
+      month === "2026-12"
+        ? staffingMonth(month)
+        : new Promise<StaffingMonth>((resolve) => {
+            answer = resolve;
+          }),
+    );
+    const { el } = await mount({ api });
+    el.month = "2027-01";
+    await settled(el);
+    expect(root(el).querySelector("[data-test=loading]")).not.toBeNull();
+    expect(picker(el).options.map((option) => option.label)).toEqual([
+      "All areas",
+      "Restaurant",
+      "Bar",
+      "Kitchen",
+    ]);
+    answer(staffingMonth("2027-01"));
+    await settled(el);
+    expect(picker(el)).not.toBeNull();
+    expect(cell(el, "2027-01-05")).not.toBeNull();
+  });
 });
