@@ -217,6 +217,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a default from your enabled languages and remove any duplicates.",
     es: "Elige un idioma predeterminado entre los disponibles y elimina los duplicados.",
   },
+  "content.suggestion_job_running": {
+    en: "Translate all is already running.",
+    es: "Traducir todo ya está en marcha.",
+  },
+  "content.suggestion_consent_required": {
+    en: "Your Waitron Cloud account must first agree to menu names going to its translation providers.",
+    es: "Tu cuenta de Waitron Cloud debe aceptar primero que los nombres de la carta se envíen a sus proveedores de traducción.",
+  },
+  "content.suggestion_limit_reached": {
+    en: "This month's translation limit is reached.",
+    es: "Se ha alcanzado el límite de traducción de este mes.",
+  },
+  "content.suggestion_service_unavailable": {
+    en: "The translation service failed. Try again later.",
+    es: "El servicio de traducción ha fallado. Vuelve a intentarlo más tarde.",
+  },
+  "content.suggestion_expired": {
+    en: "The results were deleted before Waitron collected them. Press Translate all again.",
+    es: "Los resultados se borraron antes de que Waitron los recogiera. Pulsa Traducir todo de nuevo.",
+  },
+  "content.suggestion_not_found": {
+    en: "That suggestion is no longer there.",
+    es: "Esa sugerencia ya no existe.",
+  },
   "content.translation_stale": {
     en: "These names or their language settings changed. Review the latest values before saving again.",
     es: "Estos nombres o su configuración de idiomas han cambiado. Revisa los valores actuales antes de volver a guardar.",

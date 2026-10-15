@@ -679,3 +679,22 @@ it("says a box holds no recovery key rather than asking for one to be entered, s
     "Esta caja no tiene clave de recuperación.",
   );
 });
+
+it("words each Translate all code in both languages", () => {
+  for (const code of [
+    "content.suggestion_job_running",
+    "content.suggestion_consent_required",
+    "content.suggestion_limit_reached",
+    "content.suggestion_service_unavailable",
+    "content.suggestion_expired",
+    "content.suggestion_not_found",
+  ])
+    for (const locale of ["en", "es"] as const)
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown.code", locale));
+  expect(codeMessage("content.suggestion_limit_reached", "en")).toBe(
+    "This month's translation limit is reached.",
+  );
+  expect(codeMessage("content.suggestion_limit_reached", "es")).toBe(
+    "Se ha alcanzado el límite de traducción de este mes.",
+  );
+});

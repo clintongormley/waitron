@@ -1580,7 +1580,7 @@ export interface CloudConnectionStatus {
     lastContactAt: string | null;
     leaseExpiresAt: string | null;
     services: {
-      service: "remote_access" | "continuous_backup" | "retained_snapshots";
+      service: "remote_access" | "continuous_backup" | "retained_snapshots" | "content_translation";
       state: "unconfigured" | "provisioning" | "ready" | "failed";
       health: "unknown" | "healthy" | "degraded" | "failed";
       failure: string | null;

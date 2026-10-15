@@ -1067,8 +1067,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   copies the saved row as it is, unplanned. The demo seed
   (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
 
-- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; ready to
-  build, Cloud's side first (owner 2026-10-06 ~17:23).** A
+- **A "Translate all" service from Waitron Cloud — specs and plans approved 2026-10-14; Waitron's
+  tasks 1–4 landed, the rest in progress (owner 2026-10-06 ~17:23).** A
   paid subscriber service in Waitron Cloud (the separate service, not this repository) that
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
@@ -1082,7 +1082,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `docs/superpowers/plans/2026-10-14-translate-all.md` (24 tasks; 22–24 are owner-run measurements
   with the real key), on waitron-cloud PR #131. The approval covers the proposed $5 per venue per
   month cap and Cloud's submit allowance (4 in flight, 1 per address); Cloud's spec still says
-  "proposed" until its first implementation change updates it.
+  "proposed" until its first implementation change updates it. **Tasks 1–4 (the box's Cloud calls
+  and a fake Cloud) are on `main`:** the box now asks for the service with `servicesVersion` 2, which
+  a Cloud without version 2 refuses, so Cloud's version 2 must be deployed before a box built from
+  `main` talks to it ([cloud-connection.md](developers/cloud-connection.md)).
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
@@ -5229,6 +5232,14 @@ the tree. What remains, largest first:
   operator step.** Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog. Left open by the
   Cloud connection integration (2026-09-24; #638, #808).
+
+- **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
+  the field into text before checking it, so `["ready"]` passes as `"ready"`:
+  `apps/server/src/cloud-client.ts` (the pairing reply's and saved view's `state`),
+  `cloud-recovery.ts` (the saved recovery `phase`, and Cloud's `result.state`) and
+  `cloud-replacement.ts` (Cloud's `state`). A689's first PR fixed the same pattern in
+  `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
+  (2026-10-15), not measured against a real Cloud.
 
 - **A stop made while `cloud-replacement.json` is unreadable is not recorded in it.** Owner to
   choose: refuse Stop access while the replacement file is unreadable, or record the stop somewhere

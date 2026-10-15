@@ -13,7 +13,11 @@ interface Pending {
   lease: string;
   body: string;
 }
-type Service = "continuous_backup" | "remote_access" | "retained_snapshots";
+const ORIGINAL_SERVICES = ["continuous_backup", "remote_access", "retained_snapshots"] as const;
+const SERVICES = [...ORIGINAL_SERVICES, "content_translation"] as const;
+type Service = (typeof SERVICES)[number];
+/** Asks Cloud for the fourth service, `content_translation` (contract, "Translate all, version 1"). */
+const CONFIGURATION_BODY = JSON.stringify({ servicesVersion: 2 });
 export interface CloudObservation {
   service: Service;
   health: "unknown" | "healthy" | "degraded" | "failed";
@@ -50,6 +54,8 @@ const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const uuid = (v: unknown) =>
   typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
+const oneOf = (allowed: readonly string[], v: unknown) =>
+  typeof v === "string" && allowed.includes(v);
 const date = (v: unknown) =>
   v === null || (typeof v === "string" && Number.isFinite(Date.parse(v)));
 function unavailable(): never {
@@ -69,20 +75,21 @@ function readView(value: unknown, state: SavedCloudState): View {
     !date(value.lastContactAt) ||
     !date(value.leaseExpiresAt) ||
     !Array.isArray(value.services) ||
-    value.services.length !== 3
+    (value.services.length !== 3 && value.services.length !== 4)
   )
     unavailable();
   const services: ServiceView[] = [];
   for (const s of value.services) {
     if (
       !object(s) ||
-      !["continuous_backup", "remote_access", "retained_snapshots"].includes(String(s.service)) ||
+      !oneOf(SERVICES, s.service) ||
       services.some((v) => v.service === s.service) ||
-      !["unconfigured", "provisioning", "ready", "failed"].includes(String(s.state)) ||
-      !["unknown", "healthy", "degraded", "failed"].includes(String(s.health)) ||
+      !oneOf(["unconfigured", "provisioning", "ready", "failed"], s.state) ||
+      !oneOf(["unknown", "healthy", "degraded", "failed"], s.health) ||
       (s.failure !== null &&
-        !["unavailable", "authentication", "configuration", "storage", "capacity"].includes(
-          String(s.failure),
+        !oneOf(
+          ["unavailable", "authentication", "configuration", "storage", "capacity"],
+          s.failure,
         )) ||
       !date(s.observedAt) ||
       !object(s.configuration) ||
@@ -98,6 +105,7 @@ function readView(value: unknown, state: SavedCloudState): View {
       observedAt: s.observedAt as string | null,
     });
   }
+  if (!ORIGINAL_SERVICES.every((name) => services.some((s) => s.service === name))) unavailable();
   return {
     ...r,
     environment: state.environment,
@@ -151,6 +159,11 @@ function leaseExpiry(lease?: Envelope): number {
     ? (JSON.parse(Buffer.from(lease.payload, "base64url").toString()) as number[])[9]!
     : 0;
 }
+/** A lease a call outside this client may use as it is: more than ten minutes left, nothing pending. */
+export function hasLiveLease(state: SavedCloudState, now = Date.now()): boolean {
+  const c = state.lifecycle;
+  return !!c && !c.revoked && !c.pending && !!c.lease && leaseExpiry(c.lease) > now + 600000;
+}
 export function readCloudInstallation(
   value: unknown,
   state: SavedCloudState,
@@ -169,7 +182,7 @@ export function readCloudInstallation(
     const p = value.pending;
     if (
       !object(p) ||
-      !["renew", "configuration", "report", "revoke"].includes(String(p.action)) ||
+      !oneOf(["renew", "configuration", "report", "revoke"], p.action) ||
       !uuid(p.operationId) ||
       typeof p.lease !== "string" ||
       p.lease.length > 4096 ||
@@ -216,7 +229,7 @@ export function projectCloudInstallation(
 }
 export function machinePayload(
   state: Pick<SavedCloudState, "origin" | "view">,
-  pending: Pending,
+  pending: { action: string; operationId: string; lease: string; body: string },
   now = Date.now(),
 ): Buffer {
   return Buffer.from(
@@ -232,7 +245,11 @@ export function machinePayload(
     ]),
   );
 }
-export function pendingRequest(action: Action, lease?: Envelope, body = "{}"): Pending {
+export function pendingRequest(
+  action: Action,
+  lease?: Envelope,
+  body = action === "configuration" ? CONFIGURATION_BODY : "{}",
+): Pending {
   return {
     action,
     operationId: randomUUID(),
@@ -277,7 +294,7 @@ export function installationClient(
         chunks.push(chunk);
       }
       const value: unknown = JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)),
+        new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
       );
       if (!response.ok) {
         if (response.status === 403 && object(value) && value.error === "revoked") {
@@ -305,6 +322,14 @@ export function installationClient(
             ? readLease((value as Record<string, unknown>).lease, state)
             : undefined;
       if (lease && leaseExpiry(lease) !== Date.parse(view.leaseExpiresAt ?? "")) unavailable();
+      // Only a version-2 `configuration` reply carries the fourth entry; keep it across the others.
+      const kept = c.view?.services.find((s) => s.service === "content_translation");
+      if (
+        p.action !== "configuration" &&
+        kept &&
+        !view.services.some((s) => s.service === "content_translation")
+      )
+        view.services.push(kept);
       c.view = view;
       if (lease) c.lease = lease;
       c.revoked = view.revokedAt !== null;
@@ -319,7 +344,7 @@ export function installationClient(
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function prepare(action: Action, body = "{}") {
+  async function prepare(action: Action, body?: string) {
     c.pending = pendingRequest(action, c.lease, body);
     await save(state);
   }
@@ -331,6 +356,14 @@ export function installationClient(
       const needsRenew = leaseExpiry(c.lease) <= Date.now() + 600000;
       await prepare(needsRenew ? "renew" : "configuration");
       await exchange(signal);
+    },
+    async ensureLease(signal?: AbortSignal) {
+      if (c.pending) await exchange(signal);
+      if (!c.revoked && (!c.lease || leaseExpiry(c.lease) <= Date.now() + 600000)) {
+        await prepare("renew");
+        await exchange(signal);
+      }
+      if (c.revoked || !c.lease) throw new AppError("cloud.not_configured", {});
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       if (c.revoked) return;

@@ -788,3 +788,50 @@ it("asks again before stopping Cloud access after a background read saw it stopp
   expect(el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
   expect(el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
 });
+for (const [locale, label] of [
+  ["en", "Translate all"],
+  ["es", "Traducir todo"],
+] as const)
+  it(`${locale} names the Translate all service`, async () => {
+    const before = currentLocale();
+    setLocale(locale);
+    try {
+      const service = (name: string) => ({
+        service: name,
+        state: name === "content_translation" ? "ready" : "unconfigured",
+        health: "unknown",
+        failure: null,
+        observedAt: null,
+      });
+      const api = new DashboardApi("", async () =>
+        Response.json({
+          state: "complete",
+          configured: true,
+          isPrimary: true,
+          code: "",
+          legalBusinessName: "Sol SL",
+          installation: {
+            state: "active",
+            revision: 1,
+            lastContactAt: new Date().toISOString(),
+            leaseExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+            services: [
+              "remote_access",
+              "continuous_backup",
+              "retained_snapshots",
+              "content_translation",
+            ].map(service),
+          },
+        }),
+      );
+      const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+        api,
+      });
+      await flush(el);
+      expect(
+        [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => dt.textContent!.trim()),
+      ).toContain(label);
+    } finally {
+      setLocale(before);
+    }
+  });

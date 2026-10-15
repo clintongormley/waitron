@@ -4,6 +4,7 @@ import {
   type CloudCaptureMetadata,
 } from "./cloud-backup.js";
 import {
+  hasLiveLease,
   installationClient,
   pendingRequest,
   projectCloudInstallation,
@@ -12,6 +13,12 @@ import {
   type CloudInstallationStatus,
   type CloudObservation,
 } from "./cloud-installation.js";
+import {
+  collectTranslation,
+  releaseTranslation,
+  submitTranslation,
+  translationStatus,
+} from "./cloud-translation.js";
 import {
   createPrivateKey,
   createPublicKey,
@@ -167,7 +174,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
   return view;
 }
 const activePaths = new Map<string, Promise<void>>();
-/** One server process owns a node state directory. Calls within that process share this write gate. */
+/** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), "cloud-connection.json");
   async function read(): Promise<SavedCloudState | undefined> {
@@ -345,7 +352,48 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     if (state.lifecycle?.revoked) throw new AppError("cloud.binding_conflict", {});
     return state;
   }
+  // Holds the shared lock only to renew the lease, never across a translation exchange, so a
+  // refresh or report is not refused `cloud.busy` while one waits on Cloud.
+  async function leaseState(signal?: AbortSignal): Promise<SavedCloudState> {
+    const current = await read();
+    if (current && hasLiveLease(current)) return current;
+    try {
+      return await run(
+        async () => {
+          const state = await read();
+          if (!state?.view?.registration || state.lifecycle?.revoked)
+            throw new AppError("cloud.not_configured", {});
+          await installationClient(state, save).ensureLease(signal);
+          return state;
+        },
+        true,
+        signal,
+      );
+    } catch (error) {
+      if (error instanceof AppError || !signal?.aborted) throw error;
+      throw new AppError("cloud.unavailable", {});
+    }
+  }
   return {
+    translation: {
+      submit: async (operationId: string, body: string, signal?: AbortSignal) =>
+        submitTranslation(await leaseState(signal), operationId, body, signal),
+      status: async (jobId: string, signal?: AbortSignal) =>
+        translationStatus(await leaseState(signal), jobId, signal),
+      collect: async (jobId: string, signal?: AbortSignal) =>
+        collectTranslation(await leaseState(signal), jobId, signal),
+      release: async (jobId: string, signal?: AbortSignal) =>
+        releaseTranslation(await leaseState(signal), jobId, signal),
+    },
+    async translationService(): Promise<"on" | "off" | "not_connected"> {
+      const state = await read();
+      if (!state?.view?.registration || state.lifecycle?.revoked) return "not_connected";
+      return state.lifecycle?.view?.services.some(
+        (s) => s.service === "content_translation" && s.state === "ready",
+      )
+        ? "on"
+        : "off";
+    },
     async importReplacement(input: {
       requestId: string;
       privateKey: string;

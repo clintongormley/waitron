@@ -24,6 +24,21 @@ it("persists renewal intent, resumes a lost response after restart, and keeps cr
     await f.close();
   }
 });
+it("signs {} as the body of renew and revoke, and the version-2 body of configuration", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh();
+    await f.client.refresh();
+    await f.client.revoke(async () => {});
+    expect(f.requests.map((v) => [v[2], v[7]])).toEqual([
+      ["renew", "{}"],
+      ["configuration", '{"servicesVersion":2}'],
+      ["revoke", "{}"],
+    ]);
+  } finally {
+    await f.close();
+  }
+});
 it("refuses cross-installation replies and preserves the last configuration on outage", async () => {
   const f = await installationFixture();
   try {
@@ -80,6 +95,7 @@ it("rejects malformed cached lifecycle state and changed lease bindings without 
     for (const change of [
       { lease: { payload: "bad", signature: "bad" } },
       { pending: { action: "renew", operationId: "bad", body: "{}", lease: "" } },
+      { pending: { action: ["renew"], operationId: randomUUID(), body: "{}", lease: "" } },
       { view: { ...saved.lifecycle.view, venueId: randomUUID() } },
     ]) {
       await writeFile(
@@ -242,6 +258,130 @@ it("cached observations distinguish fresh healthy from stale health and clear st
     expect(view.services[0]!.health).toBe("healthy");
     expect(view.services[1]!.health).toBe("unknown");
     expect(view.services[1]!.failure).toBeNull();
+  } finally {
+    await f.close();
+  }
+});
+it("asks for the fourth service and keeps it when a renewal or report answers three", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew: no lease yet
+    await f.client.refresh(); // configuration
+    expect(f.requests.at(-1)![2]).toBe("configuration");
+    expect(f.requests.at(-1)![7]).toBe('{"servicesVersion":2}');
+    const services = (await f.client.status()).installation!.services.map((s) => s.service);
+    expect(services).toContain("content_translation");
+    await f.client.report([{ service: "remote_access", health: "healthy", failure: null }]);
+    expect(f.requests.at(-1)![2]).toBe("report");
+    expect((await f.client.status()).installation!.services.map((s) => s.service)).toContain(
+      "content_translation",
+    );
+    f.fail("invalid_proof"); // drops the lease, so the next refresh renews
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.fail("");
+    await f.client.refresh();
+    expect(f.requests.at(-1)![2]).toBe("renew");
+    expect((await f.client.status()).installation!.services.map((s) => s.service)).toContain(
+      "content_translation",
+    );
+    const restarted = createCloudConnection(f.options);
+    expect((await restarted.status()).installation!.services).toHaveLength(4);
+  } finally {
+    await f.close();
+  }
+});
+
+it("accepts the four services in any order", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: [four[3], four[2], four[0], four[1]] });
+    const status = await f.client.refresh();
+    expect(status.installation!.services.map((s) => s.service).sort()).toEqual([
+      "content_translation",
+      "continuous_backup",
+      "remote_access",
+      "retained_snapshots",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it.each<[string, (s: unknown[]) => unknown[]]>([
+  [
+    "an unknown fourth service",
+    (s: unknown[]) => [s[0], s[1], s[2], { ...(s[3] as object), service: "telepathy" }],
+  ],
+  ["a service listed twice", (s: unknown[]) => [s[0], s[1], s[2], s[0]]],
+  ["an original service missing", (s: unknown[]) => [s[3], s[1], s[2]]],
+  ...[0, 1, 2].map((i): [string, (s: unknown[]) => unknown[]] => [
+    `a list repeating entry ${i}'s service`,
+    (s) => {
+      const e = s[i] as Record<string, unknown>;
+      return [s[0], s[1], s[2], { ...e, service: [e.service] }];
+    },
+  ]),
+  ...[0, 1, 2, 3].flatMap((i) =>
+    (
+      [
+        ["service", (entry: Record<string, unknown>) => [entry.service]],
+        ["state", () => ["ready"]],
+        ["health", () => ["healthy"]],
+        ["failure", () => ["unavailable"]],
+      ] as const
+    ).map(([field, value]): [string, (s: unknown[]) => unknown[]] => [
+      `a list as entry ${i}'s ${field}`,
+      (s) =>
+        s.map((entry, j) => {
+          const e = entry as Record<string, unknown>;
+          return j === i ? { ...e, [field]: value(e) } : e;
+        }),
+    ]),
+  ),
+])("refuses a reply with %s", async (_name, change) => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    expect(four).toHaveLength(4);
+    f.patch({ services: change(four) });
+    await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("drops the fourth service when a configuration reply answers three", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: four.slice(0, 3) });
+    const status = await f.client.refresh();
+    expect(f.requests.at(-1)![2]).toBe("configuration");
+    expect(status.installation!.services.map((s) => s.service)).not.toContain(
+      "content_translation",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+it("does not repeat the fourth service when a report reply carries it", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh(); // renew
+    await f.client.refresh(); // configuration, four services
+    const four = (f.replies.get(String(f.requests.at(-1)![4])) as { services: unknown[] }).services;
+    f.patch({ services: four });
+    await f.client.report([{ service: "remote_access", health: "healthy", failure: null }]);
+    expect(f.requests.at(-1)![2]).toBe("report");
+    expect((await f.client.status()).installation!.services).toHaveLength(4);
   } finally {
     await f.close();
   }

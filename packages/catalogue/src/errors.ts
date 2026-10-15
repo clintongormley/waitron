@@ -40,6 +40,18 @@ declare module "@waitron/shared" {
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     "content.translation_stale": { kind: string; id: string };
+    /** A Translate all job is already submitting or running for the venue. */
+    "content.suggestion_job_running": Record<string, never>;
+    /** The Cloud account has not agreed to menu text going to the named language-model providers. */
+    "content.suggestion_consent_required": Record<string, never>;
+    /** Cloud refused the job at the venue's spending cap; `fits` is how many items would fit. */
+    "content.suggestion_limit_reached": { fits: number };
+    /** Cloud accepted the job but the translation provider failed for all of it. */
+    "content.suggestion_service_unavailable": Record<string, never>;
+    /** Cloud no longer holds the job's results, or holds no such job for this installation. */
+    "content.suggestion_expired": Record<string, never>;
+    /** The suggestion being discarded is gone. */
+    "content.suggestion_not_found": { suggestionId: string };
     "content.translation_unavailable": { kind: string; id: string };
     "content.translation_batch_invalid": Record<string, never>;
     "content.translation_refused": {

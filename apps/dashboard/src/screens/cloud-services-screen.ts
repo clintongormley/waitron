@@ -163,6 +163,7 @@ export class CloudServicesScreen extends LitElement {
       remote_access: "cloud.remote",
       continuous_backup: "cloud.continuous",
       retained_snapshots: "cloud.snapshots",
+      content_translation: "cloud.translation",
     } as const;
     const services = installation?.services.length
       ? installation.services
