@@ -2005,8 +2005,72 @@ describe("till-app simplified-invoice limit", () => {
     expect(said(el)).toContain("3,00 €");
   });
 
-  it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
+  it("with full invoices off, choosing Full invoice opens no dialog and the basket still refuses past the limit", async () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "2");
+    emit(c, "choose-invoice");
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
+
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    expect(c.store.total).toBe("3.00");
+    expect(said(el)).toContain("3,00 €");
+  });
+
+  it("with full invoices off, paying a loaded basket over the limit asks for no recipient and sends the sale", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(limitedTill) });
+    const c = await toCounter(el);
+    c.store.loadFrom("large", [{ product: c.products[0]!, quantity: "2001" }]);
+    await flush(el);
+    expect(c.store.total).toBe("3001.50");
+
+    emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.recordSale).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["off", false, false],
+    ["on", true, true],
+  ])(
+    "draws the counter's Full invoice only while full invoices are on (%s)",
+    async (_case, fullInvoices, drawn) => {
+      const paying = {
+        ...limitedTill,
+        fullInvoices,
+        canvas: {
+          ...limitedTill.canvas,
+          tabs: [
+            {
+              ...limitedTill.canvas.tabs[0]!,
+              cards: [
+                ...limitedTill.canvas.tabs[0]!.cards,
+                { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+              ],
+            },
+          ],
+        } satisfies CanvasDef,
+      };
+      const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(paying) });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      await flush(el);
+      const panel = deepFind(el, "till-tender-pay")!;
+      expect(panel.shadowRoot!.querySelector(".hold")).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector("[data-full-invoice]") !== null).toBe(drawn);
+    },
+  );
+
+  it("lets a named full-invoice basket grow past the limit without releasing the next basket", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...limitedTill, fullInvoices: true }),
+    });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "2");
     emit(c, "choose-invoice");
@@ -2037,6 +2101,40 @@ describe("till-app simplified-invoice limit", () => {
     await flush(el);
     expect(c.store.total).toBe("3.00");
     expect(said(el)).toContain("3,00 €");
+  });
+
+  it("asks for a recipient over the server's limit, not over €3,000", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...limitedTill, fullInvoices: true }),
+    });
+    const c = await toCounter(el);
+    c.store.loadFrom("large", [{ product: c.products[0]!, quantity: "3" }]);
+    await flush(el);
+    expect(c.store.total).toBe("4.50");
+
+    emit(c, "confirm-payment", { method: "cash", amount: "4.50" });
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("asks for no recipient for a server that sends no limit", async () => {
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...limitedTill, simplifiedInvoiceLimit: null, fullInvoices: true }),
+    });
+    const c = await toCounter(el);
+    c.store.loadFrom("large", [{ product: c.products[0]!, quantity: "2001" }]);
+    await flush(el);
+    expect(c.store.total).toBe("3001.50");
+
+    emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(api.recordSale).toHaveBeenCalledTimes(1);
   });
 
   it("refuses nothing for a server that sends no limit", async () => {

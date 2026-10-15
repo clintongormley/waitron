@@ -156,6 +156,8 @@ export interface TillInfo {
   /** The largest total a sale with no named customer may have, as a decimal string, or null when
    * the venue's fiscal regime sets none. The counter basket refuses an edit that would pass it. */
   simplifiedInvoiceLimit: string | null;
+  /** Whether the server can issue a full invoice naming the customer (F1). */
+  fullInvoices: boolean;
 }
 
 /**

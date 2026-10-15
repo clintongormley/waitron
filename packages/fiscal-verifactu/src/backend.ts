@@ -44,10 +44,9 @@ import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
  * "which module produced this" tag. */
 const BACKEND_ID = "verifactu";
 
-/** AEAT's ceiling on a simplified invoice (F2), as `@waitron/verifactu`'s `validate` applies it
- * (`F2_AMOUNT_LIMIT`): 3,000.00 plus its 10.00 tolerance, exceeded only by a cent more.
- * ./record-limits.test.ts compares it with the validator's verdict. */
-const SIMPLIFIED_INVOICE_LIMIT = decimal("3010.00");
+/** The owner's €3,000 (A741), inside the validator's `F2_AMOUNT_LIMIT` (3,010.00 with its
+ * tolerance); ./record-limits.test.ts checks it. */
+const SIMPLIFIED_INVOICE_LIMIT = decimal("3000.00");
 
 /**
  * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any

@@ -181,6 +181,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property({ type: Boolean }) fullInvoices = false;
   @property() receiptLanguage = "";
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
   @property({ attribute: false }) api?: TillApi;
@@ -452,6 +453,7 @@ export class TillCardGrid extends LitElement {
             .activeReaders=${this.activeReaders}
             .defaultReaderId=${this.defaultReaderId}
             .receiptLanguages=${this.receiptLanguages}
+            .fullInvoices=${this.fullInvoices}
             .receiptLanguage=${this.receiptLanguage}
           ></till-tender-pay>`;
       case "held-orders":
@@ -531,6 +533,7 @@ export class TillCardGrid extends LitElement {
           .party=${this.party}
           .bills=${this.partyBills}
           .receiptLanguages=${this.receiptLanguages}
+          .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}

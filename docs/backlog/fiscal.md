@@ -55,15 +55,16 @@ consistent ordinary receipt and till dates; passing the saved offset remains a p
 Existing settings history locks are retained; this decision authorizes no repair bypass.
 No stored fiscal row is to be rewritten.
 
-## No sale over €3,010 can be made at all
+## No sale over €3,000 can be made at all
 
-- **No sale over €3,010 can be made at all**: Waitron issues only simplified invoices and no screen
+- **No sale over €3,000 can be made at all**: Waitron issues only simplified invoices and no screen
   accepts a customer's tax ID, so a full invoice is not offered. Spain's legal ceiling for a
   simplified invoice in hospitality is €3,000 (RD 1619/2012 art. 4.2, quoted in
   [verifactu-findings.md](../compliance/verifactu-findings.md) and the
-  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)); the
-  branch refuses over €3,010, the limit `@waitron/verifactu`'s validator applies (3,000 plus its
-  10.00 tolerance), as the owner asked.
+  [full-invoices design](../superpowers/specs/2026-10-03-full-invoices-at-till-design.md)).
+  A Veri\*Factu venue refuses a sale over €3,000, the owner's choice of 2026-10-15 (A741). The 3,010.00 that
+  `@waitron/verifactu`'s validator applies (3,000 plus its 10.00 tolerance) stays a ceiling the
+  limit sits inside.
 
 ## Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale
 
@@ -164,8 +165,10 @@ recipient support remains outside that build; `recordSubstitution` still has no 
 ## `packages/fiscal-verifactu` restates rules the validator owns
 
 - **`packages/fiscal-verifactu` restates rules the validator owns** — `venue-fields.ts` its venue-field
-  patterns and caps, `backend.ts` its simplified-invoice limit — kept honest by drift guards
-  (`record-limits.test.ts` compares the limit and the recipient name cap with the validator's verdict).
+  patterns and caps — kept honest by drift guards (`record-limits.test.ts` compares the recipient
+  name cap with the validator's verdict). `backend.ts`'s simplified-invoice limit no longer restates
+  the validator's rule: it is the owner's €3,000 (A741), and `record-limits.test.ts` checks our
+  verdict against the validator's at six totals.
   Exporting the patterns from the library instead was DEFERRED on purpose (owner, 2026-09-12) — it
   widens an audited fiscal library's public surface and the drift guard already closes the risk.
   Revisit when something else needs those patterns.
@@ -203,8 +206,13 @@ with no backward-compatibility implementation.
 does with an email or A4 choice (A555), obtain the asesor's manual-remedy approval and settle
 applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
-and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
-queue order; this landing does not start another fiscal item.
+and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Enabling it also means: the
+server sends `fullInvoices: true` in `GET /api/till` (`apps/server/src/till-api.ts`), so the till
+draws its Full invoice buttons again (A741); `sale.over_simplified_limit` is reworded, since it
+says the till cannot issue a full invoice; and someone decides whether the server should go on
+accepting a saved F1 choice (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which
+lifts its check on an order growing past the limit. A741 left that last one unchanged. Follow the
+campaign's current queue order; this landing does not start another fiscal item.
 
 ## When the business e-invoicing regime starts
 
@@ -888,6 +896,12 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **A741, owner decision 2026-10-15: one large-bill limit of €3,000** (#1774). A sale of exactly
+  €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,
+  `packages/fiscal-verifactu/src/backend.ts`), inside the 3,010.00 that `@waitron/verifactu`'s
+  validator applies. The till asks whether a large bill is for different people at the server's
+  limit, and asks no full-invoice question and draws no Full invoice button while the server sends
+  `fullInvoices: false`.
 - **A696, owner decision 2026-10-15: “A — Venue's time zone”.** Every new invoice date and
   record offset, ordinary receipt and till use the saved venue zone, including DST, independently
   of the process zone. Old records, including their dates, offsets and hashes, stay unchanged.

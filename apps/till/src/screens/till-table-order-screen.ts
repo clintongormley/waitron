@@ -1199,6 +1199,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) bills: PartyBill[] = [];
   /** The receipt languages staff may choose for a bill; the choice shows only when there are several. */
   @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property({ type: Boolean }) fullInvoices = false;
   /** The payments of the bill on screen, when it holds any; a balance of another bill is ignored. */
   @property({ attribute: false }) billBalance: BillBalance | null = null;
   /** Finish table was refused because a bill is unpaid. */
@@ -3390,6 +3391,7 @@ export class TillTableOrderScreen extends LitElement {
           .store=${this.#payStore}
           .busy=${this.busy}
           .takesCash=${this.takesCash}
+          .fullInvoices=${this.fullInvoices}
         ></till-tender-pay>
         ${this.#billChoices(shown)} ${this.#payWays()}
       </section>`;
@@ -3416,19 +3418,25 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** Full invoice, and the receipt's language when several are offered, for a bill still owing. */
+  /** Full invoice while full invoices are on, and the receipt's language when several are offered, for a
+   * bill still owing. */
   #billChoices(bill: PartyBill | undefined): TemplateResult | typeof nothing {
     if (bill === undefined || !owing(bill)) return nothing;
+    if (!this.fullInvoices && this.receiptLanguages.length < 2) return nothing;
     const target = { workingOrderId: bill.workingOrderId, revision: bill.revision };
     return html`<div class="bill-choices">
-      <wt-button
-        variant="secondary"
-        size="sm"
-        data-choose-bill-invoice
-        .disabled=${this.busy}
-        @click=${() => this.#dispatch("choose-bill-invoice", target)}
-        >${t("invoice.full")}</wt-button
-      >${
+      ${
+        this.fullInvoices
+          ? html`<wt-button
+              variant="secondary"
+              size="sm"
+              data-choose-bill-invoice
+              .disabled=${this.busy}
+              @click=${() => this.#dispatch("choose-bill-invoice", target)}
+              >${t("invoice.full")}</wt-button
+            >`
+          : nothing
+      }${
         this.receiptLanguages.length < 2
           ? nothing
           : html`<wt-button

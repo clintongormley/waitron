@@ -4,6 +4,7 @@ import {
   clockTime,
   countText,
   currentLocale,
+  differentPeopleText,
   pickLocale,
   setLocale,
   subscribeLocale,
@@ -101,6 +102,17 @@ it("names the item, the device carrying it and the person signed in there, or th
   // A name holding a placeholder or a replacement pattern is written as it is.
   expect(carriedText("{device} $&", ana, "equipment.held_by", "equipment.held_by_person")).toBe(
     "{device} $& is carried by Bar till (Ana)",
+  );
+});
+
+it("names the server's large-bill limit in the different-people question, in English and Spanish", () => {
+  setLocale("en-GB");
+  expect(differentPeopleText("3000.00")).toBe(
+    "Confirm that the resulting bills belong to different people. A bill over €3,000.00 needs a full invoice unless it is genuinely shared between people.",
+  );
+  setLocale("es-ES");
+  expect(differentPeopleText("3000.00")).toBe(
+    "Confirma que las cuentas resultantes pertenecen a personas distintas. Una cuenta superior a 3000,00\u00a0€ necesita una factura completa salvo que se comparta realmente entre varias personas.",
   );
 });
 

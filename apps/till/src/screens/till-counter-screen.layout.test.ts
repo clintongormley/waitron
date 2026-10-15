@@ -439,7 +439,7 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
         store.addProduct(cafe, "1");
         const { el, host } = await mountWidget<TillTenderPay>(
           "till-tender-pay",
-          { store, mode },
+          { store, mode, fullInvoices: true },
           theme,
         );
         host.style.width = "360px";
@@ -458,6 +458,38 @@ describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) =
           expect(place.bottom).toBeLessThanOrEqual(invoice.top);
           expect(place.width).toBe(inShadow(el, ".idle-actions").getBoundingClientRect().width);
         }
+        await expectNoA11yViolations(host);
+      },
+    );
+
+    it.each(["prepay", "ticket_then_pay"] as const)(
+      "keeps hold and the tenders usable without Full invoice in %s mode",
+      async (mode) => {
+        await page.viewport(1024, 768);
+        setLocale(locale);
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "1");
+        const { el, host } = await mountWidget<TillTenderPay>(
+          "till-tender-pay",
+          { store, mode },
+          theme,
+        );
+        host.style.width = "360px";
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(el.shadowRoot!.querySelector("[data-full-invoice]")).toBeNull();
+        for (const selector of [".pay", ".pay-card", ".hold"]) {
+          const rect = inShadow(el, selector).getBoundingClientRect();
+          expect(rect.height).toBeGreaterThanOrEqual(44);
+          expect(rect.width).toBeGreaterThanOrEqual(44);
+        }
+        const hold = inShadow(el, ".hold").getBoundingClientRect();
+        const card = host.getBoundingClientRect();
+        expect(hold.left).toBeGreaterThanOrEqual(card.left);
+        expect(hold.right).toBeLessThanOrEqual(card.right);
+        expect(hold.bottom).toBeLessThanOrEqual(window.innerHeight);
+        const actions = inShadow(el, ".idle-actions").getBoundingClientRect();
+        expect(hold.left).toBe(actions.left);
+        expect(hold.right).toBeLessThan(actions.left + actions.width / 2);
         await expectNoA11yViolations(host);
       },
     );

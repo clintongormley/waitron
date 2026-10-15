@@ -25,6 +25,7 @@ import {
   carriedText,
   countText,
   currentLocale,
+  differentPeopleText,
   named,
   overLimitText,
   setLocale,
@@ -2239,7 +2240,10 @@ export class TillApp extends LitElement {
   #reprinting = false;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private partyBills: PartyBill[] = [];
-  @state() private differentPeopleConfirmation: { proceed: () => Promise<void> } | null = null;
+  @state() private differentPeopleConfirmation: {
+    limit: string;
+    proceed: () => Promise<void>;
+  } | null = null;
   /** The party of the order on screen as it was read just before that order's lines and bills: what
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
    * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
@@ -2327,6 +2331,8 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages staff may choose, the location's own first. */
   @state() private receiptLanguages: string[] = [];
+  @state() private fullInvoices = false;
+  #simplifiedInvoiceLimit: string | null = null;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
    * order. `saved` is false while the server does not hold it yet. With none, or one naming another
    * order, the basket prints in the location's. */
@@ -2761,7 +2767,10 @@ export class TillApp extends LitElement {
       this.cardProvider = till.cardProvider;
       this.tipsEnabled = till.tipsEnabled;
       // A server too old to send it sets no limit.
-      this.#store.simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
+      this.#simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
+      this.#store.simplifiedInvoiceLimit = this.#simplifiedInvoiceLimit;
+      // A server too old to send it counts as off.
+      this.fullInvoices = till.fullInvoices === true;
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
       this.#applyProfileSetup(till);
@@ -4443,7 +4452,9 @@ export class TillApp extends LitElement {
 
   #askInvoiceRecipientForLargeBill(): boolean {
     if (
-      compareDecimal(this.#store.total, decimal("3000")) <= 0 ||
+      !this.fullInvoices ||
+      this.#simplifiedInvoiceLimit === null ||
+      compareDecimal(this.#store.total, decimal(this.#simplifiedInvoiceLimit)) <= 0 ||
       this.invoiceChoice?.orderId === this.#store.id
     )
       return false;
@@ -4452,6 +4463,7 @@ export class TillApp extends LitElement {
   }
 
   #askInvoiceRecipientForOrder(): void {
+    if (!this.fullInvoices) return;
     const orderId = this.#store.id;
     const session = this.#operatorSession;
     this.invoiceRecipientOrderId = orderId;
@@ -8597,7 +8609,8 @@ export class TillApp extends LitElement {
   }
 
   #renderDifferentPeopleConfirmation(): TemplateResult | typeof nothing {
-    if (this.differentPeopleConfirmation === null) return nothing;
+    const confirmation = this.differentPeopleConfirmation;
+    if (confirmation === null) return nothing;
     return html`<wt-dialog
       ${trackDialog()}
       data-confirm-different-people
@@ -8605,7 +8618,7 @@ export class TillApp extends LitElement {
       .heading=${t("table.confirm_different_people_title")}
       @wt-close=${() => (this.differentPeopleConfirmation = null)}
     >
-      <p>${t("table.confirm_different_people")}</p>
+      <p>${differentPeopleText(confirmation.limit)}</p>
       <div slot="footer">
         <wt-button
           variant="secondary"
@@ -8989,6 +9002,8 @@ export class TillApp extends LitElement {
 
   async #askDifferentPeople(proceed: () => Promise<void>): Promise<boolean> {
     if (this.differentPeopleConfirmation !== null) return true;
+    const limit = this.#simplifiedInvoiceLimit;
+    if (limit === null) return false;
     const billId = this.activeTabId;
     if (billId === undefined) return true;
     const bill = this.partyBills.find((row) => row.workingOrderId === billId);
@@ -9003,10 +9018,11 @@ export class TillApp extends LitElement {
         return true;
       }
     }
-    if (compareDecimal(decimal(total), decimal("3000")) <= 0) return false;
+    if (compareDecimal(decimal(total), decimal(limit)) <= 0) return false;
     const partyId = this.orderParty?.id;
     const visit = this.#orderVisit;
     this.differentPeopleConfirmation = {
+      limit,
       proceed: async () => {
         if (
           this.activeTabId === billId &&
@@ -9602,6 +9618,7 @@ export class TillApp extends LitElement {
   }
 
   #onChooseBillInvoice(event: Event): void {
+    if (!this.fullInvoices) return;
     const { workingOrderId, revision } = (
       event as CustomEvent<{
         workingOrderId: string;
@@ -10505,6 +10522,7 @@ export class TillApp extends LitElement {
         .activeReaders=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .receiptLanguages=${this.receiptLanguages}
+        .fullInvoices=${this.fullInvoices}
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
@@ -10541,6 +10559,7 @@ export class TillApp extends LitElement {
       .activeReaders=${this.#payReaders()}
       .defaultReaderId=${this.#payDefaultReaderId()}
       .receiptLanguages=${this.receiptLanguages}
+      .fullInvoices=${this.fullInvoices}
       .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
       .api=${this.api}
       .fireControl=${this.fireControl}
@@ -10635,6 +10654,7 @@ export class TillApp extends LitElement {
           .party=${this.orderParty}
           .bills=${this.partyBills}
           .receiptLanguages=${this.receiptLanguages}
+          .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}

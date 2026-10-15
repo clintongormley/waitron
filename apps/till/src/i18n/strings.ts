@@ -931,7 +931,7 @@ export const en = {
   "table.split_confirm": "Add bill",
   "table.confirm_different_people_title": "Separate bills for different people?",
   "table.confirm_different_people":
-    "Confirm that the resulting bills belong to different people. A bill over €3,000 needs a full invoice unless it is genuinely shared between people.",
+    "Confirm that the resulting bills belong to different people. A bill over {amount} needs a full invoice unless it is genuinely shared between people.",
   "table.confirm_different_people_action": "Confirm different people",
   "table.split_no_lines": "No items to split",
   "table.split_quantity": "Quantity",
@@ -2290,7 +2290,7 @@ export const es: Record<StringKey, string> = {
   "table.split_confirm": "Añadir cuenta",
   "table.confirm_different_people_title": "¿Cuentas separadas para distintas personas?",
   "table.confirm_different_people":
-    "Confirma que las cuentas resultantes pertenecen a personas distintas. Una cuenta superior a 3000 € necesita una factura completa salvo que se comparta realmente entre varias personas.",
+    "Confirma que las cuentas resultantes pertenecen a personas distintas. Una cuenta superior a {amount} necesita una factura completa salvo que se comparta realmente entre varias personas.",
   "table.confirm_different_people_action": "Confirmar personas distintas",
   "table.split_no_lines": "No hay artículos para dividir",
   "table.split_quantity": "Cantidad",

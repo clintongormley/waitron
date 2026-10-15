@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { BillPayDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { TillTenderPay } from "../widgets/tender-pay.js";
 import type {
   BillBalance,
   CurrentOrders,
@@ -126,8 +127,30 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-table-order-screen: the ways to pay part of a bill", () => {
+  it("a bill offers no Full invoice while full invoices are off", async () => {
+    const el = await mountScreen();
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".bill-choices")).toBeNull();
+  });
+
+  it("hands the bill's pay panel whether full invoices are on", async () => {
+    const off = await mountScreen();
+    expect(off.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!.fullInvoices).toBe(
+      false,
+    );
+    cleanupWidgets();
+    const on = await mountScreen({ fullInvoices: true });
+    expect(on.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!.fullInvoices).toBe(true);
+  });
+
   it("offers a full invoice for a partly paid bill and identifies the bill to change", async () => {
-    const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
+    const el = await mountScreen({
+      bills: [partlyPaid],
+      billBalance: balance(),
+      fullInvoices: true,
+    });
     const asked = capture<{ workingOrderId: string; revision: number }>(el, "choose-bill-invoice");
 
     const button = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]");
@@ -291,6 +314,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
     const el = await mountScreen({
       bills: [{ ...untouched, revision: 5, receiptLanguage: "ca-ES" }],
       receiptLanguages: offered,
+      fullInvoices: true,
     });
     const asked = capture<{ workingOrderId: string; revision: number }>(
       el,
@@ -333,7 +357,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
   });
 
   it("draws the language button as quiet as the invoice action, and holds it while the till is busy", async () => {
-    const el = await mountScreen({ receiptLanguages: offered });
+    const el = await mountScreen({ receiptLanguages: offered, fullInvoices: true });
     const invoice = el.shadowRoot!.querySelector<HTMLElement & { variant: string }>(
       "[data-choose-bill-invoice]",
     )!;
@@ -345,8 +369,15 @@ describe("till-table-order-screen: a bill's receipt language", () => {
     expect(languageButton(el)!.disabled).toBe(true);
   });
 
+  it("offers the language button without Full invoice while full invoices are off", async () => {
+    const el = await mountScreen({ receiptLanguages: offered });
+
+    expect(languageButton(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
+  });
+
   it("offers no language button when one receipt language is offered", async () => {
-    const el = await mountScreen({ receiptLanguages: ["es-ES"] });
+    const el = await mountScreen({ receiptLanguages: ["es-ES"], fullInvoices: true });
 
     expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
     expect(languageButton(el)).toBeNull();

@@ -263,6 +263,7 @@ const till = {
     url: string;
     standing: "serving-primary" | "serving-secondary" | "sell-only";
   }[],
+  simplifiedInvoiceLimit: "3000.00" as string | null,
 };
 
 const phoneCanvasDef: CanvasDef = {
@@ -664,6 +665,10 @@ async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOr
 }
 
 let currentApi: TillApi;
+const fullInvoicesOn = () => ({
+  getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
+});
+
 async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   currentApi = stubApi(overrides);
   return mountWidget<TillApp>("till-app", { api: currentApi }, theme);
@@ -3144,7 +3149,7 @@ describe("till-app", () => {
   });
 
   it("opens customer details before a walk-up full invoice choice can pay", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3158,7 +3163,7 @@ describe("till-app", () => {
   });
 
   it("asks for a full-invoice recipient before charging a loaded bill over €3,000", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
     c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
     await flush(el);
@@ -3203,7 +3208,7 @@ describe("till-app", () => {
   });
 
   it("asks for a full-invoice recipient before starting card payment on a loaded bill over €3,000", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
     c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
     await flush(el);
@@ -3238,6 +3243,7 @@ describe("till-app", () => {
   it("saves a chosen full-invoice recipient before placing a ticket-then-pay bill", async () => {
     const placeOrder = vi.fn().mockResolvedValue(placedResult);
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       zonePolicy: { serviceMode: "ticket_then_pay" },
       placeOrder,
     });
@@ -3282,6 +3288,7 @@ describe("till-app", () => {
     const officePrinter = { id: "pp-office", name: "Office HP" };
     const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       zonePolicy: { serviceMode: "ticket_then_pay" },
       placeOrder,
       getInvoiceDeliveryOptions,
@@ -3327,6 +3334,7 @@ describe("till-app", () => {
       .mockResolvedValueOnce({ invoicePrinter: { id: "pp-office", name: "Office HP" } })
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
+      ...fullInvoicesOn(),
       zonePolicy: { serviceMode: "ticket_then_pay" },
       placeOrder,
       getInvoiceDeliveryOptions,
@@ -3395,6 +3403,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
+        fullInvoices: true,
         cardProvider: "simulator",
         capabilities: ["print-receipt", "integrated-card-payment"],
       }),
@@ -3437,7 +3446,7 @@ describe("till-app", () => {
           answer = resolve;
         }),
     );
-    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3464,7 +3473,7 @@ describe("till-app", () => {
           answers.push(resolve);
         }),
     );
-    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3491,7 +3500,7 @@ describe("till-app", () => {
           answer = resolve;
         }),
     );
-    const { el } = await mountApp({ getInvoiceDeliveryOptions });
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3506,7 +3515,7 @@ describe("till-app", () => {
   });
 
   it("sends the chosen Spanish recipient with the first walk-up cash sale", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3559,7 +3568,7 @@ describe("till-app", () => {
       .fn()
       .mockResolvedValueOnce({ outcome: "declined" })
       .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
-    const { el } = await mountApp({ pay });
+    const { el } = await mountApp({ ...fullInvoicesOn(), pay });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3606,7 +3615,7 @@ describe("till-app", () => {
   });
 
   it("does not send one customer's full-invoice choice with a different basket", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
     await flush(el);
@@ -3972,7 +3981,9 @@ describe("till-app", () => {
 
     it("offers no language button when the location offers one receipt language", async () => {
       const { el } = await counterWith({
-        getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, fullInvoices: true, receiptLanguages: ["es-ES"] }),
       });
 
       expect(tenderPay(el).shadowRoot!.querySelector("[data-full-invoice]")).not.toBeNull();

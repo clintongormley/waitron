@@ -226,6 +226,7 @@ export class TillTenderPay extends LitElement {
   @property() defaultReaderId?: string;
   /** The receipt languages staff may choose from; the button shows only when there are several. */
   @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property({ type: Boolean }) fullInvoices = false;
   /** The language this order's receipt prints in. */
   @property() receiptLanguage = "";
 
@@ -793,6 +794,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderInvoiceButton(disabled: boolean) {
+    if (!this.fullInvoices) return nothing;
     return html`<wt-button
       data-full-invoice
       variant="secondary"
