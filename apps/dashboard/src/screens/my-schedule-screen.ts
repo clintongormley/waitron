@@ -144,7 +144,7 @@ export class MyScheduleScreen extends LitElement {
     if (this.#url.read("dashboard") !== "my-schedule") return;
     const selected = this.#url.read("view");
     this.tab = selected === "hours" && this.modules.includes("workforce") ? "hours" : "schedule";
-    if (selected !== this.tab) this.#url.write({ view: this.tab }, true);
+    if (selected !== null && selected !== this.tab) this.#url.write({ view: this.tab }, true);
   }
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("modules")) this.#restoreTab();

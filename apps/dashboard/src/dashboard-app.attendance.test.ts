@@ -207,7 +207,7 @@ it("Back from Hours protects a dirty own request while retaining the hidden sche
       composed: true,
     }),
   );
-  await expect.poll(() => location.pathname).toBe("/manage/my-schedule/view/schedule");
+  await expect.poll(() => location.pathname).toBe("/manage/my-schedule");
   await panel.updateComplete;
   expect(panel.shadowRoot!.querySelector("dashboard-hours-record")).toBeNull();
   expect(screen.shadowRoot!.querySelector('[data-test="abs-note"]')).not.toBeNull();
