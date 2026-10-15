@@ -2000,12 +2000,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
   Left open by A439.
 
-- **A676 — `recordKitchenNotices` takes its five optional values as positional arguments
-  (2026-10-14; open).** Two of them sit side by side and are both text or null (`cancelledExtra`,
-  `reroutedTo`), so a call that swaps them type-checks. Move the optional ones into one options
-  object across `packages/module/src/module.ts`, `packages/venue-service/src/kitchen-notices.ts`
-  and the callers in `apps/server/src/kitchen-print.ts`. Left open by A650 Part 1.
-
 - **A694 — Correction slips do not print the party's name (2026-10-15; open, owner decision).**
   Kitchen tickets and MOVED slips read "Order 5 · Ana" for a named party (A683). The other kitchen
   slips — VOID, RECALLED, MOVED TO a station, HOLD CHANGED, HOLD CANCELLED and CHANGED (an extra
