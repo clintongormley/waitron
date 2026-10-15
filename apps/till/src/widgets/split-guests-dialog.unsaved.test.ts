@@ -248,7 +248,7 @@ it("a count stored elsewhere while an untouched window is taken out moves the st
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-it("a typed staying count stored elsewhere while the window is taken out is saved once it is put back", async () => {
+it("a typed staying count stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "stayingGuests", "3");
   await storeWhileDetached(app, form, "3");
@@ -257,7 +257,7 @@ it("a typed staying count stored elsewhere while the window is taken out is save
   await fill(form, "stayingGuests", "5");
   expect(unload()).toBe(true);
 });
-it("a split the window stays open after keeps its counts when the window is taken out and put back before the stored count changes", async () => {
+it("a split the window stays open after keeps its counts when the window is taken out and put back while the stored count is unchanged", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "stayingGuests", "3");
   await fill(form, "leavingGuests", "2");

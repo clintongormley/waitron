@@ -2096,16 +2096,18 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
   covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
-  scope last committed — the opened value, then each saved value, or, in the till's party name, Guests and
-  Split a table windows, each value stored on another till while they are open — in a field the disconnect does
+  scope last committed — the opened value, then each saved value and, in the till's party name, Guests and Split a table
+  windows, each value stored on another till while they are open — in a field the disconnect does
   not clear, commit it into the new scope, and clear it wherever the form really reopens, or a
-  reopened form starts changed. A form that forgets on disconnect which record it opened re-seeds
+  reopened form starts changed. A form that follows a stored value also notes a change to it that
+  arrives while the form is out, because the update that sees it runs while the form is detached,
+  and follows it once put back (`#storedChanged`). A form that forgets on disconnect which record it opened re-seeds
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase, shift and bookings forms, the product
   editor, the unit form, the menus screen's section and menu details form, an include's Edit
   dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case. The recipe editor
-  clears its choice on removal by design (batch 2a). The till's party name, invoice recipient,
+  clears its choice on removal by design (batch 2a). The till's party name, Guests, Split a table, invoice recipient,
   extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. The other forms in the list above are untried;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
@@ -2228,8 +2230,7 @@ and nothing guards it across screens:
   the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Reset table window
   (`apps/till/src/widgets/reset-table-dialog.ts`); the floor's Rename window
   (`apps/till/src/widgets/today-name-dialog.ts`).
-  The party name dialog, the Guests window and the Split a table window compare against the stored
-  value, not the opened one, and follow a value stored on another till while they are open
+  The party name dialog and the Guests window compare against the stored value, not the opened one, and follow a value stored on another till while they are open
   (`#followStored`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in

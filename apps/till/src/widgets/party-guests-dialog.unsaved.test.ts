@@ -266,7 +266,7 @@ it("a count stored elsewhere while an untouched window is taken out moves the wi
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-it("a typed count stored elsewhere while the window is taken out is saved once it is put back", async () => {
+it("a typed count stored elsewhere while the window is taken out counts as saved once it is put back", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "4");
   await storeWhileDetached(app, form, "4");
