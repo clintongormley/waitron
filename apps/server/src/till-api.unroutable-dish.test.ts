@@ -404,10 +404,10 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const before = facts();
     const res = await payCash(till, id);
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
+    expect(await res.json()).toEqual({
       error: {
-        code: "department.operation_description_required",
-        params: { departmentId: null },
+        code: "sale.department_missing",
+        params: {},
       },
     });
     expect(facts()).toEqual(before);

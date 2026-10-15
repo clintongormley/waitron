@@ -479,7 +479,7 @@ it("missing description leaves an unfiled capture recoverable without touching t
 });
 
 it.each(["cash", "card"] as const)(
-  "a missing department refuses a %s bill payment with its own code before money or drawer work",
+  "a missing department refuses a %s bill payment with its own code and unchanged records",
   async (method) => {
     const id = await tabWith(venue, "Caña");
     await venue.db.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
