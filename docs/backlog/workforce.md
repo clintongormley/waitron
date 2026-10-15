@@ -48,54 +48,30 @@ your time record open. If the finish was recorded but logout fails, the till sta
 Clocked out. A lost clock response is checked with a fresh own-state read before another write is
 available. An open shift in another location is shown with clock actions unavailable.
 
-Part 3 has a reviewed [end-of-day plan](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
-The part-3 branch has a library processor for automatic finishes, missing-time questions, overnight
-wake-ups and late clock/rota reconciliation. Its tests retain a question when there is no later
-activity or existing clock history conflicts with an automatic finish. On this branch, reading your
-clock state or submitting a clock action reconciles your open completed day first. A stale action is
-refused after committing the automatic finish. This worker-only pass leaves the shared day's work
-pending for a complete background pass. A loop helper processes one completed day per pass and waits
-for its active pass on shutdown. The missing-time reminder helper rechecks current clock and rota
-evidence before claiming, snapshots the saved email rather than a pending replacement, and sends
-outside the write transaction. SMTP acceptance and uncertain delivery suppress another automatic
-attempt; an explicit refusal waits fifteen minutes before retrying. An abandoned claim becomes
-uncertain after sixty seconds. SMTP acceptance does not establish inbox delivery, and restoring an
-older backup can lose the sent marker and permit a duplicate. Writable workforce primaries start
-both duties and begin a fresh discovery generation at each open. Setup, mirror, fenced, secondary
-and workforce-disabled boots start neither duty. Failure unwind and normal close abort and await
-the duties before closing their database handle. Place/cancel till routes forward the amendment
-recorder. Invoice choice, receipt language and cancellation/comp/discount commands also capture the
-admitted worker and trusted instant in their write transaction. The route tests check capture refusal
-rolls back those commands and that repeated submissions create no later activity. Direct line
-course/send/recall and make-at changes, preparation and pass transitions, serving, station moves and
-handover also capture the admitted worker. Their route tests check rollback on capture refusal,
-replays and unchanged commands, while device-only work records no worker activity. A group spanning
-two bills records each affected bill at one trusted instant. Bill and party command scopes keep
-separate activity identities even when their submission ids match. Direct group submissions, joins,
-releases, reordering, line moves and splits now snapshot their event's worker, location and trusted
-instant. The captured event replaces the retained event in attendance reads and survives a later
-change to the party's bill locations. Legacy prep of a paid order and an unpaid departure from an
-already placed bill also capture the acting worker; their tests check rollback on capture refusal.
-Course releases and group moves that empty a held group also snapshot their derived events at one
-trusted command instant. The route tests check that these events retain their original location
-after bills move and that a refused second snapshot rolls back the whole command. Group events
-created by draft submission, basket edits and held-line cancellations now retain their own snapshots
-too. The command tests check their original location after the bill's stored location changes, rollback on snapshot refusal,
-and one instant shared with the basket edit or adjustment. Move a bill and Split a table now snapshot
-their arriving-group events under the admitted mover at the trusted command instant. The tests check
-that a refused snapshot rolls back the move and that a later location change preserves the original
-activity. Held and fired arrivals share the supplied instant. Draft creation, takeover, submission
-and discard also retain their natural event snapshots, including an absorbed draft when parties
-combine. Bill-line splits, merges and transfers capture both affected bills under the admitted
-worker at one trusted instant. Party names, bill-request flags and group reminder timing do not
-extend attendance as order or payment activity. Database-content restore checks restart discovery
-before processing and retain the original chain plus question and reminder identities. These checks
-keep the destination's identity and skip fiscal restore hooks. Branch review and final delivery
-checks remain open; part 3 is unfinished.
+Part 3 connects the [end-of-day checks](../superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md).
+A forgotten clock-out closes at your last later sign-in, order, accepted payment or break activity
+in that business day. Without later activity, the shift stays open and a question records the missing
+time. A published rota shift without a clock-in, or till work without a clock-in, also creates a
+question. Automatic ends count immediately; their questions wait for the response screens in part 4.
+Your clock state and clock actions reconcile an overdue open day before returning the current state.
 
-My hours stays with part 5; no placeholder is offered in part 2. Parts 3–6 remain open: automatic
-closure/questions, corrections, hours and the export/access screens. The period-read cost and the
-correction waiting-list follow-ups remain in the backlog.
+Missing-time reminders use the venue's email setup and your saved address. Without an address,
+the question remains without email. SMTP acceptance and uncertain delivery suppress another
+automatic attempt; an explicit refusal waits fifteen minutes before retrying. SMTP acceptance does
+not establish inbox delivery. Restoring an older backup can lose the sent marker and permit a
+duplicate. Background checks run only on a writable primary with workforce enabled. They catch up
+after restart and wait for source discovery before processing an old day. Database-content restore
+checks retain the chain, questions and reminder identity; these keep the destination's identity and
+skip fiscal restore hooks.
+
+Order and draft snapshots retain the admitted worker, original location and command instant.
+Payment callbacks qualify the original request instead of creating later human activity. Party
+names, bill-request flags and group reminder timing do not count as order or payment activity.
+
+My hours stays with part 5; no placeholder is offered. Parts 4–6 remain open: answering questions,
+corrections, hours and the export/access screens. The period-read cost and correction waiting-list
+follow-ups remain below.
+
 
 ## A10 period read cost
 
