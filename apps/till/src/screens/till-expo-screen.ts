@@ -362,13 +362,6 @@ export class TillExpoScreen extends LitElement {
         border-radius: var(--wt-radius-full, 999px);
       }
 
-      /* The pending note earns emphasis — the expediter must NOT read an unreviewed dish as
-         allergen-free (the Cautious policy). Text weight is the non-colour tell beside the colour. */
-      .allergen-pending {
-        color: var(--wt-color-warning-text, var(--wt-color-text));
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       /* The as-served DIET & contains row (dietary-classification, Task 7), indented like the allergen
          row beneath the dish + modifiers. The badge/chip look comes from the shared dietBadgeStyles;
          only the indent is expo-specific. */
@@ -1078,8 +1071,7 @@ export class TillExpoScreen extends LitElement {
   #allergens(item: ExpoItem): TemplateResult | typeof nothing {
     const asServed = item.asServed;
     const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
-    const pending = asServed?.pending ?? false;
-    if (codes.length === 0 && !pending) return nothing;
+    if (codes.length === 0) return nothing;
     const locale = currentLocale();
     return html`<span class="item-allergens" data-item-allergens=${item.id}>
       ${
@@ -1087,11 +1079,6 @@ export class TillExpoScreen extends LitElement {
           ? html`<span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
                 (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
               )}`
-          : nothing
-      }
-      ${
-        pending
-          ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`
           : nothing
       }
     </span>`;

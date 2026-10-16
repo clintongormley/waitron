@@ -34,7 +34,6 @@ type BarItem =
   | "schedule"
   | "profile"
   | "equipment"
-  | "allergens"
   | "operator";
 
 /** First to leave the bar first: the lowest priority first, and who is signed in last. `#items`
@@ -43,7 +42,6 @@ const LEAVE_ORDER: readonly BarItem[] = [
   "transfers",
   "equipment",
   "profile",
-  "allergens",
   "schedule",
   "station",
   "expo",
@@ -327,7 +325,6 @@ export class TillShell extends LitElement {
       schedule: this.affordances.includes("schedule"),
       profile: this.canSwitchProfile,
       equipment: true,
-      allergens: true,
       operator: true,
     };
     return LEAVE_ORDER.filter((item) => has[item]);
@@ -511,7 +508,7 @@ export class TillShell extends LitElement {
       "schedule",
       "show-schedule",
       t("schedule.open"),
-    )}${here("allergens") ? button("allergens", "open-allergens", t("allergens.open")) : nothing}${
+    )}${
       here("profile") && this.canSwitchProfile
         ? button("profile", "open-profile", t("profile.open"))
         : nothing

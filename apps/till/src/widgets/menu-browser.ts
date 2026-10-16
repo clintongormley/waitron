@@ -7,7 +7,10 @@ import {
   readableTextColor,
   registerIcons,
   visuallyHiddenStyles,
+  Gestures,
 } from "@waitron/ui";
+import "./product-info.js";
+import { nutritionDietLabels } from "./nutrition-icons.js";
 import { foldCache, foldForSearch, formatMoney, searchFor, type NameSearch } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
@@ -91,6 +94,37 @@ function tilePaint(color: string): string {
  */
 @customElement("till-menu-browser")
 export class TillMenuBrowser extends LitElement {
+  #gestures?: Gestures;
+  #pressedProduct?: TillProduct;
+  #pressedTarget?: EventTarget;
+  #suppressClick = false;
+  @state() private infoProduct?: TillProduct;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#gestures = new Gestures(this, {
+      holdStart: (at) => {
+        if (at.target === this.#pressedTarget) this.#suppressClick = true;
+      },
+      longPress: (at) => {
+        if (at.target === this.#pressedTarget && this.#pressedProduct)
+          this.infoProduct = this.#pressedProduct;
+      },
+      pan: () => {
+        this.#suppressClick = true;
+      },
+      cancel: () => {
+        this.#suppressClick = true;
+      },
+    });
+  }
+
+  override disconnectedCallback(): void {
+    this.#gestures?.disconnect();
+    this.#pressedProduct = undefined;
+    this.infoProduct = undefined;
+    super.disconnectedCallback();
+  }
   constructor() {
     super();
     new ContentLanguageController(this);
@@ -173,13 +207,22 @@ export class TillMenuBrowser extends LitElement {
       }
 
       .tile::part(button) {
+        position: relative;
         height: 100%;
         min-height: calc(var(--wt-tap-min) * 1.5);
         padding: var(--wt-space-2);
       }
 
-      /* A word breaks only when it is wider than the whole tile; the icon sits above the name, so
-         it never takes the name's width. */
+      .nutrition-mark {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-end: var(--wt-space-1);
+        --wt-icon-size: var(--wt-font-size-md);
+      }
+      .tile[data-nutrition] .name {
+        padding-inline-end: var(--wt-space-5);
+      }
+
       .label {
         display: flex;
         flex-direction: column;
@@ -561,6 +604,9 @@ export class TillMenuBrowser extends LitElement {
     const sellable = hasSomethingToSell(product);
     const fill = tileFill(mode, product.image, product.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
+    const marked =
+      Object.keys(product.allergens ?? {}).length > 0 ||
+      nutritionDietLabels(product.diet, product.dietaryDeclarations).length > 0;
     return html`<wt-button
       class="tile"
       data-kind="product"
@@ -568,8 +614,18 @@ export class TillMenuBrowser extends LitElement {
       ?data-painted=${paint !== undefined}
       ?data-sold-out=${!sellable}
       ?disabled=${!sellable}
-      @click=${onTap}
+      ?data-nutrition=${marked}
+      @contextmenu=${(event: Event) => event.preventDefault()}
+      @pointerdown=${(event: PointerEvent) => {
+        this.#pressedProduct = product;
+        this.#pressedTarget = event.composedPath()[0];
+        this.#suppressClick = false;
+      }}
+      @click=${(event: MouseEvent) => {
+        if (event.detail === 0 || !this.#suppressClick) onTap();
+      }}
     >
+      ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
       <span class="label">
         ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name">${productName(product)}</span>
@@ -764,6 +820,22 @@ export class TillMenuBrowser extends LitElement {
       </div>
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}
+      ${
+        this.infoProduct
+          ? html`<till-product-info
+              .product=${this.infoProduct}
+              @close-info=${(event: Event) => {
+                event.stopPropagation();
+                this.infoProduct = undefined;
+              }}
+              @add-product=${(event: CustomEvent<TillProduct>) => {
+                event.stopPropagation();
+                this.infoProduct = undefined;
+                this.#pick(event.detail);
+              }}
+            ></till-product-info>`
+          : nothing
+      }
       ${
         this.weighs
           ? html`<till-tender-pay class="weigh" weighOnly .store=${this.store}></till-tender-pay>`

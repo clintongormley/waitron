@@ -27,11 +27,11 @@ Files: `widgets/menu-browser.ts`, new `widgets/product-info.ts`, new `widgets/nu
 
 ## 2. Icons on unsent and sent order lines
 
-Files: `widgets/basket.ts`, `screens/till-table-order-screen.ts`, their tests, and existing server line reads/types if their payload lacks the recorded nutrition.
+Files: `widgets/basket.ts`, `screens/till-table-order-screen.ts`, their tests, and existing server line reads/types if their payload lacks nutrition.
 
 - [ ] RED: dish/variant/extra fixtures use different allergens; icons follow the selected dish's name on counter, table draft, pending persisted and sent lines, including older bills. Unknown nutrition renders no icons, and extras never change the dish's own set.
 - [ ] Render icon names with accessible localized labels, including cereal/nut kinds and direct No meat/No fish declarations. Retire the separate As served and diet rows on order lines. Preserve order-line gestures for A738.
-- [ ] GREEN: focused suites, database-backed read checks for any added fields, and unchanged money/permissions behaviour.
+- [ ] GREEN: focused suites, database-backed read checks for any added fields, following the kitchen queue’s live effective product read, and unchanged money/permissions behaviour.
 
 ## 3. Retire the old screen and kitchen warning
 
@@ -50,4 +50,4 @@ Files: `navigation.ts`, `till-app.ts`, `widgets/till-shell.ts`, `screens/till-co
 
 ## Review focus
 
-Held click followed by a native click must not add a dish. Repeated taps must not disappear into double-tap recognition. Pointer cancellation and scrolling must not select. A variant must display its own nutrition. Sent rows must retain their recorded values after the live menu changes. Test each in its owning task above.
+Held click followed by a native click must not add a dish. Repeated taps must not disappear into double-tap recognition. Pointer cancellation and scrolling must not select. A variant must display its own nutrition. Persisted table rows read the same effective live dish nutrition as the kitchen queue; retrieved counter lines retain their existing snapshot path. Test each in its owning task above.

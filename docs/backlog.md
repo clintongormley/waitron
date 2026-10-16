@@ -666,13 +666,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A668 — allergen information on the till (owner, 2026-10-14;
-  spec approved 2026-10-15).** Remove the Allergens screen, add the `allergies` mark and
-  long-press info window, put allergen icons after order-line names, and remove the kitchen's
-  "not reviewed" warning. The shared icons, editor, Products list and publishing warnings are
-  delivered by A668-4, A668-2 and A668-3.
-  [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md),
-  [mockups](backlog/mockups/a668-allergen-icons/)
 
 - **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
   `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
@@ -683,7 +676,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A printed menu carries each dish's allergen icons after its name and a key on the page naming
   every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
   online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
-  till's Allergens screen goes.
+  till no longer offers a separate Allergens screen.
 
 - **A651 — drop photos to upload them, and tidy the image library and its picker (owner,
   2026-10-14; open).** Photos dropped anywhere on the library page upload at once, several at a
@@ -2395,7 +2388,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a-phones-chrome-drew-a-white-page-for-the-box-watch-not-a-job-yet)
 
 - **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
-  button stops short of the right edge; the Schedule and Allergens screens draw their own copy of
+  button stops short of the right edge; the Schedule screen draws its own copy of
   the card's border and padding.
   [Detail](backlog/till.md#two-small-phone-width-points-a414-left-1495)
 
@@ -3172,7 +3165,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
   grep) and can be retired.
 
-- The till reads its fallback receipt language and the allergen sheet's language only when it
+- The till reads its fallback receipt language only when it
   starts (again after a server switch or an enrolment), so a change reaches those after a
   reload. The on-screen ticket follows each sale's own language.
 

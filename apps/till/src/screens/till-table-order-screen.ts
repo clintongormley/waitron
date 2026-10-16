@@ -1,3 +1,10 @@
+import { asServedAllergens, asServedDiet } from "../state/as-served.js";
+import {
+  nutritionIcons,
+  nutritionIconStyles,
+  nutritionDietLabels,
+} from "../widgets/nutrition-icons.js";
+import type { LineNutrition } from "../api/client.js";
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
@@ -423,6 +430,7 @@ export class TillTableOrderScreen extends LitElement {
       }
     `,
     baseStyles,
+    nutritionIconStyles,
     servicePeriodStyles,
     tableTargetStyles,
     css`
@@ -2895,7 +2903,9 @@ export class TillTableOrderScreen extends LitElement {
    * table's offers no longer hold has no name to show, so it reads as not offered. */
   #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
     const name = shownName(line.product);
-    return html`<span class=${nameClass}>${name} ×${this.#displayQty(line.quantity)}</span>
+    return html`<span class=${nameClass}
+        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
+      >
       ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
         (answer) => html`<span class="modifier-answer">${answer}</span>`,
       )}
@@ -3115,7 +3125,9 @@ export class TillTableOrderScreen extends LitElement {
         @click=${() => this.#toggleSelected(line)}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
-        <span class="draft-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+        <span class="draft-line-name"
+          >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
+        >
       </button>
       ${
         tools.length === 0
@@ -3720,11 +3732,25 @@ export class TillTableOrderScreen extends LitElement {
       : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`;
   }
 
+  #nutrition(line: OrderLine | { nutrition?: LineNutrition }) {
+    if ("product" in line) {
+      const served = asServedAllergens(line);
+      return nutritionIcons(
+        served.pending ? null : served.allergens,
+        nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations),
+      );
+    }
+    return nutritionIcons(
+      line.nutrition?.allergens,
+      nutritionDietLabels(undefined, line.nutrition?.dietaryDeclarations),
+    );
+  }
+
   #pendingLine(line: TabLine): TemplateResult {
     const name = this.#nameForLine(line);
     return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
       <span class="name"
-        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
+        >${name}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#lineActions(line)}
@@ -3749,7 +3775,7 @@ export class TillTableOrderScreen extends LitElement {
                 (line) =>
                   html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
                     <span class="name"
-                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
+                      >${this.#nameForLine(line)}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#servedActions(line)}
@@ -3993,7 +4019,9 @@ export class TillTableOrderScreen extends LitElement {
     const partly = compareDecimal(served, decimal("0")) > 0 && row.servedAt === null;
     return html`<li class="group-line current-row" data-group-line=${row.lineId}>
       <span class="row-what">
-        <span class="group-line-name">${row.name} ×${this.#displayQty(row.quantity)}</span>
+        <span class="group-line-name"
+          >${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}</span
+        >
         ${row.extras.map(
           (extra) =>
             html`<span class="row-extra">${extra.name} ×${this.#displayQty(extra.quantity)}</span>`,
@@ -4225,7 +4253,9 @@ export class TillTableOrderScreen extends LitElement {
   #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
     const name = this.#nameForLine(line);
     return html`<li class="group-line" data-group-line=${line.id}>
-      <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      <span class="group-line-name"
+        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
+      >
       ${this.#paidMark(line.lineNo, line.quantity)}
       ${
         group === null

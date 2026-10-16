@@ -13,7 +13,7 @@ So a product carries up to three names, and so does each of its variants.
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and the printed allergen sheet |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and invoice |
 | **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
@@ -28,10 +28,7 @@ below.
 name falls back to Name. The text frozen for the receipt is the default language's under every
 receipt language, or, where the default is blank, another stored language's
 (`defaultLanguageDescriptions`, below), not Name; that step is `resolveSnapshotText`
-(`packages/shared/src/content-languages.ts`). The printed allergen sheet instead requests only its chosen language: the receipt language when
-the till has a catalogue for it, else English. An absent or disabled customer translation uses
-Name (untagged staff text), rather than substituting a different customer translation (`customerProductName`,
-`apps/till/src/widgets/product-name.ts`). They do not fall back
+(`packages/shared/src/content-languages.ts`). They do not fall back
 to each other, and a product with a customer-facing name but no kitchen name still prints its staff
 Name to the kitchen.
 
@@ -240,7 +237,6 @@ Where each one surfaces:
 | Current orders on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts` |
 | The floor's chip for a held dish that can no longer be sold ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
-| Printed allergen sheet | the customer-facing name held in the menu's published version | `apps/till/src/screens/till-allergen-screen.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
@@ -871,3 +867,17 @@ and paying bills such a line only once it has been sent; unsent, it is refused `
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available; a
 menu cannot hide one (_Active and Available_, under _Variants_).
+
+
+## Nutrition on the till
+
+Product buttons open `till-product-info` on a held pointer press through the shared `Gestures`
+recogniser. Their `allergies` mark appears for declared allergens or diet labels and is part of the
+same button: clicking it selects the dish. The information window uses staff names, localized
+allergen kinds and diet labels, and the existing product selection path for Add to order.
+
+`nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names.
+A null allergen declaration draws no icons. Counter lines keep their existing `asServedAllergens`
+and `asServedDiet` calculation and retrieved snapshots. Persisted table rows receive `nutrition`
+from `readLineNutrition`, a live effective-product read like the kitchen queue’s own nutrition read.
+Each extra stays separate. The retired Allergens screen has no destination or print path.

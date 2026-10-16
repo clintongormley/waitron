@@ -12,7 +12,6 @@ import { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
-import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
   id: "p1",
@@ -514,11 +513,9 @@ describe("till-counter-screen", () => {
     expect(getLocales).toHaveBeenCalledTimes(1);
   });
 
-  it("labels the Allergens control with the localised action and shows the sale body by default", async () => {
+  it("keeps the sale body without a retired Allergens control", async () => {
     const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(
-      t("allergens.open"),
-    );
+    expect(el.shadowRoot!.querySelector("wt-button.allergens")).toBeNull();
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
     expect(el.shadowRoot!.querySelector(".sale-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
@@ -532,19 +529,6 @@ describe("till-counter-screen", () => {
     el.addEventListener("open-equipment", () => (fired += 1));
     equipment.click();
     expect(fired).toBe(1);
-  });
-
-  it("tapping Allergens swaps the sale body for the allergen screen, passing products/locale/invoiceLocale", async () => {
-    const { el } = await mount({ invoiceLocale: "en" });
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.allergens")!.click();
-    await el.updateComplete;
-    const screen = el.shadowRoot!.querySelector<TillAllergenScreen>("till-allergen-screen");
-    expect(screen).not.toBeNull();
-    expect(el.shadowRoot!.querySelector(".body")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
-    expect(screen!.products).toBe(products);
-    expect(screen!.locale).toBe(currentLocale());
-    expect(screen!.invoiceLocale).toBe("en");
   });
 
   it("puts the language chooser in its own header, just before the operator's name", async () => {
@@ -596,17 +580,6 @@ describe("till-counter-screen", () => {
       }),
     );
     expect(spy).toHaveBeenCalledWith({ code: "en-GB" });
-  });
-
-  it("returns to the sale body when the allergen screen asks to close", async () => {
-    const { el } = await mount();
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button.allergens")!.click();
-    await el.updateComplete;
-    const screen = el.shadowRoot!.querySelector("till-allergen-screen")!;
-    screen.dispatchEvent(new CustomEvent("close-allergens", { bubbles: true, composed: true }));
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 
   it("suppresses its own header when embedded (chrome lives in the shell)", async () => {

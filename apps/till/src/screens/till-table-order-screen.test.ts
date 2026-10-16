@@ -5653,3 +5653,70 @@ describe("closed department ordering", () => {
     expect(el.lines.map((line) => line.id)).toEqual(["line-1"]);
   });
 });
+
+describe("A668 nutrition after table-order names", () => {
+  it("shows each persisted pending and served line's own nutrition without reading the current menu", async () => {
+    const { el } = await mount({
+      lines: [
+        {
+          ...pendingLine,
+          sentAt: null,
+          firedAt: null,
+          state: null,
+          nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["no_fish"] },
+        },
+        { ...servedLine, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["halal"] } },
+      ],
+    });
+    await openDrawer(el);
+    expect(
+      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="allergen-milk"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="diet-no_fish"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="allergen-eggs"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="diet-halal"]'),
+    ).not.toBeNull();
+  });
+  it("shows sent dishes from other bills with their own nutrition in Current orders", async () => {
+    const { el } = await mount({
+      currentOrders: {
+        revision: 1,
+        reminder: null,
+        groups: [],
+        ungrouped: [
+          {
+            lineId: "other-bill-line",
+            workingOrderId: "other-bill",
+            lineNo: 5,
+            name: "Other bill dish",
+            quantity: "1.000",
+            unitPrecision: 0,
+            servedQuantity: "0.000",
+            servedAt: null,
+            released: true,
+            kitchen: null,
+            note: null,
+            extras: [],
+            nutrition: {
+              allergens: { nuts: { kinds: ["hazelnuts"] } },
+              dietaryDeclarations: ["kosher"],
+            },
+          },
+        ],
+      },
+    });
+    await openDrawer(el);
+    const row = el.shadowRoot!.querySelector(
+      '[data-group-line="other-bill-line"] .group-line-name',
+    )!;
+    expect(row.querySelector('wt-icon[name="allergen-nuts"]')?.getAttribute("label")).toMatch(
+      /hazelnut|avellana/i,
+    );
+    expect(row.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
+  });
+});

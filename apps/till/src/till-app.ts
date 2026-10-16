@@ -132,7 +132,6 @@ import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
-import "./screens/till-allergen-screen.js";
 import "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
 import {
@@ -2712,9 +2711,7 @@ export class TillApp extends LitElement {
         this.#clocking !== undefined &&
         !this.#clockAccessLost
       );
-    return (
-      !this.deviceMode && (destination === "allergens" || this.#affordances().includes(destination))
-    );
+    return !this.deviceMode && this.#affordances().includes(destination);
   }
 
   #openStartingScreen(): void {
@@ -7780,16 +7777,6 @@ export class TillApp extends LitElement {
     this.#pushDrill({ kind: "schedule" });
   }
 
-  #onOpenAllergens(): void {
-    if (!this.#inShell()) return;
-    this.errorKey = undefined;
-    this.#pushDrill({ kind: "allergens" });
-  }
-
-  #onCloseAllergens(): void {
-    this.#popDrill();
-  }
-
   /**
    * A shell tab reached through `tab-select` must load the floor itself, or the floor-plan card renders
    * with no table to tap. A failed load leaves the last-known floor.
@@ -12147,13 +12134,6 @@ export class TillApp extends LitElement {
           .fireControl=${this.fireControl}
           .runsPass=${this.capabilities.includes("run-the-pass")}
         ></till-expo-screen>`;
-      case "allergens":
-        return html`<till-allergen-screen
-          slot="drill"
-          .products=${this.products}
-          .locale=${currentLocale()}
-          .invoiceLocale=${this.invoiceLocale}
-        ></till-allergen-screen>`;
       case undefined:
         return nothing;
     }
@@ -12372,10 +12352,8 @@ export class TillApp extends LitElement {
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
-        @open-allergens=${() => this.#requestLeave(() => this.#onOpenAllergens())}
         @open-equipment=${() => void this.#onOpenEquipment()}
         @open-profile=${() => void this.#onOpenProfile()}
-        @close-allergens=${() => this.#requestLeave(() => this.#onCloseAllergens())}
         @logout=${() => this.#requestLeave(() => this.#onLogout(), "signout")}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => {
           if (e.detail.code === currentLocale()) return;

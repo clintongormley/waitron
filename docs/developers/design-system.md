@@ -4375,8 +4375,8 @@ too and, like any tab change, adds a Back stop.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for the till's fixed primary
 screens. Nested views and zones extend those paths, such as `/manage/floor-plan/zone/<id>`.
-Till Schedule, Kitchen, Pass and Allergens use `/tabs/<key>/view/<destination>`, with destinations
-`schedule`, `station`, `expo` and `allergens`. The operator Kitchen picker adds `/station/<id>`;
+Till Schedule, Kitchen and Pass use `/tabs/<key>/view/<destination>`, with destinations
+`schedule`, `station` and `expo`. The operator Kitchen picker adds `/station/<id>`;
 an embedded station keeps its selection local to its screen. Restore these destinations
 only after login and device validation. A kitchen display opens the one kitchen screen its device
 chose and cannot open operator destinations from a path. A primary key outside the device's fixed
@@ -4420,9 +4420,9 @@ Find a bill stays in More at every width and opens the Bills and Transactions pa
 returns to the counter without replacing the basket. A transaction receipt keeps the page's tab,
 query and server page for its own Back action.
 
-The other bar actions run left to right in priority order: Pass, Kitchen, My schedule, Allergens,
+The other bar actions run left to right in priority order: Pass, Kitchen, My schedule,
 Profile, Equipment and Transfers (the count and its button together). More takes these from the
-right. The Waitron name hides first, followed by Transfers, Equipment, Profile, Allergens, My
+right. The Waitron name hides first, followed by Transfers, Equipment, Profile, My
 schedule, Kitchen, Pass, and finally the operator's name with Log out after the language chooser.
 Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
 chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
@@ -4450,8 +4450,8 @@ page's language as `active` and decides what a pick means. A signed-in operator'
 existing preference write; login, pairing and kitchen-display choices are local UI changes.
 
 At phone width the till's page keeps `--wt-space-2` at its edges (`apps/till/index.html`), and the
-Floor, table Order, Expo, Station, Counter, Schedule and Allergens screens add no side padding of
-their own; Schedule and Allergens also drop their card's border there. Cases:
+Floor, table Order, Expo, Station, Counter and Schedule screens add no side padding of
+their own; Schedule also drops its card's border there. Cases:
 `apps/till/src/screens/device-screens.phone-margin.test.ts`.
 
 ### Fixed device screens
@@ -4655,3 +4655,17 @@ until Save. Saving a
 master edit preserves today's deferred removal rules. See the
 [A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
 for the hierarchy's separate immediate cleanup and retained-history limits.
+
+
+### Nutrition at the till
+
+A product button uses the shared `allergies` symbol in its top trailing corner when it has declared
+allergens or dietary labels. The name leaves room for the mark. The mark is decorative; a short
+press on any part of the button selects the dish. A held pointer press opens the product information
+window without selecting it. The window offers Close and Add to order and remains available on
+products with no mark.
+
+Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
+Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens
+shows no line icons. The separate As served and Diet rows are retired. Kitchen allergen chips stay
+textual and omit the unreviewed-allergen warning.

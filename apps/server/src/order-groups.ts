@@ -1,3 +1,4 @@
+import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -1220,6 +1221,7 @@ export interface CurrentOrderExtra {
 
 /** A dish line of the party, on whichever of its bills, a paid one included. */
 export interface CurrentOrderRow {
+  nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
   lineNo: number;
@@ -1341,6 +1343,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       asc(workingOrders.id),
       asc(workingOrderLines.lineNo),
     );
+  const nutrition = await readLineNutrition(
+    tx,
+    lines.map((line) => line.id),
+  );
   const extras = new Map<string, CurrentOrderExtra[]>();
   const heldExtras = new Set(
     lines
@@ -1378,6 +1384,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     dishes.push(line);
     const row: CurrentOrderRow = {
       lineId: line.id,
+      ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
       workingOrderId: line.workingOrderId,
       lineNo: line.lineNo,
       name: staffPresentationName({ name: line.name, variantName: line.variantName }),
