@@ -802,7 +802,10 @@ also show inherited values in italic on their folded section's closed line.
 In Nutritional info you choose “Contains none of the 14” to record a reviewed empty allergen set.
 A variant's “Same as {parent}” keeps its allergens inherited and shows its parent's choices as
 read-only italic chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
-Implied diet labels are shown in quiet ticked chips without adding them to your saved declarations.
+Selecting a diet label starts the variant's own diet, replacing the inherited preview. Labels
+implied by another own choice are shown as quiet, read-only ticked chips without adding them to
+your saved declarations. A label already stored explicitly stays there when you remove its
+implying label.
 Changing a diet label preserves the allergen review state, and changing allergens preserves the diet.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by

@@ -77,6 +77,7 @@ it("shows vegan implications without adding them to declarations", () => {
   });
   expect(own).toEqual(["vegan"]);
   expect(dietaryPresentation(["vegan", "vegetarian"], []).implied).toEqual([
+    { label: "vegetarian", from: "vegan" },
     { label: "no_meat", from: "vegan" },
     { label: "no_fish", from: "vegan" },
   ]);
@@ -93,4 +94,18 @@ it("keeps explicit empty diets distinct from inherited diets", () => {
     implied: [],
     inherited: true,
   });
+});
+
+it("presents redundant explicit labels as implied without rewriting their stored declaration", () => {
+  const own = ["no_meat", "vegan", "vegetarian"] as const;
+  expect(dietaryPresentation([...own], [])).toEqual({
+    chosen: ["vegan"],
+    inherited: false,
+    implied: [
+      { label: "vegetarian", from: "vegan" },
+      { label: "no_meat", from: "vegan" },
+      { label: "no_fish", from: "vegan" },
+    ],
+  });
+  expect(own).toEqual(["no_meat", "vegan", "vegetarian"]);
 });

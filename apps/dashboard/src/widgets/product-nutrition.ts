@@ -1,6 +1,7 @@
 import type { AllergenDeclaration } from "../api/client.js";
 import { validateAllergens } from "@waitron/catalogue/src/allergens.js";
 import {
+  DIETARY_LABELS,
   expandDietaryDeclarations,
   type DietaryLabel,
 } from "@waitron/catalogue/src/dietary-declarations.js";
@@ -56,12 +57,19 @@ export function dietaryPresentation(
   implied: { label: DietaryLabel; from: DietaryLabel }[];
   inherited: boolean;
 } {
-  const chosen = [...(own ?? parent)];
+  const declared = [...(own ?? parent)];
+  const implied = expandDietaryDeclarations(declared).flatMap((label) => {
+    const from = DIETARY_LABELS.find(
+      (other) =>
+        other !== label &&
+        declared.includes(other) &&
+        expandDietaryDeclarations([other]).includes(label),
+    );
+    return from === undefined ? [] : [{ label, from }];
+  });
   return {
-    chosen,
+    chosen: declared.filter((label) => !implied.some((entry) => entry.label === label)),
     inherited: own === null,
-    implied: expandDietaryDeclarations(chosen)
-      .filter((label) => !chosen.includes(label))
-      .map((label) => ({ label, from: chosen.includes("vegan") ? "vegan" : "vegetarian" })),
+    implied,
   };
 }

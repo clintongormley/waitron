@@ -2735,8 +2735,10 @@ variant describes itself in no language.
   choice remains unreviewed. Gluten and Nuts open indented kind chips. A variant's “Same as
   {parent}” keeps its allergens inherited, with the parent's choices in italic and read-only;
   an own choice replaces that set. Diet edits and allergen edits retain the other field's own value.
-  Implied diet labels are ticked and quiet, with “· from {label}”; they cannot be removed on their
-  own, and displaying them does not add declarations to the saved set.
+  The parent's diet labels are an italic preview: selecting one starts the variant's own diet.
+  A diet label implied by another own choice is ticked and quiet, with “· from {label}”; it cannot
+  be removed on its own, even if it is also stored explicitly. Displaying implications does not
+  add declarations to the saved set, and removing an implying label retains any explicit ones.
 - **An image** shows the fallback picture itself (`dashboard-image-upload`'s `inheritedImage`).
   In the variant form it has no visible caption, and its alt text names the main product's photo
   (`editor.inherited_image_alt`); Remove sits beside Choose image where it would for a photo of

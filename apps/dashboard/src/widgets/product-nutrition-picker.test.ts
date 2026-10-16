@@ -194,9 +194,10 @@ it("shows vegan implications as quiet noneditable ticks without saving them", as
 
 it("retains an explicit vegetarian declaration when Vegan is removed", async () => {
   const { el } = await mount({ allergens: {}, dietaryDeclarations: ["vegan", "vegetarian"] });
-  expect(chip(el, "diet-vegetarian").disabled).toBe(false);
+  expect(chip(el, "diet-vegetarian").disabled).toBe(true);
   await click(el, "diet-vegan");
   expect(el.value.dietaryDeclarations).toEqual(["vegetarian"]);
+  expect(chip(el, "diet-vegetarian").disabled).toBe(false);
   expect(chip(el, "diet-no_meat").getAttribute("aria-pressed")).toBe("true");
 });
 
@@ -277,4 +278,51 @@ it("keeps an allergen incomplete after its last kind is unticked", async () => {
   expect(el.value.allergens).toEqual({ gluten: { kinds: [] } });
   expect(chip(el, "allergen-gluten").getAttribute("aria-pressed")).toBe("true");
   expect(chip(el, "none").getAttribute("aria-pressed")).toBe("false");
+});
+
+it("locks stored explicit diet labels while another chosen label implies them", async () => {
+  const { el, changes } = await mount({
+    allergens: null,
+    dietaryDeclarations: ["vegan", "vegetarian", "no_meat"],
+  });
+  for (const label of ["vegetarian", "no_meat", "no_fish"]) {
+    const button = chip(el, `diet-${label}`);
+    expect(button.disabled, label).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  }
+  expect(changes).toEqual([]);
+  expect(el.value.dietaryDeclarations).toEqual(["vegan", "vegetarian", "no_meat"]);
+  await click(el, "diet-vegan");
+  expect(el.value.dietaryDeclarations).toEqual(["vegetarian", "no_meat"]);
+  expect(chip(el, "diet-vegetarian").disabled).toBe(false);
+  expect(chip(el, "diet-no_meat").disabled).toBe(true);
+});
+
+it("locks an earlier explicit diet when a later choice starts implying it", async () => {
+  const { el, changes } = await mount();
+  await click(el, "diet-no_meat");
+  await click(el, "diet-vegetarian");
+  expect(chip(el, "diet-no_meat").disabled).toBe(true);
+  expect(chip(el, "diet-no_fish").disabled).toBe(true);
+  chip(el, "diet-no_meat").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  expect(changes).toHaveLength(2);
+  expect(el.value.dietaryDeclarations).toEqual(["vegetarian", "no_meat"]);
+  await click(el, "diet-vegetarian");
+  expect(el.value.dietaryDeclarations).toEqual(["no_meat"]);
+  expect(chip(el, "diet-no_meat").disabled).toBe(false);
+});
+
+it("lets a variant choose its own Vegetarian diet while its parent is Vegan", async () => {
+  const { el, changes } = await mount(
+    { allergens: null, dietaryDeclarations: null },
+    { inherited },
+  );
+  expect(chip(el, "diet-vegetarian").disabled).toBe(false);
+  await click(el, "diet-vegetarian");
+  expect(changes).toEqual([{ field: "dietaryDeclarations", value: ["vegetarian"] }]);
+  expect(el.value).toEqual({ allergens: null, dietaryDeclarations: ["vegetarian"] });
+  expect(inherited.dietaryDeclarations).toEqual(["vegan"]);
+  expect(chip(el, "diet-vegan").getAttribute("aria-pressed")).toBe("false");
+  expect(chip(el, "diet-no_meat").disabled).toBe(true);
 });

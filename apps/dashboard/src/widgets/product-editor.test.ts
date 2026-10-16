@@ -4510,7 +4510,7 @@ it.each([
   },
 );
 
-it("draws inherited nutritional values as quiet italic read-only chips", async () => {
+it("draws inherited nutritional values as quiet italic chips with read-only allergens", async () => {
   const el = await mountVariant();
   await openSection(el, "nutrition");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
@@ -4520,7 +4520,7 @@ it("draws inherited nutritional values as quiet italic read-only chips", async (
     const shown = picker.shadowRoot!.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)!;
     expect(getComputedStyle(shown).fontStyle, choice).toBe("italic");
     expect(getComputedStyle(shown).backgroundColor, choice).toBe("rgb(7, 8, 9)");
-    expect(shown.disabled).toBe(true);
+    expect(shown.disabled).toBe(choice === "allergen-milk");
     expect(shown.getAttribute("aria-pressed")).toBe("true");
   }
 });
@@ -5894,7 +5894,7 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
     { label: t("modifiers.allergens"), value: `${allergenName("milk")}, ${allergenName("eggs")}` },
     {
       label: t("editor.nutrition.dietary"),
-      value: `${t("editor.diet.vegetarian")}, ${t("editor.diet.vegan")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
+      value: `${t("editor.diet.vegan")}, ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
     },
   ]);
   await openSection(el, "nutrition");

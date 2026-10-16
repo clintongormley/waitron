@@ -70,6 +70,8 @@ export class ProductNutritionPicker extends LitElement {
         background: var(--wt-color-surface-lifted);
         color: var(--wt-color-text);
         border-color: var(--wt-color-border);
+      }
+      .chip:disabled {
         cursor: default;
       }
       .inherited {
@@ -135,7 +137,7 @@ export class ProductNutritionPicker extends LitElement {
       type="button"
       name=${field || choice}
       data-choice=${choice}
-      class=${`chip ${readonly ? "quiet" : ""} ${inherited ? "inherited" : ""} ${dashed ? "none" : ""} ${this.busy ? "busy" : ""}`}
+      class=${`chip ${readonly || inherited ? "quiet" : ""} ${inherited ? "inherited" : ""} ${dashed ? "none" : ""} ${this.busy ? "busy" : ""}`}
       aria-pressed=${String(selected)}
       ?disabled=${this.busy || readonly}
       aria-invalid=${this.errors[field] ? "true" : nothing}
@@ -286,7 +288,7 @@ export class ProductNutritionPicker extends LitElement {
               (event) => this.#diet(label, event),
               {
                 icon: `diet-${label}`,
-                readonly: implied !== undefined || (dietary.inherited && selected),
+                readonly: !dietary.inherited && implied !== undefined,
                 inherited: dietary.inherited && selected,
               },
             );
