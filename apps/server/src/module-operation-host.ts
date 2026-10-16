@@ -45,6 +45,11 @@ export function createFirstSetupModuleHost(options: {
   >;
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
 }) {
+  const evidence: { current?: { read: ModuleOperationHost["readPublicEvidence"] } } = {};
+  const host = createModuleOperationHost(options.environment, {
+    read: async (binding) => evidence.current?.read(binding),
+  });
+  const modules = configureModuleOperations(options.modules, host);
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...options, coordinator });
   const bootId = randomUUID();
@@ -55,11 +60,11 @@ export function createFirstSetupModuleHost(options: {
     bootId,
     freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
-        options.modules,
+        modules,
         request.location.fiscalTerritory,
         options.moduleConfig,
       );
-      const selected = enabledModules(options.modules, selection.config);
+      const selected = enabledModules(modules, selection.config);
       planVenue(request, selected);
       let configurationImport;
       if (intent?.configurationImport) {
@@ -86,6 +91,7 @@ export function createFirstSetupModuleHost(options: {
   });
   const legacyEvidence = createFirstFiscalEvidence({
     ...options,
+    modules,
     store,
     coordinator,
     bootId,
@@ -94,13 +100,14 @@ export function createFirstSetupModuleHost(options: {
   const keys = createFirstSetupNodeKeys({ ...options, store, coordinator, owner });
   const delivery = createFirstFiscalDelivery({
     ...options,
+    modules,
     store,
     coordinator,
     owner,
     keys,
     bootId,
   });
-  const evidence = {
+  const configuredEvidence = {
     ...legacyEvidence,
     invalidate(attemptId: string) {
       legacyEvidence.invalidate(attemptId);
@@ -110,28 +117,28 @@ export function createFirstSetupModuleHost(options: {
       return (await delivery.has(binding)) ? delivery.read(binding) : legacyEvidence.read(binding);
     },
   };
-  const host = createModuleOperationHost(options.environment, evidence);
+  evidence.current = configuredEvidence;
   return {
     coordinator,
     store,
     owner,
     offerings(territory: string) {
       const selected = enabledModules(
-        options.modules,
+        modules,
         venueFiscalSelection(options.modules, territory, options.moduleConfig).config,
       );
       return selected
         .filter((module) => initialSetupFor(selected, module.name) !== undefined)
         .map((module) => ({ module: module.name, version: module.version }));
     },
-    evidence,
+    evidence: configuredEvidence,
     keys,
     delivery,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(
         options.stateDir,
         venueFiscalSelection(
-          options.modules,
+          modules,
           state.frozen.request.location.fiscalTerritory,
           options.moduleConfig,
         ).config,
@@ -139,9 +146,9 @@ export function createFirstSetupModuleHost(options: {
     },
     assertSelection(state: import("@waitron/provisioning").FirstSetupState) {
       const selected = enabledModules(
-        options.modules,
+        modules,
         venueFiscalSelection(
-          options.modules,
+          modules,
           state.frozen.request.location.fiscalTerritory,
           options.moduleConfig,
         ).config,
@@ -154,6 +161,6 @@ export function createFirstSetupModuleHost(options: {
       )
         throw new AppError("setup.attempt_conflict", {});
     },
-    modules: configureModuleOperations(options.modules, host),
+    modules,
   };
 }

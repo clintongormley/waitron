@@ -30,6 +30,16 @@ import {
   type DeclaredPaperEvidence,
 } from "./declared-paper-evidence.js";
 import { projectDeclaredHistory } from "./paper-register-history.js";
+import {
+  createInitialCloudRequest,
+  readInitialCloudRequest,
+  isInitialCloudRequest,
+  prepareInitialCloudSetup,
+  configuredCloudTrust,
+  confirmInitialCloudSetup,
+  readInitialCloudConfirmation,
+} from "./initial-cloud-setup.js";
+import type { ReceiptTrust } from "./cloud-evidence.js";
 import { isAllocatedSeries } from "./allocation-identity.js";
 
 function refuse(reason = "malformed_allocation"): never {
@@ -131,7 +141,19 @@ function frozenRequest(context: InitialSetupContext) {
   if (!isDeepStrictEqual(expected, context.request)) refuse("event_mismatch");
   return expected;
 }
-function readInput(context: InitialSetupContext, value: unknown) {
+function readInput(
+  context: InitialSetupContext,
+  value: unknown,
+  trust: ReceiptTrust | null = null,
+) {
+  if (isInitialCloudRequest(context.request)) {
+    const imported = prepareInitialCloudSetup(context, value, { trust });
+    return {
+      kind: "cloud" as const,
+      input: imported.input as { allocation: FiscalAllocation; approval: RecoveryApproval },
+      summary: imported.summary,
+    };
+  }
   const held = frozenRequest(context);
   bounded(value);
   if (
@@ -240,189 +262,238 @@ function readInput(context: InitialSetupContext, value: unknown) {
   };
 }
 
-export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
-  candidates(context, proposal) {
-    binding(context);
-    if (!record(proposal) || !exact(proposal, ["serials"]) || !Array.isArray(proposal.serials))
-      refuse();
-    return validateInitialPaperCandidates(context, proposal.serials as number[]);
-  },
-  request,
-  inspect(context, value) {
-    const checked = readInput(context, value);
-    const { input } = checked;
-    if (checked.kind === "declared") {
+function createInitialSetup(receiptTrust: () => ReceiptTrust | null): InitialSetupContribution {
+  const contribution: InitialSetupContribution = {
+    configure(host) {
+      return createInitialSetup(() => configuredCloudTrust(host.environment));
+    },
+    candidates(context, proposal) {
+      binding(context);
+      if (record(proposal) && proposal.route === "cloud") {
+        if (
+          !exact(proposal, ["route", "venueId", "operationId", "incidentEvidence"]) ||
+          typeof proposal.venueId !== "string" ||
+          typeof proposal.operationId !== "string" ||
+          typeof proposal.incidentEvidence !== "string"
+        )
+          refuse();
+        return createInitialCloudRequest(
+          context,
+          proposal.venueId,
+          proposal.operationId,
+          proposal.incidentEvidence,
+        );
+      }
+      if (!record(proposal) || !exact(proposal, ["serials"]) || !Array.isArray(proposal.serials))
+        refuse();
+      return validateInitialPaperCandidates(context, proposal.serials as number[]);
+    },
+    request(context, value) {
+      return isInitialCloudRequest(value)
+        ? readInitialCloudRequest({ ...context, request: value })
+        : request(context, value);
+    },
+    inspect(context, value) {
+      const checked = readInput(context, value, receiptTrust());
+      const { input } = checked;
+      if (checked.kind === "cloud")
+        return prepareInitialCloudSetup(context, value, { trust: receiptTrust() });
+      if (checked.kind === "declared") {
+        return freeze({
+          input,
+          summary: {
+            allocationId: input.allocation.allocationId,
+            installationIdentity: input.allocation.installationIdentity,
+            series: input.allocation.series,
+            integrity: "owner-declared",
+            historyDigest: checked.proof.historyDigest,
+          },
+        });
+      }
+      const { block } = checked;
+      // Public inspection grants neither key enrolment nor a current-master confirmation.
       return freeze({
         input,
         summary: {
           allocationId: input.allocation.allocationId,
           installationIdentity: input.allocation.installationIdentity,
           series: input.allocation.series,
-          integrity: "owner-declared",
-          historyDigest: checked.proof.historyDigest,
+          custodianId: block.custodianId,
+          generationId: block.generationId,
+          blockId: block.blockId,
         },
       });
-    }
-    const { block } = checked;
-    // Public inspection grants neither key enrolment nor a current-master confirmation.
-    return freeze({
-      input,
-      summary: {
-        allocationId: input.allocation.allocationId,
-        installationIdentity: input.allocation.installationIdentity,
-        series: input.allocation.series,
-        custodianId: block.custodianId,
-        generationId: block.generationId,
-        blockId: block.blockId,
-      },
-    });
-  },
-  enrol(context, publicKey, comparison) {
-    binding(context);
-    if (!record(publicKey) || !exact(publicKey, ["custodianId", "publicKey", "fingerprint"]))
-      refuse("reservation_untrusted");
-    const trust = enrolPaperCustodian(publicKey.custodianId, publicKey.publicKey, comparison);
-    if (trust === null || trust.fingerprint !== publicKey.fingerprint)
-      refuse("reservation_untrusted");
-    return freeze(trust);
-  },
-  documentConfirmation(context, imported, document) {
-    const current = FISCAL_INITIAL_SETUP.confirmation(context, imported, document.statement);
-    const facts = readDeclaredPaperConfirmation(current);
-    if (
-      facts.delivery.documentDigest !== document.documentDigest ||
-      facts.delivery.historyDigest !== document.historyDigest
-    )
-      refuse("outside_confirmation_missing");
-    if (document.prior !== null) {
-      const prior = readDeclaredPaperConfirmation(document.prior);
-      const projected = projectDeclaredHistory(prior.history, prior.known);
-      const known = {
-        scope: projected.scope,
-        sHighWater: projected.sHighWater,
-        pHighWater: projected.pHighWater,
-        sBurnFloor: projected.sBurnFloor,
-        pBurnFloor: projected.pBurnFloor,
-        currentHead: projected.head,
-        retainedHeads: projected.heads,
-        originals: projected.originals,
-        retiredBindings: projected.retiredBindings,
-        history: prior.history,
-      };
-      projectDeclaredHistory(facts.history, known);
-      const serial = Number(facts.input.allocation.installationIdentity.slice(1));
-      if (serial <= projected.sBurnFloor) refuse("reservation_mismatch");
-    }
-    return current;
-  },
-  confirmation(context, imported, statement) {
-    const checked = readInput(context, imported.input);
-    const { input } = checked;
-    if (checked.kind === "declared") {
-      const facts = readDeclaredPaperConfirmation(statement);
-      if (
-        !isDeepStrictEqual(facts.input, input) ||
-        !isDeepStrictEqual(facts.history.scope, {
-          taxpayerNif: context.taxId,
-          softwareId: WAITRON_ID_SISTEMA,
-          environment: context.environment,
-        }) ||
-        !isAllocatedSeries(
-          input.allocation.series,
-          input.allocation.installationIdentity,
-          context.bases,
+    },
+    enrol(context, publicKey, comparison) {
+      binding(context);
+      if (!record(publicKey) || !exact(publicKey, ["custodianId", "publicKey", "fingerprint"]))
+        refuse("reservation_untrusted");
+      const trust = enrolPaperCustodian(publicKey.custodianId, publicKey.publicKey, comparison);
+      if (trust === null || trust.fingerprint !== publicKey.fingerprint)
+        refuse("reservation_untrusted");
+      return freeze(trust);
+    },
+    documentConfirmation(context, imported, document) {
+      const current = contribution.confirmation(context, imported, document.statement);
+      if (isInitialCloudRequest(context.request)) {
+        const facts = readInitialCloudConfirmation(current);
+        const delivery = facts.delivery as { documentDigest: string; historyDigest: string };
+        if (
+          delivery.documentDigest !== document.documentDigest ||
+          delivery.historyDigest !== document.historyDigest
         )
+          refuse("outside_confirmation_missing");
+        if (document.prior !== null) {
+          const prior = readInitialCloudConfirmation(document.prior);
+          if (
+            (prior.priorActivation === "committed" && facts.priorActivation !== "committed") ||
+            !isDeepStrictEqual({ ...prior, priorActivation: facts.priorActivation }, current)
+          )
+            refuse("outside_confirmation_missing");
+        }
+        return current;
+      }
+      const facts = readDeclaredPaperConfirmation(current);
+      if (
+        facts.delivery.documentDigest !== document.documentDigest ||
+        facts.delivery.historyDigest !== document.historyDigest
       )
-        refuse("event_mismatch");
-      return facts;
-    }
-    const { block } = checked;
-    if (
-      !record(statement) ||
-      !exact(statement, ["trust", "current"]) ||
-      !record(statement.trust) ||
-      !exact(statement.trust, ["custodianId", "publicKey", "fingerprint"]) ||
-      !record(statement.current)
-    )
-      refuse("outside_confirmation_missing");
-    const current = statement.current;
-    const expected = {
-      version: 1,
-      allocationId: input.allocation.allocationId,
-      binding: context.binding,
-      operatorId: context.administratorId,
-      priorActivation: current.priorActivation,
-      incidentEvidence: input.approval.incidentEvidence,
-      requiredBases: context.bases,
-      recipientVenueId: context.recipientVenueId,
-      generationId: block.generationId,
-      blockId: block.blockId,
-      currentRegisterConfirmed: true,
-      consumptionConfirmed: true,
-      currentEntryState: "consumed-for-event",
-    };
-    if (
-      !isDeepStrictEqual(expected, current) ||
-      !["none", "committed"].includes(current.priorActivation as string)
-    )
-      refuse("outside_confirmation_missing");
-    const trust = enrolPaperCustodian(
-      statement.trust.custodianId,
-      statement.trust.publicKey,
-      statement.trust.fingerprint,
-    );
-    const validation = validateAllocationEnvelope(input.allocation, input.approval, {
-      taxpayerNif: context.taxId,
-      softwareId: WAITRON_ID_SISTEMA,
-      environment: context.environment,
-      mode: "initial-setup",
-      ...context.binding,
-      operatorId: context.administratorId,
-      incidentEvidence: input.approval.incidentEvidence,
-      requiredBases: context.bases,
-      priorActivation: "none",
-      reauthentication: { eventId: context.binding.eventId, operatorId: context.administratorId },
-      authority: {
-        kind: "paper",
-        trust,
+        refuse("outside_confirmation_missing");
+      if (document.prior !== null) {
+        const prior = readDeclaredPaperConfirmation(document.prior);
+        const projected = projectDeclaredHistory(prior.history, prior.known);
+        const known = {
+          scope: projected.scope,
+          sHighWater: projected.sHighWater,
+          pHighWater: projected.pHighWater,
+          sBurnFloor: projected.sBurnFloor,
+          pBurnFloor: projected.pBurnFloor,
+          currentHead: projected.head,
+          retainedHeads: projected.heads,
+          originals: projected.originals,
+          retiredBindings: projected.retiredBindings,
+          history: prior.history,
+        };
+        projectDeclaredHistory(facts.history, known);
+        const serial = Number(facts.input.allocation.installationIdentity.slice(1));
+        if (serial <= projected.sBurnFloor) refuse("reservation_mismatch");
+      }
+      return current;
+    },
+    confirmation(context, imported, statement) {
+      const checked = readInput(context, imported.input, receiptTrust());
+      if (checked.kind === "cloud")
+        return confirmInitialCloudSetup(context, imported, statement, receiptTrust());
+      const { input } = checked;
+      if (checked.kind === "declared") {
+        const facts = readDeclaredPaperConfirmation(statement);
+        if (
+          !isDeepStrictEqual(facts.input, input) ||
+          !isDeepStrictEqual(facts.history.scope, {
+            taxpayerNif: context.taxId,
+            softwareId: WAITRON_ID_SISTEMA,
+            environment: context.environment,
+          }) ||
+          !isAllocatedSeries(
+            input.allocation.series,
+            input.allocation.installationIdentity,
+            context.bases,
+          )
+        )
+          refuse("event_mismatch");
+        return facts;
+      }
+      const { block } = checked;
+      if (
+        !record(statement) ||
+        !exact(statement, ["trust", "current"]) ||
+        !record(statement.trust) ||
+        !exact(statement.trust, ["custodianId", "publicKey", "fingerprint"]) ||
+        !record(statement.current)
+      )
+        refuse("outside_confirmation_missing");
+      const current = statement.current;
+      const expected = {
+        version: 1,
+        allocationId: input.allocation.allocationId,
+        binding: context.binding,
+        operatorId: context.administratorId,
+        priorActivation: current.priorActivation,
+        incidentEvidence: input.approval.incidentEvidence,
+        requiredBases: context.bases,
         recipientVenueId: context.recipientVenueId,
         generationId: block.generationId,
         blockId: block.blockId,
         currentRegisterConfirmed: true,
         consumptionConfirmed: true,
         currentEntryState: "consumed-for-event",
-      },
-    });
-    if (!validation.ok) refuse(validation.reason);
-    // Only the host's owner-bound step can turn this checked statement into a short-lived grant.
-    return freeze(structuredClone(expected));
-  },
-  async committed(tx, context, value) {
-    const { input } = readInput(context, value);
-    const [retained] = await tx
-      .select()
-      .from(fiscalAllocations)
-      .where(eq(fiscalAllocations.eventKey, context.binding.eventId));
-    if (retained === undefined) return null;
-    if (
-      retained.nodeId !== context.binding.targetNodeId ||
-      retained.taxpayerNif !== context.taxId ||
-      retained.softwareId !== WAITRON_ID_SISTEMA ||
-      retained.environment !== context.environment ||
-      !isDeepStrictEqual(input.allocation, retained.allocation) ||
-      !isDeepStrictEqual(input.approval, retained.approval) ||
-      retained.result.activationEventId !== context.binding.eventId ||
-      retained.result.sifId !== retained.sifId
-    )
-      refuse("event_mismatch");
-    const [node] = await tx.select().from(nodes).where(eq(nodes.id, retained.nodeId));
-    if (node === undefined) refuse("node_mismatch");
-    const active = await readModuleAllocationSeries(
-      tx,
-      { nodeId: nodeId(node.id), locationId: locationId(node.locationId) },
-      context.bases,
-    );
-    if (!isDeepStrictEqual(active, retained.result.series)) refuse("activation_superseded");
-    return freeze(structuredClone(retained.result));
-  },
-};
+      };
+      if (
+        !isDeepStrictEqual(expected, current) ||
+        !["none", "committed"].includes(current.priorActivation as string)
+      )
+        refuse("outside_confirmation_missing");
+      const trust = enrolPaperCustodian(
+        statement.trust.custodianId,
+        statement.trust.publicKey,
+        statement.trust.fingerprint,
+      );
+      const validation = validateAllocationEnvelope(input.allocation, input.approval, {
+        taxpayerNif: context.taxId,
+        softwareId: WAITRON_ID_SISTEMA,
+        environment: context.environment,
+        mode: "initial-setup",
+        ...context.binding,
+        operatorId: context.administratorId,
+        incidentEvidence: input.approval.incidentEvidence,
+        requiredBases: context.bases,
+        priorActivation: "none",
+        reauthentication: { eventId: context.binding.eventId, operatorId: context.administratorId },
+        authority: {
+          kind: "paper",
+          trust,
+          recipientVenueId: context.recipientVenueId,
+          generationId: block.generationId,
+          blockId: block.blockId,
+          currentRegisterConfirmed: true,
+          consumptionConfirmed: true,
+          currentEntryState: "consumed-for-event",
+        },
+      });
+      if (!validation.ok) refuse(validation.reason);
+      // Only the host's owner-bound step can turn this checked statement into a short-lived grant.
+      return freeze(structuredClone(expected));
+    },
+    async committed(tx, context, value) {
+      const { input } = readInput(context, value, receiptTrust());
+      const [retained] = await tx
+        .select()
+        .from(fiscalAllocations)
+        .where(eq(fiscalAllocations.eventKey, context.binding.eventId));
+      if (retained === undefined) return null;
+      if (
+        retained.nodeId !== context.binding.targetNodeId ||
+        retained.taxpayerNif !== context.taxId ||
+        retained.softwareId !== WAITRON_ID_SISTEMA ||
+        retained.environment !== context.environment ||
+        !isDeepStrictEqual(input.allocation, retained.allocation) ||
+        !isDeepStrictEqual(input.approval, retained.approval) ||
+        retained.result.activationEventId !== context.binding.eventId ||
+        retained.result.sifId !== retained.sifId
+      )
+        refuse("event_mismatch");
+      const [node] = await tx.select().from(nodes).where(eq(nodes.id, retained.nodeId));
+      if (node === undefined) refuse("node_mismatch");
+      const active = await readModuleAllocationSeries(
+        tx,
+        { nodeId: nodeId(node.id), locationId: locationId(node.locationId) },
+        context.bases,
+      );
+      if (!isDeepStrictEqual(active, retained.result.series)) refuse("activation_superseded");
+      return freeze(structuredClone(retained.result));
+    },
+  };
+
+  return contribution;
+}
+export const FISCAL_INITIAL_SETUP = createInitialSetup(() => null);

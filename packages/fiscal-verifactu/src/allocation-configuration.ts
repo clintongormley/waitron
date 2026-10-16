@@ -8,7 +8,11 @@ import {
 import { createBoundPaperAllocationSource } from "./allocation-paper-source.js";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
 
-import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
+import { configuredCloudTrust, readInitialCloudConfirmation } from "./initial-cloud-setup.js";
+import {
+  createCloudAllocationPreparation,
+  createCloudAllocationFilePreparation,
+} from "./cloud-preparation.js";
 import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
 import { createDeclaredPaperPreparation } from "./declared-paper-preparation.js";
 
@@ -27,6 +31,30 @@ function configuredOperations(
 ): ModuleOperationPreparation {
   return {
     async prepare(operation, run) {
+      const cloud =
+        typeof operation.input === "object" &&
+        operation.input !== null &&
+        Object.hasOwn(operation.input, "receipt");
+      if (cloud && operation.binding.action === "setup") {
+        const trust = configuredCloudTrust(environment);
+        const receiptDirectory = environment.WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY;
+        if (host === undefined || trust === null || !receiptDirectory?.trim())
+          throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
+        return createCloudAllocationPreparation({
+          trust,
+          receiptDirectory,
+          confirmationPath: "",
+          readCurrent: async () => {
+            const current = readInitialCloudConfirmation(
+              (await host.readPublicEvidence(operation.binding))?.current,
+            );
+            const { kind: _, delivery: __, ...checked } = current;
+            void _;
+            void __;
+            return checked;
+          },
+        }).prepare(operation, run);
+      }
       if (host !== undefined) {
         const evidence = await host.readPublicEvidence(operation.binding);
         if (

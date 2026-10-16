@@ -1,5 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { OperationBinding } from "./operation-authority.js";
+import type { ModuleOperationHost } from "./operation-preparation.js";
 
 export interface InitialSetupContext {
   readonly attemptId: string;
@@ -20,6 +21,7 @@ export interface InitialSetupImport {
 }
 
 export interface InitialSetupContribution {
+  configure?(host: ModuleOperationHost): InitialSetupContribution;
   candidates(context: InitialSetupContext, proposal: unknown): unknown;
   request(context: InitialSetupContext, validatedCandidates: unknown): unknown;
   inspect(context: InitialSetupContext, input: unknown): InitialSetupImport;

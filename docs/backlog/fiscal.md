@@ -336,6 +336,17 @@ also need pre-sign partitioning within the existing import count/byte limits; ol
 oversized blocks remain intact and explicitly unavailable for import. This records missing
 integration; it authorises no Cloud repository change or new campaign item.
 
+**Replacement-plan Tasks 5–6, 2026-10-16, branch milestone:** owner-bound kept-document grants,
+public-history chunks and staged node verifiers now cross the existing publication path. Signed C
+first setup verifies independent configured issuer trust, the frozen local administrator, request,
+operation and complete bases before the existing activation writer. Local synthetic checks cover
+C000042 followed by paper P000008 from the retained S42/P7 checkpoint, with unchanged source bytes;
+this is not a live Cloud or PDF-upload acceptance receipt. Production Cloud capabilities, first-local-
+operator admission, namespace discovery and joint service qualification remain separately open.
+No paper import or unsigned paper report is enabled. Remaining A679 tasks connect V2 inspection,
+wizard and recovery delivery, then the whole-branch reviews, CI and owner’s built-PDF/printed-typing
+acceptance. Earlier dated implementation checkpoints below describe superseded work where they differ.
+
 **Replacement-plan Task 1, 2026-10-15, branch milestone:** the signed-history verifier preserves
 original public blocks and consumptions, checks predecessors and occupied names, and distinguishes
 complete history from conservative checkpoint continuation. Printed-entry codecs recover the same

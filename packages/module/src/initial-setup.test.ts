@@ -55,3 +55,38 @@ describe("initial setup module selection", () => {
     expect(result[1]).toBe(none);
   });
 });
+
+it("binds independent initial-setup host configuration without changing the shared descriptor", () => {
+  const host: ModuleOperationHost = {
+    environment: { ISSUER: "configured" },
+    readPublicEvidence: async () => undefined,
+  };
+  const bound = {
+    ...seat,
+    inspect: (_context: unknown, input: unknown) => ({ input, summary: host.environment.ISSUER }),
+  };
+  const configurable = { ...seat, configure: () => bound };
+  const original = fakeModule("alternate", { provisioning: { initialSetup: configurable } });
+  const result = configureModuleOperations([original], host);
+  expect(result[0]?.provisioning?.initialSetup?.inspect({} as never, "packet")).toEqual({
+    input: "packet",
+    summary: "configured",
+  });
+  expect(original.provisioning?.initialSetup).toBe(configurable);
+});
+
+it("keeps the descriptor copy when an operation factory returns its existing preparation", () => {
+  const operations: ModuleOperationPreparation = {
+    prepare: async (operation, run) => run(operation),
+    configure() {
+      return this;
+    },
+  };
+  const original = fakeModule("alternate", { operations });
+  const configured = configureModuleOperations([original], {
+    environment: {},
+    readPublicEvidence: async () => undefined,
+  });
+  expect(configured[0]).not.toBe(original);
+  expect(configured[0]?.operations).toBe(operations);
+});

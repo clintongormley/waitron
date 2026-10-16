@@ -19,11 +19,22 @@ export function configureModuleOperations(
   modules: readonly WaitronModule[],
   host: ModuleOperationHost,
 ): readonly WaitronModule[] {
-  return modules.map((module) =>
-    module.operations?.configure === undefined
-      ? module
-      : { ...module, operations: module.operations.configure(host) },
-  );
+  return modules.map((module) => {
+    const operations = module.operations?.configure?.(host) ?? module.operations;
+    const initialSetup = module.provisioning?.initialSetup;
+    const configuredSetup = initialSetup?.configure?.(host) ?? initialSetup;
+    if (module.operations?.configure === undefined && initialSetup?.configure === undefined)
+      return module;
+    return {
+      ...module,
+      operations,
+      ...(configuredSetup === initialSetup
+        ? {}
+        : {
+            provisioning: { ...module.provisioning, initialSetup: configuredSetup },
+          }),
+    };
+  });
 }
 
 export interface ModuleOperationPreparation {
