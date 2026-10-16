@@ -6603,10 +6603,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 _Formerly entries spread across the old sections._
 
 - **A664 — archive or delete a venue's old data once it no longer has to be kept (owner,
-  2026-10-14; open).** Nothing is deleted on a schedule today. First find, from primary sources,
-  how long each kind of record must be kept, and how long personal data may be; then design what
-  happens to each table after that. Fiscal records are append-only and hash-chained, so this needs
-  a spec agreed with the owner and the asesor before any code.
+  2026-10-14; research complete 2026-10-16, proposed design awaiting owner and relevant adviser
+  approval; implementation open).** The [proposed design](superpowers/specs/2026-10-16-a664-data-retention-design.md)
+  separates legal evidence, short operational windows, holds, archives and recovery copies. Its
+  [source register](compliance/research/2026-10-16-a664-retention.md) and
+  [208-table static inventory](superpowers/specs/2026-10-16-a664-retention-table-inventory.md)
+  support [Q48](compliance/asesor-questions.md#q48-a664-retention-and-evidence-process-added-2026-10-16).
+  No product code, including reporting, starts before owner and relevant-adviser design agreement. No automatic deletion or protected-history removal is approved.
   [Detail](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
@@ -6798,7 +6801,9 @@ DPO: a data map (what personal data, where, how long); the controller-versus-pro
 whether a DPA is needed; the venue-facing duties (privacy notice, lawful basis, access/erasure/
 portability, breach notification, retention) and which Waitron must _build_ versus the venue must
 _operate_. Blocks nothing today; the retention/erasure/export mechanics become build work once
-scoped.
+scoped. A664’s [proposed retention map](superpowers/specs/2026-10-16-a664-data-retention-design.md)
+awaits owner and relevant specialist approval under its own gates; the broader privacy programme
+remains open.
 
 ---
 

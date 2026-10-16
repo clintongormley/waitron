@@ -1,5 +1,7 @@
 # Questions for the asesor
 
+**2026-10-16, A664:** [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) adds venue-specific retention/process questions and separate privacy/labour referrals. The [proposed design](../superpowers/specs/2026-10-16-a664-data-retention-design.md) awaits owner and relevant adviser approval. The historical Word copies have not been changed; no enquiry has been sent.
+
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
 primary texts. These are the items that research could not resolve.
@@ -575,6 +577,34 @@ should be set up, and weak evidence about our shape.
 
 **Outstanding reciprocal obligation.** They could not locate the ERP-modules FAQ that Q1 rests
 on and asked for the text. We offered to give back — send it.
+
+---
+
+## Q48: A664 retention and evidence process (added 2026-10-16)
+
+**PROPOSED; owner/adviser approval pending; no implementation or enquiry.** This dated section adds to the historical list without changing earlier answers or numbering. The older “nothing blocks the build” note does not open A664’s approval gates.
+
+English context: the [retention design](../superpowers/specs/2026-10-16-a664-data-retention-design.md), [complete static inventory](../superpowers/specs/2026-10-16-a664-retention-table-inventory.md) and [primary-source register](research/2026-10-16-a664-retention.md) distinguish invoices, RF, accounting/payment evidence, time records, payroll artifacts and service-only personal data. The legal clock texts are already researched (F01–F40, L1–L9); the unanswered work is their application to this venue and this proposed custody/erasure process. The proposed 30/90-day routine windows and 35-day recovery-copy ceiling are driver choices, not legal periods or owner decisions. All A664 product code, including reporting, waits for owner and relevant-adviser design agreement. No invariant change or protected-row purge is authorised.
+
+### Fiscal/commercial adviser: apply the evidence map to this venue (G1)
+
+> Para este restaurante y su régimen territorial y fiscal concreto, ¿puede revisar por escrito el mapa propuesto de documentos y señalar qué conjuntos constituyen la factura conservada, justificantes de los libros, prueba de cobro/devolución, constancia de remisión/aceptación y mera copia del RF? Necesitamos identificar los libros y su último asiento aplicable, los efectos de deducciones o regularizaciones pendientes y las actuaciones que cambian el cómputo, no un plazo único desde la fecha de factura. Para RF pendientes, rechazados o con expediente abierto, ¿qué prueba adicional debe conservar este proceso concreto y qué hecho permite cerrar el expediente a efectos de conservación?
+>
+> ¿Resulta suficiente el paquete propuesto para los documentos identificados, con originales íntegros, contexto de esquema/versión, relaciones y límites de cadena, lector sin el servidor de venta y acceso electrónico para la Administración? Revise el destino y ubicación reales y la custodia tras el cierre o fallecimiento del titular. Indique cualquier documento o acceso que falte. Esta revisión no solicita autorización para cambiar cadenas, numeración ni protecciones de inmutabilidad.
+
+Obtain the actual acquiring/provider agreements from the operator before classifying contractual dispute evidence; this is a factual input, not a question the statute or adviser can answer without those agreements. Do not ask whether every merchant inherits the PSP/AML retention duties (F30–F37).
+
+### Refer to a labour specialist/gestoría for actual labour artifacts (G2)
+
+> Para el convenio de hostelería y la organización de este centro, ¿qué campos y documentos del mapa acreditan jornada, resumen mensual a tiempo parcial, nómina/cotización, ausencias y meras previsiones de turnos? Confirme la identidad mínima que debe acompañarlos, las correcciones y accesos necesarios y cómo se aplican a estos documentos concretos las distintas obligaciones ya identificadas en L1/L2/L6/L8/L9. ¿Qué hechos o reclamaciones de este centro exigen una conservación adicional y quién autoriza levantar cada retención? Los cierres de período no se destruirán mientras esa clasificación esté pendiente.
+
+### Refer to a privacy specialist with the controller for the proposed process (G3)
+
+> Para los usos reales de este restaurante, ¿son necesarias y proporcionadas las ventanas operativas propuestas, y qué base del artículo 6 y excepción del artículo 9 permiten tratar las notas identificables de alergias o salud? Revise la retirada al acabar el servicio y la conservación mínima ante una incidencia, incluidas las notas ya incorporadas a instantáneas inmutables. Necesitamos un tratamiento concreto cuando no exista ya una base para conservar el original y el almacenamiento actual no permita retirarlo sin alterar historia protegida; una vista ocultada no resuelve esa copia.
+>
+> ¿Cuándo corresponde bloqueo del artículo 32, frente a custodia documental o limitación de uso, con qué responsabilidades/plazos aplicables, quién conserva las claves y quién puede acceder? Revise también la propuesta de copias de recuperación inaccesibles con caducidad máxima de 35 días, borrado de versiones/réplicas, reaplicación de supresiones antes de abrir una restauración y respuesta sobre copias ya entregadas a terceros. Indique si debe acortarse el retraso o cambiar el proceso antes de habilitarlo, y los contratos/roles/destinos que faltan comprobar.
+
+These referrals do not ask the fiscal adviser to certify the GDPR programme. The controller’s wider notices, rights, contracts, breaches and accountability work remains separate. G4 needs measured storage/restore results; G5 needs a separate protected-storage decision and any explicit permission for conflicting invariant changes. Written answers here do not substitute for either. No answer is recorded yet.
 
 ---
 
