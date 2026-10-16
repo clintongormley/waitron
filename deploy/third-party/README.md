@@ -8,6 +8,13 @@ Google's "G" on the dashboard's Sign in with Google button, and npm packages bun
 server and web apps. The print-agent image, built by the same `deploy/Dockerfile`, has its own
 `/app/third-party/` with notices for its bundled npm packages and Python packages.
 
+## Nutrition icons
+
+The web apps register the shared allergen and diet icon paths from Erudus, Pictogrammers
+and Material Symbols. `nutrition-icons/README.md` records the pinned sources and adaptations;
+that directory carries Erudus's MIT notice and Pictogrammers' notice. The Apache 2.0 licence
+is in `licenses/Apache-2.0.txt`.
+
 ## Bundled npm packages
 
 Each server JavaScript bundle ships its own `/app/third-party/npm/server/<bundle>.js.NOTICES.txt`.

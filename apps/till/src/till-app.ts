@@ -12,6 +12,7 @@ import {
   navigationGuardFor,
   baseStyles,
   registerIcons,
+  NUTRITION_ICONS,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -352,6 +353,7 @@ const INVOICE_OPTIONS_LIMIT_MS = 5_000;
 // wt-combobox's, wt-row-actions' `kebab`, wt-number-stepper's `minus` and `plus`, and the top bar's
 // More menu's `hamburger`.
 registerIcons({
+  ...NUTRITION_ICONS,
   close: CROSS_ICON_PATH,
   minus: "M2.5 7.25H13.5V8.75H2.5Z",
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
