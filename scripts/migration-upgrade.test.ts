@@ -580,6 +580,7 @@ type Row = Record<string, Value>;
  * trigger refuses every generic value. Keyed `table.column`.
  */
 const CANDIDATES: Record<string, readonly Value[]> = {
+  "party_allergy_guests.allergens": ['{"milk":{}}'],
   "location_day_cutover_changes.effective_business_day": ["2026-01-01", "2026-01-02"],
   "location_day_cutover_changes.day_cutover": ["05:00:00", "07:00:00"],
   // The CHECK wants 64 lowercase hex digits and an image extension.
