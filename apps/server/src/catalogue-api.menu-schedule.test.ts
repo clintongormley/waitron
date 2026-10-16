@@ -268,6 +268,19 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);
     await setSoupPrice(app, menuId, itemId, "5.50");
+    const proposed = await json<MenuPreview>(
+      await send(app, "GET", `/management-api/catalogues/${menuId}/preview`),
+      200,
+    );
+    expect(proposed.warnings).toEqual([
+      {
+        kind: "allergens_unreviewed",
+        products: [
+          { id: proposed.document.offers[itemId]!.productId, name: "Soup", parentName: null },
+        ],
+      },
+    ]);
+
     const queued = await json<{ versionId: string }>(await queue(app, menuId, TOMORROW), 201);
     expect(queued).toEqual({ versionId: expect.any(String), number: 2, activatesAt: TOMORROW_AT });
     const answer = await publications(app, menuId);

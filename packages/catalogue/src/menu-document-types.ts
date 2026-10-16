@@ -288,6 +288,10 @@ export interface MenuPreview {
   warnings: (
     | { kind: "shortcut_missing"; name: string }
     | {
+        kind: "allergens_unreviewed";
+        products: { id: string; name: string; parentName: string | null }[];
+      }
+    | {
         kind: "extra_portion_precision";
         listName: string;
         name: string;

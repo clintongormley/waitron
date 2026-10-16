@@ -647,7 +647,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](../developers/products.md), under _Variants_.
 
-- **The product list.** A variant's allergen cell is [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md)'s. A variant's name may sit a few pixels low in its row at 390px, not yet looked at;
+- **The product list.** A variant's name may sit a few pixels low in its row at 390px, not yet looked at;
   `listedVariantsOfProducts` (`packages/catalogue/src/operations.ts`) repeats the grouping
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does — share one helper.
 
@@ -918,7 +918,7 @@ so this is expected only while the dashboard's category list is behind.
 Availability is blank for an ordinary product, Unavailable when sold out, and Archived when archived,
 also when it is sold out; the owner chose this column over badges beside the name. The Allergens filter
 offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
-so a product never checked stays apart from one checked and allergen-free. Dietary info's "Has" means a
+so a product never checked stays apart from one checked and allergen-free. A668-3 (2026-10-16) renames the displayed Pending label to Not reviewed and applies each variant's effective state to its cell and filter; inherited badges are italic. Dietary info's "Has" means a
 categorised dietary origin from the product's recipe, or a Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
 ticked dietary declaration. Made at offers only the stations the column names for some product, not
 every kitchen station, and matches the station the column shows, including a switched-off station a

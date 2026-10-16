@@ -68,7 +68,7 @@ it("resolves a unit token to Spanish and English, unknown value raw", () => {
 });
 
 it("resolves an allergen-state token to Spanish and English, unknown value raw", () => {
-  expect(allergenStateName("pending", "es")).toBe("Pendiente");
+  expect(allergenStateName("pending", "es")).toBe("Sin revisar");
   expect(allergenStateName("none", "es")).toBe("Ninguno");
   expect(allergenStateName("declared", "es")).toBe("Declarado");
   expect(allergenStateName("declared", "en")).toBe("Declared");
@@ -194,4 +194,9 @@ it("defaults to the active locale when none is passed", () => {
   expect(allergenName("eggs")).toBe("Huevos");
   setLocale("en");
   expect(roleName("manager")).toBe("Manager");
+});
+
+it("names unreviewed allergen filters without changing generic Pending status", () => {
+  expect(allergenStateName("pending", "en")).toBe("Not reviewed");
+  expect(statusName("pending", "en")).toBe("Pending");
 });

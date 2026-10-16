@@ -140,7 +140,9 @@ const products: Product[] = [
         unitPrice: "4.50",
         available: false,
         active: true,
+        allergensInherited: true,
         effective: {
+          allergens: {},
           unitPrice: "4.50",
           vatClass: "general",
           primaryCategoryId: "cat-1",
@@ -155,7 +157,9 @@ const products: Product[] = [
         unitPrice: null,
         available: true,
         active: false,
+        allergensInherited: true,
         effective: {
+          allergens: {},
           unitPrice: "3.00",
           vatClass: "reduced",
           primaryCategoryId: "cat-1",
@@ -174,6 +178,37 @@ beforeEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
+  it("shows inherited and own allergen badges accessibly", async () => {
+    const parent = products[3]!;
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products: [
+          {
+            ...parent,
+            variants: parent.variants.map((variant, index) => ({
+              ...variant,
+              active: true,
+              allergensInherited: index === 0,
+              effective: {
+                ...variant.effective,
+                allergens: (index === 0 ? {} : { eggs: {} }) as Product["allergens"],
+              },
+            })),
+          },
+        ],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll('[data-test="allergen-state"]').length).toBe(3);
+    expect(table.shadowRoot!.querySelectorAll('[part~="inherited-allergens"]').length).toBe(1);
+    await expectNoA11yViolations(host);
+  });
+
   it("keeps a visually hidden phone count in the row's accessible name", async () => {
     const before = {
       width: window.innerWidth,

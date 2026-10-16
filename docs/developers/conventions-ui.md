@@ -1197,3 +1197,17 @@ document, while the day screen's 310-pixel container held a 426-pixel column. Th
 failed in both themes, then passed after changing the grid tracks. A short-name fixture passed
 before the fix and did not reproduce this case. The command was `pnpm --filter @waitron/dashboard
 exec vitest run src/screens/attendance-corrections-screen.test.ts -t 'phone content width'`.
+
+
+## Keep a comma-separated CSS selector group together
+
+Before inserting a rule, read the whole selector group. A new italic rule in A668-3 split the
+existing product/variant cell group and accidentally included the product cell. The allergen badge
+tests passed while a new probe measured an italic product name. The computed-style assertions check both
+the inherited badge and the product name that must stay normal; the original cell group retains
+its shared `display: block` rule.
+
+Measured 2026-10-16: `pnpm --filter @waitron/dashboard exec vitest run
+src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed three cases with
+`italic` instead of `normal` before the selector correction. The assertion lives in
+`apps/dashboard/src/widgets/product-list.test.ts`, under **A668 effective allergen cells**.

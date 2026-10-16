@@ -315,7 +315,9 @@ function variantProducts(): Product[] {
     unitPrice,
     available: true,
     active: true,
+    allergensInherited: true,
     effective: {
+      allergens: null,
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
       primaryCategoryId: "c-drinks",
@@ -7840,6 +7842,66 @@ describe("publishing", () => {
     inPanel(el, "publish-confirm")?.click();
     await el.updateComplete;
   }
+
+  it("refreshes a stale scheduled preview while retaining the date draft and asking again", async () => {
+    const warned = {
+      ...lunchPreview(),
+      warnings: [
+        {
+          kind: "allergens_unreviewed" as const,
+          products: [{ id: "p-burger", name: "Staff burger", parentName: null }],
+        },
+      ],
+    };
+    const client = api({
+      getMenuPreview: vi.fn().mockResolvedValue(warned),
+      scheduleMenuPublication: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu.changed_since_preview" })
+        .mockResolvedValue({ number: 3, versionId: "v3", activatesAt: "2030-01-01T12:00:00Z" }),
+    });
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
+      "dashboard-menu-publications",
+    )!;
+    const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    await expect.poll(() => sq('[data-test="schedule-open"]')).not.toBeNull();
+    await userEvent.click(sq('[data-test="schedule-open"]'));
+    await schedule.updateComplete;
+    for (const [name, value] of [
+      ["date", "2030-01-01"],
+      ["time", "12:00"],
+    ]) {
+      const field = sq(`wt-input[name="${name}"]`) as HTMLElementTagNameMap["wt-input"];
+      field.value = value!;
+      field.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    }
+    await schedule.updateComplete;
+    await userEvent.click(sq('[data-test="schedule-submit"]'));
+    await schedule.updateComplete;
+    expect(client.scheduleMenuPublication).not.toHaveBeenCalled();
+    const reads = client.getMenuPreview.mock.calls.length;
+    client.getMenuPreview.mockResolvedValue({ ...warned, hash: "fresh-scheduled-hash" });
+    await userEvent.click(sq('[data-test="publish-confirm"]'));
+    await expect.poll(() => schedule.preview?.hash).toBe("fresh-scheduled-hash");
+    expect(client.getMenuPreview).toHaveBeenCalledTimes(reads + 1);
+    expect(schedule.isConnected).toBe(true);
+    expect((sq('wt-input[name="date"]') as HTMLElementTagNameMap["wt-input"]).value).toBe(
+      "2030-01-01",
+    );
+    expect((sq('wt-input[name="time"]') as HTMLElementTagNameMap["wt-input"]).value).toBe("12:00");
+    await userEvent.click(sq('[data-test="schedule-submit"]'));
+    await schedule.updateComplete;
+    expect(client.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+    await userEvent.click(sq('[data-test="publish-confirm"]'));
+    await expect.poll(() => client.scheduleMenuPublication.mock.calls.length).toBe(2);
+    expect(client.scheduleMenuPublication).toHaveBeenLastCalledWith("menu-lunch", {
+      expectedHash: "fresh-scheduled-hash",
+      activatesAt: { date: "2030-01-01", time: "12:00" },
+    });
+  });
 
   it("renders the publications widget for the open menu with the preview it read", async () => {
     const client = api();
