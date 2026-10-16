@@ -7,6 +7,7 @@ import { type WtCombobox, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { StoreChangeController } from "../state/store-controller.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
@@ -37,7 +38,7 @@ import type {
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "../widgets/basket.js";
-import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
+import type { CollectCardDetail, CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
 /** A brand wordmark is a fixed name, not translated UI copy. */
 const BRAND = "Waitron";
@@ -47,6 +48,7 @@ export class TillCounterScreen extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    new StoreChangeController(this, () => this.store);
   }
 
   static override styles = [
@@ -243,6 +245,7 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
+  @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
@@ -411,8 +414,11 @@ export class TillCounterScreen extends LitElement {
 
   #lists(): TemplateResult | typeof nothing {
     if (this.heldOrders.length === 0 && this.counterWaiting.length === 0) return nothing;
+    const orders = this.heldOrders.some((order) => order.id === this.store.id)
+      ? this.heldOrders.filter((order) => order.id !== this.store.id)
+      : this.heldOrders;
     return html`<till-held-orders
-        .orders=${this.heldOrders}
+        .orders=${orders}
         .tables=${this.tables}
         .zones=${this.zones}
       ></till-held-orders>
@@ -466,6 +472,7 @@ export class TillCounterScreen extends LitElement {
             .takesCash=${this.takesCash}
             .tipsEnabled=${this.tipsEnabled}
             .cardOutcome=${this.cardOutcome}
+            .cardRetryDetail=${this.cardRetryDetail}
             .cardAttemptsOver=${this.cardAttemptsOver}
             .activeReaders=${this.activeReaders}
             .defaultReaderId=${this.defaultReaderId}

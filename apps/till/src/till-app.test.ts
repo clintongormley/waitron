@@ -9925,7 +9925,8 @@ describe("till-app", () => {
 
       // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
       emit(counter(el)!, "retrieve-order", { id: "wo-1" });
-      await discardBasketChanges(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 
       // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
       // not this one.
@@ -19672,76 +19673,55 @@ describe("W69 held move basket protection", () => {
   for (const locale of ["en-GB", "es-ES"])
     for (const theme of ["light", "dark"] as const)
       for (const width of [390, 1280])
-        it(`native held move Keep/Escape/Discard ${locale} ${theme} ${width}`, async () => {
+        it(`native held move leaves the current edited order out of Held ${locale} ${theme} ${width}`, async () => {
           const size = { width: window.innerWidth, height: window.innerHeight };
           await page.viewport(width, 900);
           try {
             const { el, c } = await loaded(
               {
                 getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+                listWorkingOrders: vi
+                  .fn()
+                  .mockResolvedValue([
+                    heldSummary,
+                    { ...heldSummary, id: "other-held", orderNumber: 42 },
+                  ]),
               },
               theme,
             );
             c.store.label = "Local lunch";
             const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
-            async function pick() {
-              await held.updateComplete;
-              await userEvent.click(
-                held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
-              );
-              await expect
-                .poll(() => held.shadowRoot!.querySelector('[data-target="t9"]'))
-                .not.toBeNull();
-              await userEvent.click(
-                held
-                  .shadowRoot!.querySelector('[data-target="t9"]')!
-                  .shadowRoot!.querySelector("button")!,
-              );
-              await expect.poll(() => warning(el).open).toBe(true);
-            }
-            await pick();
-            const q = warning(el);
-            const keep = q
-              .shadowRoot!.querySelector("[data-choice=keep]")!
-              .shadowRoot!.querySelector("button")!;
-            await expect.poll(() => keep.matches(":focus")).toBe(true);
-            expect(currentApi.moveBill).not.toHaveBeenCalled();
-            await expectNoA11yViolations(q);
-            await page.screenshot({
-              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-warning.png`,
-            });
-            await userEvent.keyboard("{Escape}");
-            await expect.poll(() => q.open).toBe(false);
-            expect(c.store.label).toBe("Local lunch");
+            await held.updateComplete;
+            expect(held.orders.map((order) => order.id)).toEqual(["other-held"]);
+            await userEvent.click(
+              held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+            );
             await expect
-              .poll(() =>
-                held
-                  .shadowRoot!.querySelector(".move")!
-                  .shadowRoot!.querySelector("button")!
-                  .matches(":focus"),
-              )
-              .toBe(true);
-            await pick();
-            await choose(el, "keep");
+              .poll(() => held.shadowRoot!.querySelector('[data-target="t9"]'))
+              .not.toBeNull();
+            await userEvent.click(
+              held
+                .shadowRoot!.querySelector('[data-target="t9"]')!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
+            expect(currentApi.moveBill).toHaveBeenCalledWith(
+              "other-held",
+              { tableId: "t9" },
+              "merge",
+              { partyId: null, otherPartyId: null },
+            );
+            expect(warning(el).open).toBe(false);
+            expect(c.store.id).toBe("wo-1");
             expect(c.store.label).toBe("Local lunch");
-            await expect
-              .poll(() =>
-                held
-                  .shadowRoot!.querySelector(".move")!
-                  .shadowRoot!.querySelector("button")!
-                  .matches(":focus"),
-              )
-              .toBe(true);
-            expect(currentApi.moveBill).not.toHaveBeenCalled();
-            await page.screenshot({
-              path: `__screenshots__/w69-held-move-look/${locale}-${theme}-${width}-kept.png`,
-            });
-            await pick();
-            await choose(el, "discard");
-            await expect.poll(() => c.store.lines.length).toBe(0);
-            expect(currentApi.moveBill).toHaveBeenCalledOnce();
+            expect(c.store.lines[0]!.quantity).toBe("2");
+            expect(unloadCancelled()).toBe(true);
             expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
+            expect(currentApi.pay).not.toHaveBeenCalled();
+            await expectNoA11yViolations(held);
+            await page.screenshot({
+              path: `__screenshots__/a767/${locale}-${theme}-${width}-held.png`,
+            });
           } finally {
             await page.viewport(size.width, size.height);
           }
@@ -21119,4 +21099,226 @@ describe("A737 Find a bill page", () => {
     expect(shell(el)!.activeScreen).toBe("order");
     expect(pageOf(el)).toBeNull();
   });
+});
+
+describe("A767 card outcome belongs to its order", () => {
+  const readerTill = () => ({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: "stripe_on_device",
+      capabilities: ["print-receipt", "integrated-card-payment"],
+    }),
+  });
+
+  for (const locale of ["en-GB", "es-ES"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`hides and restores the order's decline and retries its own reader, ${locale}, ${theme}, ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+            const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+              id,
+              orderNumber: id === "declined-order" ? 41 : 42,
+              revision: 3,
+              label: id === "declined-order" ? "Order 41" : "Order 42",
+              kitchenNote: {
+                scope: { workingOrderId: id },
+                note: null,
+                revision: 0,
+                ownerRevision: 3,
+              },
+              lines: [
+                {
+                  menuItemId: "menu-item-cafe-0",
+                  productId: "cafe",
+                  quantity: id === "declined-order" ? "2.000" : "1.000",
+                },
+              ],
+            }));
+            const { el } = await mountApp({ ...readerTill(), pay, retrieveWorkingOrder }, theme);
+            await toCounter(el);
+            setLocale(locale);
+            await flush(el);
+            const c = counter(el)!;
+            emit(c, "retrieve-order", { id: "declined-order" });
+            await flush(el);
+            emit(c, "collect-card", { readerId: "reader-41", tip: "0.50", allowOffline: true });
+            await flush(el);
+            expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+            await page.screenshot({
+              path: `__screenshots__/a767/${locale}-${theme}-${width}-declined.png`,
+            });
+            emit(c, "retrieve-order", { id: "other-order" });
+            await flush(el);
+            expect(c.store.id).toBe("other-order");
+            expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
+            expect(tenderPay(el).shadowRoot!.querySelector(".card-outcome")).toBeNull();
+            await page.screenshot({
+              path: `__screenshots__/a767/${locale}-${theme}-${width}-other.png`,
+            });
+            emit(c, "retrieve-order", { id: "declined-order" });
+            await flush(el);
+            expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+            selectTab(el, "floor");
+            await flush(el);
+            selectTab(el, "counter");
+            await flush(el);
+            expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+            await expectNoA11yViolations(tenderPay(el));
+            await page.screenshot({
+              path: `__screenshots__/a767/${locale}-${theme}-${width}-restored.png`,
+            });
+            pay.mockClear();
+            await userEvent.click(
+              tenderPay(el)
+                .shadowRoot!.querySelector(".retry")!
+                .shadowRoot!.querySelector("button")!,
+            );
+            await flush(el);
+            expect(pay).toHaveBeenCalledExactlyOnceWith(
+              expect.objectContaining({
+                id: "declined-order",
+                readerId: "reader-41",
+                tip: "0.50",
+                allowOffline: true,
+              }),
+            );
+          } finally {
+            await page.viewport(size.width, size.height);
+          }
+        });
+
+  it("does not charge the replacement order from a Retry control painted for the previous order", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({ ...readerTill(), pay });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "collect-card", {});
+    await flush(el);
+    const retry = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!;
+    pay.mockClear();
+    c.store.loadFrom("other-order", [{ product: cafe, quantity: "1" }]);
+    retry.click();
+    await flush(el);
+    expect(c.store.id).toBe("other-order");
+    expect(pay).not.toHaveBeenCalled();
+  });
+});
+
+describe("A767 sign-in and held-order recovery", () => {
+  const heldRow = (id: string): HeldOrderSummary => ({
+    id,
+    orderNumber: id === "wo-1" ? 41 : 42,
+    label: null,
+    itemCount: 1,
+    total: "3.00",
+    outstanding: "3.00",
+    hasPayments: false,
+    partyId: null,
+    openedAt: "2026-10-16T12:00:00.000Z",
+    signals: [],
+  });
+
+  it("returns the same person to the table order they left on sign-out", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
+    const opened = await toTableOrder(el, openTable);
+    expect(opened).not.toBeNull();
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    await vi.waitFor(() => expect(tableOrder(el)).not.toBeNull());
+    expect(tableOrder(el)!.party?.id).toBe("v-2");
+    expect(tableOrder(el)!.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(currentApi.listDrafts).toHaveBeenLastCalledWith(
+      "v-2",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("starts a different person at home rather than resuming the previous person's table", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
+    await toTableOrder(el, openTable);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("does not resume a table that now belongs to a different party", async () => {
+    const getTablesState = vi.fn().mockResolvedValue([openTable]);
+    const { el } = await mountApp({ getTablesState });
+    await toTableOrder(el, openTable);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    getTablesState.mockResolvedValue([
+      { ...openTable, party: { ...openTable.party!, id: "new-guests" } },
+    ]);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("omits the order open on the counter from Held and makes it available after switching away", async () => {
+    const rows = [heldRow("wo-1"), heldRow("wo-2")];
+    const { el } = await mountApp({ listWorkingOrders: vi.fn().mockResolvedValue(rows) });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    const held = () =>
+      c.shadowRoot!.querySelector<HTMLElement & { orders: HeldOrderSummary[] }>("till-held-orders");
+    expect(held()!.orders.map((order) => order.id)).toEqual(["wo-2"]);
+    c.store.clear();
+    await flush(el);
+    expect(held()!.orders.map((order) => order.id)).toEqual(["wo-1", "wo-2"]);
+  });
+
+  it("retrieves without discarding edits after sign-in when a declined card already stored the unchanged order", async () => {
+    const { el } = await mountApp({ pay: vi.fn().mockResolvedValue({ outcome: "declined" }) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(c.store.persisted).toBe(true);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    expect(question.open).toBe(false);
+    expect(c.store.id).toBe("wo-1");
+  });
+});
+
+it("A767 keeps edits made while the card request was pending protected after a decline", async () => {
+  let decline!: (outcome: PayOutcome) => void;
+  const pay = vi.fn(
+    () =>
+      new Promise<PayOutcome>((resolve) => {
+        decline = resolve;
+      }),
+  );
+  const { el } = await mountApp({ pay });
+  const c = await toCounter(el);
+  c.store.addProduct(cafe, "2");
+  emit(c, "collect-card", {});
+  await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
+  c.store.setLineQuantity(0, "3");
+  decline({ outcome: "declined" });
+  await flush(el);
+  expect(c.store.lines[0]!.quantity).toBe("3");
+  emit(c, "retrieve-order", { id: "wo-1" });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
+  expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
 });
