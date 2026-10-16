@@ -166,12 +166,18 @@ export class CalendarDayBox extends LitElement {
       at = flatParent(at)
     ) {
       const style = getComputedStyle(at);
-      if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+      const clipsY = style.overflowY !== "visible";
+      const clipsX = style.overflowX !== "visible";
+      if (!clipsX && !clipsY) continue;
       const clip = at.getBoundingClientRect();
-      top = Math.max(top, clip.top + at.clientTop);
-      left = Math.max(left, clip.left + at.clientLeft);
-      bottom = Math.min(bottom, clip.top + at.clientTop + at.clientHeight);
-      right = Math.min(right, clip.left + at.clientLeft + at.clientWidth);
+      if (clipsY) {
+        top = Math.max(top, clip.top + at.clientTop);
+        bottom = Math.min(bottom, clip.top + at.clientTop + at.clientHeight);
+      }
+      if (clipsX) {
+        left = Math.max(left, clip.left + at.clientLeft);
+        right = Math.min(right, clip.left + at.clientLeft + at.clientWidth);
+      }
     }
     return top < bottom && left < right;
   }

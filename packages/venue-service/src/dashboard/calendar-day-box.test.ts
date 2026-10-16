@@ -328,6 +328,28 @@ describe("calendar-day-box", () => {
     expect(box.shown).toBe(false);
   });
 
+  it.each([
+    ["stays open", "below it, where it does not clip", "top: 90px;", true],
+    ["closes", "beside it, where it clips", "left: 200px;", false],
+  ])("%s when its date is %s, inside a box clipping sideways only", async (_, __, place, open) => {
+    host.style.height = "3000px";
+    const clipper = document.createElement("div");
+    clipper.style.cssText = "width: 50px; height: 30px; overflow-x: clip; overflow-y: visible;";
+    const inner = document.createElement("button");
+    inner.textContent = "17";
+    inner.style.cssText = `display: block; position: relative; ${place}`;
+    clipper.append(inner);
+    host.prepend(clipper);
+    box.show(inner);
+    const scroll = scrolled(window);
+    window.scrollBy(0, 10);
+    await scroll;
+    const date = inner.getBoundingClientRect();
+    const clip = clipper.getBoundingClientRect();
+    expect(date.top >= clip.bottom || date.left >= clip.right).toBe(true);
+    expect(box.shown).toBe(open);
+  });
+
   it("stays open beside its date when the page scrolls, its root element setting its own overflow", async () => {
     document.documentElement.style.overflowY = "scroll";
     try {
