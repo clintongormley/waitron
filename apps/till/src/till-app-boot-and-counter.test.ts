@@ -29,6 +29,7 @@ import type {
   ServiceZoneSummary,
   TillApi,
   TillProduct,
+  TableParty,
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -283,7 +284,9 @@ describe("till-app session activity", () => {
       const getDeviceStationScreen = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
       const getDevicePassScreen = vi.fn().mockResolvedValue(board);
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "kds", capabilities }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: "kds", fireControl: "expo", capabilities }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "pass-device",
           name: "Pantalla Pase",
@@ -300,6 +303,7 @@ describe("till-app session activity", () => {
           initialDevicePass: unknown;
           runsPass: boolean;
           deviceName?: string;
+          fireControl: string;
         }
       >("till-expo-screen");
       expect(screen).not.toBeNull();
@@ -307,6 +311,7 @@ describe("till-app session activity", () => {
       expect(screen!.initialDevicePass).toBe(board);
       expect(screen!.runsPass).toBe(runsPass);
       expect(screen!.deviceName).toBe("Pantalla Pase");
+      expect(screen!.fireControl).toBe("expo");
       expect(getDevicePassScreen).toHaveBeenCalledTimes(1);
       expect(getDeviceStationScreen).not.toHaveBeenCalled();
     },
@@ -5648,3 +5653,137 @@ it.each([false, true])("direct Kitchen mount requires act-as-kds (%s)", async (a
   expect(el.shadowRoot!.querySelector("till-kitchen-screen-notice")).toBeNull();
   expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
 });
+
+it("opens the profile starting screen in the sign-in history entry", async () => {
+  history.replaceState(null, "", "/");
+  const push = vi.spyOn(history, "pushState");
+  try {
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, formFactor: "till", startingScreen: "show-schedule" }),
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+    });
+    await toCounter(el);
+    expect(counter(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-schedule-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/tabs/counter/view/schedule");
+    expect(push).not.toHaveBeenCalled();
+  } finally {
+    push.mockRestore();
+  }
+});
+
+it.each([
+  [["take-cash"], false],
+  [["take-cash", "take-orders"], true],
+] as const)(
+  "fixed Floor lets today's plan change only with take-orders (%j)",
+  async (capabilities, can) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait", capabilities }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "floor-device", formFactor: "phone-portrait" }),
+    });
+    await toCounter(el);
+    const floor = el.shadowRoot!.querySelector<HTMLElement & { canChangeToday: boolean }>(
+      "till-floor-screen",
+    )!;
+    expect(floor).not.toBeNull();
+    expect(floor.canChangeToday).toBe(can);
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "fixed embedded Order on %s keeps its note, groups, stations, diet and receipt languages",
+  async (formFactor) => {
+    const receiptLanguages = ["es-ES", "ca-ES"];
+    const groups = [
+      {
+        id: "g-1",
+        position: 1,
+        state: "held",
+        firedAt: null,
+        remindAt: null,
+        lineIds: [],
+        summary: "",
+      },
+    ];
+    const stations = [
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: true,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default",
+      },
+      {
+        id: "grill",
+        name: "Grill",
+        displayOrder: 1,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open",
+      },
+    ];
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor, receiptLanguages }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "order-device", formFactor }),
+    });
+    await toCounter(el);
+    const party = {
+      id: "v-1",
+      revision: 3,
+      guestCount: 2,
+      state: "open",
+      name: null,
+      displayName: "Table 4",
+      mainBillId: "wo-1",
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: [],
+      unsentDrafts: [],
+      reminder: null,
+      kitchenNote: { scope: { partyId: "v-1" }, note: "No peanuts", revision: 4, ownerRevision: 3 },
+    } satisfies TableParty;
+    Object.assign(el, {
+      tabGroups: groups,
+      stations,
+      selectedDiet: "vegetarian",
+      orderParty: party,
+      activeTabId: "wo-1",
+    });
+    emit(shell(el)!, "screen-select", { screen: "order" });
+    await flush(el);
+    const order = el.shadowRoot!.querySelector<
+      HTMLElement & {
+        embedded: boolean;
+        canSettle: boolean;
+        groups: unknown;
+        stations: unknown;
+        selectedDiet: string;
+        receiptLanguages: string[];
+        kitchenNote: string | null;
+        kitchenNoteRevision: number;
+      }
+    >("till-table-order-screen")!;
+    expect(order).not.toBeNull();
+    expect(order.embedded).toBe(true);
+    expect(order.canSettle).toBe(true);
+    expect(order.selectedDiet).toBe("vegetarian");
+    expect(order.groups).toBe(groups);
+    expect(order.stations).toBe(stations);
+    expect(order.receiptLanguages).toBe(receiptLanguages);
+    expect(order.kitchenNote).toBe("No peanuts");
+    expect(order.kitchenNoteRevision).toBe(4);
+  },
+);

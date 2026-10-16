@@ -2668,7 +2668,7 @@ export class TillApp extends LitElement {
       "show-schedule": "schedule",
     } as const satisfies Record<NavigationScreen, TillDestination>;
     const destination = destinations[screen];
-    this.#pushDrill({ kind: destination });
+    this.#pushDrill({ kind: destination }, true);
   }
 
   #restoreDestination(): void {
@@ -11138,10 +11138,10 @@ export class TillApp extends LitElement {
   }
 
   /** Records the same `nav` trail as {@link #setScreen}. */
-  #pushDrill(drill: Drill): void {
+  #pushDrill(drill: Drill, replace = false): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#writeUrl({ "till-view": drill.kind, "till-station": null });
+      this.#writeUrl({ "till-view": drill.kind, "till-station": null }, replace);
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });

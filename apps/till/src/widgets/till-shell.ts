@@ -666,7 +666,7 @@ export class TillShell extends LitElement {
     return html`
       <div class="shell">
         ${
-          this.kiosk
+          this.kiosk || this.formFactor === "kds"
             ? this.loadLocales !== undefined
               ? html`<div class="language-corner">${this.#chooser()}</div>`
               : nothing

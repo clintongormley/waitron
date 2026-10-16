@@ -61,4 +61,12 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
     );
     await expectNoA11yViolations(host);
   });
+  it("a partly paid Counter offering to take the rest has no violations", async () => {
+    const { host } = await mountWidget<TillCounterScreen>(
+      "till-counter-screen",
+      { store: new WorkingOrderStore(), payRest: "70.00", embedded: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

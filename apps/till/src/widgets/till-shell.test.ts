@@ -1713,3 +1713,15 @@ it.each([
     }
   },
 );
+
+it("the KDS form factor keeps operator controls out and retains its language chooser", async () => {
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "kds",
+    operatorName: "Ana",
+    loadLocales: async () => [{ code: "en-GB", label: "English" }],
+  });
+  expect(el.shadowRoot!.querySelector("header")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".tab")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".logout")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
+});

@@ -60,7 +60,7 @@ describe("till attendance sign-in flow", () => {
     await signIn(f.el);
     await vi.waitFor(() => expect(questions(f.el)).not.toBeNull());
     expect(clockPage(f.el)).toBeNull();
-    expect(f.el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
     await questionButton(f.el, "[data-confirm]");
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
     expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
@@ -233,7 +233,7 @@ describe("till attendance sign-in flow", () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await f.el.updateComplete;
     expect(questions(f.el)?.inbox?.personId).toBe("p2");
-    expect(f.el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
     expect(f.api.logout).toHaveBeenCalledTimes(1);
   });
 
@@ -755,7 +755,7 @@ it("Cancel can return to work during uncertainty, and Fix my hours can recover i
   );
   await questionButton(f.el, "[data-cancel]");
   await working(f.el);
-  const shell = f.el.shadowRoot!.querySelector("till-tab-shell")!;
+  const shell = f.el.shadowRoot!.querySelector("till-shell")!;
   expect(
     shell.shadowRoot!.querySelector('[data-clock-action="in"]')!.hasAttribute("disabled"),
   ).toBe(true);

@@ -45,17 +45,7 @@ export async function mountEquipmentApp(
       nodeId: "n1",
       servers: [],
       capabilities: ["show-schedule", "show-station", "show-expo", "take-orders"],
-      canvas: {
-        formFactor: "handheld",
-        tabs: [
-          {
-            key: "counter",
-            title: "Counter",
-            columns: 12,
-            cards: [{ type: "product-grid", colSpan: 12, rowSpan: 6, config: {} }],
-          },
-        ],
-      },
+      formFactor: "till",
     }),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -106,12 +96,12 @@ export async function signIn(el: TillApp, locale = "en-GB"): Promise<void> {
     permissions: [],
     locale,
   });
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-tab-shell")).not.toBeNull());
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
   await el.updateComplete;
 }
 
 export async function openEquipment(el: TillApp): Promise<void> {
-  emit(el.shadowRoot!.querySelector("till-tab-shell")!, "open-equipment");
+  emit(el.shadowRoot!.querySelector("till-shell")!, "open-equipment");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("till-equipment-dialog")).not.toBeNull(),
   );

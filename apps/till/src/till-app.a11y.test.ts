@@ -126,21 +126,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-const counterCanvas = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-      ],
-    },
-  ],
-};
+const counterFormFactor = "till";
 
 async function flush(el: TillApp): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -220,21 +206,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         orderFlow: "prepay",
         courses: [],
         capabilities: [],
-        canvas: {
-          formFactor: "till",
-          tabs: [
-            {
-              key: "counter",
-              title: "Counter",
-              columns: 12,
-              cards: [
-                { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-                { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-                { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-              ],
-            },
-          ],
-        },
+        formFactor: "till",
       }),
       parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
       listWorkingOrders: vi
@@ -263,18 +235,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
   });
 
   it("has no violations on the floor while it says what a completed draft sent", async () => {
-    const floorCanvas = {
-      formFactor: "till",
-      tabs: [
-        ...counterCanvas.tabs,
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 24,
-          cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-        },
-      ],
-    };
+    const floorFormFactor = "till";
     const party = {
       kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "v1",
@@ -296,7 +257,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         courses: [],
         capabilities: [],
         fireControl: "waiter",
-        canvas: floorCanvas,
+        formFactor: floorFormFactor,
       }),
       listZoneOffers: base.listDefaultZoneOffers,
       listZones: vi
@@ -343,9 +304,9 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       permissions: [],
     });
     await flush(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
-    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = el;
     emit(grid.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t4",
       seated: true,
@@ -386,7 +347,7 @@ describe.each(["light", "dark"] as const)(
               orderFlow: "prepay",
               courses: [],
               capabilities: [],
-              canvas: counterCanvas,
+              formFactor: counterFormFactor,
             }),
           }),
         },

@@ -4,7 +4,7 @@ import { TillApp } from "./till-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import type {
   MenuState,
@@ -144,35 +144,7 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf",
 };
 
-const counterTab: CanvasDef["tabs"][number] = {
-  key: "counter",
-  title: "Counter",
-  columns: 12,
-  cards: [
-    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-  ],
-};
-
-const tableCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    counterTab,
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const tableFormFactor: FormFactor = "till";
 
 const till = {
   locale: "en-GB",
@@ -186,7 +158,7 @@ const till = {
   courses: [],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas: { formFactor: "till", tabs: [counterTab] } satisfies CanvasDef,
+  formFactor: "till",
   capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null,
   nodeId: "n1",
@@ -339,7 +311,7 @@ describe("period service at the counter", () => {
     await poll(el);
     expect(counter(el).menus.every((menu) => !menu.orderable && menu.sendable)).toBe(true);
     const screen = counter(el);
-    const grid = screen.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = screen;
     expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(screen.shadowRoot!.querySelector("[data-last-orders-ended]")?.textContent?.trim()).toBe(
       "Last orders have ended",
@@ -448,7 +420,7 @@ describe("period service at the counter", () => {
     expect(screen.shadowRoot!.querySelector("[data-service-closed]")?.textContent?.trim()).toBe(
       "Restaurant is closed: no period is running",
     );
-    const grid = screen.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = screen;
     expect(grid.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(grid.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(screen.store.lines.map((line) => line.product.productId)).toEqual([]);
@@ -750,7 +722,7 @@ describe("the remembered default and the session", () => {
     api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO]));
 
     counter(el).store.removeLine(0);
-    el.shadowRoot!.querySelector("till-tab-shell")!
+    el.shadowRoot!.querySelector("till-shell")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!
       .click();
     await flush(el);
@@ -799,7 +771,7 @@ describe("an open table's order", () => {
     },
   };
   const COMEDOR = offers("zone-comedor", [DESAYUNOS, ALMUERZO], "desayunos", "table_tab");
-  const shellGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+  const shellGrid = (el: TillApp) => el;
   const tableScreen = (el: TillApp) =>
     shellGrid(el).shadowRoot!.querySelector<HTMLElement & { selectedMenuId: string }>(
       "till-table-order-screen",
@@ -819,7 +791,7 @@ describe("an open table's order", () => {
       menus: COMEDOR.menus.map((menu) => ({ ...menu, orderable: false })),
     };
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async () => closed),
       getTablesState: vi.fn().mockResolvedValue([table]),
       listZones: vi.fn().mockResolvedValue([
@@ -838,7 +810,7 @@ describe("an open table's order", () => {
       submitDraft: drafts.submitDraft,
     });
     await signIn(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",
@@ -880,7 +852,7 @@ describe("an open table's order", () => {
     };
     let current = breakfast;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
         zoneId === "zone-comedor" ? current : BARRA,
       ),
@@ -909,7 +881,7 @@ describe("an open table's order", () => {
       ),
     });
     await signIn(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",
@@ -935,7 +907,7 @@ describe("an open table's order", () => {
     expect(
       tableScreen(el).shadowRoot!.querySelector("[data-service-period]")?.textContent?.trim(),
     ).toBe("Lunch");
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "counter" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "counter" });
     await flush(el);
     expect(selected(el)).toBe("desayunos");
   });
@@ -964,7 +936,7 @@ describe("an open table's order", () => {
     };
     let current: ZoneOfferCatalogue = breakfast;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
         zoneId === "zone-comedor" ? current : BARRA,
       ),
@@ -999,7 +971,7 @@ describe("an open table's order", () => {
       ),
     });
     await signIn(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",
@@ -1035,14 +1007,14 @@ describe("an open table's order", () => {
       expect(button.disabled).toBe(true);
       expect(button.variant).toBe("secondary");
     }
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "counter" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "counter" });
     await flush(el);
     expect(selected(el)).toBe("desayunos");
   });
 
   it("keeps the menu the table shows whatever the poll names for the table's zone", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
       listZoneOffers: vi.fn(async (zoneId: string) =>
         zoneId === "zone-comedor" ? COMEDOR : BARRA,
       ),
@@ -1066,7 +1038,7 @@ describe("an open table's order", () => {
       menuState: vi.fn(async () => state([DESAYUNOS, ALMUERZO], "almuerzo")),
     });
     await signIn(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",

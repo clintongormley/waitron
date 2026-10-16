@@ -8,7 +8,7 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { TillStationChoiceDialog } from "./widgets/station-choice-dialog.js";
-import type { CanvasDef } from "./layout.js";
+import type { FormFactor } from "./layout.js";
 import type {
   CounterWaitingOrder,
   Station,
@@ -21,21 +21,7 @@ import type {
 // at a time, the order's movable dishes not already at the chosen station, through the table's move
 // route and dialog.
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 4, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
-        { type: "held-orders", colSpan: 8, rowSpan: 2, config: {} },
-      ],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -49,7 +35,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["take-orders"],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",

@@ -2,7 +2,6 @@ import { afterEach, expect, it, describe } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TabDef } from "../layout.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -11,8 +10,8 @@ import {
   expectNoA11yViolations,
 } from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
-import "../widgets/tab-shell.js";
-import type { TillTabShell } from "../widgets/tab-shell.js";
+import "../widgets/till-shell.js";
+import type { TillShell } from "../widgets/till-shell.js";
 import indexHtml from "../../index.html?raw";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
@@ -33,17 +32,6 @@ afterEach(async () => {
 });
 
 /** The till's default Counter tab (`packages/layouts/src/default-canvases.ts`). */
-const counterTab: TabDef = {
-  key: "counter",
-  title: "Counter",
-  columns: 12,
-  cards: [
-    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-    { type: "total", colSpan: 4, rowSpan: 1, config: {} },
-    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-  ],
-};
 
 function product(key: string, name: string, unitPrice: string): TillProduct {
   return {
@@ -282,13 +270,13 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
           { ...cafe, diet: { vegan: "yes", vegetarian: "yes", contains: [] } },
           croquetasDish,
         ];
-        const { el: shell, host } = await mountWidget<TillTabShell>(
-          "till-tab-shell",
+        const { el: shell, host } = await mountWidget<TillShell>(
+          "till-shell",
           {
-            tabs: [counterTab, { ...counterTab, key: "floor", title: "Floor", cards: [] }],
+            formFactor: "till",
             transferAvailable: true,
             canSwitchProfile: true,
-            activeTabKey: "counter",
+            activeScreen: "counter",
             operatorName: "Administradora",
             affordances: ["station", "expo", "schedule", "find-bill"],
           },
@@ -353,9 +341,9 @@ it("keeps a usable basket and payment controls when many orders are held", async
     openedAt: "2026-10-08T12:00:00.000Z",
     signals: [],
   }));
-  const { el: shell, host } = await mountWidget<TillTabShell>("till-tab-shell", {
-    tabs: [counterTab],
-    activeTabKey: "counter",
+  const { el: shell, host } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "till",
+    activeScreen: "counter",
     operatorName: "Ana",
   });
   host.style.height = "752px";

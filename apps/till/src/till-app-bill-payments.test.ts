@@ -22,7 +22,7 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "./widgets/bill-pay-dialog.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   AllocationPreview,
   BillBalance,
@@ -242,23 +242,7 @@ const invoiceOf = (total: string): TillSaleResult => ({
   qr: "https://example.test/vf?nif=B1&num=F-0007&fecha=30-09-2026&total=30.00",
 });
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -272,7 +256,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: true,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -370,11 +354,8 @@ const text = (node: Element | null | undefined) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
-const floor = (el: TillApp) =>
-  el
-    .shadowRoot!.querySelector<HTMLElement>("till-card-grid")!
-    .shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
+const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
+const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
 const dialog = (el: TillApp) =>
@@ -402,7 +383,7 @@ async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
   await flush(el);
   emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-  emit(shell(el), "tab-select", { key: "floor" });
+  emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
   emit(floor(el), "open-table", { tableId: "t4", seated: true });
   await flush(el);
@@ -1900,21 +1881,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
     expect(dialog(el)).not.toBeNull();
   });
-  const counterCanvas: CanvasDef = {
-    formFactor: "till",
-    tabs: [
-      {
-        key: "counter",
-        title: "Counter",
-        columns: 12,
-        cards: [
-          { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-          { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-          { type: "held-orders", colSpan: 8, rowSpan: 2, config: {} },
-        ],
-      },
-    ],
-  };
+  const counterFormFactor: FormFactor = "till";
   const held = (over: Partial<HeldOrderSummary> = {}): HeldOrderSummary => ({
     id: "wo-1",
     orderNumber: 5,
@@ -1943,7 +1910,7 @@ describe("till-app: a partly paid order at the counter", () => {
   /** Signed in at the counter with the held order `wo-1` retrieved into the basket. */
   async function retrieved(overrides: Record<string, unknown>): Promise<TillApp> {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: counterFormFactor }),
       listWorkingOrders: vi.fn().mockResolvedValue([held()]),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
@@ -2446,7 +2413,7 @@ describe("till-app: the owner's split after a contribution", () => {
 
     emit(ticket, "new-sale");
     await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     const back = await (async () => {
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
@@ -3015,23 +2982,7 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   it("offers no reader to a handheld whose profile lacks integrated card payment: its card is keyed on a separate terminal", async () => {
-    const phoneCanvas: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 12,
-          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-        {
-          key: "order",
-          title: "Order",
-          columns: 12,
-          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
+    const phoneFormFactor: FormFactor = "phone-portrait";
     const takeBillPayment = vi
       .fn()
       .mockResolvedValue(
@@ -3040,7 +2991,7 @@ describe("till-app: a bill payment on the card reader", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: phoneCanvas,
+        formFactor: phoneFormFactor,
         capabilities: ["print-receipt"] as CapabilityFlag[],
         cardProvider: "stripe_terminal",
         activeReaders: readers,
@@ -3059,7 +3010,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await flush(el);
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
-    const grid = el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+    const grid = el;
     emit(grid.shadowRoot!.querySelector("till-table-order-screen")!, "bill-pay", {
       way: "contribution",
       lines: [],
@@ -3108,23 +3059,7 @@ describe("till-app: a bill payment on the card reader", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: {
-          formFactor: "phone-portrait",
-          tabs: [
-            {
-              key: "floor",
-              title: "Floor",
-              columns: 12,
-              cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-            },
-            {
-              key: "order",
-              title: "Order",
-              columns: 12,
-              cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-            },
-          ],
-        } satisfies CanvasDef,
+        formFactor: "phone-portrait",
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
         cardProvider: "stripe_terminal",
         activeReaders: readers,
@@ -3143,7 +3078,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await flush(el);
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el);
-    const grid = el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+    const grid = el;
     emit(grid.shadowRoot!.querySelector("till-table-order-screen")!, "bill-pay", {
       way: "contribution",
       lines: [],

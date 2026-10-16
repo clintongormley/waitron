@@ -24,7 +24,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillUnpaidDepartureDialog } from "./widgets/unpaid-departure-dialog.js";
 import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type {
   CurrentOrders,
@@ -179,23 +179,7 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=30.00",
 };
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -209,7 +193,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["print-receipt"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -375,8 +359,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
-const tabGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
+const tabGrid = (el: TillApp) => el;
 const floor = (el: TillApp) =>
   tabGrid(el)?.shadowRoot?.querySelector<TillFloorScreen>("till-floor-screen") ?? null;
 const tableOrder = (el: TillApp) =>
@@ -399,7 +383,7 @@ async function toFloor(el: TillApp): Promise<TillFloorScreen> {
   await flush(el);
   emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-  emit(shell(el), "tab-select", { key: "floor" });
+  emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
   return floor(el)!;
 }
@@ -1378,23 +1362,7 @@ describe("till-app: the party's bills and Finish table", () => {
   });
 });
 
-const phone: CanvasDef = {
-  formFactor: "phone-portrait",
-  tabs: [
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 12,
-      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const phone: FormFactor = "phone-portrait";
 
 /** An API method whose answer waits until the test settles or refuses it. */
 function held() {
@@ -1418,7 +1386,7 @@ describe("till-app: the party on a handheld", () => {
 
   it("shows the party's bills on the order tab, and returns to the floor tab once finished", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -1438,7 +1406,7 @@ describe("till-app: the party on a handheld", () => {
     await flush(el);
 
     expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
-    expect((shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey).toBe("floor");
+    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
   });
 
   /** The server's side of D19: a command carrying any revision but the party's current one is
@@ -1466,7 +1434,7 @@ describe("till-app: the party on a handheld", () => {
       const reads = floorThat([mesa4, mesa9], [splitElsewhere, mesa9]);
       const command = currentRevisionOnly(6, answer);
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -1476,7 +1444,7 @@ describe("till-app: the party on a handheld", () => {
       await flush(el);
       emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       emit(shell(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
@@ -1484,9 +1452,9 @@ describe("till-app: the party on a handheld", () => {
       const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
 
       reads.other.acted = true;
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "tab-select", { key: "order" });
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
       expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
       emit(orderCard(el)!, type, detail);
@@ -1508,28 +1476,14 @@ describe("till-app: the party on a handheld", () => {
   );
 
   describe("a table action's answer once the waiter has gone to the floor tab", () => {
-    const onPhone = (canvas: CanvasDef = phone) => ({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
+    const onPhone = (formFactor: FormFactor = phone) => ({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: formFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
-    const withCounter: CanvasDef = {
-      ...phone,
-      tabs: [
-        ...phone.tabs,
-        {
-          key: "counter",
-          title: "Counter",
-          columns: 12,
-          cards: [{ type: "product-grid", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
-    const activeTab = (el: TillApp) =>
-      (shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey;
     async function selectTab(el: TillApp, key: string): Promise<void> {
-      emit(shell(el), "tab-select", { key });
+      emit(shell(el), "screen-select", { screen: key });
       await flush(el);
     }
     async function openOnPhone(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
@@ -1579,19 +1533,29 @@ describe("till-app: the party on a handheld", () => {
       expect(orderCard(el)!.orderId).toBeUndefined();
     });
 
-    it("Finish, answering once the waiter has moved on from the floor tab to the counter, stays on the counter and clears the finished party", async () => {
+    it("Finish answering after the waiter opens Station keeps Station open and clears the finished party", async () => {
       const { call, answer } = held();
-      const { el } = await mountApp({ ...onPhone(withCounter), finishTable: call });
+      const { el } = await mountApp({
+        ...onPhone(),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: "phone-portrait",
+          capabilities: ["print-receipt", "show-station"],
+        }),
+        finishTable: call,
+      });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
       await selectTab(el, "floor");
-      await selectTab(el, "counter");
+      emit(shell(el), "show-station");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
 
       answer.settle({ state: "closed" });
       await flush(el);
 
       expect(call).toHaveBeenCalledOnce();
-      expect(activeTab(el)).toBe("counter");
+      expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
       await selectTab(el, "order");
       expect(orderCard(el)!.party).toBeNull();
       expect(orderCard(el)!.orderId).toBeUndefined();
@@ -1752,7 +1716,7 @@ describe("till-app: the party on a handheld", () => {
       const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7, mesa9]),
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -1774,10 +1738,10 @@ describe("till-app: the party on a handheld", () => {
       await flush(el);
       expect(card()!.shadowRoot!.querySelector(dialog)).toBeNull();
 
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       expect(card()).toBeNull();
-      emit(shell(el), "tab-select", { key: "order" });
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
 
       expect(card()).not.toBeNull();
@@ -2177,7 +2141,7 @@ describe("till-app: table actions on the party", () => {
     it("hands the refusal to the order card on a handheld", async () => {
       const { el } = await mountApp({
         getTablesState: floorOfTwo(),
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -2598,7 +2562,7 @@ describe("till-app: the party's guest count", () => {
 
   it("hands a refusal of the count to the order card on a handheld", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -3230,7 +3194,7 @@ describe("till-app: moving a bill", () => {
     expect(tableOrder(el)!.bills).toEqual([tabBill]);
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
     expect(banner(el)).toBeNull();
-    emit(shell(el), "tab-select", { key: "counter" });
+    emit(shell(el), "screen-select", { screen: "counter" });
     await flush(el);
     expect(heldRows(el)).toEqual([moved]);
   });
@@ -3531,7 +3495,7 @@ describe("till-app: paying a bill by its state", () => {
     expect(api.recordSale).not.toHaveBeenCalled();
     emit(el.shadowRoot!.querySelector("till-ticket-view")!, "new-sale");
     await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -3988,22 +3952,9 @@ describe("till-app: every table move sends the party revision it last read", () 
   });
 });
 
-const tablet: CanvasDef = {
-  formFactor: "tablet-landscape",
-  tabs: [
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [
-        { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-        { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-      ],
-    },
-  ],
-};
+const tablet: FormFactor = "tablet-landscape";
 const onTablet = () => ({
-  getTill: vi.fn().mockResolvedValue({ ...till, canvas: tablet }),
+  getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tablet }),
   getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape" }),
 });
 const tabletOrderCard = (el: TillApp) =>
@@ -4538,6 +4489,8 @@ describe("till-app: leaving a finished party", () => {
     answerBills([tabBill, checkBill]);
     await flush(el);
 
+    emit(shell(el), "screen-select", { screen: "order" });
+    await flush(el);
     expect(api.finishTable).toHaveBeenCalledOnce();
     expect(tabletOrderCard(el)!.lines).toEqual([]);
     expect(tabletOrderCard(el)!.bills).toEqual([]);
@@ -5585,7 +5538,7 @@ describe("till-app: the order's groups", () => {
       [
         "a handheld's order card",
         {
-          getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
           getDeviceIdentity: vi
             .fn()
             .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -6374,7 +6327,7 @@ describe("till-app: submitting the draft", () => {
     const server = groupsServer();
     const { el } = await mountApp({
       ...server,
-      getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses, canvas: phone }),
+      getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses, formFactor: phone }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -6389,9 +6342,9 @@ describe("till-app: submitting the draft", () => {
     await ring(el, card, beer);
     await act(el, card, "fire-all");
 
-    expect((shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey).toBe("floor");
+    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
     expect(
       tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!
@@ -7793,7 +7746,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(dialog(el)).toBeNull();
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
     await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);

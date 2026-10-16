@@ -257,7 +257,7 @@ export async function pageButton(el: TillApp, selector: string) {
   await userEvent.click(surface()!.shadowRoot!.querySelector<HTMLElement>(selector)!);
 }
 export async function shellAction(el: TillApp, selector: string) {
-  const shell = el.shadowRoot!.querySelector("till-tab-shell")!;
+  const shell = el.shadowRoot!.querySelector("till-shell")!;
   const button = shell.shadowRoot!.querySelector<HTMLElement>(selector)!;
   expect(button).not.toBeNull();
   const menu = button.closest("wt-row-actions")!;
@@ -266,5 +266,5 @@ export async function shellAction(el: TillApp, selector: string) {
   await userEvent.click(button);
 }
 export async function working(el: TillApp) {
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-tab-shell")).not.toBeNull());
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
 }

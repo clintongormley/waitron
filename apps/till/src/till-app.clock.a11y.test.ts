@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("till clocking app accessibility in %s
         await expectNoA11yViolations(f.host);
         await pageButton(f.el, "[data-clock-in]");
         await working(f.el);
-        const shell = f.el.shadowRoot!.querySelector("till-tab-shell")!;
+        const shell = f.el.shadowRoot!.querySelector("till-shell")!;
         const menu = shell.shadowRoot!.querySelector(
           width === 390 ? 'wt-row-actions[data-test="more-menu"]' : "wt-row-actions.operator-menu",
         )!;

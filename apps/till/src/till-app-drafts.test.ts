@@ -22,7 +22,7 @@ import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   DraftLineInput,
   OrderGroup,
@@ -173,38 +173,11 @@ const mesa7 = table(
   party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
 );
 
-const drillCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const drillFormFactor: FormFactor = "till";
 
-const orderTabCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    drillCanvas.tabs[1]!,
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const orderTabFormFactor: FormFactor = "tablet-landscape";
 
-function till(canvas: CanvasDef) {
+function till(formFactor: FormFactor) {
   return {
     locale: "en",
     invoiceLocale: "es-ES",
@@ -217,7 +190,7 @@ function till(canvas: CanvasDef) {
     courses,
     cardProvider: "none" as const,
     tipsEnabled: false,
-    canvas,
+    formFactor: formFactor,
     capabilities: ["print-receipt"] as CapabilityFlag[],
     inactivityTimeoutSeconds: null,
     nodeId: "n1",
@@ -241,7 +214,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       venueDefault: "en",
       loginDefault: "en",
     }),
-    getTill: vi.fn().mockResolvedValue(till(drillCanvas)),
+    getTill: vi.fn().mockResolvedValue(till(drillFormFactor)),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
@@ -316,8 +289,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
-const cardGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
+const cardGrid = (el: TillApp) => el;
 const floor = (el: TillApp) =>
   cardGrid(el)?.shadowRoot?.querySelector<TillFloorScreen>("till-floor-screen") ?? null;
 const tableOrder = (el: TillApp) =>
@@ -341,7 +314,7 @@ async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promis
 async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
   await flush(el);
   await signIn(el);
-  emit(shell(el), "tab-select", { key: "floor" });
+  emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
   emit(floor(el)!, "open-table", { tableId, seated: true });
   await flush(el);
@@ -591,7 +564,7 @@ describe("W69 unassigned table draft", () => {
           await page.viewport(width, 900);
           try {
             const { el } = await opening(
-              { getTill: vi.fn().mockResolvedValue({ ...till(drillCanvas), locale }) },
+              { getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), locale }) },
               undefined,
               theme,
             );
@@ -1028,12 +1001,12 @@ describe("till-app: a table's draft is kept on the server", () => {
   it("shows the mark when the Order tab is left for the floor, once the save has landed", async () => {
     const { el } = await mountApp({
       ...lateSaveLiveFloor(),
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
     });
     await openMesa(el);
     await tap(el, "Flan");
 
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await settle(el);
 
     expect(unsentMark(el, "t4")).toBe("Ana has an unsent order: 1 item");
@@ -1105,11 +1078,11 @@ describe("till-app: a table's draft is kept on the server", () => {
   });
 
   it("saves the draft when the Order tab is left for the floor", async () => {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)) });
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     await openMesa(el);
     await tap(el, "Flan");
 
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
 
     expect(savedLines()).toEqual(["offer-flan ×1"]);
@@ -1403,7 +1376,7 @@ describe("till-app: switching the device's profile with a table order open", () 
       switchDeviceProfile,
       getTill: vi
         .fn()
-        .mockResolvedValueOnce(till(drillCanvas))
+        .mockResolvedValueOnce(till(drillFormFactor))
         .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
     });
     await openMesa(el);
@@ -1419,7 +1392,7 @@ describe("till-app: switching the device's profile with a table order open", () 
       .shadowRoot!.querySelector("dialog")!;
     expect(native.matches(":modal")).toBe(true);
 
-    answerTill(till(drillCanvas));
+    answerTill(till(drillFormFactor));
     await flush(el, 6);
 
     expect(profileDialog(el)).toBeNull();
@@ -1432,7 +1405,7 @@ describe("till-app: switching the device's profile with a table order open", () 
       switchDeviceProfile: switchStub(),
       getTill: vi
         .fn()
-        .mockResolvedValueOnce(till(drillCanvas))
+        .mockResolvedValueOnce(till(drillFormFactor))
         .mockImplementationOnce(() => new Promise((resolve) => (answerTill = resolve))),
     });
     await openMesa(el);
@@ -1449,7 +1422,7 @@ describe("till-app: switching the device's profile with a table order open", () 
     expect(dialog.busy).toBe(true);
     expect(native.matches(":modal")).toBe(true);
 
-    answerTill(till(drillCanvas));
+    answerTill(till(drillFormFactor));
     await flush(el, 6);
 
     expect(profileDialog(el)).toBeNull();
@@ -2174,21 +2147,7 @@ describe("till-app: a Send the session outlives", () => {
 
 describe("till-app: leaving a draft while a save is out, then signing out", () => {
   const mesa9 = table("t9", "9", null);
-  const sideBySide: CanvasDef = {
-    formFactor: "till",
-    tabs: [
-      drillCanvas.tabs[0]!,
-      {
-        key: "service",
-        title: "Service",
-        columns: 24,
-        cards: [
-          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-        ],
-      },
-    ],
-  };
+  const sideBySide: FormFactor = "till";
 
   /** Beer's save is held, and Steak is an edit waiting behind it, so the next save queues. */
   async function editBehindHeldSave(el: TillApp): Promise<() => void> {
@@ -2202,7 +2161,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
   /** Resolves to how many floor reads there had been when the held save answered. */
   async function signOutAndInAsSam(el: TillApp, answer: () => void): Promise<number> {
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     await signIn(el, "p2", "Sam");
     const floorReads = api.getTablesState.mock.calls.length;
@@ -2224,7 +2183,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "service" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -2245,7 +2204,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(sideBySide)) });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "service" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -2276,7 +2235,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     const { el } = await mountApp();
     await openMesa(el);
     const answer = await editBehindHeldSave(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
 
     const floorReads = await signOutAndInAsSam(el, answer);
@@ -2301,7 +2260,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       emit(shell(el), "logout");
       await flush(el);
       await signIn(el, "p2", "Sam");
-      emit(shell(el), "tab-select", { key: floorTab });
+      emit(shell(el), "screen-select", { screen: floorTab });
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
       await flush(el);
@@ -2330,7 +2289,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       const { el } = await mountApp(splitting());
       await openMesa(el);
       const answer = await editBehindHeldSave(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
 
       await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
@@ -2347,7 +2306,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       });
       await flush(el);
       await signIn(el);
-      emit(shell(el), "tab-select", { key: "service" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
       await flush(el);
@@ -2355,7 +2314,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
       await flush(el);
 
-      await samSplitsBeforeTheSaveAnswers(el, answer, "service");
+      await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
 
       expect(api.mergeBills).not.toHaveBeenCalled();
       expect(banner(el)).toBeNull();
@@ -2555,21 +2514,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
       lineIds: ["l-1"],
       summary: "1 × Steak",
     };
-    const sideBySide: CanvasDef = {
-      formFactor: "till",
-      tabs: [
-        drillCanvas.tabs[0]!,
-        {
-          key: "service",
-          title: "Service",
-          columns: 24,
-          cards: [
-            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-          ],
-        },
-      ],
-    };
+    const sideBySide: FormFactor = "till";
     let answerGroups!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
@@ -2598,7 +2543,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "service" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
@@ -2629,21 +2574,7 @@ describe("till-app: a table open that another overtakes", () => {
   };
 
   it("keeps the next table's draft on screen when an earlier table's read answers late", async () => {
-    const sideBySide: CanvasDef = {
-      formFactor: "till",
-      tabs: [
-        drillCanvas.tabs[0]!,
-        {
-          key: "service",
-          title: "Service",
-          columns: 24,
-          cards: [
-            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-          ],
-        },
-      ],
-    };
+    const sideBySide: FormFactor = "till";
     let answerMesa7!: () => void;
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
@@ -2655,7 +2586,7 @@ describe("till-app: a table open that another overtakes", () => {
     server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "service" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
@@ -2674,7 +2605,7 @@ describe("till-app: a table open that another overtakes", () => {
   it("gives no one the draft of a table opened by someone who has since signed out", async () => {
     let answerOffers!: () => void;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       listZoneOffers: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerOffers = resolve));
         return catalogue("v1");
@@ -2683,17 +2614,17 @@ describe("till-app: a table open that another overtakes", () => {
     server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     answerOffers();
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     expect(browser(el)?.store.lines ?? []).toEqual([]);
@@ -2760,7 +2691,7 @@ describe("till-app: a table open that the session outlives", () => {
   it("leaves the next person on no table when the open answers after a sign-out", async () => {
     let answerOffers!: () => void;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       listZoneOffers: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerOffers = resolve));
         return catalogue("v1");
@@ -2768,17 +2699,17 @@ describe("till-app: a table open that the session outlives", () => {
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     answerOffers();
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBeUndefined();
@@ -2801,13 +2732,13 @@ describe("till-app: seating a free table while something else happens", () => {
   it("stays on the table opened after it when the seat answers late", async () => {
     const seat = seatingLater();
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: seat.seatTable,
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
@@ -2825,23 +2756,23 @@ describe("till-app: seating a free table while something else happens", () => {
   it("leaves the next person on no table when the seat answers after a sign-out", async () => {
     const seat = seatingLater();
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: seat.seatTable,
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     seat.answer();
     await flush(el, 6);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBeUndefined();
@@ -2877,7 +2808,7 @@ describe("till-app: Split quantity on a draft line", () => {
 const DEFAULT_FRAME = [414, 896] as const;
 
 describe("till-app: the draft beside browsing, or on its own Review view", () => {
-  const phoneCanvas: CanvasDef = { ...orderTabCanvas, formFactor: "phone-portrait" };
+  const phoneFormFactor: FormFactor = "phone-portrait";
   const visible = (el: TillApp, selector: string) =>
     tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
 
@@ -2885,7 +2816,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
     await page.viewport(390, 844);
     try {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue(till(phoneCanvas)),
+        getTill: vi.fn().mockResolvedValue(till(phoneFormFactor)),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "phone-1",
           name: "Phone",
@@ -2930,7 +2861,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
       );
       const { el } = await mountApp({
         listZoneOffers: vi.fn().mockResolvedValue(long),
-        getTill: vi.fn().mockResolvedValue(till(phoneCanvas)),
+        getTill: vi.fn().mockResolvedValue(till(phoneFormFactor)),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "phone-1",
           name: "Phone",
@@ -2978,7 +2909,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
 
 describe("till-app: the next person after an ordinary sign-out", () => {
   it("finds the table left open with its menu and their own draft on it", async () => {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)) });
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     server.personId = "p2";
     server.personName = "Sam";
     server.save("v1", {
@@ -3000,11 +2931,11 @@ describe("till-app: the next person after an ordinary sign-out", () => {
     });
     await openMesa(el);
     await tap(el, "Beer");
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el, 6);
 
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -3073,7 +3004,7 @@ describe("till-app: two table opens overlapping", () => {
     let answerSeat!: () => void;
     let answerLines!: () => void;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerSeat = resolve));
@@ -3086,7 +3017,7 @@ describe("till-app: two table opens overlapping", () => {
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
@@ -3109,7 +3040,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
   it("leaves the next person on their floor when the table's lines answer after a sign-out", async () => {
     let answerLines!: () => void;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTabLines: vi.fn(async () => {
         await new Promise<void>((resolve) => (answerLines = resolve));
         return { lines: [], revision: 0, editSentLines: true };
@@ -3117,15 +3048,15 @@ describe("till-app: a table open whose last wait outlives the session", () => {
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     answerLines();
     await flush(el, 6);
@@ -3137,7 +3068,7 @@ describe("till-app: a table open whose last wait outlives the session", () => {
   it("leaves the next person on their floor when a seated table's read answers after a sign-out", async () => {
     let answerLines!: () => void;
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi
         .fn()
@@ -3149,15 +3080,15 @@ describe("till-app: a table open whose last wait outlives the session", () => {
     });
     await flush(el);
     await signIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     answerLines();
     await flush(el, 6);
@@ -3260,7 +3191,7 @@ describe("till-app: other people's drafts and taking one over", () => {
   async function openAs(el: TillApp, personId: string, name: string): Promise<void> {
     await flush(el);
     await signIn(el, personId, name);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
@@ -3361,7 +3292,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       { ownerId: SAM, lines: 2 },
     ]);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el, 6);
     await openAs(el, ALEX, "Alex");
 
@@ -3516,7 +3447,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
     await takeOver(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el, 6);
     await signIn(el, ALEX, "Alex");
 
@@ -3608,10 +3539,10 @@ describe("till-app: other people's drafts and taking one over", () => {
   });
 
   it("shows other people's drafts on a tablet's Order tab, and takes one over there", async () => {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)) });
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     await reviewed(el);
@@ -3941,19 +3872,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
   });
 
   it("asks nothing while another card on the order's tab has a dialog open, and asks at the next poll once it is closed", async () => {
-    const withFloor: CanvasDef = {
-      ...orderTabCanvas,
-      tabs: [
-        orderTabCanvas.tabs[0]!,
-        {
-          ...orderTabCanvas.tabs[1]!,
-          cards: [
-            ...orderTabCanvas.tabs[1]!.cards,
-            { type: "floor-plan", colSpan: 12, rowSpan: 4, config: {} },
-          ],
-        },
-      ],
-    };
+    const withFloor: FormFactor = "till";
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(till(withFloor)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, table("t9", "9", null)]),

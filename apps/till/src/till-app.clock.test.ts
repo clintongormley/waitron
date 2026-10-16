@@ -102,13 +102,13 @@ describe("till clocking integration", () => {
     const f = await clockApp();
     await signIn(f.el);
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
-    expect(f.el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
     await pageButton(f.el, "[data-clock-in]");
     await working(f.el);
     expect(
-      f.el.shadowRoot!.querySelector("till-tab-shell")!.getAttribute("activeTabKey") ??
-        (f.el.shadowRoot!.querySelector("till-tab-shell") as unknown as { activeTabKey: string })
-          .activeTabKey,
+      f.el.shadowRoot!.querySelector("till-shell")!.getAttribute("activeScreen") ??
+        (f.el.shadowRoot!.querySelector("till-shell") as unknown as { activeScreen: string })
+          .activeScreen,
     ).toBe("floor");
     expect(f.api.clockIn).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(f.api.getTablesState).toHaveBeenCalled());
@@ -121,7 +121,7 @@ describe("till clocking integration", () => {
       await signIn(f.el);
       await working(f.el);
       expect(clockPage(f.el)).toBeNull();
-      const shell = f.el.shadowRoot!.querySelector("till-tab-shell")!;
+      const shell = f.el.shadowRoot!.querySelector("till-shell")!;
       expect(
         shell.shadowRoot!.querySelector(
           `[data-clock-action="${state.state === "out" ? "in" : "break-start"}"]`,
@@ -155,7 +155,7 @@ describe("till clocking integration", () => {
     expect(f.el.shadowRoot!.querySelector("[data-clocked-out]")!.textContent).toContain(
       t("clock.recorded_out"),
     );
-    expect(f.el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
   });
 
   it("saved Clock out with hanging logout stays locked; a new operator clears the notice", async () => {
@@ -180,7 +180,7 @@ describe("till clocking integration", () => {
     await f.el.updateComplete;
     expect(f.el.shadowRoot!.querySelector("[data-clocked-out]")).toBeNull();
     expect(
-      f.el.shadowRoot!.querySelector("till-tab-shell")!.shadowRoot!.querySelector(".operator")!
+      f.el.shadowRoot!.querySelector("till-shell")!.shadowRoot!.querySelector(".operator")!
         .textContent,
     ).toContain("Luis");
     expect(currentLocale()).toBe("es-ES");
@@ -287,7 +287,7 @@ describe("till clocking integration", () => {
         await vi.waitFor(() =>
           expect(
             f.el
-              .shadowRoot!.querySelector("till-tab-shell")!
+              .shadowRoot!.querySelector("till-shell")!
               .shadowRoot!.querySelector("[data-clock-retry]"),
           ).not.toBeNull(),
         );
@@ -373,7 +373,7 @@ describe("till clocking integration", () => {
     old.resolve(clockState("working", "ana-in"));
     await Promise.resolve();
     await f.el.updateComplete;
-    const shell = f.el.shadowRoot!.querySelector("till-tab-shell")!;
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!;
     expect(shell.shadowRoot!.querySelector(".operator")!.textContent).toContain("Luis");
     expect(shell.shadowRoot!.querySelector("[data-clock-state]")!.textContent).toBe(
       t("clock.on_break"),

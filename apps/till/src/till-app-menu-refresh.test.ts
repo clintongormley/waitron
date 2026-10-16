@@ -14,7 +14,7 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBasketRefreshDialog } from "./widgets/basket-refresh-dialog.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   MenuState,
   MenuUnavailable,
@@ -188,21 +188,7 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf",
 };
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-        { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-      ],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en-GB",
@@ -216,7 +202,7 @@ const till = {
   courses: [],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null,
   nodeId: "n1",
@@ -297,8 +283,7 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-const grid = (el: TillApp) =>
-  counter(el).shadowRoot!.querySelector<HTMLElement>("till-card-grid")!.shadowRoot!;
+const grid = (el: TillApp) => counter(el).shadowRoot!;
 const tenderPay = (el: TillApp) => grid(el).querySelector<TillTenderPay>("till-tender-pay")!;
 const payButton = (el: TillApp) =>
   tenderPay(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".pay")!;
@@ -915,24 +900,7 @@ describe("an offers load", () => {
 // ── Fix round 1 ──────────────────────────────────────────────────────────────────────────────────
 
 /** A till whose canvas mounts the table screen as the `order` tab's card, beside the counter. */
-const tableCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    canvas.tabs[0]!,
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const tableFormFactor: FormFactor = "till";
 
 const DINING = {
   ...V1,
@@ -1021,7 +989,7 @@ function tableStubs(
   overrides: Record<string, unknown> = {},
 ) {
   return {
-    getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+    getTill: vi.fn().mockResolvedValue({ ...till, formFactor: tableFormFactor }),
     listZoneOffers: vi.fn((zoneId: string) =>
       Promise.resolve(zoneId === "zone-dining" ? DINING : V1),
     ),
@@ -1047,7 +1015,7 @@ function tableStubs(
   };
 }
 
-const shellGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+const shellGrid = (el: TillApp) => el;
 const tableScreen = (el: TillApp) =>
   shellGrid(el).shadowRoot!.querySelector<
     HTMLElement & { products: { id: string; available?: boolean }[] }
@@ -1059,7 +1027,7 @@ const roundGrid = (el: TillApp) =>
 
 async function toTable(el: TillApp): Promise<void> {
   await toCounter(el);
-  emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+  emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
   await flush(el);
   const floorScreen = shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
   emit(floorScreen, "open-table", { tableId: "t2", seated: true });
@@ -1131,7 +1099,7 @@ describe("a table round refused because the menu changed", () => {
       tableStubs(dining("v2"), {
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          canvas: tableCanvas,
+          formFactor: tableFormFactor,
           courses: [
             { id: "starters", name: "Starters", displayOrder: 0 },
             { id: "desserts", name: "Desserts", displayOrder: 1 },
@@ -1222,7 +1190,7 @@ describe("the counter's basket hold stays on the counter", () => {
     await poll(el);
     expect(payButton(el).disabled).toBe(true);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",
@@ -1259,7 +1227,7 @@ describe("the poll's own costs", () => {
       "zone-dining",
     ]);
 
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     api.menuState.mockClear();
     await poll(el);
@@ -1475,13 +1443,10 @@ describe("a round at phone width", () => {
   it("keeps each round line's remove control on screen", async () => {
     await page.viewport(390, 844);
     try {
-      const phone: CanvasDef = {
-        formFactor: "phone-portrait",
-        tabs: [tableCanvas.tabs[1]!, tableCanvas.tabs[2]!],
-      };
+      const phone: FormFactor = "phone-portrait";
       api = stubApi({
         ...tableStubs(),
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phone }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "h1",
           name: "H",
@@ -1533,24 +1498,10 @@ const tableB = {
 describe("a kept round and another table", () => {
   it("does not carry a refused round to the next table opened on the same screen", async () => {
     // Floor and order share one tab, as a tablet canvas can, so the table screen stays mounted.
-    const sideBySide: CanvasDef = {
-      formFactor: "till",
-      tabs: [
-        canvas.tabs[0]!,
-        {
-          key: "service",
-          title: "Service",
-          columns: 24,
-          cards: [
-            { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-            { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-          ],
-        },
-      ],
-    };
+    const sideBySide: FormFactor = "till";
     const { el } = await mountApp(
       tableStubs(DINING, {
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: sideBySide }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: sideBySide }),
         getTablesState: vi.fn().mockResolvedValue([table, tableB]),
         submitDraft: vi
           .fn()
@@ -1558,7 +1509,7 @@ describe("a kept round and another table", () => {
       }),
     );
     await toCounter(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "service" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     const floorScreen = () => shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
     emit(floorScreen(), "open-table", { tableId: "t2", seated: true });
@@ -1743,7 +1694,7 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
           ? Promise.reject({ code: "server.internal" })
           : Promise.resolve(V1),
       );
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: tableC.id,
@@ -1775,7 +1726,13 @@ const seated = table;
 describe("a round the server adds to another tab", () => {
   it("moves the screen to that tab and takes the sent lines out of the round", async () => {
     const { el } = await mountApp(
-      tableStubs(DINING, { submitDraft: answering(landed("wo-next")) }),
+      tableStubs(DINING, {
+        submitDraft: answering(landed("wo-next")),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "tablet-landscape" }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "tablet-1", formFactor: "tablet-landscape" }),
+      }),
     );
     await toTable(el);
     const round = roundStore(el);
@@ -1791,7 +1748,7 @@ describe("a round the server adds to another tab", () => {
     expect(round.lineCount).toBe(0);
     expect(banner(el)).toBeNull();
     // The whole draft went, so the till is on the floor; its Order tab shows the tab it landed on.
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "order" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "order" });
     await flush(el);
     expect(shownTab(el)).toBe("wo-next");
   });
@@ -1806,7 +1763,7 @@ describe("a round the server adds to another tab", () => {
     );
     await toTable(el);
     await sendLemonadeRound(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t3",
@@ -1928,7 +1885,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     );
     await toTable(el);
     await sendLemonadeRound(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t3",
@@ -2280,7 +2237,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
     tableStubs(DINING, {
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: { ...tableCanvas, tabs: tableCanvas.tabs.filter((tab) => tab.key !== "order") },
+        formFactor: "till",
       }),
       listZoneOffers: vi.fn((zone: string) =>
         Promise.resolve(zone === "zone-dining" ? { ...DINING, service } : V1),

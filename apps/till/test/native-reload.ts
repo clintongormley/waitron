@@ -77,10 +77,7 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
           courses: [],
           cardProvider: "none",
           tipsEnabled: false,
-          canvas: {
-            formFactor: "till",
-            tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
-          },
+          formFactor: "till",
           capabilities: ["show-schedule"],
           inactivityTimeoutSeconds: null,
           nodeId: "native-reload-node",
@@ -120,8 +117,8 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
         }),
       );
     });
-    await subject.locator("till-tab-shell").waitFor({ state: "attached" });
-    await subject.locator("till-tab-shell").evaluate((owner) => {
+    await subject.locator("till-shell").waitFor({ state: "attached" });
+    await subject.locator("till-shell").evaluate((owner) => {
       owner.dispatchEvent(new CustomEvent("show-schedule", { bubbles: true, composed: true }));
     });
     const note = subject.locator("wt-input.abs-note input");

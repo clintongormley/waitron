@@ -608,3 +608,21 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 });
+
+it("lets a held-order retrieve event reach the fixed Counter host", async () => {
+  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
+    store: new WorkingOrderStore(),
+    heldOrders: [{ ...heldOrder, id: "wo-2" }],
+  });
+  let captured: CustomEvent<{ id: string }> | undefined;
+  el.addEventListener(
+    "retrieve-order",
+    (event) => (captured = event as CustomEvent<{ id: string }>),
+  );
+  el.shadowRoot!.querySelector("till-held-orders")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button.retrieve")!
+    .click();
+  expect(captured?.composed).toBe(true);
+  expect(captured?.bubbles).toBe(true);
+  expect(captured?.detail).toEqual({ id: "wo-2" });
+});
