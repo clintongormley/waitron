@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
@@ -407,6 +407,10 @@ export async function submitDraft(
           joinGroupId,
           operatorId,
           billId: input.billId,
+          sourceDraftLineIds: groups.flatMap(({ lineIds }) => {
+            const selected = new Set(lineIds);
+            return lines.filter((line) => selected.has(line.id)).map((line) => line.id);
+          }),
           revisionMoved: true,
         },
         attendance === undefined ? undefined : { recorder: attendance, at },
@@ -693,7 +697,22 @@ async function addDiscardedDraft(
     ...stored.filter(({ draftId }) => draftId === into.id),
     ...stored.filter(({ draftId }) => draftId === fromDraftId),
   ].map(({ line }) => line);
-  await replaceLines(tx, [into.id, fromDraftId], into.id, normaliseDraftLines(combined));
+  const [owner] = await tx
+    .select({ partyId: orderDrafts.partyId })
+    .from(orderDrafts)
+    .where(eq(orderDrafts.id, into.id));
+  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, owner!.partyId);
+  const assigned = new Set(
+    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+  );
+  await replaceLines(
+    tx,
+    [into.id, fromDraftId],
+    into.id,
+    normaliseDraftLines(
+      combined.map((line) => (assigned.has(line.id) ? { ...line, noMerge: true } : line)),
+    ),
+  );
   await tx
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })
@@ -785,25 +804,46 @@ async function replaceLines(
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
-  await tx.delete(orderDraftLines).where(inArray(orderDraftLines.draftId, [...fromDraftIds]));
-  if (lines.length === 0) return;
-  await tx.insert(orderDraftLines).values(
-    lines.map((line, index) => ({
-      id: line.id,
-      draftId: intoDraftId,
-      position: index + 1,
-      menuItemId: line.menuItemId,
-      variantId: line.variantId,
-      menuVersionId: line.menuVersionId,
-      options: line.options,
-      extras: line.extras,
-      note: line.note,
-      quantity: stringToThousandths(line.quantity),
-      courseId: line.courseId,
-      makeAtStationId: line.makeAt ?? null,
-      noMerge: line.noMerge,
-    })),
+  // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
+  await tx.delete(orderDraftLines).where(
+    and(
+      inArray(orderDraftLines.draftId, [...fromDraftIds]),
+      lines.length === 0
+        ? undefined
+        : notInArray(
+            orderDraftLines.id,
+            lines.map((line) => line.id),
+          ),
+    ),
   );
+  if (lines.length === 0) return;
+  const rows = lines.map((line, index) => ({
+    id: line.id,
+    draftId: intoDraftId,
+    position: index + 1,
+    menuItemId: line.menuItemId,
+    variantId: line.variantId,
+    menuVersionId: line.menuVersionId,
+    options: line.options,
+    extras: line.extras,
+    note: line.note,
+    quantity: stringToThousandths(line.quantity),
+    courseId: line.courseId,
+    makeAtStationId: line.makeAt ?? null,
+    noMerge: line.noMerge,
+  }));
+  await tx
+    .insert(orderDraftLines)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: orderDraftLines.id,
+      set: {
+        draftId: intoDraftId,
+        position: sql`excluded.position`,
+        quantity: sql`excluded.quantity`,
+        noMerge: sql`excluded.no_merge`,
+      },
+    });
 }
 
 /** One open draft of the party, which the caller knows is there. */

@@ -1,3 +1,4 @@
+import type { PartyAllergySnapshot } from "./party-allergy.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import semver from "semver";
 import type { Hono } from "hono";
@@ -1199,6 +1200,33 @@ export interface VenueServiceContribution {
   readClearingWorkflow(tx: Transaction): Promise<boolean>;
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
+  readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
+  savePartyAllergy(
+    tx: Transaction,
+    partyId: string,
+    expectedRevision: number,
+    input: unknown,
+    operatorId: string,
+  ): Promise<PartyAllergySnapshot>;
+  setAllergyLineTicks(tx: Transaction, partyId: string, input: unknown): Promise<void>;
+  moveAllergyDraftTicks(
+    tx: Transaction,
+    partyId: string,
+    lines: readonly { draftLineId: string; workingLineId: string }[],
+  ): Promise<void>;
+  mergePartyAllergies(
+    tx: Transaction,
+    from: string,
+    into: string,
+    operatorId: string,
+  ): Promise<void>;
+  splitPartyAllergies(
+    tx: Transaction,
+    from: string,
+    into: string,
+    billId: string | null,
+    operatorId: string,
+  ): Promise<void>;
   kitchenNoteKey(scope: KitchenNoteScope): string;
   readKitchenNotes(
     tx: Transaction,

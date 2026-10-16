@@ -1,3 +1,7 @@
+import * as orderWrites from "./working-order.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { AppError } from "@waitron/shared";
+import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -2538,4 +2542,283 @@ describe("finishing the table", () => {
       { code: "party.bill_outstanding" },
     );
   });
+});
+
+describe("A669 allergy ticks on real draft submission", () => {
+  it("maps reordered groups to their own guests, skips extras children and retains an unsent tick", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", {
+        options: [v.rare],
+        extras: [{ listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] }],
+      }),
+      item(v, "fish"),
+      item(v, "beer"),
+    ]);
+    const state = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window seat", allergens: { milk: {} }, note: "Severe" },
+            { who: "Red coat", allergens: { fish: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[1]!.id },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[2]!.id },
+      ]),
+    );
+    await submit(v, partyId, draft, ALEX, [
+      { lineIds: [draft.lines[1]!.id], release: "hold" },
+      { lineIds: [draft.lines[0]!.id], release: "fire" },
+    ]);
+    const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    const working = await db.select().from(workingOrderLines);
+    expect(ticks).toHaveLength(3);
+    expect(ticks).toEqual(
+      expect.arrayContaining([
+        {
+          guestId: state.guests[0]!.id,
+          draftLineId: null,
+          workingLineId: working.find((line) => line.productId === v.productId.burger)!.id,
+        },
+        {
+          guestId: state.guests[1]!.id,
+          draftLineId: null,
+          workingLineId: working.find((line) => line.productId === v.productId.fish)!.id,
+        },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[2]!.id, workingLineId: null },
+      ]),
+    );
+    const extra = working.find((line) => line.parentLineId !== null)!;
+    expect(extra.productId).toBe(v.productId.sauce);
+    expect(ticks.some((tick) => tick.workingLineId === extra.id)).toBe(false);
+  });
+});
+
+it("A669 keeps separately assigned identical dishes when joining two drafts of the same owner", async () => {
+  const v = await setupVenue();
+  const a = await seated(v, "Allergy join A"),
+    b = await seated(v, "Allergy join B");
+  const da = await save(v, a.partyId, ALEX, null, 0, [item(v, "beer")]);
+  const dbb = await save(v, b.partyId, ALEX, null, 0, [item(v, "beer")]);
+  const ga = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      a.partyId,
+      await partyRevision(a.partyId),
+      { answer: "allergies", guests: [{ who: "Left seat", allergens: { milk: {} } }] },
+      ALEX,
+    ),
+  );
+  const gb = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      b.partyId,
+      await partyRevision(b.partyId),
+      { answer: "allergies", guests: [{ who: "Right seat", allergens: { eggs: {} } }] },
+      ALEX,
+    ),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, a.partyId, [
+      { guestId: ga.guests[0]!.id, draftLineId: da.lines[0]!.id },
+    ]),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, b.partyId, [
+      { guestId: gb.guests[0]!.id, draftLineId: dbb.lines[0]!.id },
+    ]),
+  );
+  await inTx(async (tx) =>
+    joinTables(tx, v.cfg, a.partyId, b.tableId, {
+      expectedPartyRevision: await partyRevision(a.partyId),
+      operatorId: ALEX,
+      bills: "separate",
+      otherPartyId: b.partyId,
+      expectedOtherPartyRevision: await partyRevision(b.partyId),
+    }),
+  );
+  const joined = await draftsOf(v, a.partyId);
+  expect(joined).toHaveLength(1);
+  expect(joined[0]!.lines.map((line) => [line.id, line.quantity])).toEqual([
+    [da.lines[0]!.id, "1.000"],
+    [dbb.lines[0]!.id, "1.000"],
+  ]);
+  const result = await inTx((tx) => readPartyAllergy(tx, a.partyId));
+  expect(result.ticks).toHaveLength(2);
+  expect(result.ticks).toEqual(
+    expect.arrayContaining([
+      { guestId: ga.guests[0]!.id, draftLineId: da.lines[0]!.id, workingLineId: null },
+      { guestId: gb.guests[0]!.id, draftLineId: dbb.lines[0]!.id, workingLineId: null },
+    ]),
+  );
+});
+
+it("A669 uses preassigned dish ids when inserted rows return in reverse order", async () => {
+  const v = await setupVenue();
+  const { partyId } = await seated(v);
+  const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
+  const state = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      partyId,
+      await partyRevision(partyId),
+      {
+        answer: "allergies",
+        guests: [
+          { who: "Beer guest", allergens: { milk: {} } },
+          { who: "Fish guest", allergens: { fish: {} } },
+        ],
+      },
+      ALEX,
+    ),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, partyId, [
+      { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+      { guestId: state.guests[1]!.id, draftLineId: draft.lines[1]!.id },
+    ]),
+  );
+  const insert = orderWrites.insertTabRound;
+  const spy = vi
+    .spyOn(orderWrites, "insertTabRound")
+    .mockImplementation(async (...args) => (await insert(...args)).reverse());
+  try {
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]);
+  } finally {
+    spy.mockRestore();
+  }
+  const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+  const rows = await db.select().from(workingOrderLines);
+  expect(ticks).toEqual(
+    expect.arrayContaining([
+      {
+        guestId: state.guests[0]!.id,
+        draftLineId: null,
+        workingLineId: rows.find((row) => row.productId === v.productId.beer)!.id,
+      },
+      {
+        guestId: state.guests[1]!.id,
+        draftLineId: null,
+        workingLineId: rows.find((row) => row.productId === v.productId.fish)!.id,
+      },
+    ]),
+  );
+  expect(ticks).toHaveLength(2);
+});
+
+it("A669 rolls back the draft, created lines and moved ticks when submission fails after the move", async () => {
+  const v = await setupVenue();
+  const { partyId } = await seated(v);
+  const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+  const state = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      partyId,
+      await partyRevision(partyId),
+      { answer: "allergies", guests: [{ who: "Window", allergens: { milk: {} } }] },
+      ALEX,
+    ),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, partyId, [
+      { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+    ]),
+  );
+  const before = await inTx((tx) => readPartyAllergy(tx, partyId));
+  const beforeDraft = await draftRow(draft.id);
+  const move = VENUE_SERVICE.moveAllergyDraftTicks;
+  const spy = vi
+    .spyOn(VENUE_SERVICE, "moveAllergyDraftTicks")
+    .mockImplementation(async (...args) => {
+      await move(...args);
+      throw new AppError("allergy.invalid", { field: "probe_after_move" });
+    });
+  try {
+    await expect(
+      submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]),
+    ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "probe_after_move" } });
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await inTx((tx) => readPartyAllergy(tx, partyId))).toEqual(before);
+  expect(await draftRow(draft.id)).toEqual(beforeDraft);
+  expect(await storedLines(draft.id)).toHaveLength(1);
+  expect(await db.select().from(workingOrderLines)).toEqual([]);
+  expect(await db.select().from(orderGroups)).toEqual([]);
+  expect(await db.select().from(ticketItems)).toEqual([]);
+});
+
+it("A669 writes draft line batches in one insert while preserving their contents", async () => {
+  const v = await setupVenue();
+  const { partyId } = await seated(v);
+  let lineWrites = 0;
+  const result = await inTx(async (tx) => {
+    const spy = vi.spyOn(tx, "insert");
+    try {
+      const saved = await saveDraft(tx, v.cfg, partyId, ALEX, {
+        draftId: null,
+        revision: 0,
+        lines: [item(v, "beer"), item(v, "fish"), item(v, "wine", { variantId: v.glass })],
+      });
+      lineWrites = spy.mock.calls.filter(([table]) => table === orderDraftLines).length;
+      return saved;
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  expect(result.lines.map((line) => line.menuItemId)).toEqual([
+    v.offer("beer"),
+    v.offer("fish"),
+    v.offer("wine"),
+  ]);
+  expect(lineWrites).toBe(1);
+});
+
+it("A669 replays a submitted draft without duplicating its groups or moving its ticks again", async () => {
+  const v = await setupVenue();
+  const { partyId } = await seated(v);
+  const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+  const state = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      partyId,
+      await partyRevision(partyId),
+      { answer: "allergies", guests: [{ who: "Window", allergens: { milk: {} } }] },
+      ALEX,
+    ),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, partyId, [
+      { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+    ]),
+  );
+  const input = {
+    submissionId: randomUUID(),
+    expectedPartyRevision: await partyRevision(partyId),
+    operatorId: ALEX,
+    draftRevision: draft.revision,
+    groups: [{ lineIds: lineIds(draft), release: "hold" as const }],
+  };
+  const first = await inTx((tx) => submitDraft(tx, v.cfg, partyId, draft.id, input));
+  const afterFirst = await inTx((tx) => readPartyAllergy(tx, partyId));
+  expect(afterFirst.ticks).toEqual([
+    { guestId: state.guests[0]!.id, draftLineId: null, workingLineId: first.groups[0]!.lineIds[0] },
+  ]);
+  const replay = await inTx((tx) => submitDraft(tx, v.cfg, partyId, draft.id, input));
+  expect(replay).toEqual(first);
+  expect(await inTx((tx) => readPartyAllergy(tx, partyId))).toEqual(afterFirst);
+  expect(await db.select().from(workingOrderLines)).toHaveLength(1);
+  expect(await db.select().from(orderGroups)).toHaveLength(1);
 });

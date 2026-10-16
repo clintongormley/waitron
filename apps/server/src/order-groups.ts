@@ -145,6 +145,8 @@ export type PlaceGroupsInput = Pick<
 > & {
   /** The command has already moved the party's revision on, so making a main bill does not. */
   revisionMoved?: boolean;
+  /** Draft ids in the same order as the input dishes, before extras become child rows. */
+  sourceDraftLineIds?: readonly string[];
 };
 
 /**
@@ -205,6 +207,19 @@ export async function placeGroups(
     return { ...row, groupId, creditedTo: operatorId };
   });
   const inserted = await insertTabRound(tx, cfg, round, rows);
+  if (input.sourceDraftLineIds !== undefined) {
+    const draftIds = input.sourceDraftLineIds;
+    await VENUE_SERVICE.moveAllergyDraftTicks(
+      tx,
+      partyId,
+      rows
+        .filter((row) => row.parentLineId == null)
+        .map((row, i) => ({
+          draftLineId: draftIds[i]!,
+          workingLineId: row.id!,
+        })),
+    );
+  }
   const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of input.groups.entries()) {
     const groupId = groupIds[i]!;

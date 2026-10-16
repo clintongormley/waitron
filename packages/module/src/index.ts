@@ -100,3 +100,5 @@ export type { ModuleTimeRecordExport } from "./record-export.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "./module.js";
+
+export type * from "./party-allergy.js";

@@ -2118,9 +2118,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/ui/src/reorder-table.ts`) also reach shadow roots attached while it holds.
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
-- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** At a table's
-  first Send the waiter answers "Any allergies at this table?". Every table send path runs it; the
-  counter does not. After A668's data shape.
+- **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
+  routes, till prompts, kitchen copy/notices and floor signal remain. At the first Send, ask
+  "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)

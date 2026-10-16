@@ -121,7 +121,10 @@ changed and removed in normal use.
   it adds and puts them in the descriptor's `requires`.
 
 Every write goes through one `withTransaction` per request. The allergy belongs to the party: when
-parties merge, the merged party's guests and ticks join the surviving party's. **When a table leaves
+parties merge, the merged party's guests and ticks join the surviving party's. **Owner answer,
+2026-10-16:** an Allergies answer wins; otherwise either party being unanswered leaves the combined
+party unanswered, so the next Send asks again. No allergies remains only when both parties answered
+No allergies. **When a table leaves
 a party** (the order screen's Actions → "Split a table", `splitTable` in
 `apps/server/src/table-actions.ts`, which opens a new party on the leaving table; not the floor
 plan's "Split tables…", which creates no party), **both parties keep a copy of every allergic
