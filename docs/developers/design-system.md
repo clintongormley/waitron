@@ -2101,15 +2101,21 @@ The staffing painters (`staffing-season-painter.ts` and `staffing-special-day-pa
 `packages/staffing/src/dashboard/`) paint how many people of each staff role a department or prep
 station needs, in the same frame, on a staffing grid (`staffing-grid.ts`) built from the parts
 venue-service exports from `@waitron/venue-service/painter`. The season painter's bar holds ✕, the
-heading "<season> week", ‹ the season chip ›, a department-or-prep-station picker, and Cancel and
-Save, over a column per weekday. The special-day painter's bar holds ✕, the special day's name, the
+heading "<season>: standard week", ‹ the season chip ›, a department-or-prep-station picker, and
+Cancel and Save, over a column per weekday. The special-day painter's bar holds ✕, the special day's name, the
 picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
 + New staff role, which opens the staff-role dialog and chooses the role it saves, and How many,
 from 1 to 50. Dragging down a column adds a block of the chosen role and number, dragging a block's
 top or bottom edge resizes it, and clicking a block offers another staff role, How many and Delete.
 Each column's ⋮ offers Copy to… and Clear; in the special-day painter it also offers Follow the
-season, and a date that follows the season reads "Follows the season". A department's opening hours
-are drawn faintly behind each column; a prep station's column has none. One draft holds every area,
+season, and a date that follows the season reads "Follows the season". Behind the staffing blocks,
+a department's opening periods are faint bands in their own colours,
+labelled with their names and times. A prep station shows the sending ranges of the periods whose
+menus route it dishes, ending at last orders, in one stable lane per sending department. A long
+department name is truncated to one line so it leaves room for the period; the day's accessible
+description keeps every full department name, period and time. Empty guides read Closed for a
+department and No orders for a station. The paint row explains the shading for the selected area;
+a viewer gets the same explanation without paint controls. One draft holds every area,
 so the picker keeps edits; Save stays quiet until the draft changes and sends only the days that
 differ from what is saved. The staffing is read when the painter opens, when ‹ › step, and after
 each save, never on a live change; the staff roles follow live changes. After a save, each day not

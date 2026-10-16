@@ -466,14 +466,19 @@ including held dishes when released (`apps/server/src/station-closing.ts`). The 
 moves with the authenticated person's id and no device; till and device closures record their
 actors in `ticket_item_moves`.
 
-Prep stations' Times tab is read-only. `stationServiceTimes` combines routed products on period
-menus with department hours, subtracts zone closed times, and joins overlapping shares of the same
-period. It reads a span of at most 42 dates and works out each date from that date's own plan, its
-season and any special day (`readDayPlan`); there is no normal week, and the route refuses a `week`
-query (`stationServiceTimes`, `packages/venue-service/src/station-service-times.ts`). Planning
+Prep stations' Times tab is read-only. `stationServiceTimes` uses the shared
+`readPlannedServiceGuides` reader to combine routed products on period menus with department
+hours. The forecast applies each period's signed last-order offset before subtracting zone closed
+times, and joins overlapping shares of the same period. The public reader takes at most 42 dates
+and works out each from that date's own plan, season and special day (`readDayPlan`); its route
+refuses a `week` query (`packages/venue-service/src/station-service-times.ts`). The staffing season
+painter instead passes the selected season's weekdays directly to the shared reader. The special-day
+staffing painter passes the edited special day's own plan, including when another repeating day
+would stand on one of its dates. All requested stations share the schedule and routing reads. Planning
 ignores today's station closures and kept-open extensions. The default station answers
 `always: "default"` and no dates, and the tab shows a sentence in place of the month; a deleted
-station's id is refused (`station.not_found`).
+station's id is refused (`station.not_found`). The default station's staffing guides show
+scheduled demand from period menus and untimed routes.
 
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.

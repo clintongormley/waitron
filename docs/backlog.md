@@ -4731,9 +4731,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
-- **A724. Staffing: named opening hours behind the grid, a prep station's hours, special days
-  reached from the day box (owner, 2026-10-15).** No more unexplained dotted lines; a station's grid
-  shaded from the periods whose menus send it dishes. [Detail](backlog/workforce.md#a724-staffing-named-opening-hours-behind-the-grid-a-prep-stations-hours-special-days-reached-from-the-day-box), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+- **A724. Staffing: reach special days and standard weeks from the month day box (owner,
+  2026-10-15).** After all of A720 lands, use its day box to open the special day's staffing or the
+  season's standard week, with no seasons or special-days row.
+  [Detail](backlog/workforce.md#a724-staffing-special-days-reached-from-the-day-box), [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png)
 
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
