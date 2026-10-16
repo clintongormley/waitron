@@ -2056,3 +2056,18 @@ Before the fix, the held case recorded no incident and failed while the released
 After the warning gate changed, both cases passed; the held case still made no provider lookup or
 send and retained its pending row. A later pass checks that the warning is recorded once. This
 uses a controlled resolver claim and simulated age, not a real hour-long network call.
+
+
+## Test a fresh refusal as well as a lost refund answer
+
+A durable request keeps its identity while an earlier result is unknown. A first amount refusal
+also needs an edit-and-resubmit case: retaining its journal can otherwise disable the very amount
+the operator must correct.
+
+A737 Part 2's second review reproduced the disabled native input after a first
+`tender.refund_exceeds_payment` response. The application case "a definitive first amount refusal"
+now edits that input, sends a corrected request and checks a new submission ID. State cases pair
+fresh and PIN-fallback refusals with same-session and reloaded unknown outcomes; the unknown cases
+retain their original body and ID. Additional cases keep a replacement request or a learned
+pending refund ID when an older refusal arrives. The server's reservation cases pair rejected
+amounts with an empty refund table; separate cases replay existing submissions.

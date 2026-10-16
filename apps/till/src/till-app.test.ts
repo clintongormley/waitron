@@ -21742,6 +21742,38 @@ describe("A737 post-invoice refund integration", () => {
     );
     await flush(el);
   }
+  it("a definitive first amount refusal leaves the native amount editable and a corrected request can complete", async () => {
+    const refundTransaction = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "tender.refund_exceeds_payment",
+        params: { applied: "2.00", tip: "0.00" },
+      })
+      .mockResolvedValueOnce({ ...returned, appliedAmount: "1.00" });
+    const { el } = await open({ refundTransaction });
+    await openRefund(el);
+    await submit(el);
+    expect(refundTransaction).toHaveBeenCalledOnce();
+    const form = dialog(el)!;
+    const field = form.shadowRoot!.querySelector<WtInput>('[name="appliedAmount"]')!;
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
+    expect(refundKeys()).toEqual([]);
+    emit(field, "wt-change", { value: "1.00" });
+    await form.updateComplete;
+    await userEvent.click(
+      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
+    );
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    expect(refundTransaction).toHaveBeenCalledTimes(2);
+    expect(refundTransaction.mock.calls[1]![1]).toMatchObject({
+      appliedAmount: "1.00",
+      reason: "Customer request",
+    });
+    expect(refundTransaction.mock.calls[1]![1].submissionId).not.toBe(
+      refundTransaction.mock.calls[0]![1].submissionId,
+    );
+  });
   it.each(["F1", "F2"] as const)(
     "a paid %s opens its original tender and closes before refreshing completed money",
     async (invoiceType) => {

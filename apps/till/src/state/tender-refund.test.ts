@@ -391,3 +391,86 @@ it.each(["completed", "failed"] as const)(
     expect(api.retryTenderRefund).not.toHaveBeenCalled();
   },
 );
+
+it.each([false, true])(
+  "allows correction after a definitive first refusal, PIN fallback=%s",
+  async (fallback) => {
+    const api = {
+      refundTransaction: vi.fn(),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const session = new TenderRefundSession(scope, api);
+    if (fallback) {
+      api.refundTransaction.mockRejectedValueOnce({ code: "authorization.not_permitted" });
+      await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+        code: "authorization.not_permitted",
+      });
+    }
+    api.refundTransaction.mockRejectedValueOnce({ code: "tender.refund_exceeds_payment" });
+    const denied = fallback
+      ? session.retry("sale-1", { personId: "manager", pin: "0123" })
+      : session.submit("sale-1", ask);
+    await expect(denied).rejects.toMatchObject({ code: "tender.refund_exceeds_payment" });
+    const firstId = api.refundTransaction.mock.calls[0]![1].submissionId;
+    expect(session.read("sale-1")).toBeNull();
+    api.refundTransaction.mockResolvedValueOnce(
+      reply({ appliedAmount: "1.00", state: "completed" }),
+    );
+    await session.submit("sale-1", { ...ask, appliedAmount: "1.00" });
+    expect(api.refundTransaction.mock.calls.at(-1)![1]).toMatchObject({ appliedAmount: "1.00" });
+    expect(api.refundTransaction.mock.calls.at(-1)![1].submissionId).not.toBe(firstId);
+  },
+);
+it.each([false, true])(
+  "retains an earlier unknown request through an amount refusal, reload=%s",
+  async (reload) => {
+    const api = {
+      refundTransaction: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("lost answer"))
+        .mockRejectedValueOnce({ code: "tender.refund_exceeds_payment" }),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const first = new TenderRefundSession(scope, api);
+    await expect(first.submit("sale-1", ask)).rejects.toThrow("lost answer");
+    const saved = first.read("sale-1");
+    const next = reload ? new TenderRefundSession(scope, api) : first;
+    await expect(next.resume("sale-1")).rejects.toMatchObject({
+      code: "tender.refund_exceeds_payment",
+    });
+    expect(next.read("sale-1")).toEqual(saved);
+    await expect(next.submit("sale-1", { ...ask, appliedAmount: "1.00" })).rejects.toThrow(
+      "locked",
+    );
+    expect(api.refundTransaction).toHaveBeenCalledTimes(2);
+  },
+);
+
+it.each(["replacement", "pending"] as const)(
+  "a late refusal never removes a %s record saved by another consumer",
+  async (change) => {
+    const attempts = new TenderRefundAttempts();
+    let kept: ReturnType<TenderRefundAttempts["read"]>;
+    const api = {
+      refundTransaction: vi.fn(async () => {
+        const sent = attempts.read(scope, "sale-1")!;
+        if (change === "replacement") {
+          attempts.clear(scope);
+          attempts.prepare(scope, "sale-1", { ...ask, appliedAmount: "1.00" });
+        } else attempts.answer(scope, sent, reply());
+        kept = attempts.read(scope, "sale-1");
+        throw { code: "tender.refund_exceeds_payment" };
+      }),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const session = new TenderRefundSession(scope, api, attempts);
+    await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+      code: "tender.refund_exceeds_payment",
+    });
+    expect(session.read("sale-1")).toEqual(kept!);
+    expect(kept!).not.toBeNull();
+  },
+);

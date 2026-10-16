@@ -146,6 +146,12 @@ export class TenderRefundAttempts {
     else this.#storage((storage) => storage.removeItem(keyFor(scope, sent.saleId)));
   }
 
+  refused(scope: TenderRefundScope, sent: SavedTenderRefund): void {
+    const current = this.read(scope, sent.saleId);
+    if (current?.request.submissionId === sent.request.submissionId && current.refundId === null)
+      this.#storage((storage) => storage.removeItem(keyFor(scope, sent.saleId)));
+  }
+
   clear(scope: TenderRefundScope): void {
     this.#storage((storage) => {
       const prefix = scopePrefix(scope);
@@ -158,6 +164,7 @@ export class TenderRefundAttempts {
 export class TenderRefundSession {
   #busy = false;
   readonly #settled = new Map<string, TenderRefundView>();
+  readonly #refused = new Set<string>();
   constructor(
     private readonly scope: TenderRefundScope,
     private readonly api: RefundApi,
@@ -181,11 +188,32 @@ export class TenderRefundSession {
   async #send(
     sent: SavedTenderRefund,
     override?: TenderRefundRequest["override"],
+    fresh = false,
   ): Promise<TenderRefundView> {
-    const result = await this.api.refundTransaction(sent.saleId, {
-      ...sent.request,
-      ...(override === undefined ? {} : { override }),
-    });
+    const id = sent.request.submissionId;
+    const knownRefused = fresh || this.#refused.has(id);
+    let result: TenderRefundView;
+    try {
+      result = await this.api.refundTransaction(sent.saleId, {
+        ...sent.request,
+        ...(override === undefined ? {} : { override }),
+      });
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+      this.#refused.delete(id);
+      // A later refusal cannot establish what an earlier unknown call returned.
+      if (knownRefused) {
+        if (code === "tender.refund_exceeds_payment") this.attempts.refused(this.scope, sent);
+        else if (
+          code === "authorization.not_permitted" ||
+          code === "tender.manual_refund_pin_required" ||
+          code === "pin.invalid"
+        )
+          this.#refused.add(id);
+      }
+      throw error;
+    }
+    this.#refused.delete(id);
     this.#answer(sent, result);
     return result;
   }
@@ -203,7 +231,10 @@ export class TenderRefundSession {
     ask: TenderRefundAsk,
     override?: TenderRefundRequest["override"],
   ): Promise<TenderRefundView> {
-    return this.#run(() => this.#send(this.attempts.prepare(this.scope, saleId, ask), override));
+    return this.#run(() => {
+      const fresh = this.read(saleId) === null;
+      return this.#send(this.attempts.prepare(this.scope, saleId, ask), override, fresh);
+    });
   }
 
   resume(saleId: string): Promise<TenderRefundView> {
