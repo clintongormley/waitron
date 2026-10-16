@@ -9,6 +9,7 @@ interface Box {
 
 interface PlaywrightFrame {
   locator(selector: string): { boundingBox(): Promise<Box | null> };
+  evaluate(script: string): Promise<unknown>;
 }
 
 interface CdpSession {
@@ -26,6 +27,7 @@ interface PlaywrightPage {
     move(x: number, y: number, options?: { steps?: number }): Promise<void>;
     down(): Promise<void>;
     up(): Promise<void>;
+    wheel(deltaX: number, deltaY: number): Promise<void>;
   };
   context(): { newCDPSession(page: PlaywrightPage): Promise<CdpSession> };
 }
@@ -51,18 +53,37 @@ async function centreOf(context: PlaywrightCommandContext, selector: string): Pr
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+export interface MouseDragOptions {
+  /** Turns the mouse wheel, button still held, once the pointer reaches `selectors[after]`. */
+  wheel?: { after: number; deltaY: number };
+}
+
 /** Presses the real mouse on the first element's centre, moves through each next centre in
  * several steps, and releases on the last. */
-export const mouseDrag: BrowserCommand<[selectors: string[]]> = async (context, selectors) => {
+export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDragOptions]> = async (
+  context,
+  selectors,
+  options = {},
+) => {
   const ctx = context as unknown as PlaywrightCommandContext;
   const [first, ...rest] = selectors;
   if (first === undefined) throw new Error("mouseDrag needs at least one selector");
   const start = await centreOf(ctx, first);
   await ctx.page.mouse.move(start.x, start.y);
   await ctx.page.mouse.down();
-  for (const selector of rest) {
+  const wheel = async (index: number) => {
+    if (options.wheel?.after !== index) return;
+    await ctx.page.mouse.wheel(0, options.wheel.deltaY);
+    // The scroll lands asynchronously; positions read before it would be the old ones.
+    await (
+      await ctx.frame()
+    ).evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+  };
+  await wheel(0);
+  for (const [index, selector] of rest.entries()) {
     const next = await centreOf(ctx, selector);
     await ctx.page.mouse.move(next.x, next.y, { steps: MOVE_STEPS });
+    await wheel(index + 1);
   }
   await ctx.page.mouse.up();
 };

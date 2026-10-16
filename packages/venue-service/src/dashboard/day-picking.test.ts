@@ -53,7 +53,6 @@ class DayPickingHost extends LitElement {
       @click=${handlers.click}
       @dblclick=${handlers.dblclick}
       @keydown=${handlers.keydown}
-      @focusin=${handlers.focusin}
       @contextmenu=${(event: Event) => {
         handlers.contextmenu(event as MouseEvent);
         this.contextMenus.push({ prevented: event.defaultPrevented });
@@ -177,6 +176,12 @@ describe("DayPicker", () => {
     await commands.mouseDrag([sel(20), sel(23), sel(20)]);
     await expectRun(host, run(20, 20));
     expect(host.chosen).toEqual([]);
+
+    // The wheel scrolls the grid two rows up mid-drag; 20 must be found where it now is.
+    await commands.mouseDrag([sel(12), sel(13), sel(20)], { wheel: { after: 1, deltaY: 100 } });
+    expect(window.scrollY).toBe(100);
+    await expectRun(host, run(12, 20));
+    window.scrollTo(0, 0);
 
     const edge = button(host, 25).getBoundingClientRect();
     const outside = document.createElement("div");
