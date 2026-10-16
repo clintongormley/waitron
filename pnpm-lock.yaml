@@ -101,8 +101,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/layouts
       axe-core:
-        specifier: ^4.14.0
-        version: 4.14.0
+        specifier: ^4.13.0
+        version: 4.13.0
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0
@@ -398,8 +398,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
       axe-core:
-        specifier: ^4.14.0
-        version: 4.14.0
+        specifier: ^4.13.0
+        version: 4.13.0
       playwright:
         specifier: ^1.64.0
         version: 1.64.0
@@ -459,8 +459,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
       axe-core:
-        specifier: ^4.14.0
-        version: 4.14.0
+        specifier: ^4.13.0
+        version: 4.13.0
       playwright:
         specifier: ^1.64.0
         version: 1.64.0
@@ -1960,8 +1960,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
       axe-core:
-        specifier: ^4.14.0
-        version: 4.14.0
+        specifier: ^4.13.0
+        version: 4.13.0
       playwright:
         specifier: ^1.64.0
         version: 1.64.0
@@ -1990,8 +1990,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
       axe-core:
-        specifier: ^4.14.0
-        version: 4.14.0
+        specifier: ^4.13.0
+        version: 4.13.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -4076,8 +4076,8 @@ packages:
   async@3.2.6:
     resolution: {integrity: sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==}
 
-  axe-core@4.14.0:
-    resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
     engines: {node: '>=4'}
 
   b4a@1.9.0:
@@ -7800,7 +7800,7 @@ snapshots:
 
   async@3.2.6: {}
 
-  axe-core@4.14.0: {}
+  axe-core@4.13.0: {}
 
   b4a@1.9.0: {}
 
