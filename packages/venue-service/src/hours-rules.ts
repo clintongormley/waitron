@@ -40,12 +40,18 @@ export function parseCalendarMonth(value: unknown): string | null {
 export function rangeDates(from: unknown, to: unknown): LocalDate[] {
   if (!isLocalDate(from)) invalidHours("from");
   if (!isLocalDate(to) || to < from) invalidHours("to");
-  const dates: LocalDate[] = [];
-  for (let date = from; date <= to; date = addDays(date, 1)) {
-    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
-    dates.push(date);
-  }
-  return dates;
+  const days = daysBetween(from, to);
+  if (days >= HOURS_RANGE_MAX_DAYS) invalidHours("to");
+  return Array.from({ length: days + 1 }, (_, i) => addDays(from, i));
+}
+
+/** Whole days from `from` to `to`. */
+export function daysBetween(from: LocalDate, to: LocalDate): number {
+  const day = (date: LocalDate) => {
+    const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+    return utcDay(y, m, d).getTime();
+  };
+  return (day(to) - day(from)) / 86_400_000;
 }
 
 /** Midnight UTC of a date; unlike `Date.UTC`, which reads years 0 to 99 as 1900 to 1999. */

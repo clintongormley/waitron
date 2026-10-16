@@ -38,12 +38,12 @@ import {
 import { segmentedStyles } from "./segmented-styles.js";
 import "./special-day-painter.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
-import type { HolidayFact, LocalDate } from "../hours-types.js";
+import { HOURS_RANGE_MAX_DAYS, type HolidayFact, type LocalDate } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { businessDateToday } from "./business-date.js";
-import { addDays, isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
+import { daysBetween, isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
 import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
@@ -61,8 +61,6 @@ type SpecialAddress = {
   to?: LocalDate | null;
 };
 const painterEntryKey = "openingHoursPainter";
-/** The most dates a new day's run read from an address may hold; a longer `to` is ignored. */
-const MAX_RUN_DATES = 366;
 /** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
 export type CalendarViews = {
   ctx: DashboardModuleContext;
@@ -264,7 +262,7 @@ export class OpeningHoursScreen extends LitElement {
           isLocalDate(date) &&
           isLocalDate(to) &&
           to > date &&
-          to <= addDays(date, MAX_RUN_DATES - 1)
+          daysBetween(date, to) < HOURS_RANGE_MAX_DAYS
             ? to
             : null,
       };

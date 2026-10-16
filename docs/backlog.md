@@ -1581,8 +1581,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **An ignored `to` stays in the address bar.** A special-day address whose `to` is earlier than
   its date, malformed, or more than 365 days after it opens the new day on its first date alone
-  (`MAX_RUN_DATES`, `opening-hours-screen.ts`), but the address still shows the `to`. Left open by
-  A720.
+  (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`. Left
+  open by A720.
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour

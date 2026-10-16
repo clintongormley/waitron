@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { layerPaint, stepSpan } from "../day-paint.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
-import { addDays, isLocalDate } from "../hours-rules.js";
+import { addDays, isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
@@ -560,11 +560,8 @@ export class SpecialDayPainter extends LitElement {
   private newDates(): LocalDate[] {
     const date = this.date && isLocalDate(this.date) ? this.date : undefined;
     if (!date) return [];
-    const dates = [date];
     const last = this.lastDate && isLocalDate(this.lastDate) ? this.lastDate : undefined;
-    if (last)
-      for (let next = addDays(date, 1); next <= last; next = addDays(next, 1)) dates.push(next);
-    return dates;
+    return last ? rangeDates(date, last) : [date];
   }
   private read(id: string, addDates: readonly LocalDate[], announce = false) {
     this.loading = true;

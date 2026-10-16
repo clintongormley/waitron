@@ -499,6 +499,24 @@ describe("a run picked on the Year", () => {
     expect(chips(painter)).toEqual(["2026-01-01"]);
   });
 
+  it("a run in the year 9999 read from an address opens whole", async () => {
+    const { el } = await mount(
+      "/manage/opening-hours/view/special-day/date/9999-01-01/to/9999-01-03",
+    );
+    const painter = await shownPainter(el);
+    expect([painter.date, painter.lastDate]).toEqual(["9999-01-01", "9999-01-03"]);
+    expect(chips(painter)).toEqual(["9999-01-01", "9999-01-02", "9999-01-03"]);
+  });
+
+  it("a run ending on 9999-12-31 read from an address opens whole", async () => {
+    const { el } = await mount(
+      "/manage/opening-hours/view/special-day/date/9999-12-30/to/9999-12-31",
+    );
+    const painter = await shownPainter(el);
+    expect([painter.date, painter.lastDate]).toEqual(["9999-12-30", "9999-12-31"]);
+    expect(chips(painter)).toEqual(["9999-12-30", "9999-12-31"]);
+  });
+
   it("a direct load of a run's address opens it", async () => {
     const { el } = await mount(
       "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
