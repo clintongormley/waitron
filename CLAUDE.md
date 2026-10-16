@@ -672,6 +672,8 @@ browser test** — most of these rules exist because a test passed while proving
   leftover, it does not end it. Cost: lane G's push failed `ci-workflow`'s paging case on a killed
   run's leftover call (A751). Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-spawnsync-timeout-kills-only-the-process-it-started).
+  Guard: the leftover-call case in `scripts/ci-workflow.test.mjs`, weaker than the rule — it covers
+  that one script; nothing guards the rule in general.
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only on macOS and only where the stubs
   are a large share of the runtime — measure first.

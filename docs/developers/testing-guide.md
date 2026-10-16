@@ -488,7 +488,9 @@ the suite performs no wait at all.
 The one design choice worth knowing before trusting it in a gate: **a bound it cannot evaluate makes
 it decline to judge the file, not accuse it.** A guard that fails a correct file stops every push, so
 where precise reading fails — a bound written as an expression, a per-case bound past a regex literal
-or on a template-table `it.each`, a number after some other callback — it goes quiet instead. That is
+or on a template-table `it.each`, a number after some other callback — it goes quiet instead
+(`scripts/ci-workflow.test.mjs` and `scripts/migration-upgrade.test.ts` among them,
+`docs/backlog.md`). That is
 a deliberate hole, and its detector block has a case for each of those shapes recording the decline,
 alongside cases for what it does read and what it is blind to.
 
@@ -514,10 +516,11 @@ script calls `gh` and `jq` inside `$(…)`, and the subshell running one outlive
 100 ms in, 40 times with `exec` and 40 without, the stand-in's `count` grew after the kill in every
 run both ways (A751's plan review). So each run now keeps its own state directory, passed to the
 stubs as `STUB_DIR`, while the stub executables are still built once per file (next section). The
-case "keeps a killed run's leftover call out of the next run's count" slows one `gh` call to three
-seconds, kills the run after one, starts the next run, and checks both that the next run's count is
-still 1 and that the killed run's own directory received the leftover call; with every run sharing
-one directory again it failed with `expected 2 to be 1`.
+case "keeps a killed run's leftover call out of the next run's count" starts a run whose `gh` call
+waits for a `release` file, kills the run with SIGTERM once that call has started, runs the next
+run, then releases the leftover call and waits for it to finish. It checks both that the next run's
+count is still 1 and that the killed run's own directory received the leftover call; with every run
+sharing one directory again it failed with `expected 2 to be 1`.
 
 ## Build a suite's executable stubs ONCE per file, not once per test.
 

@@ -5805,7 +5805,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work
   (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
   On recurrence, retain the phase report and host state before retrying; compare repeated samples
-  before assigning the variation to CPU scheduling or storage.
+  before assigning the variation to CPU scheduling or storage. Since A751 the budget counts the
+  walk's own processor time, so a recurrence fails only when the walk's own processor time passes
+  the budget or no phase moves for 120 s; keep that report's processor and wall times.
   [Measurement](developers/ci-and-gates.md#reducing-repeated-upgrade-test-setup-work-a736)
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**

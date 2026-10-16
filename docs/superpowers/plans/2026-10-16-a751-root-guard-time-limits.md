@@ -63,7 +63,9 @@ transaction, `probes/feed-probe`) — a product change in `packages/db`, recorde
    (a really-sleeping `sleep` stand-in passed on the old code, 5 of 5): run A slows one `gh` call
    to 3 s through `GH_STUB_DELAY` and is killed after 1 s; run B starts at once; at 4.5 s B's
    `count` must still be 1 and A's own directory must hold the leftover call. It failed on the
-   shared directory with `expected 2 to be 1`.
+   shared directory with `expected 2 to be 1`. Changed after the finish-branch review (the fixed
+   one-second kill did not establish that the `gh` call had started): the stand-in now waits for a
+   `release` file under `GH_STUB_HOLD`, and the case kills run A once that call has started.
 2. Fix: the two stub EXECUTABLES stay built once per file (CLAUDE.md §4) in their own directory on
    `PATH`; each `runCrossCheck` call gets its own fresh STATE directory passed as `STUB_DIR` (which
    the stubs already read), removed in `afterAll`. Also `exec` the inner bash in `runVerdict` and
@@ -116,7 +118,8 @@ there wall ≈ CPU and the check behaves as today (CI numbers to cite: run 38137
 3. `scripts/migration-upgrade.test.ts`: use the new budget; the printed line names both limits and
    the walk's CPU and wall time. No migration, row, reset or trigger assertion changes.
 4. The Vitest bound is above CI's `root-guards` job limit (`timeout-minutes: 8`): in CI the work
-   budget fails first (wall ≈ CPU there), so the report still comes. State that in the docs.
+   budget usually fails first (wall ≈ CPU there); a walk starved past eight minutes without
+   spending it is cut off by GitHub with no report. Say so in the docs.
 5. Run `pnpm exec vitest run scripts/step-watch.test.mjs scripts/migration-upgrade-budget.test.mjs scripts/migration-upgrade.test.ts`.
 
 **Why not the hook's scheduling.** The spec offers it. The root project does slow its own files 3–5x

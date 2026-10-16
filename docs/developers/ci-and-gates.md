@@ -1792,10 +1792,13 @@ wall time, the test fails with the phase still running, the process's active res
 the stalled work; it only names it. The active resources are resource TYPES, not a cause, and
 the report's own timer is among them. The gap is also checked at every phase event and when the
 walk ends, so a synchronous hold longer than the limit that then lets go fails too, with
-`No phase started or finished for N ms, past the M ms no-progress limit, until …` and the summary.
+`No phase started or finished for N ms, past the M ms no-progress limit, until phase X started`
+(or `finished`, or `before the body finished` when the walk ends) and the summary.
 
-The two measurements below were taken when the limit was a whole-walk deadline; the report's
-content is the same, and its wording now says "no-progress limit" where these say "deadline".
+The two measurements below were taken when the limit was a whole-walk deadline. The report's
+content is the same; its first line now reads `Still running after N ms with no phase started or
+finished for G ms, past the M ms no-progress limit.`, and the worker's says `its M ms no-progress
+timer` where these say `deadline timer`.
 Measured 2026-09-28 (Vitest 4.1.11, Node v26.7.0) with the deadline set to one second, `CI=true`
 and the agent variables unset, the test failed:
 
@@ -1879,7 +1882,7 @@ and successful retry totalled 1,540 ms. The three added cuts and reset added 16 
 were on different runners, so their total difference does not measure the migration's cost.
 
 The deadline now allows 30 seconds plus 500 ms per distinct post-floor migration date, with one
-more step for the baseline. The test timeout leaves another ten seconds for the report. For
+more step for the baseline. Until A751 the test timeout left another ten seconds for the report. For
 249 steps that is a 154,500 ms deadline, 44,258 ms beyond the captured failing workload and
 49,161 ms beyond the slowest passing run above. The fixed allowance covers setup and resets;
 the per-step allowance is slightly above the failed walk's average of about 443 ms per step.
@@ -1887,9 +1890,9 @@ This is a workload budget, not a claim that every individual phase fits 500 ms. 
 dates, such as the in-flight core 0140 and venue-service 0049, add 1,000 ms; their runtime has
 not been measured here. A new reset may require measuring this allowance again.
 
-`scripts/migration-upgrade-budget.test.mjs` sends the captured elapsed time through the real
-`reportStallAfter` with an injected clock: the new budget accepts it, and a walk at its new deadline
-still fails. During A489's failing-test experiment, substituting the old 110,000 ms budget rejected
+`scripts/migration-upgrade-budget.test.mjs` sends the captured workload through the real
+`reportStallAfter` as processor time, over the heaviest loaded wall time measured: the budget
+accepts it, and a walk whose work reaches the budget fails. During A489's failing-test experiment, substituting the old 110,000 ms budget rejected
 the captured workload and the doubled walk. All migration,
 row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
@@ -1987,8 +1990,10 @@ in the walk's main-thread processor time (`process.threadCpuUsage()`; the engine
 that thread), checked at every phase event and when the walk ends. The no-progress limit is
 120,000 ms of wall time. Vitest's own bound for the case is 1,800,000 ms, a backstop for a walk
 that keeps moving while starved. Processor time on one thread cannot exceed the wall time that
-passed, so this budget fails no walk the wall-time deadline passed; a walk slowed only by other
-work on the machine now passes. CI's `root-guards` job allows eight minutes (`timeout-minutes: 8`),
+passed, so the work budget fails no walk the wall-time deadline passed; a walk slowed only by
+other work on the machine now passes. The no-progress limit is new, and stricter in one case: a
+walk with a gap of more than 120 s between phase events, finishing inside the old 173 s deadline,
+passed before and fails now (the largest gap measured under the load below was 34 s). CI's `root-guards` job allows eight minutes (`timeout-minutes: 8`),
 below the Vitest bound, so a CI walk starved past that without spending its budget is cut off by
 GitHub without the walk's report. What neither limit sees: a walk that waits without using the
 processor — on the disk, say — in many gaps each under two minutes.
