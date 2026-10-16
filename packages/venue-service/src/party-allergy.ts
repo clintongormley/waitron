@@ -253,10 +253,17 @@ export async function mergePartyAllergies(
 ): Promise<void> {
   if (from === into) return;
   const source = await readPartyAllergy(tx, from);
-  if (source.answer === null) return;
   const target = await readPartyAllergy(tx, into);
   const answer =
-    source.answer === "allergies" || target.answer === "allergies" ? "allergies" : "none";
+    source.answer === "allergies" || target.answer === "allergies"
+      ? "allergies"
+      : source.answer === null || target.answer === null
+        ? null
+        : "none";
+  if (answer === null) {
+    await tx.delete(partyAllergy).where(inArray(partyAllergy.partyId, [from, into]));
+    return;
+  }
   await tx
     .insert(partyAllergy)
     .values({ partyId: into, answer, changedBy: operatorId, changedAt: nowIso() })

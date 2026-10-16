@@ -1535,6 +1535,11 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 
 ## Decisions and deliberate limits
 
+- **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either
+  party has that answer. Otherwise an unanswered party leaves the combined party unanswered, so
+  the next Send asks again; keep No allergies only when both parties answered No allergies.
+
+
 ### An order's number is never reset (owner, 2026-10-16)
 
 A working order's number comes from one counter per node that starts at 1 and only climbs

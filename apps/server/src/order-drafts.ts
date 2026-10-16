@@ -804,6 +804,7 @@ async function replaceLines(
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
+  // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
   await tx.delete(orderDraftLines).where(
     and(
       inArray(orderDraftLines.draftId, [...fromDraftIds]),

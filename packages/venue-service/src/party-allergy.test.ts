@@ -323,12 +323,12 @@ it("merges guests with identical Who labels without losing ids or ticks", async 
 });
 
 it.each([null, "none", "allergies"] as const)(
-  "joining an unanswered party cannot erase the survivor's %s answer",
+  "joining an unanswered party retains Allergies and otherwise asks again (%s)",
   async (answer) => {
     const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
     if (answer !== null) await save({ answer, guests: answer === "none" ? [] : [guest] });
     await tx((t) => allergy.mergePartyAllergies(t, other!.id, partyId, actor));
-    expect((await read()).answer).toBe(answer);
+    expect((await read()).answer).toBe(answer === "allergies" ? "allergies" : null);
   },
 );
 
@@ -468,7 +468,7 @@ it("rejects duplicate line ids and extras children while keeping existing assign
 });
 
 it.each([
-  ["none", null, "none"],
+  ["none", null, null],
   ["none", "allergies", "allergies"],
   ["allergies", "none", "allergies"],
 ] as const)("merges source %s into target %s as %s", async (from, into, expected) => {
@@ -543,3 +543,28 @@ it("identifies the guest whose allergen declaration is invalid", async () => {
   ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "guests.1.allergens" } });
   expect((await read()).guests).toEqual([]);
 });
+
+it.each([
+  [null, null, null, 0],
+  [null, "none", null, 0],
+  ["none", null, null, 0],
+  ["none", "none", "none", 0],
+  [null, "allergies", "allergies", 1],
+  ["allergies", null, "allergies", 1],
+  ["none", "allergies", "allergies", 1],
+  ["allergies", "none", "allergies", 1],
+  ["allergies", "allergies", "allergies", 2],
+] as const)(
+  "owner merge answer: source %s, target %s gives %s with %s guests",
+  async (from, into, expected, count) => {
+    const [source] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+    if (from !== null)
+      await save({ answer: from, guests: from === "allergies" ? [guest] : [] }, 0, source!.id);
+    if (into !== null) await save({ answer: into, guests: into === "allergies" ? [guest] : [] });
+    await tx((t) => allergy.mergePartyAllergies(t, source!.id, partyId, actor));
+    const result = await read();
+    expect(result.answer).toBe(expected);
+    expect(result.guests).toHaveLength(count);
+    expect((await read(source!.id)).guests).toEqual([]);
+  },
+);
