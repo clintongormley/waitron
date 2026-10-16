@@ -33,7 +33,7 @@ const UNIT_NAMES: NameTable = {
 // These must read as three distinct strings: a screen reader and a colour-blind operator have to
 // tell them apart without relying on colour.
 const ALLERGEN_STATE_NAMES: NameTable = {
-  pending: { en: "Pending", es: "Pendiente" },
+  pending: { en: "Not reviewed", es: "Sin revisar" },
   none: { en: "None", es: "Ninguno" },
   declared: { en: "Declared", es: "Declarado" },
 };

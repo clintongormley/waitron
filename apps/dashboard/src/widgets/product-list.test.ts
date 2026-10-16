@@ -3788,7 +3788,7 @@ describe("a product's variants in the list", () => {
     },
   );
 
-  it("shows only a variant's price, availability and menu, leaving its other cells empty", async () => {
+  it("shows a variant's price, availability, menu and effective allergens, leaving its other cells empty", async () => {
     setLocale("en");
     const route = {
       stationId: "deli",
@@ -3812,13 +3812,19 @@ describe("a product's variants in the list", () => {
       t("product.made_at"),
       t("editor.modifiers"),
       t("product.ordering"),
-      t("product.allergens"),
       t("product.dietary_info"),
     ]) {
       const cell = cellUnder(root, "cecina:thin", header);
       expect(cell.textContent!.trim(), header).toBe("");
       expect(cell.querySelector("*"), header).toBeNull();
     }
+    const allergens = cellUnder(
+      root,
+      "cecina:thin",
+      t("product.allergens"),
+    ).querySelector<HTMLElement>('[data-test="allergen-state"]')!;
+    expect(allergens.textContent!.trim()).toBe("Not reviewed");
+    expect(getComputedStyle(allergens).fontStyle).toBe("italic");
     expect(
       cellUnder(root, "cecina:thin", t("product.price")).querySelector('[data-test="price"]')!
         .textContent,
@@ -6665,4 +6671,104 @@ it.each(
     else document.documentElement.setAttribute("data-theme", previousTheme);
     await page.viewport(1280, 844);
   }
+});
+
+describe("A668 effective allergen cells", () => {
+  it.each([null, {}, { milk: {} }])(
+    "shows inherited allergen badges in italic for %j",
+    async (allergens) => {
+      setLocale("en");
+      const { el, table, root } = await mountTree({
+        categories: [],
+        products: [
+          product({
+            id: "dish",
+            name: "Dish",
+            allergens,
+            variants: [
+              bunVariant,
+              {
+                ...bunVariant,
+                id: "own",
+                name: "Own",
+                allergensInherited: false,
+                effective: {
+                  unitPrice: "1.00",
+                  vatClass: "reduced",
+                  primaryCategoryId: null,
+                  allergens: {},
+                },
+              },
+            ],
+          }),
+        ],
+      });
+      root.querySelector<HTMLElement>('tr[data-row-key="dish"] .tree-toggle')!.click();
+      await table.updateComplete;
+      const badge = (key: string) =>
+        cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
+          '[data-test="allergen-state"]',
+        );
+      expect(badge("dish:small")).not.toBeNull();
+      expect(badge("dish:small")!.textContent!.trim()).toBe(
+        allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
+      );
+      expect(getComputedStyle(badge("dish:small")!).fontStyle).toBe("italic");
+      expect(badge("dish:own")!.textContent!.trim()).toBe("None");
+      expect(getComputedStyle(badge("dish:own")!).fontStyle).toBe("normal");
+      expect(badge("dish")!.textContent!.trim()).toBe(
+        allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
+      );
+      expect(getComputedStyle(badge("dish")!).fontStyle).toBe("normal");
+    },
+  );
+  it("filters variants by effective allergen state and retains the pending filter key", async () => {
+    setLocale("en");
+    const own = (id: string, allergens: Product["allergens"]): ListedVariant => ({
+      ...bunVariant,
+      id,
+      name: id,
+      allergensInherited: false,
+      effective: { unitPrice: "1.00", vatClass: "reduced", primaryCategoryId: null, allergens },
+    });
+    const { el, table, root } = await mountTree({
+      categories: [],
+      products: [
+        product({
+          id: "dish",
+          name: "Dish",
+          allergens: null,
+          variants: [
+            bunVariant,
+            own("none", {}),
+            own("eggs", { eggs: {} }),
+            { ...own("archived", {}), active: false },
+          ],
+        }),
+      ],
+    });
+    root.querySelector<HTMLElement>('tr[data-row-key="dish"] .tree-toggle')!.click();
+    await table.updateComplete;
+    const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="allergens"]')!;
+    expect(filter.options.map(({ value, label }) => [value, label])).toEqual([
+      ["", "Any"],
+      ["pending", "Not reviewed"],
+      ["none", "None"],
+      ["declared", "Declared"],
+    ]);
+    for (const [state, key] of [
+      ["none", "none"],
+      ["declared", "eggs"],
+      ["pending", "small"],
+    ]) {
+      await chooseOption(filter, state!);
+      await table.updateComplete;
+      expect(rowKeys(root)).toContain(`dish:${key}`);
+      expect(rowKeys(root).filter((key) => key.startsWith("dish:"))).toEqual([`dish:${key}`]);
+    }
+    el.products = [...el.products];
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(table.filterValues("allergens")).toEqual(["pending"]);
+  });
 });

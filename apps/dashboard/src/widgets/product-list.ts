@@ -196,6 +196,9 @@ export class ProductList extends LitElement {
       }
       /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell),
+      wt-data-table::part(inherited-allergens) {
+        font-style: italic;
+      }
       wt-data-table::part(variant-cell) {
         display: block;
       }
@@ -1247,18 +1250,23 @@ export class ProductList extends LitElement {
         choosable: "shown",
         label: t("product.allergens"),
         cell: ({ product, variant }) => {
-          if (variant) return nothing;
-          const state = allergenState(product.allergens);
-          return html`<span part="badge" data-test="allergen-state" data-state=${state}
+          const state = allergenState(variant ? variant.effective.allergens : product.allergens);
+          return html`<span
+            part=${variant?.allergensInherited ? "badge inherited-allergens" : "badge"}
+            data-test="allergen-state"
+            data-state=${state}
             >${allergenStateName(state)}</span
           >`;
         },
         sortValue: ({ product, variant }) =>
-          variant ? "" : allergenStateName(allergenState(product.allergens)),
+          allergenStateName(
+            allergenState(variant ? variant.effective.allergens : product.allergens),
+          ),
         filter: {
           label: t("product.allergens"),
           allLabel: t("product.filter_any"),
-          value: ({ product }) => allergenState(product.allergens),
+          value: ({ product, variant }) =>
+            allergenState(variant ? variant.effective.allergens : product.allergens),
           options: (["pending", "none", "declared"] as const).map((state) => ({
             value: state,
             label: allergenStateName(state),
