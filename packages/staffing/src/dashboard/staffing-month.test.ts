@@ -394,7 +394,6 @@ describe("the Staffing view's month", () => {
           const day = td.querySelector<HTMLElement>(".day")!;
           return {
             attributes: [...td.attributes].map(({ name, value }) => `${name}=${value}`),
-            label: day.getAttribute("aria-label"),
             current: day.getAttribute("aria-current"),
             body: markup(day, "innerHTML"),
             bars: [...day.querySelectorAll<HTMLElement>("[data-test=bar]")].map((bar) => [
@@ -405,13 +404,28 @@ describe("the Staffing view's month", () => {
         }),
       };
     };
+    const days = () => [...root(el).querySelectorAll<HTMLElement>("tbody .day")];
+    const heard = (node: Node): string =>
+      node instanceof Element
+        ? node.getAttribute("aria-hidden") === "true"
+          ? ""
+          : [...node.childNodes].map(heard).join("")
+        : node instanceof Text
+          ? node.data
+          : "";
     const before = drawn();
+    const names = days().map((day) => heard(day).replace(/\s+/g, " ").trim());
+    for (const [index, day] of days().entries())
+      await named(day).toHaveAccessibleName(spoken(names[index]!));
     expect(before.cells.some(({ current }) => current === "date")).toBe(true);
     expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
     el.canWrite = true;
     await settled(el);
     expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
     expect(drawn()).toEqual(before);
+    expect(days()).toHaveLength(names.length);
+    for (const [index, day] of days().entries())
+      await named(day).toHaveAccessibleName(spoken(names[index]!));
   });
 
   it("speaks Spanish", async () => {
