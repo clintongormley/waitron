@@ -615,3 +615,17 @@ it("a zoomed-out grid keeps a screen pixel for each line and a full-size turn sy
   expect(icon.getBoundingClientRect().width).toBe(24);
   expect(icon.getBoundingClientRect().height).toBe(24);
 });
+
+it("a fractional-width refusal remains centred after zoom without rounding its left edge", async () => {
+  const el = await canvas();
+  el.tables = [{ ...el.tables[0]!, refused: "Booked at 21:00" }, el.tables[1]!];
+  await el.updateComplete;
+  await doubled(el);
+  const reason = part(el, "refused-reason");
+  reason.style.width = "99.9921875px";
+  el.requestUpdate();
+  await el.updateComplete;
+  const text = reason.getBoundingClientRect();
+  const box = button(el).getBoundingClientRect();
+  expect(text.left + text.width / 2).toBeCloseTo(box.left + box.width / 2);
+});

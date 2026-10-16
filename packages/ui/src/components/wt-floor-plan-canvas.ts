@@ -732,8 +732,12 @@ export class WtFloorPlanCanvas extends LitElement {
           ? `0 calc(${badge.offsetHeight}px + var(--wt-space-1))`
           : "";
       const width = reason.getBoundingClientRect().width / this.zoom;
-      const centred = Number(reason.dataset.centre) - width / 2;
-      reason.style.left = `${Math.min(Math.max(centred, 0), Math.max(grid - width, 0))}px`;
+      const centre = Number(reason.dataset.centre);
+      const centred = centre - width / 2;
+      const left = Math.min(Math.max(centred, 0), Math.max(grid - width, 0));
+      const fits = left === centred;
+      reason.style.left = `${fits ? centre : left}px`;
+      reason.style.transform = fits ? "translateX(-50%)" : "";
     }
   }
 
