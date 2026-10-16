@@ -56,6 +56,25 @@ export function openingHoursDay(
       ? format("day.standard", { season })
       : "";
   const names = monthNames(departments);
+  const chosen = day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
+  const rows = day.departments
+    .filter((d) => !chosen || d.departmentId === chosen)
+    .flatMap((read) => departmentRows(read, day, names));
+  return {
+    name: special || holiday,
+    nameKind: special ? "special" : holiday ? "holiday" : "",
+    line,
+    rows,
+  };
+}
+
+/** The day box's rows for one department of a date's read: the department, then each of its
+ *  zones in the read's order. */
+export function departmentRows(
+  read: Day["departments"][number],
+  day: Day,
+  names: MonthNames,
+): DayBoxRow[] {
   const list = (ranges: readonly ServiceRange[]) =>
     ranges.map((range) =>
       format("month.range", {
@@ -68,32 +87,21 @@ export function openingHoursDay(
     pieces.map(({ startsAt, endsAt }) =>
       format("day.closed_range", { start: startsAt, end: endsAt }),
     );
-  const chosen = day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
-  const rows = day.departments
-    .filter((d) => !chosen || d.departmentId === chosen)
-    .flatMap((read): DayBoxRow[] => {
-      const name = names.name(read.departmentId);
-      return [
-        {
-          name,
-          text: read.ranges.length ? list(read.ranges).join(" · ") : t("hours.closed"),
-          strong: true,
-        },
-        ...read.zones.map((zone) => {
-          const own = zoneOwnHours(read.ranges, zone.closed, day);
-          const row = { name: names.name(zone.zoneId) };
-          if (!own.closed.length) return { ...row, text: format("day.as_department", { name }) };
-          const text = own.ranges.length
-            ? [...list(own.ranges), ...closed(own.closed)].join(" · ")
-            : t("hours.closed");
-          return { ...row, text, strong: true };
-        }),
-      ];
-    });
-  return {
-    name: special || holiday,
-    nameKind: special ? "special" : holiday ? "holiday" : "",
-    line,
-    rows,
-  };
+  const name = names.name(read.departmentId);
+  return [
+    {
+      name,
+      text: read.ranges.length ? list(read.ranges).join(" · ") : t("hours.closed"),
+      strong: true,
+    },
+    ...read.zones.map((zone) => {
+      const own = zoneOwnHours(read.ranges, zone.closed, day);
+      const row = { name: names.name(zone.zoneId) };
+      if (!own.closed.length) return { ...row, text: format("day.as_department", { name }) };
+      const text = own.ranges.length
+        ? [...list(own.ranges), ...closed(own.closed)].join(" · ")
+        : t("hours.closed");
+      return { ...row, text, strong: true };
+    }),
+  ];
 }

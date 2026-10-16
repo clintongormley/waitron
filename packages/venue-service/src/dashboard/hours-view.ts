@@ -80,6 +80,29 @@ export function dateAroundDay(
   return { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
 }
 
+/** A day's column heading, "Mon 12 Oct", in the dashboard's language. */
+export function formatDayHeading(date: LocalDate): string {
+  return dateFormat({ weekday: "short", day: "numeric", month: "short" }).format(asUtc(date));
+}
+
+/** A week's title in parts, "12 – 18 Oct 2026", in `language`, else the dashboard's. A month part
+ *  carries the `YYYY-MM` it names and a year part its year, read from `from` for a part the range
+ *  starts with or shares and from `to` for a part it ends with. */
+export function formatWeekTitleParts(
+  from: LocalDate,
+  to: LocalDate,
+  language?: string,
+): { text: string; month?: string; year?: number }[] {
+  return dateFormat({ day: "numeric", month: "short", year: "numeric" }, language)
+    .formatRangeToParts(asUtc(from), asUtc(to))
+    .map(({ type, value, source }) => {
+      const date = source === "endRange" ? to : from;
+      if (type === "month") return { text: value, month: date.slice(0, 7) };
+      if (type === "year") return { text: value, year: Number(date.slice(0, 4)) };
+      return { text: value };
+    });
+}
+
 /** The browser's own date, which stands in for the venue's until the venue's date is read. */
 export function browserToday(): LocalDate {
   const now = new Date();
