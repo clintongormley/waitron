@@ -15,6 +15,7 @@ import "./opening-hours-month.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
+afterEach(() => commands.parkPointer());
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");

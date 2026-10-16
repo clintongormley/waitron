@@ -143,6 +143,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-12-14T12:00:00Z"));
 });
+afterEach(() => commands.parkPointer());
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
