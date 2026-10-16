@@ -11,6 +11,7 @@
     "./hours-occurrences": "./src/hours-occurrences.ts",
     "./holiday-types": "./src/holiday-types.ts",
     "./dashboard/season-tint": "./src/dashboard/season-tint.ts",
+    "./dashboard/calendar-day-box": "./src/dashboard/calendar-day-box.ts",
     "./dashboard/live-queries": "./src/dashboard/live-queries.ts",
     "./painter": "./src/dashboard/painter.ts",
     "./testing/zone-menus.js": "./src/testing/zone-menus.ts",

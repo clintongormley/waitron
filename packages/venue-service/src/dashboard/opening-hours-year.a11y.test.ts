@@ -95,7 +95,6 @@ const states: Record<string, () => OpeningHoursYear> = {
         { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
       ],
     }),
-  "the date panel open": () => yearModel(),
   "a year whose holiday coverage could not be read": () => yearModel({ holidayCoverage: [] }),
 };
 
@@ -106,11 +105,6 @@ describe.each(["light", "dark"] as const)("Opening hours year accessibility (%s)
     el.model = states[state]!();
     host.append(el);
     await el.updateComplete;
-    if (state === "the date panel open") {
-      el.shadowRoot!.querySelector<HTMLElement>('td[data-date="2027-12-20"] button')!.click();
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector('[data-test="date-panel"]')).not.toBeNull();
-    }
     if (state === "a year whose holiday coverage could not be read")
       expect(el.shadowRoot!.querySelector('[data-test="coverage"]')).not.toBeNull();
     for (const mark of ["public_holiday", "special_day"])

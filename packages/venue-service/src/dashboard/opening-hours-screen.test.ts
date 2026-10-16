@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { html, LitElement } from "lit";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import {
   CALENDAR_OWN_VIEW_IDS,
   registerCatalogue,
@@ -16,6 +16,8 @@ import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
+import { formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 
 import "./opening-hours-screen.js";
@@ -27,9 +29,16 @@ beforeEach(() => {
   setLocale("en");
   history.replaceState(null, "", "/manage/opening-hours/view/year");
 });
-afterEach(() => {
+async function useViewport(width: number, height: number) {
+  const before = [innerWidth, innerHeight] as const;
+  await resizeViewport(width, height);
+  onTestFinished(() => resizeViewport(...before));
+}
+afterEach(async () => {
   vi.useRealTimers();
-  for (const host of hosts.splice(0)) host.remove();
+  await emptyPageAtTop(() => {
+    for (const host of hosts.splice(0)) host.remove();
+  });
   setLocale("en");
   history.replaceState(null, "", originalUrl);
 });
@@ -150,6 +159,15 @@ async function mount(request?: DashboardRequest, readOnly = false) {
   await el.updateComplete;
   return el;
 }
+const dayBox = (el: Screen) => el.shadowRoot!.querySelector("calendar-day-box");
+const boxOpen = (el: Screen) =>
+  dayBox(el)?.shadowRoot?.querySelector("[popover]")?.matches(":popover-open") ?? false;
+const boxButtons = (el: Screen) =>
+  [...(dayBox(el)?.querySelectorAll<HTMLElement>("wt-button") ?? [])].map((button) =>
+    (button.textContent ?? "").trim(),
+  );
+const boxButton = (el: Screen, test: string) =>
+  dayBox(el)?.querySelector<HTMLElement>(`[data-test=${test}]`) ?? null;
 const checkedView = (el: Screen) =>
   el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")?.value;
 const switchViews = (el: Screen) =>
@@ -566,10 +584,9 @@ describe("Year special-day actions", () => {
     const trigger = cal.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`);
     expect(trigger, "the year offers the date").not.toBeNull();
     trigger!.click();
-    await cal.updateComplete;
-    const button = cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=special-${kind}]`);
-    expect(button, `${kind} offered for ${date}`).not.toBeNull();
-    button!.click();
+    const el = cal.getRootNode() as ShadowRoot;
+    await expect.poll(() => boxButton(el.host as Screen, `special-${kind}`)).not.toBeNull();
+    boxButton(el.host as Screen, `special-${kind}`)!.click();
   }
   function field(form: SpecialDayPainter, name: string) {
     return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -716,18 +733,6 @@ describe("Year special-day actions", () => {
     expect(frame(form).refusal).toBe(t("special.load_error"));
     expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
   });
-  it("says when the special day to delete cannot be read, and clears it on another view", async () => {
-    const { el, cal } = await yearMount({ readFails: true });
-    await action(cal, "2026-10-13", "delete");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]")?.textContent)
-      .toContain("Opening hours could not be loaded.");
-    expect(el.shadowRoot!.querySelector("[data-test=delete-special-day]")).toBeNull();
-    cal.dispatchEvent(new CustomEvent("year-month-open", { detail: { date: "2026-12-01" } }));
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=special-read-error]"))
-      .toBeNull();
-  });
   it("Make on a plain date creates a special day in the painter and refreshes the year", async () => {
     const { el, cal, writes, reads } = await yearMount();
     await action(cal, "2026-10-16", "add");
@@ -750,101 +755,45 @@ describe("Year special-day actions", () => {
       ]);
     await expect.poll(reads).toBe(2);
   });
-  it("Delete names the repeating special day, warns that every year goes and refreshes", async () => {
-    const { el, cal, writes, reads } = await yearMount();
-    await action(cal, "2026-10-13", "delete");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .not.toBeNull();
-    const confirm = el.shadowRoot!.querySelector("[data-test=delete-special-day]")!;
-    expect(confirm.textContent).toContain("Anniversary");
-    expect(confirm.textContent).toContain("every year");
-    expect(writes).toEqual([]);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-special-delete]")!.click();
-    await expect
-      .poll(() => writes)
-      .toEqual([
-        [
-          "/management-api/venue-service/special-days/annual%2Fday",
-          "DELETE",
-          { expectedClockRevision: 0 },
-        ],
-      ]);
-    await expect.poll(reads).toBe(2);
-  });
-  it("a refused Delete says so and stays open; Cancel then closes it without another write", async () => {
-    const { el, cal, writes } = await yearMount({ refuse: { code: "hours.clock_changed" } });
-    await action(cal, "2026-10-13", "delete");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .not.toBeNull();
-    const confirm = el.shadowRoot!.querySelector("[data-test=delete-special-day]")!;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-special-delete]")!.click();
-    await expect
-      .poll(() => confirm.querySelector("[role=alert]")?.textContent)
-      .toBe("The change could not be saved.");
-    expect(writes).toHaveLength(1);
-    expect(el.shadowRoot!.querySelector("[data-test=delete-special-day]")).toBe(confirm);
-    confirm.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .toBeNull();
-    expect(writes).toHaveLength(1);
-  });
-  it("Delete names a one-off special day with no every-year warning", async () => {
-    const { el, cal } = await yearMount({ oneOff: true });
-    await action(cal, "2026-10-13", "delete");
-    await expect
-      .poll(() =>
-        el.shadowRoot!.querySelector("[data-test=delete-special-day] p")?.textContent?.trim(),
-      )
-      .toBe("Delete Anniversary?");
-  });
-  it("closing the Delete confirmation from the dialog itself deletes nothing", async () => {
-    const { el, cal, writes } = await yearMount();
-    await action(cal, "2026-10-13", "delete");
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .not.toBeNull();
-    el.shadowRoot!.querySelector("[data-test=delete-special-day]")!.dispatchEvent(
-      new CustomEvent("wt-close", { bubbles: true, composed: true }),
-    );
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-special-day]"))
-      .toBeNull();
-    expect(writes).toEqual([]);
-  });
 });
 
-it("pre-fills the holiday's name when the sender names only the date's own holidays", async () => {
+async function makeFromYear(el: Screen, date: string) {
+  const year = el.shadowRoot!.querySelector("opening-hours-year")!;
+  await expect
+    .poll(() => year.shadowRoot!.querySelector(`td[data-date='${date}'] button`))
+    .not.toBeNull();
+  year.shadowRoot!.querySelector<HTMLElement>(`td[data-date='${date}'] button`)!.click();
+  await expect.poll(() => boxButton(el, "special-add")).not.toBeNull();
+  boxButton(el, "special-add")!.click();
+}
+it("Make over the Year pre-fills a holiday the year read names when the month read holds no row for the date", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/year");
   const el = await mount((async (path, method) => {
     if (method !== "GET") throw new Error(`unexpected ${method} ${path}`);
     if (path.endsWith("/special-days")) return [];
-    if (path.includes("/opening-hours/year?")) return yearRead(2026);
+    if (path.includes("/opening-hours/month?")) return { days: [] };
+    if (path.includes("/opening-hours/year?"))
+      return yearRead(2026, [
+        {
+          date: "2026-11-04",
+          seasonId: null,
+          specialDay: null,
+          holidays: [
+            {
+              id: "h",
+              date: "2026-11-04",
+              name: "Town feast",
+              scope: "local",
+              sourceId: "official",
+            },
+          ],
+          tone: "public_holiday",
+          closed: false,
+        },
+      ]);
     return structuredClone(model());
   }) as DashboardRequest);
-  const child = el.shadowRoot!.querySelector("opening-hours-year")!;
-  child.dispatchEvent(
-    new CustomEvent("special-day-action", {
-      detail: {
-        kind: "open",
-        date: "2026-11-04",
-        holidays: [
-          {
-            id: "h",
-            date: "2026-11-04",
-            name: "Town feast",
-            scope: "local",
-            sourceId: "official",
-          },
-        ],
-        returnTo: () => child,
-      },
-      bubbles: true,
-      composed: true,
-    }),
-  );
+  await makeFromYear(el, "2026-11-04");
   const editor = await specialPainter(el);
   expect(
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
@@ -862,6 +811,7 @@ it("a special-day painter opened from the Year keeps its revision through a pass
     if (method === "GET") {
       if (path.endsWith("/opening-hours")) openingReads++;
       if (path.endsWith("/special-days")) return [];
+      if (path.includes("/opening-hours/month?")) return { days: [] };
       if (path.includes("/opening-hours/year?"))
         return yearRead(2026, [], { clockRevision: calendar.clockRevision });
       return structuredClone(data);
@@ -869,14 +819,7 @@ it("a special-day painter opened from the Year keeps its revision through a pass
     writes.push(body);
     throw { code: "hours.clock_changed" };
   }) as DashboardRequest);
-  const child = el.shadowRoot!.querySelector("opening-hours-year")!;
-  child.dispatchEvent(
-    new CustomEvent("special-day-action", {
-      detail: { kind: "open", date: "2026-11-04", holidays: [], returnTo: () => child },
-      bubbles: true,
-      composed: true,
-    }),
-  );
+  await makeFromYear(el, "2026-11-04");
   const editor = await specialPainter(el);
   editor.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -948,6 +891,7 @@ describe("Year view", () => {
     const writes: unknown[][] = [];
     let openingReads = 0;
     let listReads: unknown[] = [];
+    const months: string[] = [];
     let failures = failYear;
     const el = await mount(
       (async (path: string, method: string, body: unknown, options) => {
@@ -957,6 +901,7 @@ describe("Year view", () => {
         }
         if (path.includes("/opening-hours/month?")) {
           const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+          months.push(new URL(path, location.href).searchParams.get("month")!);
           return monthModel({ month: new URL(path, location.href).searchParams.get("month")! });
         }
         const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
@@ -983,6 +928,7 @@ describe("Year view", () => {
       view,
       years,
       writes,
+      months,
       openingReads: () => openingReads,
       listReads: () => listReads,
     };
@@ -1045,23 +991,285 @@ describe("Year view", () => {
     expect(listReads()).toEqual([{ passive: true }]);
   });
 
-  async function heldMount(address: string, hold: (path: string) => boolean) {
+  async function heldMount(address: string, hold: (path: string) => boolean, readOnly = false) {
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     history.replaceState(null, "", address);
     const held: { path: string; release: (value: unknown) => void }[] = [];
-    const el = await mount((async (path: string) => {
-      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
-      const answer = asked
-        ? yearModel(Number(asked[1]))
-        : path.endsWith("/special-days")
-          ? []
-          : model();
-      if (!hold(path)) return answer;
-      return new Promise<unknown>((release) => held.push({ path, release }));
-    }) as DashboardRequest);
+    const el = await mount(
+      (async (path: string) => {
+        const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+        const answer = asked
+          ? yearModel(Number(asked[1]))
+          : path.endsWith("/special-days")
+            ? []
+            : model();
+        if (!hold(path)) return answer;
+        return new Promise<unknown>((release) => held.push({ path, release }));
+      }) as DashboardRequest,
+      readOnly,
+    );
     const view = () => el.shadowRoot!.querySelector("opening-hours-year")!;
     return { el, view, held };
   }
+
+  const yearDate = (view: HTMLElementTagNameMap["opening-hours-year"], date: string) =>
+    view.shadowRoot!.querySelector<HTMLElement>(`td[data-date="${date}"] button`)!;
+  async function shownYear(view: () => HTMLElementTagNameMap["opening-hours-year"] | null) {
+    await expect.poll(() => view()?.model?.year).toBe(2026);
+    await view()!.updateComplete;
+    return view()!;
+  }
+
+  it("a date opens its box over the real Year, from that date's month", async () => {
+    await useViewport(1280, 800);
+    const { el, view, months } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    const year = await shownYear(view);
+    const button = yearDate(year, "2026-12-10");
+    button.scrollIntoView({ block: "center" });
+    await userEvent.click(button);
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const box = dayBox(el)!;
+    expect(button.getRootNode()).toBe(year.shadowRoot);
+    expect(box.getRootNode()).toBe(el.shadowRoot);
+    const placed = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    expect(Math.abs(placed.top - button.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
+    expect(box.heading).toBe(formatDate("2026-12-10"));
+    await expect.poll(() => box.line).toBe("Winter standard hours");
+    expect(box.rows.length).toBeGreaterThan(0);
+    expect(box.message).toBe("");
+    expect(months).toEqual(["2026-12"]);
+    await userEvent.click(yearDate(year, "2026-12-11"));
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-12-11"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(months).toEqual(["2026-12"]);
+  });
+
+  it("a holiday's box names it and Make pre-fills it", async () => {
+    const { el, view, writes } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    yearDate(await shownYear(view), "2026-12-08").click();
+    await expect.poll(() => dayBox(el)?.name).toBe("Immaculate Conception");
+    boxButton(el, "special-add")!.click();
+    const form = await specialPainter(el);
+    expect(form.specialDayId).toBeNull();
+    expect(form.date).toBe("2026-12-08");
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("Immaculate Conception");
+    expect(writes).toEqual([]);
+  });
+
+  it("shows Loading… until the date's month answers", async () => {
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.endsWith("/opening-hours/month?month=2026-12"),
+    );
+    yearDate(await shownYear(view), "2026-12-10").click();
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.message).toBe(t("day.loading"));
+    expect(dayBox(el)!.line).toBe("");
+    expect(boxButtons(el)).toEqual(["Make a special day"]);
+    await expect.poll(() => held.length).toBe(1);
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    held[0]!.release(monthModel({ month: "2026-12" }));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.message).toBe("");
+    expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+  });
+
+  it("keeps a box near the bottom on screen when its month arrives", async () => {
+    await useViewport(390, 640);
+    expect([window.innerWidth, window.innerHeight]).toEqual([390, 640]);
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.endsWith("/opening-hours/month?month=2026-12"),
+    );
+    const button = yearDate(await shownYear(view), "2026-12-28");
+    button.scrollIntoView({ block: "end" });
+    await userEvent.click(button);
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await expect.poll(() => held.length).toBe(1);
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    held[0]!.release(monthModel({ month: "2026-12" }));
+    await expect.poll(() => dayBox(el)?.rows.length).toBeGreaterThan(0);
+    const placed = () =>
+      dayBox(el)!.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    await expect.poll(() => placed().bottom).toBeLessThanOrEqual(640);
+    expect(placed().top).toBeGreaterThanOrEqual(0);
+    expect(placed().left).toBeGreaterThanOrEqual(0);
+    expect(placed().right).toBeLessThanOrEqual(390);
+  });
+
+  it("says when the date's month cannot be read", async () => {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    const el = await mount((async (path: string) => {
+      if (path.includes("/opening-hours/month?")) throw { code: "connection.failed" };
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) return yearModel(Number(asked[1]));
+      return path.endsWith("/special-days") ? [] : model();
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year");
+    yearDate(await shownYear(view), "2026-10-13").click();
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    expect(dayBox(el)!.message).toBe("");
+    expect(dayBox(el)!.line).toBe("");
+    expect(boxButtons(el)).toEqual(["Edit special day", "Edit All year's standard week"]);
+  });
+
+  it("fills the box once a reread of its failed month succeeds", async () => {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    let failures = 1;
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    const el = await mount((async (path: string) => {
+      if (path.includes("/opening-hours/month?")) {
+        if (failures-- > 0) throw { code: "connection.failed" };
+        return monthModel({ month: "2026-12" });
+      }
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) return yearModel(Number(asked[1]));
+      return path.endsWith("/special-days") ? [] : model();
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year");
+    yearDate(await shownYear(view), "2026-12-10").click();
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.message).toBe("");
+    expect(dayBox(el)!.error).toBe("");
+  });
+
+  it("keeps the Year box's hours beside an error when a later reread of its month fails, until a reread succeeds", async () => {
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    let failures = 0;
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    const el = await mount((async (path: string) => {
+      if (path.includes("/opening-hours/month?")) {
+        if (failures-- > 0) throw { code: "connection.failed" };
+        return monthModel({ month: "2026-12" });
+      }
+      const asked = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (asked) return yearModel(Number(asked[1]));
+      return path.endsWith("/special-days") ? [] : model();
+    }) as DashboardRequest);
+    const view = () => el.shadowRoot!.querySelector("opening-hours-year");
+    yearDate(await shownYear(view), "2026-12-10").click();
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.error).toBe("");
+    failures = 1;
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    expect(dayBox(el)!.line).toBe("Winter standard hours");
+    expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.message).toBe("");
+    el.api.rereadWithSpecialDays();
+    await expect.poll(() => dayBox(el)?.error).toBe("");
+    expect(dayBox(el)!.line).toBe("Winter standard hours");
+  });
+
+  it("Month after a date's box opens that date's month", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    await userEvent.click(yearDate(await shownYear(view), "2026-12-10"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="month"]',
+      )!,
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/month/month/2026-12");
+  });
+
+  function watchLog(el: Screen) {
+    const log: string[] = [];
+    const watch = el.api.watchMonth.bind(el.api);
+    vi.spyOn(el.api, "watchMonth").mockImplementation((month, ...rest) => {
+      log.push(`+${month}`);
+      const detach = watch(month, ...rest);
+      return () => {
+        log.push(`-${month}`);
+        detach();
+      };
+    });
+    return log;
+  }
+  const redated = async (month: string) => {
+    const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
+    return JSON.parse(JSON.stringify(monthModel()).replaceAll("2026-12", month));
+  };
+
+  it("closing the box releases its month's read", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    const year = await shownYear(view);
+    const log = watchLog(el);
+    await userEvent.click(yearDate(year, "2026-12-10"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    expect(log).toEqual(["+2026-12"]);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => dayBox(el)).toBeNull();
+    expect(log).toEqual(["+2026-12", "-2026-12"]);
+  });
+
+  it("a read that answers after the box moved to another month does not fill the new box", async () => {
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.includes("/opening-hours/month?"),
+    );
+    const year = await shownYear(view);
+    yearDate(year, "2026-12-10").click();
+    await expect.poll(() => held.length).toBe(1);
+    yearDate(year, "2026-11-04").click();
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-11-04"));
+    await expect.poll(() => held.length).toBe(2);
+    // A probe read released just after December's travels the same promise chain behind it, so
+    // once the probe's answer arrives December's has been applied or dropped.
+    const probed = new Promise((resolve) => {
+      const detach = el.api.watchMonth("2027-05", resolve, resolve, () => {});
+      onTestFinished(detach);
+    });
+    await expect.poll(() => held.length).toBe(3);
+    // December's answer carries November's dates, so it would fill the November box if applied.
+    held[0]!.release(await redated("2026-11"));
+    held[2]!.release(await redated("2027-05"));
+    await probed;
+    await el.updateComplete;
+    expect(dayBox(el)!.line).toBe("");
+    expect(dayBox(el)!.message).toBe(t("day.loading"));
+    held[1]!.release(await redated("2026-11"));
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+  });
+
+  it("removing the screen releases the box's month read", async () => {
+    const { el, view } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    const year = await shownYear(view);
+    const log = watchLog(el);
+    yearDate(year, "2026-12-10").click();
+    await expect.poll(() => dayBox(el)?.line).toBe("Winter standard hours");
+    el.remove();
+    expect(log).toContain("-2026-12");
+  });
+
+  it("a viewer's box over the Year offers only the season's week, from the year read while its month loads", async () => {
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2026",
+      (path) => path.endsWith("/opening-hours/month?month=2026-10"),
+      true,
+    );
+    yearDate(await shownYear(view), "2026-10-13").click();
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.message).toBe(t("day.loading"));
+    expect(boxButtons(el)).toEqual(["Show All year's standard week"]);
+    await expect.poll(() => held.length).toBe(1);
+    held[0]!.release(await redated("2026-10"));
+    await expect.poll(() => dayBox(el)?.line).not.toBe("");
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButton(el, "special-edit")).toBeNull();
+    expect(boxButton(el, "special-add")).toBeNull();
+  });
 
   it.each(["slow", "instant"])(
     "keeps keyboard focus on › while the next year loads (%s read)",
@@ -1342,12 +1550,16 @@ describe("Month view", () => {
     await view()!.updateComplete;
     return view()!;
   }
-  async function ordinary(el: Screen, view: HTMLElementTagNameMap["opening-hours-month"]) {
-    dateButton(view, "2026-12-10").click();
-    await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")?.open).toBe(true);
-    const dialog = el.shadowRoot!.querySelector("ordinary-date-dialog")!;
-    await dialog.updateComplete;
-    return dialog;
+  async function openBox(
+    el: Screen,
+    view: HTMLElementTagNameMap["opening-hours-month"],
+    date = "2026-12-10",
+  ) {
+    dateButton(view, date).click();
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const box = dayBox(el)!;
+    await box.updateComplete;
+    return box;
   }
 
   it("draws the month the address names from that month's read, with Month chosen in the switch", async () => {
@@ -1466,72 +1678,99 @@ describe("Month view", () => {
     expect(view()!.model?.month).toBe("2026-12");
   });
 
+  it("an open Month box keeps its hours and leaves the failed reread to the screen's one alert, until a reread succeeds", async () => {
+    const { el, view, failNext } = await monthMount(
+      "/manage/opening-hours/view/month/month/2026-12",
+    );
+    const box = await openBox(el, await shown(view));
+    expect(box.error).toBe("");
+    const alert = () => el.shadowRoot!.querySelector("[data-test=month-read-error]")?.textContent;
+    failNext(1);
+    el.api.rereadWithSpecialDays();
+    await expect.poll(alert).toBe(t("opening.load_error"));
+    await dayBox(el)!.updateComplete;
+    expect(boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.error).toBe("");
+    expect(dayBox(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    el.api.rereadWithSpecialDays();
+    await expect.poll(alert).toBeUndefined();
+    expect(boxOpen(el)).toBe(true);
+  });
+
   it.each([
-    ["Edit the week", "edit-week"],
-    ["Make this a special day", "make-special"],
+    ["Edit Winter's standard week", "edit-week"],
+    ["Make a special day", "special-add"],
   ])(
-    "does nothing with %s when the screen has gone before the dialog sends it",
+    "does nothing with %s when the screen has gone before the box's button acts",
     async (_, test) => {
       const { el, view, writes } = await monthMount(
         "/manage/opening-hours/view/month/month/2026-12",
       );
-      const dialog = await ordinary(el, await shown(view));
-      const sent = new Promise((resolve) =>
-        dialog.addEventListener(
-          test === "edit-week" ? "ordinary-date-edit-week" : "ordinary-date-make-special",
-          resolve,
-          { once: true },
-        ),
+      const box = await openBox(el, await shown(view));
+      const closed = new Promise((resolve) =>
+        box.addEventListener("calendar-day-box-close", resolve, { once: true }),
       );
-      dialog.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!.click();
+      boxButton(el, test)!.click();
       el.remove();
-      await sent;
+      await closed;
       await el.updateComplete;
       expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
       expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
+      expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
       expect(writes).toEqual([]);
     },
   );
 
-  it("does nothing with Add to a special day when the screen has gone before the dialog sends it", async () => {
-    const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    const dialog = await ordinary(el, await shown(view));
-    await expect.poll(() => dialog.specialDays.length).toBe(2);
-    dialog.shadowRoot!.querySelector("[name=specialDayId]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "company" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await dialog.updateComplete;
-    const sent = new Promise((resolve) =>
-      dialog.addEventListener("ordinary-date-add-to-special", resolve, { once: true }),
-    );
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to-special]")!.click();
-    el.remove();
-    await sent;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
-    expect(writes).toEqual([]);
-  });
+  it.each([
+    ["Edit Winter's standard week", "edit-week"],
+    ["Make a special day", "special-add"],
+  ])(
+    "does nothing with %s when the screen has gone before the box's button acts, under the dashboard's navigation guard",
+    async (_, test) => {
+      const { el, view, writes } = await monthMount(
+        "/manage/opening-hours/view/month/month/2026-12",
+      );
+      const guard = new NavigationGuard(window, {
+        isDirty: () => false,
+        request: async () => "proceeded",
+      });
+      onTestFinished(() => guard.dispose());
+      const box = await openBox(el, await shown(view));
+      const closed = new Promise((resolve) =>
+        box.addEventListener("calendar-day-box-close", resolve, { once: true }),
+      );
+      boxButton(el, test)!.click();
+      el.remove();
+      await closed;
+      await el.updateComplete;
+      expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+      expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
+      expect(el.shadowRoot!.querySelector("season-painter")).toBeNull();
+      expect(writes).toEqual([]);
+    },
+  );
 
-  it("an ordinary date opens its dialog with the date's season and the venue's special days", async () => {
-    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    const dialog = await ordinary(el, await shown(view));
-    expect(dialog.date).toBe("2026-12-10");
-    expect(dialog.season).toEqual({ id: "winter", name: "Winter" });
-    expect(dialog.tint).toBe("2");
-    await expect
-      .poll(() => dialog.specialDays)
-      .toEqual([
-        { id: "company", name: "Company dinners" },
-        { id: "xmas", name: "Christmas Day" },
-      ]);
-    expect(dialog.returnTo!()).toBe(dateButton(view()!, "2026-12-10"));
-    dialog.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-    await expect.poll(() => el.shadowRoot!.querySelector("ordinary-date-dialog")).toBeNull();
+  it("a Year date's box lists every department after one was picked in the Month", async () => {
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/department/bar/month/2026-12",
+    );
+    await shown(view);
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        '[data-test=view-switch] input[value="year"]',
+      )!,
+    );
+    const yearView = () => el.shadowRoot!.querySelector("opening-hours-year");
+    await expect.poll(() => yearView()?.model?.year).toBe(2026);
+    await yearView()!.updateComplete;
+    yearView()!
+      .shadowRoot!.querySelector<HTMLElement>('td[data-date="2026-12-15"] button')!
+      .click();
+    await expect.poll(() => dayBox(el)?.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.rows.map((row) => row.name)).toEqual(
+      expect.arrayContaining(["Restaurant", "Bar"]),
+    );
   });
 
   const withWinter = (data: OpeningHoursModel) => {
@@ -1541,14 +1780,38 @@ describe("Month view", () => {
     ];
     data.currentSeasonId = "autumn";
   };
-  it("Edit the Winter week opens the season painter on that season, keeping the month's department", async () => {
+  it("a date opens its box over the real Month", async () => {
+    await useViewport(1280, 800);
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/month/2026-12",
+      false,
+      withWinter,
+    );
+    const month = await shown(view);
+    const box = await openBox(el, month);
+    const button = dateButton(month, "2026-12-10");
+    expect(button.getRootNode()).toBe(month.shadowRoot);
+    expect(box.getRootNode()).toBe(el.shadowRoot);
+    const placed = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    const anchor = button.getBoundingClientRect();
+    expect(Math.abs(placed.top - anchor.bottom)).toBeLessThanOrEqual(1);
+    expect(placed.top).toBeGreaterThanOrEqual(0);
+    expect(placed.left).toBeGreaterThanOrEqual(0);
+    expect(placed.right).toBeLessThanOrEqual(innerWidth);
+    expect(placed.bottom).toBeLessThanOrEqual(innerHeight);
+    expect(box.heading).toBe(formatDate("2026-12-10"));
+    expect(box.line).toBe("Winter standard hours");
+    expect(boxButtons(el)).toEqual(["Make a special day", "Edit Winter's standard week"]);
+  });
+
+  it("Edit Winter's standard week opens the season painter on that season, keeping the month's department", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/department/bar/month/2026-12",
       false,
       withWinter,
     );
-    const dialog = await ordinary(el, await shown(view));
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
+    await openBox(el, await shown(view));
+    boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/season/season/winter/department/bar");
@@ -1557,10 +1820,10 @@ describe("Month view", () => {
       .toBe("winter");
     expect(el.shadowRoot!.querySelector("season-painter")!.departmentId).toBe("bar");
     expect(el.shadowRoot!.querySelector("opening-hours-month")).toBe(view());
-    expect(el.shadowRoot!.querySelector("ordinary-date-dialog")?.open ?? false).toBe(false);
+    expect(boxOpen(el)).toBe(false);
   });
 
-  it("Edit the Winter week carries a department chosen in the month's picker, and none after All departments", async () => {
+  it("Edit Winter's standard week carries a department chosen in the month's picker, and none after All departments", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
       false,
@@ -1575,8 +1838,8 @@ describe("Month view", () => {
       await expect.poll(() => location.pathname).toBe(path);
     };
     await pick("bar", "/manage/opening-hours/view/month/department/bar/month/2026-12");
-    let dialog = await ordinary(el, await shown(view));
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
+    await openBox(el, await shown(view));
+    boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/season/season/winter/department/bar");
@@ -1584,8 +1847,8 @@ describe("Month view", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await shown(view);
     await pick("all", "/manage/opening-hours/view/month/month/2026-12");
-    dialog = await ordinary(el, await shown(view));
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-week]")!.click();
+    await openBox(el, await shown(view));
+    boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/season/season/winter/department/rest");
@@ -1594,59 +1857,21 @@ describe("Month view", () => {
       .toBe("rest");
   });
 
-  it("Make this a special day opens a new special day holding the date", async () => {
+  it("Make a special day opens a new special day holding the date", async () => {
     const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    const dialog = await ordinary(el, await shown(view));
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=make-special]")!.click();
+    await openBox(el, await shown(view));
+    boxButton(el, "special-add")!.click();
     const form = await specialPainter(el);
     expect(form.specialDayId).toBeNull();
     expect(form.date).toBe("2026-12-10");
     expect(writes).toEqual([]);
   });
 
-  it("Add to a special day opens that special day with the date added, written only on Save", async () => {
-    const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    const dialog = await ordinary(el, await shown(view));
-    await expect.poll(() => dialog.specialDays.length).toBe(2);
-    dialog.shadowRoot!.querySelector("[name=specialDayId]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "company" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await dialog.updateComplete;
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=add-to-special]")!.click();
-    const form = await specialPainter(el);
-    expect(form.specialDayId).toBe("company");
-    await expect.poll(() => painterChips(form)).toEqual(["2026-12-10", "2026-12-14"]);
-    const save = painterSave(form);
-    expect(save.disabled).toBe(false);
-    expect(writes).toEqual([]);
-    save.click();
-    await expect
-      .poll(() => writes)
-      .toEqual([
-        [
-          "/management-api/venue-service/special-days/company",
-          "PUT",
-          {
-            expectedClockRevision: 0,
-            name: "Company dinners",
-            repeatsYearly: false,
-            dates: [
-              { date: "2026-12-10", closedAllDay: false },
-              { date: "2026-12-14", closedAllDay: false },
-            ],
-          },
-        ],
-      ]);
-    await expect.poll(() => painterSave(form).disabled).toBe(true);
-  });
-
-  it("a special date opens the painter on its special day, over the month", async () => {
+  it("a special date's box offers Edit special day, which opens its painter over the month", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    dateButton(await shown(view), "2026-12-14").click();
+    await openBox(el, await shown(view), "2026-12-14");
+    expect(boxButtons(el)[0]).toBe("Edit special day");
+    boxButton(el, "special-edit")!.click();
     const form = await specialPainter(el);
     expect(form.specialDayId).toBe("company");
     expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/company");
@@ -1664,34 +1889,118 @@ describe("Month view", () => {
     expect(months).toEqual(["2026-10"]);
   });
 
-  it("passes read-only to the month and opens nothing from it", async () => {
+  it("passes read-only to the month, whose box offers no special-day button and opens no painter", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12", true);
     const month = await shown(view);
     expect(month.readOnly).toBe(true);
-    month.dispatchEvent(
-      new CustomEvent("ordinary-date-open", {
-        detail: { date: "2026-12-10", seasonId: "winter", returnTo: () => null },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    month.dispatchEvent(
-      new CustomEvent("special-day-action", {
-        detail: {
-          kind: "open",
-          date: "2026-12-14",
-          specialDay: company,
-          holidays: [],
-          returnTo: () => null,
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    for (const date of ["2026-12-10", "2026-12-14"]) {
+      month.dispatchEvent(
+        new CustomEvent("calendar-day-open", {
+          detail: { date, returnTo: () => dateButton(month, date) },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect.poll(() => dayBox(el)?.heading).toBe(formatDate(date));
+      expect(boxButton(el, "special-add")).toBeNull();
+      expect(boxButton(el, "special-edit")).toBeNull();
+    }
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("ordinary-date-dialog")?.open ?? false).toBe(false);
     expect(el.shadowRoot!.querySelector("special-day-painter")).toBeNull();
     expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+  });
+
+  it("a viewer's box offers only Show Winter's standard week, which opens the read-only painter", async () => {
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/month/2026-12",
+      true,
+      withWinter,
+    );
+    await openBox(el, await shown(view));
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    boxButton(el, "edit-week")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("season-painter")?.seasonId)
+      .toBe("winter");
+    expect(el.shadowRoot!.querySelector("season-painter")!.readOnly).toBe(true);
+    expect(location.pathname).toMatch(/^\/manage\/opening-hours\/view\/season\/season\/winter/);
+  });
+
+  it("Escape closes the box and focus returns to the date", async () => {
+    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
+    const month = await shown(view);
+    await userEvent.click(dateButton(month, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => boxOpen(el)).toBe(false);
+    await expect.poll(() => month.shadowRoot!.activeElement).toBe(dateButton(month, "2026-12-10"));
+    await expect.poll(() => dayBox(el)).toBeNull();
+  });
+
+  it("a second date's click shows that date's box", async () => {
+    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
+    const month = await shown(view);
+    await userEvent.click(dateButton(month, "2026-12-14"));
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-12-14"));
+    expect(dayBox(el)!.name).toBe("Company dinners");
+    await userEvent.click(dateButton(month, "2026-12-08"));
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-12-08"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.name).toBe("Immaculate Conception");
+    dateButton(month, "2026-12-09").click();
+    await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-12-09"));
+    expect(boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.heading).toBe(formatDate("2026-12-09"));
+    // A close the first box sent arrives after the next date's click.
+    const first = dayBox(el)!;
+    dateButton(month, "2026-12-10").click();
+    first.dispatchEvent(
+      new CustomEvent("calendar-day-box-close", { bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.heading).toBe(formatDate("2026-12-10"));
+  });
+
+  it("an open box follows a department the address changes to, placed again beside its date", async () => {
+    await useViewport(390, 640);
+    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
+    const month = await shown(view);
+    const button = dateButton(month, "2026-12-31");
+    button.scrollIntoView({ block: "end" });
+    await userEvent.click(button);
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const box = dayBox(el)!;
+    await expect.poll(() => box.rows.length).toBeGreaterThan(1);
+    const popup = () => box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    const touches = () => {
+      const anchor = button.getBoundingClientRect();
+      return (
+        Math.abs(popup().top - anchor.bottom) <= 1 || Math.abs(popup().bottom - anchor.top) <= 1
+      );
+    };
+    await expect.poll(touches).toBe(true);
+    history.pushState(null, "", "/manage/opening-hours/view/month/department/bar/month/2026-12");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => box.rows.length).toBe(1);
+    expect(boxOpen(el)).toBe(true);
+    await expect.poll(touches).toBe(true);
+  });
+
+  it("the box near the bottom of the screen", async () => {
+    await useViewport(390, 640);
+    expect([window.innerWidth, window.innerHeight]).toEqual([390, 640]);
+    const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
+    const month = await shown(view);
+    const button = dateButton(month, "2026-12-31");
+    button.scrollIntoView({ block: "end" });
+    await userEvent.click(button);
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const placed = dayBox(el)!.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    expect(placed.top).toBeGreaterThanOrEqual(0);
+    expect(placed.left).toBeGreaterThanOrEqual(0);
+    expect(placed.right).toBeLessThanOrEqual(390);
+    expect(placed.bottom).toBeLessThanOrEqual(640);
   });
 
   describe("the Year / Month switch", () => {
@@ -1705,9 +2014,7 @@ describe("Month view", () => {
       );
 
     it("offers Year and Month, Year chosen, in the Year's toolbar row", async () => {
-      const before = [window.innerWidth, window.innerHeight] as const;
-      await page.viewport(1280, 800);
-      onTestFinished(() => page.viewport(...before));
+      await useViewport(1280, 800);
       expect(window.innerWidth).toBe(1280);
       const { el } = await monthMount("/manage/opening-hours/view/year");
       const year = () => el.shadowRoot!.querySelector("opening-hours-year");
@@ -1826,9 +2133,7 @@ describe("Month view", () => {
     });
 
     it("fits a phone's width", async () => {
-      const before = [window.innerWidth, window.innerHeight] as const;
-      await page.viewport(390, 800);
-      onTestFinished(() => page.viewport(...before));
+      await useViewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
       const month = await shown(view);

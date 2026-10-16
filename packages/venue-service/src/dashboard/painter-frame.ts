@@ -182,7 +182,7 @@ export class PainterFrame extends LitElement {
               class="close"
               data-test="dismiss"
               variant="ghost"
-              aria-label=${t("ordinary.close")}
+              aria-label=${t("painter.close")}
               ?disabled=${this.busy}
               @click=${() => this.close()}
               ><wt-icon name="close"></wt-icon

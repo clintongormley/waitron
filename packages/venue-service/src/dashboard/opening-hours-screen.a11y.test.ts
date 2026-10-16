@@ -171,4 +171,72 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await screen.shadowRoot!.querySelector(view)!.updateComplete;
     await expectNoA11yViolations(host);
   });
+  test.each([
+    ["the day box over the Month, a plain day", "2026-12-10", "special-add"],
+    ["the day box over the Month, a special day", "2026-12-14", "special-edit"],
+  ] as const)("%s", async (_state, date, button) => {
+    setLocale("en");
+    history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    const ready = request("ready");
+    screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked.includes("/opening-hours/month?"))
+        return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
+      const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
+      return asked.includes("/opening-hours/year?")
+        ? read
+        : { ...read, departments: structuredClone(DEPARTMENTS) };
+    }) as DashboardRequest);
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("opening-hours-month")?.model)
+      .toBeDefined();
+    const month = screen.shadowRoot!.querySelector("opening-hours-month")!;
+    await month.updateComplete;
+    month.shadowRoot!.querySelector<HTMLElement>(`td[data-date="${date}"] button`)!.click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector(`calendar-day-box [data-test=${button}]`))
+      .not.toBeNull();
+    const box = screen.shadowRoot!.querySelector("calendar-day-box")!;
+    await box.updateComplete;
+    expect(box.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+  test.each([
+    ["the day box over the Year", true],
+    ["the day box over the Year, while its month loads", false],
+  ] as const)("%s", async (_state, answered) => {
+    setLocale("en");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/year/2026");
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    const ready = request("ready");
+    screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked.includes("/opening-hours/month?"))
+        return answered
+          ? monthModel({ month: new URL(asked, location.href).searchParams.get("month")! })
+          : new Promise(() => {});
+      const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
+      return asked.includes("/opening-hours/year?")
+        ? read
+        : { ...read, departments: structuredClone(DEPARTMENTS) };
+    }) as DashboardRequest);
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("opening-hours-year")?.model)
+      .toBeDefined();
+    const year = screen.shadowRoot!.querySelector("opening-hours-year")!;
+    await year.updateComplete;
+    year.shadowRoot!.querySelector<HTMLElement>('td[data-date="2026-12-10"] button')!.click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("calendar-day-box [data-test=special-add]"))
+      .not.toBeNull();
+    const box = screen.shadowRoot!.querySelector("calendar-day-box")!;
+    if (answered) await expect.poll(() => box.line).not.toBe("");
+    else expect(box.message).not.toBe("");
+    await box.updateComplete;
+    expect(box.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
 });

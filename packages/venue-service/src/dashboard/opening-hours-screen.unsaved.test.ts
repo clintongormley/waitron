@@ -5,6 +5,7 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import "./opening-hours-screen.js";
 
 class OpeningLeaveApp extends LitElement {
@@ -62,6 +63,8 @@ class OpeningLeaveApp extends LitElement {
         localHolidaysPerYear: 2,
       };
     if (path.endsWith("/special-days")) return [];
+    if (path.includes("/opening-hours/month?"))
+      return monthModel({ month: new URL(path, "http://x").searchParams.get("month")! });
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -190,8 +193,12 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
       .poll(() => cal.shadowRoot!.querySelector("td[data-date='2026-10-13'] button"))
       .not.toBeNull();
     cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
-    await cal.updateComplete;
-    cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("calendar-day-box [data-test=special-edit]"))
+      .not.toBeNull();
+    screen
+      .shadowRoot!.querySelector<HTMLElement>("calendar-day-box [data-test=special-edit]")!
+      .click();
     await expect
       .poll(() =>
         screen

@@ -10,10 +10,11 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
+import { monthNames, type MonthNames } from "./opening-hours-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
+import { closedHatch } from "./period-colour-styles.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
-import type { SpecialDayAction } from "./special-day-action.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
@@ -26,10 +27,9 @@ export interface MonthDepartment {
   periods: readonly { id: string; name: string; colour: CalendarColour }[];
 }
 
-/** What `ordinary-date-open` carries: a date no special day or public holiday holds. */
-export interface OrdinaryDateOpen {
+/** What `calendar-day-open` carries; `returnTo` finds the date's button while it is drawn. */
+export interface CalendarDayOpen {
   date: LocalDate;
-  seasonId: string | null;
   returnTo: () => HTMLElement | null;
 }
 
@@ -45,12 +45,6 @@ function stepMonth(month: string, by: number): string {
   return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
 
-/** Names for the read's ids, from the host's department list; an id the list lacks reads "". */
-interface Names {
-  name(id: string): string;
-  period(id: string): { name: string; colour?: string };
-}
-
 interface Row {
   key: string;
   name: string;
@@ -62,8 +56,8 @@ interface Row {
 
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
  *  per department (or one department and its zones), from the server's month read alone. A date sends
- *  `special-day-action` on a special day or public holiday and `ordinary-date-open` otherwise; ‹ ›
- *  send `month-change` and the picker `month-department-change`. */
+ *  `calendar-day-open`, except in station mode, where dates are plain; ‹ › send `month-change` and
+ *  the picker `month-department-change`. */
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
@@ -219,7 +213,7 @@ export class OpeningHoursMonthView extends LitElement {
         inset-block: 0;
       }
       .gap {
-        background: var(--wt-color-border);
+        background: ${closedHatch};
       }
       .segment[data-colour="red"] {
         background: var(--wt-color-palette-red);
@@ -307,29 +301,10 @@ export class OpeningHoursMonthView extends LitElement {
     target.focus();
   }
 
-  #action(day: Day, trigger: HTMLElement): void {
-    const model = this.model!;
-    const date = day.date;
-    this.#emit<SpecialDayAction>("special-day-action", {
-      kind: "open",
+  #open(date: LocalDate): void {
+    this.#emit<CalendarDayOpen>("calendar-day-open", {
       date,
-      specialDay: day.specialDay ? { ...day.specialDay } : null,
-      holidays: structuredClone(day.holidays),
-      visibleHolidays: structuredClone(model.days.flatMap((other) => other.holidays)),
-      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
-    });
-  }
-
-  #open(day: Day, trigger: HTMLElement): void {
-    if (day.specialDay || day.holidays.length) {
-      this.#action(day, trigger);
-      return;
-    }
-    const date = day.date;
-    this.#emit<OrdinaryDateOpen>("ordinary-date-open", {
-      date,
-      seasonId: day.seasonId,
-      returnTo: () => (trigger.isConnected ? trigger : this.#dayButton(date)),
+      returnTo: () => this.#dayButton(date),
     });
   }
 
@@ -340,7 +315,7 @@ export class OpeningHoursMonthView extends LitElement {
       : "";
   }
 
-  #rows(day: Day, chosen: string, { name }: Names): Row[] {
+  #rows(day: Day, chosen: string, { name }: MonthNames): Row[] {
     const place = placeOnDay(day);
     const placed = (ranges: readonly ServiceRange[]) =>
       ranges.map((range) => ({ ...range, ...place(range) }));
@@ -386,7 +361,7 @@ export class OpeningHoursMonthView extends LitElement {
     return format("month.range", { name, start: range.startsAt, end: range.endsAt });
   }
 
-  #describe(day: Day, rows: readonly Row[], names: Names): string[] {
+  #describe(day: Day, rows: readonly Row[], names: MonthNames): string[] {
     if (day.closedAllDay) return [];
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
@@ -411,7 +386,7 @@ export class OpeningHoursMonthView extends LitElement {
     model: OpeningHoursMonth,
     chosen: string,
     tints: Map<string, string>,
-    names: Names,
+    names: MonthNames,
     stop: LocalDate,
   ) {
     const rows = this.#rows(day, chosen, names);
@@ -483,7 +458,7 @@ export class OpeningHoursMonthView extends LitElement {
       ?data-closed=${day.closedAllDay}
     >
       ${
-        this.readOnly
+        this.stationMode
           ? html`<div
               class="day"
               role="group"
@@ -498,7 +473,7 @@ export class OpeningHoursMonthView extends LitElement {
               tabindex=${day.date === stop ? 0 : -1}
               aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
-              @click=${(event: Event) => this.#open(day, event.currentTarget as HTMLElement)}
+              @click=${() => this.#open(day.date)}
               @focus=${() => {
                 this.focusDate = day.date;
               }}
@@ -509,7 +484,7 @@ export class OpeningHoursMonthView extends LitElement {
     </td>`;
   }
 
-  #picker(model: OpeningHoursMonth, chosen: string, names: Names) {
+  #picker(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     const value = chosen || ALL;
     const options = [
       { value: ALL, label: t("opening.all_departments") },
@@ -565,31 +540,15 @@ export class OpeningHoursMonthView extends LitElement {
       ${model ? this.#grid(model) : nothing}`;
   }
 
-  #names(): Names {
-    const named = new Map<string, string>(
-      this.departments.flatMap((d) => [
-        [d.id, d.name] as const,
-        ...d.zones.map((z) => [z.id, z.name] as const),
-      ]),
-    );
-    const periods = new Map(
-      this.departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)),
-    );
-    return {
-      name: (id) => named.get(id) ?? "",
-      period: (id) => periods.get(id) ?? { name: "" },
-    };
-  }
-
   #tools(model: OpeningHoursMonth) {
     if (this.stationMode) return nothing;
-    return this.#picker(model, this.#chosen(model), this.#names());
+    return this.#picker(model, this.#chosen(model), monthNames(this.departments));
   }
 
   #grid(model: OpeningHoursMonth) {
     const chosen = this.#chosen(model);
     const tints = seasonTints(model.seasons);
-    const names = this.#names();
+    const names = monthNames(this.departments);
     const stop =
       [this.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
