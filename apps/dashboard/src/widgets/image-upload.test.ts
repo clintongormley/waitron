@@ -655,6 +655,37 @@ describe("image-upload as a receipt logo", () => {
     },
   );
 
+  it.each([
+    ["the picture", "own.png"],
+    ["the Add a logo box", null],
+  ] as const)(
+    "marks %s invalid in the danger colour, where focusFirstInvalid finds it",
+    async (_, image) => {
+      const { el, host } = await logo({ image, invalid: true });
+      host.style.setProperty("--wt-color-danger", "rgb(200, 1, 2)");
+      expect(choose(el).getAttribute("aria-invalid")).toBe("true");
+      expect(getComputedStyle(choose(el)).borderTopColor).toBe("rgb(200, 1, 2)");
+      expect(await focusFirstInvalid(el.shadowRoot!)).toBe(choose(el));
+      el.invalid = false;
+      await el.updateComplete;
+      expect(choose(el).hasAttribute("aria-invalid")).toBe(false);
+    },
+  );
+
+  it.each([
+    ["the picture", "own.png"],
+    ["the Add a logo box", null],
+  ] as const)("is a tap target with a visible focus ring, as %s", async (_, image) => {
+    const { el } = await logo({ image });
+    const box = choose(el).getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    // By keyboard: run after this block's earlier cases, `.focus()` drew no ring.
+    await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(choose(el));
+    expect(getComputedStyle(choose(el)).outlineStyle).not.toBe("none");
+  });
+
   it("draws the logo on white paper in the dark theme", async () => {
     const { el } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",
