@@ -1,5 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, symlink } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -15,7 +24,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
-  const root = await mkdtemp(join(tmpdir(), "first-resolution-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "first-resolution-")));
   dirs.push(root);
   const roots = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
   const coordinator = createFirstSetupCoordinator();
@@ -744,3 +753,68 @@ it("Start again can retire two fresh attempts while discovery stays at the origi
   ).toEqual(next);
   expect((await host.resolution.inspectFirstSetupResolution()).database).toBe("no-venue-rows");
 });
+
+it("retirement captures stable physical paths for configured ancestor aliases and deduplicates the same original", async () => {
+  const f = await fixture("active");
+  const physical = join(f.root, "public");
+  await mkdir(join(physical, "history"), { recursive: true });
+  await mkdir(join(physical, "receipts"));
+  await writeFile(join(physical, "history", "current.json"), '{"position":42}');
+  await writeFile(join(physical, "receipts", "one.json"), '{"serial":42}');
+  await symlink(physical, join(f.root, "alias"));
+  const service = createFirstSetupResolutionInspection({
+    ...f,
+    publicEvidencePaths: [
+      join(f.root, "alias", "history", "current.json"),
+      join(physical, "history", "current.json"),
+    ],
+    publicEvidenceDirectories: [join(f.root, "alias", "receipts"), join(physical, "receipts")],
+  });
+  const { realpath } = await import("node:fs/promises");
+  const canonical = await realpath(physical);
+  const snapshot = await service.captureFirstSetupOriginals();
+  expect(snapshot.originals.filter((entry) => entry.name.startsWith("outside-file:"))).toEqual([
+    {
+      name: `outside-file:${join(canonical, "history", "current.json")}`,
+      bytes: Buffer.from('{"position":42}'),
+    },
+    {
+      name: `outside-file:${join(canonical, "receipts", "one.json")}`,
+      bytes: Buffer.from('{"serial":42}'),
+    },
+  ]);
+  expect(snapshot.originals.filter((entry) => entry.name.startsWith("directory:outside:"))).toEqual(
+    [
+      {
+        name: `directory:outside:${join(canonical, "receipts")}`,
+        bytes: Buffer.from('["one.json"]'),
+      },
+    ],
+  );
+});
+
+it.each(["file", "directory"])(
+  "retargeting a configured %s ancestor invalidates inspection even with identical bytes",
+  async (kind) => {
+    const f = await fixture("active");
+    for (const name of ["first", "second"]) {
+      await mkdir(join(f.root, name, "history"), { recursive: true });
+      await writeFile(join(f.root, name, "history", "current.json"), '{"position":42}');
+    }
+    const alias = join(f.root, "alias");
+    await symlink(join(f.root, "first"), alias);
+    const service = createFirstSetupResolutionInspection({
+      ...f,
+      ...(kind === "file"
+        ? { publicEvidencePaths: [join(alias, "history", "current.json")] }
+        : { publicEvidenceDirectories: [join(alias, "history")] }),
+    });
+    const before = await service.inspectFirstSetupResolution();
+    const { unlink } = await import("node:fs/promises");
+    await unlink(alias);
+    await symlink(join(f.root, "second"), alias);
+    const after = await service.inspectFirstSetupResolution();
+    expect(after.artifacts).toEqual(before.artifacts);
+    expect(after.inspectionId).not.toBe(before.inspectionId);
+  },
+);

@@ -280,7 +280,7 @@ async function fixture(
       module: f.module,
       request: candidates,
     });
-  return { ...f, host, state, old, claim };
+  return { ...f, host, state, old, claim, publicPath };
 }
 it("fresh bindings cannot reuse a retired installation with another allocation ID", async () => {
   const f = await fixture();
@@ -611,5 +611,26 @@ it.each(["old", "fresh"])(
       code: "sif.allocation_invalid",
       params: { reason: which === "old" ? "reservation_mismatch" : "outside_confirmation_missing" },
     });
+  },
+);
+
+it.each(["replace", "remove"])(
+  "a live outside history may %s without releasing its archived42 burn floor",
+  async (change) => {
+    for (const serial of [2, 43]) {
+      const f = await fixture(serial, request.taxId, "production", true, undefined, {
+        history: retainedCheckpoint("S"),
+        source: "outside",
+      });
+      if (change === "replace")
+        await writeFile(f.publicPath, JSON.stringify(retainedCheckpoint("P")));
+      else await unlink(f.publicPath);
+      if (serial <= 42)
+        await expect(f.host.assertFreshAssignment(f.state, f.module)).rejects.toMatchObject({
+          code: "setup.attempt_conflict",
+        });
+      else await f.host.assertFreshAssignment(f.state, f.module);
+      expect(await f.host.store.read()).toEqual(f.state);
+    }
   },
 );

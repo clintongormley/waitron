@@ -1,7 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { constants } from "node:fs";
 import { open, readdir } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, relative, isAbsolute, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -84,6 +84,7 @@ async function originalsUnchanged(
   anchor: FirstSetupAnchor,
   record: ResolutionRecord,
   retired: FirstSetupAnchor,
+  checkOutside: boolean,
 ) {
   const originals = await store(anchor).readOriginals(record.resolutionId);
   for (const required of [
@@ -100,6 +101,15 @@ async function originalsUnchanged(
     if (label.startsWith("outside-file:") || (directory && label.startsWith("outside:"))) {
       path = label.slice(label.indexOf(":") + 1);
       if (resolve(path) !== path) uncertain();
+      const local = [retired.venueDir, retired.stateDir].some((root) => {
+        const suffix = relative(root, path);
+        return (
+          suffix === "" ||
+          (suffix !== ".." && !suffix.startsWith(`..${sep}`) && !isAbsolute(suffix))
+        );
+      });
+      // Current outside sources advance independently; their archived bytes remain digest-bound.
+      if (!checkOutside && !local) continue;
     } else {
       if (!label.startsWith("state/") && !label.startsWith("venue/")) uncertain();
       const [root, ...parts] = label.split("/");
@@ -185,7 +195,7 @@ async function checkedApplied(
     await checkedChain(anchor, predecessor, seen);
     retired = predecessor.binding;
   }
-  await originalsUnchanged(anchor, record, retired);
+  await originalsUnchanged(anchor, record, retired, false);
   return { binding, predecessor, retired };
 }
 async function checkedChain(anchor: FirstSetupAnchor, witness: Witness, seen = new Set<string>()) {
@@ -237,10 +247,17 @@ export async function selectFirstSetupWorkspace(
         join(anchor.venueDir, "first-setup-selection.json"),
       ]),
     ];
+    let alreadySelected = current !== null;
     for (const path of selections) {
       const value = await read(path);
+      alreadySelected &&= isDeepStrictEqual(value, witness);
       if (!isDeepStrictEqual(value, predecessor) && !isDeepStrictEqual(value, witness)) uncertain();
     }
+    if (alreadySelected) {
+      await resolveFirstSetupWorkspace(anchor);
+      return binding;
+    }
+    await originalsUnchanged(anchor, record, retired, true);
     if (current === null) {
       for (const path of [binding.venueDir, binding.stateDir]) {
         await firstSetupDirectory(path, true);

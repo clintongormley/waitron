@@ -26,7 +26,11 @@ afterEach(async () => {
   );
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture(sharedRoots = false) {
+async function fixture(
+  sharedRoots = false,
+  insideOutside = false,
+  outsideName = "outside-history.json",
+) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "setup-workspace-")));
   dirs.push(root);
   const anchor = {
@@ -37,7 +41,11 @@ async function fixture(sharedRoots = false) {
   if (!sharedRoots) await mkdir(anchor.stateDir);
   await writeFile(join(anchor.stateDir, "first-setup.json"), "unchanged original state");
   await writeFile(join(anchor.venueDir, "first-setup-claim.json"), "unchanged original marker");
-  await writeFile(join(root, "outside-history.json"), "independently configured public history");
+  const outsidePath = join(insideOutside ? anchor.stateDir : root, outsideName);
+  await writeFile(outsidePath, "independently configured public history");
+  const receiptDir = join(root, "receipts");
+  await mkdir(receiptDir);
+  await writeFile(join(receiptDir, "one.json"), "first outside receipt");
   const resolutionId = randomUUID(),
     workspaceId = randomUUID();
   const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
@@ -78,13 +86,18 @@ async function fixture(sharedRoots = false) {
       { name: "venue/venue.db", bytes: null },
       { name: "directory:state/first-fiscal-documents", bytes: null },
       {
-        name: `outside-file:${join(root, "outside-history.json")}`,
+        name: `outside-file:${outsidePath}`,
         bytes: Buffer.from("independently configured public history"),
+      },
+      { name: `directory:outside:${receiptDir}`, bytes: Buffer.from('["one.json"]') },
+      {
+        name: `outside-file:${join(receiptDir, "one.json")}`,
+        bytes: Buffer.from("first outside receipt"),
       },
     ],
   );
   const applied = await store.apply(prepared);
-  return { root, anchor, binding, store, prepared, applied };
+  return { root, anchor, binding, store, prepared, applied, outsidePath };
 }
 it("selects an empty isolated workspace while preserving the old missing database and original bytes", async () => {
   const f = await fixture();
@@ -253,14 +266,13 @@ it.each([
 );
 
 it.each(["document-directory", "configured-history"] as const)(
-  "changed %s evidence refuses a selected workspace",
+  "changed %s evidence refuses installation of a workspace selection",
   async (which) => {
     const f = await fixture();
-    await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
     if (which === "document-directory")
       await mkdir(join(f.anchor.stateDir, "first-fiscal-documents"));
     else await writeFile(join(f.root, "outside-history.json"), "restored older public history");
-    await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
   },
@@ -427,6 +439,115 @@ it("restoring an earlier ancestor is refused after a later workspace was selecte
     code: "setup.attempt_uncertain",
   });
   await expect(provision.assertFirstSetupBootTarget(next.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it("a selected workspace retains archived evidence while independently configured public history advances", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await writeFile(join(f.root, "outside-history.json"), "newer independent public history");
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+  await provision.assertFirstSetupBootTarget(f.binding);
+  const archived = await f.store.readOriginals(f.applied.resolutionId);
+  expect(archived.find((entry) => entry.name.startsWith("outside-file:"))?.bytes?.toString()).toBe(
+    "independently configured public history",
+  );
+});
+
+it("missing live outside history does not erase archived retirement evidence or select old roots", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await unlink(join(f.root, "outside-history.json"));
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+  await expect(provision.assertFirstSetupBootTarget(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(
+    (await f.store.readOriginals(f.applied.resolutionId))
+      .find((entry) => entry.name.startsWith("outside-file:"))
+      ?.bytes?.toString(),
+  ).toBe("independently configured public history");
+});
+
+it("altering an archived outside original still refuses the selected workspace", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const path = join(
+    f.anchor.stateDir,
+    "first-setup-resolutions",
+    f.applied.resolutionId,
+    "original-4-0.json",
+  );
+  await writeFile(
+    path,
+    JSON.stringify({ bytes: Buffer.from("different archived public history").toString("base64") }),
+  );
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it("configured public evidence inside a retired root remains frozen", async () => {
+  const f = await fixture(false, true);
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await writeFile(f.outsidePath, "changed inside retired state");
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it("dot-prefixed configured evidence inside a retired root cannot escape local preservation", async () => {
+  const f = await fixture(false, true, "..history.json");
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await writeFile(f.outsidePath, "changed inside retired state");
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+
+it.each(["append", "replace", "remove"])(
+  "independent receipt directories may %s after selection without rewriting archived originals",
+  async (change) => {
+    const f = await fixture();
+    await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+    const receipt = join(f.root, "receipts", "one.json");
+    if (change === "append")
+      await writeFile(join(f.root, "receipts", "two.json"), "second outside receipt");
+    else if (change === "replace") await writeFile(receipt, "new current outside receipt");
+    else await rm(join(f.root, "receipts"), { recursive: true });
+    expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+    await provision.assertFirstSetupBootTarget(f.binding);
+    const originals = await f.store.readOriginals(f.applied.resolutionId);
+    expect(
+      originals.find((entry) => entry.name === `outside-file:${receipt}`)?.bytes?.toString(),
+    ).toBe("first outside receipt");
+    expect(
+      originals
+        .find((entry) => entry.name === `directory:outside:${join(f.root, "receipts")}`)
+        ?.bytes?.toString(),
+    ).toBe('["one.json"]');
+  },
+);
+
+it("replaying an already published selection after outside history advances returns its unchanged binding", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const paths = [
+    join(f.anchor.stateDir, "first-setup-selection.json"),
+    join(f.anchor.venueDir, "first-setup-selection.json"),
+  ];
+  const before = await Promise.all(paths.map((path) => readFile(path)));
+  await writeFile(f.outsidePath, "advanced independent current history");
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, f.applied)).toEqual(f.binding);
+  expect(await Promise.all(paths.map((path) => readFile(path)))).toEqual(before);
+});
+
+it("creating a document directory in retired local state still refuses an already selected workspace", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await mkdir(join(f.anchor.stateDir, "first-fiscal-documents"));
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });
 });

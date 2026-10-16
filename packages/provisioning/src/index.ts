@@ -49,7 +49,10 @@ export type {
   FirstSetupMarker,
   FirstSetupRepair,
 } from "./first-setup-state.js";
-export { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
+export {
+  canonicalFirstSetupDirectory,
+  createFirstSetupResolutionStore,
+} from "./first-setup-resolution.js";
 export type {
   RegisterAnswer,
   WorkspaceBinding,

@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { AppError } from "@waitron/shared";
 import type { SQLWrapper } from "drizzle-orm";
@@ -9,6 +9,7 @@ import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase, type Database } from "@waitron/db";
 import {
   assertFirstSetupBootTarget,
+  canonicalFirstSetupDirectory,
   firstSetupAnchorFor,
   readOperationalVenueIds,
   readTenantIdentities,
@@ -125,7 +126,14 @@ export function createFirstSetupResolutionInspection(
     async captureFirstSetupOriginals() {
       const inspection = await service.inspectFirstSetupResolution();
       const originals: { name: string; bytes: Buffer | null }[] = [];
-      const capture = async (path: string, name: string, limit = 128 * 1024 * 1024) => {
+      const observed = (name: string) =>
+        inspection.artifacts.find((artifact) => artifact.name === name);
+      const capture = async (
+        path: string,
+        name: string,
+        expected: FirstSetupArtifact | undefined,
+        limit = 128 * 1024 * 1024,
+      ) => {
         let file;
         try {
           file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -133,9 +141,11 @@ export function createFirstSetupResolutionInspection(
           if (!info.isFile() || info.size > limit) throw new AppError("setup.not_ready", {});
           const bytes = await file.readFile();
           if (bytes.length > limit) throw new AppError("setup.not_ready", {});
+          if (expected?.digest !== digest(bytes)) throw new AppError("setup.attempt_conflict", {});
           originals.push({ name, bytes });
         } catch (error) {
           if (!missing(error)) throw error;
+          if (expected?.status !== "missing") throw new AppError("setup.attempt_conflict", {});
           originals.push({ name, bytes: null });
         } finally {
           await file?.close();
@@ -147,39 +157,73 @@ export function createFirstSetupResolutionInspection(
         await capture(
           join(venue ? options.venueDir : options.stateDir, file.name),
           `${venue ? "venue" : "state"}/${file.name}`,
+          file,
         );
       }
-      const directory = async (path: string, name: string, fileName: (name: string) => string) => {
+      const directory = async (
+        path: string,
+        name: string,
+        prefix: string,
+        fileName: (name: string) => string,
+        artifactName: (name: string) => string,
+      ) => {
+        const entries = inspection.artifacts.filter((artifact) =>
+          artifact.name.startsWith(`${prefix}/`),
+        );
         try {
           const info = await lstat(path);
           if (!info.isDirectory() || info.isSymbolicLink())
             throw new AppError("setup.not_ready", {});
           const names = (await readdir(path)).sort();
           if (names.length > 1024) throw new AppError("setup.not_ready", {});
+          if (
+            observed(prefix)?.status !== "present" ||
+            names.length !== entries.length ||
+            names.some((item) => !entries.some((entry) => entry.name === artifactName(item)))
+          )
+            throw new AppError("setup.attempt_conflict", {});
           originals.push({ name, bytes: Buffer.from(JSON.stringify(names)) });
           for (const item of names) {
             const label = fileName(item);
             if (!originals.some((original) => original.name === label))
-              await capture(join(path, item), label, 8 * 1024 * 1024);
+              await capture(join(path, item), label, observed(artifactName(item)), 8 * 1024 * 1024);
           }
         } catch (error) {
           if (!missing(error)) throw error;
+          const expected = observed(prefix);
+          if ((expected !== undefined && expected.status !== "missing") || entries.length !== 0)
+            throw new AppError("setup.attempt_conflict", {});
           originals.push({ name, bytes: null });
         }
       };
       await directory(
         join(options.stateDir, "first-fiscal-documents"),
         "directory:state/first-fiscal-documents",
+        "first-fiscal-documents",
         (name) => `state/first-fiscal-documents/${name}`,
+        (name) => `first-fiscal-documents/${name}`,
       );
-      for (const path of options.publicEvidencePaths ?? [])
-        await capture(path, `outside-file:${path}`, 8 * 1024 * 1024);
-      for (const path of options.publicEvidenceDirectories ?? [])
-        await directory(
-          path,
-          `directory:outside:${path}`,
-          (name) => `outside-file:${join(path, name)}`,
+      for (const [index, configured] of (options.publicEvidencePaths ?? []).entries()) {
+        const path = join(
+          await canonicalFirstSetupDirectory(dirname(resolve(configured))),
+          basename(configured),
         );
+        const name = `outside-file:${path}`;
+        if (!originals.some((entry) => entry.name === name))
+          await capture(path, name, observed(`outside-evidence-${index}`), 8 * 1024 * 1024);
+      }
+      for (const [index, configured] of (options.publicEvidenceDirectories ?? []).entries()) {
+        const path = await canonicalFirstSetupDirectory(configured);
+        const name = `directory:outside:${path}`;
+        if (!originals.some((entry) => entry.name === name))
+          await directory(
+            path,
+            name,
+            `outside-receipts-${index}`,
+            (item) => `outside-file:${join(path, item)}`,
+            (item) => `outside-receipts-${index}/${digest(item)}`,
+          );
+      }
       if ((await service.inspectFirstSetupResolution()).inspectionId !== inspection.inspectionId)
         throw new AppError("setup.attempt_conflict", {});
       return { inspection, originals };
@@ -201,6 +245,7 @@ export function createFirstSetupResolutionInspection(
     },
     async inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
       const artifacts: FirstSetupArtifact[] = [];
+      const physicalSources: (string | null)[] = [];
       for (const name of [
         "first-setup.json",
         "module-operation-public.json",
@@ -237,12 +282,23 @@ export function createFirstSetupResolutionInspection(
           artifacts.push({ name: "first-fiscal-documents", status: "unreadable" });
       }
       for (const [index, path] of (options.publicEvidencePaths ?? []).entries()) {
-        const file = await artifact(dirname(path), basename(path), 8 * 1024 * 1024);
-        artifacts.push({ ...file, name: `outside-evidence-${index}` });
-      }
-      for (const [index, directory] of (options.publicEvidenceDirectories ?? []).entries()) {
-        const label = `outside-receipts-${index}`;
         try {
+          const parent = await canonicalFirstSetupDirectory(dirname(resolve(path)));
+          physicalSources.push(join(parent, basename(path)));
+          const file = await artifact(parent, basename(path), 8 * 1024 * 1024);
+          artifacts.push({ ...file, name: `outside-evidence-${index}` });
+        } catch {
+          physicalSources.push(null);
+          artifacts.push({ name: `outside-evidence-${index}`, status: "unreadable" });
+        }
+      }
+      for (const [index, configured] of (options.publicEvidenceDirectories ?? []).entries()) {
+        const label = `outside-receipts-${index}`;
+        let recorded = false;
+        try {
+          const directory = await canonicalFirstSetupDirectory(configured);
+          physicalSources.push(directory);
+          recorded = true;
           const info = await lstat(directory);
           if (!info.isDirectory() || info.isSymbolicLink())
             artifacts.push({ name: label, status: "unreadable" });
@@ -258,6 +314,7 @@ export function createFirstSetupResolutionInspection(
             }
           }
         } catch (error) {
+          if (!recorded) physicalSources.push(null);
           artifacts.push({ name: label, status: missing(error) ? "missing" : "unreadable" });
         }
       }
@@ -298,6 +355,7 @@ export function createFirstSetupResolutionInspection(
         inspectionId: digest(
           JSON.stringify([
             result,
+            physicalSources,
             options.publicEvidencePaths ?? [],
             options.publicEvidenceDirectories ?? [],
           ]),
