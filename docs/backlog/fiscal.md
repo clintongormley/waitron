@@ -284,6 +284,15 @@ Focused route tests use a test module with the real selector and host store. The
 contribution, every setup/recovery mode and retirement/publication journeys still need Tasks 4–10;
 these component checks do not establish their readiness.
 
+**Hour-plan Task 4 preparation checkpoint, 2026-10-16:** new component tests pass material
+from a durably selected hour through the existing prepared-allocation boundary and real writer.
+They require the original authenticated operator, exact input and bases, current clock checks and
+retained history floors. Preparation reads an existing intent without selecting another hour;
+pending waits expose no activation input. The real generic host's held read now survives its
+callback entering `activation-started`, while new preparation revisions remain refused there.
+The configured fiscal setup and disposable defaults remain unchanged. This is not qualification
+of the real wizard, every host or the later recovery/PDF journeys; Task 4 remains incomplete.
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the

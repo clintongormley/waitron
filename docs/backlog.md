@@ -333,6 +333,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;
   the disposable hour allocator is tested but its default switch awaits exact old-test approval.
+  The initial hour preparation adapter and the host's activation transition have component checks;
+  saved intents now retain their authenticated operator.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

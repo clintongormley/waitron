@@ -109,3 +109,22 @@ instead of its retained success expectation. An independently installed candidat
 tracked file restored to Task 4 base `54405e998f492442ecf00ccf14dc1b46a4cd79f6` reproduces that
 same case and response. The fixture still needs the owned Live journey; its assertions remain.
 This is an incomplete Task 4 checkpoint, with no final branch qualification or landing claim.
+
+### Task 4 preparation adapter and host transition
+
+No existing test file, assertion, fiscal fixture or guard changed in this checkpoint. New
+`hour-preparation.test.ts` cases exercise the existing writer through the prepared-allocation
+boundary. An initial failing case allowed a different authenticated operator to activate another
+operator's saved intent; the retained intent now includes that operator in its binding. New cases
+also require preparation to consume an existing intent without spending another hour, preserve all
+configured bases and refuse changed input, clocks or history.
+
+New `first-fiscal-hour-preparation.test.ts` cases exercise the real generic host's state lifecycle.
+Its final preparation read initially refused after the callback entered `activation-started`.
+That read is now admitted, while the replacement callback checks the earlier writable states.
+A refused replacement rejects the whole held operation; the new test checks that outer rejection
+and the absence of a preparation journal.
+
+The adapter's clock/history providers are controlled fixtures in these component tests. The real
+fiscal contribution's host wiring and the five-file disposable-test permission remain open;
+the configured defaults and their old assertions are untouched.

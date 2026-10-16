@@ -4,6 +4,7 @@ import {
   type OperationAuthority,
   type OperationBinding,
   type ModuleOperationHost,
+  type OperationOperator,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -33,6 +34,7 @@ interface SelectionRequest {
 }
 interface EntryBase {
   softwareId: string;
+  operatorId: OperationOperator;
   binding: OperationBinding;
   scope: HourScope;
   bases: HourSelectionFacts["bases"];
@@ -102,6 +104,14 @@ function parseState(value: unknown): Entry[] {
     if (
       !record(entry) ||
       !validBinding(entry.binding) ||
+      !(
+        text(entry.operatorId) ||
+        (record(entry.operatorId) &&
+          entry.operatorId.kind === "recovery-key" &&
+          Object.keys(entry.operatorId).length === 3 &&
+          entry.operatorId.nodeId === entry.binding.targetNodeId &&
+          entry.operatorId.eventId === entry.binding.eventId)
+      ) ||
       !validScope(entry.scope) ||
       !validBases(entry.bases) ||
       !text(entry.contextKey) ||
@@ -149,6 +159,9 @@ function fingerprint(entry: EntryBase): string {
     ordered(entry.bases),
     entry.contextKey,
     entry.softwareId,
+    typeof entry.operatorId === "string"
+      ? entry.operatorId
+      : [entry.operatorId.kind, entry.operatorId.nodeId, entry.operatorId.eventId],
     entry.answer,
   ]);
 }
@@ -163,18 +176,25 @@ export function createHourSelection(options: {
 }) {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
-  const perform = async (supplied: SelectionRequest, persist: boolean) => {
+  const perform = async (
+    supplied: Omit<SelectionRequest, "answer"> & { answer?: Answer },
+    mode: "select" | "preview" | "selected",
+  ) => {
+    const persist = mode === "select";
     const request = { ...supplied, binding: { ...supplied.binding } };
     const authorize = () => {
+      const operator = readOperationAuthority(request.authority, request.binding);
       if (
         request.binding.module !== "fiscal-verifactu" ||
         !["setup", "restore", "re-register", "promote"].includes(request.binding.action) ||
-        readOperationAuthority(request.authority, request.binding) === undefined
+        operator === undefined
       )
         refuse("reauthentication_required");
+      return operator!.operatorId;
     };
-    authorize();
-    if (!["no", "yes", "unknown"].includes(request.answer)) refuse("event_mismatch");
+    const operatorId = authorize();
+    if (mode !== "selected" && !["no", "yes", "unknown"].includes(request.answer!))
+      refuse("event_mismatch");
     return options.withState(request.binding, async (state) => {
       authorize();
       const fresh = await options.read({ ...request.binding });
@@ -207,22 +227,25 @@ export function createHourSelection(options: {
         }
       }
       const entries = [...retained.values()];
-      const base: EntryBase = {
-        softwareId: WAITRON_ID_SISTEMA,
-        binding: request.binding,
-        scope: facts.scope,
-        bases: facts.bases,
-        contextKey: facts.contextKey,
-        answer: request.answer,
-      };
       const sameEvent = entries.filter(
         (entry) =>
           entry.binding.module === request.binding.module &&
           entry.binding.eventId === request.binding.eventId,
       );
+      const intent = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
+      if (mode === "selected" && intent === undefined) return refuse("reservation_missing");
+      const answer = mode === "selected" ? intent!.answer : request.answer!;
+      const base: EntryBase = {
+        softwareId: WAITRON_ID_SISTEMA,
+        operatorId,
+        binding: request.binding,
+        scope: facts.scope,
+        bases: facts.bases,
+        contextKey: facts.contextKey,
+        answer,
+      };
       if (sameEvent.some((entry) => fingerprint(entry) !== fingerprint(base)))
         return refuse("event_mismatch");
-      const intent = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
       const permitted = canSelectHour(facts.clock, request.confirmation);
       if (!permitted) {
@@ -273,7 +296,7 @@ export function createHourSelection(options: {
         authorize();
         entries.push(entry);
       };
-      if (request.answer !== "no") {
+      if (answer !== "no") {
         if (wait === undefined) {
           wait = { ...base, kind: "wait", targetMs: (Math.floor(now / HOUR_MS) + 1) * HOUR_MS };
           if (persist) await write(wait);
@@ -313,8 +336,13 @@ export function createHourSelection(options: {
     });
   };
   return {
-    select: (request: SelectionRequest) => perform(request, true),
+    select: (request: SelectionRequest) => perform(request, "select"),
     preview: (request: Omit<SelectionRequest, "answer">) =>
-      perform({ ...request, answer: "no" }, false),
+      perform({ ...request, answer: "no" }, "preview"),
+    async selected(request: Omit<SelectionRequest, "answer">) {
+      const result = await perform(request, "selected");
+      if (result.status !== "selected") return refuse("clock_unconfirmed");
+      return result;
+    },
   };
 }

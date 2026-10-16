@@ -180,6 +180,9 @@ export function createFirstSetupModuleHost(options: {
     coordinator,
     withVenueExclusion: (body) => resolution.withVenueExclusion(body),
     authorizeReplacement: async () => {
+      const state = await store.read();
+      if (state === null || !["claimed", "consumption-intent"].includes(state.status))
+        throw new AppError("setup.attempt_conflict", {});
       const authorize = replacementAuthority.getStore();
       if (authorize === undefined) throw new AppError("setup.owner_required", {});
       await authorize();
@@ -190,7 +193,7 @@ export function createFirstSetupModuleHost(options: {
       const installed = modules.find((entry) => entry.name === binding.module);
       if (
         state === null ||
-        !["claimed", "consumption-intent"].includes(state.status) ||
+        !["claimed", "consumption-intent", "activation-started"].includes(state.status) ||
         binding.action !== "setup" ||
         binding.sourceId !== state.frozen.sourceId ||
         binding.targetNodeId !== state.frozen.nodeId ||
