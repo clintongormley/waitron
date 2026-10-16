@@ -5,6 +5,7 @@ import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
   readJsonBody,
+  readRawJsonBody,
   requireBodyUuid,
   requireManagementSession,
   requireString,
@@ -80,14 +81,18 @@ const runPaintSave = createErrorBoundary(
   "staffing.failed",
 );
 
-/** Refuses any body key outside `allowed`, so a client cannot choose what the server derives. */
-function onlyKeys(body: object, allowed: readonly string[]): void {
+function onlyKeys(
+  body: unknown,
+  allowed: readonly string[],
+): asserts body is Record<string, unknown> {
+  if (body === null || typeof body !== "object" || Array.isArray(body))
+    throw new AppError("management.request_invalid", { field: "body" });
   const extra = Object.keys(body).find((key) => !allowed.includes(key));
   if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
 }
 
 /** The colour is checked against the palette by the domain, which refuses it as `staffing.invalid`. */
-function staffRoleInput(body: Record<string, unknown>): StaffRoleInput {
+function staffRoleInput(body: unknown): StaffRoleInput {
   onlyKeys(body, ["name", "colour"]);
   return {
     name: requireString(body.name, "name"),
@@ -95,7 +100,7 @@ function staffRoleInput(body: Record<string, unknown>): StaffRoleInput {
   };
 }
 
-function uuidList(body: Record<string, unknown>, field: string): string[] {
+function uuidList(body: unknown, field: string): string[] {
   onlyKeys(body, [field]);
   const value = body[field];
   if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
@@ -106,7 +111,7 @@ const invalid = (field: string) => new AppError("staffing.invalid", { field });
 
 /** The body's `edits` list, each edit checked to hold only `keys`. */
 function editList(
-  body: Record<string, unknown>,
+  body: unknown,
   keys: ReadonlySet<string>,
 ): { edit: Record<string, unknown>; field: string }[] {
   onlyKeys(body, ["edits"]);
@@ -121,7 +126,7 @@ function editList(
 const SEASON_EDIT_KEYS = new Set(["area", "weekday", "blocks"]);
 const SPECIAL_DAY_EDIT_KEYS = new Set(["area", "dateId", "blocks"]);
 
-function seasonEdits(body: Record<string, unknown>, cutover: string): SeasonStaffingEdit[] {
+function seasonEdits(body: unknown, cutover: string): SeasonStaffingEdit[] {
   return editList(body, SEASON_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
     const { weekday } = edit;
@@ -133,7 +138,7 @@ function seasonEdits(body: Record<string, unknown>, cutover: string): SeasonStaf
 
 /** `blocks: null` is a value (the date follows the season); a missing `blocks` is refused by
  *  `parseBlocks` as `undefined`. */
-function specialDayEdits(body: Record<string, unknown>, cutover: string): SpecialDayStaffingEdit[] {
+function specialDayEdits(body: unknown, cutover: string): SpecialDayStaffingEdit[] {
   return editList(body, SPECIAL_DAY_EDIT_KEYS).map(({ edit, field }) => {
     const area = parseArea(edit.area, `${field}.area`);
     const dateId = uuid(edit.dateId, `${field}.dateId`);
@@ -266,7 +271,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         await gated(sessionId, async (tx) =>
           saveSeasonStaffing(tx, ctx.cfg, id, seasonEdits(body, await cutoverOf(tx))),
         );
@@ -288,7 +293,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         await gated(sessionId, async (tx) =>
           saveSpecialDayStaffing(tx, ctx.cfg, id, specialDayEdits(body, await cutoverOf(tx))),
         );
@@ -309,7 +314,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.post(BASE, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         const staffRole = await gated(sessionId, (tx) =>
           createStaffRole(tx, ctx.cfg, staffRoleInput(body)),
         );
@@ -321,7 +326,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.put(`${BASE}/order`, (c) =>
       runReorder(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         await gated(sessionId, (tx) =>
           reorderStaffRoles(tx, ctx.cfg, uuidList(body, "staffRoleIds")),
         );
@@ -333,7 +338,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         return c.json(
           await gated(sessionId, (tx) => updateStaffRole(tx, ctx.cfg, id, staffRoleInput(body))),
         );
@@ -344,7 +349,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        const body = await readJsonBody<Record<string, unknown>>(c);
+        const body = await readRawJsonBody<unknown>(c);
         return c.json(
           await gated(sessionId, (tx) =>
             setStaffRoleHolders(tx, ctx.cfg, id, uuidList(body, "personIds")),
