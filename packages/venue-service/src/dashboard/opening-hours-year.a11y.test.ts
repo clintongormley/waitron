@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { commands } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -99,6 +100,22 @@ const states: Record<string, () => OpeningHoursYear> = {
 };
 
 describe.each(["light", "dark"] as const)("Opening hours year accessibility (%s)", (theme) => {
+  test("a picked run", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-year") as OpeningHoursYearView;
+    el.model = yearModel();
+    host.append(el);
+    await el.updateComplete;
+    const day = (date: string) => `opening-hours-year td[data-date="${date}"] button`;
+    // The drag's points are read where the days are drawn, so December must be on screen.
+    el.shadowRoot!.querySelector('[data-month="2027-12"]')!.scrollIntoView({ block: "center" });
+    await commands.mouseDrag([day("2027-12-19"), day("2027-12-26")]);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll('td button[aria-pressed="true"]')).toHaveLength(8);
+    await commands.parkPointer();
+    await expectNoA11yViolations(host);
+  });
+
   test.each(Object.keys(states))("%s", async (state) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-year") as OpeningHoursYearView;

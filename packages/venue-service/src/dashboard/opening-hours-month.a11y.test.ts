@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { commands } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -78,6 +79,20 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     const root = el.shadowRoot!;
     for (const shown of ['[data-test="no-orders"]', "season-chips", ".track", "[data-closed]"])
       expect(root.querySelector(shown), shown).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a picked run", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, { model: monthModel(), departments: DEPARTMENTS });
+    host.append(el);
+    await el.updateComplete;
+    const day = (date: string) => `opening-hours-month td[data-date="${date}"] button.day`;
+    await commands.mouseDrag([day("2026-12-24"), day("2027-01-02")]);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll('button.day[aria-pressed="true"]')).toHaveLength(10);
+    await commands.parkPointer();
     await expectNoA11yViolations(host);
   });
 

@@ -1,5 +1,5 @@
-import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -13,6 +13,7 @@ import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { monthNames, type MonthNames } from "./opening-hours-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
+import { DayPicker } from "./day-picking.js";
 import { closedHatch } from "./period-colour-styles.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
@@ -31,6 +32,13 @@ export interface MonthDepartment {
 export interface CalendarDayOpen {
   date: LocalDate;
   returnTo: () => HTMLElement | null;
+}
+
+/** What `calendar-days-open` carries: the date opened and the run of dates it opens. */
+export interface CalendarDaysOpen {
+  date: LocalDate;
+  from: LocalDate;
+  to: LocalDate;
 }
 
 /** The months the month read serves: its first week must start in year 0100 or later. */
@@ -56,8 +64,8 @@ interface Row {
 
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
  *  per department (or one department and its zones), from the server's month read alone. A date sends
- *  `calendar-day-open`, except in station mode, where dates are plain; ‹ › send `month-change` and
- *  the picker `month-department-change`. */
+ *  `calendar-day-open`, and an editor's opened run `calendar-days-open`, except in station mode,
+ *  where dates are plain; ‹ › send `month-change` and the picker `month-department-change`. */
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
@@ -138,11 +146,26 @@ export class OpeningHoursMonthView extends LitElement {
         text-align: start;
         overflow: hidden;
       }
+      table.picking {
+        user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation;
+      }
       button.day {
         cursor: pointer;
+        touch-action: manipulation;
+        -webkit-touch-callout: none;
       }
       .day[aria-current="date"] {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
+      }
+      .day[aria-pressed="true"] {
+        box-shadow: 0 0 0 var(--wt-field-line-width-active) var(--wt-color-text);
+      }
+      .day[aria-pressed="true"][aria-current="date"] {
+        box-shadow:
+          inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary),
+          0 0 0 var(--wt-field-line-width-active) var(--wt-color-text);
       }
       button.day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
@@ -279,8 +302,25 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
-  /** The date that holds the month's one Tab stop. */
-  @state() private focusDate: LocalDate | null = null;
+  #days = new DayPicker(this, {
+    button: (date) => this.#dayButton(date),
+    dates: () => this.model?.days.map((day) => day.date) ?? [],
+    canPick: () => !this.readOnly && !this.stationMode,
+    choose: (date) =>
+      this.#emit<CalendarDayOpen>("calendar-day-open", {
+        date,
+        returnTo: () => this.#dayButton(date),
+      }),
+    picked: () => {},
+    open: (date, { from, to }) =>
+      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, from, to }),
+  });
+
+  protected override willUpdate(changes: PropertyValues<this>): void {
+    if (!changes.has("model")) return;
+    const before = changes.get("model") as OpeningHoursMonth | undefined;
+    if (before?.month !== this.model?.month) this.#days.clear();
+  }
 
   #emit<T>(name: string, detail: T): void {
     this.dispatchEvent(new CustomEvent<T>(name, { detail, bubbles: true, composed: true }));
@@ -288,24 +328,6 @@ export class OpeningHoursMonthView extends LitElement {
 
   #dayButton(date: LocalDate): HTMLElement | null {
     return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
-  }
-
-  #keydown(event: KeyboardEvent): void {
-    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
-    const date = (event.composedPath()[0] as HTMLElement).closest("td")?.dataset.date;
-    if (step === undefined || date === undefined) return;
-    event.preventDefault();
-    const target = this.#dayButton(addDays(date, step));
-    if (!target) return;
-    this.focusDate = target.closest("td")!.dataset.date!;
-    target.focus();
-  }
-
-  #open(date: LocalDate): void {
-    this.#emit<CalendarDayOpen>("calendar-day-open", {
-      date,
-      returnTo: () => this.#dayButton(date),
-    });
   }
 
   /** The chosen department's id when the read carries it, else "" for every department. */
@@ -471,12 +493,9 @@ export class OpeningHoursMonthView extends LitElement {
               type="button"
               class="day"
               tabindex=${day.date === stop ? 0 : -1}
+              aria-pressed=${this.#days.isPicked(day.date) ? "true" : "false"}
               aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
-              @click=${() => this.#open(day.date)}
-              @focus=${() => {
-                this.focusDate = day.date;
-              }}
             >
               ${body}
             </button>`
@@ -550,10 +569,11 @@ export class OpeningHoursMonthView extends LitElement {
     const tints = seasonTints(model.seasons);
     const names = monthNames(this.departments);
     const stop =
-      [this.focusDate, model.today].find(
+      [this.#days.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
       ) ?? model.days.find((day) => day.inMonth)!.date;
     const legend = this.#rows(model.days[0]!, chosen, names).map((row) => row.name);
+    const on = this.stationMode ? undefined : this.#days.handlers;
     const weeks = Array.from({ length: model.days.length / 7 }, (_, row) =>
       model.days.slice(row * 7, row * 7 + 7),
     );
@@ -577,7 +597,14 @@ export class OpeningHoursMonthView extends LitElement {
             </div>`
           : nothing
       }
-      <table @keydown=${this.#keydown}>
+      <table
+        class=${this.stationMode ? nothing : "picking"}
+        @pointerdown=${on?.pointerdown}
+        @click=${on?.click}
+        @dblclick=${on?.dblclick}
+        @keydown=${on?.keydown}
+        @contextmenu=${on?.contextmenu}
+      >
         <thead>
           <tr>
             ${Array.from({ length: 7 }, (_, index) => {
