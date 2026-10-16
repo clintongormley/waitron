@@ -4,11 +4,15 @@ import { currentLocale } from "@waitron/dashboard-kit";
 const A_MONDAY = Date.UTC(2024, 0, 1);
 const DAY_MS = 86_400_000;
 
-export const formatLocale = () => (currentLocale().startsWith("es") ? "es-ES" : "en-GB");
+export const formatLocale = (language = currentLocale()) =>
+  language.startsWith("es") ? "es-ES" : "en-GB";
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
-export function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const locale = formatLocale();
+export function dateFormat(
+  options: Intl.DateTimeFormatOptions,
+  language?: string,
+): Intl.DateTimeFormat {
+  const locale = formatLocale(language);
   const key = `${locale} ${JSON.stringify(options)}`;
   let formatter = formatters.get(key);
   if (!formatter) {
