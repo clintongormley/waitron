@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type { WtInput, WtButton, WtFormActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -121,7 +122,7 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
   expect(q(el, "[data-test=locked-notes]")?.textContent?.split("setup")).toHaveLength(2);
   expect(field(el, "venueName").required).toBe(true);
-  expect(q(el, "wt-help-tooltip")).not.toBeNull();
+  expect(q(el, "wt-help-tooltip")).toBeNull();
 });
 it("requires acknowledgement of a changed normalized patch and resets it on a later edit", async () => {
   setLocale("en-GB");
@@ -415,20 +416,22 @@ it("explains current-address printing for a street correction without changing s
   setLocale("en-GB");
   const { api } = rig();
   const el = await editing(api);
+  expect(q(el, "[data-test=address-notice]")?.textContent).toContain("copies of earlier sales");
   change(el, "addressLine1", "Corrected address");
   await flush(el);
   expect(q(el, "[data-test=address-notice]")?.textContent).toContain("copies of earlier sales");
   expect(q(el, "[data-test=issuer]")?.textContent).toContain("Issuer SL");
 });
 
-it("explains the consequences beside the filled name and clock fields", async () => {
+it("explains the consequences of a changed name and clock in the review box", async () => {
   setLocale("en-GB");
   const el = await editing(rig().api);
-  const nameHelp = field(el, "venueName").parentElement!.querySelector("wt-help-tooltip")!;
-  const clockHelp = field(el, "timeZone").parentElement!.querySelector("wt-help-tooltip")!;
-  expect(nameHelp.textContent?.toLowerCase()).toContain("departments");
-  expect(clockHelp.textContent).toContain("Manual day overrides");
-  expect(nameHelp.getAttribute("aria-label")).toContain("Venue name");
+  change(el, "venueName", "Renamed");
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  const review = q(el, "[data-test=warnings]")!;
+  expect(review.textContent?.toLowerCase()).toContain("departments");
+  expect(review.textContent).toContain("Manual day overrides");
 });
 
 it.each([
@@ -443,8 +446,9 @@ it.each([
 ])("names opening hours and special dates in the clock warning (%s)", async (locale, sentence) => {
   setLocale(locale);
   const el = await editing(rig().api);
-  const clockHelp = field(el, "timeZone").parentElement!.querySelector("wt-help-tooltip")!;
-  expect(clockHelp.textContent).toContain(sentence);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  expect(q(el, "[data-test=warnings]")?.textContent).toContain(sentence);
 });
 
 it("shows captured old/new civil and business dates, transition boundaries and retained deadlines before clock acknowledgement", async () => {
@@ -639,30 +643,23 @@ it.each([
 it.each([
   ["en-GB", "Locked: the venue has recorded sales.", "recorded sales"],
   ["es", "Bloqueado: el local tiene ventas registradas.", "ventas registradas"],
-])(
-  "says the sales lock once for the form, tooltips included (%s)",
-  async (locale, sentence, stem) => {
-    setLocale(locale);
-    const r = rig();
-    const el = await editing(r.api);
-    change(el, "timeZone", "UTC");
-    await flush(el);
-    const locked = venueDetailsFixture();
-    locked.hasSales = true;
-    for (const key of ["city", "timeZone", "dayCutover"] as const)
-      locked.policy[key] = { decision: "refuse", reasons: ["sales"] };
-    r.set(locked);
-    await r.notify(el, "sales");
-    const all = el.shadowRoot!.textContent ?? "";
-    expect(count(all, stem)).toBe(1);
-    const notes = [...el.shadowRoot!.querySelectorAll("[data-test=locked-notes] > p")].map(text);
-    expect(notes.filter((note) => note === sentence)).toHaveLength(1);
-    const clockHelp = field(el, "timeZone").parentElement!.querySelector("wt-help-tooltip")!;
-    expect(clockHelp.textContent).toContain(
-      locale === "es" ? "Los horarios de apertura" : "Department and station opening hours",
-    );
-  },
-);
+])("says the sales lock once, at the card's foot (%s)", async (locale, sentence, stem) => {
+  setLocale(locale);
+  const r = rig();
+  const el = await editing(r.api);
+  change(el, "timeZone", "UTC");
+  await flush(el);
+  const locked = venueDetailsFixture();
+  locked.hasSales = true;
+  for (const key of ["city", "timeZone", "dayCutover"] as const)
+    locked.policy[key] = { decision: "refuse", reasons: ["sales"] };
+  r.set(locked);
+  await r.notify(el, "sales");
+  const all = el.shadowRoot!.textContent ?? "";
+  expect(count(all, stem)).toBe(1);
+  const notes = [...el.shadowRoot!.querySelectorAll("[data-test=locked-notes] > p")].map(text);
+  expect(notes.filter((note) => note === sentence)).toHaveLength(1);
+});
 
 it("puts a sales-lock refusal from the server beside its field in words that read on their own", async () => {
   setLocale("en-GB");
@@ -677,4 +674,82 @@ it("puts a sales-lock refusal from the server beside its field in words that rea
   await click(el, "[data-test=save]");
   expect(field(el, "addressLine1").error).toBe("Locked: the venue has recorded sales.");
   expect(actions(el).error).toBe("Correct the highlighted fields to continue.");
+});
+
+it("draws no help buttons anywhere in the open form", async () => {
+  const el = await editing(rig().api);
+  expect(q(el, "form")).not.toBeNull();
+  expect(q(el, "wt-help-tooltip")).toBeNull();
+});
+
+it.each([
+  [1280, true],
+  [390, false],
+])("puts postcode and city on one row only on a wide window (%i px)", async (width, sideBySide) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 800);
+  try {
+    const el = await editing(rig().api);
+    const postcode = field(el, "postalCode").getBoundingClientRect();
+    const city = field(el, "city").getBoundingClientRect();
+    if (sideBySide) {
+      expect(city.top).toBe(postcode.top);
+      expect(city.left).toBeGreaterThan(postcode.right);
+    } else expect(city.top).toBeGreaterThan(postcode.bottom);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
+it("keeps every field within the form width token on a wide window", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1280, 800);
+  try {
+    const el = await editing(rig().api);
+    const probe = document.createElement("div");
+    probe.style.width = "var(--wt-form-max-width)";
+    el.shadowRoot!.appendChild(probe);
+    const form = probe.getBoundingClientRect().width;
+    expect(form).toBeGreaterThan(0);
+    expect(
+      q(el, "section.settings-card[data-editing]")!.getBoundingClientRect().width,
+    ).toBeGreaterThan(form);
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input, wt-combobox")];
+    expect(fields.length).toBeGreaterThan(0);
+    for (const input of fields)
+      expect(input.getBoundingClientRect().width).toBeLessThanOrEqual(form);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
+it("says the lock and the address note once at the foot of an unchanged form, and marks the locked time zone", async () => {
+  setLocale("en-GB");
+  const locked = venueDetailsFixture();
+  locked.hasSales = true;
+  locked.policy.timeZone = { decision: "refuse", reasons: ["sales"] };
+  const el = await editing(rig(locked).api);
+  const foot = q(el, "[data-test=form-foot]")!;
+  expect(foot.nextElementSibling?.localName).toBe("wt-form-actions");
+  expect(count(text(foot), "Locked: the venue has recorded sales.")).toBe(1);
+  expect(count(text(foot), "copies of earlier sales")).toBe(1);
+  expect(count(el.shadowRoot!.textContent ?? "", "copies of earlier sales")).toBe(1);
+  expect(text(q(el, "[data-test=locked-timeZone]"))).toBe("Europe/Madrid · locked");
+  expect(save(el).disabled).toBe(true);
+});
+
+it("does not draw the business-day start in the form", async () => {
+  const el = await editing(rig().api);
+  expect(q(el, "[data-test=locked-dayCutover]")).toBeNull();
+});
+
+it("leaves the Business card in view mode while the Venue card is open", async () => {
+  setLocale("en-GB");
+  const el = await editing(rig().api);
+  const [business, venue] = cards(el);
+  expect(venue!.hasAttribute("data-editing")).toBe(true);
+  expect(business!.hasAttribute("data-editing")).toBe(false);
+  expect(business!.querySelector("form, wt-input")).toBeNull();
+  expect(rows(business)[0]).toBe("Legal name: Issuer SL");
+  expect(q(el, "[data-test=change-legal-name]")!.closest("header")?.parentElement).toBe(business);
 });

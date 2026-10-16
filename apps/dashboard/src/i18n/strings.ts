@@ -827,7 +827,8 @@ export const en = {
   "action.account_settings": "Account settings",
   "nav.group.reports": "Reporting",
   "venue_details.address_notice":
-    "Receipts printed after this correction use the current address, including copies of earlier sales. The recorded issuer and trading name stay as issued.",
+    "Receipts printed from now on, including copies of earlier sales, use the new address.",
+  "venue_details.locked": "locked",
   "business_day.title": "Business-day start",
   "business_day.current": "Current start",
   "business_day.pending": "Scheduled start",
@@ -910,7 +911,6 @@ export const en = {
   "venue_details.sales": "Locked: the venue has recorded sales.",
   "venue_details.orders": "Locked: the venue has order history.",
   "venue_details.daily_close": "Locked: the venue has a daily close.",
-  "venue_details.help": "Review what changes before saving this filled-in field.",
   "venue_details.changed":
     "This value changed in another session. Cancel to load the latest saved values, then review your change.",
   "venue_details.invalid": "Check this value and try again.",
@@ -3748,7 +3748,8 @@ export const es: Record<StringKey, string> = {
   "nav.destination": "{label} — en {page}",
   "nav.no_matches": "Ninguna página coincide.",
   "venue_details.address_notice":
-    "Los recibos impresos después de esta corrección usan la dirección actual, incluidas las copias de ventas anteriores. El emisor y el nombre comercial registrados se conservan como se emitieron.",
+    "Los recibos que se impriman a partir de ahora, incluidas las copias de ventas anteriores, usan la nueva dirección.",
+  "venue_details.locked": "bloqueado",
   "business_day.title": "Inicio del día de trabajo",
   "business_day.current": "Inicio actual",
   "business_day.pending": "Inicio programado",
@@ -3833,7 +3834,6 @@ export const es: Record<StringKey, string> = {
   "venue_details.sales": "Bloqueado: el local tiene ventas registradas.",
   "venue_details.orders": "Bloqueado: el local tiene historial de pedidos.",
   "venue_details.daily_close": "Bloqueado: el local tiene un cierre diario.",
-  "venue_details.help": "Revisa qué cambia antes de guardar este campo ya rellenado.",
   "venue_details.changed":
     "Este valor ha cambiado en otra sesión. Pulsa Cancelar para cargar los valores guardados más recientes y después revisa tu cambio.",
   "venue_details.invalid": "Revisa este valor e inténtalo de nuevo.",

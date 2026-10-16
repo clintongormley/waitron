@@ -12,7 +12,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -45,16 +44,6 @@ const LABELS: Record<VenueDetailField, StringKey> = {
   timeZone: "venue_details.timeZone",
   dayCutover: "venue_details.dayCutover",
 };
-const HELP: Record<VenueDetailField, StringKey> = {
-  name: "venue_details.name_warning",
-  addressLine1: "venue_details.address_notice",
-  addressLine2: "venue_details.address_notice",
-  postalCode: "venue_details.postcode_warning",
-  city: "venue_details.city_warning",
-  province: "venue_details.geography_context",
-  timeZone: "venue_details.clock_warning",
-  dayCutover: "venue_details.clock_warning",
-};
 const PROBLEMS: Record<string, StringKey> = {
   required: "venue_details.required",
   length: "venue_details.length",
@@ -84,12 +73,31 @@ export class VenueDetailsPanel extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .fields {
+        display: grid;
+        gap: var(--wt-space-3);
+        max-width: var(--wt-form-max-width);
+        min-width: 0;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+        gap: var(--wt-space-3);
+      }
       .field {
         min-width: 0;
       }
+      .locked {
+        color: var(--wt-color-text-muted);
+      }
       .reason {
         color: var(--wt-color-text-muted);
-        max-width: var(--wt-field-max-width);
+        max-width: var(--wt-form-max-width);
+      }
+      @media (max-width: 48rem) {
+        .pair {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       .reason p {
         margin: 0;
@@ -444,7 +452,7 @@ export class VenueDetailsPanel extends LitElement {
       for (const reason of policy.reasons) if (REASONS[reason]) keys.add(REASONS[reason]!);
     }
     if (keys.size === 0) return nothing;
-    return html`<div class="reason" data-test="locked-notes">
+    return html`<div data-test="locked-notes">
       ${[...keys].map((key) => html`<p>${t(key)}</p>`)}
     </div>`;
   }
@@ -466,12 +474,15 @@ export class VenueDetailsPanel extends LitElement {
         this.#change(field, event);
     };
     const value = this.draft![field] ?? "";
-    const locked = this.model!.policy[field].decision === "refuse";
-    if (field === "dayCutover" || (locked && this.#patch()[field] === undefined))
-      return html`<div data-test=${`locked-${field}`}>
-        <strong>${t(LABELS[field])}</strong>
-        <p>${value || t("venue_details.unset")}</p>
-      </div>`;
+    if (this.#isLockedRow(field))
+      return settingsRows([
+        {
+          label: t(LABELS[field]),
+          value: html`${value || t("venue_details.unset")}
+            <span class="locked">· ${t("venue_details.locked")}</span>`,
+          dataTest: `locked-${field}`,
+        },
+      ]);
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
@@ -498,9 +509,21 @@ export class VenueDetailsPanel extends LitElement {
               @wt-change=${change}
             ></wt-input>`
       }
-      <wt-help-tooltip aria-label=${`${t(LABELS[field])}: ${t("venue_details.help")}`}
-        >${t(HELP[field])}</wt-help-tooltip
-      >
+    </div>`;
+  }
+  #isLockedRow(field: VenueDetailField): boolean {
+    return this.model!.policy[field].decision === "refuse" && this.#patch()[field] === undefined;
+  }
+  #fields(): TemplateResult {
+    const pair = !this.#isLockedRow("postalCode") && !this.#isLockedRow("city");
+    return html`<div class="fields">
+      ${this.#field("name")} ${this.#field("addressLine1")} ${this.#field("addressLine2")}
+      ${
+        pair
+          ? html`<div class="pair">${this.#field("postalCode")} ${this.#field("city")}</div>`
+          : html`${this.#field("postalCode")} ${this.#field("city")}`
+      }
+      ${this.#field("province")} ${this.#field("timeZone")}
     </div>`;
   }
   override render(): TemplateResult {
@@ -581,17 +604,7 @@ export class VenueDetailsPanel extends LitElement {
                       }}
                       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
                     >
-                      ${VENUE_DETAIL_FIELDS.map((field) => this.#field(field))}
-                      ${this.#lockedNotes()}
-                      ${
-                        ["addressLine1", "addressLine2", "postalCode", "city", "province"].some(
-                          (field) => this.#patch()[field as VenueDetailField] !== undefined,
-                        )
-                          ? html`<p class="reason" data-test="address-notice">
-                              ${t("venue_details.address_notice")}
-                            </p>`
-                          : nothing
-                      }
+                      ${this.#fields()}
                       ${
                         this.#warnings().length > 0
                           ? html`<div class="warnings" data-test="warnings">
@@ -614,6 +627,10 @@ export class VenueDetailsPanel extends LitElement {
                             </div>`
                           : nothing
                       }
+                      <div class="reason" data-test="form-foot">
+                        ${this.#lockedNotes()}
+                        <p data-test="address-notice">${t("venue_details.address_notice")}</p>
+                      </div>
                       <wt-form-actions .error=${this.actionError}>
                         <wt-button
                           slot="cancel"
