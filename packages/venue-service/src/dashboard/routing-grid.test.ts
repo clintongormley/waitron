@@ -232,6 +232,18 @@ describe("the toolbar", () => {
   });
 });
 const trigger = (box: HTMLButtonElement) => box;
+/** The name a screen reader reads for `node`. */
+const named = (node: Element) => expect.element(page.elementLocator(node));
+const containing = (words: string) => new RegExp(words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+/** What `node` draws: its text less the words only a screen reader reads. */
+const drawnText = (node: Element) => {
+  const copy = node.cloneNode(true) as Element;
+  for (const hidden of copy.querySelectorAll(".visually-hidden")) hidden.remove();
+  return copy.textContent!.replace(/\s+/g, " ").trim();
+};
+/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
+const spoken = (words: string) =>
+  new RegExp(`^${containing(words).source.replaceAll(", ", " ?, ")}$`);
 /** The station the cell's button draws, and whether it is drawn as inherited. */
 const shown = (box: HTMLButtonElement) => {
   const value = box.querySelector(".station")!;
@@ -436,11 +448,11 @@ describe("venue-routing-grid", () => {
     expect(shown(combo(el, "all", "terrace")!)).toEqual({ text: "No preparation", muted: false });
     // The accessible label names the row path, the zone, the value and whether it is set here.
     const mojito = trigger(combo(el, "p:mojito", "terrace")!);
-    expect(mojito.getAttribute("aria-label")).toBe(
-      "Drinks › Cocktails › Mojito, Terrace: Terrace bar, inherited",
+    await named(mojito).toHaveAccessibleName(
+      spoken("Drinks › Cocktails › Mojito, Terrace: Terrace bar, inherited."),
     );
-    expect(trigger(combo(el, "c:drinks", "every")!).getAttribute("aria-label")).toBe(
-      "Drinks, Every zone: Bar, set here",
+    await named(trigger(combo(el, "c:drinks", "every")!)).toHaveAccessibleName(
+      spoken("Drinks, Every zone: Bar, set here."),
     );
     expect(
       Object.fromEntries(
@@ -481,8 +493,10 @@ describe("venue-routing-grid", () => {
     expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
       "Old kitchen: Disabled. Its work goes to Kitchen.",
     );
-    expect(trigger(old).getAttribute("aria-label")).toBe(
-      "Food, Inside: Old kitchen (Disabled), set here",
+    await named(trigger(old)).toHaveAccessibleName(
+      spoken(
+        "Food, Inside: Old kitchen (Disabled), set here. Old kitchen: Disabled. Its work goes to Kitchen.",
+      ),
     );
   });
 
@@ -663,7 +677,7 @@ describe("venue-routing-grid", () => {
     el.model = structuredClone(el.model!);
     await el.updateComplete;
     expect(shown(bread)).toEqual({ text: "Bar", muted: false });
-    expect(trigger(bread).getAttribute("aria-label")).toBe("Bread, Inside: Bar, set here");
+    await named(trigger(bread)).toHaveAccessibleName(spoken("Bread, Inside: Bar, set here."));
     expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({
       text: "No preparation",
       muted: true,
@@ -937,38 +951,45 @@ describe("venue-routing-grid", () => {
   });
 
   it.each([
-    ["en", "No category, Terrace: Bar, inherited", "No category, Every zone: Bar, set here"],
-    ["es", "Sin categoría, Terrace: Bar, heredado", null],
+    ["en", "No category, Terrace: Bar, inherited.", "No category, Every zone: Bar, set here."],
+    ["es", "Sin categoría, Terrace: Bar, heredado.", null],
   ] as const)(
     "a No category editor's label names No category in %s",
     async (locale, zone, every) => {
       setLocale(locale);
       const { el } = await mount(noCategoryAtBar());
-      expect(trigger(combo(el, "no_category", "terrace")!).getAttribute("aria-label")).toBe(zone);
+      await named(trigger(combo(el, "no_category", "terrace")!)).toHaveAccessibleName(spoken(zone));
       if (every !== null) {
-        expect(trigger(combo(el, "no_category", "every")!).getAttribute("aria-label")).toBe(every);
+        await named(trigger(combo(el, "no_category", "every")!)).toHaveAccessibleName(
+          spoken(every),
+        );
       }
     },
   );
 
   describe("no note on how an extra is made", () => {
-    const text = (el: RoutingGrid, row: string, zone: string) =>
-      cell(el, row, zone).textContent!.replace(/\s+/g, " ").trim();
+    const text = (el: RoutingGrid, row: string, zone: string) => drawnText(cell(el, row, zone));
     const name = (el: RoutingGrid, row: string, zone: string) =>
-      trigger(combo(el, row, zone)!).getAttribute("aria-label");
+      named(trigger(combo(el, row, zone)!));
 
     it("an empty Every zone cell shows and names only the default station it falls through to", async () => {
       const { el } = await mount();
       expect(text(el, "p:bread", "every")).toBe("Kitchen");
-      expect(name(el, "p:bread", "every")).toBe("Bread, Every zone: Kitchen, inherited");
+      await name(el, "p:bread", "every").toHaveAccessibleName(
+        spoken("Bread, Every zone: Kitchen, inherited."),
+      );
     });
 
     it("a No preparation cell, its own or inherited, shows and names only No preparation", async () => {
       const { el } = await mount();
       expect(text(el, "all", "terrace")).toBe("No preparation");
-      expect(name(el, "all", "terrace")).toBe("All categories, Terrace: No preparation, set here");
+      await name(el, "all", "terrace").toHaveAccessibleName(
+        spoken("All categories, Terrace: No preparation, set here."),
+      );
       expect(text(el, "p:bread", "terrace")).toBe("No preparation");
-      expect(name(el, "p:bread", "terrace")).toBe("Bread, Terrace: No preparation, inherited");
+      await name(el, "p:bread", "terrace").toHaveAccessibleName(
+        spoken("Bread, Terrace: No preparation, inherited."),
+      );
     });
 
     it("a product row storing its own station shows and names only that station", async () => {
@@ -976,14 +997,16 @@ describe("venue-routing-grid", () => {
       await openAll(el);
       await el.updateComplete;
       expect(text(el, "p:burger", "every")).toBe("Kitchen");
-      expect(name(el, "p:burger", "every")).toBe("Food › Burger, Every zone: Kitchen, set here");
+      await name(el, "p:burger", "every").toHaveAccessibleName(
+        spoken("Food › Burger, Every zone: Kitchen, set here."),
+      );
     });
 
     it("the All categories × Every zone cell shows only the default station, editable or not", async () => {
       const { el } = await mount();
       expect(text(el, "all", "every")).toBe("Kitchen");
-      expect(name(el, "all", "every")).toBe(
-        "All categories, Every zone: Kitchen, the default station",
+      await name(el, "all", "every").toHaveAccessibleName(
+        spoken("All categories, Every zone: Kitchen, the default station."),
       );
 
       const readOnly = await mount(routing({ canMakeDefault: false }));
@@ -996,8 +1019,12 @@ describe("venue-routing-grid", () => {
       setLocale("es");
       const { el } = await mount();
       expect(text(el, "p:bread", "terrace")).toBe("Sin preparación");
-      expect(name(el, "p:bread", "terrace")).toBe("Bread, Terrace: Sin preparación, heredado");
-      expect(name(el, "p:bread", "every")).toBe("Bread, Todas las zonas: Kitchen, heredado");
+      await name(el, "p:bread", "terrace").toHaveAccessibleName(
+        spoken("Bread, Terrace: Sin preparación, heredado."),
+      );
+      await name(el, "p:bread", "every").toHaveAccessibleName(
+        spoken("Bread, Todas las zonas: Kitchen, heredado."),
+      );
     });
   });
 
@@ -1171,6 +1198,16 @@ describe("venue-routing-grid", () => {
       }
     });
 
+    it("keeps a cell's row, zone and state off the screen, beside its station, never inside it", async () => {
+      const { el } = await warned();
+      const hidden = [...root(el).querySelectorAll<HTMLElement>("button.cell .visually-hidden")];
+      expect(hidden.length).toBeGreaterThan(0);
+      for (const span of hidden) {
+        expect(span.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+        expect(span.closest(".station")).toBeNull();
+      }
+    });
+
     it.each([
       ["the disabled-station warning", '[data-test="disabled-target"]'],
       ["the refusal", '[data-test="cell-error"]'],
@@ -1178,11 +1215,12 @@ describe("venue-routing-grid", () => {
       const { el } = await warned();
       const food = cell(el, "c:food", "inside");
       const note = food.querySelector<HTMLElement>(selector)!;
-      const described = root(el).getElementById(
-        combo(el, "c:food", "inside")!.getAttribute("aria-describedby")!,
+      const notes = combo(el, "c:food", "inside")!.querySelector(".notes");
+      expect(notes?.contains(note)).toBe(true);
+      await named(combo(el, "c:food", "inside")!).toHaveAccessibleName(
+        containing(note.textContent!.replace(/\s+/g, " ").trim()),
       );
-      expect(described?.contains(note)).toBe(true);
-      expect(combo(el, "c:drinks", "every")!.hasAttribute("aria-describedby")).toBe(false);
+      expect(combo(el, "c:drinks", "every")!.querySelector(".notes")).toBeNull();
       await userEvent.click(note);
       await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
     });
@@ -1284,16 +1322,14 @@ describe("venue-routing-grid", () => {
       expect(own.tagName).toBe("BUTTON");
       expect(shown(own)).toEqual({ text: "Bar", muted: false });
       expect(lines(el, "c:drinks", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(own.getAttribute("aria-label")).toBe(
-        "Drinks, Every zone: Bar, set here. Lunch: Kitchen",
+      await named(own).toHaveAccessibleName(
+        spoken("Drinks, Every zone: Bar, set here. Lunch: Kitchen"),
       );
       const bread = combo(el, "p:bread", "terrace")!;
       expect(lines(el, "p:bread", "terrace")).toEqual(["Staff lunch: Bar"]);
-      expect(bread.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        "No preparation Staff lunch: Bar",
-      );
-      expect(bread.getAttribute("aria-label")).toBe(
-        "Bread, Terrace: No preparation, set here. Staff lunch: Bar",
+      expect(drawnText(bread)).toBe("No preparation Staff lunch: Bar");
+      await named(bread).toHaveAccessibleName(
+        spoken("Bread, Terrace: No preparation, set here. Staff lunch: Bar"),
       );
       // Inherited in the Every zone column: muted, not italic, with the deciding cell's lines.
       await openAll(el);
@@ -1303,8 +1339,8 @@ describe("venue-routing-grid", () => {
       expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("normal");
       expect(getComputedStyle(own.querySelector(".station")!).fontStyle).toBe("normal");
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(cola.getAttribute("aria-label")).toBe(
-        "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
+      await named(cola).toHaveAccessibleName(
+        spoken("Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen"),
       );
     });
 
@@ -1342,8 +1378,10 @@ describe("venue-routing-grid", () => {
           "line: Staff lunch: Bar",
         ]);
         const own = combo(el, "c:drinks", "every")!;
-        expect(own.getAttribute("aria-label")).toBe(
-          "Drinks, Every zone: Bar, set here. Lunch: Kitchen. Not on Lunch menus. Staff lunch: Bar",
+        await named(own).toHaveAccessibleName(
+          spoken(
+            "Drinks, Every zone: Bar, set here. Lunch: Kitchen Not on Lunch menus Staff lunch: Bar",
+          ),
         );
         const probe = document.createElement("span");
         probe.style.color = "var(--wt-color-warning)";
@@ -1375,8 +1413,8 @@ describe("venue-routing-grid", () => {
           "line: Lunch: Kitchen",
           "line: Staff lunch: Bar",
         ]);
-        expect(combo(el, "p:cola", "every")!.getAttribute("aria-label")).toBe(
-          "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen. Staff lunch: Bar",
+        await named(combo(el, "p:cola", "every")!).toHaveAccessibleName(
+          spoken("Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen Staff lunch: Bar"),
         );
       });
 
@@ -1393,8 +1431,8 @@ describe("venue-routing-grid", () => {
         setLocale("es");
         const { el } = await mount(flagged(["lunch"]));
         expect(drawn(el, "c:drinks", "every")[1]).toBe("flag: No está en los menús de Lunch");
-        expect(combo(el, "c:drinks", "every")!.getAttribute("aria-label")).toContain(
-          "Lunch: Kitchen. No está en los menús de Lunch. Staff lunch: Bar",
+        await named(combo(el, "c:drinks", "every")!).toHaveAccessibleName(
+          containing("Lunch: Kitchen No está en los menús de Lunch Staff lunch: Bar"),
         );
       });
     });
@@ -1588,8 +1626,8 @@ describe("venue-routing-grid", () => {
       const own = combo(el, "c:drinks", "every")!;
       expect(shown(own)).toEqual({ text: "Kitchen", muted: false });
       expect(lines(el, "c:drinks", "every")).toEqual(["Staff lunch: Terrace bar"]);
-      expect(own.getAttribute("aria-label")).toBe(
-        "Drinks, Every zone: Kitchen, set here. Staff lunch: Terrace bar",
+      await named(own).toHaveAccessibleName(
+        spoken("Drinks, Every zone: Kitchen, set here. Staff lunch: Terrace bar"),
       );
       // A waiting choice with no lines draws none.
       el.pending = { address: drinks, target: station("kitchen") };
@@ -1606,8 +1644,8 @@ describe("venue-routing-grid", () => {
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
       expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(false);
-      expect(cola.getAttribute("aria-label")).toBe(
-        "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
+      await named(cola).toHaveAccessibleName(
+        spoken("Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen"),
       );
     });
 
@@ -2013,8 +2051,10 @@ describe("station colours", () => {
     expect(dots[0]!.getBoundingClientRect().width).toBeGreaterThan(0);
     expect(dots[1]).toBeNull();
     expect(dots[2]).toBeNull();
-    expect(own.getAttribute("aria-label")).toBe(
-      "Drinks, Every zone: Bar, set here. Lunch: Kitchen. Staff lunch: No preparation. Late: Old kitchen (Disabled)",
+    await named(own).toHaveAccessibleName(
+      spoken(
+        "Drinks, Every zone: Bar, set here. Lunch: Kitchen Staff lunch: No preparation Late: Old kitchen (Disabled)",
+      ),
     );
   });
 
@@ -2274,8 +2314,8 @@ describe("one period", () => {
     });
     expect(lineCount(el)).toBe(0);
     expect(root(el).querySelectorAll('[data-test="period-flag"]')).toHaveLength(0);
-    expect(combo(el, "c:pizzas", "every")!.getAttribute("aria-label")).toBe(
-      "PIZZAS, Every zone: Pizza oven, set here",
+    await named(combo(el, "c:pizzas", "every")!).toHaveAccessibleName(
+      spoken("PIZZAS, Every zone: Pizza oven, set here."),
     );
     await choosePeriod(el, "dinner");
     expect(drawn(el, "c:postres", "terrace")).toEqual({
