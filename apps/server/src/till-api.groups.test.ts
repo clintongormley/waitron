@@ -1597,6 +1597,26 @@ async function remindAts(partyId: string) {
 }
 
 describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/current-orders", () => {
+  it("includes each sent line's recorded course in the Current orders response", async () => {
+    const party = await seated();
+    const mains = await inTx(venue, (tx) =>
+      createCourse(tx, venue.cfg, { name: `Mains-${randomUUID()}` }),
+    );
+    const submitted = await call("POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      groups: [{ release: "hold", lines: [{ ...dish("Tarta"), courseId: mains.id }] }],
+    });
+    expect(submitted.status).toBe(200);
+
+    const read = await call("GET", `/api/parties/${party.partyId}/current-orders`);
+
+    expect(read.status).toBe(200);
+    expect(read.json).toMatchObject({
+      groups: [{ rows: [{ courseId: mains.id }] }],
+    });
+  });
+
   it("snoozes the group waiting by whole minutes, answering the party's revision, and Current orders shows the reminder once the work ahead is served", async () => {
     const party = await withGroups();
     const revision = await revisionOf(party.partyId);

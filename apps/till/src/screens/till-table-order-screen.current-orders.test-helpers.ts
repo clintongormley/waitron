@@ -20,6 +20,7 @@ export function row(
     lineId,
     workingOrderId: "wo-4",
     lineNo: 1,
+    courseId: null,
     name,
     quantity,
     unitPrecision: 0,

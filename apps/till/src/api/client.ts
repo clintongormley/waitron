@@ -598,6 +598,7 @@ export interface CurrentOrderRow {
   lineId: string;
   workingOrderId: string;
   lineNo: number;
+  courseId: string | null;
   /** The staff name. */
   name: string;
   quantity: string;

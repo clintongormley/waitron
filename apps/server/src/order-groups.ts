@@ -1225,6 +1225,7 @@ export interface CurrentOrderRow {
   lineId: string;
   workingOrderId: string;
   lineNo: number;
+  courseId: string | null;
   /** The staff name, the variant's on a variant line. */
   name: string;
   quantity: string;
@@ -1314,6 +1315,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
       lineNo: workingOrderLines.lineNo,
+      courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -1387,6 +1389,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
       workingOrderId: line.workingOrderId,
       lineNo: line.lineNo,
+      courseId: line.courseId,
       name: staffPresentationName({ name: line.name, variantName: line.variantName }),
       quantity: thousandthsToDecimal(line.quantity),
       unitPrecision: line.unitPrecision,

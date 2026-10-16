@@ -67,6 +67,8 @@ import { joinTables } from "./table-actions.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
+import { createCourse } from "./kitchen.js";
+import { deleteCourse } from "./course-delete.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -971,6 +973,7 @@ function row(fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name">): Row
   return {
     workingOrderId: expect.any(String) as unknown as string,
     lineNo: expect.any(Number) as unknown as number,
+    courseId: null,
     quantity: "1.000",
     unitPrecision: 0,
     servedQuantity: "0.000",
@@ -1010,6 +1013,40 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read.groups[0]!.rows[0]).toMatchObject({
       nutrition: { allergens: { gluten: { kinds: ["barley"] } }, dietaryDeclarations: ["halal"] },
     });
+  });
+
+  it.each([
+    { dish: "steak", deleted: false },
+    { dish: "steak", deleted: true },
+    { dish: "water", deleted: false },
+    { dish: "water", deleted: true },
+  ] as const)(
+    "returns the recorded course of $dish (course deleted afterwards: $deleted)",
+    async ({ dish, deleted }) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains" }));
+      const held = await group(v, s.partyId, "hold", [{ ...line(v, dish), courseId: mains.id }]);
+      if (deleted) await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+
+      const read = await currentOrders(s.partyId);
+
+      expect(read.groups[0]!.rows).toEqual([
+        expect.objectContaining({ lineId: held.lineIds[0], courseId: mains.id }),
+      ]);
+    },
+  );
+
+  it("returns null for a sent line recorded without a course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const sent = await group(v, s.partyId, "fire", [line(v, "water")]);
+
+    const read = await currentOrders(s.partyId);
+
+    expect(read.groups[0]!.rows).toEqual([
+      expect.objectContaining({ lineId: sent.lineIds[0], courseId: null }),
+    ]);
   });
 
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {

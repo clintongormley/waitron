@@ -2709,6 +2709,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
               lineId: tiramisu.id,
               workingOrderId: "wo-4",
               lineNo: 6,
+              courseId: null,
               name: "Tiramisu",
               quantity: "1.000",
               unitPrecision: 0,
