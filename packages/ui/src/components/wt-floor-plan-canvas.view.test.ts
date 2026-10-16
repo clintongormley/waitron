@@ -954,12 +954,12 @@ it("an unselected refused table turned 180° keeps its reason one --wt-space-1 u
 });
 
 it.each(ZOOMS)(
-  "at zoom %s, the grid runs 8 squares past the lowest table or, lower still, its selected turn arrow, so it holds the size badge and refusal at every turn and scrolls no further",
+  "at zoom %s, the grid runs 8 squares past the lowest table or, lower still, its turn arrow, selected or not, so it holds the size badge and refusal at every turn and scrolls no further",
   async (zoom, deltaY) => {
     const unselected = await feedbackCanvas(deltaY, { y: 200, rotation: 180, selected: false });
     const plain = part(unselected, "grid").getBoundingClientRect().height;
     cleanup();
-    const el = await feedbackCanvas(deltaY, { y: 200 });
+    const el = await feedbackCanvas(deltaY, { y: 200, rotation: 180 });
     expect(part(el, "grid").getBoundingClientRect().height).toBe(plain);
     const square = 12 * zoom;
     let lower = 0;
@@ -980,5 +980,107 @@ it.each(ZOOMS)(
       if (arrow.bottom > box.bottom) lower++;
     }
     expect(lower).toBeGreaterThan(0);
+  },
+);
+
+it.each([
+  [180, ...ZOOMS[0]],
+  [180, ...ZOOMS[1]],
+  [180, ...ZOOMS[2]],
+  [90, ...ZOOMS[0]],
+  [90, ...ZOOMS[1]],
+  [90, ...ZOOMS[2]],
+])(
+  "a table turned %s° at zoom %s, scrolled to the grid's far corner, stays put when the selection is cleared",
+  async (rotation, _zoom, deltaY) => {
+    const el = (await mount(
+      '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+    )) as WtFloorPlanCanvas;
+    el.tables = [
+      {
+        ...table("T1", 200, 200),
+        placement: { ...table("T1", 200, 200).placement, height: 4, rotation },
+      },
+    ];
+    el.selected = "T1";
+    await settled(el);
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth;
+    viewport.scrollTop = viewport.scrollHeight;
+    await settled(el);
+    const before = button(el).getBoundingClientRect();
+    el.selected = null;
+    await settled(el);
+    const after = button(el).getBoundingClientRect();
+    expect({ left: after.left, top: after.top }).toEqual({ left: before.left, top: before.top });
+  },
+);
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) => [8, 1].map((side) => [side, side, zoom, deltaY] as const)),
+)(
+  "a %s × %s table at zoom %s: the grid runs 8 squares right of and below the table or, further still, its turn arrow, and scrolls no further, at every turn",
+  async (side, _side, zoom, deltaY) => {
+    const el = (await mount(
+      '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+    )) as WtFloorPlanCanvas;
+    const at200 = (rotation: number): PlanCanvasTable => ({
+      ...table("T1", 200, 200),
+      placement: { ...table("T1", 200, 200).placement, width: side, height: side, rotation },
+    });
+    el.tables = [at200(0)];
+    el.selected = "T1";
+    await settled(el);
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    const square = 12 * zoom;
+    let further = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [at200(rotation)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const rightmost = (Math.max(box.right, arrow.right) - grid.left) / square;
+      const lowest = (Math.max(box.bottom, arrow.bottom) - grid.top) / square;
+      expect(grid.width / square, at).toBe(Math.ceil(rightmost - 0.01) + 8);
+      expect(grid.height / square, at).toBe(Math.ceil(lowest - 0.01) + 8);
+      expect(arrow.right, at).toBeLessThanOrEqual(grid.right);
+      const viewport = part(el, "viewport");
+      expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }, at).toEqual({
+        width: grid.width,
+        height: grid.height,
+      });
+      if (arrow.right > box.right) further++;
+    }
+    expect(further).toBeGreaterThan(0);
+  },
+);
+
+it.each(ZOOMS)(
+  "at zoom %s, a table at the plan's (0, 0) keeps its turn arrow inside the grid's top and left at every turn",
+  async (_zoom, deltaY) => {
+    const el = await canvas("T1");
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [
+        { ...table("T1", 0, 0), placement: { ...table("T1", 0, 0).placement, rotation } },
+      ];
+      await el.updateComplete;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      expect(arrow.left, `${rotation}°`).toBeGreaterThanOrEqual(grid.left);
+      expect(arrow.top, `${rotation}°`).toBeGreaterThanOrEqual(grid.top);
+    }
   },
 );

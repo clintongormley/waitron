@@ -679,8 +679,9 @@ you set spacing without replacing its error and folding behaviour.
 | `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid, initially 12 px per square, that fills its
-box and reaches at least 8 squares past the furthest table and, where a turn points a selected
-table's turn arrow lower than every table, 8 squares below that arrow. Above and left of the plan it always
+box and reaches at least 8 squares past the furthest table, and 8 squares right of and below the
+furthest point any table's turn arrow would reach once that table is selected, so selecting a table or
+clearing the selection never resizes the grid. Above and left of the plan it always
 keeps a margin, drawn blank so the grid's lines start at the plan's own top and left edge, of
 `√((--wt-space-5 / 2 + --wt-space-1 + --wt-tap-min)² + (--wt-tap-min / 2)²)` (the turn arrow's
 furthest reach from the middle of a table's top side), rounded up to whole squares and enlarged

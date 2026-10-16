@@ -123,11 +123,18 @@ function sameBox(a: PlanPlacement, b: PlanPlacement): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
-/** How far below `p`'s centre its turn arrow's lowest corner is drawn, in the units of `gap` (from
- *  the top side to the arrow) and `size` (the arrow's side); `half` is half `p`'s height. */
-function arrowBelow(p: PlanPlacement, half: number, gap: number, size: number): number {
-  const { x, y } = outward("top", p.rotation);
-  return Math.max((half + gap) * y, (half + gap + size) * y) + (size * Math.abs(x)) / 2;
+/** How far right of and below a table's centre its turn arrow's furthest corner each way is drawn,
+ *  in the units of `half` (half the table's height), `gap` (from the top side to the arrow) and
+ *  `size` (the arrow's side). */
+function arrowReach(
+  rotation: number,
+  half: number,
+  gap: number,
+  size: number,
+): { right: number; below: number } {
+  const { x, y } = outward("top", rotation);
+  const along = (d: number) => Math.max((half + gap) * d, (half + gap + size) * d);
+  return { right: along(x) + (size * Math.abs(y)) / 2, below: along(y) + (size * Math.abs(x)) / 2 };
 }
 
 /** Degrees clockwise from straight up, round the centre. */
@@ -373,7 +380,7 @@ export class WtFloorPlanCanvas extends LitElement {
         left: 0;
       }
 
-      /* The drag listens on the window, so the pointer leaves the dot or corner while the arrow should stay. */
+      /* The drag listens on the window, so the pointer leaves the dot or corner while the resize cursor should stay. */
       .viewport[data-resizing] * {
         cursor: inherit !important;
       }
@@ -545,7 +552,11 @@ export class WtFloorPlanCanvas extends LitElement {
       this.#margin = Math.ceil((reach * Math.max(1, 1 / this.zoom)) / GRID_SQUARE_PX);
     }
     const extent = gridExtent(placements, { columns: 0, rows: 0 });
-    const plan = { ...extent, rows: Math.max(extent.rows, this.#arrowRows()) };
+    const arrows = this.#arrowExtent(placements);
+    const plan = {
+      columns: Math.max(extent.columns, arrows.columns),
+      rows: Math.max(extent.rows, arrows.rows),
+    };
     // Tolerates float error in a corner computed to land exactly on the edge.
     let x = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9)));
     let y = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9)));
@@ -581,20 +592,23 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#size = { columns, rows };
   }
 
-  /** Rows from the plan's top to `gridExtent`'s margin past the selected table's turn arrow, so the
-   *  size badge and reason drawn under an arrow a turn points down stay inside the grid. */
-  #arrowRows(): number {
-    const t = this.tables.find((t) => t.key === this.selected);
-    if (t === undefined) return 0;
-    const p = this.#placementOf(t);
+  /** Columns and rows from the plan's top left to `gridExtent`'s margin past the furthest point
+   *  right and below any table's turn arrow would reach once that table is selected, so selecting a
+   *  table never resizes the grid. */
+  #arrowExtent(placements: readonly PlanPlacement[]): { columns: number; rows: number } {
     const scale = Math.max(1, 1 / this.zoom);
-    const below = arrowBelow(
-      p,
-      (p.height * GRID_SQUARE_PX) / 2,
-      this.#arrow.gap * scale,
-      this.#arrow.size * scale,
-    );
-    return Math.ceil(p.y + p.height / 2 + below / GRID_SQUARE_PX) + EXTENT_MARGIN;
+    const gap = this.#arrow.gap * scale;
+    const size = this.#arrow.size * scale;
+    let columns = 0;
+    let rows = 0;
+    for (const p of placements) {
+      const { right, below } = arrowReach(p.rotation, (p.height * GRID_SQUARE_PX) / 2, gap, size);
+      const across = Math.ceil(p.x + p.width / 2 + right / GRID_SQUARE_PX) + EXTENT_MARGIN;
+      const down = Math.ceil(p.y + p.height / 2 + below / GRID_SQUARE_PX) + EXTENT_MARGIN;
+      columns = Math.max(columns, across);
+      rows = Math.max(rows, down);
+    }
+    return { columns, rows };
   }
 
   /** `answered`: the tables were set in this update; set back to the layout before a change, they
@@ -714,7 +728,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   /** Outside the table's button, so a round table's clip never cuts it. Always below, past a
    *  selected table's bottom handles and turn arrow: the grid runs `gridExtent`'s margin past the
-   *  lowest table and the selected table's arrow. */
+   *  lowest table and every table's arrow. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
     const style = styleMap({
@@ -820,8 +834,8 @@ export class WtFloorPlanCanvas extends LitElement {
     return this.keyResized === this.selected ? this.keyResized : null;
   }
 
-  /** A `top` `--wt-space-1` below the lower of `p`'s bottom dots and its turn arrow's lowest
-   *  corner; the CSS form of `arrowBelow`, so it follows the tokens the arrow is drawn from. */
+  /** A `top` `--wt-space-1` below the lower of half a handle's hit area past `p`'s drawn box and its
+   *  turn arrow's lowest corner; the CSS form of `arrowReach`'s `below`. */
   #underHandles(p: PlanPlacement): string {
     const box = this.#drawnBox(p);
     const scale = "var(--wt-plan-control-scale)";
