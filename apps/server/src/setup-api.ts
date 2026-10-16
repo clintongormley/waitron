@@ -226,6 +226,7 @@ export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.configuration_outdated": 400,
   "setup.request_invalid": 400,
+  "setup.owner_required": 403,
   "setup.provisioning_secret_required": 400,
   "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` (see `parseVenue`).
@@ -796,6 +797,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         c.req.header("Accept-Language"),
       );
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
+      if (
+        mode === "live" &&
+        deps.firstFiscal !== undefined &&
+        deps.firstFiscal.offerings(request.venue.location.fiscalTerritory).length > 0
+      )
+        throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
       const rawEmail = (parsed as Record<string, unknown>).email;
       if (environment === "production" && rawEmail === undefined) {

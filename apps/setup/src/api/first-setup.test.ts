@@ -184,3 +184,21 @@ describe("first setup HTTP client", () => {
     expect(requests).toEqual(["/setup-api/provision"]);
   });
 });
+
+it("transports opaque preparation proposals with the exact owner binding", async () => {
+  const { api, requests } = transport();
+  await expect(
+    api.firstSetupPreparation(owner, "example-module", { action: "clock-challenge" }),
+  ).resolves.toEqual({ result: "response" });
+  expect(requests).toEqual([
+    {
+      url: "https://box.test/setup-api/first-setup/preparation",
+      init: {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ module: "example-module", proposal: { action: "clock-challenge" } }),
+      },
+    },
+  ]);
+});

@@ -439,15 +439,18 @@ describe("first fiscal setup public contribution", () => {
   });
 });
 
-it("the launch-configured collector activates a setup from independently bound host evidence", async () => {
+it("the historical paper collector activates independently bound evidence", async () => {
   const { withOperationAuthority } = await import("@waitron/module");
-  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const { createAllocationPreparation } = await import("./allocation-preparation.js");
+  const { createBoundPaperAllocationSource } = await import("./allocation-paper-source.js");
   const { activatePreparedModuleAllocation } = await import("./allocation-preparation.js");
   const f = fixture();
-  const operations = FISCAL_OPERATIONS.configure!({
-    environment: {},
-    readPublicEvidence: async () => ({ trust, current: f.current }),
-  });
+  const operations = createAllocationPreparation(
+    createBoundPaperAllocationSource({
+      environment: {},
+      readPublicEvidence: async () => ({ trust, current: f.current }),
+    }),
+  );
   const result = await withOperationAuthority(
     context.binding,
     context.administratorId,

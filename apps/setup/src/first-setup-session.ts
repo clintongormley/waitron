@@ -372,6 +372,15 @@ export class FirstSetupSession {
       }
     });
   }
+  preparation(module: string, proposal: unknown): Promise<unknown> {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const result = await this.#api.firstSetupPreparation(this.#owner(), module, proposal);
+      current();
+      this.#acceptState(result.state);
+      return result.preparation;
+    });
+  }
   candidates(module: string, proposal: unknown, password: string): Promise<void> {
     return this.#change(module, async (owner) => {
       const { reconfirmation } = await this.#api.reconfirmFirstSetup(owner, password, "block-use");

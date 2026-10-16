@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
@@ -11,7 +11,7 @@ import { tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
+import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -24,6 +24,31 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { mountSetup } from "./setup-api.js";
 import { request } from "../test/first-fiscal.js";
+
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const mono = performance.now(),
+      now = Date.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: now,
+      uncertaintyMs: 500,
+      wallStartedMs: now,
+      wallFinishedMs: now,
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+});
+afterEach(() => vi.useRealTimers());
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -153,33 +178,22 @@ it("owned production Live refuses a missing certificate before creating a readin
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 async function preparedActivation(environment: "production" | "preproduction") {
-  const f = await declaredFirstFiscalFixture({ environment });
-  roots.push(f.root);
-  const host = createFirstSetupModuleHost({ ...f, environment: {}, modules: f.modules });
-  const staged = await host.keys.stageInitialNodeKey(
-    f.ownerAttempt,
-    await host.owner.reconfirm(f.ownerAttempt, PASSWORD, "block-use"),
-  );
-  const document = {
-    module: f.module,
-    stageId: staged.stage.stageId,
-    inputDigest: publicDigest(f.input),
-    historyDigest: f.statement.delivery.historyDigest,
-    documentDigest: f.statement.delivery.documentDigest,
+  const root = await mkdtemp(join(tmpdir(), "hour-readiness-activation-"));
+  roots.push(root);
+  const f = {
+    root,
+    stateDir: join(root, "state"),
+    venueDir: join(root, "venue"),
+    modules: ALL_MODULES.filter((module) =>
+      ["core", "fiscal-verifactu", "fiscal-none"].includes(module.name),
+    ),
   };
-  await host.delivery.registerFirstFiscalDelivery(f.ownerAttempt, {
-    ...document,
-    statement: f.statement,
-  });
-  await host.delivery.confirmFirstFiscalDocumentKept(
-    f.ownerAttempt,
-    { ...document, kept: true },
-    await host.owner.reconfirm(f.ownerAttempt, PASSWORD, "activation"),
-  );
+  const host = createFirstSetupModuleHost({ ...f, environment: {}, database: () => venue.db });
   const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 29).toString("base64") });
   const published: unknown[] = [];
   const deps: SetupDeps = {
     environment,
+    devMode: environment === "preproduction",
     db: venue.db,
     ring,
     firstFiscal: host,
@@ -219,11 +233,20 @@ async function preparedActivation(environment: "production" | "preproduction") {
             from: "owner@example.test",
           },
         };
+  const app = new Hono();
+  mountSetup(app, deps, () => {});
+  const owned = await ownedHourSetup(
+    async (input, init) => app.request(String(input), init),
+    "https://box.test",
+    request,
+    PASSWORD,
+  );
+  const owner = { ...owned.state, capability: owned.headers["X-Waitron-Setup-Owner"]! };
   return {
     host,
     published,
     activate: () =>
-      host.coordinator.run((hold) => activateFirstFiscal(host, deps, f.ownerAttempt, body, hold)),
+      host.coordinator.run((hold) => activateFirstFiscal(host, deps, owner, body, hold)),
   };
 }
 

@@ -1,6 +1,7 @@
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
   FirstSetupOwner,
+  FirstSetupState,
   FirstSetupOwnership,
   FirstSetupStatus,
   FirstSetupUpdate,
@@ -456,6 +457,19 @@ export class SetupApi {
       "/setup-api/first-setup/reconfirm",
       "POST",
       { password, purpose },
+      firstSetupHeaders(owner),
+    );
+  }
+
+  firstSetupPreparation(
+    owner: FirstSetupOwner,
+    module: string,
+    proposal: unknown,
+  ): Promise<{ state: FirstSetupState; preparation: unknown }> {
+    return this.#request(
+      "/setup-api/first-setup/preparation",
+      "POST",
+      { module, proposal },
       firstSetupHeaders(owner),
     );
   }

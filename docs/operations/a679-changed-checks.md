@@ -203,3 +203,51 @@ kept in Lane E receipts for exact permission before any application.
 The protected allocation writer, restore hook, filing implementation and golden suites remain
 outside this continuation's changed paths. Verify their Git blobs against the continuation base
 when resuming; this inventory does not substitute for running their checks.
+
+
+## Task 4 approved legacy checks and owned Live modes, 2026-10-16 22:49
+
+The owner's 22:10 approval applies the exact 21:55 proposal. In
+`packages/fiscal-verifactu/src/initial-setup.test.ts`, the former launch-configured paper case
+now calls the historical paper collector directly. Its `S000001` series and stored-allocation
+assertions are unchanged. In `apps/server/src/fiscal-readiness-first-setup.test.ts`, production
+setup now uses the owned hour API and expects `hour/<owned event>` instead of `contract-S000001`.
+Direct readiness without that session expects `outside_confirmation_missing` instead of
+`environment_mismatch`, and additionally checks the scratch database's empty application tables.
+The production success, node, administrator, counter and isolation assertions remain.
+
+The existing Live certificate case in `apps/server/src/boot.test.ts` also uses the owned hour API.
+Its original assertions are unchanged. Both boot fixtures share a test helper that claims ownership,
+compares clocks, reconfirms the password, records the hour and submits the frozen module input.
+Internet responses and the embedded release stamp are controlled; these checks do not qualify
+actual browser or external-clock journeys.
+
+A new mode check returned 200 for development Live without owned selection, including an import
+request. The ordinary provision handler now answers `setup.owner_required` with 403 when its
+configured host offers owned setup. The new mode cases also exercise automatic Demo and Preparation,
+and owned development Live through publication. The original throwaway-route checks remain.
+
+The browser API and tab session now transport opaque preparation proposals and readings. Six new
+cases initially failed on the absent methods; the two files then returned 53 passes. Their checks
+cover owner headers, selected-module binding, disposal, another attempt's response and a wait that
+keeps the attempt unfrozen. Readings remain outside tab storage in these cases.
+
+The broader boot file returned 60 passes and two failures: the missing setup bundle and excessive
+maximum tick interval receive `setup.attempt_uncertain` before their expected `server.config_invalid`.
+Their assertions remain unchanged. Follow the early target inspection in `boot.ts` before changing
+that order. Lane F's parked A737 branch also changes `boot.ts`; this continuation leaves it untouched
+under the lane's file-reservation rule. The prior baseline experiment is recorded in the plan ledger.
+
+Task 4 remains open for CLI admission, full configuration-import mode qualification and later wizard
+integration. This checkpoint does not qualify the whole branch, generated recovery PDF or recovery
+entry paths. The local command logs, exact assertion inventory and installed omission controls are
+in Lane E's `receipts/a679-hour-task4-modes-20261016-2234/`.
+
+The extended mode run also found two fixtures in `first-fiscal-hour-readiness.test.ts` still
+staging a paper document through the configured hour contribution. Those fixtures now use the
+same owned-hour helper; their original 22 assertions remain. The final independently installed
+candidate returned 77 server cases across eight files and 53 browser-session cases across two
+files. The fiscal run returned 148 cases including the unchanged golden and immutability suites.
+Six guard omissions each failed the intended check and passed after restoration. Three package
+typechecks, scoped lint and focused root guards pass. Whole boot remains 60 passed and two failed
+as listed above; these focused results do not establish branch readiness.

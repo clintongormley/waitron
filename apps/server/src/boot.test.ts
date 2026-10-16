@@ -1,4 +1,4 @@
-import { initialSetupInput } from "./testing/allocated-provision.js";
+import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -1617,11 +1617,29 @@ describe("startServer, against a migrated venue directory", () => {
       .spyOn(fiscal, "drain")
       .mockResolvedValue({ ...emptyDrainResult(), recordsSubmitted: 1, recordsAccepted: 1 });
     try {
-      const initialOperations = await initialSetupInput(
-        stateDir,
-        provisionVenueBody("60000013M"),
-        "preproduction",
-      );
+      const release = await import("@waitron/fiscal-verifactu/src/hour-release.js");
+      vi.spyOn(release, "readHourRelease").mockReturnValue({
+        instantMs: Date.parse("2026-10-15T00:00:00Z"),
+        committedAt: "2026-10-15T00:00:00.000Z",
+        sourceCommit: "a".repeat(40),
+        generator: "scripts/generate-hour-release.mjs:v1",
+        generatorSha256: "b".repeat(64),
+      });
+      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+      vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => {
+        const mono = performance.now(),
+          now = Date.now();
+        return {
+          source: "internet",
+          result: "usable",
+          instantMs: now,
+          uncertaintyMs: 500,
+          wallStartedMs: now,
+          wallFinishedMs: now,
+          monotonicStartedMs: mono,
+          monotonicFinishedMs: mono,
+        };
+      });
       await withMockedKill(async (kills) => {
         const server = await startServer({
           WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
@@ -1637,10 +1655,15 @@ describe("startServer, against a migrated venue directory", () => {
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
         try {
+          const draft = provisionVenueBody("60000013M");
+          const owned = await ownedHourSetup(
+            (input, init) => fetch(input, { ...init, ...via }),
+            `https://127.0.0.1:${port}`,
+            draft,
+            draft.admin.password,
+          );
           const body = {
             mode: "live",
-            venue: provisionVenueBody("60000013M"),
-            initialOperations,
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,
@@ -1650,16 +1673,15 @@ describe("startServer, against a migrated venue directory", () => {
           const tested = await fetch(`https://127.0.0.1:${port}/setup-api/fiscal-test`, {
             ...via,
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: owned.headers,
             body: JSON.stringify(body),
           });
           expect(tested.status).toBe(200);
           expect(await tested.json()).toMatchObject({ status: "accepted" });
-          body.initialOperations = await initialSetupInput(stateDir, body.venue, "production");
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: owned.headers,
             body: JSON.stringify({
               ...body,
               email: {

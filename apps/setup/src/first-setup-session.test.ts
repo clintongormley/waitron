@@ -752,3 +752,99 @@ it("releases a real nonce lock granted after the session was disposed without op
   expect(session.state).toBeUndefined();
   await expect(session.claim(venue)).rejects.toMatchObject({ code: "setup.attempt_conflict" });
 });
+
+describe("module preparation in the owned tab", () => {
+  it("returns opaque readings without storing them or sending a password", async () => {
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : json({
+            state: initial,
+            preparation: { id: "clock-comparison", clocks: ["box", "browser"] },
+          }),
+    );
+    await session.open();
+    await session.claim(venue);
+    const before = sessionStorage.getItem(FIRST_SETUP_SESSION_KEY);
+    expect(
+      await session.preparation("example-module", { action: "compare-clocks", browser: null }),
+    ).toEqual({ id: "clock-comparison", clocks: ["box", "browser"] });
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/preparation",
+    ]);
+    expect(requests[1]!.body).toEqual({
+      module: "example-module",
+      proposal: { action: "compare-clocks", browser: null },
+    });
+    expect(requests[1]!.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe(before);
+    expect(session.state).toEqual(initial);
+  });
+  it("keeps a pending selection owned without turning it into consumption intent", async () => {
+    const { session, requests } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : ends(path, "reconfirm")
+          ? json({ reconfirmation: "proof" })
+          : json({ state: initial, preparation: { status: "waiting", targetMs: 1234 } }),
+    );
+    await session.open();
+    await session.claim(venue);
+    await session.candidates("example-module", { answer: "yes" }, "administrator password");
+    expect(await session.preparation("example-module", { action: "selection" })).toEqual({
+      status: "waiting",
+      targetMs: 1234,
+    });
+    expect(session.state?.status).toBe("claimed");
+    expect(session.state?.consumptionIntent).toBe(false);
+    expect(requests.map(({ path }) => path)).toEqual([
+      "/setup-api/first-setup/claim",
+      "/setup-api/first-setup/reconfirm",
+      "/setup-api/first-setup/candidates",
+      "/setup-api/first-setup/preparation",
+    ]);
+  });
+  it("refuses another module before sending a preparation request", async () => {
+    const { session, requests } = create(claim);
+    await session.open();
+    await session.claim(venue);
+    await expect(session.preparation("foreign-module", {})).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(requests).toHaveLength(1);
+  });
+  it("drops a delayed reading after the tab's session is disposed", async () => {
+    const answer = deferred<Response>(),
+      started = deferred<void>();
+    const { session } = create((path) => {
+      if (ends(path, "claim")) return claim();
+      started.resolve();
+      return answer.promise;
+    });
+    await session.open();
+    await session.claim(venue);
+    const pending = session.preparation("example-module", {});
+    await started.promise;
+    await session.dispose();
+    answer.resolve(json({ state: initial, preparation: { id: "late-comparison" } }));
+    await expect(pending).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(session.state).toBeUndefined();
+  });
+  it("rejects readings from a different attempt before exposing them", async () => {
+    const { session } = create((path) =>
+      ends(path, "claim")
+        ? claim()
+        : json({
+            state: { ...initial, attemptId: "55555555-5555-4555-8555-555555555555" },
+            preparation: { id: "foreign-comparison" },
+          }),
+    );
+    await session.open();
+    await session.claim(venue);
+    await expect(session.preparation("example-module", {})).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(session.state).toEqual(initial);
+  });
+});

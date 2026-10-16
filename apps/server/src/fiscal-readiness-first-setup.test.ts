@@ -11,13 +11,18 @@ import {
   type ThrowawayAllocation,
   type ModuleOperationInput,
 } from "@waitron/module";
-import { venueFiscalSelection, type VenueRequest } from "@waitron/provisioning";
+import {
+  venueFiscalSelection,
+  type VenueRequest,
+  type InitialVenueInput,
+} from "@waitron/provisioning";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { initialSetupInput } from "./testing/allocated-provision.js";
 import { freePorts } from "./testing/free-ports.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { request } from "../test/first-fiscal.js";
+import { request, PASSWORD } from "../test/first-fiscal.js";
+import { ownedHourSetup } from "../test/owned-hour-setup.js";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -26,6 +31,24 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 const calls = vi.hoisted(() => ({ throwaway: vi.fn(), outside: vi.fn(), drain: vi.fn() }));
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const mono = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 500,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
   return {
@@ -116,7 +139,7 @@ it.each([true, false])(
     const directory = await root();
     const stateDir = join(directory, "state");
     await mkdir(stateDir);
-    const production = await initialSetupInput(stateDir, request, "production");
+    let production: InitialVenueInput = await initialSetupInput(stateDir, request, "production");
     const [port] = await freePorts(1);
     const migrationsRoot = join(directory, "migrations");
     await copyMigrationsRoot(migrationsRoot);
@@ -207,14 +230,19 @@ it.each([true, false])(
       expect(facts(join(stateDir, name!))).toEqual(first);
       if (supplied) {
         expect(await post()).toMatchObject({ status: 200, body: { status: "accepted" } });
+        const owned = await ownedHourSetup(
+          (input, init) => fetch(input, { ...init, dispatcher: agent } as RequestInit),
+          `https://127.0.0.1:${port}`,
+          request,
+          PASSWORD,
+        );
+        production = owned.initialOperations;
         const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
           dispatcher: agent,
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: owned.headers,
           body: JSON.stringify({
             mode: "live",
-            venue: request,
-            initialOperations: production,
             aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
             email: {
               server: "smtp.example.test",
@@ -233,12 +261,14 @@ it.each([true, false])(
         server = undefined;
         const live = facts(env.WAITRON_VENUE_DIR);
         expect(live.deployment).toEqual([{ environment: "production" }]);
+        expect(first.nodes).not.toContainEqual({ id: production.nodeId });
+        expect(first.administrators).not.toContainEqual({ id: production.administratorId });
         expect(live.nodes).toEqual([{ id: production.nodeId }]);
         expect(live.administrators).toEqual([{ id: production.administratorId }]);
         expect(live.allocations).toEqual([
           {
             event_key: expect.any(String),
-            allocation_key: "contract-S000001",
+            allocation_key: `hour/${production.inputs[0]!.eventId}`,
             node_id: production.nodeId,
             environment: "production",
           },
@@ -259,7 +289,7 @@ it.each([true, false])(
   },
 );
 
-it("direct readiness rejects a supplied production allocation through the existing verifier", async () => {
+it("direct readiness refuses an uploaded production allocation without an owned hour session", async () => {
   const stateDir = await root();
   const initialOperations = await initialSetupInput(stateDir, request, "production");
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
@@ -296,7 +326,19 @@ it("direct readiness rejects a supplied production allocation through the existi
     }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "environment_mismatch" },
+    params: { reason: "outside_confirmation_missing" },
   });
   expect(calls.throwaway).not.toHaveBeenCalled();
+  const [scratch] = (await readdir(stateDir)).filter((name) =>
+    name.startsWith("fiscal-readiness-db-"),
+  );
+  expect(scratch).toBeDefined();
+  const empty = facts(join(stateDir, scratch!));
+  expect(empty.nodes).toEqual([]);
+  expect(empty.administrators).toEqual([]);
+  expect(empty.allocations).toEqual([]);
+  expect(empty.identities).toEqual([]);
+  expect(empty.series).toEqual([]);
+  expect(empty.records).toEqual([]);
+  expect(empty.sales).toEqual([]);
 });
