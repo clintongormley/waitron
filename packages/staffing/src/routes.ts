@@ -198,7 +198,8 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.post(`${ROOT}/rota/change-week`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const body = record(await readJsonBody<unknown>(c), "body", new Set(["week"]));
+        const body = await readRawJsonBody<unknown>(c);
+        onlyKeys(body, ["week"]);
         if (!isRotaWeek(body.week))
           throw new AppError("management.request_invalid", { field: "week" });
         const week = body.week;
