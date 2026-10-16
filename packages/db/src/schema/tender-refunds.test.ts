@@ -32,14 +32,12 @@ describe("settled-tender refund ledger", () => {
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Refund fixture" });
-    await db
-      .insert(locations)
-      .values({
-        id: LOCATION,
-        name: "Venue",
-        invoiceLocales: ["es"],
-        operationDescription: "Meals",
-      });
+    await db.insert(locations).values({
+      id: LOCATION,
+      name: "Venue",
+      invoiceLocales: ["es"],
+      operationDescription: "Meals",
+    });
     nodeId = await seedNode(db, locationId(LOCATION));
     ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
     const [series] = await db
