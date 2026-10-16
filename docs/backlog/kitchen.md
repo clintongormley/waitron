@@ -140,18 +140,6 @@ list does not exist.
   stays, counting, until the screen is opened again; long outages are counted in minutes, never
   hours.
 
-## Each is decided by the unit's identity, with one known gap
-
-- **Each is decided by the unit's identity, with one known gap.** While a line is still open,
-  deleting the stored unit seeded as `each` it was sold in makes its queue row, any notice recorded
-  after, its printed ticket, the expo board and the ticket's merge-or-split check read it as not
-  Each, because `readLinesSoldInEach` looks the seed key up on the live unit row; the unit a product
-  with no stored unit reads as cannot be deleted, so only such a stored unit is affected. A line with
-  no recorded context but a unit recorded on it prints that unit, so its entries print as sold.
-  **Kept as it is, by the owner's choice (2026-09-28):** the till's ticket view
-  (`apps/till/src/screens/till-ticket-view.ts`) still shows the Each unit. The printed receipt
-  prints an Each count bare since A663 Part 2 (owner, 2026-10-15).
-
 ## A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
 
 **A725 (owner, 2026-10-15).** Mockup: [prep stations](mockups/a718-a727-calendar-and-stations/14-prep-stations.png). Files:
@@ -245,6 +233,63 @@ go-live nothing is carried forward.
 Wording: in the mock-ups a station's inherited choice reads "Same as every station". A725 point 6's
 "Venue setting: Print" was chosen when the default lived on Venue settings; the owner is asked to
 confirm the new wording when A756 is picked up.
+
+## Left by C80: a dish whose course the till does not list
+
+- Left by C80 (read from `draftSections` and `groupArrivingDishes`, not compared with a running
+  till): the till files a dish whose course it does not list (an inactive course) under the earliest
+  course it lists, while a move keeps it in its own held group; and when a round is SENT,
+  `working-order.ts` picks its earliest course without checking whether it is active, so with a
+  switched-off course the send path and the move path can file a dish with no course under different
+  courses (owner, 2026-09-29: not queued). Left open by the table actions plan's Task 9 (#874,
+  dishes arriving in a party get a kitchen group).
+
+  **2026-10-10 update:** A435 step 5 now shows saved drafts in their recorded course section and
+  fired lines with their recorded label, even with no active courses. The C80 reading above is
+  historical; its move/send comparison remains unverified here.
+
+## A long word in a routing-grid row name still splits at 390 px
+
+- **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name
+  breaks between words where each word fits ("AGAVE", "Café con / leche" stay whole), but a word
+  wider than what is left of the capped first column beside the indent and the arrow still breaks
+  inside itself ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). The column is held at 96 px by the
+  phone-width case "at phone width the row label column is capped and the zones take most of the width"
+  (`packages/venue-service/src/dashboard/routing-grid.test.ts`). Options: widen the cap, shrink the
+  arrow at phone width, or hyphenate (`hyphens: auto` needs a `lang` on the grid or above it; the
+  dashboard sets none — `apps/dashboard/index.html`'s `<html>` has none).
+
+## Routing reads do work only one screen uses
+
+- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review:
+  every read of the routing model works out each period's products (`readRoutingPeriods`,
+  `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
+  catalogue's folder read pays for it too; and the Opening hours model reads every period's routing
+  uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
+  or category change, though since A506-11 nothing reads the model's copy: the period delete dialog
+  reads its own through `GET …/menu-periods/:periodId/delete-impact`. Work each out only where it is
+  used.
+
+## A695 — Naming or renaming a party after its food was sent prints nothing
+
+- **A695 — Naming or renaming a party after its food was sent prints nothing (2026-10-15; open,
+  owner decision).** Since A683 a named party's kitchen tickets read "Order 5 · Ana", but Name the
+  party prints no MOVED slip (A650 design, path 17), so a ticket already on the rail keeps the old
+  name, or none, while later tickets for the same order carry the new one. Decide: should a rename
+  of a party with sent food print a slip? Raised by A683's review (#1724).
+
+## A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
+
+- **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
+  (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
+  kitchen items and sends replacements. The dish keeps its earlier made-here choice
+  (`keepMadeHere`, `apps/server/src/working-order.ts`), but its extras are routed afresh in
+  `insertSplitExtras`, which reads the made-here stations of the sending device. So an extra the
+  Quesos station already received can come back as made on the spot when a device that makes
+  Quesos itself does the edit. Found by A687's review (#1720); its fifth case in
+  `apps/server/src/sent-order-number.test.ts` relies on this behaviour and will fail if it
+  changes. The review believed it dates from #1013 (`git log -S keepMadeHere`), not checked
+  further. Decide: should extras keep their earlier choice, as the dish does?
 
 ## Decisions and deliberate limits
 
@@ -356,3 +401,8 @@ confirm the new wording when A756 is picked up.
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and
   a station's own MOVED slips choice decide paper only. Plan:
   [2026-10-14-a650-moved-slips-design.md](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.
+
+- **Each is decided by the unit's identity.** **Kept as it is, by the owner's choice
+  (2026-09-28):** the till's ticket view (`apps/till/src/screens/till-ticket-view.ts`) still shows
+  the Each unit. The printed receipt prints an Each count bare since A663 Part 2 (owner,
+  2026-10-15).
