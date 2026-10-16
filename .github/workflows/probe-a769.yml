@@ -1,0 +1,21 @@
+name: probe-a769
+on: pull_request
+jobs:
+  timeout-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - id: shard
+        run: sleep 300
+      - name: if failure()
+        if: failure()
+        run: echo "RAN failure()"
+      - name: if cancelled()
+        if: cancelled()
+        run: echo "RAN cancelled()"
+      - name: if always() and shard not success
+        if: always() && steps.shard.outcome != 'success'
+        run: echo "RAN always-and-outcome outcome=${{ steps.shard.outcome }}"
+      - name: if always()
+        if: always()
+        run: echo "RAN always()"
