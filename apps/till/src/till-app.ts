@@ -7951,8 +7951,6 @@ export class TillApp extends LitElement {
     return { sync, read: read ? await sync.load() : true };
   }
 
-  /** A sign-out leaves the order on the table-order screen, but its draft went with the session: the
-   * person signing in gets their own draft on that party. */
   #resumeOrderDraft(): void {
     const session = this.#operatorSession;
     void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
