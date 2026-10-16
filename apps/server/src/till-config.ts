@@ -28,6 +28,8 @@ export interface TillConfig {
   tipsEnabled: boolean;
   /** Whether the installed fiscal contribution exposes an operation description field. */
   operationDescriptionRequired?: boolean;
+  /** What a sale files when its department has no usable description: the fiscal seat's default. */
+  operationDescriptionDefault?: string;
   /**
    * True for Demo and Prepare installations. Receipt renderers use it only to add an unmistakable
    * practice warning; fiscal values and hashes never depend on it.

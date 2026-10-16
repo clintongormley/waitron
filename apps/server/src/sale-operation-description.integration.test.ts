@@ -248,6 +248,22 @@ it("unpaid issuance files the department description and correction uses its ret
   ]);
 });
 
+it("a department with no description files the fiscal seat's default, for the sale and its correction", async () => {
+  await authored();
+  const cfg = { ...venue.cfg, operationDescriptionDefault: "Seat default" };
+  const id = await open();
+  await issueOrderInvoice(deps(), cfg, id, venue.operatorId);
+  expect(records(id)).toEqual([{ description: "Seat default" }]);
+  const session = await withTransaction(venue.db, (tx) =>
+    loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
+  );
+  await withTransaction(venue.db, async (tx) => {
+    const invoice = await readOrderInvoice(tx, id);
+    await creditWholeInvoice(tx, deps(), cfg, invoice!, { sessionId: session.id });
+  });
+  expect(records(id)).toEqual([{ description: "Seat default" }, { description: "Seat default" }]);
+});
+
 it("a correction refuses a missing retained-department description without a new record", async () => {
   const id = await open();
   await issueOrderInvoice(deps(), venue.cfg, id, venue.operatorId);
