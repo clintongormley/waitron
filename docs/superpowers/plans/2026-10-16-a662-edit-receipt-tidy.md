@@ -85,14 +85,21 @@ is a default rather than a fix to the import.
   over a default. A venue without Veri\*Factu (`operationDescriptionRequired === false`) still files
   `""` and shows no field. No error code is added, renamed or removed; the till's and the
   Departments screen's handling of the code stay, reachable in the no-default case.
-- **A stored value that cannot be used counts as none.** `parseReceipt`
-  (`department-receipts.ts:113-121`) already reads a blank, over-500, control-character or
-  non-text description as absent, for the dialog, the warning and the printed receipt alike; the
-  default follows that one rule rather than adding a second "stored but unusable" state to the
-  venue-service read contract. From reading, no writer can store such a value: the receipt
-  validator drops a blank one (`packages/layouts/src/validate.ts:154-161`), the dialog's save refuses
-  the rest (`apps/server/src/department-receipt-draft.ts:90-106`), and the configuration import
-  refuses them (`packages/venue-service/src/configuration-transfer.ts:617-625`).
+- **A stored value that cannot be used counts as none — a departure to name in the PR.** The
+  queue says "keep the refusal for any case the owner did not name"; a stored but unusable
+  description (non-text, over 500 characters, a control character) is such a case, and it now
+  files the default instead of being refused. Chosen because `parseReceipt`
+  (`department-receipts.ts:113-121`) already reads every such value as absent, for the dialog, the
+  warning and the printed receipt alike; keeping a refusal for it alone would add a second
+  "stored but unusable" state to the venue-service read contract (`module.ts`). What the writers
+  refuse, each pinned by a test: the dialog's save refuses `""`, `" "`, 501 characters and a
+  control character before writing (`apps/server/src/department-receipt-settings-api.test.ts:198-210`,
+  `department-receipt-draft.test.ts:101-116`); the configuration import refuses `null`, `[]`, 501
+  characters and a control character (`packages/venue-service/src/configuration-transfer.test.ts:1405-1419`).
+  Not pinned, and from reading only: the configuration import checks type, length and control
+  characters (`configuration-transfer.ts:617-625`) but not blankness, so it is believed to store a
+  blank description as given. A blank one is "no description", the case the owner named. Assumption:
+  nothing else writes `department_receipts.receipt`.
 - **Point 2: `<wt-modal size="wide">`** replaces `<wt-dialog>` and its one-off
   `--wt-dialog-max-width: min(96vw, var(--wt-modal-max-width))` (`department-receipt-dialog.ts:58-60`).
   `design-system.md:1631-1632` lists `size="wide"` (`--wt-modal-max-width`, 1024px) for "a
@@ -106,23 +113,52 @@ is a default rather than a fix to the import.
   column's width depends neither on whether a preview has loaded nor on which paper it shows.
   The strut must NOT carry the `.paper` class: tests wait for `.paper` as the sign a preview drew
   (`department-receipt-dialog.client.test.ts:147`, `department-receipt-dialog.a11y.test.ts:45`).
+  `wt-modal` extends `wt-dialog`, so `beforeClose`, `wt-close`, `description` and `dismissible`
+  carry over. Two behaviours change, both accepted and both checked in the Task 0 / Task 5 looks:
+  the dialog opens with focus on its body, which is always a Tab stop (`bodyTabStop = "always"`,
+  `wt-modal.ts`; `design-system.md:1669-1670`), where today's overflowing `wt-dialog` hands focus
+  to the first switch; and fields stop at `--wt-form-max-width` (576px), which `wt-modal` sets on
+  its body (`wt-modal.ts:51`).
 - **Point 3:** the address lines go. The sentence shown when the location has NO address
   (`receipts.no_address`, "This location has no address saved. It is set during setup.") stays: it
   is not a copy of the address, and nothing else says why the switch prints nothing.
 - **Point 4:** a `logo` presentation of `dashboard-image-upload`, beside its `thumbnail` one, so
   the picker, its draft scope and its disabled handling are reused. With a logo: a bordered button
   showing the picture on the paper's white (`paperStyles` keeps paper colours in both themes;
-  share that ground rather than writing a new colour), the picture no larger than it prints — at
-  most `safeWidthDots("80mm")` wide and `LOGO_MAX_HEIGHT_DOTS` tall at 203 dpi
-  (`dpiValue("203dpi")`; `packages/printing/src/layout.ts`, `dither.ts:2`), about 63 × 20 mm —
-  with `object-fit: contain`; accessible name "Change logo". Beside it a ghost `wt-button`
-  "Remove" (accessible name "Remove logo"). Without a logo: one dashed button "+ Add a logo". Both
+  share that ground rather than writing a new colour), drawn at the size it prints. Printing fits
+  every logo, small or large, inside 504 × 160 dots: `decodeLogoGreyscale` runs sharp's
+  `.resize(maxWidth, maxHeight, { fit: "inside" })` (`packages/media/src/logo.ts:26`), which
+  ENLARGES a small image, called with `safeWidthDots(paper)` and `LOGO_MAX_HEIGHT_DOTS`
+  (`apps/server/src/receipt-logo.ts:15`). Measured 2026-10-16 with the worktree's sharp and that
+  exact chain (flatten, resize 504 × 160 inside, b-w): 100 × 30 → 504 × 151, 2000 × 600 → 504 × 151,
+  504 × 151 → 504 × 151. So
+  the picture sits in a fixed box of `safeWidthDots("80mm")` × `LOGO_MAX_HEIGHT_DOTS` dots at
+  `dpiValue("203dpi")` — 504/203 in × 160/203 in, about 238 × 76 CSS px, 63 × 20 mm
+  (`packages/printing/src/layout.ts`, `dither.ts:2`) — with `object-fit: contain`, so a small logo
+  is enlarged on screen as on paper; accessible name "Change logo". Beside it a ghost `wt-button`
+  "Remove" (accessible name "Remove logo"). Without a logo: one dashed button "+ Add a logo", its
+  "+" `aria-hidden` so the accessible name is exactly "Add a logo". Both
   buttons keep `data-test="choose-image"` / `"remove-image"`, which the dialog's tests already use.
   The picker's footer shows no Remove in this presentation (Remove is beside the picture). Remove
   only clears the receipt's logo; it sends nothing to the image library. Spanish: «Añadir un
   logotipo», «Cambiar el logotipo», «Quitar», «Quitar el logotipo» — «Quitar», not the existing
   `action.remove` «Eliminar», which reads as deleting the image.
 - **Point 5:** `receipts.offered_languages` ("Available at the till.") is deleted, EN and ES.
+
+## Task 0 — Reproduce first, and look at today's dialog
+
+Before any code. Read CLAUDE.md §6 and `docs/developers/workflow-guide.md` (the dev stack from a
+worktree). Start the dev stack on this worktree's UNCHANGED code with `wa-wt demo <this worktree's
+name>` — never a bare `pnpm dev*`, never the Santet worktree. If a reset turns out to be needed,
+first `lsof` port 8080 and the slot's venue folder and stop only what you started. On a department
+with no stored description (check the Departments list shows "Set up the tax-agency description"),
+open Edit receipt and take pictures on opening and again after the preview draws, at 1280 and 390,
+light and dark, with and without a logo (choose one from the image library; take a wide one), into
+`/Users/clintongormley/waitron-campaign-c/a662-shots/before/`. Record, with the measured dialog
+width each time (devtools or `getBoundingClientRect` on the `<dialog>`): whether the dialog opens
+narrow and widens when the preview draws, and whether the logo widens it further (the spec's point
+2 says "not checked"). Note where focus lands on opening (Decisions, point 2). Put the findings in
+the PR. Remove the test logo afterwards so Task 5 starts from the same state.
 
 ## Task 1 — The sale path files the fiscal seat's default when a department has none
 
@@ -183,15 +219,30 @@ Test first:
    description issue, and `GET /management-api/venue-service/departments/<row.id>/receipt` answers
    `receipt.operationDescription` equal to the Veri\*Factu module's default, read from `ALL_MODULES`
    (never a literal). For GB-vat: no issue, the answer has no `operationDescription`, and
-   `operationDescriptionRequired` is false. Rename the case to say what it now checks.
+   `operationDescriptionRequired` is false. Rename the case to say what it now checks. This read
+   goes through real start-up and reads boot's `till` object (`venueCfg: till`, `boot.ts:1718`),
+   the same object every sale route's cfg is spread from (Task 1's trace), so it is the start-up
+   check that the default reaches the sale path too — indirectly. Task 5 makes a real sale on the
+   dev stack to see it directly; say both in the PR.
+
+What start-up no longer shows: today this boot test is the only check that boot wires
+`operationDescriptionRequired` into `routeCtx.cfg` (~1800) — it expects every ES-common department
+reported. Afterwards Veri\*Factu always offers a default, so the list is empty for both packs and
+deleting that flag at ~1800 passes every test. Nothing at start-up can observe it while the only
+installed filing module has a default. The remaining guard for "required with no default" is the
+routes level: `packages/venue-service/src/routes.test.ts`'s existing no-default table (~3913-3950)
+and its `false`/`undefined` cases (~3958-3974). List this as a WEAKENED check in the PR
+(below). The default's own wiring at ~1800 stays observable (deletion proof below).
 
 Then: `operationDescriptionDefault?: string` on `ModuleRouteContext.cfg`; the routes condition
 becomes required AND no default; the GET falls back to `cfg.operationDescriptionDefault`; boot sets
 one `const` from `enabledFiscal.venueFields?.defaults?.operationDescription` and passes it at ~1487
 (`till`) and ~1800 (`routeCtx.cfg`).
 
-Deletion proofs, one at a time: drop the ~1487 wiring (boot GET case fails), the ~1800 wiring (boot
-readiness case fails), the GET fallback (case 2 fails), the routes condition (case 1 fails).
+Deletion proofs, one at a time: drop the ~1487 default (boot GET case fails), the ~1800 default
+(boot readiness case fails), the GET fallback (case 2 fails), the routes condition (case 1 fails).
+Also drop the ~1800 `operationDescriptionRequired` and record in the PR that every test still
+passes (the weakened check above).
 
 Checks: the three files above; `pnpm exec vitest run scripts/module-seams.test.ts
 scripts/live-subscriptions.test.ts`; `pnpm --filter @waitron/venue-service exec vitest run
@@ -226,6 +277,8 @@ preview stacks under the form on a phone.
 
 Checks: `pnpm --filter @waitron/dashboard exec vitest run src/screens/department-receipt-dialog
 src/screens/receipt-editor-boundaries.test.ts src/dashboard-app.receipt-dialog.test.ts src/i18n`;
+`pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "[Rr]eceipt"` (the
+hosted dialog's cases, ~8037-8170, cancel and Escape close among them; read the `Tests` count);
 `pnpm exec vitest run scripts/style-token-names.test.ts scripts/native-form-fields.test.ts`;
 `pnpm --filter @waitron/dashboard typecheck`; `pnpm format:check`.
 
@@ -237,16 +290,20 @@ Files: `apps/dashboard/src/widgets/image-upload.ts`, `image-upload.test.ts`,
 
 Test first, in `image-upload.test.ts` (real Chromium):
 
-1. `logo` with no image: one button, dashed border, text "+ Add a logo", accessible name "Add a
-   logo"; a click opens the picker; no `remove-image`.
+1. `logo` with no image: one button, dashed border, text "+ Add a logo", accessible name exactly
+   "Add a logo" (the "+" is `aria-hidden`); a click opens the picker; no `remove-image`.
 2. With an image: the picture button's accessible name is "Change logo" and a click opens the
    picker; `remove-image` sits beside it (same row at 1280 px, by `getBoundingClientRect`); clicking
    it sends `image-changed { image: null }` and makes no `imageLibraryRequest` call (spy); the
    open picker's footer has no `remove-image`.
-3. Printed size: set the picture's `src` to a 2000 × 600 PNG drawn on a canvas (`toDataURL`), wait
-   for `load`; its rendered width is within 1px of `safeWidthDots("80mm") / dpiValue("203dpi")`
-   inches in CSS px (about 238px) and its height no more than `LOGO_MAX_HEIGHT_DOTS / 203` inches.
-   A broken image would measure 0, so "within 1px" is the discriminating check, not "at most".
+3. Printed size, for a SMALL and a LARGE picture: set the picture's `src` to a 100 × 30 PNG, then
+   a 2000 × 600 one, each drawn on a canvas (`toDataURL`), and wait for `load`. The `<img>`'s box is
+   the fixed box, `safeWidthDots("80mm") / dpiValue("203dpi")` × `LOGO_MAX_HEIGHT_DOTS / 203`
+   inches in CSS px (about 238 × 76), within 1px. The DRAWN picture, computed from `naturalWidth`
+   and `naturalHeight` and the box (`object-fit: contain`: scale = min(boxW / naturalWidth,
+   boxH / naturalHeight)), is about 238 × 71 for both — the 504 × 151 dots both print at (Decisions,
+   measured). A box bounded only by `max-inline-size`/`max-block-size` would draw the small
+   picture at 100 × 30, so the small case is the one that fails against the wrong design.
 4. `disabled` disables both buttons and closes an open picker (as the full presentation does).
 5. `image-upload.a11y.test.ts`: both states, light and dark, no axe violations.
 
@@ -254,12 +311,15 @@ Then in the dialog: `<dashboard-image-upload logo …>` without `label`; delete 
 (EN, ES) after a grep; add the four strings (Decisions). A case in the new width test: with a logo
 whose picture is the 2000 × 600 PNG, the dialog's width equals the no-logo width at 1280 and 390.
 
-Deletion proofs: remove the size bound (case 3 and the dialog width case fail); restore.
+Deletion proofs: replace the fixed box with `max-*` bounds (the small case of 3 fails); remove the
+box's size altogether (both cases of 3 and the dialog width case fail); restore.
 
 Checks: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/image-upload
 src/screens/department-receipt-dialog src/widgets/product-editor src/widgets/variant-form
-src/widgets/section-details-form src/widgets/include-folder-form src/i18n` (the widget's other
-users must pass unchanged); the guards and typecheck of Task 3; `pnpm format:check`.
+src/widgets/section-details-form src/widgets/include-folder-form src/widgets/product-appearance
+src/i18n` and `pnpm --filter @waitron/dashboard exec vitest run src/screens/catalogue-screen.test.ts
+-t "image"` (the widget's other users must pass unchanged; check the filter selects cases by the
+`Tests` count, and drop it if it selects none); the guards and typecheck of Task 3; `pnpm format:check`.
 
 ## Task 5 — Look, docs, backlog
 
@@ -268,12 +328,20 @@ users must pass unchanged); the guards and typecheck of Task 3; `pnpm format:che
    "Set up the tax-agency description". Open its Edit receipt: the description field shows the
    default, filled in; the dialog is at its final width from the first frame (screen-record or two
    shots, before and after the preview draws). Choose a logo from the library, then Remove it.
+   Check the two `wt-modal` changes: where focus lands on opening (the body, then Tab reaches the
+   first switch), and that fields stop at 576px at 1280 without looking cramped beside the preview.
+   Then make one cash sale on the dev stack's till in that department and read its record:
+   `sqlite3 -readonly <the slot's venue.db> "select descripcion_operacion from registros_facturacion
+   order by secuencia desc limit 1"` — expect the Veri\*Factu default. This is the direct start-up
+   check of the sale path's wiring (Task 2).
    Save pictures, both themes, at 1280 and 390, with and without a logo, plus the Departments list,
-   to `/Users/clintongormley/waitron-campaign-c/a662-shots/`. Compare with the mockup.
+   to `/Users/clintongormley/waitron-campaign-c/a662-shots/after/`. Compare with the mockup and with
+Task 0's `before/` pictures.
 2. Docs, rewritten to the new behaviour:
-   - `docs/developers/design-system.md` ~4411-4416 (Edit receipt): a wide modal; the logo as a
-     small picture with Remove, or "+ Add a logo"; no address copy; a department without its own
-     tax-agency description shows, and files, the installed fiscal module's default.
+   - `docs/developers/design-system.md` ~4411-4416 (Edit receipt): a wide modal that opens with
+     focus on its body and holds its fields to the form width; the logo as a picture at its printed
+     size with Remove, or "+ Add a logo"; no address copy; a department without its own tax-agency
+     description shows, and files, the installed fiscal module's default.
    - `docs/developers/products.md` ~216-218: the department's description, or the fiscal module's
      default when it has none.
    - `docs/backlog/setup.md` ~42-44: the same, beside "the generic location field is not their
@@ -293,7 +361,11 @@ Checks: `pnpm exec vitest run scripts/claude-md-pointers.test.ts`; `pnpm format:
 Server:
 - `apps/server/src/boot.departments-readiness.test.ts:22-23, 77-85` (point 1): ES-common expected
   every department reported `department.operation_description_required` → none, and the receipt read
-  answers the module's default.
+  answers the module's default. WEAKENED in one respect: it was the only check that start-up wires
+  `operationDescriptionRequired` into the module routes (`boot.ts` ~1800); with Veri\*Factu always
+  offering a default, that wiring is no longer observable at start-up. Remaining guard for "required
+  with no default": `packages/venue-service/src/routes.test.ts` ~3913-3974. Gained: start-up now
+  checks the default is wired (the receipt read).
 
 Dashboard (point 2 — selector only, the assertions on the element are unchanged):
 `querySelector("wt-dialog")` → `"wt-modal"` at `testing/department-receipt-dialog-fixture.ts:93`,
@@ -308,6 +380,9 @@ Dashboard (behaviour):
   own element → asserts no line is shown; the absent-address sentence half is unchanged.
 - `department-receipt-dialog.retained.test.ts:415` (point 5): asserted the text contains
   `receipts.offered_languages` → the key is gone; Task 3 case 3 asserts the sentence is absent.
+
+Departure from the queue's wording to name in the PR: a stored but unusable description files the
+default rather than being refused (Decisions).
 
 Any other check that breaks is a STOP: report it, do not edit it. A fiscal or golden test, or a
 `scripts/` guard, needing a change is a STOP.
