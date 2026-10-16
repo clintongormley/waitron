@@ -141,6 +141,10 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Mark A679 hour implementation still open in backlog; add dated supersession pointers without rewriting historical requirements or receipts.
 - [ ] Resume the existing product branch, reconcile published documents and current main according to overlap rules. Create no second active product feature.
 
+**Task 0 checkpoint, 2026-10-16:** plan published at `275d1d6b702909c101aa99b3f78f51930ac6f834`, after separate high-effort authorship and an independent requirements check. The check corrected history filtering across software IDs and countdown restart semantics. CI `38908709040` and licence/sign-off `38908708463` passed on that exact commit. The product branch rebased from `92a76fb6891e4eb7fb83d5db2f942f67d1656294` to `4094497d8402376f68e9986cc82c6eaa066da930`; conflict resolutions retained the approved A679 backlog paragraph. Of 214 feature code paths, 211 retained identical Git blobs; the other three incorporated main's workflow, boot-test and module-export changes. This is a source comparison, not behavioral qualification.
+
+Focused rebase checks passed: 20 module cases, 20 unchanged protected fiscal cases and 186 CI-workflow cases. `src/boot.test.ts` returned 58 passed and four failed both at the old commit in an independently installed disposable worktree and at the rebased commit. The named failures and messages matched: two static configuration refusals were masked by `setup.attempt_uncertain`, and Demo/Live provision requests returned 400 instead of 200. These failures predate this rebase; their introduction into the feature branch was not measured. Tasks 4, 9 and 10 below own their remaining qualification. No hour implementation, product review, product CI or finish readiness is claimed.
+
 ### Task 1: Hour identity and unchanged-writer feasibility
 
 **Files:** new `vf/hour-identity.ts` and tests; `allocation-identity.ts`, `allocation-envelope.ts`, `allocation-operation.ts`, `reserved-series.ts` only within permitted validation/admission scope.
@@ -216,6 +220,7 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Fix only readiness-target parsing/admission: production keeps certificate requirements; preproduction’s certificate-free contract reaches its intended disposable readiness result.
 - [ ] Keep readiness database, credentials and receipt separate; no network call joins the sale path.
 - [ ] Configure hour preparation through every host, including CLI provisioning. No fallback to ambient paper/Cloud/emergency files.
+- [ ] Qualify the existing Demo provisioning case in `server/boot.test.ts` through the intended automatic preparation path. Retain its assertions on the response, stored venue, environment and restart; do not weaken them to accept a refusal.
 - [ ] Run fiscal disposable tests: `node scripts/run-with-deadline.mjs 240 -- pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/throwaway-allocation.test.ts src/hour-activation.test.ts`.
 - [ ] Preserve old fiscal assertions; enumerate incompatible old policy checks for exact permission rather than silently rewriting them.
 - [ ] Repeat to GREEN; commit `git commit -s -m "feat: apply hour admission across setup modes and readiness"`.
@@ -303,6 +308,7 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Run: `node scripts/run-with-deadline.mjs 420 -- pnpm --filter @waitron/setup exec vitest run src/setup-app-first-fiscal.test.ts src/setup-app-first-fiscal.unsaved.test.ts src/screens/first-setup-resolution-screen.test.ts src/screens/recovery-allocation.test.ts src/screens/recovery-allocation.unsaved.test.ts`.
 - [ ] Run server document checks: `node scripts/run-with-deadline.mjs 300 -- pnpm --filter @waitron/server exec vitest run src/recovery-document-api.test.ts src/first-fiscal-delivery.test.ts src/recovery-pack-api.test.ts --maxWorkers=2`.
 - [ ] Use module-owned UI/explicit browser exports; generic setup does not parse hour/PDF fiscal internals.
+- [ ] Qualify the existing Live provision case in `server/boot.test.ts` with the actual owned preparation/readiness context. Preserve its certificate, environment and successful-response assertions; add required fixture context rather than changing those expected outcomes.
 - [ ] Apply shared required fields, semantic names, hints, caret preservation, draft scopes, field errors and one bottom message. Request refusal alone never disables retry.
 - [ ] Keep HTTP public-only; secrets require actual HTTPS/same-origin/authentication. No A731/A732/A733 mutation or password reset is introduced.
 - [ ] Repeat to GREEN; commit `git commit -s -m "feat: complete hour setup and key-only recovery journeys"`.
@@ -315,6 +321,8 @@ The host owns paths, exclusion, lock reuse and durable writes; the module owns t
 - [ ] Assert exact attachment bytes; an actual annotation/resave changes PDF hash while retaining attachment; actual print/export removes attachment and offers manual entry.
 - [ ] Render real PDF pages and enter the **rendered values** through real recovery fields, including lowercase, grouping and look-alikes; authenticate a real selected-backup fixture.
 - [ ] Exercise direct `bin.ts`, supervised `runEntry`, already-recovery listener, raw boot, restore CLI and provisioning CLI with normal and interrupted states.
+- [ ] Preserve the two existing static-configuration refusal cases in `server/boot.test.ts`: bad SPA configuration and an excessive tick budget must report their existing `server.config_invalid` details before first-setup target inspection touches an unopenable path. Trace the startup order before changing it; retain both assertions and the valid-configuration controls.
+- [ ] Run the entire existing boot suite after Tasks 4/9 integration: `node scripts/run-with-deadline.mjs 360 -- pnpm --filter @waitron/server exec vitest run src/boot.test.ts --maxWorkers=2`. Its four recorded failures must be resolved before finish/land.
 - [ ] Fault before/after intent, kept grant, commit, verifier, audit, retirement and selection publication; assert original retention, no old-root open/fallback and no duplicate activation.
 - [ ] Include simultaneous independent No/Yes setups as explicit limit tests: identical hours are possible; copy must require coordination and make no reservation guarantee.
 - [ ] Cover clock rollback/future clock, lost history, stale backup, old box return and clone limits without claiming detection the evidence cannot supply.

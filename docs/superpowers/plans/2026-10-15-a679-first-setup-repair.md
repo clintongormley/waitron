@@ -1,5 +1,10 @@
 # A679 implementation addendum — owner approval at 17:15
 
+> **2026-10-16 at 14:50:** the owner approved [hour-coded series](../specs/2026-10-16-a679-hour-coded-series-design.md).
+> Follow the [hour-code implementation plan](2026-10-16-a679-hour-code-implementation.md) for
+> naming, audit carriers and integration. Keep this addendum's ownership, strict inspection,
+> original-retention and workspace invariants; its register consultation requirements are historical.
+
 This addendum supersedes the original plan’s original-tab recovery requirement and “incident resolution” outcomes. Implement only the approved A679 core. A696 is outside scope. A731, A732 and A733 remain separate requirements before go-live.
 
 **Evidence status:** source reading only. No implementation, tests, browser journey or fault experiment was executed for this addendum. Existing review reports and retained password-test results predate this redesign; they do not qualify its repair, workspace-selection or entry paths.
