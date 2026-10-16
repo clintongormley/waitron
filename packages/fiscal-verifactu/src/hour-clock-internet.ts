@@ -115,7 +115,9 @@ export async function observeInternetHourClock(
             (age !== null && !/^0+$/.test(age)) ||
             /\bhit\b/i.test(response.headers.get("x-cache") ?? "") ||
             /\b11[01]\b/.test(response.headers.get("warning") ?? "") ||
-            /(?:s-maxage|max-age)\s*=\s*"?[1-9]/i.test(response.headers.get("cache-control") ?? "")
+            /(?:s-maxage|max-age)\s*=\s*"?0*[1-9]/i.test(
+              response.headers.get("cache-control") ?? "",
+            )
           )
             return unavailable("response");
           const wallFinishedMs = wall();

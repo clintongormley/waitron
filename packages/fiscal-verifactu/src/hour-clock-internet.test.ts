@@ -170,6 +170,7 @@ describe("authenticated internet clock observation", () => {
     { "X-Cache": "HIT from proxy" },
     { Warning: '110 - "stale"' },
     { "Cache-Control": "public, max-age=3600" },
+    { "Cache-Control": 'public, s-maxage="0001"' },
   ])("refuses malformed or cached evidence %j", async (extra) => {
     const result = await observeInternetHourClock("production", {
       ...clocks(),
