@@ -5,14 +5,20 @@ their full text.
 
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
-- **A646 — owner, 2026-10-14; OPEN; DESIGN PROPOSED, awaiting owner agreement (2026-10-16).**
+- **A646 — owner, 2026-10-14; OPEN; DESIGN REVISED after the ~22:40 owner answer, awaiting agreement (2026-10-16).**
   [Proposed design](../superpowers/specs/2026-10-16-a646-modules-page-design.md), not an approved
   decision or an implementation plan. [Static mockups](mockups/a646-modules-page/README.md) illustrate the proposal. Build waits for owner design agreement and A739/A764 to land. The
   first independent build PR must repair retained disabled-module append-only protection before
-  any UI toggle; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
-  The author proposes Settings > Modules, Google as an optional module, card providers as
-  contributions within Payments, separate applied/desired revisions and bounded runtime refusals.
-  The spec holds the single owner question, worked examples, build boundaries and uncertainties.
+  any UI state controls; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+  The revision proposes one complete optional catalogue, initially Enabled; Add a module filters
+  that same list to Disabled. Category is independent, and Card payments links to Card providers
+  with All states. Row kebabs offer Configure plus Enable/Disable, with persistent red reasons
+  when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
+  separate confirmation and server checks. Google remains proposed; Stripe/SumUp remain Payments
+  contributions. Runtime, credentials, payment history, migration-slot/H2 and first-repair limits
+  remain. The one unresolved owner question is Google lockout scope: only the applying admin or
+  every active admin (recommended proposal, not approval). Both need the actor's fresh non-Google
+  proof; the wider option adds supported recorded enrollment for others, not everyone's fresh proof.
 
   **Original request and reading receipts, retained from 2026-10-14:** The owner asked for a system
   section where an administrator installs and configures

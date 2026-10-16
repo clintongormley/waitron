@@ -5588,13 +5588,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
   off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up
-  (owner, 2026-10-14; OPEN; DESIGN PROPOSED, awaiting owner agreement, 2026-10-16).**
-  [Proposed design](superpowers/specs/2026-10-16-a646-modules-page-design.md);
-  [static mockups](backlog/mockups/a646-modules-page/README.md).
-  Build remains open and waits for owner agreement plus A739/A764 to land; no implementation plan yet.
-  Its first independent build PR must fix the still-OPEN
-  [disabled-module protection defect](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
+  [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
+  Build waits for owner agreement and A739/A764; retained protection comes first. Google's access-check scope remains undecided.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's

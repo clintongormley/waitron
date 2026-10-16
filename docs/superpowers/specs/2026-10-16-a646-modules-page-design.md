@@ -3,10 +3,10 @@
 **DESIGN PROPOSED, 2026-10-16. Awaiting owner agreement.** This is the design author's
 proposal, not an owner-approved decision or an implementation plan. Nothing here is built or
 behaviorally verified. Build waits for owner agreement and **A739 and A764 to land**. The retained
-append-only protection repair below must be the first independent build PR, before any UI toggle.
+append-only protection repair below must be the first independent build PR, before any UI state controls.
 
 You should be able to set up Google login or a card provider in one place, without restarting
-Waitron or stopping someone paying. A switch must describe what Waitron actually applied. It must
+Waitron or stopping someone paying. A row must describe what Waitron actually applied. It must
 never hide an unfinished charge, remove the means to refund an earlier payment, or close your only
 way back into administration.
 
@@ -16,6 +16,21 @@ to Modules filtered to card providers. Profile > Security shows its Google row o
 is enabled. Static documentation mockups are available in
 [the mockup index](../../backlog/mockups/a646-modules-page/README.md). They illustrate the proposal,
 not the running application.
+
+## Owner revision source, 16 October 2026
+
+The prior design is **not approved**. The owner selected “More modules on the page” and “Layout
+or wording”. In the answer relayed by the supervising watcher at about 22:40, the owner wrote:
+
+> on layout, we should show the enabled modules, with each row can't be disabled having a greyed out toggle and the reason displayed in red inside the row. then we need an "add a module" which will (eventually) need a search bar. maybe for the moment it is one list initially filtered on "enabled"
+> maybe instead of the toggle we have a kebab menu with configure/disable
+> configure should open a modal
+> modules can have reasons why they can't be disabled, eg "you don't have a password / passkey set" so would be prevented from logging back in. could be extended to all admins.
+
+This revision takes the row-menu option: no on/off toggles. It proposes one catalogue, separate
+configuration and activation, and a modal editor. Extending Google lockout checks to every active
+administrator remains the **one unresolved owner decision**, described below. Neither that extension
+nor the rest of this revised design is treated as approved.
 
 ## What the source says today
 
@@ -46,22 +61,69 @@ and public login methods), `design-system.md` (Forms, unsaved edits, sidebar and
 
 ## What you see and who can change it
 
-**My proposal:** show a list with **All / Card providers**, a short description, applied state,
-configuration status and one **Configure** action per entry. State and configuration are separate:
-Google can be Off and Configured; Stripe can be On and Needs attention. Configuration presence
-alone never means a provider is healthy. Required and provision-only entries are readable, with a
-reason instead of an editable switch. The selected fiscal regime says **Chosen during setup**;
-the page offers no regime selector and no activation of an alternative regime.
+**Revised proposal:** every optional module appears in **one catalogue** in Settings > Modules.
+Its state filter opens at **Enabled**, with **Disabled** and **All** also available. **Add a module**
+changes that same catalogue to Disabled; it is a discovery shortcut, not a second list or a state
+mutation. It preserves the category filter and shows that filter visibly. You can clear Category
+to browse every optional entry. Search is explicitly deferred to a later design.
 
-Configure opens one shared dialog, full width at 390px and bounded at 1280px. It contains the
-desired switch, contributed fields, consequences and explicit **Save / Cancel**. A switch stages
-a choice, it does not send a request by itself. Required fields have visible marks. Google shows
+Category is independent of state: **All categories / Card providers**. Card payments' direct link
+sets **Category = Card providers, State = All**, overriding a remembered Enabled filter. It shows
+configured and disabled providers together. Configuration does not filter that view: a disabled
+provider needing setup is visible too. A manager's permission-limited provider view still uses
+the same catalogue; authorized filtering must happen at the server.
+
+Each row shows its name, **applied state**, **configuration/readiness** and a **wt-row-actions**
+kebab. State and configuration are separate: Google can be Disabled and Configured; Stripe can
+be Enabled and Needs attention. Configuration presence alone never means healthy. The enabled
+row's menu contains **Configure / Disable**; the disabled row's menu contains **Configure / Enable**.
+There is no on/off toggle on the page or in a dialog. Use wt-data-table, with its actions column
+keyed `actions` and pinned at the end; wrap row text on phones and keep all rows reachable by
+scrolling. The requested Enabled/Disabled state wording here is specific to this module-setting
+proposal. EN actions are Enable/Disable; ES actions Habilitar/Deshabilitar.
+
+When Disable is forbidden, keep it grey and disabled in the menu. Keep a **specific red reason
+inside the row**, visible with the menu closed, plus the recovery action. Do not replace it with
+a tooltip or a generic “unavailable”. Distinguish these cases:
+
+| Row condition, returned by the server                                                           | Persistent reason and recovery                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Applying admin has no supported password/passkey                                                | “You have no password or passkey, so you could not sign back in.” Link to Account security to enroll, then return and prove that method.                                                                                   |
+| Applying admin has a method but no current proof                                                | “Confirm another sign-in method before disabling Google.” Offer the fresh-proof action; a recorded factor alone is insufficient for this actor.                                                                            |
+| Another admin lacks enrollment, **only if Every active administrator is selected by the owner** | “Pablo has no non-Google sign-in method.” Identify Pablo only to an authorized administrator; offer account management so Pablo can enroll through the authorized path. Do not imply enrolling a factor on Pablo's behalf. |
+| An enabled dependent or essential service needs the module                                      | Name the dependent, for example “Staffing needs Workforce.” Open that dependency's settings; do not cascade-disable.                                                                                                       |
+| Schema/runtime adapter is not ready                                                             | “Runtime changes are not prepared for this module.” Offer preparation status, with an explicit read-only explanation if no self-service action exists.                                                                     |
+| Stripe has an unknown live charge                                                               | “Table 4: €28 payment outcome is unknown.” Open Card payments' existing check/resolution tools. Do not cancel or retry the charge.                                                                                         |
+
+The row is a server snapshot, never authority from browser storage. Confirmation performs fresh
+server checks, including races after the row loaded. A newly discovered refusal refreshes the
+row's reason while leaving the applied state unchanged. Loading or failed readiness reads do
+not masquerade as permission to mutate; show the failed read and Retry.
+
+**Configure opens a centred wt-dialog modal over a dimmed page**, bounded on desktop and with
+phone margins. It never becomes a side panel or an expanded row. It contains contributed settings
+and **Save / Cancel**, with no activation field. Saving only stores validated settings; a disabled
+entry stays disabled. After saving, you choose the row's **Enable** action separately. An enabled
+entry's credential change still uses the runtime safety checks below. A module with no settings
+opens a truthful “No settings for this module” dialog with Close and no pretend Save form.
+
+**Enable / Disable opens a separate explicit confirmation**, showing the named entry, requested
+state and consequences. Confirm uses that state verb, never Save; Cancel does nothing. Enabling
+requires saved, readable configuration where required, prepared schema/runtime support and current
+dependencies. Missing settings lead you to Configure, never automatic enable-on-save. Disabling
+retains settings and historical data. A refused change must be explicitly retried after recovery.
+
+Required and provision-only entries are readable separately, outside the optional catalogue, with
+their tier and reason rather than mutation controls. The selected fiscal regime says **Chosen
+during setup**; there is no regime selector or activation of an alternative regime.
+
+Required configuration fields have visible marks. Google shows
 Client ID and Client secret with **Replace** controls when already set, and a copyable derived
 callback URL. Neither stored value is returned to the browser. Keeping an existing value is an
 explicit request operation, not a submitted mask or an empty string. Clearing credentials is a
 separate guarded action, not the meaning of switching Off.
 
-Save is quiet and disabled until the draft changes, using draftScopeFor/saveActionState and an
+Configuration Save is quiet and disabled until the draft changes, using draftScopeFor/saveActionState and an
 early handler return. Cancel, Escape, browser Back, language change and navigation use the shared
 unsaved-edits controller. Invalid fields explain themselves beside each field; the one localized
 form error sits below the inputs above the buttons. A server refusal keeps Save retryable unless
@@ -71,19 +133,56 @@ Live notices never overwrite a dirty draft; another revision requires reloading/
 **My permission proposal:** introduce core `modules.manage`, granted only to admins. It permits
 the complete list, module changes and Google configuration. Keep `payments.manage` for provider
 configuration and reader work. A manager with that permission can open only the Card providers
-view and its provider dialogs, including a direct bookmarked URL; cannot widen it to All or alter
-Payments itself. An admin with modules.manage still needs payments.manage for provider changes.
+view and its provider dialogs, including a direct bookmarked URL. That manager may select All
+states within Card providers, but cannot widen Category to All categories or alter Payments itself.
+An admin with modules.manage still needs payments.manage for provider changes.
 Each API enforces the same rule before any secret read or provider call and again before commit.
 Staff, expired sessions and non-primary/mirror writes are refused. No generic endpoint accepts a
 permission name or a credential purpose supplied by the browser.
 
 Card payments keeps readers, assignment, operational status and unfinished-payment/refund tools.
 Its provider setup area becomes **Configure card providers**, linking to
-`/manage/modules/view/card-providers`. Existing provider setup addresses redirect there. Reader
+`/manage/modules/view/card-providers/state/all`. Existing provider setup addresses redirect there,
+also explicitly selecting State = All. Reader
 pairing stays on Card payments; shared provider-owned components are reused rather than copied.
 Navigation and filters contain category names, never a list of SumUp/Stripe/module IDs.
 
 ## Which things are modules
+
+### Full catalogue inventory and source limits
+
+The following inventory was read at snapshot `2e33ca8907863d3f8125eb15378a57cd4aaf1eb5`.
+`git diff 2aa3e92506aa483c97a77ad8516f96068a5ede46 HEAD -- packages/composition/src/modules.ts
+packages/media/src/module.ts packages/composition/src/card-providers.ts
+packages/dashboard-modules/src/card-providers.ts` printed no differences for those files. This
+preserves the earlier source-reading snapshot above; it is **not runtime verification**. Labels,
+example enabled/disabled choices and readiness reasons in the boards are illustrative proposals,
+not reports of an installation's current settings.
+
+| Optional entry in the same catalogue       | Descriptor receipt at that snapshot                                                                                                                                                                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity (`identity`)                      | `packages/composition/src/modules.ts:153`, toggleable at `:155`                                                                                                                                                                                            |
+| Workforce (`workforce`)                    | Same file `:167`, toggleable at `:169`; requires identity                                                                                                                                                                                                  |
+| Workforce Spain (`workforce-es`)           | Same file `:182`, toggleable at `:184`                                                                                                                                                                                                                     |
+| Payments (`payments`)                      | Same file `:198`, toggleable at `:200`                                                                                                                                                                                                                     |
+| Scheduler (`scheduler`)                    | Same file `:213`, toggleable at `:215`                                                                                                                                                                                                                     |
+| Credentials (`credentials`)                | Same file `:226`, toggleable at `:228`                                                                                                                                                                                                                     |
+| Bookings (`bookings`)                      | Same file `:275`, toggleable at `:277`                                                                                                                                                                                                                     |
+| Staffing (`staffing`)                      | Same file `:310`, toggleable at `:312`; requires identity, venue-service and workforce                                                                                                                                                                     |
+| Google login (`identity-google`, proposed) | No current descriptor; proposed here, depending on identity and credentials                                                                                                                                                                                |
+| Stripe and SumUp (provider contributions)  | `packages/composition/src/card-providers.ts:12`; owning descriptors at `packages/payments-stripe/src/card-provider.ts:133` and `packages/payments-sumup/src/card-provider.ts:123`; browser panels at `packages/dashboard-modules/src/card-providers.ts:10` |
+
+`MEDIA_MODULE` is imported at `packages/composition/src/modules.ts:1` and inserted at `:151`.
+Its owning descriptor says **mandatory**, `packages/media/src/module.ts:26–30`; do not silently
+count it as optional. Core, catalogue, venue-service and adjustments are also mandatory in the
+composition. Fiscal-verifactu and fiscal-none are provision-only alternatives. These belong in the
+separate readable tier section, with the selected regime identified and no regime mutation.
+
+This table is a dated documentation receipt. The product must derive the catalogue from composed
+descriptors and provider contributions, including optional entries without settings or a working
+runtime adapter. Do not turn this inventory into a list of names in a host or filter. Ineligible
+entries remain visible with truthful reasons. An authorized All state view contains every optional
+entry; Enabled and Disabled are filters over that same set.
 
 **My proposal:** Google is a separate optional module, provisionally `identity-google`, depending
 on identity and credentials. Identity retains people, subject linkage and sessions. Google owns
@@ -111,7 +210,8 @@ vault or scheduler services, or by retained work cannot stop. Declare these requ
 owning boundary and compose them, including currently implicit host consumers. Reject the change
 and name the dependent service/module; do not silently cascade-disable it. Tier=toggleable only
 makes a module eligible to supply a safe runtime adapter. Until it does, show **Cannot change while
-running** and refuse Save. This is deliberately more conservative than trusting today's tiers.
+running** and refuse the state confirmation. Configuration Save is separate and must not claim to
+start or stop the module. This is deliberately more conservative than trusting today's tiers.
 
 ## Applying a change while requests continue
 
@@ -122,6 +222,13 @@ venue database, with an operation ID, expected prior revision, actor, phase and 
 code. The core-owned control tables are infrastructure; their commit must state that ownership
 reason. Credential candidates stay sealed in credentials-owned staging rows, never in control
 table JSON. Neither table set enters ordinary configuration transfer.
+
+Keep settings writes and state changes distinct throughout this lifecycle. A settings operation
+preserves the applied enabled/disabled state, including when saved credentials become usable.
+Only an explicitly confirmed Enable/Disable operation may change that state. Both kinds use the
+same revision, preparation and publication safety boundary where they affect running services.
+For Google, access checks use the owner's eventual lockout scope below, not an assumed all-admin
+rule. Neither a configuration form nor its Save is a delayed activation request.
 
 Start with one pending change at a time. A request repeats its operation ID safely; a stale
 expected revision answers conflict rather than overwriting another administrator. Store only
@@ -142,7 +249,8 @@ allowlisted error details, never a submitted value or a raw provider exception.
 4. **Drain or refuse.** Proposed drain deadline: five seconds. Do not cancel an admitted payment,
    refund, send or callback to meet it. If a lease remains, or durable work cannot continue safely,
    release the barrier and mark this candidate Refused, keeping the old revision applied. Nothing
-   silently switches off later. You review and press Save again after the work finishes.
+   silently switches off later. You retry the relevant settings save or state confirmation
+   explicitly after the work finishes.
 5. **Publish once.** With no affected leases and after a final transactional recheck of dependencies,
    debt and admin access, promote staged credentials and commit the applied revision atomically.
    Publish the prepared in-memory snapshot before releasing the barrier. No await may admit work
@@ -163,8 +271,8 @@ An unimplemented adapter refuses; an unknown duties field is not accepted as one
 dependencies already have the recognized schema needed by this image. A never-migrated or stale
 dormant module answers **This module needs preparation before it can be enabled**. The first
 release does not run applyMigrations against the serving store, remove live change-feed triggers,
-or restart the process from Save. A later explicitly reviewed maintenance preparation can add that
-ability. Successful supported switches apply without restart; unsupported ones remain visibly
+or restart the process from a settings save or state confirmation. A later explicitly reviewed maintenance preparation can add that
+ability. Successful supported state changes apply without restart; unsupported ones remain visibly
 unchanged. The page does not promise every shipped module is immediately switchable.
 
 ### Payments and other work that outlives a request
@@ -182,7 +290,7 @@ for earlier payments. The historical transaction chooses its provider, even when
 is no longer offered for a new payment. Do not gate these continuation services by navigation,
 module visibility or the new-collection flag. Show **Off for new payments; earlier payments can
 still be checked or refunded**. Payments itself cannot stop while those retained consumers need
-it. No clearing debt to make a toggle succeed, and no suppression of its incidents.
+it. No clearing debt to make Disable succeed, and no suppression of its incidents.
 
 Credential replacement also waits for affected operations. Verify that the replacement serves
 the same provider account and environment before changing a credential used by earlier payments.
@@ -194,7 +302,7 @@ Workforce must account for open shifts, attendance operations and scheduled duti
 own adapter; bookings must account for its retained work likewise. There is no generic
 “zero HTTP requests means safe” shortcut. Unsupported stop/readiness stays a bounded refusal.
 Fiscal drain, submission debt and append-only checks remain essential services, unaffected by
-optional-module switches. There is no fiscal regime switch.
+optional-module state changes. There is no fiscal regime switch.
 
 ### Durable restart and one configuration authority
 
@@ -249,25 +357,44 @@ from venue-wide capabilities, never from an email/account-enrollment lookup. Exi
 Remember preferences selecting an unavailable method return to the email/method choice without
 opening a passkey prompt or clearing unrelated preferences.
 
-**My acceptance rule:** before Google Off, removal or client-identity change, the applying admin
-must complete a non-Google sign-in proof for this operation. It is short-lived and purpose-bound.
-Every other active admin must have a supported non-Google method recorded: a set password with
-its required email and second-factor configuration, or a passkey for the current origin/RP. For
-those other admins, enrollment counts; no fresh proof from each person is required. Enrollment
-does not establish that they still know the password or possess the passkey. The page must not
-promise otherwise. The only admin in a venue is necessarily the applying admin, so that person
-must demonstrate their alternative before proceeding.
+### One unresolved decision: whose access must Google disable protect?
+
+**Both options require the applying administrator's fresh non-Google proof**, short-lived and
+bound to this operation and configuration revision, before Google Disable, removal or client-identity
+change. An expired, replayed or differently scoped proof refuses. Saving first-time configuration
+while Google is disabled does not activate it or require a pretend disable proof.
+
+| Proposed scope                                                          | Additional acceptance condition                                                                                                                                          | Worked example                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Only the administrator making the change** (“Only me”)                | Check that actor's supported enrollment and fresh proof. Do not claim to preserve other admins' new logins. Warn explicitly about the consequence.                       | Elena has a password and completes its fresh proof. Pablo is Google-only. With other safety checks clear, Elena may confirm Disable. Pablo **will lose new login access** until he enrolls another supported method; his existing session follows normal expiry/status rules.                                               |
+| **Every active administrator** (**recommended proposal, not approval**) | In addition to Elena's fresh proof, every other active admin must have supported recorded non-Google enrollment. Do **not** demand fresh possession proof from everyone. | Elena has a password and completes its fresh proof. Pablo is Google-only. Refuse Disable and keep Google enabled, naming Pablo only to the authorized admin. After Pablo enrolls a supported alternative through the authorized path, a new confirmation can pass. Pablo need not furnish fresh proof to Elena's operation. |
+
+I recommend **Every active administrator** because it avoids deliberately removing Pablo's new
+login route. It establishes supported enrollment for others, not their present possession. The
+owner's “could be extended to all admins” leaves this choice open; do not implement either scope
+as an approved decision. If Elena is the sole admin, both options require her enrollment and proof.
+
+A supported recorded method is a set password with its required email and second-factor
+configuration, or a passkey for the current origin/relying party (the site identity to which the
+passkey belongs). Enrollment does not establish that the person still knows the password or
+possesses the passkey. Browser capability flags and cached enrollment are never sufficient.
 
 The applying admin's proof verifies the password with any configured second factor, or a passkey
 with user verification for this origin/RP. A PIN, an existing session, an invitation, an email reset
-promise or a bare recovery code does not count. If either check fails, refuse with **Set up another
-way to sign in before turning Google off**, identifying an affected administrator only within the
-authorized settings response. Recheck the applying admin's proof/status and all admins' enrollment
-facts in the publication transaction. Concurrent admin suspension, role/factor removal and reset
-paths check the same recorded-method invariant and serialize with publication. They must leave at
-least one active administrator and, while Google is off, a supported recorded non-Google login
-for each active administrator. This demonstrates an alternative for the person making the Google
-change; it does not prove other people's present possession.
+promise or a bare recovery code does not count. If a selected-scope check fails, refuse with the
+specific row reason and recovery action described above. Recheck the applying admin's proof,
+status, enrollment and the selected scope's other facts in the publication transaction.
+
+Concurrent admin suspension, role/factor removal, reset and admin admission paths must serialize
+with publication and enforce the **selected scope's** recorded-method invariant, while retaining
+at least one active administrator. Under Only me, protect the applying actor's supported alternative
+against a racing removal; do not reject Pablo's Google-only status by silently imposing all-admin
+protection. If the protected actor later ceases to be active/admin, the change must preserve an
+active administrator with a supported alternative. Under Every active administrator, preserve
+supported recorded alternatives for every active admin, including newly admitted ones while
+Google is disabled. Both options need their race cases qualified after the scope is agreed;
+Only me cannot promise that every administrator can log in. No option proves other people's
+present possession.
 
 Do not claim existing profile methods supply passwordless reauthentication. Add a bounded identity
 contract for proving an existing password or passkey for this operation. If a passwordless admin
@@ -278,7 +405,7 @@ rules and keep all stored factors; turning off a login provider is not logout or
 For the initial release, refuse Google disable/rotation while a nonexpired login/link state or
 callback lease exists. Keep the applied ID/secret, callback route and cookie semantics until it
 completes or expires. This bounds waiting to the existing flow lifetime without breaking a code
-already issued. After a refusal, new flows may continue on the old revision; Save is never a
+already issued. After a refusal, new flows may continue on the old revision; a confirmation or settings Save is never a
 hidden delayed shutdown. Bind future flows to their applied configuration revision and invalidate
 them on restore. Validate state/cookie/nonce/PKCE and use the real token-exchange boundary in tests.
 
@@ -352,17 +479,18 @@ cannot leave a stale navigation choice. Reads are passive session activity.
 
 These are proposed outcomes, not requests run against today's server:
 
-| You do this                                                                              | Proposed response and visible result                                                                                                                                                                                                      |
-| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Admin Elena submits operation `google-17`, expected revision 16, On with a new ID+secret | Applied revision 17; the GET returns configured=true and no credential fields. Profile and public login show Google after capability refresh, without restarting the process. Cancel instead submits nothing.                             |
-| A manager opens Card payments > Configure card providers                                 | Modules opens at Card providers. SumUp/Stripe panels use their owning seats. Changing the URL to All or posting Google settings is forbidden before any provider call or vault read.                                                      |
-| Elena submits Stripe Off while table 4 has a €28 unknown attempt                         | Conflict with the unresolved-work reason. Desired operation is Refused; applied remains On. A764's check continues; no cancellation, second charge, sale rewrite or unlocked order is invented by Modules.                                |
-| Stripe has no active readers or unfinished attempts, then Off applies                    | Stripe disappears from new-payment choices. A refund of an earlier €28 payment still resolves through Stripe with retained credentials and existing refund rules. Its late webhook/reconciliation still runs.                             |
-| Elena is the only admin, has Google and no working password/passkey, and requests Off    | Refused; Google stays On and the dialog explains how to add another login. An existing browser session does not satisfy the check. With a proven non-Google method and no pending Google flow, retry can apply Off and keep that session. |
-| A kitchen send remains active when another optional service is changed                   | The send completes under its captured revision. It is never cancelled to make Save succeed. A busy affected service exceeds five seconds: Refused, old revision retained, retry explicitly later.                                         |
-| The box crashes with desired revision 18 prepared but applied 17                         | Boot serves 17 after preflight and marks 18 Interrupted. Crash after publication commit reconstructs 18; a lost HTTP response can be resolved by operation ID.                                                                            |
-| Workforce is Off, its time_entries table exists, and one standard trigger is missing     | The first repair slice reinstalls the missing trigger before trading and watches the retained table. It does not run workforce's pending migrations. A missing table required by recorded history refuses instead.                        |
-| Google is enabled in a restored backup but its vault key cannot open the credential      | Google is explicitly unreadable and accepts no login starts. Do not generate a new key, erase linkage or claim Google is configured successfully. Essential access failure follows curated recovery.                                      |
+| You do this                                                                                 | Proposed response and visible result                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Google is disabled; Elena saves a new ID+secret at expected revision 16                     | Revision 17 stores sealed configuration; the GET returns configured=true and no credential values. Google remains disabled and absent from login/Profile. Cancel would submit nothing. Elena must separately choose Enable and confirm before state and capabilities change.                     |
+| A manager opens Card payments > Configure card providers                                    | The same catalogue opens at Category = Card providers, State = All, showing configured Stripe and disabled SumUp even if Enabled was remembered. Their panels use owning seats. Widening Category to all modules or posting Google settings is forbidden before any provider call or vault read. |
+| Elena submits Stripe Off while table 4 has a €28 unknown attempt                            | Conflict with the unresolved-work reason. Desired operation is Refused; applied remains On. A764's check continues; no cancellation, second charge, sale rewrite or unlocked order is invented by Modules.                                                                                       |
+| Stripe has no active readers or unfinished attempts, then Off applies                       | Stripe disappears from new-payment choices. A refund of an earlier €28 payment still resolves through Stripe with retained credentials and existing refund rules. Its late webhook/reconciliation still runs.                                                                                    |
+| Elena is the only admin, has Google and no supported password/passkey, and requests Disable | Under either scope, Refused. Google stays enabled; the row shows its red reason and Account security recovery link, with Disable grey. A session does not satisfy the check. Enrollment plus fresh proof and no pending flow permit a new confirmation, keeping the session.                     |
+| Elena has password + fresh proof; Pablo is Google-only                                      | Only me permits Disable with the explicit Pablo consequence; Every active administrator refuses naming Pablo until enrollment. These are the two outcomes of the unresolved scope decision, not two policies an operator can choose to bypass a refusal.                                         |
+| A kitchen send remains active when another optional service is changed                      | The send completes under its captured revision. It is never cancelled to make a state confirmation or settings save succeed. A busy affected service exceeds five seconds: Refused, old revision retained, retry explicitly later.                                                               |
+| The box crashes with desired revision 18 prepared but applied 17                            | Boot serves 17 after preflight and marks 18 Interrupted. Crash after publication commit reconstructs 18; a lost HTTP response can be resolved by operation ID.                                                                                                                                   |
+| Workforce is Off, its time_entries table exists, and one standard trigger is missing        | The first repair slice reinstalls the missing trigger before trading and watches the retained table. It does not run workforce's pending migrations. A missing table required by recorded history refuses instead.                                                                               |
+| Google is enabled in a restored backup but its vault key cannot open the credential         | Google is explicitly unreadable and accepts no login starts. Do not generate a new key, erase linkage or claim Google is configured successfully. Essential access failure follows curated recovery.                                                                                             |
 
 ## Proposed PR boundaries and qualification
 
@@ -370,16 +498,16 @@ These are design boundaries for later planning, **not an implementation plan or 
 Each row is one independent, implementer-sized PR. Split further if a boundary does not fit; do
 not combine them into one host rewrite. All wait for owner design agreement plus A739/A764.
 
-| Order | Independently reviewable outcome                                                                 | Focused failing-first checks                                                                                                                                                                                                                                                                                                                                                                          |
-| ----- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Retained protection and preflight/watch repair, no settings UI or runtime controls               | Real populated database across disabled and dependent sets: missing trigger restored; altered trigger refused; missing required versus never-installed/new table; new marker on retained old schema; unknown/ahead history; failed later migration; absent dormant journal stays unchanged; serving pragma/table disappearance. Demonstrate actual refused mutations and a permitted mutable control. |
-| 2     | Descriptor-owned catalogue and effective runtime eligibility, no write controls                  | Composition/browser parity, category filtering, dependency closure and locked tiers; reject incomplete/unsupported adapters; no host provider/module lists or browser server imports.                                                                                                                                                                                                                 |
-| 3     | Durable applied/desired operation store and one resolver, no admission change                    | Stale expected revision, idempotent retry, permission boundaries, transactional commit, crash before/after publication and restore interruption; inventory every file/env/session/mirror/export consumer.                                                                                                                                                                                             |
-| 4     | Coordinator/router generation dispatch, stable capability/live resource and safe-refusal adapter | Hold a real request across Save, unrelated request continues; timeout leaves old revision; no admission gap; restart reconstructs; unrelated live subscriptions survive disable/reconnect. No product module becomes switchable in this PR.                                                                                                                                                           |
-| 5     | Google module and sealed settings boundary, still no page toggle                                 | Real vault round-trip/rotation/wrong key and recovery material; no GET/log/transfer leak; real token-exchange implementation with HTTP/token-signing fixture at its external boundary, not a mocked identity module; callback lease/state lifetime and replay; public method privacy.                                                                                                                 |
-| 6     | Google access guard and runtime adapter                                                          | Password and browser passkey proof; passwordless/sole-admin refusal; all-admin and concurrent role/status/factor removal; active callback refusal; sessions retained; unavailable Remember method. Only this adapter gains live Google transitions.                                                                                                                                                   |
-| 7     | Provider admission/configuration boundary, reuse A739/A764 and A737 behavior                     | Real sealed payload through provider seat and actual HTTP/SDK client boundary with controlled transport; 401/403/409, environment/account mismatch, cached client rotation, collect/refund/unknown/manual-check races, restart debt, historical refund with provider Off, legacy endpoint bypass refusals. No new financial state transitions.                                                        |
-| 8     | Modules page, Google Profile visibility and Card payments link/setup move                        | Permission-filtered list and direct URLs, Save/Cancel and stale/dirty/live races, retained form after refusal, successful-save/failed-refresh separation, existing provider panels and accessible keyboard/Enter/Back behavior.                                                                                                                                                                       |
+| Order | Independently reviewable outcome                                                                 | Focused failing-first checks                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Retained protection and preflight/watch repair, no settings UI or runtime controls               | Real populated database across disabled and dependent sets: missing trigger restored; altered trigger refused; missing required versus never-installed/new table; new marker on retained old schema; unknown/ahead history; failed later migration; absent dormant journal stays unchanged; serving pragma/table disappearance. Demonstrate actual refused mutations and a permitted mutable control.                                                |
+| 2     | Descriptor-owned catalogue and effective runtime eligibility, no write controls                  | Full optional inventory/browser parity; independent state/category filters, default Enabled, Add a module selects Disabled, direct provider link selects All states; readable mandatory/provision-only tiers; dependency closure; reject incomplete adapters; no host name lists or browser server imports.                                                                                                                                          |
+| 3     | Durable applied/desired operation store and one resolver, no admission change                    | Stale expected revision, idempotent retry, permission boundaries, transactional commit, crash before/after publication and restore interruption; inventory every file/env/session/mirror/export consumer.                                                                                                                                                                                                                                            |
+| 4     | Coordinator/router generation dispatch, stable capability/live resource and safe-refusal adapter | Hold a real request across a settings save and a state confirmation, unrelated request continues; timeout leaves old revision; no admission gap; restart reconstructs; unrelated live subscriptions survive disable/reconnect. No product module becomes switchable in this PR.                                                                                                                                                                      |
+| 5     | Google module and sealed settings boundary, still no page state controls                         | Real vault round-trip/rotation/wrong key and recovery material; no GET/log/transfer leak; settings saves preserve disabled state; real token-exchange implementation with HTTP/token-signing fixture at its external boundary, not a mocked identity module; callback lease/state lifetime and replay; public method privacy.                                                                                                                        |
+| 6     | Google access guard and runtime adapter, after owner selects scope                               | Fresh password/browser passkey proof, expiry/purpose/replay; passwordless/sole-admin refusal; selected-scope Elena/Pablo outcome and concurrent role/status/factor removal/reset/admin-admission cases, including the permitted control; active callback refusal; sessions retained; unavailable Remember method. Do not hardwire all-admin protection while scope is pending.                                                                       |
+| 7     | Provider admission/configuration boundary, reuse A739/A764 and A737 behavior                     | Real sealed payload through provider seat and actual HTTP/SDK client boundary with controlled transport; 401/403/409, environment/account mismatch, cached client rotation, collect/refund/unknown/manual-check races, restart debt, historical refund with provider Off, legacy endpoint bypass refusals. No new financial state transitions.                                                                                                       |
+| 8     | Modules page, Google Profile visibility and Card payments link/setup move                        | One permission-filtered catalogue; all state/category combinations and direct URLs; wt-row-actions and persistent specific red reasons; centred wt-dialog; no toggles; Configure saves settings only, unchanged Save quiet/disabled, separate state confirmation and server recheck; no-settings dialog; stale/dirty/live races, refused draft retention, successful-save/failed-refresh separation, reused panels and keyboard/Enter/Back behavior. |
 
 For each production PR, observe the focused behavioral failure before implementation and preserve
 existing assertions. Use useVenueDb for database work. Qualify critical guards by omitting each in
@@ -413,7 +541,7 @@ are not a passing implementation claim. A773 checkout `7d3bd79ff` retains the se
 
 Preserve A679's selected regime/setup attempt, A773's sends, A737's refund/resume rules and
 A764's unknown-resolution ownership. No writer, computeHuella, invoice-number, registerSif or
-restoreFiscal changes are authorized. Do not route those operations through a new optional toggle
+restoreFiscal changes are authorized. Do not route those operations through a new optional state control
 or replace their business rules. If later runtime boundary work reaches campaign H2, mark that PR
 **needs-owner-review** before implementation with the exact protected changes; this design supplies
 no implied permission. Recheck migration collisions and A760's freeze before any migration PR.
@@ -424,8 +552,6 @@ tables/states A739/A764 finally expose; and how the retained-schema inventory is
 A760's squash. They have explicit refusal behavior here, not permission to guess. An adapter or
 history format that cannot meet this contract remains read-only until separately qualified.
 
-**One owner question:** Do you agree with this first version of Settings > Modules, where supported
-changes apply without a restart, but Waitron refuses a busy or unprepared module, keeps Stripe on
-while a €28 charge is unknown, preserves refunds after new Stripe payments are switched off, and
-requires you to test another login before turning Google off, with another login recorded for each
-other active administrator?
+**One owner question:** Should disabling Google protect **only the administrator making the
+change**, or **every active administrator** (recommended: your fresh alternative-login proof,
+plus supported enrollment for the others)?
