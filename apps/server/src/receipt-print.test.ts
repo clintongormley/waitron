@@ -2195,6 +2195,39 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
   });
 });
 
+describe("a party's receipt prints its guests and the amount per person", () => {
+  /** The receipt printed when a party seated with `guests` pays one Burger at 12,00 €. */
+  async function receiptOfParty(guests: number | null): Promise<string> {
+    const v = await setupPartyVenue(suite.db);
+    const [{ departmentId }] = await suite.db
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+    await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
+    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter(v.cfg) });
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 12"), guests);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+
+    await pay(v, tabId, "12.00");
+
+    const receipts = (await printJobsFor(v.cfg))
+      .map((job) => decodeTicket(new Uint8Array(job.payload)))
+      .filter((text) => text.includes("TOTAL"));
+    expect(receipts).toHaveLength(1);
+    return receipts[0]!;
+  }
+
+  it("prints a party of 4's guests and its share of 12,00 €", async () => {
+    const receipt = await receiptOfParty(4);
+    expect(receipt).toContain("4 comensales · por persona");
+    expect(receipt).toContain("3,00 €");
+  });
+
+  it("prints no guests for a party seated with no count", async () => {
+    expect(await receiptOfParty(null)).not.toContain("comensal");
+  });
+});
+
 describe("the receipt's top block: logo, address, phone and email", () => {
   const LOGO = `${"a".repeat(64)}.png`;
   /** 16 × 2 dots: a printable raster for either paper. */

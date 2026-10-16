@@ -24,6 +24,7 @@ import type { TillConfig } from "./till-config.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
+import { readReceiptGuests } from "./receipt-guests.js";
 import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -116,6 +117,7 @@ export async function readInvoiceDocument(
   const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
     .toISOString()
     .slice(0, 10);
+  const guests = await readReceiptGuests(tx, saleId);
   return {
     surface: "a4",
     issuer,
@@ -126,6 +128,7 @@ export async function readInvoiceDocument(
     invoiceLocale: sale.locale,
     namesLocale: sale.invoiceLocales[0]!,
     simulated: cfg.practiceMode,
+    ...(guests === undefined ? {} : { guests }),
     result: {
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }

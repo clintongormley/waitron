@@ -5,6 +5,7 @@ import {
   billPayments,
   invoiceSeries,
   locations,
+  parties,
   sales,
   tenants,
   tenantReceipts,
@@ -913,5 +914,56 @@ describe("A4 department-only decoration", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("the guests a full invoice prints", () => {
+  /** A paid full invoice for one Burger, on a bill whose party was seated with `guests`. */
+  async function paidFullInvoice(guests: number): Promise<string> {
+    const { partyId, billId } = await billWith(venue, [{ name: "Burger" }]);
+    await suite.db.update(parties).set({ guestCount: guests }).where(eq(parties.id, partyId));
+    const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
+    await setOrderInvoiceChoice(suite.db, venue.backend, venue.cfg, billId, {
+      revision: order!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Bill customer",
+        countryCode: "ES",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      },
+    });
+    return withTransaction(suite.db, async (tx) => {
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: `invoice-document-guests-${billId}`,
+          kind: "contribution",
+          method: "cash",
+          applied: 1200,
+          tendered: 1200,
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date());
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      return sale!.id;
+    });
+  }
+
+  it("reads the guests of the bill's party", async () => {
+    const document = await read(venue.backend, await paidFullInvoice(4));
+    expect(document.guests).toBe(4);
+  });
+
+  it("reads no guests for a sale with no bill", async () => {
+    const issued = await issue(venue.backend);
+    const document = await read(venue.backend, issued.saleId);
+    expect(document).not.toHaveProperty("guests");
   });
 });

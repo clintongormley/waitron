@@ -20,6 +20,7 @@ import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
+import { readReceiptGuests } from "./receipt-guests.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import {
@@ -211,6 +212,7 @@ async function buildReceiptBytes(
     printAddress: authored?.printAddress === true,
   });
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
+  const guests = await readReceiptGuests(tx, saleId);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
@@ -223,6 +225,7 @@ async function buildReceiptBytes(
     printer,
     simulated: cfg.practiceMode,
     duplicate,
+    ...(guests === undefined ? {} : { guests }),
   });
 }
 
