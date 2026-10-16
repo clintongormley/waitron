@@ -310,3 +310,46 @@ changes in this continuation.
 Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts` to reproduce
 the eight passing retained cases. This closes the fixture qualification only. CLI admission,
 the two boot configuration failures and later wizard/recovery/PDF tasks remain open.
+
+## Task 4 shared preparation host, 2026-10-17
+
+The command-line composition root has no trusted facts reader or preparation journal. To make
+those facilities available without importing the server application, the journal implementation
+moves from `apps/server/src/module-preparation-state.ts` to
+`packages/provisioning/src/module-preparation-state.ts`. Its complete 23-case suite moves beside
+it; only package-local import paths change. Every original matcher is retained. No existing fiscal
+check changes. The server now uses provisioning's `createSetupPreparationHost` for the journal
+and matching asynchronous facts scope; its frozen-state/history/password checks stay at their
+existing boundaries.
+
+Eight new cases cover durable reopening, matching-scope facts, refusal outside a scope, a foreign
+binding, a read that finishes after scope exit, refused operation and replacement authority, and
+reuse of an existing coordinator hold. The initial forwarding implementation returned facts in
+three forbidden cases; the behavioral run recorded three failures and three passes before the
+scope checks were added. The first missing-file run collected no tests and is not that receipt.
+
+Run the two provisioning files named in the plan's dated pointer to exercise the shared code.
+This change does not wire the real CLI's claim, password, activation or publication lifecycle.
+The retained CLI desired-success reproduction remains open, as do Task 4 and the later PDF work.
+
+The broader host run exposed six failures in `module-operation-host.test.ts`. An independently
+installed checkout of `ad8ca1a4fd304dac924361b621037eb64aeb2b35` reproduced all six by the same
+names. Four ordinary-operation cases now pass without changing their assertions: the first-setup
+evidence wrapper returns no evidence for a non-setup action, and verifies setup evidence before
+checking assignment freshness. Seven new routing cases cover those four actions with no attempt,
+missing setup ownership, and both fresh and reused assignments after real owner confirmation.
+
+The final ten-file server command records 71 passes and two failures. The remaining names are
+“the bound runtime retains independent trust after restart and prepares only a fresh owner-confirmed
+attempt” and “binds configured outside evidence and invalidates every live confirmation after snapshot
+recovery”. Their paper enrolment/document fixtures meet the new hour-only configured contribution.
+Their original source and assertions remain unchanged; their replacement qualification belongs to
+the unfinished setup/PDF work and its exact-permission rule. This is not a green server suite.
+
+The four provisioning files record 172 passes. Coverage restricted to the moved journal and new
+host reports both files at 100 percent for statements, branches, functions and lines. The unchanged
+golden/immutability pair records 20 passes; the focused boundary/error guards record 3,036 passes.
+Independent installed omissions of the scope, post-read scope check, replacement authority,
+durable write, ordinary-action routing and assignment-freshness check each fail their behavioral
+assertions, then pass after restoration. The moved journal's 40 original matcher expressions and
+its non-import implementation statements match the starting commit.

@@ -70,3 +70,4 @@ export {
   assertFirstSetupBootTarget,
 } from "./first-setup-workspace.js";
 export type { FirstSetupAnchor, FirstSetupBootTarget } from "./first-setup-workspace.js";
+export { createSetupPreparationHost } from "./setup-preparation-host.js";

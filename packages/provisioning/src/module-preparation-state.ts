@@ -2,13 +2,9 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import {
-  firstSetupAnchorFor,
-  readDurableHostJson,
-  writeDurableHostJson,
-  type FirstSetupCoordinator,
-  type FirstSetupHold,
-} from "@waitron/provisioning";
+import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
+import { firstSetupAnchorFor } from "./first-setup-workspace.js";
+import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { OperationBinding } from "@waitron/module";
 
 interface Revision {

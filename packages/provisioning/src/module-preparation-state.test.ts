@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { createFirstSetupCoordinator, type FirstSetupHold } from "@waitron/provisioning";
+import { createFirstSetupCoordinator, type FirstSetupHold } from "./index.js";
 import { lockVenueDatabase } from "@waitron/db";
 import type { OperationBinding } from "@waitron/module";
 import { createModulePreparationState } from "./module-preparation-state.js";
@@ -225,7 +225,7 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
 it("selected successor workspaces retain spent module history at the original anchor", async () => {
   const { randomUUID } = await import("node:crypto");
   const { createFirstSetupResolutionStore, selectFirstSetupWorkspace, firstSetupAnchorFor } =
-    await import("@waitron/provisioning");
+    await import("./index.js");
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
   await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");

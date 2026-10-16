@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md`, published at `cc5a284539b723c455ebd717bf4ae4cc1500ba2d`, approved by the owner at approximately 14:50 on 2026-10-16.
 
+> **Implementation pointer, 2026-10-17:** the shared preparation journal and its unchanged behavioral suite moved to `packages/provisioning/src/module-preparation-state.ts` and its sibling test. For Task 3's journal check, run `pnpm --filter @waitron/provisioning exec vitest run src/module-preparation-state.test.ts src/setup-preparation-host.test.ts`. The server route checks remain in `@waitron/server`. The original task text below records the planned locations.
+
 ## Authority, baseline and replacement scope
 
 - This plan belongs at `docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md`.
