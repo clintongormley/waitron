@@ -13,7 +13,8 @@ import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-
 import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
-import type { CalendarDayOpen } from "./opening-hours-month.js";
+import { DayPicker } from "./day-picking.js";
+import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import type { SpecialDaysApi } from "./special-days-client.js";
 import { t } from "./strings.js";
 
@@ -29,7 +30,8 @@ const A_MONDAY = "2024-01-01";
 
 /** A year of the venue's days in twelve months, tinted by season and marked for public holidays,
  *  special days and closed days, drawn from the server's year read alone. A date sends
- *  `calendar-day-open`; ‹ › send `year-change` and a month's name `year-month-open`. */
+ *  `calendar-day-open`, and an editor's opened run `calendar-days-open`; ‹ › send `year-change`
+ *  and a month's name `year-month-open`. */
 @customElement("opening-hours-year")
 export class OpeningHoursYearView extends LitElement {
   static override styles = [
@@ -107,6 +109,9 @@ export class OpeningHoursYearView extends LitElement {
         border-collapse: separate;
         border-spacing: var(--wt-space-1);
         table-layout: fixed;
+        user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation;
       }
       th {
         font-size: var(--wt-font-size-sm);
@@ -130,6 +135,8 @@ export class OpeningHoursYearView extends LitElement {
         font-size: var(--wt-font-size-sm);
         text-align: center;
         cursor: pointer;
+        touch-action: manipulation;
+        -webkit-touch-callout: none;
       }
       td[data-tint] .day {
         background: var(--season-tint);
@@ -161,6 +168,10 @@ export class OpeningHoursYearView extends LitElement {
         color: var(--wt-color-on-day-closed);
         font-weight: var(--wt-font-weight-bold);
       }
+      td[data-date] .day[aria-pressed="true"] {
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
       [aria-current="date"] {
         text-decoration: underline;
         text-decoration-thickness: var(--wt-field-line-width-active);
@@ -181,12 +192,21 @@ export class OpeningHoursYearView extends LitElement {
    *  a repeating day in a later year. */
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
-  /** The date that holds the year's one Tab stop. */
-  @state() private focusDate: LocalDate | null = null;
   @state() private areaError = "";
   @state() private areaBusy = false;
 
   #connection = {};
+  #dayPicker = new DayPicker(this, {
+    button: (date) => this.#dayButton(date),
+    canPick: () => !this.readOnly,
+    choose: (date) =>
+      this.#emit<CalendarDayOpen>("calendar-day-open", {
+        date,
+        returnTo: () => this.#dayButton(date),
+      }),
+    open: (date, { from, to }) =>
+      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, from, to }),
+  });
   #areaRequest = {};
 
   override disconnectedCallback(): void {
@@ -197,9 +217,11 @@ export class OpeningHoursYearView extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (!changes.has("model")) return;
-    const prefix = this.model ? `${yearKey(this.model.year)}-` : "";
-    if (this.focusDate !== null && !this.focusDate.startsWith(prefix)) this.focusDate = null;
     const before = changes.get("model") as OpeningHoursYear | undefined;
+    if (before?.year !== this.model?.year) {
+      this.#dayPicker.clear();
+      this.#dayPicker.forgetFocus();
+    }
     if (before?.area.addressKey !== this.model?.area.addressKey) {
       this.#areaRequest = {};
       this.areaBusy = false;
@@ -215,25 +237,6 @@ export class OpeningHoursYearView extends LitElement {
     return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
   }
 
-  #open(date: LocalDate): void {
-    this.focusDate = date;
-    this.#emit<CalendarDayOpen>("calendar-day-open", {
-      date,
-      returnTo: () => this.#dayButton(date),
-    });
-  }
-
-  #keydown(event: KeyboardEvent): void {
-    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
-    const date = (event.composedPath()[0] as HTMLElement).closest("td")?.dataset.date;
-    if (step === undefined || date === undefined) return;
-    event.preventDefault();
-    const target = this.#dayButton(addDays(date, step));
-    if (!target) return;
-    this.focusDate = target.closest("td")!.dataset.date!;
-    target.focus();
-  }
-
   #month(
     model: OpeningHoursYear,
     month: string,
@@ -245,6 +248,7 @@ export class OpeningHoursYearView extends LitElement {
     const key = `${yearKey(model.year)}-${month}`;
     const grid = monthGrid(key);
     const headingId = `month-${month}`;
+    const handlers = this.#dayPicker.handlers;
     return html`<section class="month" data-month=${key}>
       <button
         type="button"
@@ -255,7 +259,14 @@ export class OpeningHoursYearView extends LitElement {
       >
         ${formatMonthName(Number(month))}
       </button>
-      <table aria-labelledby=${headingId} @keydown=${this.#keydown}>
+      <table
+        aria-labelledby=${headingId}
+        @pointerdown=${handlers.pointerdown}
+        @click=${handlers.click}
+        @dblclick=${handlers.dblclick}
+        @keydown=${handlers.keydown}
+        @contextmenu=${handlers.contextmenu}
+      >
         <thead>
           ${header}
         </thead>
@@ -285,6 +296,7 @@ export class OpeningHoursYearView extends LitElement {
                     type="button"
                     class="day"
                     tabindex=${date === stop ? 0 : -1}
+                    aria-pressed=${this.#dayPicker.isPicked(date) ? "true" : "false"}
                     aria-label=${[
                       formatLongDate(date),
                       day?.specialDay?.name,
@@ -295,10 +307,6 @@ export class OpeningHoursYearView extends LitElement {
                       .join(", ")}
                     title=${day?.specialDay?.name || holidayName || nothing}
                     aria-current=${date === model.today ? "date" : nothing}
-                    @click=${() => this.#open(date)}
-                    @focus=${() => {
-                      this.focusDate = date;
-                    }}
                   >
                     ${Number(date.slice(8))}
                   </button>
@@ -442,7 +450,7 @@ export class OpeningHoursYearView extends LitElement {
     </tr>`;
     const prefix = `${yearKey(model.year)}-`;
     const stop =
-      [this.focusDate, model.today].find(
+      [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
     return html`<season-chips

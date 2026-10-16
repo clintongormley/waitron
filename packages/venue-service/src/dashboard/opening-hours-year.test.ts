@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-calendar.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
-import type { CalendarDayOpen } from "./opening-hours-month.js";
+import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
 import "./opening-hours-year.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
+afterEach(() => commands.parkPointer());
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
@@ -120,6 +121,19 @@ function opens(el: OpeningHoursYearView) {
   );
   return sent;
 }
+
+function opensRun(el: OpeningHoursYearView) {
+  const sent: CalendarDaysOpen[] = [];
+  el.addEventListener("calendar-days-open", (event) =>
+    sent.push((event as CustomEvent<CalendarDaysOpen>).detail),
+  );
+  return sent;
+}
+const pressed = (el: OpeningHoursYearView) =>
+  [...root(el).querySelectorAll<HTMLElement>('td button[aria-pressed="true"]')].map(
+    (button) => button.closest("td")!.dataset.date,
+  );
+const daySel = (date: LocalDate) => `opening-hours-year td[data-date="${date}"] button`;
 
 describe("Opening hours year", () => {
   it("draws twelve Monday-first months holding only their own dates", async () => {
@@ -418,6 +432,96 @@ describe("Opening hours year", () => {
     expect(root(el).activeElement?.closest("td")?.dataset.date).toBe("2027-12-31");
     await el.updateComplete;
     expect(dayButton(el, "2027-12-31").tabIndex).toBe(0);
+  });
+
+  it("a drag picks a run and a double-click asks to open it", async () => {
+    const el = await mount();
+    const opened = opens(el);
+    const runs = opensRun(el);
+    await commands.mouseDrag(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"].map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"]);
+    expect(opened).toEqual([]);
+    await userEvent.dblClick(dayButton(el, "2027-10-22"));
+    await el.updateComplete;
+    expect(runs).toEqual([{ date: "2027-10-22", from: "2027-10-20", to: "2027-10-23" }]);
+    expect(pressed(el)).toEqual(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"]);
+  });
+
+  it("a viewer's drag and double-click pick no run and open nothing", async () => {
+    const el = await mount(yearModel(), { readOnly: true });
+    const runs = opensRun(el);
+    await commands.mouseDrag(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"].map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual([]);
+    await userEvent.dblClick(dayButton(el, "2027-10-22"));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(["2027-10-22"]);
+    expect(runs).toEqual([]);
+  });
+
+  it("Enter opens, Space shows the day box", async () => {
+    const el = await mount();
+    const opened = opens(el);
+    const runs = opensRun(el);
+    await commands.mouseDrag(["2027-10-20", "2027-10-23"].map(daySel));
+    dayButton(el, "2027-10-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(runs).toEqual([{ date: "2027-10-22", from: "2027-10-20", to: "2027-10-23" }]);
+    expect(opened).toEqual([]);
+    await userEvent.keyboard("{ }");
+    expect(opened.map(({ date }) => date)).toEqual(["2027-10-22"]);
+    expect(runs).toHaveLength(1);
+  });
+
+  it("puts the Tab stop back on today when the year changes and comes back", async () => {
+    const el = await mount();
+    await userEvent.click(dayButton(el, "2027-10-22"));
+    await el.updateComplete;
+    expect(dayButton(el, "2027-10-22").tabIndex).toBe(0);
+    const next = yearModel();
+    el.model = {
+      ...next,
+      year: 2028,
+      days: next.days.map((day) => ({ ...day, date: `2028${day.date.slice(4)}` })),
+    };
+    await el.updateComplete;
+    el.model = yearModel();
+    await el.updateComplete;
+    const stops = [...root(el).querySelectorAll<HTMLElement>("td button")].filter(
+      (button) => button.tabIndex === 0,
+    );
+    expect(stops.map((button) => button.closest("td")!.dataset.date)).toEqual(["2027-03-10"]);
+  });
+
+  it("a viewer's Enter shows the day box and opens no run", async () => {
+    const el = await mount(yearModel(), { readOnly: true });
+    const opened = opens(el);
+    const runs = opensRun(el);
+    dayButton(el, "2027-10-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened.map(({ date }) => date)).toEqual(["2027-10-22"]);
+    expect(runs).toEqual([]);
+  });
+
+  it("forgets a picked run when the year changes", async () => {
+    const el = await mount();
+    await commands.mouseDrag(["2027-10-20", "2027-10-23"].map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toHaveLength(4);
+    el.model = yearModel();
+    await el.updateComplete;
+    expect(pressed(el)).toHaveLength(4);
+    const next = yearModel();
+    el.model = {
+      ...next,
+      year: 2028,
+      days: next.days.map((day) => ({ ...day, date: `2028${day.date.slice(4)}` })),
+    };
+    await el.updateComplete;
+    el.model = yearModel();
+    await el.updateComplete;
+    expect(pressed(el)).toEqual([]);
   });
 
   it("draws no colour key, no + Special day and no sentence for a complete official list", async () => {

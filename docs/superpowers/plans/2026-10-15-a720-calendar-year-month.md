@@ -1138,6 +1138,10 @@ export class DayPicker implements ReactiveController {
 }
 ```
 
+> 2026-10-16, as built: `dates()` is gone and `picked` is optional; the day under a pointer is found
+> with `pointerElementsAt` (`@waitron/ui/src/reorder-table.ts`), and only a click carrying the
+> gesture's pointerId is swallowed (`day-picking.ts`).
+
 **Behaviour**, following the two pointer drags already in this package —
 `paint-grid-parts.ts:241-260` and `departments-zones-drag.ts:40-60`, `:138-170`, `:289-300`:
 - **Styles the host applies:** `touch-action: manipulation` on the day buttons (a finger still

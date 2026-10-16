@@ -2084,8 +2084,9 @@ stretch. A department paints its periods and Closed; a zone paints Open and Clos
 department's day, with the zone's season closures drawn as Closed. A date's ⋮ offers Copy to… and
 Clear. The grid is drawn from the first date's changeover; when the dates' changeovers differ, a
 notice says so. Opened on a public holiday with no special day, a new day starts with the holiday's
-name and date and can be saved as it opened; when a special day of that name exists, the painter
-first offers Add to <name>, which opens the one with the latest date with this date added as an
+name and its date (on a picked run whose first date is the holiday, every date of the run) and can
+be saved as it opened; when a special day of that name exists, the painter
+first offers Add to <name>, which opens the one with the latest date with this date, or every date of the picked run, added as an
 unsaved change, or New special day; once the new day is edited or a save of it is sent, no offer is made. Save stays quiet until the draft changes and sends the name,
 Every year, the dates and their Closed ticks, and paint only for each department or zone and date
 whose paint differs from what is saved; the painter stays open and the answer becomes the saved
@@ -3919,7 +3920,10 @@ not have the department's own week. Every other week address opens the painter i
 `/view/week`, with or without a department, a station or All departments, an address with no view
 naming a season, a department, a zone or `?station=`, and an unknown view. The
 special-day painter (Forms above) has its own address too: `/view/special-day` for a new day,
-with `/date/<yyyy-mm-dd>` for a new day holding that date, and
+with `/date/<yyyy-mm-dd>` for a new day holding that date, `/date/<yyyy-mm-dd>/to/<yyyy-mm-dd>`
+for a new day holding every date from the first to the second (the editor on a picked run; `to` is
+left out when the run is one day, and one later than the date by more than 365 days, earlier than
+it or malformed is ignored, so the day opens on its first date alone), and
 `/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to
 its draft as an unsaved change; Back or Forward to the same day with another date asks first when
 the draft has changes, and then opens the stored day again with that date. It opens over the view it was opened from, or the Year on a direct
@@ -3929,8 +3933,10 @@ and `/view/date` with no date or a bad one by the month view. After provisioning
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.
 
-- **Year.** A date opens the day box (below); pointing at a special day or public holiday names
-  it. ‹ › step years, a month's name, drawn as a link ending in ›, opens that
+- **Year.** Clicking a date picks it and opens the day box (below); pointing at a special day or
+  public holiday names it. Days are picked as Picking days (below) says, and a picked day is filled
+  with `--wt-color-primary`, its number in `--wt-color-on-primary`; today stays underlined.
+  ‹ › step years, a month's name, drawn as a link ending in ›, opens that
   month (below), and the season chips rename, move, add and delete seasons
   (`season-chips.ts`), and a chip's name opens the season painter.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
@@ -3951,8 +3957,27 @@ Opening hours' Year.
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
   colour. Above the dates, ‹, the month's name, ›, the
   Year / Month switch and the Show department picker share one row, which wraps at phone width; ‹ › step months. Arrow keys move between
-  dates, with one Tab stop. A date opens the day box (below), for a viewer too; in station mode
-  (the Times tab of Prep stations) the dates are plain.
+  dates, with one Tab stop. Clicking a date picks it and opens the day box (below), for a viewer
+  too; days are picked as Picking days (below) says, and
+  a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
+  today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
+  the dates are plain and nothing is picked.
+- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
+  click picks one day and opens its day box, dragging over days picks the run between them, and
+  Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
+  day double-clicked is inside it, otherwise on that day alone, and on a stored special day's date
+  it opens that special day instead. On a phone a tap picks a day and opens its day box, and a
+  finger that moves straight away scrolls the page. Holding a finger on a day (a long press) picks
+  it without selecting its number as text; moving the finger then stretches the run, and the page
+  does not scroll while it does; lifting it after a long press without moving opens the editor as a double-click does.
+  On the keyboard the arrow keys move to the next day and pick it alone, Shift with an arrow
+  stretches the run, Enter opens the editor as a double-click does, and Space, like a click, opens
+  the day box. In a screen reader's reading mode Enter arrives as a click, so it opens the day
+  box, whose special-day action opens the editor on that day, or the special day holding it; in its focus mode Shift with an
+  arrow and Enter pick a run and open the editor on it. A viewer picks one day at a time, with a
+  click, a tap, Space, Enter or an arrow key (Shift is ignored), and a click, a tap, Space or Enter
+  opens the day box; for a viewer a drag, a double-click and a long press pick no run, and nothing
+  opens the editor.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens, and Staffing's month and
   A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that

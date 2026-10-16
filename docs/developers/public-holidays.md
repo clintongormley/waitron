@@ -11,7 +11,9 @@ A public holiday is information: reading one does not write a special day or cha
 On a public date, the day box's Make a special day opens the special-day painter on a new day with the
 holiday's name and date filled in; you choose its dates, whether it repeats every year, and whether
 each date is Closed all day. When a special day of that name already exists, the painter first
-offers Add to <name>, which opens that day with this date added, unsaved. The Year's and the
+offers Add to <name>, which opens that day with this date added, unsaved. Opened on a picked run
+whose first date is the holiday, the new day holds every date of the run, and Add to adds them all.
+The Year's and the
 month's readers are `readOpeningHoursYear` and `readOpeningHoursMonth` in
 `packages/venue-service/src/opening-hours-calendar.ts`, and the painter draws each date's season
 hours from `readSeasonDays` in the same file; the painter, the Year and the month are

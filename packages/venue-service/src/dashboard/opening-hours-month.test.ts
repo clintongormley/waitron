@@ -1,16 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import { DEPARTMENTS, holiday, monthModel } from "../testing/opening-hours-month-fixture.js";
-import type { CalendarDayOpen, OpeningHoursMonthView } from "./opening-hours-month.js";
+import type {
+  CalendarDayOpen,
+  CalendarDaysOpen,
+  OpeningHoursMonthView,
+} from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
+afterEach(() => commands.parkPointer());
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
@@ -65,6 +70,12 @@ function events<T>(el: OpeningHoursMonthView, name: string): T[] {
   return sent;
 }
 const percent = (value: string) => Number.parseFloat(value);
+const pressed = (el: OpeningHoursMonthView) =>
+  [...root(el).querySelectorAll<HTMLElement>('button.day[aria-pressed="true"]')].map(
+    (button) => button.closest<HTMLElement>("[data-date]")!.dataset.date,
+  );
+const daySel = (date: LocalDate) => `opening-hours-month td[data-date="${date}"] button.day`;
+const DRAG = ["2026-12-20", "2026-12-21", "2026-12-22", "2026-12-23"];
 
 describe("Opening hours month", () => {
   it("heads the month with its name and year, and the columns with weekdays from Monday", async () => {
@@ -709,6 +720,97 @@ describe("Opening hours month", () => {
     await userEvent.keyboard("{ArrowRight}");
     await el.updateComplete;
     expect(el.shadowRoot!.activeElement).toBe(dayButton(el, "2026-12-24"));
+  });
+
+  it("a drag picks a run and a double-click asks to open it", async () => {
+    const el = await mount();
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    await commands.mouseDrag(DRAG.map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(DRAG);
+    expect(opened).toEqual([]);
+    await userEvent.dblClick(dayButton(el, "2026-12-22"));
+    await el.updateComplete;
+    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+    expect(pressed(el)).toEqual(DRAG);
+  });
+
+  it("a viewer's drag and double-click pick no run and open nothing", async () => {
+    const el = await mount(monthModel(), { readOnly: true });
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    await commands.mouseDrag(DRAG.map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual([]);
+    await userEvent.dblClick(dayButton(el, "2026-12-22"));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(["2026-12-22"]);
+    expect(runs).toEqual([]);
+  });
+
+  it("Enter opens, Space shows the day box", async () => {
+    const el = await mount();
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    await commands.mouseDrag(["2026-12-20", "2026-12-23"].map(daySel));
+    dayButton(el, "2026-12-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+    expect(opened).toEqual([]);
+    await userEvent.keyboard("{ }");
+    expect(opened.map(({ date }) => date)).toEqual(["2026-12-22"]);
+    expect(runs).toHaveLength(1);
+  });
+
+  it("a viewer's Enter shows the day box and opens no run", async () => {
+    const el = await mount(monthModel(), { readOnly: true });
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    dayButton(el, "2026-12-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened.map(({ date }) => date)).toEqual(["2026-12-22"]);
+    expect(runs).toEqual([]);
+  });
+
+  it("a run crosses into the next month's faint dates", async () => {
+    const el = await mount();
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    const run = ["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"];
+    await commands.mouseDrag(run.map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(run);
+    await userEvent.dblClick(dayButton(el, "2027-01-01"));
+    expect(runs).toEqual([{ date: "2027-01-01", from: "2026-12-30", to: "2027-01-02" }]);
+  });
+
+  it("forgets a picked run when the month changes", async () => {
+    const el = await mount();
+    await commands.mouseDrag(["2026-12-30", "2027-01-02"].map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toHaveLength(4);
+    el.model = monthModel();
+    await el.updateComplete;
+    expect(pressed(el)).toHaveLength(4);
+    el.model = monthModel({
+      month: "2027-01",
+      days: monthModel().days.map((day) => ({ ...day, date: addDays(day.date, 35) })),
+    });
+    await el.updateComplete;
+    el.model = monthModel();
+    await el.updateComplete;
+    expect(pressed(el)).toEqual([]);
+  });
+
+  it("in station mode, a drag or a double-click picks and opens nothing", async () => {
+    const el = await mount(stationModel(), { stationMode: true, departments: STATION });
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    const sel = (date: LocalDate) => `opening-hours-month td[data-date="${date}"] .day`;
+    await commands.mouseDrag(DRAG.map(sel));
+    await userEvent.dblClick(cell(el, "2026-12-22").querySelector<HTMLElement>(".day")!);
+    expect(root(el).querySelector("[aria-pressed]")).toBeNull();
+    expect(opened).toEqual([]);
+    expect(runs).toEqual([]);
   });
 
   it("fits a phone's width without scrolling sideways", async () => {

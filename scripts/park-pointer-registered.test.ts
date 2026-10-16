@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  * Reads TEXT, not the module graph: it looks for an IMPORT of `a11y-helpers` or a literal
  * `commands.parkPointer` call in a package's source, and for the `...parkPointerCommands` spread in
  * its vitest config. A rename of the command or the shared fragment, or a helper reached under a
- * different spelling, would slip past.
+ * different spelling, would slip past. The same holds for `pointerGestureCommands`: a literal
+ * `commands.mouseDrag` or `commands.touchGesture` call, and the `...pointerGestureCommands` spread.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -20,6 +21,8 @@ const ROOTS = ["packages", "apps"];
 const IMPORTS_A11Y_HELPERS = /^\s*import\b[^\n]*\ba11y-helpers\b/m;
 /** A source file calls the command directly (a local test-helpers copy of the hook). */
 const CALLS_PARK_POINTER = /\bcommands\.parkPointer\b/;
+/** A source file calls one of the commands in `pointerGestureCommands`. */
+const CALLS_POINTER_GESTURE = /\bcommands\.(?:mouseDrag|touchGesture)\b/;
 
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
@@ -51,26 +54,37 @@ function packageDirsWithVitestConfig(): string[] {
   return dirs;
 }
 
+type Uses = { parkPointer: boolean; pointerGesture: boolean };
+
+/** What each package's source uses, from one read of its files; both blocks below share it. */
+const usesByPackage = new Map<string, Uses>(
+  packageDirsWithVitestConfig().map((dir) => {
+    let files: string[];
+    try {
+      files = sourceFilesIn(join(dir, "src"));
+    } catch {
+      files = [];
+    }
+    const uses: Uses = { parkPointer: false, pointerGesture: false };
+    for (const f of files) {
+      const text = readFileSync(f, "utf8");
+      uses.parkPointer ||= IMPORTS_A11Y_HELPERS.test(text) || CALLS_PARK_POINTER.test(text);
+      uses.pointerGesture ||= CALLS_POINTER_GESTURE.test(text);
+      if (uses.parkPointer && uses.pointerGesture) break;
+    }
+    return [dir, uses];
+  }),
+);
+
 describe("parkPointer command registration", () => {
-  const packages = packageDirsWithVitestConfig();
+  const packages = [...usesByPackage.keys()];
 
   it("finds packages to check (the scan is not silently empty)", () => {
     expect(packages.length).toBeGreaterThan(0);
   });
 
   for (const dir of packages) {
-    const src = join(dir, "src");
-    let files: string[];
-    try {
-      files = sourceFilesIn(src);
-    } catch {
-      files = [];
-    }
-    const needsParkPointer = files.some((f) => {
-      const text = readFileSync(f, "utf8");
-      return IMPORTS_A11Y_HELPERS.test(text) || CALLS_PARK_POINTER.test(text);
-    });
-    if (!needsParkPointer) continue;
+    if (!usesByPackage.get(dir)!.parkPointer) continue;
 
     const rel = dir.slice(repoRoot.length + 1);
     it(`${rel} registers parkPointer in its vitest config`, () => {
@@ -78,6 +92,25 @@ describe("parkPointer command registration", () => {
       expect(
         config.includes("...parkPointerCommands"),
         `${rel}/src runs the parkPointer hook but ${rel}/vitest.config.ts does not spread ...parkPointerCommands into its browser commands`,
+      ).toBe(true);
+    });
+  }
+});
+
+describe("pointer gesture command registration", () => {
+  const callers = [...usesByPackage].filter(([, uses]) => uses.pointerGesture).map(([dir]) => dir);
+
+  it("finds packages calling the commands (the scan is not silently empty)", () => {
+    expect(callers.length).toBeGreaterThan(0);
+  });
+
+  for (const dir of callers) {
+    const rel = dir.slice(repoRoot.length + 1);
+    it(`${rel} registers pointerGestureCommands in its vitest config`, () => {
+      const config = readFileSync(join(dir, "vitest.config.ts"), "utf8");
+      expect(
+        config.includes("...pointerGestureCommands"),
+        `${rel}/src calls commands.mouseDrag or commands.touchGesture but ${rel}/vitest.config.ts does not spread ...pointerGestureCommands into its browser commands`,
       ).toBe(true);
     });
   }

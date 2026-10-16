@@ -30,6 +30,7 @@ afterEach(() => {
 interface Options extends SpecialDayAnswers {
   specialDayId?: string | null;
   date?: string | null;
+  lastDate?: string | null;
   addDate?: string | null;
   holidays?: readonly HolidayFact[];
   readOnly?: boolean;
@@ -49,6 +50,7 @@ async function mount(options: Options = {}) {
   painter.model = painterModel();
   painter.specialDayId = options.specialDayId === undefined ? "sd1" : options.specialDayId;
   painter.date = options.date ?? null;
+  painter.lastDate = options.lastDate ?? null;
   painter.addDate = options.addDate ?? null;
   painter.holidays = options.holidays ?? [];
   painter.readOnly = options.readOnly ?? false;
@@ -268,6 +270,44 @@ describe("a new special day", () => {
     expect(grid(painter)).toBeNull();
     expect(part(painter, "no-dates")).not.toBeNull();
   });
+
+  it("a new day on a run holds every date of it", async () => {
+    const { painter } = await mount({
+      specialDayId: null,
+      date: "2026-10-20",
+      lastDate: "2026-10-23",
+    });
+    expect(chips(painter)).toEqual(["2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"]);
+    expect(grid(painter).columns.map(({ key }) => key)).toEqual(chips(painter));
+    expect(saveButton(painter).disabled).toBe(true);
+    await typeName(painter, "Autumn fair");
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("a new day on a run takes the first date's holiday name", async () => {
+    const { painter } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      lastDate: "2026-12-27",
+      holidays: [holiday("2026-12-26", "San Esteban"), holiday("2026-12-25", "Navidad")],
+    });
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("Navidad");
+    expect(chips(painter)).toEqual(["2026-12-25", "2026-12-26", "2026-12-27"]);
+  });
+
+  it("a change of the run's last date starts again from the new run", async () => {
+    const { painter } = await mount({
+      specialDayId: null,
+      date: "2026-10-20",
+      lastDate: "2026-10-23",
+    });
+    painter.lastDate = "2026-10-21";
+    await settle(painter);
+    expect(chips(painter)).toEqual(["2026-10-20", "2026-10-21"]);
+  });
 });
 
 describe("opened on a public holiday", () => {
@@ -422,6 +462,28 @@ describe("opened on a public holiday", () => {
         },
       },
     ]);
+  });
+
+  it("Add to on a run adds every date of the run to that special day", async () => {
+    const days = { sd2: named("sd2", "Navidad", ["2025-12-25", "2026-12-26"]) };
+    const { painter, writes, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      lastDate: "2026-12-27",
+      holidays: navidad,
+      days,
+    });
+    await listed(painter, lists);
+    part(painter, "add-to")!.click();
+    await loaded(painter);
+    await expect
+      .poll(() => chips(painter))
+      .toEqual(["2025-12-25", "2026-12-25", "2026-12-26", "2026-12-27"]);
+    expect(writes).toEqual([]);
+    await save(painter, writes);
+    expect(
+      (writes[0]!.body as { dates: { date: string }[] }).dates.map(({ date }) => date),
+    ).toEqual(["2025-12-25", "2026-12-25", "2026-12-26", "2026-12-27"]);
   });
 
   it("Add to a day that already holds the date opens it unchanged", async () => {
