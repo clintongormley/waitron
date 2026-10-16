@@ -386,6 +386,28 @@ or the version check failed, so stderr alone may not distinguish them. On recurr
 separate statuses and timings for both commands before assigning the cause. The controlled
 short-limit measurement is in [the CI guide](../developers/ci-and-gates.md#give-a-healthy-version-check-its-normal-allowance).
 
+## The step-watch guard received an undefined held-thread result
+
+On 2026-10-16, A737 Part 2's normal push at `877d14981`, rebased onto A751's
+`39d07827e`, ran `pnpm vitest run --coverage`. Vitest 4.1.11 reported 6,838 passing
+cases and one failure in 157.65 seconds. The failing case was
+`scripts/step-watch.test.mjs`'s "reports the phase a synchronous call holds the thread in,
+from another thread, counting from the last phase event". At line 557,
+`expect(seenWhileHeld).toMatch(...)` received undefined. Its callback assigns that value
+inside the held database call; the retained output does not explain why it was absent.
+
+The same case run alone passed: `pnpm exec vitest run scripts/step-watch.test.mjs
+-t 'reports the phase a synchronous call holds'` reported 1 passed, 45 skipped.
+The guard and implementation had no diff from `origin/main`. Neither observation establishes
+the cause or excludes a contribution from the feature branch. The normal push stopped before
+uploading objects; no hook was bypassed. Raw logs remain in Lane F's local
+`receipts/a737-after-a751/push.log` and `step-watch-focused.log`.
+
+Next: capture the orchestration outcome and phase events before the missing-value assertion,
+reproduce the full-run failure, then repair the responsible side without weakening the held-call
+or phase-history checks. The phase waits exceeding the 100 ms no-progress limit are a hypothesis,
+not a measured cause. An unchanged retry or the isolated pass is not a repair.
+
 ## The simulator suite lost its worker to the venue watchdog
 
 On 2026-10-16, an A739a investigation at `6dcffc9d3` ran:

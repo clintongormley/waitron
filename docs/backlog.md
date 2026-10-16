@@ -4953,6 +4953,13 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **The step-watch guard received an undefined held-thread result.** A737 Part 2's
+  normal pre-push run after A751 reported 6,838 passing root cases and one failure at
+  `scripts/step-watch.test.mjs:557`: `seenWhileHeld` was undefined. The isolated case passed;
+  the cause and the feature branch's contribution remain unverified. Retain the failure and
+  diagnose it before another unchanged push.
+  [Detail](backlog/ci.md#the-step-watch-guard-received-an-undefined-held-thread-result).
+
 - **The simulator suite lost its worker to the venue watchdog during A739a investigation
   (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
   `provisioning.database_holder_frozen` after 15 passing cases; the isolated expiry case passed.
