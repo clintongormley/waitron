@@ -360,9 +360,12 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     }
     await el.updateComplete;
     if (state === "variant-page") {
-      // Without these the scan could pass on a page that drew none of its hints.
-      for (const name of ["allergens-hint", "dietary-hint"])
-        expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
+      const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+      await picker.updateComplete;
+      expect(
+        picker.shadowRoot!.querySelector('[data-choice="same-as"]')!.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(picker.shadowRoot!.querySelectorAll(".inherited").length).toBeGreaterThan(0);
       const area = el.shadowRoot!.querySelector<HTMLElement & { placeholder: string }>(
         "wt-textarea[name=description-en]",
       )!;

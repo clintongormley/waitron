@@ -1,3 +1,4 @@
+import { allergensFromChoices } from "./allergen-choices.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
@@ -277,17 +278,15 @@ it("keeps Save quiet when the same cereal and nut choices return in another orde
     allergens: { gluten: { kinds: ["rye", "wheat"] }, nuts: { kinds: ["walnuts", "almonds"] } },
   });
   expect(await saveState(el)).toEqual(quiet);
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
+    new CustomEvent("wt-nutrition-change", {
+      detail: {
+        field: "allergens",
+        value: allergensFromChoices(["gluten:wheat", "nuts:almonds", "gluten:rye", "nuts:walnuts"]),
+      },
       bubbles: true,
       composed: true,
-      detail: {
-        value: {
-          allergens: ["gluten:wheat", "nuts:almonds", "gluten:rye", "nuts:walnuts"],
-          dietary: full.dietaryDeclarations,
-        },
-      },
     }),
   );
   await el.updateComplete;
@@ -298,28 +297,56 @@ it("leaves variant Open available when only allergen kind order changes", async 
   const el = await mount({ ...full, allergens: { gluten: { kinds: ["rye", "wheat"] } } });
   const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
   expect(table.openBlocked).toBe(false);
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices(["gluten:wheat", "gluten:rye"]) },
       bubbles: true,
       composed: true,
-      detail: {
-        value: { allergens: ["gluten:wheat", "gluten:rye"], dietary: full.dietaryDeclarations },
-      },
     }),
   );
   await el.updateComplete;
   await table.updateComplete;
   expect(table.openBlocked).toBe(false);
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices(["gluten:wheat"]) },
       bubbles: true,
       composed: true,
-      detail: { value: { allergens: ["gluten:wheat"], dietary: full.dietaryDeclarations } },
     }),
   );
   await el.updateComplete;
   await table.updateComplete;
   expect(table.openBlocked).toBe(true);
   expect(await saveState(el)).toEqual(ready);
+});
+
+it("keeps incomplete allergen kinds dirty for Save and variant Open until reverted", async () => {
+  const el = await mount({ ...full, allergens: {} });
+  const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  expect(await saveState(el)).toEqual(quiet);
+  expect(table.openBlocked).toBe(false);
+  picker.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: { gluten: {} } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(await saveState(el)).toEqual(ready);
+  expect(table.openBlocked).toBe(true);
+  picker.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: {} },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(await saveState(el)).toEqual(quiet);
+  expect(table.openBlocked).toBe(false);
 });

@@ -1,3 +1,4 @@
+import { allergensFromChoices } from "./allergen-choices.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons, type ComboboxOption } from "@waitron/ui";
@@ -28,6 +29,42 @@ import { EACH_CHOICE } from "./variant-table.js";
 // cannot catch a defect in it.
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
+
+it("keeps unreviewed allergens null when only a dietary label is saved", async () => {
+  const el = await mountPricing({ ...saved, allergens: null, dietaryDeclarations: [] });
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  await picker.updateComplete;
+  await userEvent.click(
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="diet-vegan"]')!,
+  );
+  await el.updateComplete;
+  expect(el.currentValue.dietaryDeclarations).toEqual(["vegan"]);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.allergens).toBeNull();
+  expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual(["vegan"]);
+});
+
+it("keeps a variant's explicit empty diet when only its allergens change", async () => {
+  const el = await mountVariant({ ...glass, dietaryDeclarations: [] });
+  el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices(["eggs"]) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.allergens).toEqual({ eggs: {} });
+  expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual([]);
+});
 
 it.each([
   { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre", "Zucchini (z)"] },
@@ -417,24 +454,24 @@ it.each([
   }
 });
 
-it("uses the shared compact nutritional picker without a reviewed switch", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, allergens: {}, dietaryDeclarations: ["no_meat"] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
+it("uses direct nutritional chips with an explicit None choice", async () => {
+  const el = await mountPricing({ ...saved, allergens: {}, dietaryDeclarations: ["no_meat"] });
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  await picker.updateComplete;
   expect(picker).not.toBeNull();
   expect(el.shadowRoot!.querySelector("dashboard-allergen-picker")).toBeNull();
   expect(picker.shadowRoot!.querySelector('[data-test="reviewed"]')).toBeNull();
-  expect(picker.shadowRoot!.querySelector('[data-test="dietary-summary"]')!.textContent).toContain(
+  expect(
+    picker.shadowRoot!.querySelector('[data-choice="none"]')!.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(
+    picker.shadowRoot!.querySelector('[data-choice="diet-no_meat"]')!.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(picker.shadowRoot!.querySelector('[data-choice="diet-no_meat"]')!.textContent).toContain(
     t("editor.diet.no_meat"),
   );
 });
-
 /** Runs `body` with the test frame at a desktop width, where the variants table keeps its price
  * column and the unit button in that column's heading. */
 async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
@@ -1274,10 +1311,10 @@ it("retains a compact-picker allergen selection across an unrelated edit", async
     taxChoices: reduced,
   });
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: { allergens: ["milk"], dietary: [] } },
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices(["milk"]) },
       bubbles: true,
       composed: true,
     }),
@@ -1297,7 +1334,7 @@ it("restores explicit kinds when they are removed then re-added", async () => {
     taxChoices: reduced,
   });
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   for (const allergens of [[], ["gluten:wheat", "gluten:barley"]]) {
     picker.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -1321,10 +1358,11 @@ it("keeps stored kinds when another allergen is added", async () => {
     taxChoices: reduced,
   });
   await openSection(el, "nutrition");
-  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
-    new CustomEvent("wt-change", {
+  el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
       detail: {
-        value: { allergens: ["gluten:wheat", "gluten:barley", "nuts:walnuts"], dietary: [] },
+        field: "allergens",
+        value: allergensFromChoices(["gluten:wheat", "gluten:barley", "nuts:walnuts"]),
       },
       bubbles: true,
       composed: true,
@@ -2712,72 +2750,47 @@ it("says a refused category on a variant's page in the message above Save, havin
   expect(await bottomOf(el)).toBe("A variant takes its product's category");
 });
 
-it("closes an allergen dropdown on Escape without closing the product's window", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, allergens: { milk: {} } },
-    locales: ["en"],
-  });
-  const cancelled = vi.fn();
+it("activates a nutritional chip with Enter without saving or closing the window", async () => {
+  const el = await mountPricing({ ...saved, allergens: { milk: {} } });
+  const cancelled = vi.fn(),
+    submit = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
+  el.addEventListener("wt-submit", submit);
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="allergens-line"]')!.focus();
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="allergen-eggs"]')!.focus();
   await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(picker.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
-  );
-  await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() =>
-    expect(picker.shadowRoot!.querySelector('[data-test="allergens-line"]')).not.toBeNull(),
-  );
+  await el.updateComplete;
+  expect(el.currentValue.allergens).toEqual({ milk: {}, eggs: {} });
+  expect(submit).not.toHaveBeenCalled();
   expect(cancelled).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
     true,
   );
 });
-
-it("saves an allergen clicked in the dropdown's list after Escape ends the edit", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, allergens: {} },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
+it("saves a cereal clicked in the chips after the nutrition section is collapsed", async () => {
+  const el = await mountPricing({ ...saved, allergens: {} });
   const cancelled = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   await userEvent.click(
-    picker.shadowRoot!.querySelector<HTMLElement>('[data-test="allergens-line"]')!,
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="allergen-gluten"]')!,
   );
-  await vi.waitFor(() =>
-    expect(picker.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull(),
+  await el.updateComplete;
+  await picker.updateComplete;
+  await userEvent.click(
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="kind-gluten-wheat"]')!,
   );
-  const combobox =
-    picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      '[data-test="allergens"]',
-    )!;
-  await combobox.updateComplete;
-  await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
-  const panel = combobox.shadowRoot!.querySelector<HTMLElement>("#panel")!;
-  await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
-  const gluten = [...combobox.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (row) => row.textContent!.trim() === `${allergenName("gluten")} (Trigo)`,
-  )!;
-  await userEvent.click(gluten);
-  await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
-  await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() =>
-    expect(picker.shadowRoot!.querySelector('[data-test="allergens-line"]')).not.toBeNull(),
-  );
-  expect(picker.shadowRoot!.querySelector('[data-test="allergens-summary"]')!.textContent).toBe(
-    `${allergenName("gluten")} (Trigo)`,
-  );
+  await el.updateComplete;
+  const fold = folded(el, "nutrition");
+  await fold.updateComplete;
+  await userEvent.click(fold.shadowRoot!.querySelector<HTMLElement>("button.header")!);
+  await fold.updateComplete;
+  expect(fold.open).toBe(false);
+  expect(nutritionFields(el)[0]!.value).toContain(allergenName("gluten"));
   expect(cancelled).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
     true,
@@ -2790,32 +2803,25 @@ it("saves an allergen clicked in the dropdown's list after Escape ends the edit"
     gluten: { kinds: ["wheat" as const] },
   });
 });
-
 it("offers all six product dietary declarations without changing the saved set", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, dietaryDeclarations: ["vegan", "halal"] },
-    locales: ["en"],
-  });
+  const el = await mountPricing({ ...saved, dietaryDeclarations: ["vegan", "halal"] });
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="dietary-line"]')!.click();
-  await picker.updateComplete;
-  const dietary = picker.shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>(
-    "[data-test=dietary]",
-  )!;
-  expect(dietary.options.map((option) => option.value)).toEqual([
-    "vegan",
-    "vegetarian",
-    "halal",
-    "kosher",
-    "no_meat",
-    "no_fish",
+  expect(
+    [...picker.shadowRoot!.querySelectorAll<HTMLElement>('[data-choice^="diet-"]')].map(
+      (button) => button.dataset.choice,
+    ),
+  ).toEqual([
+    "diet-vegan",
+    "diet-vegetarian",
+    "diet-halal",
+    "diet-kosher",
+    "diet-no_meat",
+    "diet-no_fish",
   ]);
   expect(el.currentValue.dietaryDeclarations).toEqual(["vegan", "halal"]);
 });
-
 it("associates a server refusal with its dropdown until the next save", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -3275,9 +3281,12 @@ it("summarises each collapsed section from its filled-in values", async () => {
     },
   ]);
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
-  expect(folded(el, "nutrition").summaryFields).toEqual([
+  expect(nutritionFields(el)).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk") },
-    { label: t("modifiers.dietary_preferences"), value: "Vegano" },
+    {
+      label: t("editor.nutrition.dietary"),
+      value: `Vegano, ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
+    },
   ]);
 });
 
@@ -4051,8 +4060,21 @@ function control<T = HTMLElement>(el: ProductEditor, name: string) {
 function firstOption(el: ProductEditor, name: string) {
   return combobox(el, name)!.options[0]!;
 }
-function hint(el: ProductEditor, name: string) {
-  return el.shadowRoot!.querySelector(`[data-test="${name}"]`)?.textContent?.trim();
+function nutritionFields(el: ProductEditor) {
+  const summary = el.shadowRoot!.querySelector('[data-test="nutrition-summary"]')!;
+  const labels = [...summary.querySelectorAll("strong")];
+  return ["nutrition-allergens", "nutrition-dietary"].map((name, index) => {
+    const node = summary.querySelector<HTMLElement>(`[data-test="${name}"]`)!;
+    return {
+      label: labels[index]!.textContent!.replace(/:$/, ""),
+      value: node.textContent!,
+      ...(node.classList.contains("inherited") ? { placeholder: true } : {}),
+    };
+  });
+}
+function inheritedNutrition(el: ProductEditor, name: string) {
+  const field = nutritionFields(el)[name === "allergens" ? 0 : 1]!;
+  return field.placeholder ? `${field.label}: ${field.value}` : undefined;
 }
 
 it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
@@ -4321,12 +4343,14 @@ it("marks a variant's own choice selected over the parent's value", async () => 
   expect(await shownIn(el, "product-course")).toBe("Desserts");
 });
 
-it("shows the parent's category, and hints its allergens, dietary declarations and photo beside their controls", async () => {
+it("shows the parent's category, inherited nutritional values and photo", async () => {
   const el = await mountVariant();
   expect(variantPath(el)).toBe(`${t("editor.classification")}: Bebidas`);
-  expect(hint(el, "allergens-hint")).toBe(`${t("modifiers.allergens")}: ${allergenName("milk")}`);
-  expect(hint(el, "dietary-hint")).toBe(
-    `${t("modifiers.dietary_preferences")}: ${t("editor.diet.vegetarian")}`,
+  expect(inheritedNutrition(el, "allergens")).toBe(
+    `${t("modifiers.allergens")}: ${allergenName("milk")}`,
+  );
+  expect(inheritedNutrition(el, "dietary")).toBe(
+    `${t("editor.nutrition.dietary")}: ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
   );
   const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
   expect(upload.inheritedImage).toBe("coffee.png");
@@ -4353,17 +4377,17 @@ it("hints what a variant will actually use where its parent names nothing there"
       .classList.contains("placeholder"),
   ).toBe(true);
   expect(combobox(el, "tax")!.placeholder).toBe("retired");
-  expect(hint(el, "allergens-hint")).toBe(
-    `${t("modifiers.allergens")}: ${t("editor.allergens_none")}`,
+  expect(inheritedNutrition(el, "allergens")).toBe(
+    `${t("modifiers.allergens")}: ${t("editor.nutrition.allergens_none")}`,
   );
-  expect(hint(el, "dietary-hint")).toBe(
-    `${t("modifiers.dietary_preferences")}: ${t("editor.diet_none")}`,
+  expect(inheritedNutrition(el, "dietary")).toBe(
+    `${t("editor.nutrition.dietary")}: ${t("editor.nutrition.diet_none")}`,
   );
 });
 
 it("hints a parent's allergens not yet reviewed as that, never as none", async () => {
   const el = await mountVariant({ ...glass, inherited: { ...parentValues, allergens: null } });
-  expect(hint(el, "allergens-hint")).toBe(
+  expect(inheritedNutrition(el, "allergens")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.allergens_unreviewed")}`,
   );
 });
@@ -4441,7 +4465,7 @@ it.each([
     category: "No category",
     course: "— none —",
     allergens: "Allergens: None",
-    dietary: "Dietary preferences: None",
+    dietary: "Dietary: None",
     unreviewed: "Allergens: Not yet reviewed",
   },
   {
@@ -4450,7 +4474,7 @@ it.each([
     category: "Sin categoría",
     course: "— ninguno —",
     allergens: "Alérgenos: Ninguno",
-    dietary: "Preferencias dietéticas: Ninguna",
+    dietary: "Dietética: Ninguna",
     unreviewed: "Alérgenos: Sin revisar todavía",
   },
 ])(
@@ -4472,38 +4496,42 @@ it.each([
       expect(control<{ unit: string }>(el, "unit-price").unit).toBe(expected.unit);
       expect(variantPath(el)).toBe(`${t("editor.classification")}: ${expected.category}`);
       expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
-      expect(hint(el, "allergens-hint")).toBe(expected.allergens);
-      expect(hint(el, "dietary-hint")).toBe(expected.dietary);
+      expect(inheritedNutrition(el, "allergens")).toBe(expected.allergens);
+      expect(inheritedNutrition(el, "dietary")).toBe(expected.dietary);
       cleanupWidgets();
       const unreviewedEl = await mountVariant({
         ...glass,
         inherited: { ...parentValues, allergens: null },
       });
-      expect(hint(unreviewedEl, "allergens-hint")).toBe(unreviewed);
+      expect(inheritedNutrition(unreviewedEl, "allergens")).toBe(unreviewed);
     } finally {
       setLocale("es-ES");
     }
   },
 );
 
-it("draws a variant's inherited allergens and dietary hints in grey italic, like a field's hint", async () => {
+it("draws inherited nutritional values as quiet italic chips with read-only allergens", async () => {
   const el = await mountVariant();
-  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  for (const name of ["allergens-hint", "dietary-hint"]) {
-    const shown = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
-    expect(getComputedStyle(shown).fontStyle, name).toBe("italic");
-    expect(getComputedStyle(shown).color, name).toBe("rgb(7, 8, 9)");
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  await picker.updateComplete;
+  el.style.setProperty("--wt-color-surface-lifted", "rgb(7, 8, 9)");
+  for (const choice of ["allergen-milk", "diet-vegetarian"]) {
+    const shown = picker.shadowRoot!.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)!;
+    expect(getComputedStyle(shown).fontStyle, choice).toBe("italic");
+    expect(getComputedStyle(shown).backgroundColor, choice).toBe("rgb(7, 8, 9)");
+    expect(shown.disabled).toBe(choice === "allergen-milk");
+    expect(shown.getAttribute("aria-pressed")).toBe("true");
   }
 });
-
-it("drops a hint once the variant sets that field itself", async () => {
+it("shows own nutritional values without the inherited style after an override", async () => {
   const el = await mountVariant({
     ...glass,
     allergens: { gluten: { kinds: ["wheat" as const] } },
     dietaryDeclarations: ["vegan"],
   });
-  expect(hint(el, "allergens-hint")).toBeUndefined();
-  expect(hint(el, "dietary-hint")).toBeUndefined();
+  expect(inheritedNutrition(el, "allergens")).toBeUndefined();
+  expect(inheritedNutrition(el, "dietary")).toBeUndefined();
 });
 
 it("saves every field a variant left blank as null, so it keeps reading the parent's", async () => {
@@ -4558,15 +4586,22 @@ it("saves a value typed into a variant's field, and null once it is cleared agai
   expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, vatClass: null });
 });
 
-it("reads an emptied allergen or dietary choice on a variant as inheriting, never as 'none'", async () => {
+it("saves explicit allergen None and an emptied dietary choice independently on a variant", async () => {
   const el = await mountVariant({
     ...glass,
     allergens: { gluten: { kinds: ["wheat" as const] } },
     dietaryDeclarations: ["vegan"],
   });
-  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: { allergens: [], dietary: [] } },
+  el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices([]) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "dietaryDeclarations", value: null },
       bubbles: true,
       composed: true,
     }),
@@ -4575,9 +4610,8 @@ it("reads an emptied allergen or dietary choice on a variant as inheriting, neve
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
-  // An empty overlay would declare the glass free of the milk its parent contains.
   expect(submit.mock.calls[0]![0].detail.value).toMatchObject({
-    allergens: null,
+    allergens: {},
     dietaryDeclarations: null,
   });
 });
@@ -5103,7 +5137,9 @@ it("keeps consecutive closed Product editor sections close enough to read as one
   const assertGap = (before: string, after: string) => {
     const first = folded(el, before);
     const next = folded(el, after);
-    const summary = first.shadowRoot!.querySelector(".summary")!;
+    const summary = first.shadowRoot!.querySelector(
+      before === "nutrition" ? ".summary-slot" : ".summary",
+    )!;
     const heading = next.shadowRoot!.querySelector(".heading")!;
     const textGap = heading.getBoundingClientRect().top - summary.getBoundingClientRect().bottom;
     expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -5780,6 +5816,12 @@ async function foldedLines(el: ProductEditor): Promise<Record<string, string>> {
     const fold = folded(el, name);
     fold.open = false;
     await fold.updateComplete;
+    if (name === "nutrition") {
+      lines[name] = nutritionFields(el)
+        .map(({ label, value, placeholder }) => `${label}: ${placeholder ? `[${value}]` : value}`)
+        .join(" · ");
+      continue;
+    }
     const summary = fold.shadowRoot!.querySelector(".summary")!.cloneNode(true) as HTMLElement;
     for (const value of summary.querySelectorAll(".summary-placeholder"))
       value.textContent = `[${value.textContent}]`;
@@ -5794,13 +5836,13 @@ it.each([
     locale: "en-GB",
     kitchen: "Kitchen name: None specified · Course: None specified",
     descriptors: "Name: None specified / Description: None specified",
-    nutrition: "Allergens: None specified · Dietary preferences: None specified",
+    nutrition: "Allergens: Not yet reviewed · Dietary: None",
   },
   {
     locale: "es-ES",
     kitchen: "Nombre de cocina: Sin especificar · Curso: Sin especificar",
     descriptors: "Nombre: Sin especificar / Descripción: Sin especificar",
-    nutrition: "Alérgenos: Sin especificar · Preferencias dietéticas: Sin especificar",
+    nutrition: "Alérgenos: Sin revisar todavía · Dietética: Ninguna",
   },
 ])(
   "names every field of a product with nothing set on its folded line, in $locale",
@@ -5822,55 +5864,53 @@ it.each([
   },
 );
 
-it.each([
-  ["never reviewed", null],
-  ["reviewed and empty", {}],
-])(
-  "reads a product's allergens %s the same way folded as on the open line",
-  async (_, allergens) => {
-    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-      open: true,
-      value: { ...bare, allergens },
-      locales: ["en"],
-      units: [unit],
-      taxChoices: reduced,
-    });
-    const closed = folded(el, "nutrition").summaryFields[0]!;
-    await openSection(el, "nutrition");
-    const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
-    await picker.updateComplete;
-    const open = picker.shadowRoot!.querySelector('[data-test="allergens-summary"]')!.textContent;
-    expect(closed).toEqual({ label: t("modifiers.allergens"), value: open });
-    expect(open).toBe(t("modifiers.none_specified"));
-  },
-);
-
-it("lists a product's allergens and dietary preferences on the folded line as the open lines do", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: {
-      ...bare,
-      allergens: { milk: {}, eggs: {} },
-      dietaryDeclarations: ["vegetarian", "vegan"],
-    },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
+it.each<{ label: string; allergens: ProductEditorDraft["allergens"] }>([
+  { label: "never reviewed", allergens: null },
+  { label: "reviewed and empty", allergens: {} },
+])("reads a product's allergens $label distinctly while closed and open", async ({ allergens }) => {
+  const el = await mountPricing({ ...saved, allergens });
+  const closed = nutritionFields(el)[0]!;
+  expect(closed).toEqual({
+    label: t("modifiers.allergens"),
+    value: t(
+      allergens === null ? "editor.allergens_unreviewed" : "editor.nutrition.allergens_none",
+    ),
   });
-  const closed = folded(el, "nutrition").summaryFields.map(({ value }) => value);
-  expect(folded(el, "nutrition").summaryFields).toEqual([
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  await picker.updateComplete;
+  expect(
+    picker.shadowRoot!.querySelector('[data-choice="none"]')!.getAttribute("aria-pressed"),
+  ).toBe(String(allergens !== null));
+  expect(picker.shadowRoot!.querySelector('[data-test="allergens-summary"]')).toBeNull();
+});
+it("lists chosen and implied dietary preferences after allergens on the folded line", async () => {
+  const el = await mountPricing({
+    ...saved,
+    allergens: { milk: {}, eggs: {} },
+    dietaryDeclarations: ["vegetarian", "vegan"],
+  });
+  expect(nutritionFields(el)).toEqual([
     { label: t("modifiers.allergens"), value: `${allergenName("milk")}, ${allergenName("eggs")}` },
     {
-      label: t("modifiers.dietary_preferences"),
-      value: `${t("editor.diet.vegetarian")}, ${t("editor.diet.vegan")}`,
+      label: t("editor.nutrition.dietary"),
+      value: `${t("editor.diet.vegan")}, ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
     },
   ]);
   await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
-  const openLine = (name: string) =>
-    picker.shadowRoot!.querySelector(`[data-test="${name}-summary"]`)!.textContent;
-  expect(closed).toEqual([openLine("allergens"), openLine("dietary")]);
+  for (const choice of [
+    "allergen-milk",
+    "allergen-eggs",
+    "diet-vegetarian",
+    "diet-vegan",
+    "diet-no_meat",
+    "diet-no_fish",
+  ])
+    expect(
+      picker.shadowRoot!.querySelector(`[data-choice="${choice}"]`)!.getAttribute("aria-pressed"),
+    ).toBe("true");
 });
 
 it("shows a variant's blank fields folded as its parent's values, as placeholders; its names stay its own", async () => {
@@ -5884,18 +5924,18 @@ it("shows a variant's blank fields folded as its parent's values, as placeholder
     { label: t("editor.name"), value: none, lines: 1 },
     { label: t("editor.description"), value: "EN: Roasted in house", lines: 2, placeholder: true },
   ]);
-  expect(folded(el, "nutrition").summaryFields).toEqual([
+  expect(nutritionFields(el)).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk"), placeholder: true },
     {
-      label: t("modifiers.dietary_preferences"),
-      value: t("editor.diet.vegetarian"),
+      label: t("editor.nutrition.dietary"),
+      value: `${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
       placeholder: true,
     },
   ]);
   expect(await foldedLines(el)).toEqual({
     kitchen: `${t("editor.kitchen_name")}: ${none} · ${t("editor.summary_course")}: [Mains]`,
     descriptors: `${t("editor.name")}: ${none} / ${t("editor.description")}: [EN: Roasted in house]`,
-    nutrition: `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("modifiers.dietary_preferences")}: [${t("editor.diet.vegetarian")}]`,
+    nutrition: `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
   });
 });
 
@@ -5920,13 +5960,21 @@ it("shows folded what a variant will use where its parent has nothing set either
     lines: 2,
     placeholder: true,
   });
-  expect(folded(el, "nutrition").summaryFields).toEqual([
-    { label: t("modifiers.allergens"), value: none, placeholder: true },
-    { label: t("modifiers.dietary_preferences"), value: none, placeholder: true },
+  expect(nutritionFields(el)).toEqual([
+    {
+      label: t("modifiers.allergens"),
+      value: t("editor.nutrition.allergens_none"),
+      placeholder: true,
+    },
+    {
+      label: t("editor.nutrition.dietary"),
+      value: t("editor.nutrition.diet_none"),
+      placeholder: true,
+    },
   ]);
   cleanupWidgets();
   el = await mountWith({ allergens: null, courseId: "gone", description: { en: " " } });
-  expect(folded(el, "nutrition").summaryFields[0]).toEqual({
+  expect(nutritionFields(el)[0]).toEqual({
     label: t("modifiers.allergens"),
     value: t("editor.allergens_unreviewed"),
     placeholder: true,
@@ -5955,9 +6003,12 @@ it("shows a variant's own values folded as its own, never as placeholders", asyn
     { label: t("editor.name"), value: "EN: A glass", lines: 1 },
     { label: t("editor.description"), value: "EN: Iced", lines: 2 },
   ]);
-  expect(folded(el, "nutrition").summaryFields).toEqual([
+  expect(nutritionFields(el)).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("eggs") },
-    { label: t("modifiers.dietary_preferences"), value: t("editor.diet.vegan") },
+    {
+      label: t("editor.nutrition.dietary"),
+      value: `${t("editor.diet.vegan")}, ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
+    },
   ]);
 });
 
@@ -6156,19 +6207,17 @@ it("saves selected cereal and nut kinds and preserves them on a later diet edit"
     allergens: { gluten: { kinds: ["wheat", "barley"] }, milk: {} },
   });
   const picker = el.shadowRoot!.querySelector<
-    HTMLElementTagNameMap["dashboard-allergen-dietary-picker"]
-  >("dashboard-allergen-dietary-picker")!;
-  expect(picker.value.allergens).toEqual(["gluten:wheat", "gluten:barley", "milk"]);
+    HTMLElementTagNameMap["dashboard-product-nutrition-picker"]
+  >("dashboard-product-nutrition-picker")!;
+  expect(picker.value.allergens).toEqual({ gluten: { kinds: ["wheat", "barley"] }, milk: {} });
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
+    new CustomEvent("wt-nutrition-change", {
+      detail: {
+        field: "allergens",
+        value: allergensFromChoices(["gluten:wheat", "gluten:barley", "nuts:walnuts", "milk"]),
+      },
       bubbles: true,
       composed: true,
-      detail: {
-        value: {
-          allergens: ["gluten:wheat", "gluten:barley", "nuts:walnuts", "milk"],
-          dietary: [],
-        },
-      },
     }),
   );
   await el.updateComplete;
@@ -6178,10 +6227,10 @@ it("saves selected cereal and nut kinds and preserves them on a later diet edit"
     milk: {},
   });
   picker.dispatchEvent(
-    new CustomEvent("wt-change", {
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "dietaryDeclarations", value: ["vegetarian"] },
       bubbles: true,
       composed: true,
-      detail: { value: { allergens: picker.value.allergens, dietary: ["vegetarian"] } },
     }),
   );
   await el.updateComplete;
@@ -6206,18 +6255,24 @@ it("opens Nutrition for a refused allergen kind, marks the picker and allows ret
   )!;
   await fold.updateComplete;
   expect(fold.open).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")!.textContent).toBe(
-    "Choose which cereals",
-  );
+  expect(
+    el
+      .shadowRoot!.querySelector("dashboard-product-nutrition-picker")!
+      .shadowRoot!.querySelector("#allergens-error")!.textContent,
+  ).toBe("Choose which cereals");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(false);
-  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
-    new CustomEvent("wt-change", {
+  el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: allergensFromChoices(["gluten:wheat"]) },
       bubbles: true,
       composed: true,
-      detail: { value: { allergens: ["gluten:wheat"], dietary: [] } },
     }),
   );
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=allergen-error]")).toBeNull();
+  expect(
+    el
+      .shadowRoot!.querySelector("dashboard-product-nutrition-picker")!
+      .shadowRoot!.querySelector("#allergens-error"),
+  ).toBeNull();
 });

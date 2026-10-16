@@ -145,7 +145,7 @@ export class ProductDetails extends LitElement {
             ? html`<ul>
                 ${Object.entries(allergens).map(([code, declaration]) => html`<li>${allergenLabel(code, declaration)} · ${t("allergen.contains")}</li>`)}
               </ul>`
-            : t("editor.allergens_none"),
+            : t("editor.nutrition.allergens_none"),
       )}
       ${this.#field(t("options.title"), attached("options"))}
       ${this.#field(t("extras.title"), attached("extras"))}
