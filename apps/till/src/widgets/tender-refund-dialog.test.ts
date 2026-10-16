@@ -377,6 +377,49 @@ it("clears a server handover refusal when that confirmation changes", async () =
   expect(root(el).querySelector("wt-form-actions")!.error).toBe("");
 });
 
+it("explains a reason longer than 500 characters and permits a corrected reason", async () => {
+  const el = await mount();
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await fill(el, "reason", "r".repeat(501));
+  await click(el);
+  expect(field(el, "reason").error).toBe(t("bill_refund.reason_long"));
+  expect(button(el).disabled).toBe(true);
+  expect(asks).toEqual([]);
+  await fill(el, "reason", "Customer request");
+  await click(el);
+  expect(asks).toHaveLength(1);
+  expect(asks[0]!.reason).toBe("Customer request");
+});
+
+it("stops an attempted form when its tender becomes unavailable", async () => {
+  const el = await mount();
+  const asks = collect(el, "tender-refund-submit");
+  await click(el);
+  expect(field(el, "reason").error).toBe(t("bill_refund.reason_invalid"));
+  el.tenders = [];
+  await el.updateComplete;
+  expect(button(el).disabled).toBe(true);
+  expect(root(el).textContent).toContain(t("tender_refund.unavailable"));
+  expect(asks).toEqual([]);
+});
+
+it.each(["appliedAmount", "tipAmount", "reason"])(
+  "puts a server validation refusal beside %s until that field changes",
+  async (name) => {
+    const el = await mount({ refusal: { code: "management.request_invalid", field: name } });
+    expect(field(el, name).error).toBe(codeMessage("management.request_invalid"));
+    await fill(el, name, name === "reason" ? "Return" : "1.00");
+    expect(field(el, name).error).toBe("");
+  },
+);
+
+it("explains a durable-storage refusal without dispatching another refund", async () => {
+  const el = await mount({ refusal: { code: "storage" } });
+  const asks = collect(el, "tender-refund-submit");
+  expect(root(el).querySelector("wt-form-actions")!.error).toContain(t("tender_refund.storage"));
+  expect(asks).toEqual([]);
+});
+
 it("keeps Cancel on one line beside recovery actions at phone width", async () => {
   await page.viewport(390, 900);
   try {
