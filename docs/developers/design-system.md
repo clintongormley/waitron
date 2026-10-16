@@ -483,10 +483,10 @@ through a token. `wt-modal` has three sized widths, each a token: compact, `--wt
 the `wt-modal` entry below). A fourth size, `full`, fills the window less `--wt-modal-inline-margin`
 on every side; only the floor plan editor uses it. `wt-dialog`, `wt-help-tooltip` and `wt-relative-time`'s box read their own token and are at most
 `48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal` (the
-ingredient form is one), so they are held to 768px too. Besides `wt-modal`, only the product
-editor's Pricing unit chooser reads one of the three size tokens: it sets its `--wt-dialog-max-width` from
-`--wt-modal-compact-width`. To resize any other dialog, set `--wt-dialog-max-width` (the till's
-device chooser does).
+ingredient form is one), so they are held to 768px too. Outside `wt-modal` a few pieces read the
+compact size token, `--wt-modal-compact-width`: the product editor's Pricing unit chooser and Menu
+publications set their `--wt-dialog-max-width` from it; grep the token for the others. To resize
+any other dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 
 `--wt-form-max-width` (`36rem`, 576px at the default text size) is the form width: the one width
 of a form inside a `wt-modal` (owner, 2026-09-30, C105). A field there grows no wider than it,
@@ -4410,11 +4410,26 @@ service has a paid-when choice and a collection-ticket choice. The zone's name a
 in one request. Edit department preserves the department's receipt policy.
 
 Edit receipt holds receipt printing, trading-name printing, address printing, logo, phone,
-email, the installed tax-agency description field, subtitle and footer. The form and printed
-preview sit beside each other where they fit and stack on a phone. Language headings name the
-languages staff may print in, with the venue's receipt language first. A new department has no
-authored receipt content. Venue settings holds the receipt language; there is no venue receipt
-page or live venue fallback for receipt decoration.
+email, the installed tax-agency description field, subtitle and footer. It is a wide `wt-modal`,
+so it has its final width from its first frame, before its fields or preview load, and opens with
+focus on its scrolling body; its fields stop at the form width. The form and printed preview sit
+beside each other where they fit and stack on a phone; the preview column holds an empty strut as
+wide as 80 mm paper (`paperStrut`, `apps/dashboard/src/widgets/print-paper.ts`), so it keeps its
+width before a preview draws. The dialog does not repeat the venue's address; when the location
+has none, one sentence under the address switch says so. The logo is `dashboard-image-upload`'s
+`logo` presentation: the picture on paper white, in a fixed box the size it prints on 80 mm paper
+at 203 dpi (about 238 × 76 px; a smaller logo is enlarged, as printing enlarges it), which opens
+the image library when clicked, with a ghost **Remove** beside it that clears only the receipt's
+logo; with none, one dashed **+ Add a logo** box. Focus returns to the logo control when the
+library closes and after Remove. Language headings name the languages staff may print in, with
+the venue's receipt language first. A new department has no authored receipt content. When the
+installed fiscal module offers a default description (`venueFields.defaults.operationDescription`;
+Veri\*Factu's is “Venta en establecimiento”), a department without its own opens the description
+field filled in with the default and editable, the Departments list asks for no description, and
+a sale there files the default; with no default offered, the field opens empty, the list shows
+“Set up the tax-agency description”, and a sale is refused with
+`department.operation_description_required`. Venue settings holds the receipt language; there is
+no venue receipt page or live venue fallback for receipt decoration.
 
 The zone editor holds only its fields: no opening hours and no floor plan. The floor-plan
 editor returns to the list. Its header ends with Undo and Redo, then Cancel beside Save, the

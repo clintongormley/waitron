@@ -215,7 +215,10 @@ None of these columns enters the fiscal hash, and none of them is sent to AEAT e
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
 breakdown, and one `DescripcionOperacion` string for the whole sale. Product issuance selects
 that string from the department receipt through
-`apps/server/src/sale-operation-description.ts`. Core passes a supplied
+`apps/server/src/sale-operation-description.ts`, or, when the department has no usable
+description, the installed fiscal module's default (`venueFields.defaults.operationDescription`,
+Veri\*Factu's “Venta en establecimiento”); with neither, the sale is refused with
+`department.operation_description_required`. Core passes a supplied
 `operationDescription` to the fiscal backend as `descriptionOfOperation`; only when that input
 is absent does `operationDescriptionFor` read `locations.operation_description`. An explicit empty
 string stays empty. The supplied/absent cases are exercised by the three core record suites;

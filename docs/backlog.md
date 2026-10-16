@@ -3580,12 +3580,22 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
   [mockups](backlog/mockups/a405-printer-details/)
 
-- **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
-  open).** A department with no description uses the Veri\*Factu default "Venta en establecimiento",
-  so the Departments warning goes and no sale is refused for it. The dialog opens at full width,
-  loses its grey address copy and a stray line, and shows the logo small with Remove beside it.
-  [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
-  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
+- **Owner's call: the receipt logo's Remove is a ghost button, where the mockup shows blue link
+  text (left open by A662).** The plan chose a ghost `wt-button`;
+  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
+
+- **The Edit receipt `<dialog>` element's content is taller than the element itself (left open by
+  A662).** Measured 2026-10-16: scroll height 984 px against 850 px at 1280 × 900, and 984 against
+  794 at 390 × 844. Its `overflow-y` is hidden, so Tab and the mouse wheel never moved it, but a
+  script's `scrollIntoView({ block: "start" })` on the preview lifted the footer and left a gap
+  under it. Hiding a form field shrinks the excess; the image library's wide modal, measured at
+  1280, has none. Not checked whether it predates A662's switch to `wt-modal`.
+
+- **Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes
+  (left open by A662).** With Veri\*Factu always offering a default description, the Departments
+  readiness list is empty either way, so `apps/server/src/boot.departments-readiness.test.ts` no
+  longer sees that flag; only `packages/venue-service/src/routes.test.ts` covers "required, no
+  default".
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
   the till's choice to change or leave out the guests line when printing a receipt (Part 3b,
