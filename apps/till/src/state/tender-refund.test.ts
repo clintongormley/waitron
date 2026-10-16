@@ -371,3 +371,23 @@ it("retains the server's twelve-digit money range and rejects a total above it",
     store.prepare(scope, "sale-2", { ...ask, appliedAmount: "999999999999.99", tipAmount: "0.01" }),
   ).toThrow("invalid");
 });
+
+it.each(["completed", "failed"] as const)(
+  "a reopened caller of the same session can read the settled %s attempt without another money request",
+  async (state) => {
+    const terminal = reply({ state });
+    const api = {
+      refundTransaction: vi.fn(async () => terminal),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const session = new TenderRefundSession(scope, api);
+    await session.submit("sale-1", ask);
+    expect(session.read("sale-1")).toBeNull();
+    expect(await session.resume("sale-1")).toEqual(terminal);
+    expect(await session.retry("sale-1")).toEqual(terminal);
+    expect(api.refundTransaction).toHaveBeenCalledTimes(1);
+    expect(api.getTenderRefund).not.toHaveBeenCalled();
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  },
+);

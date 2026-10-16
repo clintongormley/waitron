@@ -157,6 +157,7 @@ export class TenderRefundAttempts {
 
 export class TenderRefundSession {
   #busy = false;
+  readonly #settled = new Map<string, TenderRefundView>();
   constructor(
     private readonly scope: TenderRefundScope,
     private readonly api: RefundApi,
@@ -185,8 +186,16 @@ export class TenderRefundSession {
       ...sent.request,
       ...(override === undefined ? {} : { override }),
     });
-    this.attempts.answer(this.scope, sent, result);
+    this.#answer(sent, result);
     return result;
+  }
+
+  #answer(sent: SavedTenderRefund, result: TenderRefundView): void {
+    const retained = this.read(sent.saleId)?.request.submissionId === sent.request.submissionId;
+    this.attempts.answer(this.scope, sent, result);
+    if (!retained) return;
+    if (result.state === "pending") this.#settled.delete(sent.saleId);
+    else this.#settled.set(sent.saleId, result);
   }
 
   submit(
@@ -199,20 +208,22 @@ export class TenderRefundSession {
 
   resume(saleId: string): Promise<TenderRefundView> {
     return this.#run(async () => {
-      const sent = this.read(saleId) ?? fail("missing");
+      const sent = this.read(saleId);
+      if (sent === null) return this.#settled.get(saleId) ?? fail("missing");
       if (sent.refundId === null) return this.#send(sent);
       const result = await this.api.getTenderRefund(sent.refundId);
-      this.attempts.answer(this.scope, sent, result);
+      this.#answer(sent, result);
       return result;
     });
   }
 
   retry(saleId: string, override?: TenderRefundRequest["override"]): Promise<TenderRefundView> {
     return this.#run(async () => {
-      const sent = this.read(saleId) ?? fail("missing");
+      const sent = this.read(saleId);
+      if (sent === null) return this.#settled.get(saleId) ?? fail("missing");
       if (sent.refundId === null) return this.#send(sent, override);
       const result = await this.api.retryTenderRefund(sent.refundId, override);
-      this.attempts.answer(this.scope, sent, result);
+      this.#answer(sent, result);
       return result;
     });
   }

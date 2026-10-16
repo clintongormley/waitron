@@ -160,6 +160,21 @@ import type {
   RefundNotice,
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
+import "./widgets/tender-refund-dialog.js";
+import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
+import type {
+  RefundableTender,
+  TenderRefundView,
+  TenderRefundRequest,
+} from "./api/tender-refund-types.js";
+import {
+  TenderRefundAttempts,
+  TenderRefundSession,
+  TenderRefundAttemptError,
+  type SavedTenderRefund,
+  type TenderRefundAsk,
+  type TenderRefundScope,
+} from "./state/tender-refund.js";
 import "./widgets/unpaid-departure-dialog.js";
 import "./widgets/cancel-credit-dialog.js";
 import "./widgets/dead-ends-section.js";
@@ -1712,6 +1727,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeTenderRefund();
+    this.#tenderRefundRead++;
     this.#stopClocking();
     this.#cancelFindBillRead();
     this.#equipmentNfc.stop();
@@ -2241,6 +2258,24 @@ export class TillApp extends LitElement {
     workingOrderId: string | null;
     returnTo: "find-bill";
   } | null = null;
+  readonly #tenderRefundAttempts = new TenderRefundAttempts();
+  #tenderRefundScope?: TenderRefundScope;
+  #tenderRefundSession?: TenderRefundSession;
+  #tenderRefundRead = 0;
+  @state() private refundableTenders: RefundableTender[] = [];
+  @state() private tenderRefunding: {
+    visit: object;
+    saleId: string;
+    session: TenderRefundSession;
+    attempt: SavedTenderRefund | null;
+    result: TenderRefundView | null;
+    ask?: TenderRefundAsk;
+    retry?: boolean;
+    busy: boolean;
+    refusal: DialogRefusal | null;
+    approvers?: StaffMember[];
+    pinError: string | null;
+  } | null = null;
   @state() private findBillError?: StringKey | { overLimit: string } | { code: string };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
@@ -2714,8 +2749,18 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("api")) {
+      this.#closeTenderRefund();
+      if (this.#tenderRefundScope !== undefined)
+        this.#tenderRefundSession = new TenderRefundSession(
+          this.#tenderRefundScope,
+          this.api,
+          this.#tenderRefundAttempts,
+        );
+    }
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
+      if (this.drill?.kind !== "ticket") this.#closeTenderRefund();
       if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
       if (this.drill?.kind !== "find-bill" && this.drill?.kind !== "ticket")
         this.historicalReceipt = null;
@@ -3718,6 +3763,15 @@ export class TillApp extends LitElement {
     { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
     switched = false,
   ): Promise<void> {
+    if (this.#tenderRefundScope?.personId !== personId) this.#clearTenderRefundSession();
+    if (this.deviceId !== undefined) {
+      this.#tenderRefundScope = { deviceId: this.deviceId, personId };
+      this.#tenderRefundSession = new TenderRefundSession(
+        this.#tenderRefundScope,
+        this.api,
+        this.#tenderRefundAttempts,
+      );
+    }
     this.#stopDepartmentTransfers();
     this.#stopClocking();
     this.#clockAccessLost = false;
@@ -5818,7 +5872,9 @@ export class TillApp extends LitElement {
         this.#stopDeliveryReread();
       }
       this.historicalReceipt = { saleId, workingOrderId, returnTo: "find-bill" };
+      this.refundableTenders = [];
       this.#pushDrill({ kind: "ticket" });
+      void this.#readRefundableTenders();
     } catch {
       if (current()) this.errorKey = "find_bill.invoice_load_failed";
     } finally {
@@ -5827,10 +5883,300 @@ export class TillApp extends LitElement {
     }
   }
 
+  #hasRefundableTenders(): boolean {
+    if (this.historicalReceipt === null || this.#tenderRefundSession === undefined) return false;
+    try {
+      if (this.#tenderRefundSession.read(this.historicalReceipt.saleId) !== null) return true;
+    } catch {
+      return true;
+    }
+    return this.refundableTenders.some(
+      (row) =>
+        (row.method === "cash" || row.method === "card") &&
+        (row.pendingRefundId !== null ||
+          compareDecimal(moneyPlus(row.appliedRemaining, row.tipRemaining), decimal("0")) > 0),
+    );
+  }
+
+  async #readRefundableTenders(afterRefund = false): Promise<void> {
+    const receipt = this.historicalReceipt;
+    if (receipt === null) return;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const read = ++this.#tenderRefundRead;
+    const current = () =>
+      this.isConnected &&
+      this.historicalReceipt === receipt &&
+      this.#operatorSession === session &&
+      this.api === api &&
+      read === this.#tenderRefundRead;
+    try {
+      const tenders = await api.getRefundableTenders(receipt.saleId, {});
+      if (current()) this.refundableTenders = tenders;
+    } catch {
+      if (current())
+        this.errorKey = afterRefund ? "tender_refund.refresh_failed" : "tender_refund.read_failed";
+    }
+  }
+
+  #closeTenderRefund(): void {
+    this.tenderRefunding = null;
+  }
+
+  #clearTenderRefundSession(): void {
+    if (this.#tenderRefundScope !== undefined) {
+      try {
+        this.#tenderRefundAttempts.clear(this.#tenderRefundScope);
+      } catch {
+        /* Storage refusal cannot keep the device signed in. */
+      }
+    }
+    this.#tenderRefundScope = undefined;
+    this.#tenderRefundSession = undefined;
+    this.#tenderRefundRead++;
+    this.refundableTenders = [];
+    this.#closeTenderRefund();
+  }
+
+  #openTenderRefund(): void {
+    const receipt = this.historicalReceipt;
+    const session = this.#tenderRefundSession;
+    if (
+      !this.isConnected ||
+      this.drill?.kind !== "ticket" ||
+      !receipt ||
+      !session ||
+      this.tenderRefunding ||
+      !this.#hasRefundableTenders()
+    )
+      return;
+    try {
+      this.tenderRefunding = {
+        visit: {},
+        saleId: receipt.saleId,
+        session,
+        attempt: session.read(receipt.saleId),
+        result: null,
+        refusal: null,
+        pinError: null,
+        busy: false,
+      };
+    } catch {
+      this.errorKey = "tender_refund.storage";
+    }
+  }
+
+  async #askTenderRefundApprover(): Promise<void> {
+    const open = this.tenderRefunding;
+    if (!open) return;
+    const api = this.api;
+    try {
+      const approvers = await api.listRefundAuthorizers();
+      if (this.tenderRefunding?.visit === open.visit && this.isConnected && this.api === api)
+        this.tenderRefunding = { ...this.tenderRefunding, busy: false, approvers, pinError: null };
+    } catch {
+      if (this.tenderRefunding?.visit === open.visit && this.isConnected && this.api === api)
+        this.tenderRefunding = {
+          ...this.tenderRefunding,
+          busy: false,
+          refusal: { code: "approvers" },
+        };
+    }
+  }
+
+  async #submitTenderRefund(ask: TenderRefundAsk): Promise<void> {
+    const open = this.tenderRefunding;
+    if (!open || open.busy || open.attempt || open.result) return;
+    const tender = this.refundableTenders.find((row) => row.tenderId === ask.tenderId);
+    if (
+      !tender ||
+      tender.pendingRefundId !== null ||
+      (tender.method !== "cash" && tender.method !== "card")
+    )
+      return;
+    this.tenderRefunding = { ...open, ask, busy: true, refusal: null };
+    if (tender.manual) await this.#askTenderRefundApprover();
+    else await this.#runTenderRefund("submit");
+  }
+
+  async #runTenderRefund(
+    action: "submit" | "status" | "retry" | "inspect",
+    override?: TenderRefundRequest["override"],
+    refundId?: string,
+  ): Promise<void> {
+    const open = this.tenderRefunding;
+    if (!open || !this.isConnected || this.drill?.kind !== "ticket") return;
+    const receipt = this.historicalReceipt;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      this.tenderRefunding?.visit === open.visit &&
+      this.historicalReceipt === receipt &&
+      this.#operatorSession === session &&
+      this.api === api;
+    this.tenderRefunding = {
+      ...open,
+      busy: true,
+      refusal: null,
+      pinError: null,
+      retry: action === "retry" || (action === "status" && open.attempt !== null),
+    };
+    await this.#holdingReload(async () => {
+      try {
+        let result: TenderRefundView;
+        if (action === "submit")
+          result = await open.session.submit(open.saleId, open.ask!, override);
+        else if (action === "inspect") result = await api.getTenderRefund(refundId!, {});
+        else if (open.attempt !== null || open.session.read(open.saleId) !== null)
+          result =
+            action === "retry"
+              ? await open.session.retry(open.saleId, override)
+              : await open.session.resume(open.saleId);
+        else if (open.result !== null)
+          result =
+            action === "retry"
+              ? await api.retryTenderRefund(open.result.id, override)
+              : await api.getTenderRefund(open.result.id, {});
+        else return;
+        if (!current()) return;
+        const target =
+          open.ask?.tenderId ??
+          open.attempt?.request.tenderId ??
+          open.result?.tenderId ??
+          this.refundableTenders.find((row) => row.pendingRefundId === refundId)?.tenderId;
+        if (result.saleId !== open.saleId || result.tenderId !== target)
+          throw new TenderRefundAttemptError("mismatch");
+        if (result.state === "completed") {
+          this.shadowRoot!.querySelector<TillTenderRefundDialog>(
+            "till-tender-refund-dialog",
+          )!.closeSaved();
+          this.#closeTenderRefund();
+          this.refundableTenders = [];
+          await this.updateComplete;
+          if (
+            this.isConnected &&
+            this.historicalReceipt === receipt &&
+            this.#operatorSession === session &&
+            this.api === api
+          )
+            await this.#readRefundableTenders(true);
+        } else
+          this.tenderRefunding = {
+            ...this.tenderRefunding!,
+            busy: false,
+            approvers: undefined,
+            result,
+            attempt: open.session.read(open.saleId),
+          };
+      } catch (error) {
+        if (!current()) return;
+        const refusal =
+          error instanceof TenderRefundAttemptError
+            ? { code: error.kind === "storage" ? "storage" : "network" }
+            : refusalOf(error);
+        if (refusal.code === "session.required" || refusal.code === "session.not_open") {
+          void this.#onLogout();
+          return;
+        }
+        let attempt: SavedTenderRefund | null = null;
+        try {
+          attempt = open.session.read(open.saleId);
+        } catch {
+          /* The storage refusal is shown without another send. */
+        }
+        this.tenderRefunding = { ...this.tenderRefunding!, busy: false, attempt, refusal };
+        if (
+          override === undefined &&
+          (refusal.code === "authorization.not_permitted" ||
+            refusal.code === "tender.manual_refund_pin_required")
+        ) {
+          this.tenderRefunding = { ...this.tenderRefunding, busy: true };
+          await this.#askTenderRefundApprover();
+        } else if (APPROVER_REFUSALS.has(refusal.code))
+          this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
+        else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
+      }
+    });
+  }
+
+  #renderTenderRefund(): TemplateResult | typeof nothing {
+    const open = this.tenderRefunding;
+    if (!open) return nothing;
+    return html`<till-tender-refund-dialog
+        .tenders=${this.refundableTenders}
+        .invoiceNumber=${this.result?.invoiceNumber ?? ""}
+        .attempt=${open.attempt}
+        .result=${open.result}
+        .busy=${open.busy}
+        .refusal=${open.refusal}
+        @tender-refund-submit=${(event: CustomEvent<TenderRefundAsk>) => {
+          event.stopPropagation();
+          if (this.tenderRefunding?.visit === open.visit)
+            void this.#submitTenderRefund(event.detail);
+        }}
+        @tender-refund-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
+            this.#closeTenderRefund();
+        }}
+        @tender-refund-status=${(event: Event) => {
+          event.stopPropagation();
+          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
+            void this.#runTenderRefund("status");
+        }}
+        @tender-refund-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
+            void this.#runTenderRefund("retry");
+        }}
+        @tender-refund-inspect=${(event: CustomEvent<{ refundId: string }>) => {
+          event.stopPropagation();
+          if (
+            this.tenderRefunding?.visit === open.visit &&
+            !this.tenderRefunding.busy &&
+            this.refundableTenders.some((row) => row.pendingRefundId === event.detail.refundId)
+          )
+            void this.#runTenderRefund("inspect", undefined, event.detail.refundId);
+        }}
+      ></till-tender-refund-dialog
+      >${
+        open.approvers === undefined
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              data-tender-refund-approval
+              .authorizers=${open.approvers}
+              .error=${open.pinError}
+              @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => {
+                event.stopPropagation();
+                if (
+                  (event.currentTarget as Element).isConnected &&
+                  this.tenderRefunding?.visit === open.visit &&
+                  !this.tenderRefunding.busy &&
+                  this.tenderRefunding.approvers?.some(
+                    (person) => person.personId === event.detail.personId,
+                  )
+                )
+                  void this.#runTenderRefund(open.retry ? "retry" : "submit", {
+                    personId: event.detail.personId,
+                    pin: event.detail.pin,
+                  });
+              }}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
+                  this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
+  }
+
   #backToFindBill(): void {
     if (this.historicalReceipt === null) return;
     this.#cancelFindBillRead();
     this.historicalReceipt = null;
+    this.#closeTenderRefund();
+    this.refundableTenders = [];
     this.reprintAsking = null;
     this.errorKey = undefined;
     this.#pushDrill({ kind: "find-bill" });
@@ -10560,6 +10906,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#clearTenderRefundSession();
     this.#stopClocking();
     this.#readerPayments.clear();
     this.#stopDepartmentTransfers();
@@ -11584,6 +11931,8 @@ export class TillApp extends LitElement {
       }
       case "ticket":
         return html`<till-ticket-view
+          .refundable=${this.#hasRefundableTenders()}
+          @tender-refund-open=${() => this.#openTenderRefund()}
           .historical=${this.historicalReceipt !== null}
           .historicalDelivery=${this.historicalReceipt?.workingOrderId != null}
           @back-to-find-bill=${() => this.#requestLeave(() => this.#backToFindBill())}
@@ -12027,7 +12376,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderAdjusting()} ${this.#renderBillPaying()} ${this.#renderDeparting()}
-        ${this.#renderCancelCrediting()}
+        ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}

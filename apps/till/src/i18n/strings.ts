@@ -3,6 +3,10 @@
 // fails typecheck.
 export const en = {
   "tender_refund.title": "Refund a payment",
+  "tender_refund.refresh_failed":
+    "The refund was recorded, but the payment balances could not be refreshed. Reopen the receipt to check them.",
+  "tender_refund.read_failed":
+    "The refundable payments could not be loaded. Reopen the receipt to try again.",
   "tender_refund.total": "Total to return",
   "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
   "tender_refund.choose": "Original payment",
@@ -1533,6 +1537,10 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "tender_refund.title": "Devolver un pago",
+  "tender_refund.refresh_failed":
+    "La devolución se ha registrado, pero no se han podido actualizar los saldos. Vuelve a abrir el recibo para consultarlos.",
+  "tender_refund.read_failed":
+    "No se han podido cargar los pagos que se pueden devolver. Vuelve a abrir el recibo para intentarlo de nuevo.",
   "tender_refund.total": "Total que se devuelve",
   "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
   "tender_refund.choose": "Pago original",

@@ -1988,8 +1988,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The standalone till refund form now covers original tender selection, amounts, reason, handover
   confirmation and pending outcomes. A device/person-scoped browser journal retains the same
   non-secret request across lost answers and reopen, and uses status or same-attempt retry after
-  learning the refund id. These pieces are not yet connected to the receipt screen or logout.
-  Receipt integration, Transactions refund rows and acknowledgments remain to be built.
+  learning the refund id. The historical receipt now opens this form, sends an authorized
+  operator's request first and asks for an approver's PIN when required. Manual-terminal returns
+  always ask for a PIN. You can reopen an unknown attempt, check a pending return or retry its
+  existing identity. With browser storage available, logout clears this person's local request
+  metadata; an ordinary reload
+  retains it, and an authorized return to the receipt can discover a server-side pending refund.
+  Completion closes the form before refreshing balances and keeps the invoice, basket and
+  Transactions query/page. Actual refund rows and separate payment acknowledgments/printing
+  remain, followed by the two required whole-branch reviews and delivery gates.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),

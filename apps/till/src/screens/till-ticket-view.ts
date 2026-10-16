@@ -512,6 +512,7 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) simulated = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
+  @property({ type: Boolean }) refundable = false;
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
   @property({ attribute: false }) originalReceiptPrint?: OriginalReceiptPrint;
@@ -900,6 +901,16 @@ export class TillTicketView extends LitElement {
       }
 
       <div class="receipt-actions">
+        ${
+          this.historical && this.refundable
+            ? html`<wt-button
+                data-tender-refund
+                variant="secondary"
+                @click=${() => this.dispatchEvent(new CustomEvent("tender-refund-open", { bubbles: true, composed: true }))}
+                >${t("tender_refund.title")}</wt-button
+              >`
+            : nothing
+        }
         ${
           this.canPrintReceipt
             ? this.historical && !this.historicalDelivery
