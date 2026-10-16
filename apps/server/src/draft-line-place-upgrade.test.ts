@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { parties, orderDrafts, runMigrations, withTransaction } from "@waitron/db";
+import { parties, runMigrations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { validateAllergens } from "@waitron/catalogue";
@@ -55,10 +55,9 @@ it("adds draft placement without deleting a guest's allergy ticks or changing ex
   const allergens = validateAllergens({ milk: {} });
   await withTransaction(db, async (tx) => {
     const [party] = await tx.insert(parties).values({ openedBy: operatorId }).returning();
-    const [draft] = await tx
-      .insert(orderDrafts)
-      .values({ partyId: party!.id, ownerId: operatorId })
-      .returning();
+    const draft = { id: randomUUID() };
+    await tx.run(sql`insert into order_drafts (id, party_id, owner_id, created_at, updated_at)
+      values (${draft.id}, ${party!.id}, ${operatorId}, '2026-10-16T12:00:00.000Z', '2026-10-16T12:00:00.000Z')`);
     // Today's column declaration includes placement, which the predecessor database does not have.
     await tx.run(sql`insert into order_draft_lines
       (id, draft_id, position, menu_item_id, options, extras, quantity, no_merge)

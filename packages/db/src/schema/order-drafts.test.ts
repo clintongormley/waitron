@@ -10,20 +10,46 @@ import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { orderDraftEvents, orderDraftLines, orderDrafts } from "./order-drafts.js";
 import { orderGroups } from "./order-groups.js";
+import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
+import { locations } from "./tenants.js";
 
 const ALEX = "cccccccc-2222-4000-8000-000000000001";
 const SAM = "cccccccc-2222-4000-8000-000000000002";
 const MENU_ITEM = "cccccccc-4444-4000-8000-000000000001";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
 
-const OPEN_DRAFT_KEY = { table: "order_drafts", columns: ["party_id", "owner_id"] };
+const OPEN_DRAFT_KEY = { table: "order_drafts", columns: ["party_id", "owner_id", "bill_id"] };
 
 describe("order_drafts, order_draft_lines and order_draft_events", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(suite.db, fn);
+
+  const defaultBills = new Map<string, string>();
+  async function bill(partyId: string): Promise<string> {
+    return inTx(async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({
+          name: "Dining room",
+          invoiceLocales: ["en"],
+          operationDescription: "Restaurant",
+        })
+        .returning();
+      const [row] = await tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          locationId: location!.id,
+          orderNumber: 1,
+          partyId,
+        })
+        .returning();
+      return row!.id;
+    });
+  }
 
   async function party(): Promise<string> {
     return inTx(async (tx) => {
@@ -36,10 +62,22 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
   }
 
   async function draft(
-    values: Partial<typeof orderDrafts.$inferInsert> & { partyId: string; ownerId: string },
+    values: Partial<typeof orderDrafts.$inferInsert> & {
+      partyId: string;
+      ownerId: string;
+      billId?: string;
+    },
   ): Promise<string> {
+    let billId = values.billId ?? defaultBills.get(values.partyId);
+    if (billId === undefined && values.partyId !== MISSING) {
+      billId = await bill(values.partyId);
+      defaultBills.set(values.partyId, billId);
+    }
     return inTx(async (tx) => {
-      const [row] = await tx.insert(orderDrafts).values(values).returning({ id: orderDrafts.id });
+      const [row] = await tx
+        .insert(orderDrafts)
+        .values({ ...values, billId })
+        .returning({ id: orderDrafts.id });
       return row!.id;
     });
   }
@@ -56,17 +94,47 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
     expect(row).toMatchObject({ ownerId: ALEX, state: "open", revision: 0 });
   });
 
-  it("refuses a second open draft for one person on one party", async () => {
+  it("keeps the draft's explicit bill identity", async () => {
+    const partyId = await party();
+    const billId = await bill(partyId);
+    const id = await draft({ partyId, ownerId: ALEX, billId });
+    const [row] = await inTx((tx) => tx.select().from(orderDrafts).where(eq(orderDrafts.id, id)));
+    expect(row).toMatchObject({ billId });
+  });
+
+  it("allows one person's open drafts on two different bills of the same party", async () => {
+    const partyId = await party();
+    const billId = await bill(partyId),
+      otherBillId = await bill(partyId);
+    await draft({ partyId, ownerId: ALEX, billId });
+    await expect(draft({ partyId, ownerId: ALEX, billId: otherBillId })).resolves.toEqual(
+      expect.any(String),
+    );
+    const rows = await inTx((tx) =>
+      tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, partyId)),
+    );
+    expect(rows.map((row) => row.billId).sort()).toEqual([billId, otherBillId].sort());
+  });
+
+  it("refuses a draft naming no stored bill", async () => {
+    const partyId = await party();
+    const error = await captureError(() => draft({ partyId, ownerId: ALEX, billId: MISSING }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("refuses a second open draft for one person on one bill", async () => {
     const onParty = await party();
-    await draft({ partyId: onParty, ownerId: ALEX });
-    const error = await captureError(() => draft({ partyId: onParty, ownerId: ALEX }));
+    const billId = await bill(onParty);
+    await draft({ partyId: onParty, ownerId: ALEX, billId });
+    const error = await captureError(() => draft({ partyId: onParty, ownerId: ALEX, billId }));
     expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
   });
 
-  it("allows another person's open draft on the same party", async () => {
+  it("allows another person's open draft on the same bill", async () => {
     const onParty = await party();
-    await draft({ partyId: onParty, ownerId: ALEX });
-    await draft({ partyId: onParty, ownerId: SAM });
+    const billId = await bill(onParty);
+    await draft({ partyId: onParty, ownerId: ALEX, billId });
+    await draft({ partyId: onParty, ownerId: SAM, billId });
     const rows = await inTx((tx) =>
       tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, onParty)),
     );
@@ -77,9 +145,10 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
     "allows a new open draft once the person's first is %s",
     async (state) => {
       const onParty = await party();
-      const first = await draft({ partyId: onParty, ownerId: ALEX });
+      const billId = await bill(onParty);
+      const first = await draft({ partyId: onParty, ownerId: ALEX, billId });
       await setState(first, state);
-      const second = await draft({ partyId: onParty, ownerId: ALEX });
+      const second = await draft({ partyId: onParty, ownerId: ALEX, billId });
       // Reopening the first would make two open drafts again.
       const error = await captureError(() => setState(first, "open"));
       expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);

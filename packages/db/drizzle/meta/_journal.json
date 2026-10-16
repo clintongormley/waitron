@@ -1212,6 +1212,13 @@
       "when": 1792367783505,
       "tag": "0172_draft_line_place",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "6",
+      "when": 1792367812128,
+      "tag": "0173_draft_bill",
+      "breakpoints": true
     }
   ]
 }
