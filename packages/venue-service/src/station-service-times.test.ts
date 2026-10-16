@@ -1010,13 +1010,11 @@ it.each([
         .update(menuPeriods)
         .set({ endOffsetMinutes: offset })
         .where(eq(menuPeriods.id, f.lunch));
-      await db
-        .insert(locationDayCutoverChanges)
-        .values({
-          locationId: f.cfg.locationId,
-          effectiveBusinessDay: "2026-10-13",
-          dayCutover: "03:00:00",
-        });
+      await db.insert(locationDayCutoverChanges).values({
+        locationId: f.cfg.locationId,
+        effectiveBusinessDay: "2026-10-13",
+        dayCutover: "03:00:00",
+      });
       expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
         always: null,
         days: [

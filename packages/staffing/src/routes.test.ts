@@ -1062,15 +1062,13 @@ it("A724 paint routes carry exact period metadata for season and special-day gui
       .insert(departmentDays)
       .values({ departmentId: p.departmentId, seasonId: p.seasonId, weekday: 5 })
       .returning();
-    await tx
-      .insert(departmentDayRanges)
-      .values({
-        departmentId: p.departmentId,
-        dayId: day!.id,
-        periodId: period!.id,
-        startsAt: "12:00:00",
-        endsAt: "16:00:00",
-      });
+    await tx.insert(departmentDayRanges).values({
+      departmentId: p.departmentId,
+      dayId: day!.id,
+      periodId: period!.id,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
     return period!.id;
   });
   const guide = {

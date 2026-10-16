@@ -989,15 +989,13 @@ it("A724 adjacent periods with the same colour keep their own names and endpoint
       .select({ id: departmentDays.id })
       .from(departmentDays)
       .where(eq(departmentDays.seasonId, v.seasonId));
-    await tx
-      .insert(departmentDayRanges)
-      .values({
-        dayId: day!.id,
-        departmentId: v.departmentId,
-        periodId: period!.id,
-        startsAt: "16:00:00",
-        endsAt: "18:00:00",
-      });
+    await tx.insert(departmentDayRanges).values({
+      dayId: day!.id,
+      departmentId: v.departmentId,
+      periodId: period!.id,
+      startsAt: "16:00:00",
+      endsAt: "18:00:00",
+    });
     return period!.id;
   });
   const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
@@ -1018,15 +1016,13 @@ it("A724 a closed own date wins over a repeating open date with sending hours", 
       .insert(departmentDays)
       .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 6 })
       .returning();
-    await tx
-      .insert(departmentDayRanges)
-      .values({
-        dayId: day!.id,
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        startsAt: "12:00:00",
-        endsAt: "16:00:00",
-      });
+    await tx.insert(departmentDayRanges).values({
+      dayId: day!.id,
+      departmentId: v.departmentId,
+      periodId: v.periodId,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
     await tx
       .update(specialDayDates)
       .set({ closedAllDay: true })
@@ -1035,14 +1031,12 @@ it("A724 a closed own date wins over a repeating open date with sending hours", 
       .insert(specialDays)
       .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
       .returning();
-    await tx
-      .insert(specialDayDates)
-      .values({
-        locationId: v.cfg.locationId,
-        specialDayId: feria!.id,
-        date: "2025-08-15",
-        closedAllDay: false,
-      });
+    await tx.insert(specialDayDates).values({
+      locationId: v.cfg.locationId,
+      specialDayId: feria!.id,
+      date: "2025-08-15",
+      closedAllDay: false,
+    });
   });
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug15]).toEqual([]);
