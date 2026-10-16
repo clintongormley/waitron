@@ -195,7 +195,10 @@ export class VenueDefaultsPanel extends LitElement {
       receiptLanguage: model.fixedReceiptLanguage ?? model.receiptLanguage,
     };
     if (this.#expected && Object.keys(changes(this.#expected, expected)).length === 0) {
-      if (Object.keys(changes(this.draft, draft)).length > 0) this.draft = draft;
+      if (Object.keys(changes(this.draft, draft)).length > 0) {
+        this.draft = draft;
+        this.#scope.changed();
+      }
       return;
     }
     this.#expected = expected;

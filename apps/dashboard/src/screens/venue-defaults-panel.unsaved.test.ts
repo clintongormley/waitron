@@ -38,17 +38,17 @@ afterEach(() => {
 });
 
 async function mount(stored: VenueDefaults = MADRID) {
-  let current = structuredClone(stored);
+  const state = { current: structuredClone(stored) };
   const writes: Partial<VenueDefaults>[] = [];
   const liveData = new LiveData();
   const api = {
     liveData,
-    getVenueDefaults: async () => structuredClone(current),
+    getVenueDefaults: async () => structuredClone(state.current),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es", "ca"] }),
     putVenueDefaults: async (changes: Partial<VenueDefaults>) => {
       writes.push(structuredClone(changes));
-      current = { ...current, ...changes };
-      return structuredClone(current);
+      state.current = { ...state.current, ...changes };
+      return structuredClone(state.current);
     },
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<DefaultsLeaveApp>("venue-defaults-leave-test-app", { api });
@@ -56,7 +56,7 @@ async function mount(stored: VenueDefaults = MADRID) {
   await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
   click(panel, "edit");
   await expect.poll(() => field(panel, "receiptLanguage")).toBeTruthy();
-  return { app, panel, writes, liveData };
+  return { app, panel, writes, liveData, state };
 }
 const field = (panel: Panel, name: string) =>
   panel.shadowRoot!.querySelector<WtCombobox>(`wt-combobox[name=${name}]`);
@@ -200,4 +200,17 @@ it("picking the saved language again from the list quiets Save and releases prot
   await expect.poll(() => save.disabled).toBe(true);
   expect(chooser.value).toBe("es-ES");
   expect(unload()).toBe(false);
+});
+
+it("a live read that moves an untouched draft to a newly fixed language turns protection on", async () => {
+  const { panel, liveData, state } = await mount();
+  expect(unload()).toBe(false);
+  state.current = {
+    ...state.current,
+    receiptLanguageChoices: ["ca-ES"],
+    fixedReceiptLanguage: "ca-ES",
+  };
+  liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => field(panel, "receiptLanguage")?.value).toBe("ca-ES");
+  expect(unload()).toBe(true);
 });
