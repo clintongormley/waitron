@@ -3386,7 +3386,8 @@ invoice's line before discounts from `listUnitGrossOf` (`:54-61`): the stored
    - the shared fixture's Menú line (`apps/server/src/testing/full-invoice-fixture.ts:41`): 8 in
      `invoice-language.test.ts`, 3 in `invoice-pdf.test.ts`, and in `receipt-document.test.ts` the
      two captured-bytes cases and «lists a full invoice's items one row each, before VAT, with the
-     discount as its own row». Adding `listUnitPriceGross: "12.10"` alone made all 14 pass under the
+     discount as its own row», plus `receipt-ticket.test.ts:3529` «prints the 80 mm table's header and its
+     first row» (review, 2026-10-16: 15 cases, not 14). Adding `listUnitPriceGross: "12.10"` alone made all 15 pass under the
      probe, the byte-file cases included: **the two `.bin` files do not change**;
    - `receipt-document.test.ts`'s own inputs: `ownerMenu` (`:473`), the whole-bill case (`:598`,
      `:611`) and `burgerAndBread` (`:646`, `:660`) — 6 cases;
@@ -3438,6 +3439,8 @@ The fallback stays in this task, so every check stays green before and after.
   script's `full-comped-weighed` (`:265`) without one: neither used the fallback (`:59`), and the
   probe changed neither. `receipt-document.test.ts:713` deletes `listUnitPriceGross` beside
   `listGross`.
+  The look script's comment above `full-comped-weighed` (~`:258`, «…under one kilo with no stored
+  unit price») goes stale once under-one-kilo no longer matters: cut the under-one-kilo clause.
 - [ ] **Step 3:** The five files under the probe — `0 failed`. Remove the probe (`git diff
   apps/server/src/receipt-figures.ts` prints nothing), run them again — pass, and
   `pnpm --filter @waitron/server exec tsc --noEmit`. **Commit.**
@@ -3480,7 +3483,7 @@ The fallback stays in this task, so every check stays green before and after.
 - [ ] **Step 2: The fiscal gate, UNEDITED:**
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/sale-amount.huella.test.ts src/money-conversion.huella.test.ts src/correction-amount.huella.test.ts`.
 - [ ] **Step 3: LOOK by comparison.** Run `receipt-look.ts` into `/tmp/a663-2e-look-after` and `cmp`
-  every PNG with `/tmp/a663-2e-look-base`: expect no difference. If one differs, open both pictures
+  every file, PNGs and PDFs, with `/tmp/a663-2e-look-base`: expect no difference. If one differs, open both pictures
   and say why in the PR.
 - [ ] **Step 4: Backlog.** Delete the `docs/backlog/printers.md` bullet «A full invoice still works a
   line's unit price back from its total…» under "Decisions and deliberate limits"; record no limit.
