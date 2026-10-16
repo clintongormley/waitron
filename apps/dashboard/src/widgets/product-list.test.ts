@@ -6674,11 +6674,11 @@ it.each(
 });
 
 describe("A668 effective allergen cells", () => {
-  it.each([null, {}, { milk: {} }])(
+  it.each([null, {}, { milk: {} }] as Product["allergens"][])(
     "shows inherited allergen badges in italic for %j",
     async (allergens) => {
       setLocale("en");
-      const { el, table, root } = await mountTree({
+      const { table, root } = await mountTree({
         categories: [],
         products: [
           product({

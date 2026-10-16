@@ -753,18 +753,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A668 — allergen information in the editor, at publishing and on the till (owner, 2026-10-14;
-  spec approved 2026-10-15).** A "Contains none of the 14" choice, so a dish stops
-  reading "not reviewed" for ever;
-  one wording per state, a variant's inherited values in italic, implied diets shown, the Products
-  list reading a variant's allergens; unreviewed dishes warned about (never blocked) when a menu is
-  published now or scheduled, each linking to its product. On the till the Allergens screen is
-  deleted; product buttons carry an `allergies` mark with a long-press info window, the order list shows allergen
-  icons after the name, and the kitchen's "not reviewed" warning goes. The shared icon set and
-  both app registrations are built in A668-4; the editor, Products list/publish warnings and till
-  surfaces remain open. Fixes a defect
-  read in the editor: ticking only a diet label records an unreviewed dish as allergen-free. Uses
-  the product editor's existing sections. [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md), [mockups](backlog/mockups/a668-allergen-icons/)
+- **A668 — allergen information in the editor and on the till (owner, 2026-10-14;
+  spec approved 2026-10-15).** The editor still needs the explicit "Contains none of the 14"
+  choice, inherited values in italic and implied diets. Fix the diet-only edit that records an
+  unreviewed dish as allergen-free. On the till, remove the Allergens screen, add the `allergies`
+  mark and long-press info window, put allergen icons after order-line names, and remove the
+  kitchen's "not reviewed" warning. A668-4 supplies the shared icons and app registrations;
+  A668-3 supplies the Products list's effective variant states and linked warnings before immediate
+  or scheduled publishing. Editor and till surfaces remain open.
+  [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md),
+  [mockups](backlog/mockups/a668-allergen-icons/)
 
 - **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
   `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
@@ -1456,7 +1454,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   parent's variant republishes in one statement. Nothing waits on them.
 
 - **The product list.** A variant's name may sit a few pixels low at 390px, and
-  `listedVariantsOfProducts` repeats `variantsOfProducts`' grouping (its allergen cell is A668's).
+  `listedVariantsOfProducts` repeats `variantsOfProducts`' grouping.
   [Detail](backlog/catalogue.md#the-product-list)
 
 - **A variant image usage's `productId` has no reader in the dashboard**

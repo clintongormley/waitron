@@ -190,7 +190,10 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
               ...variant,
               active: true,
               allergensInherited: index === 0,
-              effective: { ...variant.effective, allergens: index === 0 ? {} : { eggs: {} } },
+              effective: {
+                ...variant.effective,
+                allergens: (index === 0 ? {} : { eggs: {} }) as Product["allergens"],
+              },
             })),
           },
         ],

@@ -178,6 +178,15 @@ dietary suitability of its own, because it is a way of asking for the same dish 
 something extra to eat. The till and kitchen show each item's own list and no longer compute a
 combined "as-served" figure across the dish and its extras.
 
+In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
+checked from one you have checked. A variant shows its effective state; italic means it follows
+its parent. The Allergens filter uses that same state for each variant.
+
+Before you publish now or schedule a menu, the confirmation lists offered dishes and active
+variants whose allergens are unreviewed. Select a name to open that product's own page. You can
+still publish or schedule: the warning asks you to check the declarations, rather than refusing
+the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
+
 Recipes and ingredient origins no longer author product declarations in the supported dashboard
 workflow. Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.

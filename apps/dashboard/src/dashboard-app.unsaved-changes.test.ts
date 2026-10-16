@@ -1,15 +1,23 @@
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
-import type { DashboardApi, MenuPriceRow, OwnProfile, Product } from "./api/client.js";
+import type { DashboardApi, MenuPriceRow, MenuPreview, OwnProfile, Product } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { MenuPricesTable } from "./widgets/menu-prices-table.js";
 import "./widgets/menu-prices-table.js";
 import type { MenuStructureTable } from "./widgets/menu-structure-table.js";
 import "./widgets/menu-structure-table.js";
+import { MenuPublicationsPanel } from "./widgets/menu-publications.js";
+import { userEvent } from "vitest/browser";
 import { productMedia } from "./widgets/product-media.js";
-import { cleanupWidgets, combinedFixture, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  combinedFixture,
+  mountWidget,
+  menuDocument,
+  closeReportsDelivered,
+} from "./widgets/test-helpers.js";
 
 const profile: OwnProfile = {
   displayName: "Ada",
@@ -1305,5 +1313,94 @@ describe("a Structure tab product row's Edit product link under the app's link r
     );
     await expect.poll(() => location.pathname).toBe("/manage/catalogue/product/p-burger");
     expect(m.app.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
+  });
+});
+
+describe("allergen warning product links with a dirty schedule", () => {
+  it.each(["bread", "large"])("keeps the date draft, then discards it and opens %s", async (id) => {
+    const m = await mount({
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+      listCatalogues: async () => [],
+      listProducts: async () => [],
+      listLibraryProducts: async () => [],
+      listCategories: async () => [],
+      getProductEditor: async () => {
+        throw { code: "product.not_found" };
+      },
+    });
+    await m.inner.requestClose("cancel");
+    await closeReportsDelivered();
+    const schedule = vi.fn();
+    const panel = document.createElement("dashboard-menu-publications") as MenuPublicationsPanel;
+    panel.menuId = "lunch";
+    panel.menuName = "Lunch";
+    panel.api = {
+      getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
+      scheduleMenuPublication: schedule,
+    } as unknown as DashboardApi;
+    panel.preview = {
+      hash: "draft",
+      changes: [],
+      clashes: [],
+      live: null,
+      status: { state: "unpublished", clashes: 0 },
+      document: menuDocument([], {}),
+      warnings: [
+        {
+          kind: "allergens_unreviewed",
+          products: [
+            { id: "bread", name: "Staff bread", parentName: null },
+            { id: "large", name: "Staff large", parentName: "Staff soup" },
+          ],
+        },
+      ],
+    } satisfies MenuPreview;
+    m.screen.shadowRoot!.append(panel);
+    await panel.updateComplete;
+    const q = (selector: string) => panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    await expect.poll(() => q('[data-test="schedule-open"]')).not.toBeNull();
+    await userEvent.click(q('[data-test="schedule-open"]'));
+    await panel.updateComplete;
+    for (const [name, value] of [
+      ["date", "2030-01-01"],
+      ["time", "12:00"],
+    ]) {
+      const field = q(`wt-input[name="${name}"]`) as WtInput;
+      field.value = value!;
+      field.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    }
+    await panel.updateComplete;
+    await userEvent.click(q('[data-test="schedule-submit"]'));
+    await panel.updateComplete;
+    expect(schedule).not.toHaveBeenCalled();
+    expect(unload()).toBe(true);
+    const link = q(`a[href="/manage/catalogue/product/${id}"]`);
+    expect(link).not.toBeNull();
+    const pushed = vi.spyOn(history, "pushState");
+    await userEvent.click(link);
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "keep");
+    expect(location.pathname).toBe("/manage/profile");
+    expect(pushed).not.toHaveBeenCalled();
+    expect((q('wt-input[name="date"]') as WtInput).value).toBe("2030-01-01");
+    await userEvent.click(link);
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe(`/manage/catalogue/product/${id}`);
+    expect(pushed).toHaveBeenCalledTimes(1);
+    expect(schedule).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
   });
 });

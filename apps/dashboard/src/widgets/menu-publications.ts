@@ -32,6 +32,7 @@ import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { publishWarningStyles, renderPublishWarningConfirmation } from "./menu-publish-warnings.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
 
@@ -184,6 +185,7 @@ function repeatedTime(params: Record<string, unknown>): RepeatedTime | null {
 export class MenuPublicationsPanel extends LitElement {
   static override styles = [
     baseStyles,
+    publishWarningStyles,
     css`
       /* The preview panel lets its text break anywhere, which would also let the table squeeze
          the pinned Actions heading mid-word. */
@@ -237,6 +239,12 @@ export class MenuPublicationsPanel extends LitElement {
   /** The queued version the schedule form moves; null when it schedules the preview. */
   @state() private moving: Edition | null = null;
   @state() private scheduleBusy = false;
+  @state() private confirming: {
+    preview: MenuPreview;
+    menuId: string;
+    opening: object;
+    draft: ScheduleDraft;
+  } | null = null;
   @state() private date = "";
   @state() private time = "";
   @state() private occurrence = "";
@@ -282,6 +290,9 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#opening = {};
+    this.confirming = null;
+    this.scheduleBusy = false;
     this.#disposeDraft();
     super.disconnectedCallback();
     // The query controller releases every observation when its host leaves the page.
@@ -290,6 +301,7 @@ export class MenuPublicationsPanel extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("menuId")) this.#follow();
+    if (changed.has("preview")) this.confirming = null;
   }
 
   #follow(): void {
@@ -298,6 +310,8 @@ export class MenuPublicationsPanel extends LitElement {
     this.cancelling = null;
     this.cancelError = null;
     this.#opening = {};
+    this.confirming = null;
+    this.scheduleBusy = false;
     this.#disposeDraft();
     this.scheduling = false;
     void this.#load();
@@ -416,6 +430,7 @@ export class MenuPublicationsPanel extends LitElement {
 
   #openSchedule(moving: Edition | null): void {
     this.#opening = {};
+    this.confirming = null;
     this.moving = moving;
     this.date = moving?.local.date ?? "";
     this.time = moving?.local.time ?? "";
@@ -430,6 +445,7 @@ export class MenuPublicationsPanel extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => a.date === b.date && a.time === b.time && a.occurrence === b.occurrence,
       restore: (value) => {
+        this.confirming = null;
         this.date = value.date;
         this.time = value.time;
         this.occurrence = value.occurrence;
@@ -442,6 +458,8 @@ export class MenuPublicationsPanel extends LitElement {
 
   #scheduleClosed(): void {
     this.#opening = {};
+    this.confirming = null;
+    this.scheduleBusy = false;
     this.#disposeDraft();
     this.scheduling = false;
     const moved = this.moving !== null;
@@ -465,6 +483,7 @@ export class MenuPublicationsPanel extends LitElement {
   #changeWhen(field: "date" | "time", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (this.scheduleBusy) return;
+    this.confirming = null;
     this[field] = event.detail.value;
     this.repeated = null;
     this.occurrence = "";
@@ -475,6 +494,7 @@ export class MenuPublicationsPanel extends LitElement {
   #changeOccurrence(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (this.scheduleBusy) return;
+    this.confirming = null;
     this.occurrence = event.detail.value;
     if (this.scheduleRefusal?.field === "occurrence") this.scheduleRefusal = null;
     this.#scope?.changed();
@@ -492,10 +512,26 @@ export class MenuPublicationsPanel extends LitElement {
     return errors;
   }
 
-  async #submitSchedule(): Promise<void> {
+  async #submitSchedule(confirmed = false): Promise<void> {
     const preview = this.preview;
     const moving = this.moving;
-    if (this.scheduleBusy) return;
+    if (!this.scheduling || this.scheduleBusy || (!confirmed && this.confirming !== null)) return;
+    if (confirmed) {
+      const consent = this.confirming;
+      this.confirming = null;
+      if (
+        consent === null ||
+        consent.preview !== preview ||
+        consent.menuId !== this.menuId ||
+        consent.opening !== this.#opening ||
+        moving !== null ||
+        !this.#canSchedule() ||
+        consent.draft.date !== this.date ||
+        consent.draft.time !== this.time ||
+        consent.draft.occurrence !== this.occurrence
+      )
+        return;
+    }
     if (saveActionState(this.#scope).unchanged) return;
     this.attempted = true;
     this.scheduleRefusal = null;
@@ -506,6 +542,15 @@ export class MenuPublicationsPanel extends LitElement {
     if (Object.keys(this.#ownErrors()).length > 0) {
       await this.updateComplete;
       await focusFirstInvalid(this.#scheduleDialog());
+      return;
+    }
+    if (moving === null && preview!.warnings.length > 0 && !confirmed) {
+      this.confirming = {
+        preview: preview!,
+        menuId: this.menuId,
+        opening: this.#opening,
+        draft: this.#draft(),
+      };
       return;
     }
     const activatesAt: ActivationTime = { date: this.date, time: this.time };
@@ -525,7 +570,7 @@ export class MenuPublicationsPanel extends LitElement {
       await this.#placeRefusal(error, menuId, opening, moving?.number ?? null);
       return;
     } finally {
-      this.scheduleBusy = false;
+      if (opening === this.#opening) this.scheduleBusy = false;
     }
     if (opening !== this.#opening) return;
     this.#scope?.commit(submitted);
@@ -540,6 +585,7 @@ export class MenuPublicationsPanel extends LitElement {
     opening: object,
     placed: number | null,
   ): Promise<void> {
+    if (opening !== this.#opening) return;
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
     const refusal: ScheduleRefusal = { field: null, code, params, placed };
@@ -569,6 +615,8 @@ export class MenuPublicationsPanel extends LitElement {
     }
     if (opening !== this.#opening) return;
     this.scheduleRefusal = refusal;
+    if (code === "menu.changed_since_preview")
+      this.dispatchEvent(new CustomEvent("wt-preview-retry", { bubbles: true, composed: true }));
     if (refusal.field !== null) {
       // The fields are disabled while the request is out, and a disabled field cannot take focus.
       this.scheduleBusy = false;
@@ -778,7 +826,7 @@ export class MenuPublicationsPanel extends LitElement {
           variant=${submitAction.variant}
           data-test="schedule-submit"
           .loading=${this.scheduleBusy}
-          ?disabled=${submitAction.unchanged || invalid}
+          ?disabled=${submitAction.unchanged || invalid || this.confirming !== null}
           @click=${() => void this.#submitSchedule()}
           >${t(
             moving === null ? "menu_publications.schedule_action" : "menu_publications.move_action",
@@ -826,7 +874,21 @@ export class MenuPublicationsPanel extends LitElement {
               >
             </div>`
       }
-      ${this.#renderDialog()} ${this.#renderSchedule()}`;
+      ${this.#renderDialog()} ${this.#renderSchedule()}
+      ${
+        this.confirming === null
+          ? nothing
+          : renderPublishWarningConfirmation({
+              preview: this.confirming.preview,
+              menuName: this.menuName,
+              actionLabel: t("menu_publications.schedule_action"),
+              busy: this.scheduleBusy,
+              confirm: () => void this.#submitSchedule(true),
+              cancel: () => {
+                this.confirming = null;
+              },
+            })
+      }`;
   }
 }
 
