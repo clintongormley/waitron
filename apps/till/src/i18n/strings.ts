@@ -2,6 +2,30 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "tender_refund.title": "Refund a payment",
+  "tender_refund.total": "Total to return",
+  "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
+  "tender_refund.choose": "Original payment",
+  "tender_refund.unavailable": "No cash or card money is available to refund.",
+  "tender_refund.applied": "Payment amount to return",
+  "tender_refund.tip": "Tip to return",
+  "tender_refund.amount_invalid":
+    "Enter an amount from zero to {amount}; the total returned must be above zero.",
+  "tender_refund.tip_requires_all": "Return a tip only with all the remaining payment amount.",
+  "tender_refund.cash_confirm": "I have handed this money back to the customer",
+  "tender_refund.manual_confirm": "I have returned this money on the original card terminal",
+  "tender_refund.confirm_required": "Confirm that the money has been returned.",
+  "tender_refund.manual_instruction":
+    "Return this amount on the original terminal, then confirm below. An authorized PIN is required.",
+  "tender_refund.pending": "The refund is awaiting confirmation. Check or retry this same attempt.",
+  "tender_refund.completed": "The money was returned. The original invoice is unchanged.",
+  "tender_refund.failed": "The refund failed. No money was returned by this attempt.",
+  "tender_refund.status": "Check status",
+  "tender_refund.retry": "Retry this refund",
+  "tender_refund.pending_payment": "Check pending refund",
+  "tender_refund.storage":
+    "The refund request could not be saved or read on this device. Ask a manager to check its outcome before starting another refund.",
+
   "kitchen_note.changed": "Kitchen note changed",
   "kitchen_note.removed": "Kitchen note removed",
   "kitchen_note.before": "Before",
@@ -1508,6 +1532,32 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "tender_refund.title": "Devolver un pago",
+  "tender_refund.total": "Total que se devuelve",
+  "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
+  "tender_refund.choose": "Pago original",
+  "tender_refund.unavailable": "No hay dinero en efectivo o tarjeta disponible para devolver.",
+  "tender_refund.applied": "Importe del pago que se devuelve",
+  "tender_refund.tip": "Propina que se devuelve",
+  "tender_refund.amount_invalid":
+    "Introduce un importe entre cero y {amount}; el total devuelto debe ser mayor que cero.",
+  "tender_refund.tip_requires_all":
+    "Devuelve una propina solo junto con todo el importe restante del pago.",
+  "tender_refund.cash_confirm": "He entregado este dinero al cliente",
+  "tender_refund.manual_confirm": "He devuelto este dinero en el terminal de tarjeta original",
+  "tender_refund.confirm_required": "Confirma que has devuelto el dinero.",
+  "tender_refund.manual_instruction":
+    "Devuelve este importe en el terminal original y confirma abajo. Se necesita un PIN autorizado.",
+  "tender_refund.pending":
+    "La devolución está pendiente de confirmación. Consulta o reintenta este mismo intento.",
+  "tender_refund.completed": "Se ha devuelto el dinero. La factura original no cambia.",
+  "tender_refund.failed": "La devolución ha fallado. Este intento no ha devuelto dinero.",
+  "tender_refund.status": "Consultar estado",
+  "tender_refund.retry": "Reintentar esta devolución",
+  "tender_refund.pending_payment": "Consultar devolución pendiente",
+  "tender_refund.storage":
+    "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Pide a un responsable que compruebe el resultado antes de iniciar otra devolución.",
+
   "kitchen_note.changed": "Nota para cocina cambiada",
   "kitchen_note.removed": "Nota para cocina eliminada",
   "kitchen_note.before": "Antes",

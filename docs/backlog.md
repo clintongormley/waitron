@@ -1985,7 +1985,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   closes frozen and the original invoice's VAT and counts unchanged. Typed browser clients and
   the Payments screen's post-invoice recovery section now show the original invoice/provider
   reference and offer scoped provider checks or a manager's PIN-and-note confirmation.
-  The till refund window, Transactions refund rows and acknowledgments remain to be built.
+  The standalone till refund form now covers original tender selection, amounts, reason, handover
+  confirmation and pending outcomes. A device/person-scoped browser journal retains the same
+  non-secret request across lost answers and reopen, and uses status or same-attempt retry after
+  learning the refund id. These pieces are not yet connected to the receipt screen or logout.
+  Receipt integration, Transactions refund rows and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
