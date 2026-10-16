@@ -139,6 +139,8 @@ describe("scheduling with allergen warnings", () => {
         await el.updateComplete;
         host.append(el);
       }
+      await el.updateComplete;
+      expect(q(el, '[data-test="publish-confirmation"]')).toBeNull();
       confirm.click();
       await el.updateComplete;
       expect(api.scheduleMenuPublication).not.toHaveBeenCalled();
@@ -171,58 +173,69 @@ describe("scheduling with allergen warnings", () => {
     await expect.poll(() => schedule.mock.calls.length).toBe(2);
     expect(schedule.mock.calls[1]![1].expectedHash).toBe("fresh");
   });
-  it("ignores the previous menu's reply while the next menu's request is pending", async () => {
-    let resolveFirst!: (value: unknown) => void, resolveSecond!: (value: unknown) => void;
-    const schedule = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveFirst = resolve;
-          }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecond = resolve;
-          }),
+  it.each(["success", "stale-edition"] as const)(
+    "ignores the previous menu's %s reply while the next menu's request is pending",
+    async (outcome) => {
+      let resolveFirst!: (value: unknown) => void, resolveSecond!: (value: unknown) => void;
+      let rejectFirst!: (error: unknown) => void;
+      const schedule = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveFirst = resolve;
+              rejectFirst = reject;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+      const { el, api } = await mount({}, schedule);
+      await submit(el);
+      expect(schedule).not.toHaveBeenCalled();
+      await userEvent.click(q(el, '[data-test="publish-confirm"]'));
+      await expect.poll(() => schedule.mock.calls.length).toBe(1);
+      el.menuId = "other";
+      el.preview = { ...preview(), hash: "second" };
+      await el.updateComplete;
+      await expect.poll(() => q(el, '[data-test="schedule-open"]')).not.toBeNull();
+      await userEvent.click(q(el, '[data-test="schedule-open"]'));
+      await el.updateComplete;
+      await field(el, "date", "2030-01-02");
+      await field(el, "time", "13:00");
+      await submit(el);
+      await userEvent.click(q(el, '[data-test="publish-confirm"]'));
+      await expect.poll(() => schedule.mock.calls.length).toBe(2);
+      const reads = api.getMenuPublications.mock.calls.length;
+      if (outcome === "stale-edition") rejectFirst({ code: "menu_publication.not_queued" });
+      else resolveFirst({ number: 1 });
+      await Promise.resolve(schedule.mock.results[0]!.value).catch(() => undefined);
+      if (outcome === "stale-edition") {
+        await expect.poll(() => api.getMenuPublications.mock.calls.length).toBe(reads + 1);
+        await api.getMenuPublications.mock.results.at(-1)!.value;
+      }
+      await el.updateComplete;
+      expect(
+        q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="schedule-submit"]').loading,
+      ).toBe(true);
+      expect(
+        q<HTMLElementTagNameMap["wt-button"]>(
+          el,
+          '[data-test="schedule-submit"]',
+        ).shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled,
+      ).toBe(true);
+      expect(q<HTMLElementTagNameMap["wt-dialog"]>(el, '[data-test="schedule-dialog"]').open).toBe(
+        true,
       );
-    const { el } = await mount({}, schedule);
-    await submit(el);
-    expect(schedule).not.toHaveBeenCalled();
-    await userEvent.click(q(el, '[data-test="publish-confirm"]'));
-    await expect.poll(() => schedule.mock.calls.length).toBe(1);
-    el.menuId = "other";
-    el.preview = { ...preview(), hash: "second" };
-    await el.updateComplete;
-    await expect.poll(() => q(el, '[data-test="schedule-open"]')).not.toBeNull();
-    await userEvent.click(q(el, '[data-test="schedule-open"]'));
-    await el.updateComplete;
-    await field(el, "date", "2030-01-02");
-    await field(el, "time", "13:00");
-    await submit(el);
-    await userEvent.click(q(el, '[data-test="publish-confirm"]'));
-    await expect.poll(() => schedule.mock.calls.length).toBe(2);
-    resolveFirst({ number: 1 });
-    await schedule.mock.results[0]!.value;
-    await el.updateComplete;
-    expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="schedule-submit"]').loading).toBe(
-      true,
-    );
-    expect(
-      q<HTMLElementTagNameMap["wt-button"]>(
-        el,
-        '[data-test="schedule-submit"]',
-      ).shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled,
-    ).toBe(true);
-    expect(q<HTMLElementTagNameMap["wt-dialog"]>(el, '[data-test="schedule-dialog"]').open).toBe(
-      true,
-    );
-    resolveSecond({ number: 2 });
-    await expect
-      .poll(() => q<HTMLElementTagNameMap["wt-dialog"]>(el, '[data-test="schedule-dialog"]').open)
-      .toBe(false);
-  });
+      resolveSecond({ number: 2 });
+      await expect
+        .poll(() => q<HTMLElementTagNameMap["wt-dialog"]>(el, '[data-test="schedule-dialog"]').open)
+        .toBe(false);
+    },
+  );
   it.each(["light", "dark"] as const)(
     "renders the scheduled confirmation accessibly in %s",
     async (theme) => {
@@ -296,3 +309,23 @@ it.each(["light", "dark"] as const)(
     );
   },
 );
+
+it("does not refresh a detached panel after its request completes", async () => {
+  let resolve!: (value: unknown) => void;
+  const schedule = vi.fn(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const { el, api } = await mount({}, schedule);
+  await submit(el);
+  await userEvent.click(q(el, '[data-test="publish-confirm"]'));
+  await expect.poll(() => schedule.mock.calls.length).toBe(1);
+  const reads = api.getMenuPublications.mock.calls.length;
+  el.remove();
+  resolve({ number: 1 });
+  await schedule.mock.results[0]!.value;
+  await el.updateComplete;
+  expect(api.getMenuPublications).toHaveBeenCalledTimes(reads);
+});

@@ -7,6 +7,12 @@ import { previewMenu, publishMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
+import {
+  menuVersions,
+  menuVersionImages,
+  menuScheduledPublications,
+  menuPublications,
+} from "./schema/publication.js";
 
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -144,9 +150,18 @@ describe("unreviewed offered allergens", () => {
               ),
         );
       await app((tx) => updateProduct(tx, f.soup, { allergens: {} }));
+      const rows = () =>
+        app(async (tx) => ({
+          versions: await tx.select().from(menuVersions),
+          images: await tx.select().from(menuVersionImages),
+          queued: await tx.select().from(menuScheduledPublications),
+          publications: await tx.select().from(menuPublications),
+        }));
+      const storedBefore = await rows();
       await expect(publish(before.hash)).rejects.toMatchObject({
         code: "menu.changed_since_preview",
       });
+      expect(await rows()).toEqual(storedBefore);
       await app((tx) => updateProduct(tx, f.soup, { allergens: null }));
       const current = await app((tx) => previewMenu(tx, f.lunch));
       const result = await publish(current.hash);

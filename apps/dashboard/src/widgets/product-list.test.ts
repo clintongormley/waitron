@@ -6705,6 +6705,11 @@ describe("A668 effective allergen cells", () => {
       });
       root.querySelector<HTMLElement>('tr[data-row-key="dish"] .tree-toggle')!.click();
       await table.updateComplete;
+      const name = cellUnder(root, "dish", "Name").querySelector<HTMLElement>(
+        '[part~="product-cell"]',
+      )!;
+      expect(getComputedStyle(name).fontStyle).toBe("normal");
+      expect(getComputedStyle(name).display).toBe("block");
       const badge = (key: string) =>
         cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
           '[data-test="allergen-state"]',

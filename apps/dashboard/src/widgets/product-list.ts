@@ -196,11 +196,11 @@ export class ProductList extends LitElement {
       }
       /* Keep wrapped names on their first-line baseline beside the media slot. */
       wt-data-table::part(product-cell),
-      wt-data-table::part(inherited-allergens) {
-        font-style: italic;
-      }
       wt-data-table::part(variant-cell) {
         display: block;
+      }
+      wt-data-table::part(inherited-allergens) {
+        font-style: italic;
       }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);

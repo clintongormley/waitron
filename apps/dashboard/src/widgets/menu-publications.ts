@@ -585,7 +585,6 @@ export class MenuPublicationsPanel extends LitElement {
     opening: object,
     placed: number | null,
   ): Promise<void> {
-    if (opening !== this.#opening) return;
     const code = codeOf(error);
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
     const refusal: ScheduleRefusal = { field: null, code, params, placed };
