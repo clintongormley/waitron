@@ -1804,14 +1804,12 @@ it.each(["scope", "visit"])("drops a party save event with an obsolete %s", asyn
 });
 it("does not pay a basket replaced just after its dirty note was saved", async () => {
   const el = await mounted({
-    setKitchenNote: vi
-      .fn()
-      .mockResolvedValue({
-        scope: { workingOrderId: "wo-9" },
-        note: "Saved instruction",
-        revision: 1,
-        ownerRevision: 4,
-      }),
+    setKitchenNote: vi.fn().mockResolvedValue({
+      scope: { workingOrderId: "wo-9" },
+      note: "Saved instruction",
+      revision: 1,
+      ownerRevision: 4,
+    }),
   });
   const store = basket(el).store;
   store.kitchenNote = "Saved instruction";
