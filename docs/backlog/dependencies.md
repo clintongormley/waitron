@@ -5,32 +5,34 @@ their full text.
 
 ## Open Dependabot pull requests
 
-- **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
-  when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest, each landed per
-  workflow-guide → Dependabot pull requests:
-  1. **sharp 0.35.5 (#1299 root, #1423 `apps/server`) and the compose group (#1178).** Land the two
-     sharp PRs together. sharp is copied into the box image and left out of every bundle, so the
-     image smoke's sharp step is the proof — and a PR that changed no image input builds no image
-     (CLAUDE.md §2): say how the image was built for it (a `workflow_dispatch` on the head, with its
-     `headSha`). For compose, check the dev stack still starts if a service image moved.
-  2. **The npm minor-and-patch group (#1267, 13 updates).** Rebase first. Read every package's notes
-     across its whole range; list anything that changes behaviour, a default or built output, and
-     diff built artefacts for anything in a bundle. A bump that breaks is dropped from the group,
-     with the reason recorded.
-  3. **stripe 22.6.2 → 23.0.0 (#1181, a major).** Map each breaking change to
-     `packages/payments-stripe` call sites; test through the real client as well as a fake (CLAUDE.md
-     §4). Payments: full review path.
+- **#1179 (Vitest 5)** waits on Stryker (owner): see _A Vitest 5 retry has to re-measure mutation_
+  below.
+- **#1181 (stripe 22.6.2 → 23.0.0, a major)** is lane F's A776: `packages/payments-stripe` is
+  mid-change there. Map each breaking change to its call sites; test through the real client as well
+  as a fake (CLAUDE.md §4). Payments: full review path.
+- **axe-core 4.13 → 4.14 — held back in #1760 (A775, 2026-10-16).** 4.14.0's changelog: "**label-content-name-mismatch:** Enable rule by default (#5421)" — in 4.13.0 the
+  rule carried the `experimental` tag, which axe skips by default. On #1760's CI (run 38956342330)
+  it failed every package with accessibility tests, most often on the shared `wt-combobox`; others
+  seen include the language chooser's trigger, the station queue's item buttons, the opening-hours
+  month's day cells and the data table's filters trigger (the full list is not yet taken). 4.14 also
+  reports an empty text box's undecided colour contrast as `emptyValue` instead of `bgOverlap`,
+  which the accessibility helpers' self-tests pin. It moves in its
+  own PR with those fixes (lane C, A775).
 
-## Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed
+## Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed
 
-**Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by #1139's
+**Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed — OPEN (found 2026-10-03 by #1139's
 review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 `docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
 0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
 `packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
 `packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:280` and
 `docs/backlog.md` (the 0.45.2 unnamed-`unique()` note under _CI, tests and developer tooling_), none of them re-checked against 0.45.3.
-**Next action:** read each claim against the installed 0.45.3, then update the number or the claim.
+0.45.4 arrived with #1760 (A775, 2026-10-16); its published package differs from 0.45.3 only in
+`postgres-js/session.*` and the version files — `sqlite-core/dialect.js` and `migrator.js` are
+byte-identical (`npm pack` of both, `cmp`), so the claims citing 0.45.3's dialect still describe the
+installed code, and only their number is stale.
+**Next action:** read each claim against the installed 0.45.4, then update the number or the claim.
 
 ## Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7
 
