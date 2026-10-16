@@ -361,10 +361,10 @@ describe("reportStallAfter", () => {
     const watch = createStepWatch();
     const result = await reportStallAfter(
       watch,
-      { workMs: 150, idleMs: 100 },
+      { workMs: 150, idleMs: 1000 },
       async () => {
         for (const label of ["one", "two", "three", "four", "five"]) {
-          await watch.phase(label, () => wait(50));
+          await watch.phase(label, () => wait(250));
         }
         return "migrated";
       },
@@ -373,13 +373,13 @@ describe("reportStallAfter", () => {
 
     expect(result).toBe("migrated");
     expect(watch.summary(5)).toMatch(/^5 phases, (\d+) ms in all/);
-    expect(Number(/(\d+) ms in all/.exec(watch.summary(5))[1])).toBeGreaterThanOrEqual(150);
+    expect(Number(/(\d+) ms in all/.exec(watch.summary(5))[1])).toBeGreaterThanOrEqual(1000);
   });
 
   it("fails naming the phase that stopped when no phase starts or finishes for the no-progress limit", async () => {
     const watch = createStepWatch({ resources: () => ["Timeout"] });
 
-    const error = await reportStallAfter(watch, { workMs: 2000, idleMs: 100 }, async () => {
+    const error = await reportStallAfter(watch, { workMs: 2000, idleMs: 1000 }, async () => {
       for (const label of ["first", "second", "third", "fourth"]) {
         await watch.phase(label, () => wait(40));
       }
@@ -387,10 +387,10 @@ describe("reportStallAfter", () => {
     }).catch((caught) => caught);
 
     const [, took, gap] =
-      /^Still running after (\d+) ms with no phase started or finished for (\d+) ms, past the 100 ms no-progress limit\. Stalled in phase hangs after \d+ ms\. Active resources: Timeout\.\nPhases finished before it:\nfirst: \d+ ms\nsecond: \d+ ms\nthird: \d+ ms\nfourth: \d+ ms$/.exec(
+      /^Still running after (\d+) ms with no phase started or finished for (\d+) ms, past the 1000 ms no-progress limit\. Stalled in phase hangs after \d+ ms\. Active resources: Timeout\.\nPhases finished before it:\nfirst: \d+ ms\nsecond: \d+ ms\nthird: \d+ ms\nfourth: \d+ ms$/.exec(
         error.message,
       );
-    expect(Number(gap)).toBeGreaterThanOrEqual(100);
+    expect(Number(gap)).toBeGreaterThanOrEqual(1000);
     expect(Number(took)).toBeGreaterThanOrEqual(Number(gap) + 160);
   });
 
@@ -540,10 +540,13 @@ describe("reportStallAfter", () => {
     try {
       outcome = await reportStallAfter(
         watch,
-        { workMs: 10_000, idleMs: 100 },
+        { workMs: 10_000, idleMs: 1000 },
         async () => {
+          // Each wait leaves the limit about 700 ms of room for a paused thread before the body
+          // fails short of the held call; together they outlast the limit and the grace, so a
+          // watchdog counting from its own start would name a phase before the held call.
           for (const tag of ["0005", "0006", "0007", "0008"]) {
-            await watch.phase(`core/${tag}_before: migrate`, () => wait(60));
+            await watch.phase(`core/${tag}_before: migrate`, () => wait(300));
           }
           return watch.phase("core/0009_held: migrate", db.query);
         },
@@ -555,10 +558,10 @@ describe("reportStallAfter", () => {
     }
 
     expect(seenWhileHeld).toMatch(
-      /^The test's thread has not run its 100 ms no-progress timer 100 ms after it fell due: something synchronous is holding it\. Stalled in phase core\/0009_held: migrate after \d+ ms\.\nPhases finished before it:\ncore\/0005_before: migrate: \d+ ms\ncore\/0006_before: migrate: \d+ ms\ncore\/0007_before: migrate: \d+ ms\ncore\/0008_before: migrate: \d+ ms\n$/,
+      /^The test's thread has not run its 1000 ms no-progress timer 100 ms after it fell due: something synchronous is holding it\. Stalled in phase core\/0009_held: migrate after \d+ ms\.\nPhases finished before it:\ncore\/0005_before: migrate: \d+ ms\ncore\/0006_before: migrate: \d+ ms\ncore\/0007_before: migrate: \d+ ms\ncore\/0008_before: migrate: \d+ ms\n$/,
     );
     expect(outcome).toBeInstanceOf(Error);
-    expect(outcome.message).toMatch(/past the 100 ms no-progress limit/);
+    expect(outcome.message).toMatch(/past the 1000 ms no-progress limit/);
   });
 
   it("fails when a synchronous call held the thread inside a phase past the no-progress limit and then let go", async () => {
@@ -614,7 +617,7 @@ describe("reportStallAfter", () => {
   it("writes no report when the body waits without holding the thread and finishes in time", async () => {
     const report = reportFile();
     try {
-      await reportStallAfter(createStepWatch(), { workMs: 10_000, idleMs: 300 }, () => wait(150), {
+      await reportStallAfter(createStepWatch(), { workMs: 10_000, idleMs: 1000 }, () => wait(600), {
         graceMs: 1,
         reportTo: report.fd,
       });

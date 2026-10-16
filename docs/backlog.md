@@ -5077,10 +5077,11 @@ the tree. What remains, largest first:
   at its own date (a change to how the guard walks, so the owner decides).
   [Detail](backlog/ci.md#a624-the-upgrade-walk-cannot-step-a-new-set-whose-first-migration-names-another-sets-later-table)
 
-- **The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed
-  one.** The failure's message was not kept. Next: if "reports the phase a synchronous call holds
-  the thread in…" fails again, keep its message and compare it with the two shapes in the detail.
-  [Detail](backlog/ci.md#the-step-watch-cases-one-pre-push-failure-a544-is-fixed-at-a-likely-cause-not-a-confirmed-one)
+- **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed
+  one.** The failure's message was not kept. On 2026-10-16 (A770) it failed in a third shape,
+  recorded in the detail. Next: if "reports the phase a synchronous call holds the thread in…" fails
+  again, keep its message and compare it with the shapes in the detail.
+  [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one)
 
 - **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
   attempt 1 timed out before any browser test started; attempt 2 passed on the same commit. A527

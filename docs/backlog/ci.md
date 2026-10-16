@@ -434,7 +434,7 @@ whose keys name venue-service's seasons and special days' dates. Next: teach the
 first migration dated after its floor at its own date (a change to how the guard walks, so the owner
 decides), then a set like staffing could keep one baseline.
 
-## The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed one
+## The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one
 
 The failure's message was not kept. A worker that starts late could report
 `Stalled between phases` with no finished phases although phases had already been sent, which
@@ -443,6 +443,13 @@ the fix closes
 that writes nothing within the held case's 5 s wait, so that the case reads an empty report, was
 not reproduced and is unchanged. Next: if "reports the phase a synchronous call holds the thread in…"
 fails again, keep its message and compare it with those two shapes.
+
+On 2026-10-16 (A770) it failed in lane F's pre-push run with
+`.toMatch() expects to receive a string, but got undefined`, neither shape: the held call never
+ran. A pause that fails the body first on A751's 100 ms no-progress limit reproduces that error,
+and A770 widened the limit
+([receipt](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); neither
+shape above has yet been seen in a real run.
 
 ## A419 dashboard CI stall remains unexplained (#1474)
 

@@ -1868,6 +1868,25 @@ those messages before it writes (`receiveMessageOnPort`). The case "reads the ph
 thread already sent when its timer fires before they are delivered" (`scripts/step-watch.test.mjs`)
 fires the timer before delivery, and failed without that read.
 
+The helper's own suite leaves room for a paused thread (A770). On 2026-10-16 lane F's pre-push root
+run, rebased on A751's merge `39d07827e`, failed "reports the phase a synchronous call holds the
+thread in, from another thread, counting from the last phase event" with
+`.toMatch() expects to receive a string, but got undefined`: the held call never ran, so the check
+read nothing. A751 had made the case wait 60 ms in each of four phases against a 100 ms no-progress
+limit, so a delay of 40 ms or more in any one wait fails the body before it reaches the held call;
+what delayed lane F's run was not observed. Not reproduced without help, on macOS, Node v26.11.1 and
+Vitest 4.1.11: 90 runs of the case beside 28 and then 54 spinning `yes` processes all passed (30,
+then 60; the one-minute load average read 12 and 20 around the first batch, 21 as the second began
+and 103 two and a half minutes after it ended), and so did 10 runs inside one root coverage run.
+Reproduced by pausing the test's thread once, for 200 ms with `Atomics.wait`, 30 ms into the body:
+that error, and A751's two sibling cases ("passes a body whose phases keep moving", "fails naming
+the phase that stopped") failed too. The three cases now use a 1,000 ms limit and passed with the
+same pause. "writes no report when the body waits without holding the thread" passed that pause in
+the first run, then failed 8 of 12 runs of it alone in review, on the test thread's own 300 ms
+limit; it now waits 600 ms against a 1,000 ms limit and passed 12 of 12, and a watchdog changed to
+report at once, or at half the limit, failed it 5 of 5. Receipts are in lane B's campaign folder,
+`a770-probe/`.
+
 A healthy run prints the number of timed phases, their summed time, the five slowest, the step
 count, the walk's processor and wall time, and both limits. Measured
 2026-09-28 with `CI=true`: `224 phases, 4976 ms in all; the slowest:`, then five lines, the first
