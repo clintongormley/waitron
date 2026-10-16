@@ -228,7 +228,7 @@ describe("style token names", () => {
   );
 
   it("excuses a listed read only when it carries a fallback", () => {
-    const listed = { file: "apps/till/src/widgets/basket.ts", name: "--wt-color-warning-text" };
+    const listed = { file: "apps/till/src/widgets/diet-badges.ts", name: "--wt-color-warning-text" };
     expect(excused({ ...listed, fallback: true })).toBe(true);
     expect(excused({ ...listed, fallback: false })).toBe(false);
     expect(excused({ ...listed, file: "apps/till/src/widgets/other.ts", fallback: true })).toBe(
