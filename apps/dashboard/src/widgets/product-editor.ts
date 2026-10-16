@@ -1408,16 +1408,29 @@ export class ProductEditor extends LitElement {
           event.stopPropagation();
           const { allergens: codes, dietary } = event.detail.value;
           const previous = allergenChoices(this.draft.allergens);
-          if (codes.length !== previous.length || codes.some((code) => !previous.includes(code)))
-            this.dismiss("allergens");
+          const allergensChanged =
+            codes.length !== previous.length || codes.some((code) => !previous.includes(code));
+          if (allergensChanged) this.dismiss("allergens");
+          const previousDietary = this.draft.dietaryDeclarations ?? [];
+          const dietaryChanged =
+            dietary.length !== previousDietary.length ||
+            dietary.some((label) => !previousDietary.includes(label));
           const allergens = allergensFromChoices(codes);
           // On a variant an empty choice is blank, which reads the parent's: saved as an empty
           // overlay it would declare the variant free of every allergen its parent contains.
           const variantPage = this.inherited !== null;
           this.draft = {
             ...this.draft,
-            allergens: variantPage && !codes.length ? null : allergens,
-            dietaryDeclarations: variantPage && !dietary.length ? null : dietary,
+            allergens: allergensChanged
+              ? variantPage && !codes.length
+                ? null
+                : allergens
+              : this.draft.allergens,
+            dietaryDeclarations: dietaryChanged
+              ? variantPage && !dietary.length
+                ? null
+                : dietary
+              : this.draft.dietaryDeclarations,
           };
           this.#draftScope?.changed();
         }}

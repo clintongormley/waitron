@@ -29,6 +29,53 @@ import { EACH_CHOICE } from "./variant-table.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
+it("keeps unreviewed allergens null when only a dietary label is saved", async () => {
+  const el = await mountPricing({ ...saved, allergens: null, dietaryDeclarations: [] });
+  await openSection(el, "nutrition");
+  const picker = el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!;
+  await picker.updateComplete;
+  await userEvent.click(
+    picker.shadowRoot!.querySelector<HTMLElement>('[data-test="dietary-line"]')!,
+  );
+  await picker.updateComplete;
+  const dietary =
+    picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[data-test="dietary"]',
+    )!;
+  await dietary.updateComplete;
+  await userEvent.click(dietary.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+  const option = [...dietary.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.textContent!.trim() === t("editor.diet.vegan"),
+  )!;
+  await userEvent.click(option);
+  await el.updateComplete;
+  expect(el.currentValue.dietaryDeclarations).toEqual(["vegan"]);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.allergens).toBeNull();
+  expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual(["vegan"]);
+});
+
+it("keeps a variant's explicit empty diet when only its allergens change", async () => {
+  const el = await mountVariant({ ...glass, dietaryDeclarations: [] });
+  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: { allergens: ["eggs"], dietary: [] } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.allergens).toEqual({ eggs: {} });
+  expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual([]);
+});
+
 it.each([
   { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre", "Zucchini (z)"] },
   { locale: "es-ES", labels: ["Unidad", "Calabacín (z)", "Litre", "Manzana (a)"] },
