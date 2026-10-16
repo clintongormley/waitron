@@ -98,7 +98,8 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   of the rule in Decisions 1–2 beside a copy of today's `resizeFrom`:
   - Of today's ten `resizeFrom` checks in `floor-plan-geometry.test.ts`, one changes (listed under
     "Changed test checks expected"); every table at (10, 10) at 0°, 30°, 45°, 90°, 180°, 225° and
-    270°, every side, ±1–3 squares, gives today's answer, and each growth's reverse puts it back.
+    270°, every side, ±1–3 squares, gives today's answer, and away from the edge each growth's
+    reverse puts it back.
   - The lowest place an unturned-start move can reach, by turn: 8 × 8 at 15° → (1, 1), drawn left
     0.10; at 30° → (2, 2), 0.54; at 45° → (2, 2), 0.34. 8 × 4 at 75° → (0, 3), drawn left 1.03
     (x is already 0). 8 × 4 at 90° → (0, 2), drawn left 2.00 (the gap). 99 × 99 at 45° → (21, 21),
@@ -108,8 +109,23 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
     rule; 116 of those would be refused if a growth whose ROUNDED outline pokes out were refused (a
     dead first square). With step-in, the largest move of the opposite side's midpoint was
     0.933 squares (a 6 × 6 at 30°, top side).
+  - At the edge a growth and its reverse need not cancel, and one growth of n squares need not equal
+    n growths of one. An 8 × 4 turned 90° at (0, 5), its left-facing (bottom) side: +3 in one go
+    gives (0, 4) 8 × 6; three +1 growths give (0, 2) 8 × 7, drawn left 0.5; a fourth (8 × 8, which
+    rounding would place touching the edge exactly) is refused because its exact outline crosses;
+    +3 then −3 gives (2, 6) 8 × 3, not the start. The fresh-context plan review found these
+    (`~/waitron-campaign-b/a672-plan-review/`) and this plan's model gives the same numbers
+    (`review-check.mjs`).
+  - Turning by the arrow keys walks a corner table away from the edge: one full turn, 24 presses of
+    ArrowRight with each change applied, from (0, 0) ends an 8 × 8 at (2, 2), a 20 × 4 at (1, 9) and
+    an 8 × 4 at (1, 3), all back at 0° (`review-check.mjs`; the plan review found the same).
+  - At the 999 limit (`review-check.mjs`, `corner-rule2.mjs`): `resizeFrom(T(999, 10, 8, 4, 90),
+    "top", 1)` answers it unchanged (x would be 999.5, rounded to 1000); the shrink
+    `resizeFrom(T(999, 10, 8, 4, 90), "right", −1)` answers (999, 9) 7 × 4 (x would be 1000, held to
+    999); `resizeFromCorner(T(999, 10, 8, 4, 90), "top-left", 0, 1)` answers it unchanged; the
+    shrink `resizeFromCorner(T(999, 10, 8, 4, 90), "bottom-right", 0, −1)` answers (999, 11) 8 × 3.
   - The corner rule at (20, 20), every 15°, every corner, −3…3 each way: the opposite corner moved
-    at most 0.500 squares, and every growth's reverse put the table back.
+    at most 0.500 squares, and every growth's reverse put the table back (away from the edge).
 - **Hit areas, computed** (`hit-areas.mjs`, Node; not a browser measurement). In the table's own
   frame (a turn moves every control together), with the shipped tokens (`--wt-space-1` 4 px,
   `--wt-space-3` 12 px, `--wt-space-5` 24 px, `--wt-tap-min` 44 px:
@@ -186,6 +202,11 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   half the growth along that axis, because x cannot go below 0 (8 × 4 turned 90° at (0, 5):
   growing its down-facing side by 3 gives (0, 7), its drawn left moving from 2 to 3.5, computed).
   Today that table could not grow those sides at all (the reproduction above).
+- **At the edge, growth is not reversible square for square.** Away from the edge a growth and its
+  reverse put the table back (today's `roundShift` promise, kept). At the edge they need not, and
+  one growth of n squares need not equal n growths of one: the 8 × 4 turned 90° at (0, 5) numbers
+  above (+3 at once gives 8 × 6, three +1 give 8 × 7, +3 then −3 gives (2, 6) 8 × 3). Task 1 pins
+  both; the owner question says so.
 - **The corner drag** keeps the first plan's rule — it moves the two sides that meet at the corner
   by how far the pointer went along each side's own outward direction, and keeps the opposite
   corner's x and y each within half a square — with the edge part replaced by the rule above: of
@@ -201,6 +222,13 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   arrow keys use the same rule from `t.placement`. Examples (computed): an 8 × 8 at (0, 0) turned to
   15° → (1, 1); then to 30° → (2, 2); a 20 × 4 at (0, 0) turned to 90° → (0, 8); an 8 × 8 at
   (10, 10) → unchanged.
+- **Turning by key walks a corner table away from the edge, and turning back never steps it out
+  again.** This follows from the owner's Q3 answer (b), "the turned table steps in … nothing else
+  moves": each press steps in from where the last one left it, and a step is only ever inwards, so
+  a table at the edge drifts away as it is turned round: one full turn of 24 presses from (0, 0)
+  ends an 8 × 8 at (2, 2), a 20 × 4 at (1, 9) and an 8 × 4 at (1, 3) (computed, above). A pointer
+  drag works from the place the press began, so turning back within one drag puts the table back.
+  Task 4 pins the key case; the owner question at the end says so.
 - **The angle** is still measured round the table's centre where the press began
   (`drag.centreX/centreY`, `:888–889`), so the turn depends only on where the pointer is, and a
   step-in cannot feed back into the angle. The table, and its arrow with it, moves under the
@@ -218,9 +246,12 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   change for this: a draft that never pokes out further than its starting placement never grows the
   origin room (P-B1, P-B2). The `hold === "drag"` branch stays, because it still keeps the grid from
   shrinking under a table dragged back from the right or bottom, and still holds the room of a table
-  that arrived poking out. If package coverage then misses that branch's origin growth, the one way
-  left to reach it is a parent setting a poking-out table during a drag; add that test rather than
-  an ignore comment.
+  that arrived poking out. **That path is kept (the driver's call) and gets a required test in
+  Task 4.** The plan review replaced the drag branch's `x = Math.max(this.#origin.x, x)` with
+  `this.#origin.x` in a throwaway apply of Tasks 1, 3, 4 and 5: all 18 room-related checks still
+  passed with this plan's new values, because no canvas gesture grows the room any more, so neither
+  coverage nor those checks would notice the path breaking. The one way left to reach it is a parent
+  setting a poking-out table while a drag is under way.
 - **Overlap.** Stepping in can put the turned table over another; it is drawn overlapping, as a move
   can be today. Nothing in the editor refuses or avoids overlap: canvas moves never look at other
   tables (`:916–922`), `placeTable` places "as given, overlaps included"
@@ -233,8 +264,8 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   (Decision 7). It is drawn blank: `.grid` gets `background-origin: content-box;
   background-clip: content-box`, and its inline style gets `padding-top` and `padding-left` equal to
   `#origin` (the margin plus any overhang), in px of the unzoomed grid as `#frameStyle` uses. The
-  surface colour moves to `.viewport` too (`background-color: var(--wt-color-surface)`), so the
-  clipped margin still shows the surface. The grid lines then start at the plan's x 0 and y 0, and
+  surface colour is also set on `.viewport` (`background-color: var(--wt-color-surface)`); keep it
+  on `.grid`. The clipped margin then still shows the surface. The grid lines then start at the plan's x 0 and y 0, and
   the first line is the plan's visible edge (P-A). Tables, handles and reasons are positioned from
   the grid's padding edge as before, so none moves (P-A).
 - **Tests pinning the margin's drawing:** none fails. "fills the visible area with grid when there
@@ -298,22 +329,27 @@ when zoomed out". The furthest point of the arrow from the top side's midpoint i
 tokens; 6 squares, as today), and that midpoint is never outside the turned box. Rewrite the comment
 at `wt-floor-plan-canvas.ts:459–460` to that reason.
 
-### 8. Cursors and the keyboard (unchanged from the first plan)
+### 8. Cursors, and no keyboard corner
 
 - `outward` and `resizeCursor` take a side or a corner; a corner's outward direction is the sum of
   its two sides' outward directions, normalised, so an unturned top-left or bottom-right corner gives
   `nwse-resize` and the other two `nesw-resize`, turning with the table.
-- The keyboard gains nothing: Shift+arrow resizing moves the table's own right side
-  (ArrowRight/ArrowLeft) and bottom side (ArrowDown/ArrowUp) only (`RESIZE_KEYS`, `:106–111`). It now
-  follows the edge rule through `resizeFrom`. No key moves the top or left side or a corner, before
-  or after this branch; that gap becomes a backlog entry (Task 9).
+- **No keyboard corner is built here (the driver's decision, 2026-10-16).** Spec point 2 says
+  "Shift+arrow resizing … need[s] the corners too"; this branch defers that part, and the PR says so.
+  Shift+arrow resizing keeps moving the table's own right side (ArrowRight/ArrowLeft) and bottom side
+  (ArrowDown/ArrowUp) only (`RESIZE_KEYS`, `:106–111`), now following the edge rule through
+  `resizeFrom`. Shift+ArrowRight and Shift+ArrowDown already reach every size a bottom-right corner
+  drag reaches. No key moves the top or left side or a corner, before or after this branch; that gap
+  becomes a backlog entry (Task 9).
 
 ## Task 1 — Geometry: the edge rule for moves and side resizes
 
 Files: `packages/ui/src/floor-plan-geometry.ts`, `packages/ui/src/floor-plan-geometry.test.ts`.
 Rough size: 30–50 tool calls.
 
-Test first (`pnpm --filter @waitron/ui exec vitest run src/floor-plan-geometry.test.ts`):
+Test first (`pnpm --filter @waitron/ui exec vitest run src/floor-plan-geometry.test.ts
+src/components/wt-floor-plan-canvas.test.ts src/components/wt-floor-plan-canvas.view.test.ts` —
+the canvas files too, because the canvas calls `resizeFrom`):
 
 1. `stepInside` on a table already inside (8 × 8 at (10, 10), any turn) answers it unchanged.
 2. From an unturned start, the lowest place by turn: `stepInside({ ...T(0, 0, 8, 8), rotation: r },
@@ -335,6 +371,13 @@ Test first (`pnpm --filter @waitron/ui exec vitest run src/floor-plan-geometry.t
    poking rounded answer.
 7. Growing towards the edge is still refused: unturned at (0, 0), left +2 and top +2 answer the table
    unchanged (the existing case); turned 180° at (0, 10), right +1 answers it unchanged.
+8. At the edge, not reversible square for square (Decision 2): 8 × 4 turned 90° at (0, 5), bottom +3
+   → (0, 4) 8 × 6; bottom +1 three times → (0, 2) 8 × 7 (drawn left 0.5), and a fourth +1 answers
+   it unchanged; bottom +3 then −3 → (2, 6) 8 × 3. Rename the existing "undoes a resize with the
+   opposite one at %i°" only if its name claims more than "away from the edge" (it runs at (10, 10)).
+9. The 999 limit, each expected value written from the rule first: `resizeFrom(table(999, 10, 8, 4,
+   90), "top", 1)` → unchanged (x would round to 1000); `resizeFrom(table(999, 10, 8, 4, 90),
+   "right", -1)` → (999, 9) 7 × 4 (a shrink is taken, x held to 999).
 
 Then implement `stepInside` (exported, with its rule in one doc comment) and change `resizeFrom` as
 in Decision 2, rewording its doc comment to the promise there. Prove tests 2 and 6 by deletion
@@ -365,6 +408,9 @@ Test first (same command):
    8 × 6 (its unturned left side faces up and the drawn top is 0, so only the other side grows);
    unturned at (0, 0), top-left (−2, −1) → (2, 1) 6 × 3 (a shrink is taken). Write each from the
    rule, then check.
+8. The 999 limit: `resizeFromCorner(table(999, 10, 8, 4, 90), "top-left", 0, 1)` → unchanged (x would
+   round to 1000); `resizeFromCorner(table(999, 10, 8, 4, 90), "bottom-right", 0, -1)` → (999, 11)
+   8 × 3 (a shrink is taken, x held to 999).
 
 Then add `PlanCorner`, widen `outward` and `resizeCursor` to `PlanSide | PlanCorner`, and add
 `resizeFromCorner` beside `resizeFrom`, sharing the edge step with it. Export nothing new from
@@ -372,8 +418,9 @@ Then add `PlanCorner`, widen `outward` and `resizeCursor` to `PlanSide | PlanCor
 
 Mutation, once, after this task:
 `gtimeout 900 pnpm --filter @waitron/ui exec stryker run --mutate src/floor-plan-geometry.ts`.
-A survivor on a new or changed line gets a test, or a line in the PR saying why no test can tell it
-apart.
+A survivor gets a test, or a line in the PR saying why no test can tell it apart, when it is on a line
+this branch added or changed, OR when the tests that used to catch it were changed by this branch to
+new values (re-pointed).
 
 ## Task 3 — Canvas: moves stop at the drawn outline
 
@@ -428,7 +475,22 @@ src/screens/floor-plan-editor.test.ts`):
    (no step: it is less far out than it began).
 6. Stepping in over another table is allowed: an 8 × 8 at (0, 0) beside T2 at (8, 0) turned 15° is
    sent at (1, 1), overlapping T2.
-7. Dashboard: "a turn from the canvas that steps the table in keeps its x and y, and one Undo puts
+7. **Required — the drag branch's room still grows** (Decision 3), at zoom 1 and at twice the zoom:
+   while a table is being dragged, the parent sets another table that pokes out past the plan's top
+   or left edge (an 8 × 8 at (0, 0) turned 45°). Keep the assertions the re-pointed cases used to
+   make: the room grows, it is scrolled away, the dragged table stays under the pointer, the grid's
+   height stays steady in a box that takes its height from the plan (as "a turned table dragged to
+   the top keeps a steady height…" checked), and after an undo (the parent setting the earlier layout
+   back) no extra room is left (as "%s leaves no extra room once the earlier layout comes back"
+   checked). Prove it by the plan review's deletion: replace `x = Math.max(this.#origin.x, x)` (and
+   the same for y) in the drag branch with `this.#origin.x`; this test must fail; restore.
+8. One full turn by key walks a corner table away from the edge (Decision 3): an 8 × 8 at (0, 0),
+   ArrowRight on its arrow 24 times with the parent applying each change, ends at 0° at (2, 2).
+9. Shift+ArrowDown on a turned table near the corner (an 8 × 8 at (2, 2) turned 30°), with the parent
+   applying the change and T2 at (20, 0): T2 does not move on screen and nothing overflows. This and
+   test 3 are the evidence for deleting the backlog entry "An arrow-key turn that makes a corner
+   table poke further out still shifts the other tables a square" in Task 9.
+10. Dashboard: "a turn from the canvas that steps the table in keeps its x and y, and one Undo puts
    all three back": `fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 15, x: 1, y: 1 })` then
    `placed(el, "m1")` has rotation 15, x 1, y 1; one Undo restores the earlier placement.
 
@@ -508,8 +570,8 @@ above `.resize-handle` and `#renderHitAreas` only if they become untrue.
 Also run `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-plan-canvas.a11y.test.ts
 src/no-hardcoded-chrome.test.ts`. The a11y cases "a selected table with its handles" and "a selected
 table at the top-left corner with its handles" now draw corners in both themes (every selected table
-does); the 2 × 2 fixture at (24, 2) turned 45° covers a table with corners and no side dots when
-selected — if no a11y case selects it, add one rather than changing an existing case.
+does); the two cases select the 2 × 2 fixture `b1`, which covers a table with corners and no side dots,
+and the side dots stay covered by the case that selects the 8 × 4.
 
 ## Task 7 — Canvas: dragging a corner
 
@@ -572,8 +634,10 @@ Decision 7's formula with its comment.
 
 Mutation, once after this task:
 `gtimeout 2700 pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-floor-plan-canvas.ts`.
-A survivor on a line this branch added or changed gets a test, or a PR line saying why none can tell
-it apart.
+A survivor gets a test, or a PR line saying why none can tell it apart, when it is on a line this
+branch added or changed, OR when the tests that used to catch it were changed by this branch to new
+values (re-pointed) — in particular the room-growing lines of `willUpdate`'s drag branch, whose old
+catching tests Tasks 3 and 4 re-point.
 
 ## Task 9 — LOOK, docs, backlog
 
@@ -615,7 +679,9 @@ Rough size: 40–60 tool calls.
    "Resizing a floor plan table needs a pointer or a keyboard": "No key moves a floor plan table's
    top or left side or a corner; Shift with the arrow keys moves its right and bottom sides. Left
    open by A672." Change "Small floor plan canvas details: `reveal` does not count the side dots" to
-   "…the side dots or the corners" if `reveal` still counts neither.
+   "…the side dots or the corners" if `reveal` still counts neither. The entry "On computers whose scrollbars take
+   space, a size reading just after a floor plan drop may shift the plan by the extra room" stays
+   open: it was seen only with a stand-in scrollbar and is not what Q3 fixed.
 
 ## Changed test checks expected
 
@@ -677,6 +743,9 @@ squares long)
   with `it.todo` naming Task 7, and Task 7 makes it real.
 - "a selected 2 × 2 table turned %i° is dragged by a press at its centre or just inside a side's dot":
   its checks are unchanged; its name may say "a side's midpoint".
+- "draws the turn arrow of a selected table at the grid's corner inside the grid, and reveal shows
+  it": its loop over `dots(el)` for a 1 × 1 finds four side dots today and none after Q2, so it would
+  check nothing. Replace that loop with one over the corner hit areas (each inside the grid).
 
 **Task 8 — `wt-floor-plan-canvas.test.ts`** (reason: A672 point 2, owner yes 2026-10-14: the turn
 arrow moves to top centre)
@@ -729,12 +798,23 @@ mutation floor are CI's (`test-ui` and `test-dashboard` coverage on the PR; the 
 > A table's saved position is its corner before it is turned, and that corner can't go below 0.
 > So a table that gets narrower when turned — an 8 × 4 table turned on its end, for example — stops
 > with a gap of 2 squares at the plan's left edge, and when you lengthen it along that edge it
-> slides a little away from the edge (half of what you add). Every other table goes right up to the
-> edge.
+> slides a little away from the edge (half of what you add). Lengthening it a square at a time also
+> ends differently from lengthening it in one go, and lengthening then shortening may not put it
+> back where it was.
+>
+> Every other table goes right up to the edge, as close as whole squares allow: up to just under a
+> square away (an 8 × 8 turned 30° stops about half a square off).
+>
+> Turning a table at the edge with the arrow keys walks it away from the edge, and turning it back
+> does not bring it back: one full turn moves an 8 × 8 from the corner to 2 squares across and 2
+> down. Dragging the arrow does the same over separate drags; only turning back within the same
+> drag puts the table back.
 >
 > (a) Keep it like this. This is what is being built now.
 >
-> (b) Let a saved position go below 0, so the turned table's outline can touch the edge and grow
-> without sliding. That is a separate job: the database and the server would accept a wider range.
+> (b) Let a saved position go below 0, so a narrow turned table's outline can touch the edge and
+> grow without sliding away from it. That is a separate job: the database and the server would
+> accept a wider range. It would not change the other two effects: positions stay whole squares,
+> and a table still steps in when turned.
 >
 > Reply a or b.
