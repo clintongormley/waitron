@@ -18,6 +18,10 @@ const states: Record<string, { props: Partial<OpeningHoursWeekView>; shown: stri
     shown: [".block[data-faded]", '.block[data-kind="closed"]'],
   },
   "a day closed all day": { props: { date: "2026-12-25" }, shown: [".name.holiday", ".track"] },
+  "a week across two years, with its four links": {
+    props: { date: "2027-01-02" },
+    shown: ['[data-test="week-month"]', '[data-test="week-year"]'],
+  },
   Spanish: { props: { date: "2026-12-08", departmentId: "rest" }, shown: [".name.holiday"] },
 };
 

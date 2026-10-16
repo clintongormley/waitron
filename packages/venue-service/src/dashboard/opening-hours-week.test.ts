@@ -162,6 +162,67 @@ describe("Opening hours week", () => {
     expect(testId(el, "next-week")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("the title links to its months and years", async () => {
+    const el = await mount({ model: undefined, date: "2027-01-02" });
+    expect(text(testId(el, "week"))).toBe("28 Dec 2026 – 3 Jan 2027");
+    const months = [...root(el).querySelectorAll<HTMLElement>('[data-test="week-month"]')];
+    const years = [...root(el).querySelectorAll<HTMLElement>('[data-test="week-year"]')];
+    expect(months.map((m) => [text(m), m.dataset.month])).toEqual([
+      ["Dec", "2026-12"],
+      ["Jan", "2027-01"],
+    ]);
+    expect(years.map((y) => [text(y), y.dataset.year])).toEqual([
+      ["2026", "2026"],
+      ["2027", "2027"],
+    ]);
+    const monthSent = events<{ month: string }>(el, "week-month-open");
+    const yearSent = events<{ year: number }>(el, "week-year-open");
+    await userEvent.click(months[1]!);
+    await userEvent.click(years[0]!);
+    expect(monthSent).toEqual([{ month: "2027-01" }]);
+    expect(yearSent).toEqual([{ year: 2026 }]);
+
+    el.date = "2026-10-14";
+    await el.updateComplete;
+    const oneMonth = [...root(el).querySelectorAll<HTMLElement>('[data-test="week-month"]')];
+    const oneYear = [...root(el).querySelectorAll<HTMLElement>('[data-test="week-year"]')];
+    expect(oneMonth.map((m) => m.dataset.month)).toEqual(["2026-10"]);
+    expect(oneYear.map((y) => y.dataset.year)).toEqual(["2026"]);
+    await userEvent.click(oneMonth[0]!);
+    await userEvent.click(oneYear[0]!);
+    expect(monthSent.at(-1)).toEqual({ month: "2026-10" });
+    expect(yearSent.at(-1)).toEqual({ year: 2026 });
+    for (const link of [...oneMonth, ...oneYear]) {
+      const hint = root(el).getElementById(link.getAttribute("aria-describedby")!);
+      expect(text(hint)).toBe(link === oneMonth[0] ? "Whole month" : "Whole year");
+    }
+  });
+
+  it("the title keeps one width", async () => {
+    let monday = "2026-01-01";
+    while (weekdayOf(monday) !== 1) monday = addDays(monday, 1);
+    const mondays: LocalDate[] = [];
+    for (; monday < "2027-01-01"; monday = addDays(monday, 7)) mondays.push(monday);
+    expect(mondays).toHaveLength(52);
+    const dates = [...mondays, "2011-05-02", "2088-05-03"];
+    const lefts: [string, number][] = [];
+    try {
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = await mount({ model: undefined });
+        for (const date of dates) {
+          el.date = date;
+          await el.updateComplete;
+          lefts.push([`${locale} ${date}`, testId(el, "next-week")!.getBoundingClientRect().left]);
+        }
+      }
+    } finally {
+      setLocale("en");
+    }
+    for (const [shown, left] of lefts)
+      expect(Math.abs(left - lefts[0]![1]), shown).toBeLessThanOrEqual(0.5);
+  });
+
   it("a day's name sends calendar-day-open", async () => {
     const el = await mount({ date: "2026-12-09" });
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");

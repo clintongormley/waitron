@@ -16,13 +16,28 @@ import {
   type CalendarDayOpen,
   type MonthDepartment,
 } from "./opening-hours-month.js";
+import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import { weekDates, weekDays, weekMonth, weekRows, type WeekRow } from "./week-rows.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
 const RULER_STEP = 120;
+
+type TitlePart = ReturnType<typeof formatWeekTitleParts>[number];
+
+let widthCandidates: TitlePart[][] | undefined;
+/** The titles of every week whose Monday falls in 2026, in each interface language. */
+function titleCandidates(): TitlePart[][] {
+  if (!widthCandidates) {
+    widthCandidates = [];
+    for (const language of Object.keys(VENUE_SERVICE_STRINGS))
+      for (let monday = "2026-01-05"; monday < "2027-01-01"; monday = addDays(monday, 7))
+        widthCandidates.push(formatWeekTitleParts(monday, addDays(monday, 6), language));
+  }
+  return widthCandidates;
+}
 
 function clockText(cutover: string, minutes: number): string {
   const [h, m] = cutover.split(":").map(Number) as [number, number];
@@ -33,12 +48,14 @@ function clockText(cutover: string, minutes: number): string {
 
 /** The Monday-to-Sunday week holding `date`, each day a section of rows with its hours drawn as
  *  blocks on one scale, the week's longest day. A day's name sends `calendar-day-open`; ‹ › send
- *  `week-change` and Show `week-department-change`. */
+ *  `week-change`, the title's months and years `week-month-open` and `week-year-open`, and Show
+ *  `week-department-change`. */
 @customElement("opening-hours-week")
 export class OpeningHoursWeekView extends LitElement {
   static override styles = [
     baseStyles,
     periodColourStyles,
+    fixedTitleStyles,
     css`
       :host {
         display: block;
@@ -51,8 +68,22 @@ export class OpeningHoursWeekView extends LitElement {
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
       }
-      h2 {
-        margin: 0;
+      .title-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .title-link:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .hint {
+        ${visuallyHiddenStyles}
       }
       .ruler,
       .row {
@@ -211,16 +242,49 @@ export class OpeningHoursWeekView extends LitElement {
         >${glyph}</wt-button
       >`;
     };
-    const title = formatWeekTitleParts(dates[0]!, dates[6]!)
-      .map((part) => part.text)
-      .join("");
+    // A candidate is shaped as the title is, its links inline-blocks; shaped otherwise, Chromium
+    // measured the Month's title a hair wider.
+    const candidates = titleCandidates().map(
+      (parts) =>
+        html`${parts.map((part) =>
+          part.month || part.year ? html`<span class="title-link">${part.text}</span>` : part.text,
+        )}`,
+    );
+    const heading = html`${formatWeekTitleParts(dates[0]!, dates[6]!).map((part) => {
+      const { month, year } = part;
+      if (month)
+        return html`<button
+          type="button"
+          class="title-link"
+          data-test="week-month"
+          data-month=${month}
+          aria-describedby="month-hint"
+          @click=${() => this.#emit("week-month-open", { month })}
+        >
+          ${part.text}
+        </button>`;
+      if (year)
+        return html`<button
+          type="button"
+          class="title-link"
+          data-test="week-year"
+          data-year=${year}
+          aria-describedby="year-hint"
+          @click=${() => this.#emit("week-year-open", { year })}
+        >
+          ${part.text}
+        </button>`;
+      return part.text;
+    })}`;
     const days = this.model ? weekDays(this.model, this.date) : undefined;
     return html`<div class="head">
         ${step(-7, "previous-week", "week.previous", "‹")}
-        <h2 data-test="week" aria-live="polite">${title}</h2>
+        ${fixedTitle(html`<h2 data-test="week" aria-live="polite">${heading}</h2>`, candidates)}
         ${step(7, "next-week", "week.next", "›")}
         ${days && this.model ? this.#show(this.model) : nothing}
       </div>
+      <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
+      <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
       ${days && this.model ? this.#week(this.model, days) : nothing}`;
   }
 
