@@ -683,8 +683,8 @@ box and reaches at least 8 squares past the furthest table. Above and left of th
 keeps a margin, drawn blank so the grid's lines start at the plan's own top and left edge, of
 `√((--wt-space-5 / 2 + --wt-space-1 + --wt-tap-min)² + (--wt-tap-min / 2)²)` (the turn arrow's
 furthest reach from the middle of a table's top side), rounded up to whole squares and enlarged
-when zoomed out, so a selected table's handles stay inside the grid
-at x 0 and y 0, and selecting a table moves nothing. A turned table reaching past the top or left
+when zoomed out, so a selected table's handles stay inside the canvas's scrolling area
+at x 0 and y 0, and selecting a table moves nothing. A turned table that arrives already poking past the top or left
 edge gets extra squares on top of that margin, so it can be scrolled wholly into view. Each table is a button at its true
 size and angle, so a small one is below `--wt-tap-min`; its name is drawn only when its shorter side
 at the original scale is at least 28 px, and is always its accessible name, with ", Fixed" (`copy.fixed`) added for a fixed table. A

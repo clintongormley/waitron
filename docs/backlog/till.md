@@ -1580,8 +1580,7 @@ grey filled for a joined table's parts. Only the square changes placement; a pla
 selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
 Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and
 [a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
-handles belong to A672. (2026-10-16, A672: those corner handles are now built; the A672 entry is
-deleted.) The current contract is in
+handles belong to A672. (2026-10-16: A672 built those corner handles.) The current contract is in
 [design-system.md](../developers/design-system.md#departments-and-zones).
 
 

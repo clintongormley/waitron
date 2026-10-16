@@ -365,7 +365,7 @@ export class WtFloorPlanCanvas extends LitElement {
         left: 0;
       }
 
-      /* The drag listens on the window, so the pointer leaves the dot while the arrow should stay. */
+      /* The drag listens on the window, so the pointer leaves the dot or corner while the arrow should stay. */
       .viewport[data-resizing] * {
         cursor: inherit !important;
       }
@@ -684,7 +684,7 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   /** Outside the table's button, so a round table's clip never cuts it. Always below, past a
-   *  selected table's bottom dot: the grid runs `gridExtent`'s margin past the lowest table. */
+   *  selected table's bottom handles: the grid runs `gridExtent`'s margin past the lowest table. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
     const dot =
@@ -703,7 +703,7 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
-  /** The frame has the table's box and turn, so the arrow and the dots turn with the table. */
+  /** The frame has the table's box and turn, so the arrow, the dots and the corners turn with the table. */
   #renderHandles(
     t: PlanCanvasTable,
     p: PlanPlacement,
@@ -744,7 +744,7 @@ export class WtFloorPlanCanvas extends LitElement {
     </div>`;
   }
 
-  /** Drawn before the table's button, so the button is above them; the dots are drawn after it. */
+  /** Drawn before the table's button, so the button is above them; the dots and corners are drawn after it. */
   #renderHitAreas(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     return html`<div class="frame" aria-hidden="true" style=${this.#frameStyle(p)}>
       ${sidesWithDots(t).map(
@@ -785,7 +785,7 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
-  /** The table whose size badge shows: a dot drag's, else the selected table's after a keyboard
+  /** The table whose size badge shows: a dot or corner drag's, else the selected table's after a keyboard
    *  resize. */
   #badged(): string | null {
     if (this.resizing !== null) return this.resizing.key;

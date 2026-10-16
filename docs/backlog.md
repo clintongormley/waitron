@@ -2256,6 +2256,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
   [Detail](backlog/till.md#loose-ends-left-by-a466-a429-slice-2--a502-part-3)
 
+- **Loose ends left by A672.**
+  - No key moves a floor plan table's top or left side or a corner. Shift with the arrow keys
+    moves only its right and bottom sides.
+  - Turning a floor plan table by key walks it away from the plan's top-left edge. Each press
+    steps a table that would poke past the edge back in from where the last press left it, and
+    turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to
+    (2, 2). Part of the owner question in "A turned floor plan table narrower than its unturned box
+    stops short of the plan's left or top edge".
+
+  [Detail](backlog/till.md#loose-ends-left-by-a672)
+
 - **Loose ends left by A718.**
   - `wt-floor-plan-preview` has no product user. It remains in `packages/ui/demo/main.ts`, with
     its token and its row in `docs/developers/design-system.md`. Retire it, or record why it is
@@ -2270,17 +2281,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     light-theme screenshot of Departments and zones. Not known whether it predates A718.
 
   [Detail](backlog/till.md#loose-ends-left-by-a718)
-
-- **Loose ends left by A672.**
-  - No key moves a floor plan table's top or left side or a corner. Shift with the arrow keys
-    moves only its right and bottom sides.
-  - Turning a floor plan table by key walks it away from the plan's top-left edge. Each press
-    steps a table that would poke past the edge back in from where the last press left it, and
-    turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to
-    (2, 2). Part of the owner question in "A turned floor plan table narrower than its unturned box
-    stops short of the plan's left or top edge".
-
-  [Detail](backlog/till.md#loose-ends-left-by-a672)
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
