@@ -1092,6 +1092,32 @@ describe("changing a week through the route", () => {
       refusal("staffing.invalid", { field: "week" }),
     );
   });
+  it("refuses a non-object or malformed body as the body, as the staff-role routes do", async () => {
+    const r = await routed();
+    for (const body of ["x", 1, true, [], ["x"], null]) {
+      await answers(
+        await r.call("POST", `${root}/change-week`, r.manager, body),
+        400,
+        refusal("management.request_invalid", { field: "body" }),
+      );
+    }
+    for (const body of [undefined, "", "{"]) {
+      await answers(
+        await r.app.request(`${root}/change-week`, {
+          method: "POST",
+          headers: { cookie: r.manager, "content-type": "application/json" },
+          body,
+        }),
+        400,
+        refusal("management.request_invalid", { field: "body" }),
+      );
+    }
+    await answers(
+      await r.call("POST", `${root}/change-week`, r.manager, { week: "2026-11-30", extra: true }),
+      400,
+      refusal("management.request_invalid", { field: "extra" }),
+    );
+  });
   it("copies only the route's location, returning the new version and pending swap list", async () => {
     const r = await routed(),
       role = await r.create("Waiter");
