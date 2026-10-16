@@ -1,9 +1,11 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { CARD_CONTRACTS, GRID_MAX_COLUMNS, SALE_CRITICAL_CARDS } from "./card-contract.js";
-import { CARD_TYPES, FORM_FACTORS } from "./canvas.js";
+import { CARD_TYPES } from "./canvas.js";
+import { FORM_FACTORS } from "./device-types.js";
 import { validateThemeOverride } from "./theme.js";
-import type { CardInstance, CardType, FormFactor, CanvasDef, TabDef } from "./canvas.js";
+import type { CardInstance, CardType, CanvasDef, TabDef } from "./canvas.js";
+import type { FormFactor } from "./device-types.js";
 
 export const MAX_TAB_TITLE_LENGTH = 60;
 

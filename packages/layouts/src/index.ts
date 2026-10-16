@@ -13,26 +13,23 @@ export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
 export {
   FORM_FACTORS,
-  CARD_TYPES,
   CAPABILITY_FLAGS,
   NAVIGATION_SCREENS,
   PROFILE_ACTIONS,
   PROFILE_SCREENS,
   kindOfFormFactor,
-} from "./canvas.js";
+} from "./device-types.js";
+export { CARD_TYPES } from "./canvas.js";
 export type {
   FormFactor,
   DeviceKind,
-  CardType,
   CapabilityFlag,
   NavigationScreen,
   ProfileAction,
   ProfileScreen,
-  CardInstance,
-  TabDef,
-  ThemeOverride,
-  CanvasDef,
-} from "./canvas.js";
+} from "./device-types.js";
+export type { CardType, CardInstance, TabDef, CanvasDef } from "./canvas.js";
+export type { ThemeOverride } from "./theme.js";
 export { CARD_CONTRACTS, SALE_CRITICAL_CARDS, GRID_MAX_COLUMNS } from "./card-contract.js";
 export type { CardContract } from "./card-contract.js";
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";

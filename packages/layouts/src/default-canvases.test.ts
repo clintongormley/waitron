@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORM_FACTORS } from "./canvas.js";
+import { FORM_FACTORS } from "./device-types.js";
 import { validateCanvas } from "./validate-canvas.js";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
 

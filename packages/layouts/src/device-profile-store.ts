@@ -17,8 +17,8 @@ import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { NAVIGATION_SCREENS } from "./canvas.js";
-import type { CapabilityFlag, FormFactor, NavigationScreen } from "./canvas.js";
+import { NAVIGATION_SCREENS } from "./device-types.js";
+import type { CapabilityFlag, FormFactor, NavigationScreen } from "./device-types.js";
 import {
   validateCapabilities,
   validateInactivityTimeout,

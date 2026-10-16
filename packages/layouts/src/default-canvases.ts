@@ -1,4 +1,5 @@
-import type { FormFactor, CanvasDef } from "./canvas.js";
+import type { FormFactor } from "./device-types.js";
+import type { CanvasDef } from "./canvas.js";
 
 /**
  * What `getCanvasForFormFactor` returns when no canvas of that form factor is stored. Spans are

@@ -30,9 +30,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
 import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
-// Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
-// `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
-// wire, rendered defensively against `CAPABILITY_FLAGS`.
+// A local mirror keeps the layouts barrel's database imports out of the browser bundle.
 import {
   CAPABILITY_FLAGS,
   FORM_FACTORS,
@@ -43,7 +41,7 @@ import {
   sharedDisplayMay,
   type CapabilityFlag,
   type FormFactor,
-} from "./canvas-editor/card-contracts.js";
+} from "../device-profile-types.js";
 import { toggleMembership } from "../array-utils.js";
 import type {
   Canvas,

@@ -1,4 +1,5 @@
-import type { CapabilityFlag, CardType } from "./canvas.js";
+import type { CapabilityFlag } from "./device-types.js";
+import type { CardType } from "./canvas.js";
 import type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 
 export const GRID_MAX_COLUMNS = 24;

@@ -12,7 +12,8 @@ import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { asc, eq, sql } from "drizzle-orm";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
-import type { FormFactor, CanvasDef } from "./canvas.js";
+import type { FormFactor } from "./device-types.js";
+import type { CanvasDef } from "./canvas.js";
 import { validateCanvas } from "./validate-canvas.js";
 
 /**

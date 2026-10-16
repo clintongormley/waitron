@@ -8,7 +8,7 @@ import {
   type FormFactor,
   type NavigationScreen,
   type ProfileAction,
-} from "./canvas.js";
+} from "./device-types.js";
 
 /** A `kds` profile is a shared display: nobody signs in on it. */
 export function isSharedDisplay(formFactor: FormFactor): boolean {

@@ -5,14 +5,14 @@ import {
   GRID_MAX_COLUMNS as SRC_MAX,
   SALE_CRITICAL_CARDS as SRC_SALE,
 } from "@waitron/layouts/src/card-contract.js";
+import { CARD_TYPES as SRC_TYPES } from "@waitron/layouts/src/canvas.js";
 import {
-  CARD_TYPES as SRC_TYPES,
   CAPABILITY_FLAGS as SRC_CAPS,
   FORM_FACTORS as SRC_FF,
   NAVIGATION_SCREENS as SRC_NAVIGATION,
   PROFILE_ACTIONS as SRC_ACTIONS,
   PROFILE_SCREENS as SRC_SCREENS,
-} from "@waitron/layouts/src/canvas.js";
+} from "@waitron/layouts/src/device-types.js";
 import {
   MAX_TAB_TITLE_LENGTH as SRC_TITLE,
   SELLING_FORM_FACTORS as SRC_SELLING,
