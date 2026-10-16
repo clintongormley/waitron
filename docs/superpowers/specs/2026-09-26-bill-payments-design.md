@@ -775,6 +775,10 @@ A refund never runs on an invoiced bill through this path (§6, "after the invoi
 **Outside Task 14:** the reconciler's reversal, and any future post-invoice refund route, still go
 through `reverseViaStripe` as it is; a backlog item records that they should take this rule.
 
+**2026-10-16 — post-invoice extension.** [A737 Part 2](../plans/2026-10-15-a737-post-invoice-refund.md)
+adds a separate durable `tender_refunds` path for payment-only returns after an invoice. The
+reconciler reversal remains the open caller of the older reversal path.
+
 ### 6a. A reduction on a bill that already has contributions
 
 A €60.00 bill with €50.00 contributed takes a €20.00 comp; it would total €40.00 with €50.00
@@ -974,6 +978,13 @@ its code.
   bill whose invoice is not yet issued is not a sale. The cash-up changes (§9a).
 
 ### 9a. The cash-up counts money on the day it moves (owner, 2026-09-26: in Task 14)
+
+**2026-10-16 — A737 Part 2 extension.** The [post-invoice refund plan](../plans/2026-10-15-a737-post-invoice-refund.md#task-2-include-completed-money-returns-in-operational-reporting)
+adds completed `tender_refunds` as a fourth cash-up source: subtract `applied_amount + tip_amount`
+and subtract `tip_amount` from the tip total, at `completed_at`, under the refund's recorded
+source/device and node. Provider refund evidence is not another cash-up source.
+The original invoice's VAT and counts and earlier frozen closes
+stay unchanged. The three-source rule below describes Task 14's earlier pre-invoice scope.
 
 **Why it cannot wait.** The cash-up (`computeCashUp`, `packages/reporting/src/cash-up.ts`) counts
 only `tenders` joined to `sales`, by `tenders.settled_at` within the business day, grouped by the

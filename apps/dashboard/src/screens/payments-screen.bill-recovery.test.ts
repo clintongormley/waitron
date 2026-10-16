@@ -52,6 +52,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listReaderHolders: vi.fn().mockResolvedValue([]),
     listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
+    listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([REFUND]),
     resolveStuckBillPayment: vi.fn().mockResolvedValue({ outcome: "not_charged" }),
     resolveStuckBillRefund: vi.fn().mockResolvedValue({ outcome: "completed" }),
@@ -121,6 +122,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const listStuckBillPayments = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([PAYMENT]);
     const api = stubApi({
       listStuckBillPayments,
+      listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
       listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     });
     const el = await mount(api);
@@ -133,9 +135,11 @@ describe("bill payment recovery on the Payments screen", () => {
   it("shows a shared load failure once and lets a deliberate refresh use the active client", async () => {
     const api = stubApi({
       listStuckBillPayments: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
       listStuckBillRefunds: vi.fn().mockRejectedValue({ code: "connection.failed" }),
       background: {
         listStuckBillPayments: vi.fn().mockResolvedValue([]),
+        listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
         listStuckBillRefunds: vi.fn().mockResolvedValue([]),
       } as unknown as DashboardApi,
     });
@@ -211,6 +215,7 @@ describe("bill payment recovery on the Payments screen", () => {
 
   it("checks a refund with its own route and reports the completed outcome", async () => {
     const api = stubApi({
+      listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
       listStuckBillRefunds: vi.fn().mockResolvedValueOnce([REFUND]).mockResolvedValue([]),
     });
     const el = await mount(api);
@@ -546,6 +551,7 @@ describe("bill payment recovery on the Payments screen", () => {
     const el = await mount(
       stubApi({
         listStuckBillPayments: vi.fn().mockResolvedValue([{ ...PAYMENT, provider: null }]),
+        listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
         listStuckBillRefunds: vi.fn().mockResolvedValue([{ ...REFUND, sentAt: null }]),
       }),
     );

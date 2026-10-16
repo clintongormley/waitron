@@ -1968,12 +1968,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
-  Add Refund to the transaction receipt for returning a correct charge, without changing its
-  invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
-  [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
-  [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
-
 - **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
   screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
   firing and the pass, is planned from the spec once A773-1 lands. **Revised 2026-10-17** (owner):
@@ -2644,7 +2638,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Counter design and implementation remain A738–A740; the handheld, kitchen screen and pass need
-  their own designs. A737 Part 2 retains the post-invoice Refund work. The screen designer was
+  their own designs. A737 Part 2 adds the separate
+  durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
@@ -3322,9 +3317,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Product decision to take before production:** The orphan drift gate holds a customer's money
   pending a human, unbounded — nothing re-sweeps a closed period.
 
-- **The card refund path records only after the provider call, with a fresh key each time.** **Next
-  action:** give the reconciler's reversal, and any post-invoice refund route when one is built, the
-  same durable-attempt rule. Left open by the service, ordering and billing plan.
+- **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
+  action:** give the reconciler's reversal the same durable-attempt rule.
+  Post-invoice returns use the durable `tender_refunds` path (A737 Part 2). The reversal remains
+  open from the service, ordering and billing plan.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
 - **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**

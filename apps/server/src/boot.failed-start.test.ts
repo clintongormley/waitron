@@ -29,6 +29,7 @@ import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
+import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { freePorts } from "./testing/free-ports.js";
 
 /**
@@ -81,6 +82,11 @@ vi.mock("./append-only-watch.js", async (importOriginal) => {
   return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
 });
 
+vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./tender-refund-recovery.js")>();
+  return { ...actual, runTenderRefundRecoveryLoop: vi.fn(actual.runTenderRefundRecoveryLoop) };
+});
+
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -121,6 +127,7 @@ afterEach(async () => {
   vi.mocked(runCloudSnapshotLoop).mockClear();
   vi.mocked(startMenuActivation).mockClear();
   vi.mocked(startAppendOnlyWatch).mockClear();
+  vi.mocked(runTenderRefundRecoveryLoop).mockReset();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -925,6 +932,146 @@ describe("closing a started server", () => {
       liveEventsClose.mockRestore();
       for (const socket of open) socket.destroy();
       await new Promise<void>((resolve) => relay.close(() => resolve()));
+    }
+  }, 60_000);
+});
+
+describe("settled-tender recovery boot lifetime", () => {
+  it("logs the unresolved refund ids when recovery reaches its shutdown limit", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    const refundId = "66666666-6666-4666-8666-666666666666";
+    const lines: string[] = [];
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation((line) => {
+      lines.push(String(line));
+      return true;
+    });
+    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce(
+      (options) =>
+        new Promise<void>((resolve) => {
+          options.signal.addEventListener(
+            "abort",
+            () => {
+              options.onShutdownTimeout?.([refundId]);
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer(env);
+      await listening(Number(env.WAITRON_HTTP_PORT));
+      await server.close();
+      const entries = lines
+        .flatMap((line) => line.trim().split("\n"))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(entries.filter((entry) => entry.event === "tender_refund.shutdown_pending")).toEqual([
+        {
+          at: expect.any(String),
+          level: "warn",
+          event: "tender_refund.shutdown_pending",
+          refundIds: [refundId],
+        },
+      ]);
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      await server?.close();
+      stdout.mockRestore();
+    }
+  }, 60_000);
+
+  it("aborts and awaits recovery when a later trading-start step fails", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }), {
+      landing: true,
+    });
+    const failure = new Error("landing interfaces unavailable");
+    failLandingAfterMdns(failure);
+    let stopped = false;
+    let signal: AbortSignal | undefined;
+    let release = () => {};
+    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce((options) => {
+      signal = options.signal;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+        options.signal.addEventListener(
+          "abort",
+          () => {
+            stopped = true;
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    });
+    const timeout = new AbortController();
+    const deadline = delay(10_000, "recovery was not stopped", { signal: timeout.signal }).catch(
+      () => "deadline cancelled",
+    );
+    const result = startServer(env).then(
+      (server) => server,
+      (error: unknown) => error,
+    );
+    try {
+      expect(await Promise.race([result, deadline])).toBe(failure);
+      expect(runTenderRefundRecoveryLoop).toHaveBeenCalledOnce();
+      expect(signal?.aborted).toBe(true);
+      expect(stopped).toBe(true);
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      timeout.abort();
+      release();
+      const outcome = await result;
+      if (isStartedServer(outcome)) await outcome.close();
+    }
+  }, 60_000);
+  it("stops recovery on an ordinary server close", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    let stopped = false;
+    let signal: AbortSignal | undefined;
+    let release = () => {};
+    let abort!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      abort = resolve;
+    });
+    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce((options) => {
+      signal = options.signal;
+      return new Promise<void>((resolve) => {
+        release = () => {
+          stopped = true;
+          resolve();
+        };
+        options.signal.addEventListener("abort", abort, { once: true });
+      });
+    });
+    const server = await startServer(env);
+    let closing: Promise<void> | undefined;
+    const deadline = new AbortController();
+    try {
+      await listening(Number(env.WAITRON_HTTP_PORT));
+      expect(runTenderRefundRecoveryLoop).toHaveBeenCalledOnce();
+      closing = server.close();
+      await Promise.race([aborted, closing]);
+      expect(signal?.aborted).toBe(true);
+      expect(
+        await Promise.race([
+          closing.then(() => "closed"),
+          delay(50, "waiting", { signal: deadline.signal }),
+        ]),
+      ).toBe("waiting");
+      expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
+      release();
+      await closing;
+      expect(stopped).toBe(true);
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      deadline.abort();
+      release();
+      if (closing !== undefined) await closing;
+      else await server.close();
     }
   }, 60_000);
 });

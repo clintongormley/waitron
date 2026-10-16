@@ -114,6 +114,18 @@ function predecessor(root: string) {
   );
 }
 
+function predecessorChangeSources(db: Database) {
+  const tables = new Set(
+    db
+      .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
+      .map(({ name }) => name),
+  );
+  return [
+    ...ALL_MODULES.flatMap((module) => module.changes ?? []),
+    { table: "canvases", type: "canvases" },
+  ].filter((source) => tables.has(source.table));
+}
+
 function report(name: string, data: unknown): void {
   const directory = process.env.WAITRON_CANVAS_UPGRADE_RECEIPTS;
   if (directory === undefined) return;
@@ -286,10 +298,7 @@ it("refuses the populated predecessor for reset and retains every row after roll
         opened.venue.all(sql`select * from ${sql.identifier(child)}`).length,
         child,
       ).toBeGreaterThan(0);
-    await installChangeFeed(opened.venue, [
-      ...ALL_MODULES.flatMap((module) => module.changes ?? []),
-      { table: "canvases", type: "canvases" },
-    ]);
+    await installChangeFeed(opened.venue, predecessorChangeSources(opened.venue));
     before = snapshot(opened.venue);
     expect(before.order_drafts!.length).toBeGreaterThan(0);
     expect(before.order_kitchen_notes!.length).toBeGreaterThan(0);
@@ -341,10 +350,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     await first.venue
       .insert(deviceProfileAdmissionRoles)
       .values({ deviceProfileId: profile!.id, role: "staff" });
-    await installChangeFeed(first.venue, [
-      ...ALL_MODULES.flatMap((module) => module.changes ?? []),
-      { table: "canvases", type: "canvases" },
-    ]);
+    await installChangeFeed(first.venue, predecessorChangeSources(first.venue));
     before = snapshot(first.venue);
   } finally {
     await first.close();
@@ -360,12 +366,13 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     const oldJournal = before![journal]! as { created_at: number }[];
     const oldTimes = new Set(oldJournal.map((row) => row.created_at));
     const newJournal = actual[journal]! as { created_at: number }[];
-    expect(newJournal).toHaveLength(oldJournal.length + 2);
+    expect(newJournal).toHaveLength(oldJournal.length + 6);
     expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
     const retained: Record<string, unknown[]> = {
       ...before!,
       [journal]: newJournal,
       device_profile_admission_roles: [],
+      tender_refunds: [],
     };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>

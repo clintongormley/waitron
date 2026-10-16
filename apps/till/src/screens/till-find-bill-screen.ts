@@ -41,7 +41,7 @@ type View = {
 const emptyView = (): View => ({ page: 0, rows: [], total: 0, loading: false, error: "" });
 const states = ["unpaid", "held", "part-paid", "paid-not-handed-over"] as const;
 const methods = ["cash", "card", "voucher", "transfer", "other"] as const;
-const types = ["sale", "full-invoice", "correction"] as const;
+const types = ["sale", "full-invoice", "correction", "refund"] as const;
 const presets = [
   "today",
   "yesterday",

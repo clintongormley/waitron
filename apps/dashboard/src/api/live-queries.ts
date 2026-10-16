@@ -159,6 +159,7 @@ export const QUERY_DEPENDENCIES = {
   // The route reads `tenant_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   listStuckPayments: ["payments", "working_orders", "devices"],
+  listStuckTenderRefunds: ["tender_refunds", "sales", "invoice_series"],
   listStuckBillPayments: ["bill_payments", "payments", "working_orders", "devices"],
   listStuckBillRefunds: [
     "bill_payment_refunds",
@@ -177,6 +178,7 @@ export const QUERY_DEPENDENCIES = {
     "sale_substitutions",
     "sale_lines",
     "tenders",
+    "tender_refunds",
     "working_orders",
     "dining_tables",
     "floor_today_tables",
@@ -214,6 +216,7 @@ export const QUERY_DEPENDENCIES = {
     "sales",
     "sale_voids",
     "tenders",
+    "tender_refunds",
     "sale_settlements",
     "location_business_day_settings",
     "location_day_cutover_changes",

@@ -297,6 +297,25 @@ stamp's own clock is guarded by the cases under "a holder whose test fakes the c
 whatever opens it, and weaker than their name: they fake the clock only the way
 `vi.useFakeTimers()` does with its default options, and only after `@waitron/store` has loaded.
 
+## A database test keeps the watchdog's monotonic clock real
+
+2026-10-17: A769 ([#1815](https://github.com/clintongormley/waitron/pull/1815)) now captures the
+watchdog's clock and interval before a test can fake them. The experiment below records the
+previous behavior; see [the current mechanism](#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
+
+When you fake time beside an open venue store, name only the timer APIs your test needs. For a
+refund response deadline, use `vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })`.
+The venue watchdog runs in a separate worker and compares its real monotonic clock with the
+heartbeat's `process.hrtime.bigint()`; faking that clock makes the heartbeat look stale.
+
+Measured 2026-10-16 on Node v26.11.1, macOS and Vitest 4.1.11 in an installed disposable checkout:
+a `useVenueDb` case enabled default fake timers and awaited a real
+`node:timers/promises.setTimeout(2500)`. Its monotonic reading changed from `3990547045443291`
+to `0`; the watchdog logged `venue.holder_frozen` and killed the worker before a test completed.
+The same case faking only Date, setTimeout and clearTimeout passed, with the monotonic reading
+continuing above its starting value. The two timer setups in
+`apps/server/src/tender-refunds.test.ts` now keep the real clock; their earlier assertions remain.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is
@@ -2028,3 +2047,38 @@ Clicking its first cell passed the same exact bill/transaction event assertions 
 pnpm --filter @waitron/till exec vitest run src/screens/till-find-bill-screen.test.ts \
   -t 'row activation at'
 ```
+
+## Observe an old refund while its resolver still owns it
+
+Resolver ownership prevents another provider operation. It does not settle the refund or remove
+its age warning. Test those two effects separately.
+
+A737 Part 2's first whole-branch review found the unresolved-warning path also checking ownership.
+The held/released control in `apps/server/src/tender-refunds.test.ts`, "warns after an hour while
+resolver ownership is live", moves the trusted clock from 59 minutes to one hour plus 1 ms.
+Before the fix, the held case recorded no incident and failed while the released control passed.
+After the warning gate changed, both cases passed; the held case still made no provider lookup or
+send and retained its pending row. A later pass checks that the warning is recorded once. This
+uses a controlled resolver claim and simulated age, not a real hour-long network call.
+
+
+## Test a fresh refusal as well as a lost refund answer
+
+A durable request keeps its identity while an earlier result is unknown. A first amount refusal
+also needs an edit-and-resubmit case: retaining its journal can otherwise disable the very amount
+the operator must correct.
+
+A737 Part 2's second review reproduced the disabled native input after a first
+`tender.refund_exceeds_payment` response. The application case "a definitive first amount refusal"
+now edits that input, sends a corrected request and checks a new submission ID. State cases pair
+fresh and PIN-fallback refusals with same-session and reloaded unknown outcomes; the unknown cases
+retain their original body and ID. Additional cases keep a replacement request or a learned
+pending refund ID when an older refusal arrives. The server's reservation cases pair rejected
+amounts with an empty refund table; separate cases replay existing submissions.
+
+The follow-up interleaving control starts another session's unanswered submission at the entry to
+`prepare`, before it reads the journal. The local request reuses that submission ID. Its amount
+refusal must retain the other session's journal; the paired case with no intervening submission
+still releases a fresh refusal. The initial separate freshness read failed that retained-journal
+assertion. Marking creation inside `prepare` passed both cases. This checks that scheduling point,
+not atomic storage across browser tabs.

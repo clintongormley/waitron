@@ -312,3 +312,27 @@ it("says how many Translate all suggestions wait, and how many could not be done
     "Traducciones listas: 1050 sugerencias pendientes de revisar. 88 no se han podido hacer esta vez.",
   );
 });
+
+it("explains conflicting settled-tender evidence without implying a fiscal correction", () => {
+  expect(
+    alertMessage("payment.tender_refund_outcome_conflict", { amount: "2.00" }, "en"),
+  ).toContain("refund of €2.00 conflicts");
+  expect(
+    alertMessage("payment.tender_refund_outcome_conflict", { amount: "2.00" }, "es"),
+  ).toContain("devolución de 2,00\u00a0€ contradice");
+});
+
+it("explains an unresolved post-invoice return without claiming the invoice is blocked", () => {
+  expect(alertMessage("payment.tender_refund_unresolved", { amount: "2.00" }, "en")).toContain(
+    "refund of €2.00 has been waiting for over an hour",
+  );
+  expect(alertMessage("payment.tender_refund_unresolved", { amount: "2.00" }, "en")).toContain(
+    "original invoice is unchanged",
+  );
+  expect(alertMessage("payment.tender_refund_unresolved", { amount: "2.00" }, "es")).toContain(
+    "devolución de 2,00\u00a0€ lleva más de una hora",
+  );
+  expect(alertMessage("payment.tender_refund_unresolved", { amount: "2.00" }, "es")).toContain(
+    "factura original no cambia",
+  );
+});

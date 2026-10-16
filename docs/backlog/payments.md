@@ -13,17 +13,20 @@ their full text.
   changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
   taken through a Stripe webhook.
 
-## The card refund path records only after the provider call, with a fresh key each time
+<a id="the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time"></a>
 
-- **The card refund path records only after the provider call, with a fresh key each time.**
+## The reconciler's card reversal records only after the provider call, with a fresh key each time
+
+- **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
   `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()`
   idempotency key on every call and writes `payment_refunds` only after the call returns, so a
   crash between the two leaves no record, and a repeat would send a new key. SumUp's refund sends
   no key at all. Its only product caller is the reconciler's reversal of an abandoned order's
   capture (`packages/payments-stripe/src/reconciler.ts`); refunding a bill's card payment before
   its invoice goes through the separate durable path of Task 14 (design §6b). **Next action:**
-  give the reconciler's reversal, and any post-invoice refund route when one is built, the same
-  durable-attempt rule.
+  give the reconciler's reversal the same durable-attempt rule.
+  Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
+  the request before sending, keeps `tr_<refundId>` on retry and recovers pending outcomes.
 
 ## A pending card refund does not refuse joining or unjoining tables, though the bill payments design says it does
 

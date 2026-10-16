@@ -1,3 +1,4 @@
+import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
 import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
 export type { AllergenEntry };
 import type { BusinessDayClock, DepartmentReceiptWrite } from "@waitron/shared";
@@ -4251,6 +4252,28 @@ export class DashboardApi {
     return this.#request<StuckPaymentResolution>(
       `/management-api/payments/stuck/${paymentId}/resolve`,
       "POST",
+    );
+  }
+
+  listStuckTenderRefunds(): Promise<StuckTenderRefundRow[]> {
+    return this.#request("/management-api/payments/tender-refunds", "GET");
+  }
+
+  resolveStuckTenderRefund(id: string): Promise<{ outcome: TenderRefundView["state"] }> {
+    return this.#request(
+      `/management-api/payments/tender-refunds/${encodeURIComponent(id)}/resolve`,
+      "POST",
+    );
+  }
+
+  attestStuckTenderRefund(
+    id: string,
+    body: { outcome: "completed" | "failed"; note: string; pin: string },
+  ): Promise<{ outcome: TenderRefundView["state"] }> {
+    return this.#request(
+      `/management-api/payments/tender-refunds/${encodeURIComponent(id)}/attest`,
+      "POST",
+      body,
     );
   }
 

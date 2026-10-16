@@ -66,6 +66,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
       availableReaders: async () => available,
       listStuckPayments: async () => [],
       listStuckBillPayments: async () => [],
+      listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: async () => [],
       renameReader: async () => {},
       unpairReader: async () => {},

@@ -1821,7 +1821,7 @@ are.
 
 Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
 ☰, with Back to the counter (board 4). [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778) covers the page, lists and receipt printing; the
-post-invoice Refund action remains Part 2. The approved page contract is:
+post-invoice Refund action belongs to Part 2. The approved page contract is:
 
 - **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
   total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
@@ -1840,6 +1840,11 @@ post-invoice Refund action remains Part 2. The approved page contract is:
   into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
   plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
   table keeps loading everything.
+
+**2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
+with the original invoice reference, Reprint and access to the original invoice. Refund is offered
+from the original invoice while supported money remains. The durable attempt and recovery contract
+is in the [Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ### A pending card payment does not stop a bill moving (table actions plan P19)
 
@@ -1877,20 +1882,6 @@ station and shows only with two or more stations. "Modifiers" under a line is th
 the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading. After every sale
 the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
 order off a short screen.
-
-### A737 Part 2. Refund a paid sale after its invoice
-
-Add Refund to the transaction receipt for returning money when the original charge was right.
-The invoice keeps its original fiscal record. A wrong charge still needs the separate correction
-workflow and is outside this item.
-
-Before calling a card provider, store the attempt with one stable idempotency key. Resume an
-interrupted attempt as the [bill-payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)
-§6b describes. Keep the existing permission and manager-PIN checks, manual-terminal confirmation
-and cash-drawer rule. Close only the post-invoice half of the
-[durable-refund follow-up](payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time);
-the reconciler's reversal remains separate. Follow the
-[Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ### A738. The counter screen: fewer distractions
 

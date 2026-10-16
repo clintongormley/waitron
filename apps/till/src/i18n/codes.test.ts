@@ -3,6 +3,19 @@ import { setLocale } from "./t.js";
 import { codeMessage } from "./codes.js";
 
 it.each([
+  "tender.refund_exceeds_payment",
+  "tender.refund_unavailable",
+  "tender.refund_in_progress",
+  "tender.refund_not_found",
+  "tender.manual_refund_pin_required",
+])("explains settled-tender refusal %s in English and Spanish", (code) => {
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage(code, locale)).not.toContain(code);
+  }
+});
+
+it.each([
   [
     "party.not_found",
     "The table order could not be found.",

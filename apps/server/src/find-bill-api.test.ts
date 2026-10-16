@@ -320,7 +320,7 @@ describe("Find a bill list routes", () => {
     ["/api/bills?staffId=bad", "staffId"],
     ["/api/bills?q=x&q=y", "q"],
     ["/api/transactions?zoneId=bad", "zoneId"],
-    ["/api/transactions?type=refund", "type"],
+    ["/api/transactions?type=credit-note", "type"],
     ["/api/transactions?preset=custom&from=2026-10-15&to=2026-10-14", "to"],
   ])("rejects invalid list query %s", async (path, field) => {
     expect(await get(path)).toMatchObject({
