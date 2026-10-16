@@ -610,6 +610,13 @@ declare module "@waitron/shared" {
       amount: string;
       errorCode: string;
     };
+    "payment.tender_refund_unresolved": {
+      refundId: string;
+      saleId: string;
+      tenderId: string;
+      amount: string;
+      pendingSince: string;
+    };
     "payment.tender_refund_outcome_conflict": {
       refundId: string;
       saleId: string;

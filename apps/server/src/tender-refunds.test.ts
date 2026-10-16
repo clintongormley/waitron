@@ -43,7 +43,12 @@ import {
   refundSettledTender,
   type TenderRefundDeps,
 } from "./tender-refunds.js";
-import { resumeTenderRefund, tenderRefundIsLive } from "./tender-refund-sends.js";
+import {
+  claimTenderRefund,
+  resumeTenderRefund,
+  tenderRefundIsLive,
+} from "./tender-refund-sends.js";
+import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
 import type { DeviceRequestConfig } from "./till-config.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
@@ -1326,4 +1331,405 @@ it("refuses an unknown settled-tender refund by its own domain code", async () =
   await expect(resumeTenderRefund(deps, randomUUID(), "retry")).rejects.toMatchObject({
     code: "tender.refund_not_found",
   });
+});
+
+describe("settled-tender refund scheduled recovery", () => {
+  function at(offset: number) {
+    deps.clock = createTrustedClock({
+      deviceId: cfg.origin.deviceId,
+      monotonic: () => 0,
+      wallClock: () => Date.parse(AT) + offset,
+      degradedAfterSeconds: 300,
+    });
+  }
+  async function abandoned(sent = true) {
+    const { t, provider } = await connected();
+    const refund = await run(t);
+    if (sent)
+      await store.db
+        .update(tenderRefunds)
+        .set({ sentAt: AT, sendCount: 1 })
+        .where(eq(tenderRefunds.id, refund.id));
+    return { t, provider, refund };
+  }
+  it("returns no scheduled work when only completed cash returns exist", async () => {
+    await run(await target());
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 0, nextDueAt: null });
+    expect(await store.db.select().from(drawerOpens)).toHaveLength(1);
+  });
+  it("fails an abandoned unsent intent without contacting a provider or opening a drawer", async () => {
+    const { refund, provider } = await abandoned(false);
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 0, nextDueAt: null });
+    expect(await row(refund.id)).toMatchObject({
+      state: "failed",
+      failedAt: AT,
+      sentAt: null,
+      sendCount: 0,
+    });
+    expect(provider.lookupCalls).toEqual([]);
+    expect(provider.refundCalls).toEqual([]);
+    expect(await store.db.select().from(drawerOpens)).toEqual([]);
+    expect(await store.db.select().from(attendanceOperationFacts)).toMatchObject([
+      { key: refund.id, outcome: "refused" },
+    ]);
+  });
+  it("recovers provider acceptance after a lost answer, recording the return once without resending", async () => {
+    const { t, provider } = await connected();
+    provider.scriptNextRefund({ made: "completed", answer: "throw" });
+    const refund = await refundSettledTender(deps, cfg, t.saleId, request(t), operator());
+    expect(refund.state).toBe("pending");
+    const before = await originalFacts();
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 0, nextDueAt: null });
+    expect(await row(refund.id)).toMatchObject({
+      state: "completed",
+      completedAt: AT,
+      lastLookupAt: AT,
+      nextRetryAt: null,
+    });
+    expect(provider.refundCalls).toHaveLength(1);
+    expect(provider.lookupCalls).toHaveLength(1);
+    expect(await store.db.select().from(paymentRefunds)).toMatchObject([
+      { amount: 200, state: "succeeded" },
+    ]);
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 0, nextDueAt: null });
+    expect(await store.db.select().from(paymentRefunds)).toHaveLength(1);
+    expect(await originalFacts()).toEqual(before);
+  });
+  it.each(["none", "ambiguous", "unreachable"] as const)(
+    "retains a sent reservation on %s evidence and persists the next lookup",
+    async (kind) => {
+      const { refund, provider } = await abandoned();
+      vi.spyOn(provider, "lookupRefund").mockResolvedValue(
+        kind === "ambiguous" ? { kind, candidates: 2 } : { kind },
+      );
+      expect(await recoverTenderRefunds(deps)).toEqual({
+        pending: 1,
+        nextDueAt: new Date("2026-10-16T12:01:00.000Z"),
+      });
+      expect(await row(refund.id)).toMatchObject({
+        state: "pending",
+        lastLookupAt: AT,
+        nextRetryAt: "2026-10-16T12:01:00.000Z",
+        sendCount: 1,
+      });
+      await recoverTenderRefunds({ ...deps });
+      expect(provider.lookupRefund).toHaveBeenCalledTimes(1);
+      at(60_000);
+      await recoverTenderRefunds({ ...deps });
+      expect(provider.lookupRefund).toHaveBeenCalledTimes(2);
+      expect(provider.refundCalls).toEqual([]);
+      expect(await store.db.select().from(paymentRefunds)).toEqual([]);
+    },
+  );
+  it.each([
+    [300_000, 75_000],
+    [2_400_000, 600_000],
+    [28_800_000, 1_800_000],
+  ])("backs off an unresolved send aged %s ms by %s ms", async (age, gap) => {
+    const { refund, provider } = await abandoned();
+    vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });
+    at(age);
+    const expected = new Date(Date.parse(AT) + age + gap);
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 1, nextDueAt: expected });
+    expect(await row(refund.id)).toMatchObject({
+      lastLookupAt: new Date(Date.parse(AT) + age).toISOString(),
+      nextRetryAt: expected.toISOString(),
+    });
+    at(age + gap - 1);
+    await recoverTenderRefunds(deps);
+    expect(provider.lookupRefund).toHaveBeenCalledTimes(1);
+    at(age + gap);
+    await recoverTenderRefunds(deps);
+    expect(provider.lookupRefund).toHaveBeenCalledTimes(2);
+  });
+  it("retries after the clock moves behind the persisted lookup time", async () => {
+    const { provider } = await abandoned();
+    vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });
+    await recoverTenderRefunds(deps);
+    at(-1000);
+    await recoverTenderRefunds(deps);
+    expect(provider.lookupRefund).toHaveBeenCalledTimes(2);
+    expect(provider.refundCalls).toEqual([]);
+  });
+  it("processes only 50 due rows in stable id order and schedules the remaining batch immediately", async () => {
+    const ids: string[] = [];
+    const provider = new FakePaymentProvider(store.db);
+    const lookup = vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });
+    for (let i = 0; i < 51; i++) {
+      const t = await target("card", "fake");
+      deps.refundProviderFor = async () => provider;
+      ids.push((await run(t)).id);
+    }
+    await store.db.update(tenderRefunds).set({ sentAt: AT, sendCount: 1 });
+    expect(await recoverTenderRefunds(deps)).toEqual({ pending: 51, nextDueAt: new Date(AT) });
+    expect(lookup.mock.calls.map(([q]) => q.refundId)).toEqual(ids.sort().slice(0, 50));
+    expect(await recoverTenderRefunds(deps)).toEqual({
+      pending: 51,
+      nextDueAt: new Date("2026-10-16T12:01:00.000Z"),
+    });
+    expect(lookup.mock.calls.map(([q]) => q.refundId)).toEqual(ids);
+    expect(provider.refundCalls).toEqual([]);
+  });
+  it("skips a live resolver without starving the next due batch or marking an unsent row failed", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 51; i++) ids.push((await abandoned(false)).refund.id);
+    ids.sort();
+    const releases = ids.slice(0, 50).map((id) => claimTenderRefund(store.db, id));
+    try {
+      expect(await recoverTenderRefunds(deps)).toEqual({ pending: 51, nextDueAt: new Date(AT) });
+      expect(await recoverTenderRefunds(deps)).toEqual({
+        pending: 50,
+        nextDueAt: new Date("2026-10-16T12:01:00.000Z"),
+      });
+      expect(await row(ids[0]!)).toMatchObject({
+        state: "pending",
+        sentAt: null,
+        lastLookupAt: null,
+      });
+      expect(await row(ids[50]!)).toMatchObject({ state: "failed" });
+    } finally {
+      for (const release of releases) release();
+    }
+  });
+  it("raises one unresolved alert after an hour even before the next provider lookup is due", async () => {
+    const { refund, provider } = await abandoned();
+    vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });
+    at(59 * 60_000);
+    expect((await recoverTenderRefunds(deps)).nextDueAt).toEqual(
+      new Date("2026-10-16T13:00:00.001Z"),
+    );
+    expect(await store.db.select().from(incidents)).toEqual([]);
+    at(60 * 60_000 + 1);
+    expect((await recoverTenderRefunds(deps)).nextDueAt).toEqual(
+      new Date("2026-10-16T13:13:45.000Z"),
+    );
+    expect(provider.lookupRefund).toHaveBeenCalledTimes(1);
+    expect(await store.db.select().from(incidents)).toMatchObject([
+      {
+        code: "payment.tender_refund_unresolved",
+        severity: "warning",
+        params: { refundId: refund.id, saleId: refund.saleId, amount: "2.00", pendingSince: AT },
+      },
+    ]);
+    at(90 * 60_000);
+    await recoverTenderRefunds(deps);
+    expect(await store.db.select().from(incidents)).toHaveLength(1);
+    expect(provider.refundCalls).toEqual([]);
+  });
+  it("isolates an evidence-write failure while another due return completes", async () => {
+    const { refund: first } = await abandoned();
+    const { refund: second, provider } = await abandoned();
+    vi.spyOn(provider, "lookupRefund").mockImplementation(async (q) => ({
+      kind: "match",
+      outcome: "completed",
+      providerRefundRef: q.refundId,
+      providerStatus: "succeeded",
+    }));
+    deps.attendance = async (tx, fact) => {
+      if (fact.key === first.id) throw new Error("attendance unavailable");
+      return recordAttendanceFact(tx, fact);
+    };
+    await expect(recoverTenderRefunds(deps)).rejects.toThrow("refund recovery");
+    expect(await row(first.id)).toMatchObject({
+      state: "pending",
+      nextRetryAt: "2026-10-16T12:01:00.000Z",
+    });
+    expect(await row(second.id)).toMatchObject({ state: "completed" });
+    expect(await store.db.select().from(paymentRefunds)).toMatchObject([
+      { providerRefundRef: second.id },
+    ]);
+    expect(provider.refundCalls).toEqual([]);
+  });
+});
+
+it("does not raise an unresolved incident for an old refund settled by this recovery pass", async () => {
+  const { t, provider } = await connected();
+  provider.scriptNextRefund({ made: "completed", answer: "throw" });
+  await refundSettledTender(deps, cfg, t.saleId, request(t), operator());
+  deps.clock = createTrustedClock({
+    deviceId: cfg.origin.deviceId,
+    monotonic: () => 0,
+    wallClock: () => Date.parse(AT) + 3_600_001,
+    degradedAfterSeconds: 300,
+  });
+  expect(await recoverTenderRefunds(deps)).toEqual({ pending: 0, nextDueAt: null });
+  expect(await store.db.select().from(incidents)).toEqual([]);
+});
+
+describe("settled-tender refund recovery loop lifetime", () => {
+  async function pending() {
+    const { t, provider } = await connected();
+    provider.scriptNextRefund({ made: false, answer: LOST });
+    const refund = await refundSettledTender(deps, cfg, t.saleId, request(t), operator());
+    return { provider, refund };
+  }
+  it("recovers at startup and sleeps no more than a minute before discovering new work", async () => {
+    const { provider, refund } = await pending();
+    const control = new AbortController();
+    const sleeps: number[] = [];
+    let offset = 0;
+    deps.clock = createTrustedClock({
+      deviceId: cfg.origin.deviceId,
+      monotonic: () => 0,
+      wallClock: () => Date.parse(AT) + offset,
+      degradedAfterSeconds: 300,
+    });
+    await runTenderRefundRecoveryLoop({
+      ...deps,
+      signal: control.signal,
+      isPrimary: () => true,
+      onError: (error) => {
+        throw error;
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        offset += ms;
+        if (sleeps.length === 2) control.abort();
+      },
+    });
+    expect(provider.lookupCalls).toHaveLength(2);
+    expect(sleeps).toEqual([60_000, 60_000]);
+    expect(await row(refund.id)).toMatchObject({
+      state: "pending",
+      lastLookupAt: "2026-10-16T12:01:00.000Z",
+    });
+    expect(provider.refundCalls).toHaveLength(1);
+  });
+  it("does no recovery while this node is not primary", async () => {
+    const { provider, refund } = await pending();
+    const control = new AbortController();
+    const sleeps: number[] = [];
+    await runTenderRefundRecoveryLoop({
+      ...deps,
+      signal: control.signal,
+      isPrimary: () => false,
+      onError: (error) => {
+        throw error;
+      },
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        control.abort();
+      },
+    });
+    expect(sleeps).toEqual([60_000]);
+    expect(provider.lookupCalls).toEqual([]);
+    expect(await row(refund.id)).toMatchObject({ lastLookupAt: null, nextRetryAt: null });
+  });
+  it("reports a failed pass and still schedules the next pass", async () => {
+    const { provider, refund } = await pending();
+    vi.spyOn(provider, "lookupRefund").mockResolvedValue({
+      kind: "match",
+      outcome: "completed",
+      providerRefundRef: "late",
+      providerStatus: "succeeded",
+    });
+    deps.attendance = async () => {
+      throw new Error("attendance unavailable");
+    };
+    const control = new AbortController();
+    const errors: unknown[] = [];
+    const sleeps: number[] = [];
+    await runTenderRefundRecoveryLoop({
+      ...deps,
+      signal: control.signal,
+      isPrimary: () => true,
+      onError: (error) => errors.push(error),
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        control.abort();
+      },
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(AggregateError);
+    expect(sleeps).toEqual([60_000]);
+    expect(await row(refund.id)).toMatchObject({ state: "pending" });
+  });
+  it("drains a lookup's actual late evidence on stop, after its response deadline", async () => {
+    const { provider, refund } = await pending();
+    vi.useFakeTimers();
+    const control = new AbortController();
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(provider, "lookupRefund").mockImplementation(async () => {
+      enter();
+      await held;
+      return {
+        kind: "match",
+        outcome: "completed",
+        providerRefundRef: "late",
+        providerStatus: "succeeded",
+      };
+    });
+    let stopped = false;
+    const work = runTenderRefundRecoveryLoop({
+      ...deps,
+      signal: control.signal,
+      isPrimary: () => true,
+      onError: (error) => {
+        throw error;
+      },
+      sleep: async () => {
+        throw new Error("stopped loop must not sleep");
+      },
+    }).then(() => {
+      stopped = true;
+    });
+    try {
+      await Promise.race([entered, work]);
+      expect(provider.lookupRefund).toHaveBeenCalledTimes(1);
+      control.abort();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(stopped).toBe(false);
+      expect(tenderRefundIsLive(store.db, refund.id)).toBe(true);
+      release();
+      await work;
+      expect(await row(refund.id)).toMatchObject({ state: "completed", providerRefundRef: "late" });
+      expect(tenderRefundIsLive(store.db, refund.id)).toBe(false);
+      expect(stopped).toBe(true);
+    } finally {
+      release();
+      control.abort();
+      await work;
+    }
+  });
+});
+
+it("contains a failed recovery sleep and does not run a pass after an already-aborted start", async () => {
+  const control = new AbortController();
+  const error = new Error("sleep failed");
+  const errors: unknown[] = [];
+  let sleeps = 0;
+  await runTenderRefundRecoveryLoop({
+    ...deps,
+    signal: control.signal,
+    isPrimary: () => true,
+    onError: (failure) => errors.push(failure),
+    sleep: async () => {
+      sleeps++;
+      if (sleeps === 1) throw error;
+      control.abort();
+    },
+  });
+  expect(sleeps).toBe(2);
+  expect(errors).toEqual([error]);
+  const t = await target("card", "fake");
+  const provider = new FakePaymentProvider(store.db);
+  deps.refundProviderFor = async () => provider;
+  const pending = await run(t);
+  await runTenderRefundRecoveryLoop({
+    ...deps,
+    signal: control.signal,
+    isPrimary: () => true,
+    onError: (failure) => {
+      throw failure;
+    },
+  });
+  expect(await row(pending.id)).toMatchObject({ state: "pending", nextRetryAt: null });
+  expect(provider.lookupCalls).toEqual([]);
 });

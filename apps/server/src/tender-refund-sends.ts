@@ -23,6 +23,11 @@ import "./errors.js";
 
 type RefundRow = typeof tenderRefunds.$inferSelect;
 const liveOf = perDatabase(() => new Set<string>());
+const resolvingOf = perDatabase(() => new Set<Promise<RefundRow>>());
+export async function waitForTenderRefundResolvers(db: Database): Promise<void> {
+  const pending = resolvingOf(db);
+  while (pending.size > 0) await Promise.allSettled([...pending]);
+}
 export function tenderRefundIsLive(db: Database, refundId: string): boolean {
   return liveOf(db).has(refundId);
 }
@@ -112,6 +117,7 @@ async function recordOutcome(
       .update(tenderRefunds)
       .set({
         state: outcome,
+        ...(outcome === "pending" ? {} : { nextRetryAt: null }),
         ...(providerRef === null
           ? {}
           : { providerRefundRef: providerRef, providerStatus: outcome }),
@@ -150,6 +156,14 @@ async function lookup(
   if (provider.lookupRefund === undefined) return { kind: "unreachable" };
   const payment = await capture(deps.db, refund);
   const excludeRefs = await withTransaction(deps.db, (tx) => excludedRefs(tx, refund));
+  await withTransaction(deps.db, async (tx) => {
+    const current = await read(tx, refund.id);
+    if (current.state === "pending")
+      await tx
+        .update(tenderRefunds)
+        .set({ lastLookupAt: deps.clock.now().instant.toISOString() })
+        .where(eq(tenderRefunds.id, refund.id));
+  });
   try {
     return await provider.lookupRefund({
       processorRef: payment.externalRef ?? payment.paymentRef,
@@ -271,9 +285,14 @@ export async function resolveClaimedTenderRefund(
   let expired = false;
   let timer: ReturnType<typeof setTimeout>;
   // A response deadline does not end the actual provider call or release its resolver ownership.
-  const task = read(deps.db, refundId)
+  const pending = resolvingOf(deps.db);
+  const task: Promise<RefundRow> = read(deps.db, refundId)
     .then((refund) => resolve(deps, refund, resolver, () => expired))
-    .finally(release);
+    .finally(() => {
+      pending.delete(task);
+      release();
+    });
+  pending.add(task);
   const deadline = new Promise<RefundRow>((resolveDeadline, rejectDeadline) => {
     timer = setTimeout(() => {
       expired = true;

@@ -157,6 +157,7 @@ import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
+import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { createAttendanceEmailSender } from "./attendance-email.js";
 import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -2391,6 +2392,25 @@ async function bootServer(
     await loop;
   });
 
+  const tenderRefundController = new AbortController();
+  const tenderRefundLoop =
+    isSingletonPrimary && !fencedOrMirror
+      ? runTenderRefundRecoveryLoop({
+          db,
+          clock: tillClock,
+          refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+          attendance: attendanceRecorder,
+          signal: tenderRefundController.signal,
+          isPrimary: () => holders.singletonRole.current === "primary",
+          onError: (error) =>
+            log("error", "tender_refund.recovery_failed", { errorCode: codeOf(error) }),
+        })
+      : undefined;
+  undoOnFailure.push(async () => {
+    tenderRefundController.abort();
+    await tenderRefundLoop;
+  });
+
   const mdns = startMdnsResponder({
     hostname: BOX_HOSTNAME,
     devMode: config.devMode,
@@ -2458,7 +2478,9 @@ async function bootServer(
         cloudController.abort();
         invoiceEmailController.abort();
         attendanceController.abort();
+        tenderRefundController.abort();
         await closeAll([
+          () => tenderRefundLoop,
           () => attendanceLoop,
           () => attendanceEmailLoop,
           () => invoiceEmailLoop,

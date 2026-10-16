@@ -74,3 +74,23 @@ export function raiseTenderRefundConflict(
     detectedAt: now,
   });
 }
+
+export function raiseTenderRefundUnresolved(
+  tx: Transaction,
+  refund: typeof tenderRefunds.$inferSelect,
+  now: Date,
+): Promise<boolean> {
+  return recordIncidentOnce(tx, {
+    origin: jobOrigin("payment_check"),
+    saleId: saleId(refund.saleId),
+    error: new AppError("payment.tender_refund_unresolved", {
+      refundId: refund.id,
+      saleId: refund.saleId,
+      tenderId: refund.tenderId,
+      amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
+      pendingSince: refund.createdAt,
+    }),
+    severity: "warning",
+    detectedAt: now,
+  });
+}
