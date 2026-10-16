@@ -890,6 +890,61 @@ describe("the day box", () => {
     expect(openEvery).toHaveBeenCalledWith("rota", { week: "2026-12-07" });
   });
 
+  describe("kept inside the window once its buttons and rows have drawn", () => {
+    const manyAreas = () =>
+      fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const extra = Array.from({ length: 6 }, (_, index) => ({
+          area: { kind: "department" as const, id: `dep-extra-${index}` },
+          name: `Terrace and private dining room ${index + 1}`,
+        }));
+        read.areas = [...read.areas, ...extra];
+        for (const day of read.days)
+          if (!day.closedAllDay)
+            day.areas = [
+              ...day.areas,
+              ...extra.map(({ area }) => ({ area, needed: 3, unfilled: null })),
+            ];
+        return read;
+      }).api;
+    // Where the box sits, read against the window and against the day it opened from.
+    const placement = (box: HTMLElementTagNameMap["calendar-day-box"], day: HTMLElement) => {
+      const placed = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+      const date = day.getBoundingClientRect();
+      return {
+        left: placed.left >= -0.5,
+        right: placed.right <= innerWidth + 0.5,
+        top: placed.top >= -0.5,
+        bottom: placed.bottom <= innerHeight + 0.5,
+        clearOfTheDay: placed.bottom <= date.top + 0.5 || placed.top >= date.bottom - 0.5,
+      };
+    };
+    const kept = { left: true, right: true, top: true, bottom: true, clearOfTheDay: true };
+
+    it("on a Sunday at the right edge of a wide window", async () => {
+      await useViewport(1280, 800);
+      const { el } = await mount({ api: manyAreas(), canWrite: true, canOpenRota: true });
+      const box = await openBox(el, "2026-12-06");
+      expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
+      expect(placement(box, dayButton(el, "2026-12-06")!)).toEqual(kept);
+    });
+
+    it("above a day in the bottom row of a phone, when below it does not fit", async () => {
+      await useViewport(390, 800);
+      const { el } = await mount({
+        api: manyAreas(),
+        width: "390px",
+        canWrite: true,
+        canOpenRota: true,
+      });
+      const day = dayButton(el, "2026-12-30")!;
+      el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
+      const box = await openBox(el, "2026-12-30");
+      expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
+      expect(placement(box, day)).toEqual(kept);
+    });
+  });
+
   it("offers no Rota for this week to a person who may not open the rota", async () => {
     const { el } = await mount({ canWrite: true });
     await openBox(el, "2026-12-03");
@@ -907,6 +962,34 @@ describe("the day box", () => {
     expect(dayBox(el)).toBeNull();
     const box = await openBox(el, "2026-12-03");
     expect(box.line).toBe("Winter standard staffing");
+  });
+
+  it("moves focus into the box as it opens, and back to its day when it closes", async () => {
+    const { el } = await mount({ canWrite: true });
+    const box = await openBox(el, "2026-12-03");
+    expect(box.shadowRoot!.activeElement?.id).toBe("heading");
+    await userEvent.keyboard("{Escape}");
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
+    expect(root(el).activeElement).toBe(dayButton(el, "2026-12-03"));
+  });
+
+  it("opens no box for a day clicked as the month is taken off the page", async () => {
+    const { el } = await mount();
+    dayButton(el, "2026-12-03")!.click();
+    await el.updateComplete;
+    el.remove();
+    await settled(el);
+    expect(dayBox(el)!.shown).toBe(false);
+  });
+
+  it("opens no box for a day clicked as the month changes", async () => {
+    const { el } = await mount();
+    dayButton(el, "2026-12-03")!.click();
+    await el.updateComplete;
+    el.month = "2027-01";
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
   });
 
   it("names the season in Spanish", async () => {

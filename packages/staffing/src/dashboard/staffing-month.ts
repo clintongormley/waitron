@@ -313,10 +313,19 @@ export class StaffingMonthView extends LitElement {
   }
 
   override updated(changed: Map<PropertyKey, unknown>): void {
-    if (!changed.has("boxDate") || !this.boxDate) return;
-    const anchor = this.#dayButton(this.boxDate)!;
+    if (changed.has("boxDate") && this.boxDate) void this.#placeBox(this.boxDate);
+  }
+
+  // The box measures itself to choose where it fits, so it is shown after its own and its
+  // buttons' pending renders.
+  async #placeBox(date: string): Promise<void> {
+    await this.updateComplete;
     const box = this.renderRoot.querySelector("calendar-day-box")!;
-    void box.updateComplete.then(() => box.show(anchor));
+    await Promise.all(
+      [box, ...box.children].map((node) => (node as Partial<LitElement>).updateComplete),
+    );
+    if (!this.isConnected || this.boxDate !== date) return;
+    box.show(this.#dayButton(date)!);
   }
 
   #keydown(event: KeyboardEvent): void {
