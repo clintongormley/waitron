@@ -71,21 +71,24 @@ export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDrag
   const start = await centreOf(ctx, first);
   await ctx.page.mouse.move(start.x, start.y);
   await ctx.page.mouse.down();
-  const wheel = async (index: number) => {
-    if (options.wheel?.after !== index) return;
-    await ctx.page.mouse.wheel(0, options.wheel.deltaY);
-    // The scroll lands asynchronously; positions read before it would be the old ones.
-    await (
-      await ctx.frame()
-    ).evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
-  };
-  await wheel(0);
-  for (const [index, selector] of rest.entries()) {
-    const next = await centreOf(ctx, selector);
-    await ctx.page.mouse.move(next.x, next.y, { steps: MOVE_STEPS });
-    await wheel(index + 1);
+  try {
+    const wheel = async (index: number) => {
+      if (options.wheel?.after !== index) return;
+      await ctx.page.mouse.wheel(0, options.wheel.deltaY);
+      // The scroll lands asynchronously; positions read before it would be the old ones.
+      await (
+        await ctx.frame()
+      ).evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+    };
+    await wheel(0);
+    for (const [index, selector] of rest.entries()) {
+      const next = await centreOf(ctx, selector);
+      await ctx.page.mouse.move(next.x, next.y, { steps: MOVE_STEPS });
+      await wheel(index + 1);
+    }
+  } finally {
+    await ctx.page.mouse.up();
   }
-  await ctx.page.mouse.up();
 };
 
 export interface TouchGesture {

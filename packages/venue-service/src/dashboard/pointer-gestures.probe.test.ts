@@ -1,10 +1,11 @@
-import { commands } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 interface Seen {
   type: string;
   pointerType: string | null;
   target: string;
+  buttons: number | null;
 }
 
 const KINDS = ["pointerdown", "pointermove", "pointerup", "pointercancel", "click"] as const;
@@ -16,6 +17,7 @@ const record = (event: Event) => {
     type: event.type,
     pointerType: event instanceof PointerEvent ? event.pointerType : null,
     target: event.target instanceof Element ? event.target.id || event.target.localName : "?",
+    buttons: event instanceof MouseEvent ? event.buttons : null,
   });
 };
 
@@ -58,6 +60,21 @@ describe("pointer gesture commands", () => {
     expect(seen.find((s) => s.type === "pointerup")?.target).toBe("two");
     expect(fromDown()).toContain("pointermove");
     expect(fromDown().slice(-2)).toEqual(["pointerup", "click"]);
+  });
+
+  it("mouseDrag that cannot find a later element still releases the button", async () => {
+    const hidden = document.createElement("button");
+    hidden.id = "hidden";
+    hidden.style.display = "none";
+    page.append(hidden);
+
+    await expect(commands.mouseDrag(["#one", "#hidden"])).rejects.toThrow(/#hidden/);
+    seen = [];
+    await userEvent.hover(document.querySelector("#two")!);
+
+    const moves = seen.filter((s) => s.type === "pointermove");
+    expect(moves.length).toBeGreaterThan(0);
+    expect(moves.map((s) => s.buttons)).toEqual(moves.map(() => 0));
   });
 
   it("touchGesture with a hold sends touch pointer events", async () => {
