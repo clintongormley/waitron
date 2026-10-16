@@ -723,6 +723,51 @@ it("keeps every field within the form width token on a wide window", async () =>
   }
 });
 
+it("lines a locked row's value up with the Business card's values on a wide window", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1280, 800);
+  try {
+    const locked = venueDetailsFixture();
+    locked.hasSales = true;
+    locked.policy.timeZone = { decision: "refuse", reasons: ["sales"] };
+    const el = await editing(rig(locked).api);
+    const lockedLeft = q(el, "[data-test=locked-timeZone]")!.getBoundingClientRect().left;
+    const viewLeft = q(el, "[data-test=saved-legalName]")!.getBoundingClientRect().left;
+    expect(Math.abs(lockedLeft - viewLeft)).toBeLessThanOrEqual(1);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
+it("puts city below a locked postcode on a wide window", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1280, 800);
+  try {
+    const locked = venueDetailsFixture();
+    locked.policy.postalCode = { decision: "refuse", reasons: ["sales"] };
+    const el = await editing(rig(locked).api);
+    const postcode = q(el, "[data-test=locked-postalCode]")!.getBoundingClientRect();
+    const city = field(el, "city").getBoundingClientRect();
+    expect(city.top).toBeGreaterThan(postcode.bottom);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
+it("draws the open Venue card's border in the primary colour", async () => {
+  const el = await editing(rig().api);
+  const probe = document.createElement("div");
+  probe.style.color = "var(--wt-color-primary)";
+  el.shadowRoot!.appendChild(probe);
+  const primary = getComputedStyle(probe).color;
+  probe.remove();
+  const card = q(el, "section.settings-card[data-editing]")!;
+  expect(getComputedStyle(card).borderTopColor).toBe(primary);
+  expect(
+    getComputedStyle(q(el, "section.settings-card:not([data-editing])")!).borderTopColor,
+  ).not.toBe(primary);
+});
+
 it("says the lock and the address note once at the foot of an unchanged form, and marks the locked time zone", async () => {
   setLocale("en-GB");
   const locked = venueDetailsFixture();

@@ -76,8 +76,11 @@ export class VenueDetailsPanel extends LitElement {
       .fields {
         display: grid;
         gap: var(--wt-space-3);
-        max-width: var(--wt-form-max-width);
         min-width: 0;
+      }
+      .fields > .field,
+      .fields > .pair {
+        max-width: var(--wt-form-max-width);
       }
       .pair {
         display: grid;
@@ -90,9 +93,15 @@ export class VenueDetailsPanel extends LitElement {
       .locked {
         color: var(--wt-color-text-muted);
       }
+      .reason,
+      .reason > div {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
       .reason {
         color: var(--wt-color-text-muted);
-        max-width: var(--wt-form-max-width);
+        padding-bottom: var(--wt-space-4);
+        border-bottom: 1px solid var(--wt-color-border);
       }
       @media (max-width: 48rem) {
         .pair {
@@ -101,6 +110,7 @@ export class VenueDetailsPanel extends LitElement {
       }
       .reason p {
         margin: 0;
+        max-width: var(--wt-form-max-width);
       }
       .warnings {
         padding: var(--wt-space-3);
