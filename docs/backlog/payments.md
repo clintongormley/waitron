@@ -87,6 +87,24 @@ their full text.
     unknown and check them automatically once collection stops, with the manager action as
     fallback. First demonstrate that the automatic check cannot cancel a live collection.
     This remains separate from A739a's outcome panel; nothing has changed the stored states yet.
+
+    **A764 investigation checkpoint (2026-10-16):** On branch
+    `fix/a764-stripe-unknown-outcome`, run
+    `pnpm --filter @waitron/payments-stripe exec vitest run --project=node src/provider-unknown.test.ts`.
+    Three new checks fail: a refused reader cancellation returns `failed` instead of `attempting`,
+    a later capture stays `failed`, and the sweep does not cancel an abandoned PaymentIntent.
+    The live-collection case passes because the current sweep does nothing; that result does not
+    establish that a future automatic resolver protects live payments.
+
+    The cancellation audit also needs an automatic actor. The existing
+    `payment_resolutions.person_id` is required, and cancelled-resolution rows advance the next
+    attempt's provider key (`packages/payments/src/resolutions.ts`). In a temporary real-database
+    probe, inserting an audit row with no person failed on that required column; the same insert
+    with a person committed. A separate probe called the manager resolver during a paused live
+    collection and observed its PaymentIntent cancelled. Do not wire that resolver straight into
+    the sweep. The proposed nullable-person audit needs a payments migration, so implementation
+    waits while this lane's A737 migration branch is parked. No migration or payment behavior has
+    changed in this checkpoint.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
     three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing

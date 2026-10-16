@@ -3389,6 +3389,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   only reconciliation sees it. **A764, owner-approved 2026-10-16:** keep the attempt unknown and
   check it automatically once collection stops, after demonstrating that a live collection cannot
   be cancelled by the check. The manager action remains the fallback. After A739a.
+  Investigation reproduced the later capture being missed;
+  the proposed automatic audit needs a migration and waits for lane F's parked A737 branch.
   [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
 
 - **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.
