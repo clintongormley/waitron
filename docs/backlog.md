@@ -6477,6 +6477,11 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Joining tables suggests their combined seats, still editable (A747, owner, 2026-10-16).**
+  Implemented for the till's joining and split/rejoin windows and the dashboard's Add joined table.
+  [Decision and limits](backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747).
+
+
 From the 2026-09-05 whole-project design review and since. They supersede older spec text where they
 conflict.
 

@@ -1,5 +1,7 @@
 # A503: joined tables replace saved joins
 
+> 2026-10-16, A747: the owner replaced empty joined-seat defaults with editable totals in the till and dashboard. The [current decision](../../backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747) supersedes the empty-default wording below.
+
 > Added 2026-10-13 by A579 ([design](2026-10-13-a579-flattened-joined-tables-design.md)): that
 > design narrows, under "The till", the Default for a joined table in a service merge to a joined
 > table a reset leaves in a group (pushing a joined table into a group now splits it, and the group

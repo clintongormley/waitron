@@ -147,3 +147,17 @@ it("an add leaves nothing unsaved in the window", async () => {
   expect(app.changes).toHaveLength(1);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+
+it("A747 saving a suggested total leaves nothing unsaved", async () => {
+  const { app, panel, dialog } = await fixture();
+  await set(panel, field(dialog, "table-name"), "Together");
+  await chooseOptions(field(dialog, "made-of"), ["c3", "c4"]);
+  await panel.updateComplete;
+  expect(field(dialog, "seats").value).toBe("8");
+  dialog.querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
+  await panel.updateComplete;
+  await expect.poll(() => dialog.open).toBe(false);
+  expect(app.changes).toHaveLength(1);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await question(app)).open).toBe(false);
+});

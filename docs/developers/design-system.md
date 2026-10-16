@@ -2294,7 +2294,7 @@ and nothing guards it across screens:
   (`apps/till/src/widgets/party-guests-dialog.ts`); the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
-  floor's seats dialog, opened by Change seats, or empty by a merge (`apps/till/src/widgets/today-seats-dialog.ts`);
+  floor's seats dialog, opened by Change seats, or with a suggested total by a merge (A747; Join can accept that total unchanged) (`apps/till/src/widgets/today-seats-dialog.ts`);
   the floor's Split tables window (`apps/till/src/widgets/split-joined-dialog.ts`); the floor's Reset table window
   (`apps/till/src/widgets/reset-table-dialog.ts`); the floor's Rename window
   (`apps/till/src/widgets/today-name-dialog.ts`).
