@@ -464,6 +464,28 @@ describe("opened on a public holiday", () => {
     ]);
   });
 
+  it("Add to on a run adds every date of the run to that special day", async () => {
+    const days = { sd2: named("sd2", "Navidad", ["2025-12-25", "2026-12-26"]) };
+    const { painter, writes, lists } = await mount({
+      specialDayId: null,
+      date: "2026-12-25",
+      lastDate: "2026-12-27",
+      holidays: navidad,
+      days,
+    });
+    await listed(painter, lists);
+    part(painter, "add-to")!.click();
+    await loaded(painter);
+    await expect
+      .poll(() => chips(painter))
+      .toEqual(["2025-12-25", "2026-12-25", "2026-12-26", "2026-12-27"]);
+    expect(writes).toEqual([]);
+    await save(painter, writes);
+    expect(
+      (writes[0]!.body as { dates: { date: string }[] }).dates.map(({ date }) => date),
+    ).toEqual(["2025-12-25", "2026-12-25", "2026-12-26", "2026-12-27"]);
+  });
+
   it("Add to a day that already holds the date opens it unchanged", async () => {
     const days = { sd2: named("sd2", "Navidad", ["2026-12-25"]) };
     const { painter, lists } = await mount({

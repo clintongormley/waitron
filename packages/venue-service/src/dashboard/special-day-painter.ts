@@ -551,34 +551,45 @@ export class SpecialDayPainter extends LitElement {
       this.loading = false;
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
       const name = date ? holidayDateName(this.holidays, date, "") : "";
-      const dates = date ? [date] : [];
-      const last = this.lastDate && isLocalDate(this.lastDate) ? this.lastDate : undefined;
-      if (date && last)
-        for (let next = addDays(date, 1); next <= last; next = addDays(next, 1)) dates.push(next);
-      this.adopt(undefined, dates, name);
+      this.adopt(undefined, this.newDates(), name);
       if (date && name) this.offerExisting(name, date);
       return;
     }
-    this.read(id, this.addDate && isLocalDate(this.addDate) ? this.addDate : undefined);
+    this.read(id, this.addDate && isLocalDate(this.addDate) ? [this.addDate] : []);
   }
-  private read(id: string, addDate?: LocalDate, announce = false) {
+  /** A new day's dates: {@link date} through {@link lastDate}, or `date` alone. */
+  private newDates(): LocalDate[] {
+    const date = this.date && isLocalDate(this.date) ? this.date : undefined;
+    if (!date) return [];
+    const dates = [date];
+    const last = this.lastDate && isLocalDate(this.lastDate) ? this.lastDate : undefined;
+    if (last)
+      for (let next = addDays(date, 1); next <= last; next = addDays(next, 1)) dates.push(next);
+    return dates;
+  }
+  private read(id: string, addDates: readonly LocalDate[], announce = false) {
     this.loading = true;
     this.adopt(undefined, []);
     const generation = this.generation;
-    this.unanswered = () => this.read(id, addDate, announce);
+    this.unanswered = () => this.read(id, addDates, announce);
     this.api.specialDays.readSpecialDay(id).then(
       (detail) => {
         if (generation !== this.generation) return;
         this.unanswered = undefined;
         this.loading = false;
         this.adopt(detail, []);
-        if (addDate !== undefined && !this.draft.dates.some(({ date }) => date === addDate))
+        const held = new Set(this.draft.dates.map(({ date }) => date));
+        const added = addDates.filter((date) => !held.has(date));
+        if (added.length)
           this.change({
             ...this.draft,
-            dates: [...this.draft.dates, { date: addDate, closedAllDay: false }].sort(byDate),
+            dates: [
+              ...this.draft.dates,
+              ...added.map((date) => ({ date, closedAllDay: false })),
+            ].sort(byDate),
           });
         if (this.followAfterRead) this.follow();
-        if (addDate === undefined) return;
+        if (!addDates.length) return;
         if (announce)
           this.dispatchEvent(
             new CustomEvent("special-day-navigate", {
@@ -658,13 +669,14 @@ export class SpecialDayPainter extends LitElement {
       this.offered = id === undefined ? undefined : { id, date };
     }, ignore);
   }
-  private addTo({ id, date }: { id: string; date: LocalDate }) {
+  private addTo({ id }: { id: string; date: LocalDate }) {
+    const dates = this.newDates();
     this.generation = {};
     this.seedToken = {};
     this.offered = undefined;
     this.specialDayId = id;
     this.seeded = this.seedKey();
-    this.read(id, date, true);
+    this.read(id, dates, true);
   }
   /** `kept` is paint made since the save that answered `detail` was sent; it stays unsaved. */
   private adopt(

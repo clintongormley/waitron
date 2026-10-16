@@ -474,6 +474,22 @@ describe("a run picked on the Year", () => {
     expect(checkedView(el)).toBe("year");
   });
 
+  it("a run of 366 dates read from an address opens whole, and a longer one opens on its first date alone", async () => {
+    const whole = await mount(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-01",
+    );
+    const painter = await shownPainter(whole.el);
+    expect(painter.lastDate).toBe("2027-01-01");
+    expect(chips(painter)).toHaveLength(366);
+    whole.el.remove();
+    const longer = await mount(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-03",
+    );
+    const single = await shownPainter(longer.el);
+    expect([single.date, single.lastDate]).toEqual(["2026-01-01", null]);
+    expect(chips(single)).toEqual(["2026-01-01"]);
+  });
+
   it("a direct load of a run's address opens it", async () => {
     const { el } = await mount(
       "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
@@ -482,6 +498,30 @@ describe("a run picked on the Year", () => {
     expect([painter.date, painter.lastDate]).toEqual(["2026-10-20", "2026-10-23"]);
     expect(chips(painter)).toEqual(run);
     expect(nameOf(painter)).toBe("Harvest day");
+  });
+});
+
+describe("a run picked on the Month", () => {
+  const monthOf = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-month")!;
+  const daySel = (date: LocalDate) => `opening-hours-month [data-date="${date}"] button`;
+
+  it("a double-click on a run in the Month opens a new day holding it", async () => {
+    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    await expect.poll(() => monthOf(el)?.model?.month).toBe("2026-12");
+    await monthOf(el).updateComplete;
+    const run = ["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"];
+    const button = (date: LocalDate) =>
+      monthOf(el).shadowRoot!.querySelector<HTMLButtonElement>(`[data-date="${date}"] button`)!;
+    button(run[0]!).scrollIntoView({ block: "center" });
+    await commands.mouseDrag(run.map(daySel));
+    await userEvent.dblClick(button("2026-12-03"));
+    const painter = await shownPainter(el);
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
+    );
+    expect(chips(painter)).toEqual(run);
+    await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
+    expect(writes).toEqual([]);
   });
 });
 
