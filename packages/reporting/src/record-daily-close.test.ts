@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  dailyCloses,
   captureError,
   constraintTarget,
   refusalError,
@@ -23,10 +24,12 @@ import {
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
+import { seedRefundableSale, seedTenderRefund } from "../test/tender-refund-fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import { isBusinessDayConflict, recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
+import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 
 // Every close here is awaited before the next; closes started together are in
 // record-daily-close.concurrency.test.ts.
@@ -92,6 +95,90 @@ async function captureCloseError(fn: () => Promise<unknown>): Promise<AppError> 
 }
 
 describe("recordDailyClose — snapshot, reconciliation, chain", () => {
+  it("keeps an earlier close frozen when cash is returned next day on another device", async () => {
+    const paid = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "100.00",
+      tip: "0.00",
+      at: "2026-08-04T10:00:00.000Z",
+      invoiceNumber: 1,
+    });
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const first = await record("2026-08-04", [
+      { deviceId: venue.deviceId, openingFloat: "0.00", payouts: "0.00", countedCash: "100.00" },
+    ]);
+    const [stored] = await suite.db.select().from(dailyCloses).where(eq(dailyCloses.id, first.id));
+    await seedTenderRefund(suite.db, paid, {
+      applied: "25.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: "2026-08-05T10:00:00.000Z",
+      at: "2026-08-05T10:00:00.000Z",
+      origin: { ...venue, deviceId: deviceB },
+    });
+    expect(await runCompute("2026-08-04")).toEqual(first.snapshot.close);
+    const second = await record("2026-08-05", [
+      { deviceId: deviceB, openingFloat: "50.00", payouts: "0.00", countedCash: "25.00" },
+    ]);
+    expect(second.snapshot.close.cash.tenderTotal).toBe("-25.00");
+    expect(second.snapshot.cashReconciliation).toEqual({
+      byDevice: [
+        {
+          deviceId: deviceB,
+          openingFloat: "50.00",
+          payouts: "0.00",
+          countedCash: "25.00",
+          cashTakings: "-25.00",
+          cashVariance: "0.00",
+        },
+      ],
+      nodeVariance: "0.00",
+    });
+    expect(second.prevEntryHash).toBe(first.entryHash);
+    expect(await suite.db.select().from(dailyCloses).where(eq(dailyCloses.id, first.id))).toEqual([
+      stored,
+    ]);
+    expect(
+      await withTransaction(suite.db, (tx) => verifyDailyCloseChain(tx, venue.nodeId)),
+    ).toMatchObject({ ok: true });
+  });
+
+  it.each(["negative", "zero"] as const)(
+    "requires a cash count after a settled-tender refund leaves %s cash",
+    async (net) => {
+      const at = net === "zero" ? "2026-08-04T10:00:00.000Z" : "2026-08-03T10:00:00.000Z";
+      const paid = await seedRefundableSale(suite.db, venue, {
+        method: "cash",
+        applied: "100.00",
+        tip: "0.00",
+        at,
+        invoiceNumber: 1,
+      });
+      await seedTenderRefund(suite.db, paid, {
+        applied: "100.00",
+        tip: "0.00",
+        state: "completed",
+        createdAt: at,
+        at: "2026-08-04T11:00:00.000Z",
+      });
+      const error = await captureCloseError(() => record("2026-08-04", []));
+      expect(error.code).toBe("close.invalid_cash_input");
+      expect(error.params).toEqual({ deviceId: venue.deviceId, reason: "uncounted_cash_device" });
+      const rec = await record("2026-08-04", [
+        {
+          deviceId: venue.deviceId,
+          openingFloat: "100.00",
+          payouts: "0.00",
+          countedCash: net === "zero" ? "100.00" : "0.00",
+        },
+      ]);
+      expect(rec.snapshot.cashReconciliation.byDevice[0]).toMatchObject({
+        cashTakings: net === "zero" ? "0.00" : "-100.00",
+        cashVariance: "0.00",
+      });
+    },
+  );
+
   it("snapshots the exact computeDailyClose figures and per-device variance (over, short, exact)", async () => {
     // Three devices at one node, each with cash takings, crafted so the reconciliation exercises all
     // three signs: A over, B short, C exact.

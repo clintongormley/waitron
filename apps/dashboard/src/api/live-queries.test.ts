@@ -105,6 +105,8 @@ it.each([
   ["getOverdueOrders", [], "floor_today_joins"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
+  ["getDailyClose", ["2026-09-11"], "tender_refunds"],
+  ["getSalesOverview", [], "tender_refunds"],
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
   ["getPlannedVsActual", ["location", "2026-09-01", "2026-09-11"], "roster_versions"],
   ["listAlerts", [], "incidents"],

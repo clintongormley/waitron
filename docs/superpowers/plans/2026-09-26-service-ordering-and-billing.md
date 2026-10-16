@@ -1860,6 +1860,10 @@ Spec §9; D12.
 
 ## Task 14: Several payments against one bill — the server — slug `bill-payments`
 
+**2026-10-16 — reporting extension:** [A737 Part 2, Task 2](2026-10-15-a737-post-invoice-refund.md#task-2-include-completed-money-returns-in-operational-reporting)
+adds completed post-invoice tender refunds to the cash-up, at completion and under their recorded
+origin/node. Task 14 below remains the earlier pre-invoice scope.
+
 Spec §6; D3, D16; the approved Task 0 design. **Payments and fiscal issuance: full review wave,
 and the owner reviews before landing.** This task's Files and Interfaces come from the approved
 design. The tests below are the minimum it must contain whatever the design decides.

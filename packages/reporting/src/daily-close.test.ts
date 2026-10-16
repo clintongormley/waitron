@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceSeries,
+  saleLines,
+  saleSettlements,
+  sales,
+  tenders,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedTender, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
+import { seedRefundableSale, seedTenderRefund } from "../test/tender-refund-fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
 import type { DailyCloseInput } from "./types.js";
 
@@ -28,6 +37,63 @@ function run(i: DailyCloseInput) {
 }
 
 describe("computeDailyClose", () => {
+  it("returns money on a later day without changing invoice VAT, counts or stored sale facts", async () => {
+    const paid = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "121.00",
+      tip: "4.00",
+      at: "2026-08-04T10:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "21.00",
+      base: "100.00",
+    });
+    const facts = async () => ({
+      sales: await suite.db.select().from(sales),
+      lines: await suite.db.select().from(saleLines),
+      tenders: await suite.db.select().from(tenders),
+      settlements: await suite.db.select().from(saleSettlements),
+      series: await suite.db.select().from(invoiceSeries),
+    });
+    const original = await facts();
+    const invoiceDay = await run(input());
+    await seedTenderRefund(suite.db, paid, {
+      applied: "121.00",
+      tip: "4.00",
+      state: "completed",
+      createdAt: "2026-08-04T11:00:00.000Z",
+      at: "2026-08-05T10:00:00.000Z",
+    });
+    expect(await run(input())).toEqual(invoiceDay);
+    expect(invoiceDay.vat).toEqual({
+      byRate: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+      baseTotal: "100.00",
+      taxTotal: "21.00",
+      grossTotal: "121.00",
+    });
+    expect(invoiceDay.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    const refundDay = await run(input({ businessDay: "2026-08-05" }));
+    expect(refundDay.cash).toEqual({
+      byOrigin: [
+        {
+          source: "device",
+          deviceId: venue.deviceId,
+          byMethod: [{ method: "cash", amount: "-125.00", tip: "-4.00" }],
+          cashTakings: "-125.00",
+        },
+      ],
+      tenderTotal: "-125.00",
+      tipTotal: "-4.00",
+    });
+    expect(refundDay.vat).toEqual({
+      byRate: [],
+      baseTotal: "0.00",
+      taxTotal: "0.00",
+      grossTotal: "0.00",
+    });
+    expect(refundDay.counts).toEqual({ sales: 0, corrections: 0, voids: 0 });
+    expect(await facts()).toEqual(original);
+  });
+
   it("validates inputs before touching the database", async () => {
     await expect(run(input({ timeZone: "Nowhere/Nope" }))).rejects.toThrow(/time zone/i);
     await expect(run(input({ dayCutover: "5:00" }))).rejects.toThrow(/cutover/i);

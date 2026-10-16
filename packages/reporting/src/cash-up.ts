@@ -11,26 +11,9 @@ import type {
 } from "./types.js";
 
 /**
- * Operational cash-up for one node — or the whole venue when `input.nodeId` is omitted — over one
- * business day: the money that moved, grouped by (origin, method), from three sources (bill
- * payments design §9a):
- *
- * - a tender with no bill payment, at its `settled_at`, on its sale's device;
- * - a `received` bill payment, at its `received_at`, on its own device: `applied + tip`, never the
- *   change;
- * - a `completed` bill payment refund, at its `completed_at`, on its own device, under its
- *   payment's method: minus `applied_amount + tip_amount`.
- *
- * A row's origin is its device, or a job source such as the Demo seed, which has a row of its own.
- *
- * A tender issued from a bill payment is left out: its money was counted when the payment was
- * received, so issuing the invoice changes no day's figures. A bill payment has no node of its own
- * and is scoped through its bill's `working_orders.node_id`.
- *
- * Every source row moves a positive amount (`tenders_amount_ck`, `bill_payments_amounts_ck`,
- * `bill_payment_refunds_amounts_ck`), so an origin has a line for a method exactly when money moved
- * through it by that method that day, even when the line nets to zero; `recordDailyClose` reads
- * the cash line that way. `cashTakings` is the origin's net cash and can be negative.
+ * Bill-derived tenders are excluded because their payments already count the handover. Provider
+ * refund evidence is excluded because the completed refund ledger counts the return.
+ * Keep method lines that net to zero: the daily close still needs a count for a drawer that moved cash.
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
   const window = businessDayWindow(input);
@@ -71,6 +54,12 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
       where r.state = 'completed'
         and ${window(sql`r.completed_at`)}
         ${nodeScopeClause(input.nodeId, sql`wo.node_id`)}
+      union all
+      select r.source, r.device_id, r.method, -(r.applied_amount + r.tip_amount), -r.tip_amount
+      from tender_refunds r
+      where r.state = 'completed'
+        and ${window(sql`r.completed_at`)}
+        ${nodeScopeClause(input.nodeId, sql`r.node_id`)}
     ) m
     group by m.source, m.device_id, m.method
     order by m.source, m.device_id, m.method

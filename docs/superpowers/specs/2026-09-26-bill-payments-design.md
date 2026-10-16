@@ -975,6 +975,13 @@ its code.
 
 ### 9a. The cash-up counts money on the day it moves (owner, 2026-09-26: in Task 14)
 
+**2026-10-16 — A737 Part 2 extension.** The [post-invoice refund plan](../plans/2026-10-15-a737-post-invoice-refund.md#task-2-include-completed-money-returns-in-operational-reporting)
+adds completed `tender_refunds` as a fourth cash-up source: subtract `applied_amount + tip_amount`
+and subtract `tip_amount` from the tip total, at `completed_at`, under the refund's recorded
+source/device and node. Provider refund evidence is not another cash-up source.
+The original invoice's VAT and counts and earlier frozen closes
+stay unchanged. The three-source rule below describes Task 14's earlier pre-invoice scope.
+
 **Why it cannot wait.** The cash-up (`computeCashUp`, `packages/reporting/src/cash-up.ts`) counts
 only `tenders` joined to `sales`, by `tenders.settled_at` within the business day, grouped by the
 SALE's till. Under this design a bill payment becomes a tender only when the bill's invoice is
