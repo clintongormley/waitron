@@ -13,7 +13,7 @@ export function kindOfFormFactor(ff: FormFactor): DeviceKind {
   return kinds[ff];
 }
 
-/** Carried by a device profile, not a canvas. Each flag is either a {@link ProfileAction}, which
+/** Carried by a device profile. Each flag is either a {@link ProfileAction}, which
  * the server checks on the routes the map in `apps/server/src/till-api.profile-actions.test.ts`
  * lists, or a {@link ProfileScreen}, which only decides what the till shows. */
 export const CAPABILITY_FLAGS = [

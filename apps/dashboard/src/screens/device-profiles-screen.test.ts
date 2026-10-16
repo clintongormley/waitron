@@ -180,7 +180,6 @@ describe("device-profiles-screen list mode", () => {
     // Two capabilities are summarised on the row (shipped locale is es-ES).
     const caps = el.shadowRoot!.querySelector("[data-test=profile-caps-p1]")!.textContent!;
     expect(caps).toContain("tarjeta");
-    // A null canvas reference and empty capabilities render their neutral fallbacks, not a throw.
     expect(el.shadowRoot!.querySelector("[data-test=profile-row-p2]")).toBeTruthy();
   });
 
@@ -436,7 +435,6 @@ describe("device-profiles-screen editor form", () => {
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     const form = el.shadowRoot!.querySelector("[data-test=editor-form]")!;
     expect(form.getAttribute("data-editing-id")).toBe("p1");
-    // The name + canvas + capability switches reflect the loaded profile.
     const name = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=profile-name]",
     )!;

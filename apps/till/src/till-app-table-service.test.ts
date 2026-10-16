@@ -1704,7 +1704,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
-    /** Sends a held change on table 2 from a device on `canvas`; the test settles its answer. */
     async function changeOnFormFactor(
       formFactor: FormFactor,
       overrides: Record<string, unknown> = {},
@@ -1967,8 +1966,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     };
     const noted: TabLine = { ...burgerLine, note: "no onions" };
 
-    /** Sends a held change on table 2 from a device on `canvas`. Once `saved()` is called, table 2
-     * reads back with the note at revision 8; table 3's menus are held until `release()`. */
     async function changeHeld(formFactor: FormFactor, overrides: Record<string, unknown> = {}) {
       let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
       let releaseOffers: () => void = () => undefined;

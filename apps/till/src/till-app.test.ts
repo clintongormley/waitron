@@ -556,14 +556,11 @@ const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 const shell = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
-/** The card grid mounted directly as a non-counter TAB's body — the floor/order/kitchen tabs
- * render through it. (The counter tab's body is the counter screen, whose OWN grid `counterGrid` reaches;
- * this one is only present when a non-counter tab is active, so it is unambiguous.) */
+
 const activeTabGrid = (el: TillApp) => counter(el) ?? el;
 const selectTab = (el: TillApp, key: string): void =>
   emit(shell(el)!, "screen-select", { screen: key });
-/** The floor screen — on the shell it renders inside the active `floor` tab's card grid (a `floor-plan`
- * card), so pierce that grid's shadow root. `null` off the floor tab. */
+
 const floor = (el: TillApp) =>
   (activeTabGrid(el)?.shadowRoot?.querySelector("till-floor-screen") as TillFloorScreen | null) ??
   null;
@@ -1875,7 +1872,6 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.getDeviceStationScreen).toHaveBeenCalled();
     // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
-    // onto the kitchen tab, whose kds-board card mounts the station screen.
     expect(lock(el)).toBeNull();
     const s = station(el);
     expect(s).not.toBeNull();
@@ -1957,7 +1953,6 @@ describe("till-app", () => {
     expect(f).not.toBeNull();
     expect(f!.tables).toEqual([freeTable]);
     expect(f!.zones).toEqual([floorZone]);
-    // This phone layout has no Counter tab and no held-orders or prep-queue card, so no counter list loads.
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
@@ -2016,7 +2011,7 @@ describe("till-app", () => {
   describe("fixed selling screens and profile controls", () => {
     const withCounterTab: FormFactor = "phone-portrait";
     const withFloorCard: FormFactor = "till";
-    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
+
     const withSaleTab: FormFactor = "phone-portrait";
     const readers = [
       { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
@@ -2131,7 +2126,6 @@ describe("till-app", () => {
     it.each(["held-orders", "prep-queue"] as const)(
       "loads the counter's %s list at login and displays its rows",
       async (type) => {
-        // Not prepay, which never reads the station queue, so the prep-queue card has rows to show.
         const el = await toFixedCounter(
           withFloorCard,
           { orderFlow: "ticket_then_pay" },
@@ -2375,7 +2369,7 @@ describe("till-app", () => {
 
   describe("a till whose device profile decides whether it is offered the card reader", () => {
     const tillCounterTab: FormFactor = "till";
-    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
+
     const tillSaleTab: FormFactor = "till";
     const readers = [
       { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
@@ -12162,7 +12156,6 @@ describe("till-app", () => {
       await toCounter(el);
       emit(shell(el)!, "screen-select", { screen: "floor" });
       await el.updateComplete;
-      // Floor tab → the card grid (its floor-plan card); the counter body is gone.
       expect(el).not.toBeNull();
       expect(counter(el)).toBeNull();
       expect(shell(el)!.activeScreen).toBe("floor");
@@ -12375,12 +12368,9 @@ describe("till-app", () => {
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false });
       await flush(el);
       const s = shell(el)!;
-      // Switched to the Order tab — the card mount, not a drill.
       expect(s.activeScreen).toBe("order");
       // NO drill-in: the tab bar owns the navigation.
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
-      // The table-order screen mounts as the Order tab's card, nested in the card grid's OWN shadow root
-      // (a card mount, not the app-root drill), so pierce the grid to find it.
       const grid = el;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull();
@@ -12520,7 +12510,6 @@ describe("till-app", () => {
       await flush(el);
       emit(tableOrder(el)!, "back-to-floor");
       await el.updateComplete;
-      // Drill gone; the underlying floor tab's card grid is back on top.
       expect(drill(el)).toBeNull();
       expect(tableOrder(el)).toBeNull();
       expect(grid(el)).not.toBeNull();
@@ -13247,15 +13236,13 @@ describe("till-app", () => {
       .fn()
       .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
 
-    /** The menu switcher the counter screen renders above the card grid. */
     const switcher = (el: TillApp) =>
       counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
     /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
     const switcherButtons = (el: TillApp) => [
       ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
     ];
-    /** The product names the counter GRID is currently showing (its `wt-button.tile` labels) — the
-     * product-grid card lives inside the counter's card grid shadow root. */
+
     const gridNames = (el: TillApp) =>
       [
         ...counterBody(el)!

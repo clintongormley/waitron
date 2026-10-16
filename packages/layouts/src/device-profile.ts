@@ -59,8 +59,6 @@ export function validateCapabilities(input: unknown, formFactor?: FormFactor): C
   return out;
 }
 
-/** `null` leaves the till on its canvas's first view; otherwise one of the navigation screens the
- * profile's `capabilities` show. */
 export function validateStartingScreen(
   value: unknown,
   capabilities: readonly string[],
