@@ -417,3 +417,35 @@ it("a cancelled touch and a disconnected canvas cannot keep moving the view", as
   await el.updateComplete;
   expect(viewport.scrollLeft).toBe(0);
 });
+
+it("a pinch starting on empty grid cannot turn its second finger on a selected table into a move", async () => {
+  const el = await canvas("T1");
+  const moves = events(el, "wt-table-move");
+  const at = centre(button(el));
+  pointer(part(el, "grid"), "pointerdown", 1, at.x - 100, at.y);
+  pointer(button(el), "pointerdown", 2, at.x, at.y);
+  pointer(window, "pointermove", 2, at.x + 100, at.y);
+  pointer(window, "pointerup", 2, at.x + 100, at.y);
+  pointer(window, "pointerup", 1, at.x - 100, at.y);
+  await el.updateComplete;
+  expect(moves).toEqual([]);
+  expect(button(el).getBoundingClientRect().width).toBe(192);
+});
+
+it("an extra finger on a selected table cannot edit it while a pinch is waiting for all fingers to lift", async () => {
+  const el = await canvas("T1");
+  const moves = events(el, "wt-table-move");
+  const at = centre(button(el));
+  pointer(part(el, "grid"), "pointerdown", 1, at.x - 48, at.y);
+  pointer(part(el, "grid"), "pointerdown", 2, at.x + 48, at.y);
+  pointer(window, "pointerup", 1, at.x - 48, at.y);
+  pointer(button(el), "pointerdown", 3, at.x, at.y);
+  pointer(window, "pointermove", 3, at.x + 24, at.y);
+  pointer(window, "pointerup", 3, at.x + 24, at.y);
+  pointer(window, "pointerup", 2, at.x + 48, at.y);
+  expect(moves).toEqual([]);
+  pointer(button(el), "pointerdown", 4, at.x, at.y);
+  pointer(window, "pointermove", 4, at.x + 24, at.y);
+  pointer(window, "pointerup", 4, at.x + 24, at.y);
+  expect(moves).toEqual([{ key: "T1", x: 12, y: 10 }]);
+});

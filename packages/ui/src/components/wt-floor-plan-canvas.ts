@@ -851,7 +851,11 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   #onPointerDown(e: PointerEvent, t: PlanCanvasTable, grab: Grab): void {
-    if ((e.pointerType === "touch" || e.pointerType === "pen") && t.key !== this.selected) return;
+    if (
+      (e.pointerType === "touch" || e.pointerType === "pen") &&
+      (t.key !== this.selected || this.#gestures!.active)
+    )
+      return;
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
     if (this.#drag !== null || e.button !== 0) return;
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
