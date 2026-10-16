@@ -962,7 +962,7 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | ci.yml             | root-guards                       | not yet measured               | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
-| ci.yml             | ci                                | 0.7                            | 5     |
+| ci.yml             | ci                                | 0.7                            | 15    |
 | ci.yml             | publish                           | 3.2                            | 10    |
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
@@ -979,9 +979,10 @@ Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-g
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
-**2026-10-16, A674:** the table's historical five-minute `ci` limit is now fifteen minutes,
-with a twelve-minute limit on its jobs API step. The observed API status lag and the ten-minute
-retry window are recorded under "How the second step reads the API" above.
+**2026-10-16, A674:** `ci` is another exception to the doubling rule. Its limit rose from five
+to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a ten-minute retry
+window. The observed API status lag and chosen margins are recorded under "How the second step
+reads the API" above; the table's 0.7-minute measurement predates this change.
 
 ui-core's figure is run `37267389722` (5m18s; its other two scheduled runs, `36380351019` and
 `38206876422`, took 2m06s and 4m56s).
