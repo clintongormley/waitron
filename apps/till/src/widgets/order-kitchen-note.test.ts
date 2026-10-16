@@ -152,3 +152,53 @@ it("uses a newer stored value as baseline without replacing the draft being type
   await userEvent.click(page.elementLocator(button(el, "save")));
   expect(sent).toEqual([{ scopeKey: "order:a", revision: 8, visit: 0, note: "My draft" }]);
 });
+
+it("adopts a newer saved note while its untouched editor is open", async () => {
+  const el = await mount({ note: "Old instruction" });
+  await open(el);
+  el.note = "New instruction";
+  el.revision++;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-textarea")!.value).toBe("New instruction");
+  expect(button(el, "save").disabled).toBe(true);
+});
+it("keeps the draft on repeated open and emits only one close", async () => {
+  const el = await mount({ note: "Saved" });
+  const closed: unknown[] = [];
+  el.addEventListener("close-kitchen-note", (e) => closed.push((e as CustomEvent).detail));
+  el.busy = true;
+  el.openEditor();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  el.busy = false;
+  await el.updateComplete;
+  await open(el);
+  await fill(el, "Draft");
+  el.openEditor();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Draft");
+  el.closeEditor();
+  el.closeEditor();
+  await el.updateComplete;
+  expect(closed).toHaveLength(1);
+});
+it("ignores queued changes and repeated saves while the first save is pending", async () => {
+  const el = await mount();
+  const saved: unknown[] = [];
+  el.addEventListener("save-kitchen-note", (e) => saved.push((e as CustomEvent).detail));
+  await open(el);
+  await fill(el, "First");
+  await userEvent.click(page.elementLocator(button(el, "save")));
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-textarea")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Queued later change" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  button(el, "save").click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-textarea")!.value).toBe("First");
+  expect(saved).toEqual([{ scopeKey: "order:a", revision: 7, visit: 0, note: "First" }]);
+});

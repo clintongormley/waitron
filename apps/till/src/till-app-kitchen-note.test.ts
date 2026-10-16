@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, servedMenus, draftServer } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1486,4 +1487,353 @@ it("keeps a newer passive note when another floor read carries an older snapshot
   expect(tableHeading(el).note).toBe("Newer passive note");
   expect(tableHeading(el).revision).toBe(4);
   expect(tableScreen(el).party?.revision).toBe(3);
+});
+
+describe("note failure recovery and callback boundaries", () => {
+  it("saves a fresh counter instruction through the editor without a server write", async () => {
+    const el = await mounted({}, false);
+    await edit(el, "Fresh local instruction");
+    expect(basket(el).store.kitchenNote).toBe("Fresh local instruction");
+    expect(basket(el).store.persisted).toBe(false);
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+    expect(heading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  });
+  it("saves an unseated table instruction through its editor", async () => {
+    const { el } = await mountedTable({ seatTable: vi.fn() }, null);
+    const draft = tableScreen(el).draftStore!;
+    await editTable(el, "Before seating");
+    expect(draft.kitchenNote).toBe("Before seating");
+    expect(tableScreen(el).party).toBeNull();
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+    expect(api.seatTable).not.toHaveBeenCalled();
+  });
+  it("keeps a confirmed Place in the basket when its note cannot be reread", async () => {
+    const el = await mounted(
+      { getKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")) },
+      false,
+    );
+    const store = basket(el).store;
+    store.addProduct(product("cana", "Caña", "2.50"), "1");
+    store.kitchenNote = "Local instruction";
+    const id = store.id;
+    const lines = store.lines;
+    emit(counter(el), "place-order", {});
+    await flush(el);
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+    expect(api.getKitchenNote).toHaveBeenCalledWith({ workingOrderId: id });
+    expect(store.persisted).toBe(true);
+    expect(store.id).toBe(id);
+    expect(store.lines).toEqual(lines);
+    expect(store.kitchenNote).toBe("Local instruction");
+  });
+  it.each(["before read", "during read"])(
+    "keeps a replacement basket when a fresh Place finishes %s",
+    async (phase) => {
+      const held = deferred<{ id: string; orderNumber: number }>();
+      const read = deferred<{
+        scope: { workingOrderId: string };
+        note: string;
+        revision: number;
+        ownerRevision: number;
+      }>();
+      const el = await mounted(
+        {
+          parkOrder: vi.fn().mockReturnValue(held.promise),
+          getKitchenNote: vi.fn().mockReturnValue(read.promise),
+        },
+        false,
+      );
+      const store = basket(el).store;
+      store.addProduct(product("cana", "Caña", "2.50"), "1");
+      const id = store.id;
+      emit(counter(el), "place-order", {});
+      await flush(el);
+      if (phase === "during read") {
+        held.resolve({ id, orderNumber: 1 });
+        await flush(el);
+        expect(api.getKitchenNote).toHaveBeenCalledOnce();
+      }
+      store.loadFrom("replacement", store.lines.slice(), "Replacement", 8, {
+        note: "Replacement instruction",
+        revision: 1,
+        scopeKey: "order:replacement",
+      });
+      await flush(el);
+      if (phase === "before read") held.resolve({ id, orderNumber: 1 });
+      else
+        read.resolve({
+          scope: { workingOrderId: id },
+          note: "Late instruction",
+          revision: 1,
+          ownerRevision: 8,
+        });
+      await flush(el);
+      expect(store.id).toBe("replacement");
+      expect(store.kitchenNote).toBe("Replacement instruction");
+      expect(store.revision).toBe(8);
+      if (phase === "before read") expect(api.getKitchenNote).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps a counter conflict editable when its authoritative reread fails", async () => {
+    const el = await mounted({
+      setKitchenNote: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+      getKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+    });
+    const h = await edit(el, "Counter draft");
+    expect(h.refusal).toBe(codeMessage("working_order.out_of_date"));
+    expect(h.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Counter draft");
+    expect(
+      h.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-save]")!.disabled,
+    ).toBe(false);
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+  });
+  it("keeps a party conflict editable when its authoritative reread fails", async () => {
+    const { el } = await mountedTable({
+      setKitchenNote: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+      getKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+    });
+    const h = await editTable(el, "Party draft");
+    expect(h.refusal).toBe(codeMessage("party.out_of_date"));
+    expect(h.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Party draft");
+    expect(
+      h.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-save]")!.disabled,
+    ).toBe(false);
+  });
+  it("does not open Waiting for an order no longer in the list", async () => {
+    const el = await mounted();
+    emit(counter(el), "edit-waiting-kitchen-note", { id: "removed" });
+    await flush(el);
+    expect(api.getKitchenNote).not.toHaveBeenCalled();
+    expect(waitingEditor(el)).toBeNull();
+  });
+  it("keeps Waiting closed after a failed note read", async () => {
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    expect(api.getKitchenNote).toHaveBeenCalledOnce();
+    expect(waitingEditor(el)).toBeNull();
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+  });
+  it("abandons a Waiting read invalidated between its reply and the editor render", async () => {
+    const read = deferred<typeof waitingSnapshot>();
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockReturnValue(read.promise),
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    const store = basket(el).store;
+    read.resolve(waitingSnapshot);
+    queueMicrotask(() => store.loadFrom("replacement", store.lines.slice()));
+    await flush(el);
+    expect(store.id).toBe("replacement");
+    expect(waitingEditor(el)).toBeNull();
+  });
+  it("uses the party owner revision for a Waiting bill and closes a stale edit", async () => {
+    const saved = { ...waitingSnapshot, scope: { partyId: "waiting-party" } };
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockResolvedValue(saved),
+      setKitchenNote: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    await saveWaiting(el, "Party instruction");
+    expect(api.setKitchenNote).toHaveBeenCalledWith(
+      { partyId: "waiting-party" },
+      {
+        note: "Party instruction",
+        submissionId: expect.any(String),
+        expectedNoteRevision: 3,
+        expectedPartyRevision: 7,
+      },
+    );
+    expect(waitingEditor(el)).toBeNull();
+    expect(basket(el).store.id).toBe("wo-9");
+  });
+  it.each(["success", "refusal"])(
+    "keeps a newer Waiting editor after an older save's %s",
+    async (outcome) => {
+      const write = deferred<typeof waitingSnapshot>();
+      const second = {
+        ...waitingSnapshot,
+        scope: { workingOrderId: "waiting-8" },
+        note: "Second instruction",
+        revision: 0,
+      };
+      const el = await mounted({
+        listCounterWaiting: vi
+          .fn()
+          .mockResolvedValue([waitingOrder, { ...waitingOrder, id: "waiting-8" }]),
+        getKitchenNote: vi.fn().mockResolvedValueOnce(waitingSnapshot).mockResolvedValue(second),
+        setKitchenNote: vi.fn().mockReturnValue(write.promise),
+      });
+      emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+      await flush(el);
+      await saveWaiting(el, "First instruction");
+      waitingEditor(el)!.closeEditor();
+      await flush(el);
+      emit(counter(el), "edit-waiting-kitchen-note", { id: "waiting-8" });
+      await flush(el);
+      expect(waitingEditor(el)?.note).toBe("Second instruction");
+      if (outcome === "success")
+        write.resolve({ ...waitingSnapshot, note: "First instruction", revision: 4 });
+      else write.reject({ code: "party.out_of_date" });
+      await flush(el);
+      expect(waitingEditor(el)?.note).toBe("Second instruction");
+      expect(waitingEditor(el)?.refusal).toBe("");
+      expect(waitingEditor(el)?.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+    },
+  );
+  it.each(["send-lines", "pay-tab", "bill-pay", "submit-draft"])(
+    "keeps a refused party note ahead of %s",
+    async (action) => {
+      const { el, server } = await mountedTable({
+        setKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+        sendLines: vi.fn(),
+        getBillBalance: vi.fn(),
+      });
+      const store = tableScreen(el).draftStore!;
+      store.addProduct(product("cana", "Caña", "2.50"), "1");
+      await flush(el);
+      const h = await editTable(el, "Unsent instruction");
+      expect(h.refusal).not.toBe("");
+      emit(
+        tableScreen(el),
+        action,
+        action === "send-lines"
+          ? { lineNos: [1] }
+          : action === "pay-tab"
+            ? { method: "cash", amount: "10.00" }
+            : action === "bill-pay"
+              ? { way: "contribution", amount: "1.00", lines: [] }
+              : { groups: [{ release: "fire", lineIndexes: [0] }], store, sent: store.lines },
+      );
+      await flush(el);
+      expect(api.sendLines).not.toHaveBeenCalled();
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.getBillBalance).not.toHaveBeenCalled();
+      expect(server.submitDraft).not.toHaveBeenCalled();
+      expect(h.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Unsent instruction");
+    },
+  );
+  it("does not begin a card payment when saving a dirty persisted instruction fails", async () => {
+    const el = await mounted({
+      setKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+      pay: vi.fn(),
+    });
+    const store = basket(el).store;
+    store.kitchenNote = "Unsent instruction";
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+    expect(api.setKitchenNote).toHaveBeenCalledOnce();
+    expect(api.pay).not.toHaveBeenCalled();
+    expect(store.kitchenNote).toBe("Unsent instruction");
+  });
+});
+
+it.each(["save refusal", "conflict reread"])(
+  "keeps a reopened table after an old note's %s",
+  async (phase) => {
+    const write = deferred<typeof partyNote>();
+    const read = deferred<typeof partyNote>();
+    const { el } = await mountedTable({
+      setKitchenNote: vi.fn().mockReturnValue(write.promise),
+      getKitchenNote: vi.fn().mockReturnValue(read.promise),
+    });
+    await editTable(el, "Old visit draft");
+    if (phase === "conflict reread") {
+      write.reject({ code: "party.out_of_date" });
+      await flush(el);
+      expect(api.getKitchenNote).toHaveBeenCalledOnce();
+    }
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      tableRow(
+        tableParty({ ...partyNote, note: "New visit instruction", revision: 5, ownerRevision: 8 }),
+      ),
+    ]);
+    emit(tableScreen(el), "floor-refresh", {});
+    await flush(el);
+    emit(tableScreen(el), "open-table", { tableId: "table-four", seated: true });
+    await flush(el);
+    expect(tableHeading(el).note).toBe("New visit instruction");
+    if (phase === "save refusal") write.reject({ code: "party.out_of_date" });
+    else
+      read.resolve({
+        ...partyNote,
+        note: "Old conflict instruction",
+        revision: 2,
+        ownerRevision: 3,
+      });
+    await flush(el);
+    expect(tableHeading(el).note).toBe("New visit instruction");
+    expect(tableHeading(el).refusal).toBe("");
+    expect(tableScreen(el).party?.revision).toBe(8);
+    if (phase === "save refusal") expect(api.getKitchenNote).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["scope", "visit"])("drops a counter save event with an obsolete %s", async (field) => {
+  const el = await mounted();
+  const store = basket(el).store;
+  emit(heading(el), "save-kitchen-note", {
+    scopeKey: field === "scope" ? "order:earlier-order" : store.kitchenNoteScopeKey,
+    visit: field === "visit" ? store.loadGeneration - 1 : store.loadGeneration,
+    revision: store.kitchenNoteRevision,
+    note: "Obsolete instruction",
+  });
+  await flush(el);
+  expect(store.kitchenNote).toBeNull();
+  expect(api.setKitchenNote).not.toHaveBeenCalled();
+});
+it.each(["scope", "visit"])("drops a party save event with an obsolete %s", async (field) => {
+  const { el } = await mountedTable();
+  const h = tableHeading(el);
+  emit(h, "save-kitchen-note", {
+    scopeKey: field === "scope" ? "party:earlier-party" : h.scopeKey,
+    visit: field === "visit" ? h.visit - 1 : h.visit,
+    revision: h.revision,
+    note: "Obsolete instruction",
+  });
+  await flush(el);
+  expect(h.note).toBe(partyNote.note);
+  expect(api.setKitchenNote).not.toHaveBeenCalled();
+});
+it("does not pay a basket replaced just after its dirty note was saved", async () => {
+  const el = await mounted({
+    setKitchenNote: vi
+      .fn()
+      .mockResolvedValue({
+        scope: { workingOrderId: "wo-9" },
+        note: "Saved instruction",
+        revision: 1,
+        ownerRevision: 4,
+      }),
+  });
+  const store = basket(el).store;
+  store.kitchenNote = "Saved instruction";
+  let replaced = false;
+  const off = store.subscribe(() => {
+    if (!replaced && !store.kitchenNoteDirty) {
+      replaced = true;
+      queueMicrotask(() =>
+        store.loadFrom("replacement", store.lines.slice(), "New order", 8, {
+          note: "Replacement instruction",
+          revision: 0,
+          ownerRevision: 8,
+          scopeKey: "order:replacement",
+        }),
+      );
+    }
+  });
+  emit(counter(el), "confirm-payment", { method: "cash", amount: "10.00" });
+  await flush(el);
+  off();
+  expect(replaced).toBe(true);
+  expect(store.id).toBe("replacement");
+  expect(store.kitchenNote).toBe("Replacement instruction");
+  expect(api.recordSale).not.toHaveBeenCalled();
 });
