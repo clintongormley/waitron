@@ -48,6 +48,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se ha podido aceptar este fichaje. Consulta tu estado.",
   },
 
+  "extras.unsupported_product": {
+    en: "Extras can only be added to a dish sold by the unit.",
+    es: "Solo se pueden añadir extras a un plato que se vende por unidades.",
+  },
   "ticket.extra_not_movable": {
     en: "Extras cannot be moved separately",
     es: "Los extras no se pueden pasar por separado",

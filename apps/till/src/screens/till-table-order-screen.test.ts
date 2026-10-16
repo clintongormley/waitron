@@ -2633,6 +2633,37 @@ describe("till-table-order-screen", () => {
       });
     });
 
+    it("sends no extras on a dish in a unit with decimal places, whose extras list it does not offer", async () => {
+      const dish: TillProduct = {
+        ...burger,
+        offeredModifiers: [cookedList, extrasList],
+        unit: {
+          id: "unit-l",
+          name: { en: "litre" },
+          abbreviation: { en: "l" },
+          precision: 3,
+          hardwareUnit: null,
+        },
+      };
+      const { el } = await mount({
+        products: [dish],
+        lines: [{ ...burgerLine, optionSnapshots: [] }],
+        revision: 1,
+      });
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      picker
+        .shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!
+        .click();
+      await picker.updateComplete;
+      const seen = captureChange(el);
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.patch).toEqual({
+        note: null,
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
+      });
+    });
+
     it("sends an empty extras set when every pick is taken off, so the server removes them", async () => {
       const dish: TillProduct = { ...burger, offeredModifiers: [extrasList] };
       const { el } = await mount({ products: [dish], lines: [burgerLine, cheeseChild] });

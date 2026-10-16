@@ -227,7 +227,7 @@ describe("order-line pricing", () => {
   });
 });
 
-it("rounds each extras pick before summing, so a fractional dish quantity matches the server", () => {
+it("rounds each extras pick before summing", () => {
   const line: OrderLine = {
     product: jamon,
     quantity: "0.125",

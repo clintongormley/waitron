@@ -2284,6 +2284,24 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(cancelDialog(el)).toBeNull();
   });
 
+  it("says a raised dish not sold by the unit cannot keep its extras, not the generic table error", async () => {
+    const { el, screen } = await openBurgerTab({
+      updateOrderLine: vi.fn().mockRejectedValue({
+        code: "extras.unsupported_product",
+        status: 400,
+        productId: "p-burger",
+        soldBy: "fraction",
+      }),
+    });
+
+    emit(screen, "change-line", { ...change, patch: { quantity: "2" } });
+    await flush(el);
+
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7);
+    expect(banner(el)!.textContent).toContain(codeMessage("extras.unsupported_product"));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+  });
+
   it("says changes to sent items are switched off, and reloads the line's actions", async () => {
     const { el, screen } = await openBurgerTab({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),

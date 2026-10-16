@@ -200,9 +200,12 @@ the basket resolved, and decides what is stored:
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
-- A pick on a dish that is not priced `each` is refused with `extras.unsupported_product`: a child
-  priced dish × pick would bill a fraction of an extra on a weighed dish. An options answer on a
-  weighed dish is still allowed.
+- A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
+  refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
+  priced dish × pick would carry a weight or a fraction of an extra, not a number of them. Its
+  extras lists are checked with no minimum, so a required list does not refuse an order of it with
+  no picks (`extrasListsFor`, `apps/server/src/working-order.ts`). An options answer on such
+  a dish is still allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
@@ -298,11 +301,13 @@ which `listMenuOffers` built when the menu was published, with each extras item 
 marked with whether it can be sold now; nothing in `apps/till` outside its tests calls
 `GET /api/products`, the route over `listAvailableProducts`.
 
-Nothing else on those two payloads describes a modifier. The till's picker walks
-`offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
-a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and tender-pay's
-weighed quantity — decide whether a dish needs a picker from that field or from an available
-variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
+Nothing else on those two payloads describes a modifier. The till's picker
+(`apps/till/src/widgets/modifier-picker.ts`) walks `offeredModifiers` through `offeredListsOf`
+(`apps/till/src/state/order-line.ts`), which drops every extras list on a dish not sold by the unit,
+and the two
+surfaces that ADD a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and
+tender-pay's weighed quantity — decide whether a dish needs a picker from those lists or from an
+available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).
 
 Six things it is worth knowing about that payload:
 
@@ -332,7 +337,8 @@ Six things it is worth knowing about that payload:
   version no longer offers checks that line's options answer against the dish's own current lists
   (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
   check it against. A required list the picker never drew would refuse the order with
-  `options.label_required` or `extras.limit_exceeded`, and an offered list the server does not know
+  `options.label_required` or `extras.limit_exceeded` — except an extras list on a dish not sold
+  by the unit, which neither the till draws nor the server requires — and an offered list the server does not know
   about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available**, and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field

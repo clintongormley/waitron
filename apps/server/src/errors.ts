@@ -284,11 +284,11 @@ declare module "@waitron/shared" {
      * name what was attempted; it is caller-supplied text, never a secret.
      */
     "sale.unsupported_tender": { method: string };
-    /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
-     *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
-     *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
-     *  to. */
-    "extras.unsupported_product": { productId: string; pricingUnit: string };
+    /** An extras pick on a dish not sold by the unit: its unit has a scale (`soldBy: "weight"`) or
+     *  allows decimal places (`"fraction"`). A child line is priced at the dish's quantity times the
+     *  pick count, so on such a dish an extra's quantity would be a weight or a fraction, not a number
+     *  of extras. */
+    "extras.unsupported_product": { productId: string; soldBy: "weight" | "fraction" };
     /**
      * A line's free-text kitchen `note`, after trimming, is longer than the limit. `length` is the
      * trimmed length and `limit` the cap.

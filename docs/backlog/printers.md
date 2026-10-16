@@ -374,9 +374,6 @@ just a green typecheck.
   incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
   What is left:
-  - **Part 2d: extras only on a dish sold by the unit**, so no half portion of an extra is stored:
-    refuse extras on a dish whose unit has a scale or allows decimals (owner, 2026-10-15; its
-    own PR, see the plan's Part 2d).
   - **Part 3: guests and the amount per person** when the table's guests were entered.
     Joined tables' counts are added together when they join (or when guests move onto a seated
     table), so the party's own count holds the sum, or no count when either party had none or the sum
@@ -574,6 +571,13 @@ returns `null`. This checks those readers, not every sale path.
   `docs/compliance/regional-language-rules.md`); with only the TOTAL enlarged, the rest of the data
   keeps the caption's size. The same call as the till screen's larger TOTAL on 2026-10-01 (C115,
   `docs/compliance/verifactu-findings.md`). The VERI\*FACTU line may be printed in bold for margin.
+
+- **A full invoice still works a line's unit price back from its total when the line has no stored
+  price before discounts (A663 Part 2c).** #1777 stores that price (`sale_lines.list_unit_price_gross`);
+  a line saved before it has none, and `listUnitGrossOf` (`apps/server/src/receipt-figures.ts`)
+  divides the line's total before discounts by its quantity instead. Kept although no
+  backwards-compatibility code is wanted before go-live, because the shared receipt test data
+  (`apps/server/src/testing/full-invoice-fixture.ts`) stores no such price. The owner was asked on 2026-10-16 whether to remove it; the default is to keep it.
 
 - **Receipts carry no drink and food subtotals (owner, 2026-10-15).** The owner dropped them from
   A663.

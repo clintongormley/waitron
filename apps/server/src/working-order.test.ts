@@ -7430,7 +7430,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       }),
     ).rejects.toMatchObject({
       code: "extras.unsupported_product",
-      params: { productId: cafeId, pricingUnit: "weight" },
+      params: { productId: cafeId, soldBy: "weight" },
     });
   });
 });

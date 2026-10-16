@@ -1065,6 +1065,43 @@ it("offers no Edit on a line whose only question was its variant", async () => {
   expect(el.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
 });
 
+it("offers no Edit on a weighed line whose dish offers only extras", async () => {
+  // The server refuses extras on a dish not sold by the unit (`extras.unsupported_product`).
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...jamon,
+    offeredModifiers: [
+      offeredExtras("list-extras", "Extras", [offeredItem("p-cheese", "Queso", "1.00")]),
+    ],
+  };
+  store.addProduct(product, "0.250");
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(el.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+});
+
+it("reopens a weighed line's picker on its options list without its extras list", async () => {
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...jamon,
+    offeredModifiers: [
+      offeredExtras("list-extras", "Extras", [offeredItem("p-cheese", "Queso", "1.00")]),
+      cutList,
+    ],
+  };
+  store.addProduct(product, "0.250", answered("label-fino", "Fino"));
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    )!;
+  await picker.updateComplete;
+  expect(picker.shadowRoot!.querySelector("#label-list-cut-label-fino")).not.toBeNull();
+  expect(picker.shadowRoot!.querySelector('[name="extras-list-extras"]')).toBeNull();
+  expect(picker.shadowRoot!.querySelector('[data-test^="pick-list-extras-"]')).toBeNull();
+});
+
 it("reopens the picker on one line's answer and changes only that line", async () => {
   const store = new WorkingOrderStore();
   const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };

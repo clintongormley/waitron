@@ -7,7 +7,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -1415,6 +1415,25 @@ describe("a table round refused for another reason", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("product.not_sold_separately"));
     expect(roundStore(el).lineCount).toBe(1);
     expect(roundStore(el).lines[0]!.blocked).toBe("not_sold_separately");
+  });
+
+  it("says extras on a dish not sold by the unit in its own words, and keeps the round", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        submitDraft: vi.fn().mockRejectedValue({
+          code: "extras.unsupported_product",
+          status: 400,
+          productId: "Lemonade",
+          soldBy: "fraction",
+        }),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("extras.unsupported_product"));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+    expect(roundStore(el).lineCount).toBe(1);
   });
 });
 
