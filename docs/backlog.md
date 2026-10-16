@@ -4989,6 +4989,13 @@ the tree. What remains, largest first:
   `menu-sections-upgrade`, `mutation-shard` and `pre-push`.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
+- **The installer's timeout-diagnostic test expired before reaching Docker.** During A668-5's
+  normal push, the 700 ms case retained self-update curl/copy calls but no Docker call, and its
+  existing `/docker/` assertion failed. The menu-upgrade populated case also exceeded 30 seconds.
+  Both files then passed all 105 cases in isolation, without a code or test change; no repair is
+  claimed. Investigate the full-suite workload and the diagnostic's preparation phase.
+  [Receipt](backlog/ci.md#a668-5-normal-push-recurrence-2026-10-16).
+
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
   `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on
   `main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
