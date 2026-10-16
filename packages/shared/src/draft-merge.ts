@@ -10,6 +10,9 @@ export interface MergeableDraftLine {
   menuVersionId: string | null;
   courseId: string | null;
   makeAt?: string | null;
+  slot?: number;
+  joinGroupId?: string | null;
+  afterGroupId?: string | null;
   note: string | null;
   options: readonly OptionSelection[];
   extras: readonly ExtraSelection[];
@@ -43,6 +46,9 @@ export function draftLineMergeKey(line: MergeableDraftLine): string | null {
     line.menuVersionId,
     line.courseId,
     line.makeAt ?? null,
+    line.slot ?? 0,
+    line.joinGroupId ?? null,
+    line.afterGroupId ?? null,
     line.note,
     options,
     extras,
