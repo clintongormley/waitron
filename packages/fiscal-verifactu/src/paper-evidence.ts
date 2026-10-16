@@ -1,3 +1,4 @@
+import { knownPaperHistoryAllows } from "./known-paper-history.js";
 import {
   parsePaperBlock as parseBlock,
   parsePaperConsumption as parseConsumption,
@@ -59,7 +60,9 @@ export type PaperReservationVerification =
   | {
       readonly ok: false;
       readonly reason:
-        Exclude<PaperVerification, { ok: true }>["reason"] | "reservation_not_current";
+        | Exclude<PaperVerification, { ok: true }>["reason"]
+        | "reservation_not_current"
+        | "reservation_mismatch";
     };
 
 export interface PaperCustodianTrust {
@@ -70,6 +73,7 @@ export interface PaperCustodianTrust {
 
 export interface PaperEvidenceContext {
   readonly allocationId: string;
+  readonly knownHistory?: unknown;
   readonly taxpayerNif: string;
   readonly softwareId: string;
   readonly environment: string;
@@ -463,7 +467,10 @@ export function verifyPaperReservation(
   trust: unknown,
   context: PaperReservationContext,
 ): PaperReservationVerification {
-  return verifyReservation(input, trust, context, context);
+  const result = verifyReservation(input, trust, context, context);
+  if (result.ok && !knownPaperHistoryAllows(result.allocation, context.knownHistory))
+    return { ok: false, reason: "reservation_mismatch" };
+  return result;
 }
 
 function verifyReservation(

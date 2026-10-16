@@ -83,7 +83,7 @@ export function firstFiscalOwner(c: Context): FirstSetupOwnerAttempt {
     ownerGeneration: integer("X-Waitron-Setup-Generation"),
   };
 }
-export async function readFirstFiscalBody(c: Context): Promise<unknown> {
+export async function readFirstFiscalBody(c: Context, limit = 131072): Promise<unknown> {
   const reader = c.req.raw.body?.getReader();
   if (reader === undefined) invalid();
   const chunks: Uint8Array[] = [];
@@ -93,7 +93,7 @@ export async function readFirstFiscalBody(c: Context): Promise<unknown> {
       const next = await reader.read();
       if (next.done) break;
       length += next.value.byteLength;
-      if (length > 131072) {
+      if (length > limit) {
         await reader.cancel();
         invalid();
       }
@@ -195,6 +195,50 @@ export function mountSetupFirstFiscalApi(
         });
       });
     });
+  for (const action of ["node-key", "document", "document-kept"] as const)
+    app.post(`${root}/${action}`, (c) =>
+      boundary(c, log, () =>
+        host.coordinator.run(async (hold) => {
+          const owner = firstFiscalOwner(c);
+          const state = await host.owner.authorize(owner);
+          host.assertSelection(state);
+          const body = object(
+            await readFirstFiscalBody(c, action === "document" ? 8 * 1024 * 1024 : 131072),
+          );
+          if (action === "node-key") {
+            exact(body, ["reconfirmation"]);
+            const { stage, key } = await host.keys.stageInitialNodeKey(
+              owner,
+              text(body.reconfirmation),
+              hold,
+            );
+            return c.json({
+              stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
+              key,
+            });
+          }
+          const fields = ["module", "stageId", "inputDigest", "historyDigest", "documentDigest"];
+          if (action === "document") {
+            exact(body, [...fields, "statement"]);
+            await host.delivery.registerFirstFiscalDelivery(
+              owner,
+              body as unknown as import("./first-fiscal-delivery.js").FirstFiscalDeliveryInput,
+              hold,
+            );
+          } else {
+            exact(body, [...fields, "kept", "reconfirmation"]);
+            const { reconfirmation, ...input } = body;
+            await host.delivery.confirmFirstFiscalDocumentKept(
+              owner,
+              input as unknown as import("./first-fiscal-delivery.js").FirstFiscalKeptInput,
+              text(reconfirmation),
+              hold,
+            );
+          }
+          return c.json({ accepted: true });
+        }),
+      ),
+    );
   app.post(`${root}/offerings`, (c) =>
     boundary(c, log, async () => {
       const body = exact(await readFirstFiscalBody(c), ["fiscalTerritory"]);

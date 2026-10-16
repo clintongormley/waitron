@@ -29,5 +29,15 @@ export interface InitialSetupContribution {
     imported: InitialSetupImport,
     statement: unknown,
   ): unknown;
+  documentConfirmation?(
+    context: InitialSetupContext,
+    imported: InitialSetupImport,
+    document: {
+      readonly statement: unknown;
+      readonly historyDigest: string;
+      readonly documentDigest: string;
+      readonly prior: unknown | null;
+    },
+  ): unknown;
   committed(tx: Transaction, context: InitialSetupContext, input: unknown): Promise<unknown | null>;
 }

@@ -29,6 +29,7 @@ import {
   readDeclaredPaperConfirmation,
   type DeclaredPaperEvidence,
 } from "./declared-paper-evidence.js";
+import { projectDeclaredHistory } from "./paper-register-history.js";
 import { isAllocatedSeries } from "./allocation-identity.js";
 
 function refuse(reason = "malformed_allocation"): never {
@@ -284,6 +285,35 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
     if (trust === null || trust.fingerprint !== publicKey.fingerprint)
       refuse("reservation_untrusted");
     return freeze(trust);
+  },
+  documentConfirmation(context, imported, document) {
+    const current = FISCAL_INITIAL_SETUP.confirmation(context, imported, document.statement);
+    const facts = readDeclaredPaperConfirmation(current);
+    if (
+      facts.delivery.documentDigest !== document.documentDigest ||
+      facts.delivery.historyDigest !== document.historyDigest
+    )
+      refuse("outside_confirmation_missing");
+    if (document.prior !== null) {
+      const prior = readDeclaredPaperConfirmation(document.prior);
+      const projected = projectDeclaredHistory(prior.history, prior.known);
+      const known = {
+        scope: projected.scope,
+        sHighWater: projected.sHighWater,
+        pHighWater: projected.pHighWater,
+        sBurnFloor: projected.sBurnFloor,
+        pBurnFloor: projected.pBurnFloor,
+        currentHead: projected.head,
+        retainedHeads: projected.heads,
+        originals: projected.originals,
+        retiredBindings: projected.retiredBindings,
+        history: prior.history,
+      };
+      projectDeclaredHistory(facts.history, known);
+      const serial = Number(facts.input.allocation.installationIdentity.slice(1));
+      if (serial <= projected.sBurnFloor) refuse("reservation_mismatch");
+    }
+    return current;
   },
   confirmation(context, imported, statement) {
     const checked = readInput(context, imported.input);

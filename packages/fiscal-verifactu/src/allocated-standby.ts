@@ -14,6 +14,7 @@ import {
 import type { AllocationEvidenceRequest } from "./allocation-operation.js";
 import type { PaperReservationContext } from "./paper-evidence.js";
 import { validateStandbyAllocation, establishDormantAllocation } from "./standby-allocation.js";
+import { readPreparedDeclaredStandby } from "./declared-paper-standby.js";
 import { activatePreparedFiscalStandby } from "./allocated-lifecycle.js";
 
 export interface StandbyAllocationEvidence extends Pick<
@@ -28,6 +29,7 @@ export interface StandbyAllocationEvidence extends Pick<
   | "currentEntryState"
 > {
   readonly trust: unknown;
+  readonly knownHistory?: unknown;
 }
 export type StandbyAllocationEvidenceSource = (
   request: AllocationEvidenceRequest,
@@ -96,6 +98,7 @@ export function createStandbyAllocationPreparation(
           "currentRegisterConfirmed",
           "reservationConfirmed",
           "currentEntryState",
+          ...(Object.hasOwn(receipt.evidence, "knownHistory") ? ["knownHistory"] : []),
         ])
       )
         return refuse("outside_confirmation_missing");
@@ -124,6 +127,8 @@ function readPrepared(
   action: string,
   target: ProvisionedNode,
 ) {
+  const declared = readPreparedDeclaredStandby(operation, action, target);
+  if (declared !== undefined) return declared;
   if (
     operation === undefined ||
     readOperationAuthority(operation.authority, operation.binding) === undefined

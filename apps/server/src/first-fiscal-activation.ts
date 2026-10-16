@@ -257,6 +257,12 @@ export async function activateFirstFiscal(
       await advance({ kind: "committed", result: checked });
   }
   const result = checked!.venue;
+  for (const module of state.frozen.modules) {
+    const binding = firstSetupModuleContext(state, module.module).binding;
+    if (!(await host.delivery.has(binding))) continue;
+    const stage = await host.keys.readStage({ ...owner, revision: state.revision }, hold);
+    await host.keys.installStagedNodeKey(deps.db, state, stage, hold);
+  }
   await host.publishSelection(state);
   const identity = async () => ({
     trust: await readMembershipTrustSet(deps.db!),

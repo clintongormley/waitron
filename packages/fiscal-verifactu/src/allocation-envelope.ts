@@ -11,6 +11,7 @@ import {
 } from "./allocation-identity.js";
 import { verifyPaperEvidence, type PaperCustodianTrust } from "./paper-evidence.js";
 import { readCloudAllocationReceipt, type ReceiptTrust } from "./cloud-evidence.js";
+import { knownPaperHistoryAllows } from "./known-paper-history.js";
 import { validateDeclaredPaperEvidence } from "./declared-paper-evidence.js";
 
 export interface FiscalAllocation {
@@ -73,6 +74,7 @@ export interface AllocationContext {
     | { readonly kind: "paper-declared"; readonly token: object }
     | {
         readonly kind: "paper";
+        readonly knownHistory?: unknown;
         readonly trust: PaperCustodianTrust | null;
         readonly recipientVenueId: string;
         readonly generationId: string;
@@ -371,6 +373,8 @@ function validateEnvelope(
       if (verified.reason === "series_mismatch") return refuse("series_mismatch");
       return refuse("reservation_untrusted");
     }
+    if (!replay && !knownPaperHistoryAllows(verified.allocation, context.authority.knownHistory))
+      return refuse("reservation_mismatch");
     if (
       verified.allocation.installationIdentity !== input.installationIdentity ||
       verified.allocation.source !== input.source ||

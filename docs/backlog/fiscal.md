@@ -276,9 +276,22 @@ Revised Task 4 adds explicitly unsigned admission through module preparation und
 authority. The new preparation checks public history, exact consumption and kept-document references;
 its callback token cannot be recreated from submitted JSON. New tests exercise S/P activation and
 exact committed-result reading without changing the activation writer or existing fiscal assertions
-(`declared-paper-preparation.test.ts`). Durable host delivery/grants remain Task 5.
-These are library/preparation checks, not wizard, recovery or owner acceptance. PDF delivery and the
-remaining replacement-plan tasks stay open.
+(`declared-paper-preparation.test.ts`).
+
+**Branch implementation checkpoint, 2026-10-16:** revised Task 5 adds owner-bound document
+registration and explicit kept confirmation, bounded public-history chunks, and one-use preparation
+grants. A transient named node key retains only its verifier on the host; synthetic publication
+checks install that verifier after fiscal commit and retain it through an interrupted publication
+retry. Signed old allocations below a separately supplied burn checkpoint are refused by initial,
+restore, re-registration and standby consumers. Unsigned standby reservation and promotion retain
+the original reservation history and require fresh operator authority. These checks use the actual
+module preparation and activation paths, with the activation writer and existing fiscal assertions
+unchanged. See `declared-paper-consumers.test.ts`, `declared-paper-standby.test.ts`,
+`first-fiscal-delivery.test.ts` and `first-fiscal-declared-publication.test.ts`.
+
+These checks do not complete the wizard, recovery or owner acceptance. The browser session's
+same-Blob Download/Print reuse belongs to revised Task 9; the host already binds repeated delivery
+to the same document and key stage. Tasks 6–12, final reviews and publication gates remain open.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
 [two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper

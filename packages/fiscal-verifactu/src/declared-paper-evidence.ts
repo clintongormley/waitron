@@ -14,6 +14,7 @@ import type {
   FiscalAllocation,
   RecoveryApproval,
 } from "./allocation-envelope.js";
+import { readDeclaredStandbyInput } from "./declared-paper-standby.js";
 import { isAllocatedSeries } from "./allocation-identity.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import {
@@ -204,13 +205,21 @@ export function readDeclaredPaperInput(value: unknown) {
     refuse("malformed_approval");
   for (const key of ["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"])
     if (!equal(approval[key], consumption[key])) refuse("event_mismatch");
-  for (const key of ["eventId", "sourceId", "targetNodeId"])
+  for (const key of ["sourceId", "targetNodeId"])
     if (!equal(reservation.binding[key], consumption[key])) refuse("event_mismatch");
+  if (
+    reservation.binding.action === "reserve"
+      ? reservation.binding.eventId === consumption.eventId
+      : reservation.binding.eventId !== consumption.eventId
+  )
+    refuse("event_mismatch");
   if (
     reservation.binding.module !== "fiscal-verifactu" ||
     (candidate.source === "initial-paper"
       ? reservation.binding.action !== "setup"
-      : !["restore", "re-register", "promote"].includes(reservation.binding.action as string))
+      : !["restore", "re-register", "promote", "reserve"].includes(
+          reservation.binding.action as string,
+        ))
   )
     refuse("event_mismatch");
   return freeze(structuredClone(value) as unknown as DeclaredPaperConfirmation["input"]);
@@ -255,7 +264,12 @@ export function readDeclaredPaperConfirmation(value: unknown): DeclaredPaperConf
   const input = readDeclaredPaperInput(value.input);
   const proof = input.allocation.reservationEvidence as DeclaredPaperEvidence;
   if (
-    !equal(value.binding, proof.reservation.binding) ||
+    !equal(
+      value.binding,
+      proof.reservation.binding.action === "reserve"
+        ? { ...proof.reservation.binding, action: "promote", eventId: proof.consumption.eventId }
+        : proof.reservation.binding,
+    ) ||
     !equal(value.operatorId, input.approval.operatorId) ||
     value.recipientVenueId !== proof.reservation.recipientVenueId
   )
@@ -303,18 +317,74 @@ export function readDeclaredPaperConfirmation(value: unknown): DeclaredPaperConf
     proof.historyDigest !== digest(history) ||
     entry?.state !== "consumed" ||
     !equal(entry.allocation, proof.reservation.allocation) ||
-    !equal(entry.binding, value.binding) ||
+    !equal(entry.binding, proof.reservation.binding) ||
     entry.recipientVenueId !== value.recipientVenueId ||
     !events.some((x) => equal(x, proof.reservation)) ||
     !events.some((x) => equal(x, proof.consumption)) ||
     serial <=
       (input.allocation.source === "initial-paper" ? projected.sBurnFloor : projected.pBurnFloor) ||
-    projected.retiredBindings.some((x) => equal(x, value.binding))
+    projected.retiredBindings.some(
+      (x) => equal(x, value.binding) || equal(x, proof.reservation.binding),
+    )
   )
     refuse();
   return freeze(
     structuredClone({ ...value, input, history }) as unknown as DeclaredPaperConfirmation,
   );
+}
+
+function promotionInput(value: unknown, facts: DeclaredPaperConfirmation) {
+  if (
+    !exact(value, ["allocation", "approval", "reservationEventId"]) ||
+    value.reservationEventId !==
+      (facts.input.allocation.reservationEvidence as DeclaredPaperEvidence).reservation.binding
+        .eventId
+  )
+    refuse("event_mismatch");
+  return { allocation: value.allocation, approval: value.approval };
+}
+
+export function verifyDeclaredDormantReservation(
+  retained: {
+    readonly eventKey: string;
+    readonly allocationKey: string;
+    readonly taxpayerNif: string;
+    readonly softwareId: string;
+    readonly environment: string;
+    readonly installationIdentity: string;
+    readonly evidence: unknown;
+    readonly bases: AllocationContext["requiredBases"];
+  },
+  context: AllocationContext,
+): boolean {
+  if (context.authority.kind !== "paper-declared") return false;
+  const held = issued.get(context.authority.token);
+  if (
+    held === undefined ||
+    readOperationAuthority(held.operation.authority, held.operation.binding) === undefined ||
+    held.operation.binding.action !== "promote"
+  )
+    return false;
+  try {
+    const proof = readDeclaredStandbyInput(retained.evidence);
+    const current = held.facts.input.allocation;
+    const consumed = current.reservationEvidence as DeclaredPaperEvidence;
+    return (
+      held.facts.known.history !== undefined &&
+      digest(held.facts.known.history) === proof.historyDigest &&
+      proof.reservationDigest === consumed.reservationDigest &&
+      equal(proof.reservation, consumed.reservation) &&
+      retained.eventKey === proof.reservation.binding.eventId &&
+      retained.allocationKey === current.allocationId &&
+      retained.taxpayerNif === current.taxpayerNif &&
+      retained.softwareId === current.softwareId &&
+      retained.environment === current.environment &&
+      retained.installationIdentity === current.installationIdentity &&
+      isAllocatedSeries(current.series, current.installationIdentity, retained.bases)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function withDeclaredPaperAdmission<T>(
@@ -328,7 +398,12 @@ export async function withDeclaredPaperAdmission<T>(
   if (
     !equal(facts.binding, operation.binding) ||
     !equal(facts.operatorId, operator.operatorId) ||
-    !equal(facts.input, operation.input)
+    !equal(
+      facts.input,
+      operation.binding.action === "promote"
+        ? promotionInput(operation.input, facts)
+        : operation.input,
+    )
   )
     refuse("event_mismatch");
   const token = Object.freeze({});

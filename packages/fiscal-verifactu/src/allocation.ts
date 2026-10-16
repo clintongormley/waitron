@@ -24,6 +24,7 @@ import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalReservations } from "./schema/reservations.js";
+import { verifyDeclaredDormantReservation } from "./declared-paper-evidence.js";
 import { verifyRetainedPaperReservation } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 
@@ -241,45 +242,50 @@ async function activateDormant(
     retained.sourceNodeId !== context.sourceId ||
     retained.eventKey === context.eventId ||
     context.mode !== "recovery" ||
-    context.authority.kind !== "paper"
+    (context.authority.kind !== "paper" && context.authority.kind !== "paper-declared")
   )
     return refuse("reservation_mismatch");
-  const proof = retained.evidence as {
-    block?: unknown;
-    reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
-  } | null;
-  const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
-    allocationId: retained.allocationKey,
-    taxpayerNif: retained.taxpayerNif,
-    softwareId: retained.softwareId,
-    environment: retained.environment,
-    recipientVenueId: context.authority.recipientVenueId,
-    generationId: context.authority.generationId,
-    blockId: context.authority.blockId,
-    eventId: retained.eventKey,
-    operatorId:
-      typeof proof?.reservation?.payload?.operatorId === "string"
-        ? proof.reservation.payload.operatorId
-        : "",
-    sourceId: retained.sourceNodeId,
-    targetNodeId: retained.nodeId,
-    incidentEvidence:
-      typeof proof?.reservation?.payload?.incidentEvidence === "string"
-        ? proof.reservation.payload.incidentEvidence
-        : "",
-    requiredBases: retained.bases,
-  });
-  if (!historical.ok) return refuse("reservation_untrusted");
-  const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
-  if (
-    historical.allocation.installationIdentity !== retained.installationIdentity ||
-    !isDeepStrictEqual(allocation, {
-      ...historical.allocation,
-      reservationEvidence: supplied?.reservationEvidence,
-    }) ||
-    !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
-  )
-    return refuse("reservation_mismatch");
+  if (context.authority.kind === "paper-declared") {
+    if (!verifyDeclaredDormantReservation(retained, context))
+      return refuse("reservation_untrusted");
+  } else {
+    const proof = retained.evidence as {
+      block?: unknown;
+      reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
+    } | null;
+    const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
+      allocationId: retained.allocationKey,
+      taxpayerNif: retained.taxpayerNif,
+      softwareId: retained.softwareId,
+      environment: retained.environment,
+      recipientVenueId: context.authority.recipientVenueId,
+      generationId: context.authority.generationId,
+      blockId: context.authority.blockId,
+      eventId: retained.eventKey,
+      operatorId:
+        typeof proof?.reservation?.payload?.operatorId === "string"
+          ? proof.reservation.payload.operatorId
+          : "",
+      sourceId: retained.sourceNodeId,
+      targetNodeId: retained.nodeId,
+      incidentEvidence:
+        typeof proof?.reservation?.payload?.incidentEvidence === "string"
+          ? proof.reservation.payload.incidentEvidence
+          : "",
+      requiredBases: retained.bases,
+    });
+    if (!historical.ok) return refuse("reservation_untrusted");
+    const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
+    if (
+      historical.allocation.installationIdentity !== retained.installationIdentity ||
+      !isDeepStrictEqual(allocation, {
+        ...historical.allocation,
+        reservationEvidence: supplied?.reservationEvidence,
+      }) ||
+      !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
+    )
+      return refuse("reservation_mismatch");
+  }
   if (context.priorActivation !== "committed") {
     const [activeSif] = await tx
       .select({ id: registroSif.id })

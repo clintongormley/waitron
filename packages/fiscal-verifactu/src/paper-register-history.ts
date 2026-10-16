@@ -147,6 +147,18 @@ function event(v: unknown): boolean {
     timestamp(v.createdAt)
   );
 }
+function publicOriginalPayload(value: unknown): boolean {
+  if (typeof value === "string") return !/-----BEGIN (?:.*PRIVATE KEY|ENCRYPTED)/.test(value);
+  if (Array.isArray(value)) return value.every(publicOriginalPayload);
+  if (record(value))
+    return Object.entries(value).every(
+      ([key, child]) =>
+        !/password|passphrase|private|pkcs8|secret|credential|recoveryKey|nodeKeys|^seed$/i.test(
+          key,
+        ) && publicOriginalPayload(child),
+    );
+  return value === null || typeof value === "boolean" || typeof value === "number";
+}
 function original(v: unknown, depth: number): v is PublicOriginal {
   if (
     !exact(v, ["kind", "bytesBase64url", "digest"]) ||
@@ -178,6 +190,7 @@ function original(v: unknown, depth: number): v is PublicOriginal {
   return (
     exact(decoded, ["payload", "keyId", "signature"]) &&
     record(decoded.payload) &&
+    publicOriginalPayload(decoded.payload) &&
     hex(decoded.keyId) &&
     typeof decoded.signature === "string" &&
     /^[A-Za-z0-9_-]{86}$/.test(decoded.signature)
@@ -378,7 +391,9 @@ export function projectDeclaredHistory(
           if (
             e.kind === "consume" &&
             (e.reservationDigest !== digest(reservation) ||
-              e.eventId !== reservation.binding.eventId ||
+              (reservation.binding.action === "reserve"
+                ? e.eventId === reservation.binding.eventId
+                : e.eventId !== reservation.binding.eventId) ||
               e.sourceId !== reservation.binding.sourceId ||
               e.targetNodeId !== reservation.binding.targetNodeId)
           )

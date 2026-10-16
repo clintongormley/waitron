@@ -9,12 +9,17 @@ import {
   type PaperReservationContext,
   type PaperReservationVerification,
 } from "./paper-evidence.js";
+import {
+  verifyDeclaredStandbyEvidence,
+  type DeclaredStandbyContext,
+} from "./declared-paper-standby.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 
 export type StandbyAllocationValidation =
+  | ReturnType<typeof verifyDeclaredStandbyEvidence>
   | PaperReservationVerification
   | {
       readonly ok: false;
@@ -34,7 +39,7 @@ export async function validateStandbyAllocation(
   targetNodeId: string,
   evidence: unknown,
   trust: unknown,
-  context: PaperReservationContext,
+  context: PaperReservationContext | DeclaredStandbyContext,
 ): Promise<StandbyAllocationValidation> {
   const [source] = await tx
     .select({ locationId: nodes.locationId })
@@ -56,7 +61,7 @@ export async function validateStandbyAllocation(
   if (sif === undefined) return { ok: false, reason: "primary_not_registered" };
   if (sif.nif !== tenant.taxId) return { ok: false, reason: "scope_mismatch" };
   const bases = await liveSeriesBases(tx, primary);
-  const validated = verifyPaperReservation(evidence, trust, {
+  const filled = {
     ...context,
     taxpayerNif: tenant.taxId,
     softwareId: sif.softwareId,
@@ -64,7 +69,11 @@ export async function validateStandbyAllocation(
     sourceId: primary.nodeId,
     targetNodeId,
     requiredBases: bases,
-  });
+  };
+  const validated =
+    "kind" in filled && filled.kind === "paper-declared-standby"
+      ? verifyDeclaredStandbyEvidence(evidence, trust, filled)
+      : verifyPaperReservation(evidence, trust, filled as PaperReservationContext);
   if (!validated.ok) return validated;
   const [usedAllocation] = await tx
     .select({ id: fiscalAllocations.eventKey })
@@ -103,12 +112,12 @@ export async function establishDormantAllocation(
   standby: ProvisionedNode,
   evidence: unknown,
   trust: unknown,
-  context: PaperReservationContext,
+  context: PaperReservationContext | DeclaredStandbyContext,
 ): Promise<{ readonly reservationEventId: string; readonly allocationId: string }> {
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
   };
-  // Validation and persistence must read the same signed bytes across awaited database reads.
+  // Validation and persistence must read the same evidence across awaited database reads.
   try {
     evidence = structuredClone(evidence);
   } catch {

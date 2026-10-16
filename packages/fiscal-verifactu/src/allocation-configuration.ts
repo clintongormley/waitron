@@ -9,6 +9,7 @@ import { createBoundPaperAllocationSource } from "./allocation-paper-source.js";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
 
 import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
+import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
 import { createDeclaredPaperPreparation } from "./declared-paper-preparation.js";
 
 function declared(value: unknown): boolean {
@@ -28,6 +29,16 @@ function configuredOperations(
     async prepare(operation, run) {
       if (host !== undefined) {
         const evidence = await host.readPublicEvidence(operation.binding);
+        if (
+          typeof evidence?.current === "object" &&
+          evidence.current !== null &&
+          "kind" in evidence.current &&
+          evidence.current.kind === "paper-declared-standby-confirmation"
+        )
+          return createDeclaredPaperStandbyPreparation(async () => evidence!.current).prepare(
+            operation,
+            run,
+          );
         if (declared(evidence?.current)) {
           return createDeclaredPaperPreparation(async () => evidence!.current).prepare(
             operation,
@@ -35,8 +46,10 @@ function configuredOperations(
           );
         }
         if (
-          operation.binding.action === "setup" &&
-          (evidence !== undefined || operation.binding.sourceId.startsWith("first-setup:"))
+          (evidence !== undefined &&
+            !["reserve", "establish"].includes(operation.binding.action)) ||
+          (operation.binding.action === "setup" &&
+            operation.binding.sourceId.startsWith("first-setup:"))
         ) {
           return createAllocationPreparation(
             createBoundPaperAllocationSource({
@@ -49,7 +62,13 @@ function configuredOperations(
       const input = operation.input as {
         allocation?: { reservationEvidence?: { kind?: unknown } };
       } | null;
-      if (input?.allocation?.reservationEvidence?.kind === "paper-declared-evidence")
+      if (
+        (typeof operation.input === "object" &&
+          operation.input !== null &&
+          "kind" in operation.input &&
+          operation.input.kind === "paper-declared-reservation") ||
+        input?.allocation?.reservationEvidence?.kind === "paper-declared-evidence"
+      )
         throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
       if (
         typeof operation.input === "object" &&
@@ -98,6 +117,7 @@ function configuredOperations(
         custodianPath,
         confirmationPath,
         confirmedFingerprint,
+        knownHistoryPath: environment.WAITRON_FISCAL_PAPER_HISTORY_FILE,
       }).prepare(operation, run);
     },
   };

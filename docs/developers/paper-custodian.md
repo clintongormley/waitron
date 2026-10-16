@@ -23,6 +23,12 @@ wizard/tool checks now cover both launch paths and custody choices with syntheti
 responses. Actual-paper acceptance and the final publication gates remain open. The command route below remains separate;
 its dated development status is historical.
 
+**2026-10-16 A679 revision:** browser setup is being replaced by the
+[one-PDF design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md), with unsigned
+owner-declared S/P history. The earlier downloadable-tool description above is historical.
+The signed command route below remains separate; the new wizard and owner acceptance are
+still incomplete.
+
 ## Create the custodian's key
 
 Build the standalone command from the repository:
@@ -324,6 +330,17 @@ export WAITRON_FISCAL_CUSTODIAN_FILE=/secure/public/custodian.json
 export WAITRON_FISCAL_CONFIRMATION_FILE=/secure/current/setup-event.json
 export WAITRON_FISCAL_CUSTODIAN_FINGERPRINT='<fingerprint compared with the current outside master>'
 ```
+
+If you separately retain version-2 public paper history, the A679 candidate collector also
+accepts `WAITRON_FISCAL_PAPER_HISTORY_FILE`, or `knownHistoryPath` on the internal file source.
+This file contains public history JSON, not a PDF or node secrets. A supplied path is reread
+before each preparation; an unreadable or malformed history refuses collection. Fresh signed
+S/P allocations at or below its burn floor are refused even with a valid signature and fresh
+consumption confirmation. If the current-event file also carries `knownHistory`, the two
+histories must match; reconcile conflicting records before using them. The custodian and
+event files retain their separate 64 KiB limits; the history file has an 8 MiB limit.
+`declared-paper-consumers.test.ts` runs the old-40/burn-42 refusal, fresh-43 control and
+missing-file/conflicting-history cases through the file collector and real activation.
 
 The collector rereads both files for each attempt. Missing or empty settings refuse collection.
 Keep the custodian's private signing key outside the venue; these settings name public evidence.

@@ -22,6 +22,7 @@ export function createPaperAllocationPreparation(configuration: {
   readonly custodianPath: string;
   readonly confirmationPath: string;
   readonly confirmedFingerprint: string;
+  readonly knownHistoryPath?: string;
 }): ModuleOperationPreparation {
   const activation = createAllocationPreparation(createPaperAllocationSource(configuration));
   const standby = createStandbyAllocationPreparation(createPaperStandbySource(configuration));

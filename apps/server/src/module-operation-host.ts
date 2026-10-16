@@ -18,6 +18,8 @@ import {
   venueFiscalSelection,
 } from "@waitron/provisioning";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
+import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
+import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -82,7 +84,32 @@ export function createFirstSetupModuleHost(options: {
       };
     },
   });
-  const evidence = createFirstFiscalEvidence({ ...options, store, coordinator, bootId, owner });
+  const legacyEvidence = createFirstFiscalEvidence({
+    ...options,
+    store,
+    coordinator,
+    bootId,
+    owner,
+  });
+  const keys = createFirstSetupNodeKeys({ ...options, store, coordinator, owner });
+  const delivery = createFirstFiscalDelivery({
+    ...options,
+    store,
+    coordinator,
+    owner,
+    keys,
+    bootId,
+  });
+  const evidence = {
+    ...legacyEvidence,
+    invalidate(attemptId: string) {
+      legacyEvidence.invalidate(attemptId);
+      delivery.invalidate(attemptId);
+    },
+    async read(binding: OperationBinding) {
+      return (await delivery.has(binding)) ? delivery.read(binding) : legacyEvidence.read(binding);
+    },
+  };
   const host = createModuleOperationHost(options.environment, evidence);
   return {
     coordinator,
@@ -98,6 +125,8 @@ export function createFirstSetupModuleHost(options: {
         .map((module) => ({ module: module.name, version: module.version }));
     },
     evidence,
+    keys,
+    delivery,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(
         options.stateDir,
