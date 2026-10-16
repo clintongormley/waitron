@@ -859,17 +859,15 @@ describe("draft placement membership", () => {
     const { partyId } = await seated(v);
     const first = randomUUID(),
       second = randomUUID();
-    await db
-      .insert(orderGroups)
-      .values(
-        [first, second].map((id, index) => ({
-          id,
-          partyId,
-          position: index + 1,
-          state: "held" as const,
-          submittedBy: ALEX,
-        })),
-      );
+    await db.insert(orderGroups).values(
+      [first, second].map((id, index) => ({
+        id,
+        partyId,
+        position: index + 1,
+        state: "held" as const,
+        submittedBy: ALEX,
+      })),
+    );
     await refusedWritingNothing(
       () =>
         save(v, partyId, ALEX, null, 0, [
@@ -1494,6 +1492,134 @@ describe("taking over a draft (D5, spec §2)", () => {
     await expect(save(v, mesa4.partyId, ALEX, alex.id, 1, [])).rejects.toMatchObject({
       code: "draft.not_found",
     });
+  });
+});
+
+describe("taking over arranged draft lines", () => {
+  it("keeps identical dishes in separately numbered new groups instead of combining their quantities", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const sam = await save(v, partyId, SAM, null, 0, [
+      item(v, "beer", { slot: 1 }),
+      item(v, "fish", { slot: 3 }),
+    ]);
+    const alex = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { slot: 1 }),
+      item(v, "fish", { slot: 3 }),
+    ]);
+
+    const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
+
+    expect(taken.lines).toEqual([
+      ...sam.lines,
+      { ...alex.lines[0]!, slot: 4 },
+      { ...alex.lines[1]!, slot: 6 },
+    ]);
+    expect(
+      (await storedLines(sam.id)).map(({ id, position, slot }) => ({ id, position, slot })),
+    ).toEqual([
+      { id: sam.lines[0]!.id, position: 1, slot: 1 },
+      { id: sam.lines[1]!.id, position: 2, slot: 3 },
+      { id: alex.lines[0]!.id, position: 3, slot: 4 },
+      { id: alex.lines[1]!.id, position: 4, slot: 6 },
+    ]);
+    expect(await storedLines(alex.id)).toEqual([]);
+    expect(await draftsOf(v, partyId)).toEqual([taken]);
+  });
+
+  it("retains each new group's held anchor while separating colliding slot numbers", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const first = randomUUID(),
+      second = randomUUID();
+    await db.insert(orderGroups).values(
+      [first, second].map((id, index) => ({
+        id,
+        partyId,
+        position: index + 1,
+        state: "held" as const,
+        submittedBy: ALEX,
+      })),
+    );
+    const sam = await save(v, partyId, SAM, null, 0, [
+      item(v, "beer", { slot: 2, afterGroupId: first }),
+    ]);
+    const alex = await save(v, partyId, ALEX, null, 0, [
+      item(v, "fish", { slot: 2, afterGroupId: second }),
+      item(v, "burger", { slot: 2, afterGroupId: second }),
+    ]);
+
+    const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
+
+    expect(taken.lines).toEqual([
+      ...sam.lines,
+      { ...alex.lines[0]!, slot: 4 },
+      { ...alex.lines[1]!, slot: 4 },
+    ]);
+    expect(await draftsOf(v, partyId)).toEqual([taken]);
+  });
+
+  it("keeps Fire-now and held joins unchanged while moving only new-group slots", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const groupId = randomUUID();
+    await db
+      .insert(orderGroups)
+      .values({ id: groupId, partyId, position: 1, state: "held", submittedBy: ALEX });
+    const sam = await save(v, partyId, SAM, null, 0, [
+      item(v, "beer", { slot: 2 }),
+      item(v, "wine", { variantId: v.glass }),
+      item(v, "fish", { joinGroupId: groupId }),
+    ]);
+    const alex = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { slot: 1 }),
+      item(v, "wine", { variantId: v.glass, quantity: "2" }),
+      item(v, "fish", { joinGroupId: groupId, quantity: "3" }),
+    ]);
+
+    const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
+
+    expect(taken.lines).toEqual([
+      sam.lines[0],
+      { ...sam.lines[1]!, quantity: "3.000" },
+      { ...sam.lines[2]!, quantity: "4.000" },
+      { ...alex.lines[0]!, slot: 3 },
+    ]);
+    expect(await storedLines(alex.id)).toEqual([]);
+  });
+
+  it("keeps the allergy tick on an absorbed line whose new-group slot changes", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const sam = await save(v, partyId, SAM, null, 0, [item(v, "fish", { slot: 1 })]);
+    const alex = await save(v, partyId, ALEX, null, 0, [item(v, "fish", { slot: 1 })]);
+    const allergy = await inTx((tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        0,
+        {
+          answer: "allergies",
+          guests: [{ who: "Red coat", allergens: { fish: {} } }],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        {
+          guestId: allergy.guests[0]!.id,
+          draftLineId: alex.lines[0]!.id,
+        },
+      ]),
+    );
+    const before = await inTx((tx) => readPartyAllergy(tx, partyId));
+
+    const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
+
+    expect(taken.lines).toEqual([...sam.lines, { ...alex.lines[0]!, slot: 2, noMerge: true }]);
+    expect(await inTx((tx) => readPartyAllergy(tx, partyId))).toEqual(before);
+    expect(await storedLines(alex.id)).toEqual([]);
   });
 });
 

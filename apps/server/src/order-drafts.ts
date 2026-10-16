@@ -739,10 +739,10 @@ async function addDiscardedDraft(
     detail: { intoDraftId: into.id },
   });
   const stored = await storedLines(tx, [into.id, fromDraftId]);
-  const combined = [
-    ...stored.filter(({ draftId }) => draftId === into.id),
-    ...stored.filter(({ draftId }) => draftId === fromDraftId),
-  ].map(({ line }) => line);
+  const combined = absorbLines(
+    stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
+    stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
+  );
   const [owner] = await tx
     .select({ partyId: orderDrafts.partyId })
     .from(orderDrafts)
@@ -763,6 +763,14 @@ async function addDiscardedDraft(
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })
     .where(eq(orderDrafts.id, into.id));
+}
+
+function absorbLines(receiving: readonly DraftLine[], absorbed: readonly DraftLine[]): DraftLine[] {
+  const offset = receiving.reduce((maximum, line) => Math.max(maximum, line.slot), 0);
+  return [
+    ...receiving,
+    ...absorbed.map((line) => (line.slot > 0 ? { ...line, slot: line.slot + offset } : line)),
+  ];
 }
 
 async function personName(tx: Transaction, personId: string): Promise<string> {
@@ -894,6 +902,9 @@ async function replaceLines(
         position: sql`excluded.position`,
         quantity: sql`excluded.quantity`,
         noMerge: sql`excluded.no_merge`,
+        slot: sql`excluded.slot`,
+        joinGroupId: sql`excluded.join_group_id`,
+        afterGroupId: sql`excluded.after_group_id`,
       },
     });
 }
