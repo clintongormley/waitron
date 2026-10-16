@@ -22,7 +22,11 @@ import type {
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
-import { localizedName } from "../i18n/localized.js";
+import {
+  publishWarningStyles,
+  renderMenuWarnings,
+  renderPublishWarningConfirmation,
+} from "./menu-publish-warnings.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { leftToBrowser } from "../navigation.js";
@@ -153,6 +157,7 @@ export class MenuPreviewPanel extends LitElement {
 
   static override styles = [
     baseStyles,
+    publishWarningStyles,
     css`
       :host {
         display: grid;
@@ -263,7 +268,7 @@ export class MenuPreviewPanel extends LitElement {
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
-  @state() private confirmingHash: string | null = null;
+  @state() private confirmingPreview: MenuPreview | null = null;
   #publishedWarnings: MenuPreview["warnings"] = [];
   @state() private selectedView: string | null = null;
   @state() private hiddenChangeIds = new Set<string>();
@@ -358,10 +363,15 @@ export class MenuPreviewPanel extends LitElement {
     }
   }
 
+  override disconnectedCallback(): void {
+    this.confirmingPreview = null;
+    super.disconnectedCallback();
+  }
+
   override willUpdate(changed: PropertyValues): void {
-    if (this.failed) this.confirmingHash = null;
+    if (this.failed || changed.has("menuName")) this.confirmingPreview = null;
     if (changed.has("preview")) {
-      this.confirmingHash = null;
+      this.confirmingPreview = null;
       this.navigationUnavailable = false;
       this.#navigation++;
       if (this.preview === null) return;
@@ -375,33 +385,6 @@ export class MenuPreviewPanel extends LitElement {
       }
       this.#menuId = menuId;
     }
-  }
-
-  #warningWords(warnings = this.preview?.warnings ?? []): string[] {
-    let missing = 0;
-    const portions: string[] = [];
-    for (const warning of warnings) {
-      if (warning.kind === "extra_portion_precision") {
-        portions.push(
-          fill("menu_preview.extra_portion_precision", {
-            list: warning.listName,
-            product: warning.name,
-            amount: `${warning.portion} ${localizedName(warning.abbreviation)}`.trim(),
-            precision: String(warning.precision),
-          }),
-        );
-      } else missing += 1;
-    }
-    const shortcuts =
-      missing === 0
-        ? []
-        : [
-            fill(
-              missing === 1 ? "menu_preview.shortcut_missing_one" : "menu_preview.shortcut_missing",
-              { count: String(missing), menu: this.menuName },
-            ),
-          ];
-    return [...shortcuts, ...portions];
   }
 
   /** One place inside a sentence. */
@@ -547,12 +530,12 @@ export class MenuPreviewPanel extends LitElement {
     if (this.failed || this.publishing || this.preview === null || this.preview.clashes.length > 0)
       return;
     if (this.preview.warnings.length && !confirmed) {
-      this.confirmingHash = this.preview.hash;
+      this.confirmingPreview = this.preview;
       return;
     }
-    if (confirmed && this.confirmingHash !== this.preview.hash) return;
+    if (confirmed && this.confirmingPreview !== this.preview) return;
     this.#publishedWarnings = this.preview.warnings;
-    this.confirmingHash = null;
+    this.confirmingPreview = null;
     this.dispatchEvent(
       new CustomEvent("wt-menu-publish", {
         detail: { hash: this.preview.hash },
@@ -566,13 +549,13 @@ export class MenuPreviewPanel extends LitElement {
     const result = this.result;
     if (result === null) return nothing;
     if (result.kind === "published")
-      return html`<p class="result ok" role="status" data-test="result">
+      return html`<div class="result ok" role="status" data-test="result">
         ${fill("menu_preview.published", {
           menu: this.menuName,
           number: String(result.number),
         })}
-        ${this.#warningWords(result.warnings ?? this.#publishedWarnings).map((words) => html`<span>${words}</span>`)}
-      </p>`;
+        ${renderMenuWarnings(result.warnings ?? this.#publishedWarnings, this.menuName)}
+      </div>`;
     const message =
       result.kind === "stale"
         ? codeMessage("menu.changed_since_preview")
@@ -685,9 +668,7 @@ export class MenuPreviewPanel extends LitElement {
     return html`<section class="warnings" aria-labelledby="warnings-heading">
       <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
       <p class="help" data-test="warnings-note">${t("menu_preview.warnings_note")}</p>
-      <ul data-test="warnings">
-        ${this.#warningWords().map((words) => html`<li>${words}</li>`)}
-      </ul>
+      ${renderMenuWarnings(warnings, this.menuName)}
     </section>`;
   }
 
@@ -850,35 +831,18 @@ export class MenuPreviewPanel extends LitElement {
         </div>
       </div>
       ${
-        this.confirmingHash === null
+        this.confirmingPreview === null
           ? nothing
-          : html`<wt-dialog
-              .open=${this.confirmingHash !== null}
-              heading=${fill("menu_preview.publish", { menu: this.menuName })}
-              data-test="publish-confirmation"
-              @wt-close=${(event: Event) => {
-                event.stopPropagation();
-                this.confirmingHash = null;
-              }}
-            >
-              ${this.#warningWords().map((words) => html`<p>${words}</p>`)}
-              <wt-form-actions slot="footer">
-                <wt-button
-                  slot="cancel"
-                  variant="secondary"
-                  @click=${() => {
-                    this.confirmingHash = null;
-                  }}
-                  >${t("action.cancel")}</wt-button
-                >
-                <wt-button
-                  data-test="publish-confirm"
-                  .disabled=${this.publishing || this.preview === null || !!this.preview.clashes.length}
-                  @click=${(event: Event) => this.#publish(event, true)}
-                  >${fill("menu_preview.publish", { menu: this.menuName })}</wt-button
-                >
-              </wt-form-actions>
-            </wt-dialog>`
+          : renderPublishWarningConfirmation({
+              preview: this.confirmingPreview,
+              menuName: this.menuName,
+              actionLabel: fill("menu_preview.publish", { menu: this.menuName }),
+              busy: this.publishing,
+              confirm: () => this.#publish(new Event("confirm"), true),
+              cancel: () => {
+                this.confirmingPreview = null;
+              },
+            })
       }`;
   }
 }
