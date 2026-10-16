@@ -2118,8 +2118,9 @@ What the job does:
   `$RUNNER_TEMP/shard-diagnostics/shard.log`. The job log hides one kind of line, the api channel's
   `Triggering command`, one per browser command, so a passing shard's log grows by about 230 lines
   rather than about a thousand.
-- When the shard fails or is cancelled at its time limit (both steps are
-  `if: failure() || cancelled()`), a step adds `after.txt` (memory, `/dev/shm`, every large
+- When the shard fails or is cancelled — at its time limit, by a newer push to the same pull
+  request, or by hand (both steps are `if: failure() || cancelled()`; only the time-limit cancel was
+  measured) — a step adds `after.txt` (memory, `/dev/shm`, every large
   process, the end of `dmesg`), and the folder is kept for 14 days as the artifact
   `venue-service-diagnostics-<shard>`. A passing shard keeps nothing.
 

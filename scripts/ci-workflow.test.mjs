@@ -1965,7 +1965,7 @@ describe("the venue-service shards' browser start-up record", () => {
     );
   });
 
-  it("snapshots the runner and keeps the folder when the shard fails or is cancelled at its limit, and only then", () => {
+  it("snapshots the runner and keeps the folder when the shard fails or is cancelled, and only then", () => {
     const named = body.findIndex((line) =>
       /^ {10}name: venue-service-diagnostics-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
     );

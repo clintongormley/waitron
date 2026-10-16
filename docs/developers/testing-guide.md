@@ -220,15 +220,13 @@ on 2026-09-09; [Vitest issue 10791](https://github.com/vitest-dev/vitest/issues/
 called `orchestrator.createTesters()` with no deadline in `BrowserPool.runNextTest`. That is a
 possible mechanism, not a diagnosis of those runs, and the hang was not reproduced locally.
 
-### A retained database fixture can keep the watchdog from taking a timer turn
+## Three `apps/server` suites added their own timer turn before `useVenueDb` gave one
 
-If your suite keeps its database across cases with `resetPerTest: false`, awaited synchronous
-queries can run from one case into the next without letting timers run. Since A769, `useVenueDb`
-gives every suite that turn after each case (the next section), whatever `resetPerTest` says; the
-`afterEach` hook awaiting `setImmediate` from `node:timers/promises` that three `apps/server`
-suites added before then (`bill-payments.test.ts`, `bill-payments.signed-in.test.ts`,
-`till-money.write-session.test.ts`) is now needed only by a suite that opens its venue folder
-without `useVenueDb`.
+Awaited synchronous queries can run from one case into the next without letting timers run, with or
+without `resetPerTest: false` (next section). `bill-payments.test.ts`,
+`bill-payments.signed-in.test.ts` and `till-money.write-session.test.ts` in `apps/server` each added
+an `afterEach` hook awaiting `setImmediate` from `node:timers/promises` before `useVenueDb` gave a
+turn of its own; whether they still need it was not measured.
 
 Measured 2026-10-08 on Node v26.7.0, macOS, Vitest 4.1.11: a disposable copy of
 `apps/server/src/bill-payments.test.ts`, with `setVenueLivenessTimings` set to a 10-second kill
@@ -240,13 +238,13 @@ unchanged production watchdog's bound is 120 seconds; these accelerated local pr
 measure Linux shard duration. CI run `37674514404`, attempts 1 and 2, each logged
 `venue.holder_frozen` inside that rollback comparison before the worker exit.
 
-### A file of synchronous database work gets no timer turn unless `useVenueDb` yields one
+## A file of synchronous database work gets no timer turn unless `useVenueDb` yields one
 
-An `await` on a `node:sqlite` query is satisfied by synchronous work, and Vitest gives the event
-loop no timer turn between one test and the next. A file made of such tests can therefore run from
+An `await` on a `node:sqlite` query is satisfied by synchronous work, and under Vitest 4.1.11 the
+run measured below took no timer turn between one test and the next. A file made of such tests can therefore run from
 its first test to its last without any interval firing — including the venue watchdog's stamp
 (`packages/store/src/venue-liveness.ts`). Once the file outlasts `WATCHDOG_KILL_MS` (120 s on 2026-10-16),
-the watchdog kills the worker as frozen. `useVenueDb` now awaits one real `setTimeout(…, 0)` in its
+the watchdog kills the worker as frozen. `useVenueDb` awaits one real `setTimeout(…, 0)` in its
 `afterEach`, after any reset, so every test in a suite that uses it ends with a timer turn. The
 `setTimeout` is captured when the module loads, so a suite that calls `vi.useFakeTimers()` and
 leaves them on cannot replace it and stall the hook.
@@ -273,8 +271,8 @@ finished the other files and exited 1.
 Guard: the cases "a timer turn after each test" and "the timer turn under fake timers" in
 `packages/db/src/testing/venue-db.test.ts`, weaker than the rule: they cover `useVenueDb` alone. A
 suite that opens a venue folder another way — calling `openVenueDatabase` or `openVenueStore`
-itself, as some suites in `packages/db`, `packages/store`, `packages/migrations` and `apps/server`
-do — gets no yield from it.
+itself, as many suites across `packages/`, `apps/` and `scripts/` do
+(`grep -rlE 'openVenue(Database|Store)\(' --include='*.test.ts'`) — gets no yield from it.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
