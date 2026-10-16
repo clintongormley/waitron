@@ -1,6 +1,6 @@
 # Questions for the asesor
 
-**2026-10-16, A664:** [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) adds venue-specific retention/process questions and separate privacy/labour referrals. The [proposed design](../superpowers/specs/2026-10-16-a664-data-retention-design.md) awaits owner and relevant adviser approval. The historical Word copies have not been changed; no enquiry has been sent.
+**2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.
 
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
@@ -581,6 +581,13 @@ on and asked for the text. We offered to give back — send it.
 ---
 
 ## Q48: A664 retention and evidence process (added 2026-10-16)
+
+**Owner decision, 2026-10-17 at 00:07:** you adopted the revised proposal for
+specialist review. See the [recorded approach decision](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review).
+You will send Q48. Relevant G1–G3 design agreement remains outstanding before any
+product/report code; six years remains the discussion baseline, and G4/G5 remain
+required. No enquiry was sent by this campaign. The dated proposals below preserve
+their historical wording; their pending-owner statements are superseded by this decision.
 
 **PROPOSED; owner/adviser approval pending; no implementation or enquiry.** This dated section adds to the historical list without changing earlier answers or numbering. The older “nothing blocks the build” note does not open A664’s approval gates.
 

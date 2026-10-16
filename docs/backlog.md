@@ -5808,9 +5808,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 _Formerly entries spread across the old sections._
 
 - **A664 — archive or delete a venue's old data once it no longer has to be kept.** Revised
-  design awaits owner and relevant adviser agreement; build remains open. Shared live-evidence
-  retention, separate personal-data review and shorter eligible retired-record periods remain
-  proposals. [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
+  proposal adopted for specialist review (owner, 2026-10-17); relevant adviser agreement,
+  build and verification remain open. You will send Q48; six years remains the discussion
+  baseline. [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
   source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to

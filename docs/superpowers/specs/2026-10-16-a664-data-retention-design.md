@@ -1,5 +1,26 @@
 # A664: keep evidence, retire expired data
 
+## Owner decision, 2026-10-17: adopted for specialist review
+
+You adopted the revised proposal for specialist review on 2026-10-17 at 00:07,
+as relayed by the supervising watcher: “A664 revised proposal MATCHES the owner's intent”.
+Keep live business/evidence together, assess unnecessary identifying details separately,
+and consider shorter retired-record periods only after the remaining duties, holds,
+dependencies and storage protections clear. This records the G0 approach decision.
+
+Six years remains the discussion baseline. The periods and operational defaults below
+remain proposals for the relevant fiscal/commercial, labour and privacy specialists
+(G1–G3). All product code, including reports, still waits for their design agreement;
+G4 verification and G5's separate protected-storage decision remain required. Adoption
+does not authorise removal or changes to fiscal invariants. You will send
+[Q48](../../compliance/asesor-questions.md#q48-a664-retention-and-evidence-process-added-2026-10-16);
+no enquiry was sent by this campaign.
+
+The following 2026-10-16 snapshot preserves the research, proposal and original owner
+question. Its pending-owner wording is superseded only by this dated decision.
+
+## Research and proposal snapshot, 2026-10-16
+
 **PROPOSED · OWNER/ADVISER APPROVAL PENDING · NO IMPLEMENTATION**
 
 Dated 2026-10-16. All choices described as DRIVER PROPOSALS remain unapproved. This is a repository design for a Spanish common-territory restaurant, subject to confirming that jurisdiction. It does not approve a purge, a fiscal invariant change or the wider GDPR programme.
