@@ -230,6 +230,24 @@ it("does not begin a different action while the preceding action remains prepare
   ]);
 });
 
+it("refuses a prepared later action's wrong predecessor before an applied successor exists", async () => {
+  const f = await fixture();
+  await f.store.apply(await f.store.prepare(f.input, f.originals));
+  await f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals);
+  const path = join(
+    f.roots.stateDir,
+    "first-setup-resolutions",
+    f.input.resolutionId,
+    "000003.json",
+  );
+  const value = JSON.parse(await readFile(path, "utf8"));
+  value.previousRecordDigest = "a".repeat(64);
+  await writeFile(path, JSON.stringify(value));
+  await expect(f.store.read(f.input.resolutionId)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+});
+
 it.each(["missing predecessor", "wrong predecessor", "changed original"])(
   "refuses a later action's %s instead of returning its applied result",
   async (fault) => {

@@ -138,7 +138,9 @@ it("ordinary roots with no resolution retain their normal target without creatin
 });
 it("records selection separately from retirement and replays without adding another action", async () => {
   const f = await fixture();
-  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).resolves.toEqual(
+    f.binding,
+  );
   const records = await f.store.read(f.binding.resolutionId);
   expect(records.map(({ sequence, action, phase }) => ({ sequence, action, phase }))).toEqual([
     { sequence: 1, action: "retire", phase: "prepared" },
