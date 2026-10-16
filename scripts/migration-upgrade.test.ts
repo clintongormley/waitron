@@ -1,7 +1,7 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { installChangeFeed } from "../packages/db/src/change-feed.js";
 import { openVenueDatabase } from "../packages/db/src/client.js";
@@ -90,6 +90,95 @@ function readJournal(folder: string): { entries: JournalEntry[] } {
 }
 
 describe("upgrading a venue one migration at a time", () => {
+  it("inspects schemas only for tables that may need more rows", () => {
+    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-filled-"));
+    scratch.push(root);
+    const connection = openRaw(root);
+    try {
+      connection.exec(`
+        create table filled (id text primary key, label text not null);
+        insert into filled values ('first', 'kept'), ('second', 'also kept');
+        create table short (id text primary key references filled(id), label text not null);
+        insert into short values ('first', 'kept');
+      `);
+    } finally {
+      connection.close();
+    }
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    try {
+      expect(carryRows(root, "filled-table probe", new Map(), new Set())).toEqual(
+        new Map([
+          ["filled", 2],
+          ["short", 2],
+        ]),
+      );
+      const shapeReads = prepare.mock.calls.filter(([query]) =>
+        query.includes("dflt_value, pk from pragma_table_info"),
+      );
+      expect(shapeReads).toHaveLength(1);
+    } finally {
+      prepare.mockRestore();
+    }
+    const readback = openRaw(root);
+    try {
+      expect(readback.prepare("select * from filled order by id").all()).toEqual([
+        { id: "first", label: "kept" },
+        { id: "second", label: "also kept" },
+      ]);
+      expect(readback.prepare("select * from short order by id").all()).toEqual([
+        { id: "first", label: "kept" },
+        { id: "second", label: "kept" },
+      ]);
+    } finally {
+      readback.close();
+    }
+  });
+
+  it("reports row loss even when the remaining rows already fill the table", () => {
+    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-loss-"));
+    scratch.push(root);
+    const connection = openRaw(root);
+    let before: Map<string, number>;
+    try {
+      connection.exec(`
+        create table filled (id integer primary key);
+        insert into filled values (1), (2), (3);
+      `);
+      before = tableCounts(connection, new Set());
+      connection.exec("delete from filled where id = 3");
+    } finally {
+      connection.close();
+    }
+    expect(() => carryRows(root, "row-loss probe", before, new Set())).toThrow(
+      "filled: 3 rows before, 2 after",
+    );
+  });
+
+  it("counts a listed one-row table as reached even when it already has two rows", () => {
+    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-one-row-"));
+    scratch.push(root);
+    const connection = openRaw(root);
+    try {
+      connection.exec(`
+        create table sale_settlements (id integer primary key);
+        insert into sale_settlements values (1), (2);
+      `);
+    } finally {
+      connection.close();
+    }
+    const wasReached = reached.oneRow.has("sale_settlements");
+    reached.oneRow.delete("sale_settlements");
+    try {
+      expect(carryRows(root, "one-row reach probe", new Map(), new Set())).toEqual(
+        new Map([["sale_settlements", 2]]),
+      );
+      expect(reached.oneRow.has("sale_settlements")).toBe(true);
+    } finally {
+      if (!wasReached) reached.oneRow.delete("sale_settlements");
+      else reached.oneRow.add("sale_settlements");
+    }
+  });
+
   it(
     "applies every shipped migration on top of the change feed the step before installed",
     async () => {
@@ -180,7 +269,10 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
           );
           return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
         });
-        await watch.phase(`${label}: change feed`, () => installChangeFeed(store.venue, present));
+        // The next migration meets the completed feed; its individual DDL commits are not a step.
+        await watch.phase(`${label}: change feed`, () =>
+          store.venue.withWriteLock(() => installChangeFeed(store.venue, present)),
+        );
         existing = new Set(
           store.venue
             .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
@@ -667,7 +759,12 @@ function carryRows(
         ]),
     );
     if (Object.keys(lost).length > 0) throw new RowsLost(label, lost);
-    const shapes = parentsFirst([...now.keys()].map((table) => shapeOf(connection, table)));
+    // Two is the fill target's maximum; a full table needs neither schema discovery nor a write.
+    const shapes = parentsFirst(
+      [...now]
+        .filter(([table, count]) => count < 2 || table in ONE_ROW)
+        .map(([table]) => shapeOf(connection, table)),
+    );
     connection.exec("begin");
     try {
       for (const shape of shapes) fill(connection, shape, label);

@@ -1819,6 +1819,93 @@ still fails. During A489's failing-test experiment, substituting the old 110,000
 the captured workload and the doubled walk. All migration,
 row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
+### Reducing repeated upgrade-test setup work (A736)
+
+A walk pays setup costs at every migration date, including dates that add no table or row. The
+filler now reads a table's constraints only when it has fewer than two rows, or appears in
+`ONE_ROW`. It still counts every table before and after filling and compares every carried count
+before selecting the tables to fill. A partial child reads its fully populated parent's keys from
+the database. Constraint information is read anew whenever a table needs a row; there is no schema
+cache across migrations.
+
+Feed installation in this guard runs inside one `withWriteLock` transaction. The next migration
+still meets all the installed triggers; the guard does not exercise interruption partway through
+feed installation. Product boot and migration code are unchanged. The deadline remains 30 seconds
+plus 500 ms per step, with another ten seconds for the report.
+
+Measured 2026-10-16 on macOS, Node v26.11.1 and Vitest 4.1.11, from main
+`3e713d3a780b8f65447ab203bc9a2f08f336f884`:
+
+- `pnpm exec vitest run scripts/migration-upgrade.test.ts --execArgv=--cpu-prof
+  --execArgv=--cpu-prof-dir=<receipt-directory>`: the unchanged test took 57,430 ms. Inclusive CPU
+  profile samples attributed 16,714 ms to `installChangeFeed`, 13,323 ms to `removeChangeFeed`, and
+  8,498 ms to `carryRows`, including 2,655 ms to `shapeOf`. These samples include native calls;
+  they do not separate CPU work from waiting inside SQLite.
+- The same profiled command after skipping unnecessary schema reads took 60,630 ms. `shapeOf`
+  samples fell to 611 ms and `carryRows` to 6,099 ms, while feed installation/removal samples rose
+  to 19,343/14,919 ms. This sample does not show a whole-walk improvement from that change alone.
+- A temporary `useVenueDb` probe on the full current schema installed all 186 sources with and
+  without `withWriteLock`, in alternating order twice. Installation took 75.28/72.24 ms without
+  the transaction and 41.18/39.40 ms with it. Removal took 55.62/53.31 ms without and 22.63/25.23 ms
+  with it; removal remains unchanged in this branch. Each installation was checked for a count of 558
+  feed triggers, and each removal for an empty feed-trigger list.
+- With both test changes, `pnpm exec vitest run scripts/migration-upgrade.test.ts --silent=false
+  --disableConsoleIntercept` took 45,610 ms. A temporary full phase report recorded the same
+  284 steps, 1,472 phases and 208 populated tables: migrate 28,777 ms, open 915 ms, feed installation
+  7,422 ms, close 1,026 ms and rows 6,574 ms. The deadline was 172,000 ms.
+- Before the changes, `pnpm exec vitest run --coverage --silent=false --disableConsoleIntercept`
+  passed all 6,703 root cases in 68.51 seconds; the upgrade walk's timed phases summed to
+  63,429 ms. This run did not reproduce the historical deadline failures.
+
+The regression case in `scripts/migration-upgrade.test.ts` initially failed with two schema reads
+where one was required. It now also checks the preserved parent rows and the child's second valid
+row. A separate case removes one of three rows and requires a row-loss refusal even though two
+rows remain. A third checks `ONE_ROW` reachability when two rows are already present, restoring its
+tracking state afterwards. Existing migration, reset, trigger and row-preservation assertions are
+unchanged.
+
+The independent run-it review's ordinary candidate run passed in 65,550 ms; its isolated
+`ONE_ROW`-omission run passed in 60,540 ms before the dedicated case was added. These additional
+samples retain the runtime-variation caveat. Its feed-definition probe compared stored trigger
+names and SQL after transactional and ordinary installation at every step: all 286 installations
+matched. There are 284 distinct step dates; `core/0012_printer_calibration` and
+`venue-service/0038_clammy_klaw` each reach feed installation again after their row-loss reset.
+Deleting the schema filter, row-loss refusal or pre-migration feed cleanup made each corresponding
+test fail. The driver then deleted the `ONE_ROW` exception in the disposable checkout and observed
+the new reachability case fail too. Review artifacts are retained with
+[PR #1788](https://github.com/clintongormley/waitron/pull/1788)'s campaign receipts.
+
+The retained failure reports were re-read on 2026-10-16. The table sums only the first contiguous
+`Phases finished before it:` block in each log; GitHub repeats part of the CI report in an error
+annotation. Summing both copies gives 168,686 ms for that CI failure, rather than the first
+report's 160,828 ms.
+
+| Failure | Elapsed / deadline | Finished phases | Sum | Longest finished phase |
+| --- | ---: | ---: | ---: | ---: |
+| CI run 38607502363, job 116002045326 (2026-10-14) | 166,059 / 165,500 ms | 991 | 160,828 ms | 1,983 ms |
+| A10-2 local push (2026-10-14) | 165,546 / 165,500 ms | 1,346 | 162,090 ms | 1,350 ms |
+| A585-6 local push (2026-10-15) | 171,087 / 171,000 ms | 1,452 | 167,826 ms | 2,114 ms |
+
+The CI log was retrieved with `gh run view 38607502363 --job 116002045326 --log` and retained as
+`receipts/a736/historical-ci-root.log` in Lane F. The local reports are
+`receipts/a10-2-ci-fix-push.log` and `receipts/a585-6/push2.log`; their current first-block sums
+above replace the old backlog's figures. A parser retained at
+`receipts/a736/reparse-phase-reports.py` prints the block's count, sum and maximum.
+
+Other retained context: A10-2's report reached `venue-service/0051_wakeful_loa` 386 ms into its
+migrate phase. Its process snapshot and isolated probe are
+`receipts/a10-2-upgrade-ps-before.txt` and `receipts/a10-2-upgrade-deadline-probe.log`; the latter
+passed in 62,597 ms. A585-6's failure reached `core/0157_mature_sir_ram` 419 ms into migration.
+`receipts/a585-6/main-migration-upgrade.log` records an isolated walk passing in 157,630 ms, with
+host load 12.09 before and 13.22 after. The previous backlog recorded load 22.07 after the failed
+hook; that value has not been rechecked here. Neither isolated pass establishes the cause of the
+failure it followed.
+
+These probes identify and reduce repeated work. The reports' longest finished phases and their
+accumulated times do not identify which host scheduling or storage event caused the earlier
+overruns. The new samples and review experiments remain under
+`~/waitron-campaign-f/receipts/a736/`; the developer backlog retains this unresolved variation.
+
 ### The upgrade test keeps its database in memory on Linux
 
 `scripts/migration-upgrade.test.ts` makes its scratch directory under `scratchParent()`
