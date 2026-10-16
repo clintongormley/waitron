@@ -2392,6 +2392,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   permissions review. Left open by A466 (A429 slice 2) / A502 part 3; A718 moved the link from the
   zone editor to the list.
 
+- **`wt-floor-plan-preview` has no product user.** The zone editor was its only one until A718
+  removed the preview; it remains in `packages/ui/demo/main.ts`, with its
+  `--wt-floor-plan-preview-max-height` token in `packages/ui-core/src/tokens/structure.css` and its row in
+  `docs/developers/design-system.md`. Retire it, or record why it is kept.
+
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
   scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
