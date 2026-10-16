@@ -3060,7 +3060,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   before the redesign. **Part 1 for the counter till is designed (2026-10-15): A738–A740**, which
   wait on part 2. The separate Find a bill page is A737 Part 1
   ([#1778](https://github.com/clintongormley/waitron/pull/1778)); its post-invoice Refund stays open
-  as A737 Part 2.
+  as A737 Part 2. **A182 part 2 has a retirement design and implementation plan (2026-10-16);
+  implementation remains open**. The documents have been reviewed, and the owner approved
+  the exact two schema-guard inventory deletions through the watcher on 2026-10-16.
+  [Design](superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md),
+  [plan](superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268

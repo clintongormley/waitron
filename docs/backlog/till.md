@@ -1113,6 +1113,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
      dashboard's editor, its navigation entry and the profile screen's picker, the routes, the live
      queries, the error codes and their translations. No data is carried over (§3's pre-live rule).
      Trace every consumer before deleting; the tests that build a canvas for the till go too.
+     **2026-10-16: retirement design and plan reviewed; implementation remains open.** The owner
+     approved the exact two schema-guard inventory deletions through the watcher that day. [Retirement design](../superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md),
+     [implementation plan](../superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
 
   **Separate, and staying** (§11): a menu's Device Home Page and its Handheld and Till displays
   (how its shortcuts are arranged), receipt
