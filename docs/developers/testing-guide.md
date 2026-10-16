@@ -2071,3 +2071,10 @@ fresh and PIN-fallback refusals with same-session and reloaded unknown outcomes;
 retain their original body and ID. Additional cases keep a replacement request or a learned
 pending refund ID when an older refusal arrives. The server's reservation cases pair rejected
 amounts with an empty refund table; separate cases replay existing submissions.
+
+The follow-up interleaving control starts another session's unanswered submission at the entry to
+`prepare`, before it reads the journal. The local request reuses that submission ID. Its amount
+refusal must retain the other session's journal; the paired case with no intervening submission
+still releases a fresh refusal. The initial separate freshness read failed that retained-journal
+assertion. Marking creation inside `prepare` passed both cases. This checks that scheduling point,
+not atomic storage across browser tabs.

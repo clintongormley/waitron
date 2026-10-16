@@ -113,7 +113,12 @@ export class TenderRefundAttempts {
     });
   }
 
-  prepare(scope: TenderRefundScope, saleId: string, ask: TenderRefundAsk): SavedTenderRefund {
+  prepare(
+    scope: TenderRefundScope,
+    saleId: string,
+    ask: TenderRefundAsk,
+    onCreated?: () => void,
+  ): SavedTenderRefund {
     const body = normalized(ask);
     const saved = this.read(scope, saleId);
     if (saved !== null) {
@@ -126,6 +131,7 @@ export class TenderRefundAttempts {
       refundId: null,
     };
     this.#write(scope, sent);
+    onCreated?.();
     return sent;
   }
 
@@ -232,8 +238,11 @@ export class TenderRefundSession {
     override?: TenderRefundRequest["override"],
   ): Promise<TenderRefundView> {
     return this.#run(() => {
-      const fresh = this.read(saleId) === null;
-      return this.#send(this.attempts.prepare(this.scope, saleId, ask), override, fresh);
+      let fresh = false;
+      const sent = this.attempts.prepare(this.scope, saleId, ask, () => {
+        fresh = true;
+      });
+      return this.#send(sent, override, fresh);
     });
   }
 

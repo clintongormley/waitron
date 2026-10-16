@@ -474,3 +474,55 @@ it.each(["replacement", "pending"] as const)(
     expect(kept!).not.toBeNull();
   },
 );
+
+it.each([false, true])(
+  "preserves an unknown request created by another consumer before prepare, interleave=%s",
+  async (interleave) => {
+    const attempts = new TenderRefundAttempts();
+    const prepare = attempts.prepare.bind(attempts);
+    let rejectOther!: (reason: unknown) => void;
+    const otherApi = {
+      refundTransaction: vi.fn(
+        () =>
+          new Promise<TenderRefundView>((_resolve, reject) => {
+            rejectOther = reject;
+          }),
+      ),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const other = new TenderRefundSession(scope, otherApi);
+    let unknown: Promise<TenderRefundView> | undefined;
+    let saved: ReturnType<TenderRefundAttempts["read"]> = null;
+    vi.spyOn(attempts, "prepare").mockImplementationOnce((...args) => {
+      if (interleave) {
+        unknown = other.submit("sale-1", ask);
+        saved = new TenderRefundAttempts().read(scope, "sale-1");
+      }
+      return prepare(...args);
+    });
+    const api = {
+      refundTransaction: vi.fn().mockRejectedValue({ code: "tender.refund_exceeds_payment" }),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const local = new TenderRefundSession(scope, api, attempts);
+    try {
+      await expect(local.submit("sale-1", ask)).rejects.toMatchObject({
+        code: "tender.refund_exceeds_payment",
+      });
+      if (interleave) {
+        expect(otherApi.refundTransaction).toHaveBeenCalledOnce();
+        expect(api.refundTransaction.mock.calls[0]![1].submissionId).toBe(
+          saved!.request.submissionId,
+        );
+        expect(local.read("sale-1")).toEqual(saved);
+      } else expect(local.read("sale-1")).toBeNull();
+    } finally {
+      if (unknown) {
+        rejectOther(new TypeError("lost other answer"));
+        await unknown.catch(() => {});
+      }
+    }
+  },
+);
