@@ -8,11 +8,11 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.8",
-    "@testcontainers/postgresql": "^12.1.0",
-    "@types/node": "^26.0.0",
+    "@electric-sql/pglite": "^0.5.9",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
-    "pg": "^8.23.0",
+    "pg": "^8.23.1",
     "typescript": "^7.0.0"
   }
 }
