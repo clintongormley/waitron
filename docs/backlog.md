@@ -5713,7 +5713,9 @@ the tree. What remains, largest first:
   (2026-10-15; open).** On A677's first push (#1737) its `packages/staffing` case hit the 30-second
   limit on drizzle-kit's generate (`GENERATE_TIMEOUT_MS`) with the machine's load average around 14;
   the branch changed no schema, the case passed alone and the retried push passed. Not measured how
-  long a generate takes on an idle machine, so the right bound is unknown.
+  long a generate takes on an idle machine, so the right bound is unknown. Again on A662's first
+  push (#1803, 2026-10-16): the `staffing` and `venue-service` generates were killed at a load
+  average around 40; no schema changed, the file passed alone (19 of 19) and the second push passed.
 
 - **A624. The upgrade walk cannot step a new set whose first migration names another set's later
   table.** `scripts/migration-upgrade.test.ts` applies every set's first migration together at its
