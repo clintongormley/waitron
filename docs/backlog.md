@@ -4068,12 +4068,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
 
 - **The dashboard's locale lookup reads inherited properties** (A626 review, 2026-10-14).
-  `pickLocale` in `packages/dashboard-kit/src/i18n.ts:65-67`, re-exported by the dashboard's
+  `pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's
   `i18n/t.ts`, returns a function for `"constructor"` and an object for `"__proto__"`.
-  An installed disposable-copy probe asserted both results and the Spanish control
-  (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a626-driver-probe.test.ts`,
-  1 passed). Whether a real dashboard caller admits those locales is unverified.
   **Next:** check own locale keys, test the English fallback and trace the callers.
+  [Detail](backlog/languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
 
 - **The recovery page's Spanish (#650) has not been read by a native speaker.** Left open by SQLite
   slice 2 Task 3a (#566, one process per venue folder; #573; #608).
@@ -4107,6 +4105,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   ("…would change…" / "…cambiaría…"), where the device, printer and card reader windows say "Work
   that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se elimina"
   and "Checking what changes…". Owner to say whether it should match.
+
 - **Future-tense lines outside the delete windows were left alone**: the Remove-standby
   explanation (`servers.remove_explanation`, "It will be marked removed…"), the Spanish variant
   badge "Se archivará al guardar", and the Spanish PIN reset confirmation
