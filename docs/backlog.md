@@ -1564,14 +1564,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
-  column and field go until A504. After A720. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
-- **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
-  (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
-  makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
-  the Staffing month follows. Points
-  1, 2, 3, 5 and 6 landed in #1765, #1770 and #1784, and point 4 in #1802; the Year | Month
-  switch goes (A759), "Seasons…" and the chips' ✎ A721's; 7 remains. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  column and field go until A504. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **Look at a picked, focused today in the Month.** `--wt-focus-offset` and
   `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so on
@@ -1604,7 +1597,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
   and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  Reached from the day box's "Open this week", with no Week button (A759). After A720. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  Reached from the day box's "Open this week", with no Week button (A759). [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
@@ -4813,7 +4806,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   replaces the Area picker and the By area | By person switch; two rows of controls; no "Add shift"
   in every cell — click an empty day for its open slots; the people panel goes; an empty week says
   why and offers the painter; one day at a time on a phone; the Staffing month's Monday rota link
-  moves into the day box (after A724). Before A586–A588.
+  moves into the day box. Before A586–A588.
   [Detail](backlog/workforce.md#a763-the-rota-view-redesigned-one-show-menu-no-button-per-cell-an-empty-week-that-says-why), [mockups](backlog/mockups/a763-rota/)
 
 - **A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
@@ -4822,11 +4815,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   many beside it, and `[Cancel] [Delete] … [Save]`, saving only on Save.
   [Detail](backlog/workforce.md#a761-the-staffing-grid-a-drag-paints-unless-a-block-is-picked-and-a-wide-block-editor)
 
-- **A724. Staffing: reach special days and standard weeks from the month day box (owner,
-  2026-10-15).** After all of A720 lands, use its day box to open the special day's staffing or the
-  season's standard week, with no seasons or special-days row.
-  [Detail](backlog/workforce.md#a724-staffing-special-days-reached-from-the-day-box), [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png)
-
+- **Staffing's day box: each area's staff roles and times.** The box lists each area's number; the
+  mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
+  block. Decision 13 of the [A720 plan](superpowers/plans/2026-10-15-a720-calendar-year-month.md),
+  [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
   hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and

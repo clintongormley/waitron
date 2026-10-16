@@ -3880,11 +3880,15 @@ hours' month carries that month into its address. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
 covering a month; each day lists the areas with a bar whose width is the area's share of the
 month's largest number, and the number. ‹ › step months, a Show picker offers All areas or one area
-(kept in the address as `area`), and a day closed all day reads Closed. Each season chip is a
-button that opens that season's staffing painter (Forms above). For a person who may write, each
-day a season or special day holds is a button that opens the special day's staffing painter, or
-else its season's; for a person who may only look, only a special day's date is a button, and the
-other days are plain. The arrow keys move between the day buttons. Below 560 px of width each bar
+(kept in the address as `area`), and a day closed all day reads Closed. It has no row of season
+chips and no legend. Every day is a button that opens the shared day box (Day box below): the
+date, the special day's name, a line saying which season's standard staffing the day follows or
+that a special day replaces it, and each shown area's number, with ", N unfilled" when the week
+has a roster version. For a person who may write, the box offers "Edit <special day> staffing" on a
+special day and "Edit <season>'s standard week" on any other day a season holds; for a person who
+may only look, it offers "Show <special day> staffing" and "Show <season>'s standard week", both on
+a special day. Each opens that staffing painter. Every day's box ends with Rota for this week when
+the person may open the Rota. The arrow keys move between the days. Below 560 px of width each bar
 sits above its label. The staffing painters have their own addresses:
 `/view/staffing[/month/<yyyy-mm>][/area/<area>]/painter/season/season/<id>` and
 `…/painter/special-day/special-day/<id>`; the month opens them with its own month, and with the
@@ -3979,8 +3983,8 @@ Opening hours' Year.
   opens the day box; for a viewer a drag, a double-click and a long press pick no run, and nothing
   opens the editor.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
-  `@waitron/venue-service/dashboard/calendar-day-box` for other screens, and Staffing's month and
-  A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that
+  `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
+  (above), and A722's Week is to open it too (backlog A722). One box at a time floats below the date that
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
   resize leaves none of the date inside the window and every box around it that clips its contents.

@@ -110,16 +110,6 @@ The PDF currently prints scalar values as `null`, `true` and `false`, including 
 reviewed serializer contract and its tests retain these spellings. Decide readable localized PDF
 wording separately, keeping CSV's scalar spellings stable; no legal-field or writer change is implied.
 
-## A724. Staffing: special days reached from the day box
-
-**A724 point 3 (owner, 2026-10-15).** Waits for all of lane A's A720 parts to land. Mockup:
-[the month](mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
-Files: `packages/staffing/src/dashboard/staffing-month.ts` and its calendar host.
-
-**Special days are reached from the day box.** The special-day staffing painter exists (A585-4)
-   but opens only from a special day's date. The month gets the Calendar's day box (`calendar-day-box.ts`), offering "Edit
-   {special day} staffing" or "Edit {season}'s standard week"; no seasons or special-days row.
-
 ## Rota warning query boundaries
 
 The A585-5 review replaced the unattached-shift SQL date with the UTC date and all nine warnings
@@ -223,11 +213,10 @@ screen.
    the picker as a sheet from the bottom, Publish at the foot. Show: Everyone lists each person with
    that day's shifts; a tap opens the same open-slots menu.
 9. **Staffing month: the Monday "Rota for this week" link goes**
-   ([board 6](mockups/a763-rota/06-staffing-month.png); today `staffing-month.ts:566`), so Monday's
-   box is the same height as the others. The day box gains "Rota for this week" and states where
-   that week's rota stands. The Rota tab opens the week of the day last picked in the month, else
-   the current week. The Staffing month has no day box until A724 lands; built before it, this point
-   waits for A724.
+   ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
+   `staffing-month.ts`), so Monday's box is the same height as the others. The day box already offers "Rota for this week" on every
+   day (A720 Part 5); it is still to state where that week's rota stands. The Rota tab opens the
+   week of the day last picked in the month, else the current week.
 
 ## Decisions and deliberate limits
 
