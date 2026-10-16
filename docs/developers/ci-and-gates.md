@@ -1145,8 +1145,9 @@ so the store is at pnpm's default path, and `actions/setup-node`'s `cache: pnpm`
 the old path will most likely miss once per job until `main` has saved new ones; that was not
 measured. The old entries are left for the cache's least-recently-used eviction.
 
-Out of scope: `deploy/Dockerfile` installs pnpm with `npm install --global pnpm@9.15.0` while
-building an image, not in a workflow setup step, and is not bounded by this; backlog A745.
+A744 left image-build installs outside this workflow-setup change. **2026-10-16:** A745 adds
+separate limits to the Dockerfile's two installs; see “The image build bounds its package installs”
+below.
 
 Guards: "the workflows' pnpm setups" in `scripts/ci-workflow.test.mjs`, weaker than its name — it
 reads every workflow as TEXT and does not run it: no non-comment `uses: pnpm/action-setup`, a
@@ -1175,6 +1176,42 @@ attempt 1. For this probe, a temporary wrapper on `PATH` invoked the real `gtime
 first version check. The same added case in the full root run failed beside 6,694 passing cases. The unchanged root
 baseline had passed all 6,694 cases, so this probe establishes the short-limit failure mechanism;
 it does not establish why A737's original intermittent first check was delayed.
+
+### The image build bounds its package installs
+
+A hung package install can consume an image job's whole allowance. The build stage in
+`deploy/Dockerfile` gives each `npm install --global pnpm@9.15.0` attempt 60 seconds and each
+`pnpm install --frozen-lockfile` attempt 300 seconds. Both use `timeout -k 10`: ten seconds after
+the first stop signal, a command that is still running is forcibly stopped. Each failed or
+stopped attempt prints its number and command. The first successful attempt ends the loop;
+a third failure stops that Dockerfile instruction.
+
+Measured on 2026-10-16 from the first uncached build-stage records in each successful CI run's
+`image / smoke` job log (`gh run view <run> --job <job> --log`):
+
+| Run | Job | pnpm setup | Workspace install |
+| --- | --- | --- | --- |
+| 38830786806 | 116748974125 | 1.8 s | 12.9 s |
+| 38843584366 | 116789076300 | 1.8 s | 13.9 s |
+| 38846737878 | 116798959862 | 2.0 s | 13.8 s |
+
+The 60-second setup limit allows thirty times this sample's longest setup. The workspace gets
+five minutes because a box building a branch uses the same Dockerfile over its own link and
+fetches the whole workspace. That allowance is about twenty-one times this sample's longest
+workspace install; a slow-link box was not measured. These are per-attempt limits, not build
+budgets. Including the kill grace, three setup attempts can take 210 seconds and three workspace
+attempts 930 seconds. The CI smoke and publish jobs keep their existing 15- and 10-minute
+limits, so their job limit can end the build before all retries finish.
+
+The package-install cases in `scripts/deploy-image-env.test.ts` execute the two Dockerfile
+`RUN` bodies under `sh`, with controlled npm and pnpm executables. Each install is checked for
+success on attempt one, two and three; three ordinary failures; three hangs; and three installers
+that ignore the first stop signal. A timeout adapter records and checks positive command limits
+and kill graces, then uses the real timeout executable, shortening only the deliberate hangs to
+one second plus a one-second kill grace. The suite checks the command arguments, attempt count,
+exit status and whether the next shell command ran. It does not contact a registry, reproduce a
+real package-manager hang, or judge whether the chosen production limits suit a particular link.
+The image smoke checks the built image separately.
 
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
