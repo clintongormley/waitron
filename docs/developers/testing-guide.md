@@ -1209,6 +1209,21 @@ The printer modal close test stalled on its own paused `requestAnimationFrame`; 
 native dialog's closed state avoids mixing that clock with the browser's queued close event
 (`apps/dashboard/src/screens/printers-screen.test.ts`, "closing Add printer…").
 
+## Wait for an opening section before clicking a choice inside it
+
+A component's `updateComplete` resolves after its render, while a CSS height transition can still
+move its contents. Wait for the frame that starts the transition, then the body's
+`getAnimations().map(animation => animation.finished)`, before sending a pointer click.
+
+A749, measured 2026-10-16 in real Chromium on macOS, Vitest 4.1.11: adding a 150 ms press-to-release
+delay to `product-editor.nutrition.test.ts` produced 27 failures among 69 cases, including the original
+“submission called zero times” assertion. A focused pointer trace recorded the Halal chip at y=657
+on press and y=826 on release, with the disclosure's height animation running at both points. The
+release and click paths no longer contained the chip; the draft still had no diet and Save stayed
+disabled. Waiting for that animation kept the existing expectations and the delayed press.
+The normal 12-case file and the same 69-case repetition passed with the wait. The trace identifies a mechanism that reproduces the
+CI symptom; the original CI run did not retain pointer geometry.
+
 ## A test waits for a browser grant by tracking the request, never by a fixed sleep.
 
 Where the browser has Web Locks, the Payments screen asks for one before it reads a card reader's

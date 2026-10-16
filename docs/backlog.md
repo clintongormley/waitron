@@ -5721,6 +5721,11 @@ the tree. What remains, largest first:
   Find the cause before treating a retry as a repair.
   [Detail](backlog/ci.md#the-simulator-suite-lost-its-worker-to-the-venue-watchdog)
 
+- **Audit the other product-editor pointer tests for opening-section races.**
+  `product-editor.test.ts:288` waits for the render, without awaiting the opening animation
+  (read only). A749 reproduces the race in the nutrition suite; try the same delayed press in the
+  sibling suite before changing its helper. [Receipt](developers/testing-guide.md#wait-for-an-opening-section-before-clicking-a-choice-inside-it).
+
 - **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
   in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
   fixture checks. Bound the generated screenshot filename and keep the complete test name in
