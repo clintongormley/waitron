@@ -141,6 +141,23 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["with a logo", { image: "abc.png" }],
+    ["without a logo", {}],
+    ["while disabled", { image: "abc.png", disabled: true }],
+    ["marked invalid", { invalid: true }],
+  ] as const)("renders accessibly as a receipt logo %s", async (_, props) => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), logo: true, ...props },
+      theme,
+    );
+    // Without this the scan could pass on a logo control that drew no button.
+    expect(el.shadowRoot!.querySelector("button[data-test=choose-image]")).not.toBeNull();
+    expect(!!el.shadowRoot!.querySelector("[data-test=remove-image]")).toBe("image" in props);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly as a thumbnail with its library open", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",

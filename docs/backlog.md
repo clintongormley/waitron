@@ -3605,12 +3605,26 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
   [mockups](backlog/mockups/a405-printer-details/)
 
-- **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
-  open).** A department with no description uses the Veri\*Factu default "Venta en establecimiento",
-  so the Departments warning goes and no sale is refused for it. The dialog opens at full width,
-  loses its grey address copy and a stray line, and shows the logo small with Remove beside it.
-  [Detail](backlog/printers.md#a662--tidy-the-edit-receipt-dialog-and-a-default-tax-agency-description),
-  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png)
+- **Owner's call: the receipt logo's Remove is a ghost button, where the mockup shows blue link
+  text (left open by A662).** The plan chose a ghost `wt-button`;
+  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
+
+- **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
+  by A662; predates it).** Each `wt-input`/`wt-textarea` hint (`p.hint`, visually hidden) is
+  positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
+  hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
+  Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
+  plain dialog of 16 hinted fields 953/864, the same fields without hints none. A
+  `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
+  the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
+  removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
+  hint.
+
+- **Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes
+  (left open by A662).** With Veri\*Factu always offering a default description, the Departments
+  readiness list is empty either way, so `apps/server/src/boot.departments-readiness.test.ts` no
+  longer sees that flag; only `packages/venue-service/src/routes.test.ts` covers "required, no
+  default".
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
   the till's choice to change or leave out the guests line when printing a receipt (Part 3b,

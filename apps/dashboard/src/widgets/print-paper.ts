@@ -119,15 +119,26 @@ function renderPiece(piece: Piece, widthDots: number) {
   }
 }
 
+/** Paper and ink keep their physical colours in both application themes. */
+export const paperGround = css`
+  color: #000;
+  background: #fff;
+`;
+
 /** The paper a print job's preview is drawn on; the host adds it to its own styles. */
 export const paperStyles = css`
-  .paper {
+  .paper,
+  .paper-strut {
     box-sizing: content-box;
     padding: 4mm;
-    /* Paper and ink keep their physical colours in both application themes. */
-    color: #000;
-    background: #fff;
     font: 2.5mm / 3.75mm monospace;
+  }
+  .paper {
+    ${paperGround}
+  }
+  .paper-strut {
+    padding-block: 0;
+    height: 0;
   }
   pre {
     margin: 0;
@@ -164,6 +175,11 @@ export const paperStyles = css`
     outline: var(--wt-selected-ring);
   }
 `;
+
+/** Nothing to see, as wide as a paper of `columns`, so a column keeps that width before a preview draws. */
+export function paperStrut(columns: number): TemplateResult {
+  return html`<div class="paper-strut" aria-hidden="true" style=${`width:${columns}ch`}></div>`;
+}
 
 /**
  * Draws a print job's preview as the paper it prints on. One instance per host: it keeps the

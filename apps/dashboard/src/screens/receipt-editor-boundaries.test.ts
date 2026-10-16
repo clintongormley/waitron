@@ -60,7 +60,7 @@ async function mount() {
   async function openReceipt() {
     el.show({ id: "bar", name: "Bar" });
     await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
-    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    const dialog = el.shadowRoot!.querySelector("wt-modal")!;
     await expect
       .poll(() => dialog.shadowRoot!.querySelector("dialog")?.matches(":modal"))
       .toBe(true);

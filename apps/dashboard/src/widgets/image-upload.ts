@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -16,6 +16,12 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
+import { dpiValue, safeWidthDots } from "@waitron/printing/src/layout.js";
+import { LOGO_MAX_HEIGHT_DOTS } from "@waitron/printing/src/dither.js";
+import { paperGround } from "./print-paper.js";
+
+/** CSS px for a count of dots at 203 dpi, so a logo is drawn the size it prints on 80 mm paper. */
+const logoPx = (dots: number) => unsafeCSS(`${(dots / dpiValue("203dpi")) * 96}px`);
 
 export interface ImageUploader {
   readonly imageLibraryRequest: DashboardRequest;
@@ -28,6 +34,11 @@ export interface ImageUploader {
  * As a `thumbnail` it is one small button showing the photo, which opens the picker; the picker's
  * footer then holds Remove. Its default slot holds what sits beside the photo, taking the rest of
  * the row.
+ *
+ * As a `logo` it is the receipt's logo, in the box it prints in on 80 mm paper at 203 dpi (sharp
+ * fits every logo inside it, enlarging a small one), with Remove beside it; with none, one
+ * "+ Add a logo" box. The picture, or the "+ Add a logo" box, opens the picker; when the picker
+ * closes, focus goes to whichever of the two is then drawn.
  */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {
@@ -96,6 +107,41 @@ export class ImageUpload extends LitElement {
       .caption {
         ${visuallyHiddenStyles}
       }
+      :host([logo]) {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+      .logo {
+        display: grid;
+        place-items: center;
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        ${paperGround}
+        cursor: pointer;
+      }
+      .logo.empty {
+        border-style: dashed;
+        color: var(--wt-color-text-muted);
+        background: var(--wt-color-surface);
+        font: inherit;
+      }
+      .logo img,
+      .logo .add {
+        display: grid;
+        place-items: center;
+        inline-size: ${logoPx(safeWidthDots("80mm"))};
+        block-size: ${logoPx(LOGO_MAX_HEIGHT_DOTS)};
+        object-fit: contain;
+      }
+      .logo:disabled {
+        ${disabledStyles}
+      }
+      .logo[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
     `,
   ];
   @property({ attribute: false }) api!: ImageUploader;
@@ -108,6 +154,7 @@ export class ImageUpload extends LitElement {
   /** Marks the control's button invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
   @property({ type: Boolean, reflect: true }) thumbnail = false;
+  @property({ type: Boolean, reflect: true }) logo = false;
   /** Nothing can be chosen or removed, and a library left open closes. */
   @property({ type: Boolean, reflect: true }) disabled = false;
   @state() private pickerOpen = false;
@@ -150,7 +197,9 @@ export class ImageUpload extends LitElement {
       });
     }
     this.#writeBusy = false;
+    const closing = this.pickerOpen && !open;
     this.pickerOpen = open;
+    if (closing && this.logo) void this.#focusLogo();
     this.dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
     );
@@ -192,8 +241,52 @@ export class ImageUpload extends LitElement {
     this.#change(null);
   }
 
+  async #focusLogo(): Promise<void> {
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=choose-image]")?.focus();
+  }
+
+  #renderLogo() {
+    const invalid = this.invalid ? "true" : nothing;
+    if (!this.image)
+      return html`<button
+        type="button"
+        class="logo empty"
+        data-test="choose-image"
+        aria-invalid=${invalid}
+        ?disabled=${this.disabled}
+        @click=${() => this.#setOpen(true)}
+      >
+        <span class="add"
+          ><span><span aria-hidden="true">+ </span>${t("image.add_logo")}</span></span
+        >
+      </button>`;
+    return html`<button
+        type="button"
+        class="logo"
+        data-test="choose-image"
+        aria-label=${t("image.change_logo")}
+        aria-invalid=${invalid}
+        ?disabled=${this.disabled}
+        @click=${() => this.#setOpen(true)}
+      >
+        <img src=${`/media/${encodeURIComponent(this.image)}`} alt="" />
+      </button>
+      <wt-button
+        data-test="remove-image"
+        variant="ghost"
+        aria-label=${t("image.remove_logo_name")}
+        ?disabled=${this.disabled}
+        @click=${() => {
+          this.#remove();
+          void this.#focusLogo();
+        }}
+        >${t("image.remove_logo")}</wt-button
+      >`;
+  }
+
   override render() {
-    return html`${this.thumbnail ? this.#renderThumbnail() : this.#renderFull()}
+    return html`${this.logo ? this.#renderLogo() : this.thumbnail ? this.#renderThumbnail() : this.#renderFull()}
     ${this.pickerOpen ? this.#renderPicker() : nothing}`;
   }
 

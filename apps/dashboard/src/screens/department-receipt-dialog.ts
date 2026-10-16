@@ -19,12 +19,13 @@ import {
 } from "@waitron/ui";
 import type { ReceiptPreview, PrintPaperWidth } from "../api/client.js";
 import { sameValue } from "../widgets/product-editor-model.js";
-import { PrintPaper, paperStyles } from "../widgets/print-paper.js";
+import { PrintPaper, paperStrut, paperStyles } from "../widgets/print-paper.js";
+import { columnsFor } from "@waitron/printing/src/layout.js";
 import { receiptLanguageName } from "../widgets/receipt-language.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import "../widgets/image-upload.js";
-import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -54,9 +55,6 @@ export class DepartmentReceiptDialog extends LitElement {
     css`
       :host {
         display: contents;
-      }
-      wt-dialog {
-        --wt-dialog-max-width: min(96vw, var(--wt-modal-max-width));
       }
       .layout {
         display: flex;
@@ -239,7 +237,7 @@ export class DepartmentReceiptDialog extends LitElement {
     scope.commit(this.#baseline);
   }
   #dialog(): WtDialog | null {
-    return this.shadowRoot?.querySelector("wt-dialog") ?? null;
+    return this.shadowRoot?.querySelector("wt-modal") ?? null;
   }
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.saving) return false;
@@ -622,7 +620,8 @@ export class DepartmentReceiptDialog extends LitElement {
             : [],
         )
       : [];
-    return html`<wt-dialog
+    return html`<wt-modal
+      size="wide"
       heading=${t("receipts.edit")}
       description=${this.department?.name ?? ""}
       .open=${this.isConnected && this.department !== null}
@@ -712,13 +711,11 @@ export class DepartmentReceiptDialog extends LitElement {
                   ></wt-switch
                   >${errors.printAddress ? html`<p class="error" data-field-error="printAddress">${errors.printAddress}</p>` : nothing}
                 </div>
-                <div class="note" data-test="venue-address">
-                  ${this.model.venueAddress.length ? this.model.venueAddress.map((line) => html`<div>${line}</div>`) : t("receipts.no_address")}
-                </div>
+                ${this.model.venueAddress.length ? nothing : html`<p class="note" data-test="venue-address">${t("receipts.no_address")}</p>`}
                 <dashboard-image-upload
                   name="logo"
+                  logo
                   .api=${this.api}
-                  label=${t("receipts.logo")}
                   .image=${this.draft.receipt.logo ?? null}
                   .draftParent=${this.#scope?.id}
                   .disabled=${this.saving}
@@ -762,7 +759,6 @@ export class DepartmentReceiptDialog extends LitElement {
                       ></wt-input>`
                     : nothing
                 }
-                <p class="note">${t("receipts.offered_languages")}</p>
                 ${warnings.length ? html`<p class="note" data-test="translation-warning" role="note">${t("receipts.translation_warning")}</p>` : nothing}
                 ${this.model.languages.map(
                   (language) =>
@@ -804,6 +800,7 @@ export class DepartmentReceiptDialog extends LitElement {
                 }
                 ${this.previewError ? html`<p class="error" role="alert">${this.previewError}</p>` : nothing}
                 ${this.preview ? this.#paper.render(this.preview.preview, marks) : nothing}
+                ${paperStrut(columnsFor("80mm"))}
               </section>
             </div>`
           : nothing
@@ -829,7 +826,7 @@ export class DepartmentReceiptDialog extends LitElement {
           >${t("action.save")}</wt-button
         >
       </wt-form-actions>
-    </wt-dialog>`;
+    </wt-modal>`;
   }
 }
 function receiptButton(host: DepartmentReceiptDialog): HTMLElement | null {

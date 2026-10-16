@@ -18,9 +18,11 @@ import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const verifactuDefault = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!
+  .venueFields!.defaults!.operationDescription;
 
 it.each(["ES-common", "GB-vat"])(
-  "trading boot gives the department list description readiness for %s",
+  "trading boot reports no department without a description, and the receipt read answers the filing module's default, for %s",
   async (pack) => {
     const venue = await provisionBillVenue(suite.db);
     await suite.db
@@ -31,6 +33,7 @@ it.each(["ES-common", "GB-vat"])(
       .select()
       .from(departments)
       .where(eq(departments.locationId, venue.cfg.locationId));
+    expect(rows.length).toBeGreaterThan(0);
     for (const row of rows)
       await suite.db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, row.id));
     await stampDeployment(suite.db, "preproduction");
@@ -71,18 +74,29 @@ it.each(["ES-common", "GB-vat"])(
       const model = (await response.json()) as {
         readiness: { code: string; departmentId?: string; departmentName?: string }[];
       };
-      const missing = model.readiness.filter(
-        (issue) => issue.code === "department.operation_description_required",
-      );
-      expect(missing).toEqual(
-        pack === "ES-common"
-          ? rows.map((row) => ({
-              code: "department.operation_description_required",
-              departmentId: row.id,
-              departmentName: row.name,
-            }))
-          : [],
-      );
+      expect(
+        model.readiness.filter(
+          (issue) => issue.code === "department.operation_description_required",
+        ),
+      ).toEqual([]);
+      for (const row of rows) {
+        const read = await fetch(
+          `http://127.0.0.1:${port}/management-api/venue-service/departments/${row.id}/receipt`,
+          { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
+        );
+        expect(read.status).toBe(200);
+        const answer = (await read.json()) as {
+          receipt: { operationDescription?: string };
+          operationDescriptionRequired: boolean;
+        };
+        if (pack === "ES-common") {
+          expect(answer.receipt.operationDescription).toBe(verifactuDefault);
+          expect(answer.operationDescriptionRequired).toBe(true);
+        } else {
+          expect(answer.receipt).not.toHaveProperty("operationDescription");
+          expect(answer.operationDescriptionRequired).toBe(false);
+        }
+      }
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

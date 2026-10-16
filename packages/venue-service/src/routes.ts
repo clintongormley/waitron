@@ -689,7 +689,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           readiness: [
             ...(await listVenueReadiness(tx, ctx.cfg)),
-            ...(ctx.cfg.operationDescriptionRequired === true
+            ...(ctx.cfg.operationDescriptionRequired === true &&
+            ctx.cfg.operationDescriptionDefault === undefined
               ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
               : []),
           ],

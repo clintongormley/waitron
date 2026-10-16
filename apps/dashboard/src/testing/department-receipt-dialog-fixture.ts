@@ -90,7 +90,7 @@ export async function mountReceiptDialog(api = receiptApi(), theme: "light" | "d
   await el.updateComplete;
   el.show({ id: "bar", name: "Bar" });
   await expect.poll(() => el.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
-  const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+  const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-modal")!;
   await expect.poll(() => dialog.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
   return { app, host, el, dialog, api };
 }

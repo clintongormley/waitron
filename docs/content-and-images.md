@@ -163,6 +163,7 @@ photograph from a product or section. The library lists that menu by name, follo
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
 to release it.
 
-A saved receipt logo also keeps a photograph in use. Follow its link to **Venue settings**,
-**Receipts**; a department logo link selects that department, including a switched-off one.
-Clear the saved logo before deleting the photograph.
+A saved receipt logo also keeps a photograph in use. The library lists that use as
+**<department> receipt logo**, and its link opens the department's **Edit receipt** dialog:
+choose **Remove** beside the logo, and save. A department that is no longer active is listed
+with **(Deleted department)** after its name and no link.

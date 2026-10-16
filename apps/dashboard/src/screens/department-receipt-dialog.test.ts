@@ -346,7 +346,7 @@ it("refreshes the selected subject name without replacing its dirty receipt or r
   await editReceipt(el, "email", "draft@example.com");
   el.subject = { id: "bar", name: "Renamed counter" };
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.description).toBe("Renamed counter");
+  expect(el.shadowRoot!.querySelector("wt-modal")!.description).toBe("Renamed counter");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
 });

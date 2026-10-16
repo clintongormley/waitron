@@ -366,22 +366,23 @@ it("pending Save freezes the saved logo and closes an already open picker", asyn
   await expect.poll(() => upload.disabled).toBe(false);
   expect(upload.image).toBe(LOGO);
 });
-it("shows the current address and previews its live replacement without changing authored receipt fields", async () => {
+it("shows no copy of the address and previews its live replacement without changing authored receipt fields", async () => {
   const { el, api } = await mountReceiptDialog();
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent)
-    .toContain("Calle Mayor 1");
+  expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
   await editReceipt(el, "email", "bar@example.com");
+  await expect
+    .poll(() => api.previewReceiptDraft.mock.lastCall?.[0].receipt.email)
+    .toBe("bar@example.com");
   const before = api.previewReceiptDraft.mock.calls.length;
   api.getDepartmentReceipt.mockResolvedValue({
     ...receiptModel,
     venueAddress: ["Plaza Nueva 2", "41001 Sevilla"],
   });
   api.liveData.invalidate([{ type: "locations" }]);
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent)
-    .toContain("Plaza Nueva 2");
-  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBeGreaterThan(before);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(before + 1);
+  expect(api.previewReceiptDraft.mock.lastCall![0].receipt.email).toBe("bar@example.com");
+  expect(el.shadowRoot!.textContent).not.toContain("Plaza Nueva 2");
   expect(receiptField(el, "email").value).toBe("bar@example.com");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
@@ -412,7 +413,6 @@ it("marks exactly the offered languages missing authored translations, including
   expect(missing()).toEqual([]);
   await editReceipt(el, "headerSubtitle-ca-ES", "Cafè");
   expect(missing()).toEqual(["es-ES", "gl-ES", "eu-ES"]);
-  expect(el.shadowRoot!.textContent).toContain(t("receipts.offered_languages"));
 });
 
 it("the real logo library keeps an upload refusal visible without changing the receipt", async () => {
@@ -528,17 +528,15 @@ it.each(["phone", "email", "operationDescription", "headerSubtitle-es-ES", "foot
 );
 
 it.each(["en-GB", "es-ES"] as const)(
-  "shows each printed address line separately and words an absent address in %s",
+  "shows no address line and words an absent address in %s",
   async (locale) => {
     setLocale(locale);
     const { el, api } = await mountReceiptDialog(
       receiptApi({ ...receiptModel, venueAddress: ["Calle Mayor 1", "28013 Madrid"] }),
     );
-    expect(
-      [...el.shadowRoot!.querySelector("[data-test=venue-address]")!.children].map(
-        (line) => line.textContent,
-      ),
-    ).toEqual(["Calle Mayor 1", "28013 Madrid"]);
+    expect(el.shadowRoot!.querySelector("[data-test=venue-address]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
+    expect(el.shadowRoot!.textContent).not.toContain("28013 Madrid");
     api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
     api.liveData.invalidate([{ type: "locations" }]);
     await expect

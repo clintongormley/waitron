@@ -146,6 +146,44 @@ async function libraryImage() {
   ).image.filename;
 }
 
+describe("the fiscal seat's default description", () => {
+  async function withoutStoredDescription(operationDescriptionDefault?: string) {
+    const f = await fixture();
+    if (operationDescriptionDefault !== undefined)
+      f.cfg.operationDescriptionDefault = operationDescriptionDefault;
+    await suite.db
+      .delete(departmentReceipts)
+      .where(eq(departmentReceipts.departmentId, f.departmentId));
+    return f;
+  }
+  const read = async (f: Awaited<ReturnType<typeof fixture>>) => {
+    const response = await f.app.request(f.path, { headers: f.headers });
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { receipt: { operationDescription?: string } }).receipt;
+  };
+  it("answers the default for a department with no stored description", async () => {
+    const f = await withoutStoredDescription("Seat default");
+    expect((await read(f)).operationDescription).toBe("Seat default");
+  });
+  it("answers a stored description over the default", async () => {
+    const f = await fixture();
+    f.cfg.operationDescriptionDefault = "Seat default";
+    expect((await read(f)).operationDescription).toBe("Meals");
+  });
+  it("answers no description when there is neither a stored one nor a default", async () => {
+    const f = await withoutStoredDescription();
+    expect(await read(f)).not.toHaveProperty("operationDescription");
+  });
+  it("saving the untouched default stores it", async () => {
+    const f = await withoutStoredDescription("Seat default");
+    const shown = await read(f);
+    expect((await f.put({ receipt: shown, policy })).status).toBe(204);
+    expect((await rows()).receipts[0]!.receipt).toEqual({ operationDescription: "Seat default" });
+    f.cfg.operationDescriptionDefault = "Another default";
+    expect((await read(f)).operationDescription).toBe("Seat default");
+  });
+});
+
 describe("replacement department receipt HTTP contract", () => {
   it.each([true, false])("reports the installed description field (%s)", async (withFiscal) => {
     const f = await fixture("manager", "manager", withFiscal);

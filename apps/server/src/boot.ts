@@ -260,6 +260,7 @@ import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule } from "./till-config.js";
+import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
@@ -1481,10 +1482,14 @@ async function bootServer(
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const operationDescriptionDefault = offeredOperationDescriptionDefault(
+    enabledFiscal.venueFields?.defaults?.operationDescription,
+  );
   const till: TillConfig = {
     ...config.till,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
+    operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the
@@ -1798,6 +1803,7 @@ async function bootServer(
       locationId: till.locationId,
       contentDefaultLanguage: venueLocale,
       operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
+      operationDescriptionDefault,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     core: moduleCoreServices(till, tableRemovals),

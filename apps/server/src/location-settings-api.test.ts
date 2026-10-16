@@ -154,7 +154,7 @@ describe("department invoice settings", () => {
     }
   });
   it.each([undefined, "", "   "])(
-    "a cash sale refuses missing department description %j before recording anything",
+    "with no default offered, a cash sale refuses missing department description %j before recording anything",
     async (description) => {
       await suite.db
         .update(departmentReceipts)

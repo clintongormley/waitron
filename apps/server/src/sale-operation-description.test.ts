@@ -114,7 +114,7 @@ async function authored(departmentId: string, receipt: Record<string, unknown>) 
     .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
 }
 const read = (
-  cfg: { locationId: ReturnType<typeof locationId> },
+  cfg: { locationId: ReturnType<typeof locationId>; operationDescriptionDefault?: string },
   source: Parameters<typeof readSaleOperationDescription>[2],
 ) => withTransaction(suite.db, (tx) => readSaleOperationDescription(tx, cfg, source));
 
@@ -147,7 +147,7 @@ describe("department operation description", () => {
     expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBe("Retained meals");
   });
   it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
-    "refuses missing/invalid authored description %j without another department fallback",
+    "refuses missing/invalid authored description %j when no default is offered, without another department fallback",
     async (operationDescription) => {
       const f = await fixture();
       await authored(f.primary, operationDescription === undefined ? {} : { operationDescription });
@@ -165,6 +165,78 @@ describe("department operation description", () => {
       expect(await read(f.cfg, { kind: "order", orderId: f.orderId })).toBe("Deli meals");
     },
   );
+  it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
+    "files the fiscal seat's default for missing/invalid authored description %j",
+    async (operationDescription) => {
+      const f = await fixture();
+      const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+      await authored(f.primary, operationDescription === undefined ? {} : { operationDescription });
+      await authored(f.fallback, { operationDescription: "Fallback drinks" });
+      for (const source of [
+        { kind: "order", orderId: f.orderId },
+        { kind: "sale", saleId: f.saleId },
+      ] as const) {
+        expect(await read(cfg, source)).toBe("Seat default");
+      }
+      await authored(f.primary, { operationDescription: "Deli meals" });
+      expect(await read(cfg, { kind: "order", orderId: f.orderId })).toBe("Deli meals");
+      expect(await read(cfg, { kind: "sale", saleId: f.saleId })).toBe("Deli meals");
+    },
+  );
+  it("files the default for a department with no receipt row at all, and refuses without one", async () => {
+    const f = await fixture();
+    expect(
+      await suite.db
+        .select()
+        .from(departmentReceipts)
+        .where(eq(departmentReceipts.departmentId, f.primary)),
+    ).toEqual([]);
+    const withDefault = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+    for (const source of [
+      { kind: "order", orderId: f.orderId },
+      { kind: "sale", saleId: f.saleId },
+    ] as const) {
+      expect(await read(withDefault, source)).toBe("Seat default");
+      await expect(read(f.cfg, source)).rejects.toMatchObject({
+        code: "department.operation_description_required",
+        params: { departmentId: f.primary },
+      });
+    }
+  });
+  it.each(["", " \t\n "])("treats a blank default %j as no default", async (blank) => {
+    const f = await fixture();
+    const cfg = { ...f.cfg, operationDescriptionDefault: blank };
+    for (const source of [
+      { kind: "order", orderId: f.orderId },
+      { kind: "sale", saleId: f.saleId },
+    ] as const) {
+      await expect(read(cfg, source)).rejects.toMatchObject({
+        code: "department.operation_description_required",
+        params: { departmentId: f.primary },
+      });
+    }
+  });
+  it.each(["order", "sale"] as const)(
+    "refuses missing %s context even when the fiscal seat offers a default",
+    async (kind) => {
+      const f = await fixture();
+      const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+      const source =
+        kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
+      await expect(read(cfg, source)).rejects.toMatchObject({
+        code: "sale.department_missing",
+        params: {},
+      });
+    },
+  );
+  it("refuses a sale's null department header even when the fiscal seat offers a default", async () => {
+    const f = await fixture(true);
+    const cfg = { ...f.cfg, operationDescriptionDefault: "Seat default" };
+    await expect(read(cfg, { kind: "sale", saleId: f.saleId })).rejects.toMatchObject({
+      code: "sale.department_missing",
+      params: {},
+    });
+  });
   it.each(["order", "sale"] as const)(
     "refuses missing %s context without a default department",
     async (kind) => {

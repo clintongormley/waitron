@@ -333,35 +333,6 @@ just a green typecheck.
      details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
      [Mockup](mockups/a405-printer-details/3-one-printer-table.png)
 
-## A662 — tidy the Edit receipt dialog, and a default tax-agency description
-
-- **A662 — tidy the Edit receipt dialog, and a default tax-agency description (owner, 2026-10-14;
-  open).** The dialog is the department's receipt settings
-  (`apps/dashboard/src/screens/department-receipt-dialog.ts`).
-  1. **A department with no description uses the default.** The Veri\*Factu module already defines
-     "Venta en establecimiento" (`venueFields.defaults.operationDescription`,
-     `packages/fiscal-verifactu/src/slot.ts`), but only the setup wizard offers it
-     (`/setup-api/venue-defaults`, `apps/server/src/setup-api.ts`). A department without one is
-     flagged "Set up the tax-agency description" on the Departments screen
-     (`venue.readiness.department_description`,
-     `packages/venue-service/src/dashboard/departments-list.ts`), and its sales are refused with
-     `department.operation_description_required` (`apps/server/src/sale-operation-description.ts`).
-     Use the fiscal module's default whenever a department has none of its own: the dialog shows it
-     filled in and editable, the warning goes, and no sale is refused for a missing description.
-     Find first why the owner's Santet Deli Co department had none — the Santet data import, or does
-     "+ Add department" leave it empty too.
-  2. **Open at full width.** The dialog opens narrow and jumps wide when the receipt preview loads;
-     hold the preview's space from the start. In the owner's screenshot with a logo set, the dialog
-     was wider still, so the full-size logo (point 4) may widen it as well; not checked.
-  3. **Drop the grey copy of the venue's address** under "Print the venue's address"; the preview
-     shows it.
-  4. **The logo.** No "Logo" label. A small preview at about its printed size, clicking it opens the
-     image library to choose another, and Remove beside it (it only takes the logo off the receipt;
-     the image stays in the library). Without a logo, a dashed box "+ Add a logo". Today the logo is
-     stretched across the form under Choose image and Remove image.
-     [Mockup](mockups/a662-edit-receipt/1-logo.png)
-  5. **Delete the stray line "Available at the till."** under the description field.
-
 ## A663 — receipts and full invoices that are easier to read
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** The
@@ -584,6 +555,13 @@ gets longer, so we should just make it look good with the date on its own line".
   internal sample values (owner).
 
 ## Decisions and deliberate limits
+
+- **A department without a tax-agency description takes the fiscal module's default when the
+  description is read, never by writing one at creation (A662 plan, 2026-10-16).** Existing
+  departments get it with no data migration. A stored description `parseReceipt`
+  (`packages/venue-service/src/department-receipts.ts`) cannot use — blank, over 500 characters,
+  or holding a character below U+0020 other than a tab, carriage return or line feed — counts as
+  none, so a sale files the default rather than being refused; the dialog, the Departments warning and the printed receipt already read it as absent.
 
 - **TOTAL is printed double size with no asesor question (owner, 2026-10-14).** Orden HAC/1177/2024
   art. 20.1.b asks for the VERI\*FACTU phrase in «un tipo de letra y tamaño bien visibles, similares

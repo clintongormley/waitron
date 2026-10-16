@@ -41,7 +41,8 @@ What constrains the next change to the wizard:
   (rectificativa). Nothing in the dashboard can change or add a series today.
 - **`operation_description` comes from the installed fiscal contribution.** Setup supplies its
   bootstrap value internally. Product sales use the description you save in each department's
-  **Edit receipt** dialog; the generic location field is not their fallback.
+  **Edit receipt** dialog, or the fiscal module's default description when the department has
+  none; the generic location field is not their fallback.
 
 ## Open owner call — setup always stores a language on the account
 
