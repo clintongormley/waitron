@@ -11,7 +11,13 @@ import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { monthNames, type MonthNames } from "./opening-hours-day.js";
-import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
+import {
+  dateAroundDay,
+  format,
+  formatLongDate,
+  formatMonthName,
+  formatWeekday,
+} from "./hours-view.js";
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
 import { closedHatch } from "./period-colour-styles.js";
@@ -107,7 +113,8 @@ export class OpeningHoursMonthView extends LitElement {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
-      .year-hint {
+      .year-hint,
+      .visually-hidden {
         ${visuallyHiddenStyles}
       }
       .rows {
@@ -438,9 +445,22 @@ export class OpeningHoursMonthView extends LitElement {
       lines[0] = lines[0]
         ? { ...lines[0], name: format("hours.calendar.special_closed", { name: lines[0].name }) }
         : { name: t("hours.closed"), kind: "" };
+    const separator = this.stationMode ? nothing : html`<span class="visually-hidden">, </span>`;
+    const unseen = this.#describe(day, rows, names).join(", ");
     const nameLines = lines.map(
-      (line) => html`<span class="name ${line.kind}" data-test="name">${line.name}</span>`,
+      (line, index) =>
+        html`${index || isToday ? separator : nothing}<span
+            class="name ${line.kind}"
+            data-test="name"
+            >${line.name}</span
+          >`,
     );
+    const around = dateAroundDay(day.date, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
     const label = [
       formatLongDate(day.date),
       special !== holidayName ? special : "",
@@ -451,8 +471,19 @@ export class OpeningHoursMonthView extends LitElement {
     ]
       .filter(Boolean)
       .join(", ");
+    const more = isToday || lines.length > 0;
+    // A button's name from what it draws, with the rest as hidden text: an aria-label would drop
+    // the drawn words from the name (WCAG 2.5.3).
     const body = html`<span class="top">
+        ${this.stationMode ? nothing : html`<span class="visually-hidden">${around.before}</span>`}
         <span class="date" data-test="date-heading">${Number(day.date.slice(8))}</span>
+        ${
+          this.stationMode
+            ? nothing
+            : html`<span class="visually-hidden"
+                >${around.after}${more || unseen ? ", " : ""}</span
+              >`
+        }
         ${isToday ? html`<span class="today" data-test="today">${t("hours.today")}</span>` : nothing}
       </span>
       ${nameLines}
@@ -461,7 +492,7 @@ export class OpeningHoursMonthView extends LitElement {
           ? html`<span class="no-orders" ?data-all-day=${day.closedAllDay} data-test="no-orders"
               >${t("month.no_orders")}</span
             >`
-          : html`<span class="track" data-row=${row.key}>
+          : html`<span class="track" data-row=${row.key} aria-hidden="true">
               ${row.ranges.map((range) => {
                 const period = names.period(range.periodId);
                 return html`<span
@@ -485,7 +516,12 @@ export class OpeningHoursMonthView extends LitElement {
                   ></span>`,
               )}
             </span>`,
-      )}`;
+      )}
+      ${
+        this.stationMode || !unseen
+          ? nothing
+          : html`<span class="visually-hidden">${more ? ", " : ""}${unseen}</span>`
+      }`;
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
@@ -507,7 +543,6 @@ export class OpeningHoursMonthView extends LitElement {
               class="day"
               tabindex=${day.date === stop ? 0 : -1}
               aria-pressed=${this.#dayPicker.isPicked(day.date) ? "true" : "false"}
-              aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
             >
               ${body}

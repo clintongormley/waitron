@@ -68,6 +68,18 @@ export function formatLongDate(date: LocalDate): string {
   );
 }
 
+/** A date formatted with `options` in the dashboard's language, as the text before and after its
+ *  day number: "Tuesday, " and " December 2026", or "martes, " and " de diciembre de 2026". */
+export function dateAroundDay(
+  date: LocalDate,
+  options: Intl.DateTimeFormatOptions & { day: "numeric" },
+): { before: string; after: string } {
+  const parts = dateFormat(options).formatToParts(asUtc(date));
+  const at = parts.findIndex((part) => part.type === "day");
+  const text = (some: Intl.DateTimeFormatPart[]) => some.map((part) => part.value).join("");
+  return { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
+}
+
 /** The browser's own date, which stands in for the venue's until the venue's date is read. */
 export function browserToday(): LocalDate {
   const now = new Date();

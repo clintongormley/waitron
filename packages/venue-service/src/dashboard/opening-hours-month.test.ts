@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
@@ -69,6 +69,17 @@ function events<T>(el: OpeningHoursMonthView, name: string): T[] {
   el.addEventListener(name, (event) => sent.push((event as CustomEvent<T>).detail));
   return sent;
 }
+const named = (button: HTMLElement) => expect.element(page.elementLocator(button));
+const containing = (words: string) => new RegExp(words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
+const spoken = (words: string) =>
+  new RegExp(`^${containing(words).source.replaceAll(", ", " ?, ")}$`);
+/** What a cell draws: its text less the hidden words a screen reader alone reads. */
+const drawn = (node: HTMLElement) => {
+  const copy = node.cloneNode(true) as HTMLElement;
+  for (const hidden of copy.querySelectorAll(".visually-hidden")) hidden.remove();
+  return text(copy);
+};
 const percent = (value: string) => Number.parseFloat(value);
 const pressed = (el: OpeningHoursMonthView) =>
   [...root(el).querySelectorAll<HTMLElement>('button.day[aria-pressed="true"]')].map(
@@ -222,12 +233,12 @@ describe("Opening hours month", () => {
     const tracks = [...sunday.querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
     expect(tracks[0]!.querySelectorAll(".segment")).toHaveLength(0);
-    expect(text(sunday)).not.toContain("Restaurant closed");
+    expect(drawn(sunday)).not.toContain("Restaurant closed");
   });
 
   it("still says a closed department in words", async () => {
     const el = await mount();
-    expect(dayButton(el, "2026-12-06").getAttribute("aria-label")).toContain("Restaurant closed");
+    await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(containing("Restaurant closed"));
   });
 
   it("draws a bar per department, each range placed from changeover to changeover in its period's colour", async () => {
@@ -435,15 +446,16 @@ describe("Opening hours month", () => {
     expect(terrace).not.toBeNull();
     expect(terrace!.querySelectorAll(".segment")).toHaveLength(0);
     expect(terrace!.querySelectorAll('[data-test="gap"]')).toHaveLength(0);
-    const label = dayButton(el, "2026-12-02").getAttribute("aria-label")!;
-    expect(label).toMatch(/Terrace closed(,|$)/);
-    expect(label).not.toMatch(/Terrace closed \d/);
+    await named(dayButton(el, "2026-12-02")).toHaveAccessibleName(/Terrace closed(,|$)/);
+    await named(dayButton(el, "2026-12-02")).not.toHaveAccessibleName(/Terrace closed \d/);
   });
 
   it("says a zone's own hours to a screen reader", async () => {
     const el = await mount(lateClosureModel(), { departmentId: "rest" });
-    expect(dayButton(el, "2026-12-02").getAttribute("aria-label")).toContain(
-      "Terrace: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–22:00, Terrace closed 22:00–23:00",
+    await named(dayButton(el, "2026-12-02")).toHaveAccessibleName(
+      containing(
+        "Terrace: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–22:00, Terrace closed 22:00–23:00",
+      ),
     );
   });
 
@@ -926,7 +938,7 @@ describe("Opening hours month", () => {
         const today = dayButton(el, "2026-12-30");
         expect(getComputedStyle(today).boxShadow, `${locale} ${width}`).not.toBe("none");
         expect(getComputedStyle(dayButton(el, "2026-12-29")).boxShadow).toBe("none");
-        expect(today.getAttribute("aria-label")).toContain(locale === "en" ? "Today" : "Hoy");
+        await named(today).toHaveAccessibleName(containing(locale === "en" ? "Today" : "Hoy"));
         const marker = cell(el, "2026-12-30").querySelector<HTMLElement>('[data-test="today"]')!;
         expect(text(marker)).toBe(locale === "en" ? "Today" : "Hoy");
         const box = marker.getBoundingClientRect();
@@ -1149,9 +1161,51 @@ describe("Opening hours month", () => {
 
   it("names each date in full for a screen reader, with its hours", async () => {
     const el = await mount();
-    const label = dayButton(el, "2026-12-06").getAttribute("aria-label")!;
-    expect(label).toContain("Sunday, 6 December 2026");
-    expect(label).toContain("Restaurant closed");
-    expect(label).toContain("All day 10:00–02:00");
+    await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(
+      "Sunday, 6 December 2026, Restaurant closed, Bar: All day 10:00–02:00",
+    );
+  });
+
+  it("names a date by what it draws, in its language's order, with Today before the day's names", async () => {
+    const model = monthModel();
+    const days = model.days.map((day) =>
+      day.date === "2026-12-25"
+        ? { ...day, specialDay: { id: "staff", name: "Staff party" } }
+        : day,
+    );
+    for (const [locale, names] of [
+      [
+        "en",
+        {
+          "2026-12-08":
+            "Tuesday, 8 December 2026, Today, Immaculate Conception, Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
+          "2026-12-25": "Friday, 25 December 2026, Staff party · Closed, Christmas Day",
+        },
+      ],
+      [
+        "es",
+        {
+          "2026-12-08":
+            "martes, 8 de diciembre de 2026, Hoy, Immaculate Conception, Restaurant: Breakfast 08:00–11:00, Lunch 13:00–16:00, Dinner 20:00–23:00, Bar: All day 10:00–02:00",
+          "2026-12-25": "viernes, 25 de diciembre de 2026, Staff party · Cerrado, Christmas Day",
+        },
+      ],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount({ ...model, today: "2026-12-08", days });
+      for (const [date, name] of Object.entries(names))
+        await named(dayButton(el, date as LocalDate)).toHaveAccessibleName(spoken(name));
+      el.remove();
+    }
+  });
+
+  it("keeps a date's hidden words off the screen and its bars out of its name", async () => {
+    const el = await mount(lateClosureModel(), { departmentId: "rest" });
+    const hidden = [...root(el).querySelectorAll<HTMLElement>("button.day .visually-hidden")];
+    expect(hidden.length).toBeGreaterThan(0);
+    for (const span of hidden) expect(span.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    const tracks = [...root(el).querySelectorAll<HTMLElement>("button.day .track")];
+    expect(tracks.length).toBeGreaterThan(0);
+    for (const track of tracks) expect(track.getAttribute("aria-hidden")).toBe("true");
   });
 });
