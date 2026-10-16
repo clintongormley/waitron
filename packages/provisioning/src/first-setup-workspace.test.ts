@@ -26,12 +26,15 @@ afterEach(async () => {
   );
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture() {
+async function fixture(sharedRoots = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "setup-workspace-")));
   dirs.push(root);
-  const anchor = { venueDir: join(root, "venue"), stateDir: join(root, "state") };
+  const anchor = {
+    venueDir: join(root, "venue"),
+    stateDir: join(root, sharedRoots ? "venue" : "state"),
+  };
   await mkdir(anchor.venueDir);
-  await mkdir(anchor.stateDir);
+  if (!sharedRoots) await mkdir(anchor.stateDir);
   await writeFile(join(anchor.stateDir, "first-setup.json"), "unchanged original state");
   await writeFile(join(anchor.venueDir, "first-setup-claim.json"), "unchanged original marker");
   await writeFile(join(root, "outside-history.json"), "independently configured public history");
@@ -286,4 +289,14 @@ it("a failure syncing a new workspace directory prevents publication of any sele
     vi.mocked(filesystem.open).mockImplementation(actual.open);
   }
   expect(await provision.selectFirstSetupWorkspace(f.anchor, f.applied)).toEqual(f.binding);
+});
+
+it("an installation sharing its original state and venue directory can select an isolated workspace", async () => {
+  const f = await fixture(true);
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, f.applied)).toEqual(f.binding);
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+  await provision.assertFirstSetupBootTarget({
+    venueDir: f.binding.venueDir,
+    stateDir: f.binding.stateDir,
+  });
 });

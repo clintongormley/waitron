@@ -173,12 +173,7 @@ export function validateWorkspaceBinding(value: unknown): asserts value is Works
     "first-setup-workspaces",
     String(value.workspaceId),
   );
-  if (
-    value.venueDir !== join(base, "venue") ||
-    value.stateDir !== join(base, "state") ||
-    value.anchorStateDir === value.anchorVenueDir
-  )
-    invalid();
+  if (value.venueDir !== join(base, "venue") || value.stateDir !== join(base, "state")) invalid();
 }
 const INPUT_KEYS = [
   "resolutionId",

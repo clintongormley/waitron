@@ -211,8 +211,8 @@ it("Finish setup needs a fresh outside committed confirmation and the original p
   await f.consult();
   f.interrupt();
   await expect(f.activate()).rejects.toThrow("synthetic after commit");
-  await f.consult(true);
-  await expect(f.finish(f.ownerAttempt)).rejects.toMatchObject({ code: "setup.owner_required" });
+  const beforeRecovery = await f.consult(true);
+  await expect(f.finish(beforeRecovery)).rejects.toMatchObject({ code: "setup.owner_required" });
   const owner = await f.recover();
   await expect(f.finish(owner)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
   expect(f.counts()).toEqual({ activations: 1, publications: 0 });
