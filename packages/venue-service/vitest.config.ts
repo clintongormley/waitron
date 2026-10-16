@@ -1,6 +1,7 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
+import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.js";
 
 export default defineConfig({
   optimizeDeps: { include: ["lit/directives/ref.js"] },
@@ -38,7 +39,7 @@ export default defineConfig({
             headless: true,
             instances: [{ browser: "chromium" }],
             // The dashboard a11y suites import a11y-helpers.ts, whose beforeEach runs this command.
-            commands: { ...parkPointerCommands },
+            commands: { ...parkPointerCommands, ...pointerGestureCommands },
           },
         },
       },

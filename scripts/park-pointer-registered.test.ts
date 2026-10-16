@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  * Reads TEXT, not the module graph: it looks for an IMPORT of `a11y-helpers` or a literal
  * `commands.parkPointer` call in a package's source, and for the `...parkPointerCommands` spread in
  * its vitest config. A rename of the command or the shared fragment, or a helper reached under a
- * different spelling, would slip past.
+ * different spelling, would slip past. The same holds for `pointerGestureCommands`: a literal
+ * `commands.mouseDrag` or `commands.touchGesture` call, and the `...pointerGestureCommands` spread.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -20,6 +21,8 @@ const ROOTS = ["packages", "apps"];
 const IMPORTS_A11Y_HELPERS = /^\s*import\b[^\n]*\ba11y-helpers\b/m;
 /** A source file calls the command directly (a local test-helpers copy of the hook). */
 const CALLS_PARK_POINTER = /\bcommands\.parkPointer\b/;
+/** A source file calls one of the commands in `pointerGestureCommands`. */
+const CALLS_POINTER_GESTURE = /\bcommands\.(?:mouseDrag|touchGesture)\b/;
 
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
@@ -78,6 +81,27 @@ describe("parkPointer command registration", () => {
       expect(
         config.includes("...parkPointerCommands"),
         `${rel}/src runs the parkPointer hook but ${rel}/vitest.config.ts does not spread ...parkPointerCommands into its browser commands`,
+      ).toBe(true);
+    });
+  }
+});
+
+describe("pointer gesture command registration", () => {
+  for (const dir of packageDirsWithVitestConfig()) {
+    let files: string[];
+    try {
+      files = sourceFilesIn(join(dir, "src"));
+    } catch {
+      files = [];
+    }
+    if (!files.some((f) => CALLS_POINTER_GESTURE.test(readFileSync(f, "utf8")))) continue;
+
+    const rel = dir.slice(repoRoot.length + 1);
+    it(`${rel} registers pointerGestureCommands in its vitest config`, () => {
+      const config = readFileSync(join(dir, "vitest.config.ts"), "utf8");
+      expect(
+        config.includes("...pointerGestureCommands"),
+        `${rel}/src calls commands.mouseDrag or commands.touchGesture but ${rel}/vitest.config.ts does not spread ...pointerGestureCommands into its browser commands`,
       ).toBe(true);
     });
   }
