@@ -374,11 +374,8 @@ just a green typecheck.
   incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
   What is left:
-  - **Part 3: guests and the amount per person** when the table's guests were entered.
-    Joined tables' counts are added together when they join (or when guests move onto a seated
-    table), so the party's own count holds the sum, or no count when either party had none or the sum
-    is over 999; a bill split by item prints no guests line (A713, owner 2026-10-15, in
-    [till.md](till.md#decisions-and-deliberate-limits)).
+  - **Part 3b:** the till lets the person printing a simplified receipt change the number of
+    guests or leave the line out, for that print only; waits for Q12.
 
 ## The till's on-screen receipt is a second copy of the layout
 
@@ -391,7 +388,8 @@ just a green typecheck.
   invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
   of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
   dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
-  into line with the printed receipt; A661 (#1745), which changed that file, has landed.
+  into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
+  not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a).
 
 ## On an A4 full invoice, a caption and its amount can split across pages
 
