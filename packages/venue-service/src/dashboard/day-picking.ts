@@ -88,6 +88,12 @@ export class DayPicker implements ReactiveController {
     return this.#run !== null && this.#run.from <= date && date <= this.#run.to;
   }
 
+  /** Drops the Tab stop's date, leaving the run as it is. */
+  forgetFocus(): void {
+    this.#focus = null;
+    this.#host.requestUpdate();
+  }
+
   clear(): void {
     this.#anchor = null;
     this.#set(null);

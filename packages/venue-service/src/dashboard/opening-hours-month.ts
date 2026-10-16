@@ -302,7 +302,7 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
-  #days = new DayPicker(this, {
+  #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     dates: () => this.model?.days.map((day) => day.date) ?? [],
     canPick: () => !this.readOnly && !this.stationMode,
@@ -319,7 +319,7 @@ export class OpeningHoursMonthView extends LitElement {
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (!changes.has("model")) return;
     const before = changes.get("model") as OpeningHoursMonth | undefined;
-    if (before?.month !== this.model?.month) this.#days.clear();
+    if (before?.month !== this.model?.month) this.#dayPicker.clear();
   }
 
   #emit<T>(name: string, detail: T): void {
@@ -493,7 +493,7 @@ export class OpeningHoursMonthView extends LitElement {
               type="button"
               class="day"
               tabindex=${day.date === stop ? 0 : -1}
-              aria-pressed=${this.#days.isPicked(day.date) ? "true" : "false"}
+              aria-pressed=${this.#dayPicker.isPicked(day.date) ? "true" : "false"}
               aria-label=${label}
               aria-current=${isToday ? "date" : nothing}
             >
@@ -569,11 +569,11 @@ export class OpeningHoursMonthView extends LitElement {
     const tints = seasonTints(model.seasons);
     const names = monthNames(this.departments);
     const stop =
-      [this.#days.focusDate, model.today].find(
+      [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
       ) ?? model.days.find((day) => day.inMonth)!.date;
     const legend = this.#rows(model.days[0]!, chosen, names).map((row) => row.name);
-    const on = this.stationMode ? undefined : this.#days.handlers;
+    const on = this.stationMode ? undefined : this.#dayPicker.handlers;
     const weeks = Array.from({ length: model.days.length / 7 }, (_, row) =>
       model.days.slice(row * 7, row * 7 + 7),
     );

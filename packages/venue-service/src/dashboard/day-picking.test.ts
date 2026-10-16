@@ -365,6 +365,17 @@ describe("DayPicker", () => {
     expect(button(host, 14).tabIndex).toBe(0);
   });
 
+  it("forgetting focus drops the Tab stop and keeps the run", async () => {
+    const host = await mount();
+    await userEvent.click(button(host, 12));
+    expect(host.picker.focusDate).toBe(day(12));
+    host.picker.forgetFocus();
+    expect(host.picker.focusDate).toBeNull();
+    await host.updateComplete;
+    expect(button(host, 1).tabIndex).toBe(0);
+    await expectRun(host, run(12, 12));
+  });
+
   it("a click no Enter keydown preceded chooses and does not open", async () => {
     const host = await mount();
     button(host, 23).focus();

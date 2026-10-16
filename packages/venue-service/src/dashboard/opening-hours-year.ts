@@ -99,11 +99,6 @@ export class OpeningHoursYearView extends LitElement {
       .month-name::after {
         content: " ›" / "";
       }
-      table {
-        user-select: none;
-        -webkit-touch-callout: none;
-        touch-action: manipulation;
-      }
       .month-name:focus-visible,
       .day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
@@ -114,6 +109,9 @@ export class OpeningHoursYearView extends LitElement {
         border-collapse: separate;
         border-spacing: var(--wt-space-1);
         table-layout: fixed;
+        user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation;
       }
       th {
         font-size: var(--wt-font-size-sm);
@@ -222,7 +220,10 @@ export class OpeningHoursYearView extends LitElement {
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (!changes.has("model")) return;
     const before = changes.get("model") as OpeningHoursYear | undefined;
-    if (before?.year !== this.model?.year) this.#picker.clear();
+    if (before?.year !== this.model?.year) {
+      this.#picker.clear();
+      this.#picker.forgetFocus();
+    }
     if (before?.area.addressKey !== this.model?.area.addressKey) {
       this.#areaRequest = {};
       this.areaBusy = false;

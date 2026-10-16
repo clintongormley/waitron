@@ -761,6 +761,16 @@ describe("Opening hours month", () => {
     expect(runs).toHaveLength(1);
   });
 
+  it("a viewer's Enter shows the day box and opens no run", async () => {
+    const el = await mount(monthModel(), { readOnly: true });
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    dayButton(el, "2026-12-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened.map(({ date }) => date)).toEqual(["2026-12-22"]);
+    expect(runs).toEqual([]);
+  });
+
   it("a run crosses into the next month's faint dates", async () => {
     const el = await mount();
     const runs = events<CalendarDaysOpen>(el, "calendar-days-open");

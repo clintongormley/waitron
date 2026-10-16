@@ -473,6 +473,36 @@ describe("Opening hours year", () => {
     expect(runs).toHaveLength(1);
   });
 
+  it("puts the Tab stop back on today when the year changes and comes back", async () => {
+    const el = await mount();
+    await userEvent.click(dayButton(el, "2027-10-22"));
+    await el.updateComplete;
+    expect(dayButton(el, "2027-10-22").tabIndex).toBe(0);
+    const next = yearModel();
+    el.model = {
+      ...next,
+      year: 2028,
+      days: next.days.map((day) => ({ ...day, date: `2028${day.date.slice(4)}` })),
+    };
+    await el.updateComplete;
+    el.model = yearModel();
+    await el.updateComplete;
+    const stops = [...root(el).querySelectorAll<HTMLElement>("td button")].filter(
+      (button) => button.tabIndex === 0,
+    );
+    expect(stops.map((button) => button.closest("td")!.dataset.date)).toEqual(["2027-03-10"]);
+  });
+
+  it("a viewer's Enter shows the day box and opens no run", async () => {
+    const el = await mount(yearModel(), { readOnly: true });
+    const opened = opens(el);
+    const runs = opensRun(el);
+    dayButton(el, "2027-10-22").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened.map(({ date }) => date)).toEqual(["2027-10-22"]);
+    expect(runs).toEqual([]);
+  });
+
   it("forgets a picked run when the year changes", async () => {
     const el = await mount();
     await commands.mouseDrag(["2027-10-20", "2027-10-23"].map(daySel));
