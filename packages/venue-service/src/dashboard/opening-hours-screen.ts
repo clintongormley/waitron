@@ -976,19 +976,14 @@ export class OpeningHoursScreen extends LitElement {
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
       // The department picker is the Month's: the Year lists every department.
-      const departmentId =
-        !year && day.departments.some((d) => d.departmentId === this.departmentId)
-          ? this.departmentId
-          : "";
-      const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
-      const monthHolidays = read.days.flatMap((row) => row.holidays);
+      const departmentId = year ? "" : this.departmentId;
       return {
-        shown,
+        shown: openingHoursDay(day, read.seasons, this.model!.departments, departmentId),
         message: "",
         error,
-        specialDayId: shown.specialDayId,
-        season: read.seasons.find(({ id }) => id === shown.seasonId),
-        holidays: monthHolidays,
+        specialDayId: day.specialDay?.id ?? null,
+        season: read.seasons.find(({ id }) => id === day.seasonId),
+        holidays: read.days.flatMap((row) => row.holidays),
       };
     }
     if (!year || year.year !== Number(date.slice(0, 4))) return undefined;

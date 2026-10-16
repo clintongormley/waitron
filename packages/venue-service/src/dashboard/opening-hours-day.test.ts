@@ -41,8 +41,6 @@ describe("openingHoursDay", () => {
         { name: "Terrace", text: "as Restaurant" },
         { name: "Bar", text: "All day 10:00–02:00", strong: true },
       ],
-      seasonId: "winter",
-      specialDayId: null,
     });
   });
 
@@ -60,8 +58,6 @@ describe("openingHoursDay", () => {
       name: "Company dinners",
       nameKind: "special",
       line: "Special day — replaces Winter's standard hours",
-      seasonId: "winter",
-      specialDayId: "company",
     });
   });
 
@@ -70,7 +66,6 @@ describe("openingHoursDay", () => {
       name: "Immaculate Conception",
       nameKind: "holiday",
       line: "Winter standard hours",
-      specialDayId: null,
     });
   });
 
@@ -92,10 +87,18 @@ describe("openingHoursDay", () => {
     ]);
   });
 
+  it("lists every department when the read does not carry the chosen one", () => {
+    expect(dayBox("2026-12-15", "gone").rows.map((row) => row.name)).toEqual([
+      "Restaurant",
+      "Terrace",
+      "Bar",
+    ]);
+  });
+
   it("says nothing about a season on a day no season holds", () => {
     const model = monthModel();
     model.days = model.days.map((d) => (d.date === "2026-12-15" ? { ...d, seasonId: null } : d));
-    expect(dayBox("2026-12-15", "", model)).toMatchObject({ line: "", seasonId: null });
+    expect(dayBox("2026-12-15", "", model)).toMatchObject({ line: "" });
     model.days = model.days.map((d) => (d.date === "2026-12-14" ? { ...d, seasonId: null } : d));
     expect(dayBox("2026-12-14", "", model).line).toBe("Special day");
   });

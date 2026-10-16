@@ -14,12 +14,31 @@ export interface OpeningHoursDay {
   nameKind: "special" | "holiday" | "";
   line: string;
   rows: DayBoxRow[];
-  seasonId: string | null;
-  specialDayId: string | null;
 }
 
-/** What the day box shows for one date of a month read. `departmentId` "" lists every department,
- *  each followed by its zones; a department id lists that department and its zones. */
+/** Names for the read's ids, from the host's department list; an id the list lacks reads "". */
+export interface MonthNames {
+  name(id: string): string;
+  period(id: string): { name: string; colour?: string };
+}
+
+export function monthNames(departments: readonly MonthDepartment[]): MonthNames {
+  const named = new Map<string, string>(
+    departments.flatMap((d) => [
+      [d.id, d.name] as const,
+      ...d.zones.map((z) => [z.id, z.name] as const),
+    ]),
+  );
+  const periods = new Map(departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)));
+  return {
+    name: (id) => named.get(id) ?? "",
+    period: (id) => periods.get(id) ?? { name: "" },
+  };
+}
+
+/** What the day box shows for one date of a month read. `departmentId` "", or one the date's read
+ *  does not carry, lists every department, each followed by its zones; a department id the read
+ *  carries lists that department and its zones. */
 export function openingHoursDay(
   day: Day,
   seasons: OpeningHoursMonth["seasons"],
@@ -36,17 +55,11 @@ export function openingHoursDay(
     : season
       ? format("day.standard", { season })
       : "";
-  const names = new Map<string, string>(
-    departments.flatMap((d) => [
-      [d.id, d.name] as const,
-      ...d.zones.map((z) => [z.id, z.name] as const),
-    ]),
-  );
-  const periods = new Map(departments.flatMap((d) => d.periods.map((p) => [p.id, p.name])));
+  const names = monthNames(departments);
   const list = (ranges: readonly ServiceRange[]) =>
     ranges.map((range) =>
       format("month.range", {
-        name: periods.get(range.periodId) ?? "",
+        name: names.period(range.periodId).name,
         start: range.startsAt,
         end: range.endsAt,
       }).trim(),
@@ -55,10 +68,11 @@ export function openingHoursDay(
     pieces.map(({ startsAt, endsAt }) =>
       format("day.closed_range", { start: startsAt, end: endsAt }),
     );
+  const chosen = day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
   const rows = day.departments
-    .filter((d) => !departmentId || d.departmentId === departmentId)
+    .filter((d) => !chosen || d.departmentId === chosen)
     .flatMap((read): DayBoxRow[] => {
-      const name = names.get(read.departmentId) ?? "";
+      const name = names.name(read.departmentId);
       return [
         {
           name,
@@ -67,7 +81,7 @@ export function openingHoursDay(
         },
         ...read.zones.map((zone) => {
           const own = zoneOwnHours(read.ranges, zone.closed, day);
-          const row = { name: names.get(zone.zoneId) ?? "" };
+          const row = { name: names.name(zone.zoneId) };
           if (!own.closed.length) return { ...row, text: format("day.as_department", { name }) };
           const text = own.ranges.length
             ? [...list(own.ranges), ...closed(own.closed)].join(" · ")
@@ -81,7 +95,5 @@ export function openingHoursDay(
     nameKind: special ? "special" : holiday ? "holiday" : "",
     line,
     rows,
-    seasonId: day.seasonId,
-    specialDayId: day.specialDay?.id ?? null,
   };
 }

@@ -10,6 +10,7 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
+import { monthNames, type MonthNames } from "./opening-hours-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -41,12 +42,6 @@ const ALL = "all";
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
   return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
-}
-
-/** Names for the read's ids, from the host's department list; an id the list lacks reads "". */
-interface Names {
-  name(id: string): string;
-  period(id: string): { name: string; colour?: string };
 }
 
 interface Row {
@@ -325,7 +320,7 @@ export class OpeningHoursMonthView extends LitElement {
       : "";
   }
 
-  #rows(day: Day, chosen: string, { name }: Names): Row[] {
+  #rows(day: Day, chosen: string, { name }: MonthNames): Row[] {
     const place = placeOnDay(day);
     const placed = (ranges: readonly ServiceRange[]) =>
       ranges.map((range) => ({ ...range, ...place(range) }));
@@ -371,7 +366,7 @@ export class OpeningHoursMonthView extends LitElement {
     return format("month.range", { name, start: range.startsAt, end: range.endsAt });
   }
 
-  #describe(day: Day, rows: readonly Row[], names: Names): string[] {
+  #describe(day: Day, rows: readonly Row[], names: MonthNames): string[] {
     if (day.closedAllDay) return [];
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
@@ -396,7 +391,7 @@ export class OpeningHoursMonthView extends LitElement {
     model: OpeningHoursMonth,
     chosen: string,
     tints: Map<string, string>,
-    names: Names,
+    names: MonthNames,
     stop: LocalDate,
   ) {
     const rows = this.#rows(day, chosen, names);
@@ -494,7 +489,7 @@ export class OpeningHoursMonthView extends LitElement {
     </td>`;
   }
 
-  #picker(model: OpeningHoursMonth, chosen: string, names: Names) {
+  #picker(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     const value = chosen || ALL;
     const options = [
       { value: ALL, label: t("opening.all_departments") },
@@ -550,31 +545,15 @@ export class OpeningHoursMonthView extends LitElement {
       ${model ? this.#grid(model) : nothing}`;
   }
 
-  #names(): Names {
-    const named = new Map<string, string>(
-      this.departments.flatMap((d) => [
-        [d.id, d.name] as const,
-        ...d.zones.map((z) => [z.id, z.name] as const),
-      ]),
-    );
-    const periods = new Map(
-      this.departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)),
-    );
-    return {
-      name: (id) => named.get(id) ?? "",
-      period: (id) => periods.get(id) ?? { name: "" },
-    };
-  }
-
   #tools(model: OpeningHoursMonth) {
     if (this.stationMode) return nothing;
-    return this.#picker(model, this.#chosen(model), this.#names());
+    return this.#picker(model, this.#chosen(model), monthNames(this.departments));
   }
 
   #grid(model: OpeningHoursMonth) {
     const chosen = this.#chosen(model);
     const tints = seasonTints(model.seasons);
-    const names = this.#names();
+    const names = monthNames(this.departments);
     const stop =
       [this.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),
