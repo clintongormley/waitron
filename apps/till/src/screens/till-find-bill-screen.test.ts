@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -450,33 +450,42 @@ it("an error leaves controls and Retry available and retries the same filters", 
   expect(requests(fetcher)).toHaveLength(3);
   expect(requests(fetcher)[2]!.searchParams.get("state")).toBe("held");
 });
-it("row activation emits the exact selected bill or transaction once, and Back cancels a pending read", async () => {
-  const { el, host } = await mount();
-  const seen: unknown[] = [];
-  host.addEventListener("find-bill-open", (e) => seen.push((e as CustomEvent).detail));
-  const grid = await ready(el);
-  const row = grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="bill-1"]');
-  expect(row).not.toBeNull();
-  await userEvent.click(row!);
-  expect(seen).toEqual([{ row: billRow() }]);
-  await switchTab(el, "transactions");
-  const transactions = await ready(el, "transactions");
-  const opened: unknown[] = [];
-  host.addEventListener("find-transaction-open", (e) => opened.push((e as CustomEvent).detail));
-  await userEvent.click(
-    transactions.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"]')!,
-  );
-  expect(opened).toEqual([{ row: transactionRow() }]);
-  const back = vi.fn(() => {
-    el.active = false;
-  });
-  host.addEventListener("find-bill-back", back);
-  await userEvent.click(
-    el.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,
-  );
-  expect(back).toHaveBeenCalledTimes(1);
-  expect(el.active).toBe(false);
-});
+it.each([390, 800, 1280, 2560])(
+  "row activation at %i emits the exact selected bill or transaction once, and Back asks its parent to leave",
+  async (width) => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 844);
+    try {
+      const { el, host } = await mount();
+      const seen: unknown[] = [];
+      host.addEventListener("find-bill-open", (e) => seen.push((e as CustomEvent).detail));
+      const grid = await ready(el);
+      const row = grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="bill-1"]');
+      expect(row).not.toBeNull();
+      await userEvent.click(row!.querySelector<HTMLElement>("td")!);
+      expect(seen).toEqual([{ row: billRow() }]);
+      await switchTab(el, "transactions");
+      const transactions = await ready(el, "transactions");
+      const opened: unknown[] = [];
+      host.addEventListener("find-transaction-open", (e) => opened.push((e as CustomEvent).detail));
+      await userEvent.click(
+        transactions.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
+      );
+      expect(opened).toEqual([{ row: transactionRow() }]);
+      const back = vi.fn(() => {
+        el.active = false;
+      });
+      host.addEventListener("find-bill-back", back);
+      await userEvent.click(
+        el.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,
+      );
+      expect(back).toHaveBeenCalledTimes(1);
+      expect(el.active).toBe(false);
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);
 it("changing the API context drops old rows/options and reads the new context even for an identical query", async () => {
   const { el } = await mount();
   await ready(el);

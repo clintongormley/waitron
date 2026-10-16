@@ -3076,8 +3076,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
   Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list of
   tabs, each tab a grid of cards, chosen per device profile. **Decided the same day: delete now**,
-  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A737–A740**, which
-  wait on part 2.
+  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A738–A740**, which
+  wait on part 2. The separate Find a bill page is A737 Part 1
+  ([#1778](https://github.com/clintongormley/waitron/pull/1778)); its post-invoice Refund stays open
+  as A737 Part 2.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268

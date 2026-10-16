@@ -1740,6 +1740,10 @@ runs first** (owner, 2026-10-08), and it was not in any lane's queue on 2026-10-
 waits on A668's data shape (allergen icons, cereal and nut kinds, the product info window); A668's
 spec was awaiting the owner's review on 2026-10-15.
 
+2026-10-16: the revised campaign order puts the separate A737 Part 1 page
+([#1778](https://github.com/clintongormley/waitron/pull/1778)) before canvas retirement.
+A738–A740 still follow canvas retirement; A737 Part 2 keeps the post-invoice Refund work.
+
 What the code does today, read on 2026-10-15 (read, not run), so the entries below can be checked
 against it: the Counter/Floor header buttons are canvas tabs (`apps/till/src/widgets/tab-shell.ts`);
 Kitchen, Pass and My schedule follow the profile's `show-station`, `show-expo` and `show-schedule`;
