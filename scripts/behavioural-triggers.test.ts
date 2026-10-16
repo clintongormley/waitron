@@ -160,6 +160,8 @@ const EXPECTED_TRIGGERS = [
   "working_orders_release_main_bill",
   "working_orders_release_main_bill_on_move",
   "parties_clear_table_status",
+  "tender_refunds_guard_update",
+  "tender_refunds_no_delete",
 ];
 
 const scratch = [];
