@@ -49,8 +49,6 @@ import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 
 type View = "year" | "month";
-const SHOWN_VIEWS: readonly View[] = ["year", "month"];
-const VIEW_LABELS = { year: "opening.view.year", month: "opening.view.month" } as const;
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`,
@@ -162,8 +160,9 @@ export class OpeningHoursScreen extends LitElement {
   @state() private boxMonth?: OpeningHoursMonth;
   private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
-  /** The date whose day box last opened: Month from the Year opens its month. */
-  private lastDay?: LocalDate;
+  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's year link held focus
+   *  as it opened the Year, and the Year draws its month names only once its read arrives. */
+  private focusMonth?: string;
   /** The open request the box was last shown for: once that box is hidden, a content change
    *  while its close is on the way must not show it again. */
   private dayBoxPlaced?: CalendarDayOpen;
@@ -532,6 +531,7 @@ export class OpeningHoursScreen extends LitElement {
         changed.has("departmentId"))
     )
       void this.placeDayBox();
+    if (this.focusMonth) void this.focusPendingMonth();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     // A new list without the shown view returns to Opening hours, replacing the address naming it.
@@ -975,7 +975,6 @@ export class OpeningHoursScreen extends LitElement {
     event.stopPropagation();
     this.afterDayBox = undefined;
     this.dayBox = event.detail;
-    this.lastDay = event.detail.date;
   }
   private async placeDayBox() {
     const open = this.dayBox;
@@ -1092,51 +1091,56 @@ export class OpeningHoursScreen extends LitElement {
       }
     </calendar-day-box>`;
   }
-  private viewSwitch() {
-    const option = (value: View) =>
-      html`<label
-        ><input
-          type="radio"
-          name="calendarSpan"
-          value=${value}
-          .checked=${live(this.view === value)}
-          @change=${(event: Event) => this.chooseSpan(value, event.currentTarget as HTMLElement)}
-        /><span>${t(VIEW_LABELS[value])}</span></label
-      >`;
-    return html`<div
-      slot="switch"
-      class="segmented"
-      role="radiogroup"
-      aria-label=${t("opening.view")}
-      data-test="view-switch"
-    >
-      ${SHOWN_VIEWS.map(option)}
-    </div>`;
+  private heldFocus(view: EventTarget | null, selector: string) {
+    if (!(view instanceof LitElement) || this.shadowRoot?.activeElement !== view) return null;
+    const held = view.shadowRoot?.activeElement;
+    return held?.matches(selector) ? held : null;
   }
-  /** A change made from a focused radio puts focus back on the switch the next view draws, since
-   *  the radio that held it goes with the view it sat in. */
-  private chooseSpan(view: View, radio: HTMLElement) {
-    const opened =
-      view === "year"
-        ? this.openYear(this.shownMonth().slice(0, 4))
-        : this.openMonth(this.monthOfShownYear());
-    if (this.shadowRoot?.activeElement !== radio) return;
+  /** A month name pressed while it held focus leaves focus on the Month's year link, since the
+   *  name goes with the Year it sat in. */
+  private openMonthFromYear(event: CustomEvent<{ date: string }>) {
+    event.stopPropagation();
+    const held = this.heldFocus(event.currentTarget, "[data-test=month-name]");
+    const opened = this.openMonth(event.detail.date.slice(0, 7));
+    if (!held) return;
     void opened.then(async () => {
       await this.updateComplete;
-      await this.shadowRoot?.querySelector<LitElement>("opening-hours-year, opening-hours-month")
-        ?.updateComplete;
-      const lost = !document.activeElement || document.activeElement === document.body;
-      if (!this.isConnected || radio.isConnected || !lost) return;
-      this.shadowRoot
-        ?.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")
-        ?.focus();
+      const month = this.shadowRoot?.querySelector("opening-hours-month");
+      await month?.updateComplete;
+      if (!this.isConnected || held.isConnected || !focusLost()) return;
+      month?.shadowRoot?.querySelector<HTMLElement>("[data-test=month-year]")?.focus();
     });
   }
-  private monthOfShownYear() {
-    const year = String(this.shownYear()).padStart(4, "0");
-    if (this.lastDay?.startsWith(`${year}-`)) return this.lastDay.slice(0, 7);
-    const today = (businessDateToday(this.model!) || browserToday()).slice(0, 7);
-    return today.startsWith(`${year}-`) ? today : `${year}-01`;
+  private openYearFromMonth(event: CustomEvent<{ year: number }>) {
+    event.stopPropagation();
+    const held = this.heldFocus(event.currentTarget, "[data-test=month-year]");
+    const month = this.shownMonth();
+    void this.openYear(String(event.detail.year)).then(() => {
+      this.focusMonth = held ? month : undefined;
+      void this.focusPendingMonth();
+    });
+  }
+  private async focusPendingMonth() {
+    const month = this.focusMonth;
+    if (!month) return;
+    if (
+      !focusLost() ||
+      this.view !== "year" ||
+      this.moduleView ||
+      this.overlaid() ||
+      this.shownYear() !== Number(month.slice(0, 4))
+    ) {
+      this.focusMonth = undefined;
+      return;
+    }
+    const year = this.shadowRoot?.querySelector("opening-hours-year");
+    await year?.updateComplete;
+    const name = year?.shadowRoot?.querySelector<HTMLElement>(
+      `[data-month="${month}"] [data-test=month-name]`,
+    );
+    if (this.focusMonth !== month || !name) return;
+    this.focusMonth = undefined;
+    if (this.isConnected && focusLost()) name.focus();
   }
   private month() {
     const write = (changes: Record<string, string | null>) =>
@@ -1150,8 +1154,10 @@ export class OpeningHoursScreen extends LitElement {
         .departmentId=${this.departmentId}
         .departments=${this.model!.departments}
         .readOnly=${this.readOnly}
+        .linkYear=${true}
         @calendar-day-open=${this.openDayBox}
         @calendar-days-open=${this.openDays}
+        @month-year-open=${this.openYearFromMonth}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
           write({ view: "month", month: event.detail.month, date: null, to: null });
@@ -1160,8 +1166,7 @@ export class OpeningHoursScreen extends LitElement {
           event.stopPropagation();
           write({ department: event.detail.departmentId || null, zone: null });
         }}
-        >${this.viewSwitch()}</opening-hours-month
-      >`;
+      ></opening-hours-month>`;
   }
   override render() {
     return html`${this.calendarHeading()}
@@ -1175,6 +1180,7 @@ export class OpeningHoursScreen extends LitElement {
                 <opening-hours-year
                   .model=${this.yearModel}
                   .year=${this.shownYear()}
+                  .readFailed=${this.yearReadError !== ""}
                   .api=${this.api}
                   .areaApi=${this.areaWrites}
                   .specialDays=${this.knownSpecialDays}
@@ -1197,12 +1203,8 @@ export class OpeningHoursScreen extends LitElement {
                       }),
                     ).then(() => this.followUrl());
                   }}
-                  @year-month-open=${(event: CustomEvent<{ date: string }>) => {
-                    event.stopPropagation();
-                    void this.openMonth(event.detail.date.slice(0, 7));
-                  }}
-                  >${this.viewSwitch()}</opening-hours-year
-                >`
+                  @year-month-open=${this.openMonthFromYear}
+                ></opening-hours-year>`
             : this.shownMonth()
               ? this.month()
               : nothing
@@ -1212,6 +1214,7 @@ export class OpeningHoursScreen extends LitElement {
     ${this.seasonPainter()} ${this.specialPainter()} ${this.seasonsWindow()}`;
   }
 }
+const focusLost = () => !document.activeElement || document.activeElement === document.body;
 declare global {
   interface HTMLElementTagNameMap {
     "dashboard-opening-hours-screen": OpeningHoursScreen;

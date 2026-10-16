@@ -290,7 +290,7 @@ describe("Opening hours year", () => {
     );
   });
 
-  it("draws only the year asked for, ‹ › and the switch's slot before any read, and steps from it", async () => {
+  it("draws only the year asked for and ‹ › before any read, and steps from it", async () => {
     const el = document.createElement("opening-hours-year");
     el.year = 2028;
     document.body.append(el);
@@ -301,8 +301,10 @@ describe("Opening hours year", () => {
       years.push((event as CustomEvent<{ year: number }>).detail.year),
     );
     expect(text(root(el).querySelector('[data-test="year"]'))).toBe("2028");
-    expect(root(el).querySelector("slot[name=switch]")).not.toBeNull();
-    expect(root(el).querySelector("table, season-chips, .note")).toBeNull();
+    expect(root(el).querySelector("slot")).toBeNull();
+    expect(
+      root(el).querySelector('table, season-chips, .note, [data-test="month-name"]'),
+    ).toBeNull();
     root(el).querySelector<HTMLElement>('[data-test="previous-year"]')!.click();
     root(el).querySelector<HTMLElement>('[data-test="next-year"]')!.click();
     expect(years).toEqual([2027, 2029]);
@@ -310,6 +312,48 @@ describe("Opening hours year", () => {
     el.year = 0;
     await el.updateComplete;
     expect(root(el).children).toHaveLength(0);
+  });
+
+  it("draws every month's name when the read has failed, each opening its month, and no grid", async () => {
+    const el = document.createElement("opening-hours-year");
+    el.year = 2028;
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-test="month-name"]')).toBeNull();
+    const opened: string[] = [];
+    el.addEventListener("year-month-open", (event) =>
+      opened.push((event as CustomEvent<{ date: string }>).detail.date),
+    );
+    el.readFailed = true;
+    await el.updateComplete;
+    const names = [...root(el).querySelectorAll<HTMLElement>('[data-test="month-name"]')];
+    expect(names.map((name) => text(name))).toEqual([
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ]);
+    expect(names.every((name) => name.localName === "button")).toBe(true);
+    expect(root(el).querySelector("table, season-chips, .note")).toBeNull();
+    names[2]!.click();
+    expect(opened).toEqual(["2028-03-01"]);
+    expect(
+      root(el).querySelector('[data-month="2028-11"] [data-test="month-name"]'),
+    ).not.toBeNull();
+
+    el.model = yearModel();
+    await el.updateComplete;
+    expect(root(el).querySelectorAll("table")).toHaveLength(12);
+    expect(root(el).querySelectorAll('[data-test="month-name"]')).toHaveLength(12);
   });
 
   it("keeps › in place whatever year it shows", async () => {

@@ -467,7 +467,7 @@ describe("Opening hours month", () => {
     expect(picker.value).toBe("rest");
   });
 
-  it("draws only ‹ month ›, the switch's slot and Show above the dates", async () => {
+  it("draws only ‹ month › and Show above the dates", async () => {
     const el = await mount();
     for (const id of ["year-back", "add-special-day", "rows"])
       expect(testId(el, id), id).toBeNull();
@@ -476,7 +476,6 @@ describe("Opening hours month", () => {
       '[data-test="previous-month"]',
       '.fixed-title:has(> [data-test="month"])',
       '[data-test="next-month"]',
-      'slot[name="switch"]',
       'wt-combobox[name="departmentId"]',
     ];
     const head = root(el).querySelector(".head")!;

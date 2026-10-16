@@ -271,12 +271,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     const screen = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
     expect(screen.api.liveData).toBe(liveData);
     expect(screen.readOnly).toBe(true);
-    await vi.waitFor(() =>
-      expect(screen.shadowRoot!.querySelector("[data-test=view-switch]")).not.toBeNull(),
-    );
     const year = () => screen.shadowRoot!.querySelector("opening-hours-year");
     await vi.waitFor(() =>
-      expect(year()?.shadowRoot?.querySelector("[data-test=year]")).not.toBeNull(),
+      expect(year()?.shadowRoot?.querySelector("[data-test=year]")).toBeTruthy(),
     );
     expect(year()!.readOnly).toBe(true);
     render(handle.render(false), container);

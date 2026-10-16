@@ -139,13 +139,9 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
+    ["the Year's head", "/manage/opening-hours/view/year", "opening-hours-year"],
     [
-      "the Year / Month switch on the Year",
-      "/manage/opening-hours/view/year",
-      "opening-hours-year",
-    ],
-    [
-      "the Year / Month switch on the Month",
+      "the Month's head, its year a link",
       "/manage/opening-hours/view/month/month/2026-12",
       "opening-hours-month",
     ],
@@ -164,11 +160,12 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
         : { ...read, departments: structuredClone(DEPARTMENTS) };
     }) as DashboardRequest);
     wrapper.appendChild(screen);
-    await expect
-      .poll(() => screen.shadowRoot!.querySelector("[data-test=view-switch]"))
-      .not.toBeNull();
     await expect.poll(() => screen.shadowRoot!.querySelector(view)?.model).toBeDefined();
     await screen.shadowRoot!.querySelector(view)!.updateComplete;
+    if (view === "opening-hours-month")
+      expect(
+        screen.shadowRoot!.querySelector(view)!.shadowRoot!.querySelector("[data-test=month-year]"),
+      ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
   test.each([
