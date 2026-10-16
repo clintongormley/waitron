@@ -155,6 +155,7 @@ Left open:
   painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
   of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
   apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
+  `packages/catalogue/src/device-home.ts`.
 
 ## Two copies of the tree pointer drag — OPEN (W88)
 
@@ -374,10 +375,10 @@ over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
 and [plan](../superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
 the 2026-09-30 folders design; what remains:
 
-- **Classification.** `Product.categoryId` and `primaryCategoryId` always hold the same value, and
-  `?descendants=1` on a category's products has no dashboard caller. A line's classification is
-  recorded when it is added (M7v), so `sale_classification.invalid` refuses adding a line; whether
-  the till's message for that refusal on the add paths is right is not checked. The demo seed
+- **Classification.** `Product.categoryId` and `primaryCategoryId` always hold the same value. A
+  line's classification is recorded when it is added (M7v), so `sale_classification.invalid`
+  refuses adding a line; whether the till's message for that refusal on the add paths is right is
+  not checked. The demo seed
   (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale`
   directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`,
   `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts`
@@ -712,7 +713,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-
 ## A651 — drop photos to upload them, and tidy the image library and its picker
 
 Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. Boards, in
@@ -807,6 +807,139 @@ and the `servicesVersion` 2 configuration reply.
   Cloud's spec still says "proposed" until its first implementation change updates it.
 - **When the check passes**, delete this entry (Task 21, Step 7); otherwise each failure becomes
   its own entry.
+
+## A655 — fewer and slimmer columns on Products
+
+**A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
+`apps/dashboard/src/widgets/product-list.ts`: (1) "Standalone ordering" (`product.ordering`,
+Spanish "Pedido por separado") gets a shorter heading — the owner suggested "Standalone"; choose it
+beside A647's new values (Anyone / Staff only / Nobody), and the Spanish needs the owner's wording.
+(2) Allergens and Dietary info start hidden (`choosable: "hidden"`) and stay in the column chooser.
+(3) Made at is deleted, or at the very least loses the grey second line under a category's station
+("set on this category", "from {name}", "default station", "some items made elsewhere",
+`folders.made_at_*`), which makes each category row up to three lines tall; which of the two is
+the owner's call at the plan. Either way "Kitchen routing unavailable"
+(`folders.made_at_unavailable`, drawn on category rows when the stations cannot be read) needs a
+new place rather than going with it; and deleting the column also deletes the station link to Prep
+stations' routing view (`/manage/prep-stations/view/routing`). Decided with it: the Availability
+column stays as it is, and the table staying wider than its box at desktop width is accepted
+(there will always be too many columns here; folding the sidebar to a strip gives it more room).
+**Added 2026-10-16 (owner):** the heading is "Standalone", and the editor field and the filter
+both become "Standalone ordering by" (today "Ordered on its own by" and "Standalone ordering");
+a Course column and a Course filter join the list, and "Default course" is renamed "Course"
+everywhere the dashboard shows it. A course change is live on the till without republishing
+(course is left out of the published copy, `packages/catalogue/src/menu-document.ts`); confirm
+that on a till while building.
+
+## A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions" shows only when something is scheduled
+
+**A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
+shows only when something is scheduled** (owner, 2026-10-12). Today "Publish now" is on its own
+line, then a "Scheduled versions" heading, the "Publish later" button and a table that says "No
+versions are scheduled." ([before](mockups/a547-preview-tab-before.png)). Wanted: the two
+buttons on one line, Publish later first; the heading and table drawn only while at least one
+version is queued. The two buttons live in different widgets: Publish now in
+`apps/dashboard/src/widgets/menu-preview.ts` (`#renderPublish`), Publish later with the heading,
+table and schedule dialog in `apps/dashboard/src/widgets/menu-publications.ts`, which the menus
+screen slots into the preview's changes pane — so putting them side by side needs a choice of
+which widget draws the row; the implementer picks one and says why. Points to settle in the
+change: each button still shows on its own when the other does not (Publish later hides on a
+clash or when the draft matches the newest live or queued version; Publish now hides when the
+draft matches live); a failed read of the schedule still shows its message and Retry rather than
+hiding; and closing the schedule dialog or cancelling the last queued version currently sends
+focus to the "Scheduled versions" heading, which may no longer be there.
+
+## Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud can still hold it
+
+- **Translate all: a job the box ends itself is marked released without a call to Cloud, and
+  Cloud can still hold it.** The box ends a job without asking Cloud when the job's own 24-hour
+  clock runs out, when `translationService()` is no longer `on` (Cloud's last configuration reply
+  no longer lists the service `ready`, or the connection is revoked), and when a status or collect
+  call is refused as a request Cloud will never accept (ended `rejected`). Cloud's 24 hours run
+  from its own submit, or from when the job finished, so it can still hold the job, and while that
+  job is queued or running the contract's `translation_job_running` refuses the venue's next
+  submit. A release would not end a queued or running job (Cloud answers 409
+  `translation_not_ready`); it only deletes a finished job's results sooner. Cloud's operator
+  switching the service off answers 503, which the box retries rather than ending the job. A
+  submit Cloud accepted whose reply was lost is the worst case: the box never learned Cloud's job
+  id, so it could not release the job even once Cloud finished it. Pinned by "a job Cloud took but
+  whose reply was lost…", "a running job 24 hours old ends expired without asking Cloud" and "a
+  status Cloud refuses as a request it will never accept…" in
+  `apps/server/src/content-suggestion-runner.test.ts`. What would fix it is open.
+
+## Translate all: open points from the review of A689's second PR
+
+- **Translate all: open points from the review of A689's second PR.** (1) A suggestion's
+  out-of-date check starts from the item as it stood when the results were stored, not when the
+  job was sent, so an owner change (an included menu moved between sections) while Cloud works is
+  not noticed. (2) A waiting placeholder ("the name doesn't say what it is") stops every later run
+  from asking for that item, even after its staff name is clarified, until someone discards it.
+  (3) A variant whose product's staff name is over 500 characters is sent with no product as
+  context, because that product is left out of the job (plan Decisions 9 and 10). (4) The fake
+  Cloud refuses a language tag outside `^[a-z]{2,3}(-[A-Z]{2})?$`
+  (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
+  enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
+  `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
+
+## Translate all wording in the translations dialog that reads wrongly for some counts
+
+- **Translate all wording in the translations dialog that reads wrongly for some counts.** A count
+  of one reads "1 suggestions" — `suggestions.waiting`, `suggestions.capacity`, `suggestions.fits`
+  and, in Spanish, `suggestions.partly` have no `_one` forms, unlike their siblings in
+  `apps/dashboard/src/i18n/strings.ts` (the plan's wording, left unchanged by A689's fourth PR). And the
+  dialog's counters still say "edited" for every row Save would send, untouched suggestions
+  included: `translations.edited`, `translations.hidden`, `translations.show_edited`,
+  `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are
+  edited"). Owner to choose the wording. The bell's Translate all notice has the same gap: one
+  suggestion reads "1 suggestions are waiting" / "1 sugerencias pendientes"
+  (`content.suggestions_ready`, `apps/dashboard/src/i18n/alert-messages.ts`), because the alert
+  formatter has no plural forms.
+
+## Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15)
+
+- **Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15).**
+  A Discard whose delete request never answers keeps Save disabled, across closing and reopening the
+  dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
+  do, `packages/dashboard-kit/src/request.ts`). And on the default language's page, an item a read
+  by reference showed should not be listed is skipped for the rest of that opening, so an item that
+  becomes listable again while the dialog is open shows only from the next opening
+  (`#dropped`, `apps/dashboard/src/widgets/content-translations-dialog.ts`). And after a Discard
+  that deleted some of a row's suggestions before one was refused, that language's row takes no
+  suggestion including any of them, and shows no Discard, for the rest of the opening the refusal
+  lands in (or, if the dialog was closed then, the very next opening, when that is on the same language);
+  the refused suggestion is still stored and fills the row again at that language's opening after
+  that.
+
+## A682. Translations: nothing required, every missing name reported, all languages side by side (owner, 2026-10-14)
+
+- **A682. Translations: nothing required, every missing name reported, all languages side by side
+  (owner, 2026-10-14).**
+  1. No customer-facing name is required. A blank one falls back to the default-language name,
+     then to the staff name. A unit has no staff name to fall back to and stays required today
+     ([products.md](../developers/products.md#the-translation-gap-report)), so settle units first.
+  2. The Missing translations report lists every missing value in every enabled language, the
+     default included.
+  3. Changing the default content language is no longer refused over missing text
+     (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`).
+  4. The translations dialog shows one field per enabled language on each row, so a name can be
+     compared and filled in every language at once. Its "Why" filter becomes a "Missing in…"
+     language filter; "Kind" stays.
+  5. On Content languages, the note under a language's count is cut off mid-sentence (the Spanish
+     row: "Spanish stays enabled for venues in this region, and…"). Wrap it.
+
+  This settles the two questions C122 and A172 left for the owner: whether a name blank in every
+  language counts under the default language, and whether "Spanish filled, English blank" is still
+  a gap. Translate all fills the same dialog; its "Use fix" button waits for this change
+  (its own entry in `docs/backlog.md`).
+
+## Open test gap from A201b (#1091)
+
+- **Open test gap from A201b** (#1091): removing `#closeLostList()` from `#includeMenu` in a
+  disposable checkout left `pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/menus-screen.test.ts` green (207/207, 2026-10-03). The suite does not establish
+  whether that guard catches a list disappearing between the last read and selection. Check that
+  race with a focused test, or remove the guard if the path cannot occur; its reachability remains
+  unverified.
 
 ## Decisions and deliberate limits
 
@@ -1006,3 +1139,9 @@ From units and the old `pricing_unit` (#342, #375, #382):
 - **Only kilograms, grams and milligrams can ever come from a scale** — a fixed list enforced by a
   database check, separate from the editable name. A unit you invent, and the volume units, are
   typed, never weighed. Intended, not an oversight.
+
+From A335 (#1457, the menu editor's heading):
+
+- **When the venue needs a reset, the menu editor shows the "reset the venue" sentence inside the
+  brackets beside the menu's name**, where the live version normally sits, in muted text. A review
+  suggested a line of its own; kept in the brackets by decision. (A335, #1457.)
