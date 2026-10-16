@@ -2974,32 +2974,13 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Defaults last in Products and menus, to a session holding catalogue.manage, and opens its page", async () => {
-    const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
-    });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-    await flush(el);
-    const item = navItem(el, "catalogue-defaults");
-    expect(item!.textContent!.trim()).toBe(t("nav.catalogue_defaults"));
-    const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
-    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order.at(-1)).toBe("nav-catalogue-defaults");
-
-    item!.click();
-    await flush(el);
-    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
-      "dashboard-catalogue-defaults-screen",
-    );
-    expect(face!.api).toBe(api);
-    expect(location.pathname).toBe("/manage/catalogue-defaults");
-  });
-
   it.each([
+    ["admin", ["catalogue.manage"]],
+    ["manager", ["catalogue.manage", "person.manage"]],
     ["supervisor", []],
     ["manager", ["person.manage"]],
   ])(
-    "does not offer Defaults to a %s session without catalogue.manage",
+    "offers no Defaults page in Products and menus to a %s session holding %j",
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -3010,20 +2991,20 @@ describe("dashboard-app", () => {
       await flush(el);
       expect(navItem(el, "overview")).toBeTruthy();
       expect(navItem(el, "catalogue-defaults")).toBeNull();
+      const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
+      const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map(
+        (b) => b.dataset.test,
+      );
+      expect(order.at(-1)).toBe("nav-units");
     },
   );
 
   it.each([
-    [
-      "manager",
-      ["catalogue.manage"],
-      "dashboard-catalogue-defaults-screen",
-      "/manage/catalogue-defaults",
-    ],
-    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["catalogue.manage"]],
+    ["manager", ["person.manage"]],
   ])(
-    "opens /manage/catalogue-defaults for a %s session holding %j only when it holds catalogue.manage",
-    async (role, permissions, tag, path) => {
+    "opens /manage/catalogue-defaults as the default page for a %s session holding %j",
+    async (role, permissions) => {
       history.replaceState(null, "", "/manage/catalogue-defaults");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -3032,8 +3013,9 @@ describe("dashboard-app", () => {
         }),
       });
       await flush(el);
-      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
-      expect(location.pathname).toBe(path);
+      expect(el.shadowRoot!.querySelector("dashboard-catalogue-defaults-screen")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
+      expect(location.pathname).toBe("/manage/overview");
     },
   );
 

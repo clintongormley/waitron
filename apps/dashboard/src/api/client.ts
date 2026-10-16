@@ -2365,12 +2365,6 @@ export class DashboardApi {
     return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "GET");
   }
 
-  saveCatalogueSettings(
-    input: Pick<CatalogueSettings, "defaultProductVatClass">,
-  ): Promise<CatalogueSettings> {
-    return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "PUT", input);
-  }
-
   saveCatalogueDefaultColor(color: string | null): Promise<CatalogueSettings> {
     return this.#request<CatalogueSettings>(
       "/management-api/catalogue-settings/default-color",
@@ -3011,10 +3005,6 @@ export class DashboardApi {
 
   getReceiptLanguage(): Promise<ReceiptLanguage> {
     return this.#request<ReceiptLanguage>("/management-api/receipt-language", "GET");
-  }
-
-  putReceiptLanguage(language: string): Promise<void> {
-    return this.#request<void>("/management-api/receipt-language", "PUT", { language });
   }
 
   getVenueDefaults(): Promise<VenueDefaults> {
