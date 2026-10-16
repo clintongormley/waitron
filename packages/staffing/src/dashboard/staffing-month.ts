@@ -268,11 +268,15 @@ export class StaffingMonthView extends LitElement {
   #watching?: string;
   /** What the pressed box button does once the box has closed. */
   #afterBox?: () => void;
+  /** The date the box was last shown for, until it closes: a box closed since then is not shown
+   *  again, since showing it before its close event would swallow that event. */
+  #placed?: string;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("month")) {
       this.boxDate = undefined;
       this.#afterBox = undefined;
+      this.#placed = undefined;
     }
     if (this.month && this.month !== this.#watching) this.#watch();
   }
@@ -325,6 +329,7 @@ export class StaffingMonthView extends LitElement {
   #boxClosed(event: Event): void {
     event.stopPropagation();
     this.boxDate = undefined;
+    this.#placed = undefined;
     const act = this.#afterBox;
     this.#afterBox = undefined;
     if (this.isConnected) act?.();
@@ -339,7 +344,9 @@ export class StaffingMonthView extends LitElement {
       [box, ...box.children].map((node) => (node as Partial<LitElement>).updateComplete),
     );
     if (!this.isConnected || this.boxDate !== date) return;
+    if (this.#placed === date && !box.shown) return;
     box.show(this.#dayButton(date)!);
+    this.#placed = date;
   }
 
   #keydown(event: KeyboardEvent): void {

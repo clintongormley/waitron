@@ -1005,6 +1005,17 @@ describe("the day box", () => {
     expect(seen).toEqual([{ focused: dayButton(el, "2026-12-03"), shown: false }]);
   });
 
+  it("acts once and stays closed when a new read arrives as a box button closes it", async () => {
+    const { el, open } = await mount({ canWrite: true });
+    await openBox(el, "2026-12-03");
+    dayBox(el)!.querySelector<HTMLElement>("wt-button")!.click();
+    const view = el as unknown as { read: StaffingMonth };
+    view.read = { ...view.read };
+    await settled(el);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(dayBox(el)).toBeNull();
+  });
+
   it("acts on no close a button did not ask for, nor on one pressed before the box was shown", async () => {
     const { el, open } = await mount({ canWrite: true });
     await openBox(el, "2026-12-03");
