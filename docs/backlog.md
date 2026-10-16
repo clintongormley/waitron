@@ -5614,6 +5614,12 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **The pnpm setup guard's successful stub once needed a second attempt (2026-10-16; open).**
+  A737's local push hook observed `installed on attempt 2 of 3` where
+  `scripts/ci-setup-pnpm.test.mjs:133` expects attempt 1. The cause is unverified; capture the
+  first attempt's refusal before changing the test or its time limits.
+  [Detail](backlog/ci.md#the-pnpm-setup-guards-successful-stub-once-needed-a-second-attempt).
+
 - **A745. The image build's pnpm install has no time limit or retry of its own.**
   `deploy/Dockerfile`'s build stage runs `npm install --global pnpm@9.15.0` and then
   `pnpm install --frozen-lockfile` with no outer `timeout` and no retry, and image-smoke (which

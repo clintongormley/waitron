@@ -355,3 +355,22 @@ tree at 320 px with `narrow: false`. Restoring the update passed both target cas
 checks the diagnostic, not the cause of the intermittent failure. Next: use that snapshot and
 the existing failure screenshot to distinguish a wide scrolling box, delayed layout and missing
 resize delivery before changing the screen or its test.
+## The pnpm setup guard's successful stub once needed a second attempt
+
+During A737 [#1778](https://github.com/clintongormley/waitron/pull/1778), the local push hook's
+`pnpm vitest run --coverage` passed 6,693 cases and failed the success case in
+`scripts/ci-setup-pnpm.test.mjs:133`: stdout said `pnpm 9.15.0 installed on attempt 2 of 3`,
+where the check expects attempt 1. The branch changes neither that test nor its shell script.
+The failed assertion did not print the first attempt's stderr. Its cause remains unverified.
+
+The fixture sets the install bound to 20 seconds and the version-read bound to one second;
+these settings alone do not establish which operation failed. Next: retain the returned stderr
+and stub state when the success case fails again, then reproduce that failure before changing
+the guard or its bounds. Re-run the unchanged suite with:
+
+```sh
+pnpm exec vitest run scripts/ci-setup-pnpm.test.mjs
+```
+
+The unchanged focused suite passed all 19 cases after the branch rebased onto A663 Part 2d
+(`6d9e88e33`). That replay did not reproduce the first-attempt refusal or establish a repair.
