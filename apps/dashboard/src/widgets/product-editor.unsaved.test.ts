@@ -785,15 +785,13 @@ it("incomplete allergen kinds survive reconnect and Keep, then Discard restores 
   const { app, editor } = await mount({ ...product, allergens: {} });
   await reattachAfterDetachedUpdate(editor);
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  editor
-    .shadowRoot!.querySelector("dashboard-product-nutrition-picker")!
-    .dispatchEvent(
-      new CustomEvent("wt-nutrition-change", {
-        detail: { field: "allergens", value: { gluten: {} } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+  editor.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: { gluten: {} } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await editor.updateComplete;
   await reattachAfterDetachedUpdate(editor);
   expect(app.leave.coordinator.isDirty()).toBe(true);
