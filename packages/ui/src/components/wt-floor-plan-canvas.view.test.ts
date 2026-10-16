@@ -200,6 +200,47 @@ it("at twice the zoom a resize changes two squares for 48 screen pixels", async 
   expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 8 }]);
 });
 
+const corner = (el: WtFloorPlanCanvas, name: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(
+    `[part="resize-corner-handle"][data-corner="${name}"]`,
+  )!;
+
+it("at twice the zoom a corner drag changes two squares each way for 48 screen pixels", async () => {
+  const el = await canvas("T1");
+  await doubled(el);
+  const changes = events(el, "wt-table-resize");
+  const handle = corner(el, "bottom-right");
+  const at = centre(handle);
+  pointer(handle, "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x + 48, at.y + 48);
+  pointer(window, "pointerup", 1, at.x + 48, at.y + 48);
+  expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 10 }]);
+});
+
+it("a finger on a selected table's corner resizes it, and on an unselected table's corner pans", async () => {
+  const el = await canvas("T1");
+  const changes = events(el, "wt-table-resize");
+  const selections = events(el, "wt-table-select");
+  const at = centre(corner(el, "bottom-right"));
+  pointer(corner(el, "bottom-right"), "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x + 24, at.y + 24);
+  pointer(window, "pointerup", 1, at.x + 24, at.y + 24);
+  expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 10 }]);
+  el.selected = null;
+  await el.updateComplete;
+  const before = button(el).getBoundingClientRect();
+  const target = el.shadowRoot!.elementFromPoint(at.x, at.y)!;
+  pointer(target, "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x - 24, at.y - 36);
+  await el.updateComplete;
+  const after = button(el).getBoundingClientRect();
+  pointer(window, "pointerup", 1, at.x - 24, at.y - 36);
+  expect(changes).toHaveLength(1);
+  expect(selections).toEqual([]);
+  expect(after.left).toBeCloseTo(before.left - 24);
+  expect(after.top).toBeCloseTo(before.top - 36);
+});
+
 it("at twice the zoom a turn still follows the table's visible centre", async () => {
   const el = await canvas("T1");
   await doubled(el);
@@ -475,7 +516,11 @@ it("zooming out keeps the turn handle and resize targets at their token sizes", 
   const arrow = part(el, "rotate-handle").getBoundingClientRect();
   expect(arrow.width).toBe(60);
   expect(arrow.height).toBe(60);
-  for (const handle of el.shadowRoot!.querySelectorAll<HTMLElement>('[part="resize-handle"]')) {
+  const areas = el.shadowRoot!.querySelectorAll<HTMLElement>(
+    '[part="resize-handle"], [part="resize-corner-handle"]',
+  );
+  expect(areas).toHaveLength(8);
+  for (const handle of areas) {
     expect(handle.getBoundingClientRect().width).toBe(28);
     expect(handle.getBoundingClientRect().height).toBe(28);
   }

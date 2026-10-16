@@ -1,7 +1,14 @@
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
-import { type PlanPlacement, outward, resizeCursor, resizeFrom } from "../floor-plan-geometry.js";
+import {
+  type PlanCorner,
+  type PlanPlacement,
+  outward,
+  resizeCursor,
+  resizeFrom,
+  resizeFromCorner,
+} from "../floor-plan-geometry.js";
 import type {
   PlanCanvasTable,
   TableMove,
@@ -13,6 +20,7 @@ import type {
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
+afterEach(() => window.scrollTo(0, 0));
 
 const place = (over: Partial<PlanPlacement> = {}): PlanPlacement => ({
   x: 0,
@@ -1115,6 +1123,23 @@ function resizes(target: EventTarget): CustomEvent<TableResize>[] {
   return seen;
 }
 
+/** Presses `corner`'s hit area at its centre and moves the same pointer by (dx, dy) px, without
+ *  releasing it. */
+function dragCorner(el: WtFloorPlanCanvas, corner: string, dx: number, dy: number, pointerId = 1) {
+  const { x, y } = centreOf(cornerArea(el, corner));
+  pointer(cornerArea(el, corner), "pointerdown", pointerId, x, y);
+  pointer(window, "pointermove", pointerId, x + dx, y + dy);
+  return { x: x + dx, y: y + dy };
+}
+
+/** Screen px that move each of `corner`'s two sides `squares` squares outwards, turned `rotation`. */
+function cornerBy(corner: PlanCorner, rotation: number, squares: number) {
+  const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
+  const a = outward(horizontal, rotation);
+  const b = outward(vertical, rotation);
+  return { x: squares * 12 * (a.x + b.x), y: squares * 12 * (a.y + b.y) };
+}
+
 /** Presses `side`'s dot at its centre and moves the same pointer by (dx, dy) px, without releasing it. */
 function dragDot(el: WtFloorPlanCanvas, side: string, dx: number, dy: number, pointerId = 1) {
   const { x, y } = centreOf(dot(el, side));
@@ -1331,6 +1356,202 @@ it("the top dot of a turned table near the plan's edge grows it and steps it in,
   await release(el, at);
   expect(resizeFrom(p, "top", 1)).toMatchObject({ x: 2, y: 2, width: 6, height: 7 });
   expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", ...resized(resizeFrom(p, "top", 1)) }]);
+});
+
+it("dragging the bottom-right corner sends one resize at release, from resizeFromCorner", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  const at = dragCorner(el, "bottom-right", 24, 12);
+  await el.updateComplete;
+  const box = button(el, "t1").getBoundingClientRect();
+  expect([box.width, box.height]).toEqual([120, 60]);
+  expect(seen).toEqual([]);
+  await release(el, at);
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 10, height: 5 }]);
+  expect(seen[0]!.detail).toEqual({
+    key: "t1",
+    ...resized(resizeFromCorner(p, "bottom-right", 2, 1)),
+  });
+  expect(moved).toEqual([]);
+});
+
+it("a turned table's corner resizes along the table's own sides, not the screen's", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4, rotation: 90 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  await release(el, dragCorner(el, "bottom-right", -12, 24));
+  await release(el, dragCorner(el, "bottom-right", 24, 0));
+  expect(seen.map((e) => e.detail)).toEqual([
+    { key: "t1", ...resized(resizeFromCorner(p, "bottom-right", 2, 1)) },
+    { key: "t1", ...resized(resizeFromCorner(p, "bottom-right", 0, -2)) },
+  ]);
+});
+
+it("a click on a corner sends no selection change", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const selections = selects(el);
+  for (const corner of CORNERS) {
+    const { x, y } = centreOf(cornerArea(el, corner));
+    cornerArea(el, corner).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, clientX: x, clientY: y }),
+    );
+  }
+  expect(selections).toEqual([]);
+});
+
+it("shows the size badge under the table while a corner is dragged, and marks no side dot", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
+  const at = dragCorner(el, "bottom-right", 24, 12);
+  await el.updateComplete;
+  const badge = badgeOf(el)!;
+  expect(badge.textContent!.trim()).toBe("10 × 5");
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(Math.abs(centreOf(badge).x - (box.left + box.width / 2))).toBeLessThanOrEqual(1);
+  expect(badge.getBoundingClientRect().top).toBeGreaterThan(box.bottom);
+  expect([...el.shadowRoot!.querySelectorAll("[part~=resize-dot][data-dragging]")]).toHaveLength(0);
+  await release(el, at);
+  expect(badgeOf(el)).toBeNull();
+});
+
+it.each(["pointerup", "pointercancel"])(
+  "shows the dragged corner's arrow over the canvas and on the page until the %s",
+  async (end) => {
+    setPageCursor("help");
+    const el = await canvas([turnedTable()], { selected: "t1" });
+    const want = resizeCursor("top-left", 90);
+    expect(want).toBe("nesw-resize");
+    const at = dragCorner(el, "top-left", -24, 0);
+    await el.updateComplete;
+    expect(cursorOf(part(el, "viewport"))).toBe(want);
+    expect(cursorOf(button(el, "t1"))).toBe(want);
+    expect(document.body.style.cursor).toBe(want);
+    pointer(window, end, 1, at.x, at.y);
+    await el.updateComplete;
+    expect(part(el, "viewport").style.cursor).toBe("");
+    expect(cursorOf(button(el, "t1"))).toBe("pointer");
+    expect(document.body.style.cursor).toBe("help");
+  },
+);
+
+it("puts the page's cursor back when the canvas is removed mid corner drag", async () => {
+  setPageCursor("help");
+  const el = await canvas([turnedTable()], { selected: "t1" });
+  dragCorner(el, "top-left", -24, 0);
+  expect(document.body.style.cursor).toBe("nesw-resize");
+  el.remove();
+  expect(document.body.style.cursor).toBe("help");
+});
+
+it("a corner drag that ends where it began sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = resizes(el);
+  const at = dragCorner(el, "bottom-right", 5, 5);
+  await el.updateComplete;
+  expect(badgeOf(el)!.textContent!.trim()).toBe("8 × 8");
+  await release(el, at);
+  expect(seen).toEqual([]);
+  expect(badgeOf(el)).toBeNull();
+});
+
+it("a pointer cancel puts a corner drag's size back and sends nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const at = dragCorner(el, "top-left", -24, -12);
+  await el.updateComplete;
+  const during = button(el, "t1").getBoundingClientRect();
+  expect([during.width, during.height]).toEqual([120, 60]);
+  pointer(window, "pointercancel", 1, at.x, at.y);
+  await el.updateComplete;
+  const after = button(el, "t1").getBoundingClientRect();
+  expect([after.width, after.height]).toEqual([96, 48]);
+  expect(offset(el, "t1")).toEqual({ left: 192, top: 192 });
+  expect(badgeOf(el)).toBeNull();
+  pointer(window, "pointerup", 1, at.x, at.y);
+  expect(seen).toEqual([]);
+});
+
+it("a second pointer cannot take over a corner drag, nor a corner a table drag", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  const first = dragCorner(el, "bottom-right", 24, 24, 1);
+  const second = dragBy(el, "t2", 60, 60, 2);
+  await release(el, second, 2);
+  expect(moved).toEqual([]);
+  await release(el, first, 1);
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 10, height: 10 }]);
+  const table1 = dragBy(el, "t2", 24, 0, 1);
+  const cornerDrag = dragCorner(el, "bottom-right", 24, 24, 2);
+  await release(el, cornerDrag, 2);
+  expect(seen).toHaveLength(1);
+  await release(el, table1, 1);
+  expect(moved).toEqual([{ key: "t2", x: 32, y: 0 }]);
+});
+
+it("the top-left corner of a turned table near the plan's edge sends only what resizeFromCorner answers, never poking out", async () => {
+  const p = place({ x: 2, y: 2, width: 6, height: 6, rotation: 30 });
+  const el = await canvas(
+    [
+      { key: "t1", label: "T1", fixed: false, placement: p },
+      table("left", "Left", { y: 12 }),
+      table("top", "Top", { x: 12 }),
+    ],
+    { selected: "t1" },
+  );
+  await settled(el);
+  const edge = {
+    left: button(el, "left").getBoundingClientRect().left,
+    top: button(el, "top").getBoundingClientRect().top,
+  };
+  const seen = resizes(el);
+  const want = resizeFromCorner(p, "top-left", 2, 2);
+  expect(resized(want)).not.toEqual(resized(p));
+  const by = cornerBy("top-left", 30, 2);
+  const { x, y } = centreOf(cornerArea(el, "top-left"));
+  pointer(cornerArea(el, "top-left"), "pointerdown", 1, x, y);
+  for (let step = 1; step <= 4; step++) {
+    pointer(window, "pointermove", 1, x + (by.x * step) / 4, y + (by.y * step) / 4);
+    await el.updateComplete;
+    const during = button(el, "t1").getBoundingClientRect();
+    expect(during.left, `step ${step}`).toBeGreaterThanOrEqual(edge.left - 1e-6);
+    expect(during.top, `step ${step}`).toBeGreaterThanOrEqual(edge.top - 1e-6);
+  }
+  await release(el, { x: x + by.x, y: y + by.y });
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", ...resized(want) }]);
+});
+
+it("keeps the side dots of a 2 × 6's corner drag that shrinks its height below 4 until the parent applies it", async () => {
+  const p = place({ x: 10, y: 10, width: 2, height: 6 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const sized = resizes(el);
+  expect(sidesWithDots(el)).toEqual(["right", "left"]);
+  const at = dragCorner(el, "top-left", 0, 3 * 12);
+  await el.updateComplete;
+  expect(button(el, "t1").getBoundingClientRect().height).toBe(3 * 12);
+  expect(sidesWithDots(el)).toEqual(["right", "left"]);
+  expect(drawnSides(el)).toEqual(["right", "left"]);
+  await release(el, at);
+  expect(sized.map((e) => e.detail)).toEqual([
+    { key: "t1", ...resized(resizeFromCorner(p, "top-left", 0, -3)) },
+  ]);
+  el.tables = [{ key: "t1", label: "T1", fixed: false, placement: { ...p, y: 13, height: 3 } }];
+  await el.updateComplete;
+  expect(sidesWithDots(el)).toEqual([]);
+  expect(drawnSides(el)).toEqual([]);
 });
 
 it("shows the size badge under the table, past its bottom dot, while a dot is dragged", async () => {
@@ -1857,11 +2078,25 @@ it.each([0, 30])(
   },
 );
 
-for (const rotation of [0, 30]) {
-  it.todo(
-    `a press just outside a corner of a selected 2 × 2 table turned ${rotation}° resizes from that corner (Task 7)`,
-  );
-}
+it.each([0, 30])(
+  "a press just outside a corner of a selected 2 × 2 table turned %i° resizes from that corner",
+  async (rotation) => {
+    const p = place({ x: 10, y: 10, width: 2, height: 2, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    await settled(el);
+    const sized = resizes(el);
+    const moved = moves(el);
+    for (const corner of CORNERS) {
+      await pressAndDrag(el, cornerPoint(el, p, corner, 3), cornerBy(corner, rotation, 2));
+    }
+    expect(sized.map((e) => e.detail)).toEqual(
+      CORNERS.map((corner) => ({ key: "t1", ...resized(resizeFromCorner(p, corner, 2, 2)) })),
+    );
+    expect(moved).toEqual([]);
+  },
+);
 
 /** `out` px from the table's `corner` along the corner's own diagonal, outwards, turned with it. */
 function cornerPoint(el: WtFloorPlanCanvas, p: PlanPlacement, corner: string, out: number) {
@@ -1887,7 +2122,6 @@ it.each([0, 30])(
       selected: "t1",
     });
     await settled(el);
-    window.scrollTo(0, 0);
     for (const corner of CORNERS) {
       expect(topmost(el, cornerPoint(el, p, corner, 3)), corner).toBe(cornerArea(el, corner));
       expect(topmost(el, cornerPoint(el, p, corner, -3))?.closest("button"), corner).toBe(
@@ -1912,7 +2146,6 @@ it.each([
       selected: "t1",
     });
     await settled(el);
-    window.scrollTo(0, 0);
     for (const corner of CORNERS) {
       // Until Task 8 moves the turn arrow to the top side, it starts --wt-space-1 past the
       // top-right corner and takes a press 10 px out there.

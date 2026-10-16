@@ -17,6 +17,7 @@ import {
   type ResizeCursor,
   resizeCursor,
   resizeFrom,
+  resizeFromCorner,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -84,10 +85,14 @@ const SIDES: readonly PlanSide[] = ["top", "right", "bottom", "left"];
 
 const CORNERS: readonly PlanCorner[] = ["top-left", "top-right", "bottom-right", "bottom-left"];
 
+const isCorner = (handle: PlanSide | PlanCorner): handle is PlanCorner =>
+  (CORNERS as readonly string[]).includes(handle);
+
 /** A side shorter than this, in squares, draws no dot; its corners resize it. */
 const SIDE_DOT_MIN_SQUARES = 4;
 
-/** Judged from the stored placement, never the draft, so a dot never vanishes under the pointer. */
+/** Judged from `t.placement`, which during a drag is the placement the drag began with, never the
+ *  draft, so a dot never vanishes under the pointer. */
 function sidesWithDots(t: PlanCanvasTable): PlanSide[] {
   const { width, height } = t.placement;
   return SIDES.filter(
@@ -136,7 +141,7 @@ const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowUp: { dx: 0, dy: -1 },
 };
 
-type Grab = { kind: "move" | "rotate" } | { kind: "resize"; side: PlanSide };
+type Grab = { kind: "move" | "rotate" } | { kind: "resize"; handle: PlanSide | PlanCorner };
 
 type Drag = Grab & {
   table: PlanCanvasTable;
@@ -281,32 +286,8 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       /* Under the table's button, which takes a press where the two overlap, so a selected table
-         of any size can still be dragged; the dot is grabbed outside the table. */
-      .resize-handle {
-        width: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
-        height: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
-        margin: calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2) 0 0
-          calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2);
-        border-radius: var(--wt-radius-full);
-        touch-action: none;
-        pointer-events: auto;
-      }
-
-      .resize-dot {
-        width: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
-        height: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
-        margin: calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2) 0 0
-          calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2);
-        border: calc(var(--wt-space-1) * var(--wt-plan-control-scale) / 2) solid
-          var(--wt-color-primary);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-surface);
-      }
-
-      .resize-dot[data-dragging] {
-        background: var(--wt-color-primary);
-      }
-
+         of any size can still be dragged; a dot or corner is grabbed outside the table. */
+      .resize-handle,
       .resize-corner-handle {
         width: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
         height: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
@@ -317,11 +298,26 @@ export class WtFloorPlanCanvas extends LitElement {
         pointer-events: auto;
       }
 
+      .resize-dot,
       .resize-corner {
         width: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
         height: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
         margin: calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2) 0 0
           calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2);
+      }
+
+      .resize-dot {
+        border: calc(var(--wt-space-1) * var(--wt-plan-control-scale) / 2) solid
+          var(--wt-color-primary);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface);
+      }
+
+      .resize-dot[data-dragging] {
+        background: var(--wt-color-primary);
+      }
+
+      .resize-corner {
         background: var(--wt-color-primary);
       }
 
@@ -407,7 +403,11 @@ export class WtFloorPlanCanvas extends LitElement {
 
   @state() private announcement = "";
 
-  @state() private resizing: { key: string; side: PlanSide; cursor: ResizeCursor } | null = null;
+  @state() private resizing: {
+    key: string;
+    handle: PlanSide | PlanCorner;
+    cursor: ResizeCursor;
+  } | null = null;
 
   @state() private zoom = 1;
 
@@ -702,7 +702,7 @@ export class WtFloorPlanCanvas extends LitElement {
     p: PlanPlacement,
     copy: Required<FloorPlanCanvasCopy>,
   ): TemplateResult {
-    const dragged = this.resizing?.side ?? null;
+    const dragged = this.resizing?.handle ?? null;
     return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
         type="button"
@@ -748,7 +748,7 @@ export class WtFloorPlanCanvas extends LitElement {
             data-side=${side}
             style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
             @click=${(e: Event) => e.stopPropagation()}
-            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", side })}
+            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", handle: side })}
           ></div>`,
       )}
       ${CORNERS.map(
@@ -758,6 +758,9 @@ export class WtFloorPlanCanvas extends LitElement {
             part="resize-corner-handle"
             data-corner=${corner}
             style=${styleMap({ cursor: resizeCursor(corner, p.rotation) })}
+            @click=${(e: Event) => e.stopPropagation()}
+            @pointerdown=${(e: PointerEvent) =>
+              this.#onPointerDown(e, t, { kind: "resize", handle: corner })}
           ></div>`,
       )}
     </div>`;
@@ -989,8 +992,8 @@ export class WtFloorPlanCanvas extends LitElement {
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
     if (grab.kind === "resize") {
-      const cursor = resizeCursor(grab.side, p.rotation);
-      this.resizing = { key: t.key, side: grab.side, cursor };
+      const cursor = resizeCursor(grab.handle, p.rotation);
+      this.resizing = { key: t.key, handle: grab.handle, cursor };
       holdPageCursor(cursor);
     }
   }
@@ -1016,9 +1019,19 @@ export class WtFloorPlanCanvas extends LitElement {
       return;
     }
     if (drag.kind === "resize") {
-      const out = outward(drag.side, p.rotation);
-      const along = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
-      const next = resizeFrom(p, drag.side, snapToSquare(along / this.zoom));
+      const along = (side: PlanSide) => {
+        const out = outward(side, p.rotation);
+        const moved = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
+        return snapToSquare(moved / this.zoom);
+      };
+      const { handle } = drag;
+      let next: PlanPlacement;
+      if (isCorner(handle)) {
+        const [vertical, horizontal] = handle.split("-") as [PlanSide, PlanSide];
+        next = resizeFromCorner(p, handle, along(horizontal), along(vertical));
+      } else {
+        next = resizeFrom(p, handle, along(handle));
+      }
       if (!sameBox(next, now)) this.draft = { key: drag.table.key, placement: next };
       return;
     }
