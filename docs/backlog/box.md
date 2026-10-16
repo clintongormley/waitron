@@ -36,34 +36,6 @@ and set when the box is imaged, with procedures for a lost card, a change of own
 a discussion record, not an approved spec). Its remote-support half is tracked in Cloud and not
 approved.
 
-## Upgrade testing — blocking before go-live (owner, 2026-09-26)
-
-- **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
-  `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
-  order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
-  rows per table through every step. The steps that cannot carry those rows are listed in the test's
-  `RESETS`, where the walk restarts from an empty database. One is a real loss rather than a refusal:
-  core `0012_printer_calibration` rebuilds `drawer_opens` without copying its rows (read from the
-  migration; the guard's two rows were gone after it), so a box holding drawer-open records when it
-  took that migration would have lost them — inferred, not run on a box. Whether the owner's box held
-  any then was not checked.
-
-  What it still does not cover, each needed before a real venue is live:
-  - **Rows.** Still open: rows the product itself writes. The synthetic rows hold a few generic
-    values, so a migration that fails only on values the product writes and they lack passes — a
-    unique index two real rows break where these two differ, a required column real rows leave empty
-    while these hold a value. Seed a realistic venue (the demo seed at least) at each step for that;
-    the product's writers name today's columns; whether they can write an older step's schema was
-    not tried.
-  - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
-    the trigger — core `0003` on `products`, recorded in
-    [conventions-data.md](../developers/conventions-data.md) → _A migration set depends on another
-    through a foreign key, a trigger on its table, or a trigger body naming its table_. The guard steps over it by applying
-    everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
-  - **A real old database.** Every step here is built by this image's own migrator from today's
-    change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
-    new image, is the test that matches what a box does.
-
 ## Automatic upgrades that can be undone until the first order
 
 - **Automatic upgrades that can be undone until the first order** (owner, 2026-10-02). Today an
@@ -256,27 +228,6 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   on `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`"). The test title in
   `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
   title is code, so a pruning PR cannot rename it).
-
-## `packages/provisioning/README.md` also says only `ES-common` is implemented
-
-- `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
-  exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
-  `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
-  reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
-  interleave was not measured) and that the entry point can only be checked through the built
-  bundle (its prompt function runs straight from source). `docs/developers/conventions-data.md`
-  cites `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
-  does.
-
-## `quoteIdent` has no caller outside its own suite
-
-- `packages/provisioning` code, found by #561 and not changed: `quoteIdent` has no
-  caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
-  by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
-  run, because the action's `email` is a required string; the coverage config leaves `src/bin.ts`
-  out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
-  test titles still say "before connecting" and "before opening a connection", and one title
-  ("rather than opening the working directory") rests on the false reason above.
 
 ## A too-short recovery key: the refusals do not link to the button they name, and Change the recovery key cannot finish
 
@@ -472,3 +423,138 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
 - A setup-wizard restore whose placement fails is not retried and is not reported on the setup
   screen, nor normally on the recovery page; the code and which database was kept are only in the
   server's own output and in `waitron.log`. **Owner decision 2026-09-25: leave it as it is.**
+
+- **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**
+  A restored or replacement box inherits both `backup.archive` and `backup.stream` (bucket keys
+  included); `docs/developers/cloud-connection.md` says so. Owner: "Keep as built: a replacement
+  box restored from Waitron Cloud reads `backup.archive` and `backup.stream` and carries on backing
+  up to the owner's own buckets with no setup. No backlog item for "drop them"."
+
+## Migrating a box drops the change-feed triggers one statement at a time, outside a transaction
+
+**Migrating a box drops the change-feed triggers one statement at a time, outside a
+transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
+`applyMigrations`) drops each `waitron_change_*` trigger on its own. A751's probe on the full
+schema: 561 drops took 85–180 ms that way and 43–48 ms inside one transaction; A736 measured
+53–56 ms against 23–25 ms. Boot migrates at every start (`apps/server/src/boot.ts`), and the
+removal is about a quarter of the upgrade walk's processor profile. A product change in
+`packages/db`, so A751 (a test-only change) left it.
+
+## The Amazon S3 delete and archive rehearsal's open edges (A538-9)
+
+**The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
+`apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
+`s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`:
+(1) the archive round trip proves download and decryption from the pack alone
+(`downloadArchive`, `decryptArtifactFile`), not a full `waitron-restore restore --from-archive`
+placement against Amazon S3; (2) the delete scenario's "a failing listing is recorded" case uses
+a stand-in backend, so that failure no longer runs through the real S3 storage code; (3) the
+step-name checks compare against hand-written lists, so a step added later is not caught;
+(4) the bucket-settings setup and the setup/teardown block are repeated across the four
+`*.aws-rehearsal.test.ts` files and the local loop and pause tests — share them.
+
+## The Amazon S3 pause rehearsal's open edges (A538-8)
+
+**The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
+`apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
+`aws-stream-pause.aws-rehearsal.test.ts`: (1) `ctx.bucketPolicy.put(document)` accepts any policy
+text and checks it back down to the one allowed shape; the simplify review proposed a
+`denyListing(prefix)` method that builds the document itself (about 60 lines and 20 refusal cases
+fewer) — a redesign of a safety check, so the owner's call; (2) the scenario's `beforeRestart`
+hook is called only by the AWS file, so no local test fails if the call goes (the AWS run would
+stop with "step 7's restart was never watched"); (3) the held-check evidence counts a held call at
+the server's own proxy but cannot say which call it is (TLS hides it) — the later logged 403 is what
+ties the refusal to the pause check.
+
+## The Amazon S3 rehearsal runner's open edges (A538-7)
+
+**The Amazon S3 rehearsal runner's open edges (A538-7).** Left open by #1648, all in
+`apps/server/src/testing/aws-rehearsal.ts` and its runbook `docs/developers/aws-backup-rehearsal.md`:
+(1) after the 60-second settle wait, teardown can still race a scenario stuck in a call that takes
+no stop signal (a restore); (2) running the cleanup command again overwrites the previous cleanup
+receipt, losing the earlier attempt's teardown ledger; (3) the receipt reader the cleanup uses is
+more lenient than the writer.
+
+## Two small leftovers in the Backups destination form (A639, #1695)
+
+**Two small leftovers in the Backups destination form, reported by A639's review and not fixed
+there (#1695).** (1) A folder typed in the settings editor and then cancelled can reappear in the
+"Turn on backups" form later; it is never sent and never counts as a change. (2) A refusal of the
+other bucket's secret that arrives after the owner switched the bucket choice away from "Another
+S3-compatible bucket" is dropped, so the next Save asks again. Neither was reproduced outside the
+reviewer's run. Separately, an entry of the Save's `destinations` list with an unknown kind is
+refused under field `destination`, a name the request no longer has; the dashboard never sends one
+(`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`).
+
+## A recovery kit can carry a recovery key its own restore refuses
+
+**A recovery kit can carry a recovery key its own restore refuses.** `parseRecoveryKit`
+(`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
+the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
+restore calls it damaged; the archive recovery pack accepts such keys. Predates A538-5 (kit.ts
+last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
+space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
+
+## A restore that fails while writing the secrets has already replaced the venue database
+
+**A restore that fails while writing the secrets has already replaced the venue database.**
+`placeValidated` (`apps/server/src/restore.ts`) puts the database in place and runs the restore
+hooks before `restoreSecrets`, so a full disk or a write error there leaves the archive's
+database with the old box's secrets. Measured in A538-5's review with a throwaway case that made
+the secrets write fail: the command exited 1 and the live venue's name was already the archive's.
+Predates A538-5. Write the secrets into staging before placement, or put the previous database
+back on failure. The same step sets `trading.env` aside (as `trading.env.replaced`) before it
+moves the database into place, so a full disk at that move leaves the old database without its
+active identity file; found by the finish-branch review's run-it seat with an injected ENOSPC,
+and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
+
+## Upgrade testing — blocking before go-live (owner, 2026-09-26)
+
+- **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
+  `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
+  order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
+  rows per table through every step. The steps that cannot carry those rows are listed in the test's
+  `RESETS`, where the walk restarts from an empty database. One is a real loss rather than a refusal:
+  core `0012_printer_calibration` rebuilds `drawer_opens` without copying its rows (read from the
+  migration; the guard's two rows were gone after it), so a box holding drawer-open records when it
+  took that migration would have lost them — inferred, not run on a box. Whether the owner's box held
+  any then was not checked.
+
+  What it still does not cover, each needed before a real venue is live:
+  - **Rows.** Still open: rows the product itself writes. The synthetic rows hold a few generic
+    values, so a migration that fails only on values the product writes and they lack passes — a
+    unique index two real rows break where these two differ, a required column real rows leave empty
+    while these hold a value. Seed a realistic venue (the demo seed at least) at each step for that;
+    the product's writers name today's columns; whether they can write an older step's schema was
+    not tried.
+  - **A rebuild of a table another set's trigger BODY reads is still refused** on a box that has
+    the trigger — core `0003` on `products`, recorded in
+    [conventions-data.md](../developers/conventions-data.md) → _A migration set depends on another
+    through a foreign key, a trigger on its table, or a trigger body naming its table_. The guard steps over it by applying
+    everything up to `0003` in one go, so the next such rebuild fails the guard. Decide the fix.
+  - **A real old database.** Every step here is built by this image's own migrator from today's
+    change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the
+    new image, is the test that matches what a box does.
+
+  The synthetic walk's work budget follows its step count (A489) and is spent in its own
+  processor time (A751); see
+  [the timing receipt](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
+
+## `packages/provisioning/README.md` also says only `ES-common` is implemented
+
+- `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
+  exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
+  `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
+  reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
+  interleave was not measured) and that the entry point can only be checked through the built
+  bundle (its prompt function runs straight from source).
+
+## `packages/provisioning` code found by #561 and not changed
+
+- `packages/provisioning` code, found by #561 and not changed: the `quoteLiteral` re-export in
+  `identifiers.ts` is used only by its own suite; the `action.email === undefined` branch in
+  `venue-apply.ts`'s seed-admin cannot run, because the action's `email` is a required string; the
+  coverage config leaves `src/bin.ts` out with no reason stated any more, which may hide code a
+  test could reach; and `cli.test.ts` test titles still say "before connecting" and "before
+  opening a connection", and one title ("rather than opening the working directory") rests on the
+  false reason in the empty-venue-directory section above.
