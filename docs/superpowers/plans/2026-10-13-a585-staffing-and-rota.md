@@ -497,6 +497,10 @@ describeSchemaConformance({
 
 ### Task 1.2: Staff roles and their holders on the server
 
+> 2026-10-16, A645: the staff-role and staffing-paint saves use `readRawJsonBody`
+> and check that the body is an object before reading its keys. See
+> `packages/staffing/src/routes.test.ts`, the non-object-body cases.
+
 **Files:**
 - Create: `packages/staffing/src/staff-roles.ts`, `src/staff-roles.test.ts`, `src/routes.ts`,
   `src/routes.test.ts`, `test/seed.ts`

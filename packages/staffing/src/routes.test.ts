@@ -108,7 +108,7 @@ async function routed() {
     expect(response.status).toBe(201);
     return (await response.json()) as StaffRole;
   };
-  return { ...venue, ...cookies, call, send, create };
+  return { ...venue, ...cookies, app, call, send, create };
 }
 
 async function answers(response: Response, status: number, body?: unknown) {
@@ -319,6 +319,44 @@ describe("the staff-role routes", () => {
     );
   });
 
+  it.each([
+    ["POST", ""],
+    ["PUT", "/role"],
+    ["PUT", "/order"],
+    ["PUT", "/role/holders"],
+  ] as const)(
+    "refuses non-object bodies at %s %s without changing roles",
+    async (method, suffix) => {
+      const r = await routed();
+      const staffRole = await r.create("Waiter");
+      const path = suffix.replace("/role", `/${staffRole.id}`);
+      const before = await (await r.send("GET", "", r.manager)).json();
+      for (const body of ["x", "", 1, true, [], ["x"], null]) {
+        await answers(
+          await r.send(method, path, r.manager, body),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await r.send("GET", "", r.manager), 200, before);
+      }
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await r.app.request(`${BASE}${path}`, {
+            method,
+            headers: { cookie: r.manager, "content-type": "application/json" },
+            body,
+          }),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await r.send("GET", "", r.manager), 200, before);
+      }
+      const denied = await r.send(method, path, r.supervisor, "x");
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    },
+  );
+
   it("lets a supervisor read the list but not write or read a delete's impact, and refuses staff and anonymous callers", async () => {
     const r = await routed();
     const staffRole = await r.create("Waiter");
@@ -437,6 +475,41 @@ async function setActive(area: AreaRef, active: boolean) {
 }
 
 describe("the staffing paint routes", () => {
+  it.each(["season", "special day"] as const)(
+    "refuses non-object %s save bodies without changing staffing",
+    async (kind) => {
+      const p = await painted();
+      const path =
+        kind === "season"
+          ? `${STAFFING}/seasons/${p.seasonId}`
+          : `${STAFFING}/special-days/${p.specialDayId}`;
+      const before = await (await p.call("GET", path, p.manager)).json();
+      for (const body of ["x", "", 1, true, [], ["x"], null]) {
+        await answers(
+          await p.call("PUT", path, p.manager, body),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await p.call("GET", path, p.manager), 200, before);
+      }
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await p.app.request(path, {
+            method: "PUT",
+            headers: { cookie: p.manager, "content-type": "application/json" },
+            body,
+          }),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await p.call("GET", path, p.manager), 200, before);
+      }
+      const denied = await p.call("PUT", path, p.supervisor, "x");
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    },
+  );
+
   it("lists the active areas to a viewer, leaving out a switched-off department and station until they are back on", async () => {
     const p = await painted();
     const all = {
