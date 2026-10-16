@@ -610,12 +610,13 @@ a reusable workflow, by its id and the inner job (`image / smoke`; plain `image`
 skipped); GitHub names a job by its `name:` when one is set (on 2026-10-06,
 `gh api "repos/clintongormley/waitron/actions/runs/37435810196/attempts/1/jobs?per_page=100"`, a
 `licence.yml` run, listed its two jobs as `Every commit is signed off` and
-`LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one. A completed entry with any other conclusion fails at once. It tries again, ten seconds
-apart and six tries in all, when the API call fails, the number of jobs read differs from its
-`total_count`, a needed job has no entry, or an entry is not yet completed — and fails when the
+`LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one.
+A completed entry with any other conclusion fails at once. It tries again at thirty-second
+intervals, twenty-one tries in all, when the API call fails, the number of jobs read differs from
+its `total_count`, a needed job has no entry, or an entry is not yet completed, and fails when the
 tries run out, so an API it cannot read fails the check rather than passing it. The step has a
-five-minute limit (`timeout-minutes: 5`), so a call that hangs fails the check when the limit is
-reached. The limit is on the step, not the job, because GitHub's runner marks a timed-out step
+twelve-minute limit (`timeout-minutes: 12`) inside a fifteen-minute job, so a call that hangs fails
+the check when the step limit is reached. The step carries its own limit because GitHub's runner marks a timed-out step
 failed: `actions/runner`'s `src/Runner.Worker/StepsRunner.cs` (branch `main`, fetched 2026-10-06)
 reads, at lines 328 and 329,
 `` step.ExecutionContext.Error($"The action '{step.DisplayName}' has timed out after {timeoutMinutes} minutes."); ``
@@ -635,15 +636,36 @@ listed all 30 jobs with `total_count` 30; `lint` appeared with attempt 1's `star
 Run 37368759185 attempt 2 showed the same shape with 26 jobs.
 
 `scripts/ci-workflow.test.mjs` runs each step's script: the first on sample `needs` results, the
-second against a stand-in `gh` that serves sample pages and failures, once with its default six
-tries and ten-second delay through a stand-in `sleep` that records each wait. It also fails if a
-needed job sets a `name:`. It runs the first step with each merge job skipped while its package is
+second against a stand-in `gh` that serves sample pages and failures. Default-window cases use
+twenty-one tries and a thirty-second delay through a stand-in `sleep` that records each wait.
+They accept success on the last poll and reject a job still pending then, or an API that always
+fails. The guard also fails if a needed job sets a `name:`. It runs the first step with each merge job skipped while its package is
 selected, and compares the step's merge table with ci.yml's `-merge` jobs, reading both as text. GitHub alone evaluates `toJSON(needs)` and answers the API. That guard is
 weaker than its name: it reads ci.yml as text, extracts each step by its `name:` and checks the
-first step has no `if:` key, the second has `if: always()` and `timeout-minutes: 5`, and each keeps
-its `env:` lines; an `if:` reaching a step another way — a job-level change, or YAML spelled
+first step has no `if:` key, the second has `if: always()` and `timeout-minutes: 12`, the job has
+`timeout-minutes: 15`, and each keeps its `env:` lines; an `if:` reaching a step another way — a job-level change, or YAML spelled
 differently — is not seen, and neither what `toJSON(needs)` produces nor the API's real answers are
 tested there.
+
+**A674, 2026-10-16: allow a late API status to settle.** Main run
+[`38573258715`, attempt 1](https://github.com/clintongormley/waitron/actions/runs/38573258715/attempts/1)
+failed after six polls. Its `ci` job `115887527392` logged `not completed:
+test-payments-stripe` from 13:44:52Z through 13:45:50Z on 2026-10-14. On 2026-10-16,
+`gh api repos/clintongormley/waitron/actions/runs/38573258715/attempts/1/jobs` returned that
+Stripe job (`115883881130`) as successful, with `completed_at` 13:39:39Z; all its steps had
+ended by 13:39:36Z. The original `ci` log, retrieved through
+`gh api --allow-escape-sequences repos/clintongormley/waitron/actions/jobs/115887527392/logs`,
+still reported it pending 6 minutes 11 seconds after that recorded completion time. This does not
+measure when the API finally caught up.
+
+Twenty-one polls thirty seconds apart give ten minutes of waits from the first poll to the last.
+That exceeds the observed lag and uses fewer calls than polling every ten seconds. The twelve-minute
+step allows another two minutes for calls and processing; slow calls can still exhaust that step
+before all polls run. The enclosing job's fifteen-minute limit leaves room for its first step and
+setup. These are chosen margins, not a measured upper bound on GitHub's lag. You still get a failed
+check if the API never settles, or as soon as a completed job has an unsuccessful conclusion.
+The local tests run the workflow's shell and jq with controlled API answers and recorded waits;
+they do not reproduce GitHub's lag or exercise a real twelve-minute step timeout.
 
 On GitHub, A274 through throwaway pull request #1282: run 37424069355, every test job skipped →
 `ci` passed; 37424588800, `changes` failed → `ci` failed; 37425317943, `changes` cancelled by its
@@ -940,7 +962,7 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | ci.yml             | root-guards                       | not yet measured               | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
-| ci.yml             | ci                                | 0.7                            | 5     |
+| ci.yml             | ci                                | 0.7                            | 15    |
 | ci.yml             | publish                           | 3.2                            | 10    |
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
 | licence.yml        | licence-integrity                 | 0.2                            | 5     |
@@ -956,6 +978,11 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-guards` (8) are set
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
+
+**2026-10-16, A674:** `ci` is another exception to the doubling rule. Its limit rose from five
+to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a ten-minute retry
+window. The observed API status lag and chosen margins are recorded under "How the second step
+reads the API" above; the table's 0.7-minute measurement predates this change.
 
 ui-core's figure is run `37267389722` (5m18s; its other two scheduled runs, `36380351019` and
 `38206876422`, took 2m06s and 4m56s).
