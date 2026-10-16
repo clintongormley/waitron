@@ -125,14 +125,13 @@ export class CalendarDayBox extends LitElement {
   #follow(anchor: HTMLElement): void {
     this.#stopFollowing();
     // A scroll does not bubble or leave its shadow root, so the capture phase is heard on the
-    // window and on each shadow root between the anchor and the document.
-    this.#scrollTargets = [window];
-    for (
-      let root = anchor.getRootNode();
-      root instanceof ShadowRoot;
-      root = root.host.getRootNode()
-    )
-      this.#scrollTargets.push(root);
+    // window and on the shadow root of every box the anchor is drawn inside, slots included.
+    const targets = new Set<EventTarget>([window]);
+    for (let at: Element | null = anchor; at !== null; at = flatParent(at)) {
+      const root = at.getRootNode();
+      if (root instanceof ShadowRoot) targets.add(root);
+    }
+    this.#scrollTargets = [...targets];
     for (const target of this.#scrollTargets)
       target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
     window.addEventListener("resize", this.#onResize, { passive: true });

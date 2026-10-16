@@ -300,6 +300,34 @@ describe("calendar-day-box", () => {
     expect(box.shown).toBe(false);
   });
 
+  it("closes when a date slotted into another shadow root's scrolling box scrolls out of it", async () => {
+    const shadowHost = document.createElement("div");
+    host.prepend(shadowHost);
+    const root = shadowHost.attachShadow({ mode: "open" });
+    const banner = document.createElement("header");
+    banner.style.height = "100px";
+    const scroller = document.createElement("div");
+    scroller.style.cssText = "height: 300px; overflow: auto;";
+    const tail = document.createElement("div");
+    tail.style.height = "1000px";
+    scroller.append(document.createElement("slot"), tail);
+    root.append(banner, scroller);
+    const slotted = document.createElement("button");
+    slotted.textContent = "17";
+    slotted.style.cssText = "display: block; margin-top: 50px;";
+    shadowHost.append(slotted);
+    box.show(slotted);
+    expect(box.shown).toBe(true);
+    const scroll = scrolled(scroller);
+    scroller.scrollTop = 120;
+    await scroll;
+    const date = slotted.getBoundingClientRect();
+    expect(date.bottom).toBeLessThan(scroller.getBoundingClientRect().top);
+    expect(date.top).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => closes).toBe(1);
+    expect(box.shown).toBe(false);
+  });
+
   it("stays open beside its date when the page scrolls, its root element setting its own overflow", async () => {
     document.documentElement.style.overflowY = "scroll";
     try {
