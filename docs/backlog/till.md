@@ -434,36 +434,9 @@ list, because no inline multi-pick primitive exists. #1601's look also saw, at 1
 list's Made of column wrap to two lines, and in Spanish the two Add buttons stack. Left open by
 A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call on the two wraps.
 
-## A671. The floor plan editor's side panel: less text, nothing jumps
-
-**A671 (owner, 2026-10-14).** The dashboard floor plan editor's side panel
-(`apps/dashboard/src/screens/floor-plan-editor.ts`, `floor-plan-tables-panel.ts`,
-`floor-plan-table-panel.ts`). Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png),
-[a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png) (the second also shows
-A672's corner handles).
-
-1. **Remove the subtitle** "Your first save goes live now; later changes tomorrow, unless you
-   'Reset to saved plan' on the till." Its explanation belongs in help mode (A582).
-2. **Remove the help sentence** above the table list ("Select a table on the plan to change it.
-   Click a table below to put it on the plan or take it off; it returns to the same spot.").
-3. **Remove the colour key** ("on plan / not placed / in a joined table"): the markers are plain
-   enough.
-4. **The table form always keeps its space.** Today placing or selecting a table opens the form
-   above the list and pushes the list down. The space stays reserved and is left empty while no
-   table is selected (owner: empty, not greyed-out fields), so the list never moves.
-5. **"Add tables" and "Add joined table" move to the top of the panel**, above the form. A569's
-   note that in Spanish the two buttons stack applies here too.
-6. **Seats, Shape and Moveable share one row of boxes of the same height.** Seats is a little
-   narrower; Shape becomes ONE button showing the current shape that switches between square and
-   round (today two buttons, which also do not line up with Seats); the Moveable switch follows
-   Shape on the same row.
-7. **The round markers beside the table names become squares**: filled in the primary colour on
-   the plan, an outline when not placed, filled grey in a joined table.
-8. **Only the square places a table or takes it off.** Clicking the name no longer toggles
-   placement; for a table on the plan it selects the table and opens its form, and for one off the
-   plan it does nothing.
-9. **A new joined table goes onto the plan as soon as it is defined** in Add joined table, rather
-   than waiting to be placed from the list.
+2026-10-16: A671 replaces the Add button placement and column arrangement. Their current contract
+is in [design-system.md](../developers/design-system.md#departments-and-zones). The remaining open
+work here is the inline Made of picker and how its parts wrap.
 
 ## A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
 
@@ -1478,6 +1451,22 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   `held.product_gone`, and the first edit of the order removes such an extra.
 
 ## Decisions and deliberate limits
+
+### A671. The floor plan editor's side panel: less text, nothing jumps
+
+Owner decisions, 2026-10-14: Add tables and Add joined table sit above the form; the form keeps
+its space empty while nothing is selected. Seats, one button showing and switching the current
+Shape, and Moveable share one row of equal-height boxes. The subtitle, selection help sentence
+and colour key go. The removed explanation of first-save and later-change timing belongs in help
+mode (A582). Placement markers are squares: primary filled on the plan, outlined off it,
+grey filled for a joined table's parts. Only the square changes placement; a placed table's name
+selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
+Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and
+[a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
+handles belong to A672. The current contract is in
+[design-system.md](../developers/design-system.md#departments-and-zones).
+
+
 
 - **A guest count typed in the Guests or Split a table window, or a party name typed in the Name
   window, replaces a count or name another till saved while the window was open, once this till

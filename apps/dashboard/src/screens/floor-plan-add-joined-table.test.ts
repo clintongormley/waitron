@@ -240,7 +240,7 @@ it("refuses a name another table has", async () => {
   expect(changes).toEqual([]);
 });
 
-it("adds Long table, 10 seats, made of Counter 3, 4 and 5, not placed", async () => {
+it("adds Long table, 10 seats, made of Counter 3, 4 and 5, at the first free spot", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
   await set(el, "table-name", " Long table ");
@@ -257,7 +257,7 @@ it("adds Long table, 10 seats, made of Counter 3, 4 and 5, not placed", async ()
       label: "Long table",
       seats: 10,
       fixed: false,
-      placement: null,
+      placement: { x: 11, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
       parts: ["c3", "c4", "c5"],
       keptSize: null,
     },
@@ -295,4 +295,40 @@ it("speaks Spanish", async () => {
   expect(errors(el)).toEqual(["", "Escribe de 1 a 999.", "Elige al menos 2 mesas."]);
   const none = await openAdd({ draft: { tables: [] } });
   expect(madeOf(none).placeholder).toBe("No hay mesas fuera del plano.");
+});
+
+it("A671: a full plan keeps the joined-table form and its values open until a place is available", async () => {
+  const full = {
+    tables: draft.tables.map((t) =>
+      t.key === "c1"
+        ? {
+            ...t,
+            placement: { ...placement, x: 0, y: 0, width: 999, height: 999 },
+          }
+        : t,
+    ),
+  };
+  const el = await openAdd({ draft: full });
+  const { changes } = listen(el);
+  await set(el, "table-name", "Long table");
+  await set(el, "seats", "10");
+  await choose(el, ["c3", "c4", "c5"]);
+  await pressAdd(el);
+  expect(changes).toEqual([]);
+  expect(dialog(el).open).toBe(true);
+  expect(formError(el)).toBe("No room on the plan.");
+  expect(field(el, "table-name").value).toBe("Long table");
+  expect(madeOf(el).values).toEqual(["c3", "c4", "c5"]);
+  expect(addButton(el).disabled).toBe(false);
+  await set(el, "table-name", "Long table 2");
+  expect(formError(el)).toBe("");
+  await pressAdd(el);
+  expect(changes).toEqual([]);
+  expect(formError(el)).toBe("No room on the plan.");
+  el.draft = draft;
+  await el.updateComplete;
+  await pressAdd(el);
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tables.at(-1)!.placement).not.toBeNull();
+  expect(dialog(el).open).toBe(false);
 });

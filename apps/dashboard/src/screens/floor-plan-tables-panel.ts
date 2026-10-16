@@ -28,7 +28,7 @@ export class FloorPlanTablesPanel extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        --columns: var(--wt-space-3) minmax(0, 1fr) var(--wt-space-6) minmax(0, 1fr);
+        --columns: var(--wt-tap-min) minmax(0, 2fr) var(--wt-space-6) minmax(0, 1fr);
       }
       .title {
         display: flex;
@@ -41,22 +41,11 @@ export class FloorPlanTablesPanel extends LitElement {
         font-size: var(--wt-font-size-md);
         color: var(--wt-color-text);
       }
-      .legend {
-        display: flex;
-        gap: var(--wt-space-3);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      .legend span {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
       .marker {
         box-sizing: border-box;
         width: var(--wt-space-3);
         height: var(--wt-space-3);
-        border-radius: var(--wt-radius-full);
+        border-radius: 0;
       }
       .marker.placed {
         background: var(--wt-color-primary);
@@ -66,15 +55,29 @@ export class FloorPlanTablesPanel extends LitElement {
         border: 2px solid var(--wt-color-text-muted);
       }
       .marker.joined {
-        border-radius: var(--wt-radius-sm);
         background: var(--wt-color-text-muted);
       }
       .columns,
-      .toggle {
+      .row {
         display: grid;
         grid-template-columns: var(--columns);
         align-items: center;
-        column-gap: var(--wt-space-3);
+        column-gap: var(--wt-space-2);
+      }
+      .row {
+        padding-inline: var(--wt-space-2);
+      }
+      .row .toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .select {
+        grid-column: 2 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        align-items: center;
+        column-gap: var(--wt-space-2);
       }
       .columns {
         padding-inline: var(--wt-space-2);
@@ -110,9 +113,10 @@ export class FloorPlanTablesPanel extends LitElement {
       li[aria-current="true"] .name {
         font-weight: var(--wt-font-weight-bold);
       }
-      .toggle {
+      .toggle,
+      .select {
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-1) var(--wt-space-2);
+        padding: var(--wt-space-1) 0;
         border: 0;
         border-radius: var(--wt-radius-md);
         background: transparent;
@@ -121,11 +125,12 @@ export class FloorPlanTablesPanel extends LitElement {
         text-align: start;
         cursor: pointer;
       }
-      .toggle:focus-visible {
+      .toggle:focus-visible,
+      .select:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
-      .toggle[aria-disabled="true"] {
+      [aria-disabled="true"] {
         cursor: default;
       }
       .name,
@@ -133,15 +138,15 @@ export class FloorPlanTablesPanel extends LitElement {
         overflow-wrap: anywhere;
       }
       .made-of,
-      .toggle[aria-disabled="true"] .name,
-      .toggle[aria-disabled="true"] [data-seats] {
+      .select[data-joined] .name,
+      .select[data-joined] [data-seats] {
         color: var(--wt-color-text-muted);
       }
       .mark {
         grid-column: 1;
         margin: 0;
         padding: 0 var(--wt-space-2) var(--wt-space-2)
-          calc(var(--wt-space-2) + 2 * var(--wt-space-3));
+          calc(var(--wt-space-2) + var(--wt-tap-min) + var(--wt-space-2));
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
@@ -157,7 +162,6 @@ export class FloorPlanTablesPanel extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
-        margin-top: auto;
       }
       .foot wt-button {
         flex: 1 1 auto;
@@ -222,23 +226,40 @@ export class FloorPlanTablesPanel extends LitElement {
       data-table=${table.key}
       aria-current=${this.selected === table.key ? "true" : nothing}
     >
-      <button
-        type="button"
-        class="toggle"
-        data-action="toggle"
-        aria-pressed=${placed ? "true" : "false"}
-        aria-disabled=${joined === undefined ? nothing : "true"}
-        aria-describedby=${mark === undefined ? nothing : markId}
-        @click=${() => this.#press(table)}
-      >
-        <span class="marker ${marker}" data-marker=${marker}></span>
-        <span class="name" data-name>${name}</span>
-        <span
-          ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
-          ><span data-seats>${table.seats ?? "—"}</span></span
+      <div class="row">
+        <button
+          type="button"
+          class="toggle"
+          data-action="toggle"
+          aria-labelledby=${`name-${index}`}
+          aria-pressed=${placed ? "true" : "false"}
+          aria-disabled=${joined === undefined ? nothing : "true"}
+          aria-describedby=${mark === undefined ? nothing : markId}
+          @click=${() => this.#press(table)}
         >
-        <span class="made-of" data-made-of>${this.#madeOf(table, joined)}</span>
-      </button>
+          <span class="marker ${marker}" data-marker=${marker}></span>
+        </button>
+        <button
+          id=${`name-${index}`}
+          type="button"
+          class="select"
+          data-action="select"
+          ?data-joined=${joined !== undefined}
+          aria-disabled=${joined !== undefined ? "true" : nothing}
+          aria-describedby=${mark === undefined ? nothing : markId}
+          @click=${() => {
+            if (placed && joined === undefined)
+              this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
+          }}
+        >
+          <span class="name" data-name>${name}</span>
+          <span
+            ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
+            ><span data-seats>${table.seats ?? "—"}</span></span
+          >
+          <span class="made-of" data-made-of>${this.#madeOf(table, joined)}</span>
+        </button>
+      </div>
       <wt-button
         variant="ghost"
         data-action="delete"
@@ -254,25 +275,6 @@ export class FloorPlanTablesPanel extends LitElement {
     const compare = createLabelComparator();
     const tables = [...this.draft.tables].sort((a, b) => compare(tableName(a), tableName(b)));
     return html`
-      <div class="title">
-        ${this.inSheet ? nothing : html`<h2>${t("floor_plan_editor.tables")}</h2>`}
-        <span class="legend" data-legend aria-hidden="true">
-          <span><span class="marker placed"></span>${t("floor_plan_editor.on_plan")}</span>
-          <span><span class="marker spare"></span>${t("floor_plan_editor.not_placed")}</span>
-          <span><span class="marker joined"></span>${t("floor_plan_editor.in_joined_table")}</span>
-        </span>
-      </div>
-      <div class="heads" aria-hidden="true">
-        <span class="columns"
-          ><span data-head>${t("floor_plan_editor.name")}</span
-          ><span data-head>${t("floor_plan_editor.seats")}</span
-          ><span data-head>${t("floor_plan_editor.made_of")}</span></span
-        >
-        <wt-button variant="ghost"><wt-icon name="bin"></wt-icon></wt-button>
-      </div>
-      <ul>
-        ${tables.map((table, index) => this.#row(table, index))}
-      </ul>
       <div class="foot">
         <wt-button
           variant="secondary"
@@ -287,6 +289,21 @@ export class FloorPlanTablesPanel extends LitElement {
           >${t("floor_plan_editor.add_joined_table")}</wt-button
         >
       </div>
+      <slot name="editor"></slot>
+      <div class="title">
+        ${this.inSheet ? nothing : html`<h2>${t("floor_plan_editor.tables")}</h2>`}
+      </div>
+      <div class="heads" aria-hidden="true">
+        <span class="columns"
+          ><span data-head>${t("floor_plan_editor.name")}</span
+          ><span data-head>${t("floor_plan_editor.seats")}</span
+          ><span data-head>${t("floor_plan_editor.made_of")}</span></span
+        >
+        <wt-button variant="ghost"><wt-icon name="bin"></wt-icon></wt-button>
+      </div>
+      <ul>
+        ${tables.map((table, index) => this.#row(table, index))}
+      </ul>
     `;
   }
 }

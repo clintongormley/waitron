@@ -175,41 +175,18 @@ it("draws placed tables and leaves unplaced ones off the canvas", async () => {
   expect(canvas(el).tables[0]).toEqual({ key: "m1", label: "T1", fixed: false, placement });
 });
 
-it.each([
-  [
-    "en-GB",
-    "Your first save goes live now; later changes tomorrow, unless you “Reset to saved plan” on the till.",
-    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
-  ],
-  [
-    "es-ES",
-    "Tu primer guardado se aplica ya; los cambios posteriores, mañana, salvo que uses «Volver al plano guardado» en el TPV.",
-    "Los cambios se aplicarán mañana, salvo que uses «Volver al plano guardado» en el TPV.",
-  ],
-])(
-  "says under the zone's name what a first save does, and when a saved plan's changes reach the till (%s)",
-  async (locale, firstNote, laterNote) => {
+it.each(["en-GB", "es-ES"])(
+  "omits the save subtitle for a first and a saved plan (%s)",
+  async (locale) => {
     setLocale(locale);
-    const note = (el: FloorPlanEditor) => {
-      const header = el.shadowRoot!.querySelector("header")!;
-      const p = header.querySelector("[data-note]")!;
-      expect(header.querySelector("h1")!.compareDocumentPosition(p)).toBe(
-        Node.DOCUMENT_POSITION_FOLLOWING,
+    for (const revision of [0, 3]) {
+      const el = await open(
+        stubApi({ getFloorPlan: vi.fn().mockResolvedValue(terrace(revision)) }),
       );
-      expect(p.compareDocumentPosition(header.querySelector("wt-form-actions")!)).toBe(
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      );
-      return p.textContent!.trim();
-    };
-    const first = await open(
-      stubApi({
-        getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
-      }),
-    );
-    expect(note(first)).toBe(firstNote);
-    cleanupWidgets();
-    const saved = await open();
-    expect(note(saved)).toBe(laterNote);
+      expect(heading(el)).toBe("Terrace");
+      expect(el.shadowRoot!.querySelector("[data-note]")).toBeNull();
+      cleanupWidgets();
+    }
   },
 );
 
@@ -562,7 +539,7 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
 });
 
 it.each(["en-GB", "es-ES"] as const)(
-  "at 1280 px in %s puts the Add buttons at the bottom of a side column taller than its list",
+  "at 1280 px in %s puts the Add buttons at the top of the side column",
   async (locale) => {
     setLocale(locale);
     await viewport(1280, 800);
@@ -574,10 +551,7 @@ it.each(["en-GB", "es-ES"] as const)(
       .shadowRoot!.querySelector<HTMLElement>(".foot")!;
     expect(foot.querySelector("wt-button[data-action=add-tables]")).not.toBeNull();
     expect(column.scrollHeight).toBe(column.clientHeight);
-    expect(foot.getBoundingClientRect().bottom).toBeCloseTo(
-      column.getBoundingClientRect().bottom,
-      0,
-    );
+    expect(foot.getBoundingClientRect().top).toBeCloseTo(column.getBoundingClientRect().top, 0);
   },
 );
 
@@ -912,7 +886,7 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
   expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:5"]);
 });
 
-it("Add joined table from the list opens the window, and Add puts Long table in the list not placed", async () => {
+it("Add joined table from the list opens the window, and Add puts Long table straight on the plan", async () => {
   const counters = terrace();
   counters.tables.push(
     ...(
@@ -952,12 +926,13 @@ it("Add joined table from the list opens the window, and Add puts Long table in 
   await el.updateComplete;
   await expect.poll(() => modal.open).toBe(false);
   const long = panelOf(el).draft.tables.find((t) => t.label === "Long table");
-  expect(long).toMatchObject({ seats: 10, placement: null, parts: ["m3", "m4", "m5"] });
+  expect(long).toMatchObject({ seats: 10, parts: ["m3", "m4", "m5"] });
+  expect(long!.placement).not.toBeNull();
   await panelOf(el).updateComplete;
   const row = panelOf(el).shadowRoot!.querySelector<HTMLElement>(`[data-table="${long!.key}"]`)!;
-  expect(row.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("spare");
+  expect(row.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("placed");
   expect(row.querySelector("[data-made-of]")!.textContent!.trim()).toBe("Counter 3, 4, 5");
-  expect(canvas(el).tables.some((t) => t.key === long!.key && t.placement !== null)).toBe(false);
+  expect(canvas(el).tables.some((t) => t.key === long!.key && t.placement !== null)).toBe(true);
   expectSaveAwake(el);
 });
 
@@ -1222,37 +1197,25 @@ it("a save's refusal stays when the draft changes after it", async () => {
   expect(message(el)).toBe("Something went wrong, try again");
 });
 
-const hintText = (el: FloorPlanEditor) =>
-  el.shadowRoot!.querySelector("[data-hint]")?.textContent!.trim() ?? null;
-
-it.each([
-  [
-    "en-GB",
-    "Select a table on the plan to change it. Click a table below to put it on the plan or take it off; it returns to the same spot.",
-  ],
-  [
-    "es-ES",
-    "Selecciona una mesa en el plano para cambiarla. Pulsa una mesa de abajo para ponerla en el plano o quitarla; vuelve al mismo sitio.",
-  ],
-])("with nothing selected, a hint sits above the tables list (%s)", async (locale, text) => {
-  setLocale(locale);
-  await viewport(1280, 800);
-  const el = await open();
-  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
-  expect(hintText(el)).toBe(text);
-  const side = el.shadowRoot!.querySelector(".side")!;
-  expect([...side.children].map((c) => c.localName)).toEqual(["p", "floor-plan-tables-panel"]);
-  expect(side.firstElementChild!.hasAttribute("data-hint")).toBe(true);
-  await page.viewport(390, 844);
-  await expect.poll(() => sheet(el)).not.toBeNull();
-  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual([
-    "p",
-    "floor-plan-tables-panel",
-  ]);
-  expect(hintText(el)).toBe(text);
-  await fromCanvas(el, "wt-table-select", { key: "m1" });
-  expect(hintText(el)).toBeNull();
-});
+it.each(["en-GB", "es-ES"])(
+  "with nothing selected, reserves an empty form area above the list (%s)",
+  async (locale) => {
+    setLocale(locale);
+    await viewport(1280, 800);
+    const el = await open();
+    await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+    const slot = () => el.shadowRoot!.querySelector<HTMLElement>(".table-slot")!;
+    expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+    expect(slot().children).toHaveLength(0);
+    expect(slot().getBoundingClientRect().height).toBeGreaterThan(0);
+    await page.viewport(390, 844);
+    await expect.poll(() => sheet(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+    expect(slot().children).toHaveLength(0);
+    await fromCanvas(el, "wt-table-select", { key: "m1" });
+    expect(slot().querySelector("floor-plan-table-panel")!.tableKey).toBe("m1");
+  },
+);
 
 function counters(): FloorPlan {
   const plain = (id: string, label: string, seats: number) => ({
@@ -1336,17 +1299,11 @@ it("puts the selected table's panel above the tables list, beside the canvas and
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
   const side = el.shadowRoot!.querySelector(".side")!;
-  expect([...side.children].map((c) => c.localName)).toEqual([
-    "floor-plan-table-panel",
-    "floor-plan-tables-panel",
-  ]);
+  expect([...side.children].map((c) => c.localName)).toEqual(["floor-plan-tables-panel"]);
   expect(tablePanel(el)!.tableKey).toBe("m1");
   await page.viewport(390, 844);
   await expect.poll(() => sheet(el)).not.toBeNull();
-  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual([
-    "floor-plan-table-panel",
-    "floor-plan-tables-panel",
-  ]);
+  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual(["floor-plan-tables-panel"]);
 });
 
 it("a panel's typed name goes into the draft and Undo takes the whole typing back", async () => {
@@ -1378,4 +1335,41 @@ it("does not reserve an unfollowed live name backed by this zone's master plan",
     }),
   );
   expect(await addTablesHint(el)).toBe("Terrace 1");
+});
+
+it("A671: selecting and clearing a table leaves the list in the same place", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  const listTop = () => panelOf(el).shadowRoot!.querySelector("ul")!.getBoundingClientRect().top;
+  const top = listTop();
+  expect(tablePanel(el)).toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await tablePanel(el)!.updateComplete;
+  expect(listTop()).toBeCloseTo(top, 0);
+  const add = panelOf(el).shadowRoot!.querySelector("[data-action=add-tables]")!;
+  expect(add.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    tablePanel(el)!.getBoundingClientRect().top,
+  );
+  await fromCanvas(el, "wt-table-select", { key: null });
+  expect(tablePanel(el)).toBeNull();
+  expect(listTop()).toBeCloseTo(top, 0);
+});
+
+it("A671: the editor shows neither the save subtitle nor the table help sentence", async () => {
+  const el = await open();
+  expect(el.shadowRoot!.querySelector("[data-note]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+});
+
+it("A671: the desktop list gives the selected short name enough room", async () => {
+  await viewport(1280, 800);
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "c1" });
+  await panelOf(el).updateComplete;
+  const name = panelOf(el).shadowRoot!.querySelector("[data-table=c1] [data-name]")!;
+  const text = document.createRange();
+  text.selectNodeContents(name);
+  expect(text.getClientRects()).toHaveLength(1);
 });

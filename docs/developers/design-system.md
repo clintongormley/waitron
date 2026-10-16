@@ -4329,31 +4329,40 @@ how orders start, counter service and receipt printing. Each row opens its Edit 
 zone's inherited value is muted and italic; an explicit override stays normal even when it
 matches the department. The row menus stay pinned at the end.
 
-Beside the plan, or in its bottom sheet on a phone, the editor shows a hint on how to choose and
-place a table while none is selected, then the selected table's form, then the tables list, with
-Add tables and Add joined table side by side at its foot, wrapping when they do not fit. The form holds Name; Seats beside Shape, a visible "Shape" caption
-naming a group of two pressed-state icon buttons (Rectangle and Round, with no tooltip, since an
-icon tooltip's Escape would also start leaving the editor), shown for a placed table only and
-stacked under Seats when the pair does not fit beside it; for a joined table, Seats is required and
-takes 1 to 999, and a required Made of picker follows, offering the tables not on the plan, not
-joined tables themselves and in no other joined table; then a Moveable switch, on for a table that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
-are set on the plan; a refusal naming one of them selects the table and shows its own sentence. The list names its tables in number order under Name, Seats and
-Made of heads; seats blank reads "—". A joined table's Made of names its parts in number order,
-written once with their shared beginning ("Counter 3, 4, 5") when every name is that beginning and
-a number, and "—" when it has none; a part's reads "in {joined table}". Each row is one button that
-puts the table on the plan or takes it off, with no question either way, except a part's row, which
-is greyed, marked disabled and does nothing. It holds a marker: a filled `--wt-color-primary`
-circle on the plan, a hollow `--wt-color-text-muted` ring when not placed, so the two differ in
-shape as well as colour, and a filled `--wt-color-text-muted` rounded square for a part of a joined
-table. A bin beside it asks "Delete {name}?" in a compact modal before the table goes; for a part,
-the question says it leaves the tables list and its joined table. It is not
-`wt-delete-dialog`: the delete changes only the draft, and Undo takes it back until Save. The
-selected table's row is `--wt-color-surface-lifted` with its name bold, and a table's mark or
-refusal shows under its name in `--wt-color-danger`, whichever table is selected. A table taken off
-goes back to the same place when pressed again, for as long as the editor stays open on that zone;
-the place is not saved. A table that never had a place, pressed when the plan has no free spot,
-changes nothing and says "No room on the plan." Cases: `floor-plan-tables-panel.test.ts` and the
-`floor-plan-editor*.test.ts` files beside it in `apps/dashboard/src/screens/`.
+Beside the plan, or in its bottom sheet on a phone, you see Add tables and Add joined table
+above the selected table's form and the tables list. The form reserves its space even when no
+table is selected, so selecting or clearing a table does not move the list. That space stays
+empty without a selection. There is no subtitle, selection hint or colour key. Add buttons sit
+side by side where they fit and wrap otherwise.
+
+The form holds Name, then Seats, Shape and Moveable in one row of equal-height boxes. Seats is
+the narrower box. Shape shows the current Rectangle or Round icon in one button; pressing it
+switches to the other shape. It has a visible Shape caption and no tooltip. Moveable is on for a
+table that is not fixed. A joined table also has a required Made of picker below that row, offering
+plain tables off the plan and in no other joined table; its required Seats takes 1 to 999. The
+reserved form area scrolls when its content needs more room. Add tables uses the same Moveable
+switch, on by default. Size and turn are set on the plan. A refusal naming a field selects the
+table and shows its own sentence beside that field.
+
+The list names tables in number order under Name, Seats and Made of heads; an unset seat count
+reads “—”. A joined table's Made of names its parts in number order, shortening a shared beginning
+to “Counter 3, 4, 5”, and reads “—” when it has none. A part's reads “in {joined table}”. Only the
+square button changes placement: a filled `--wt-color-primary` square means on the plan, an outlined
+`--wt-color-text-muted` square means off it, and a filled `--wt-color-text-muted` square means a part
+of a joined table. A part's square is marked disabled and does nothing. Pressing a placed table's
+name selects it without changing placement; an unplaced name does nothing. Joined parts have muted
+names and seats. The selected row uses `--wt-color-surface-lifted` with its name bold.
+
+A bin asks “Delete {name}?” before the table leaves the draft. For a part, the question also names
+its joined table. Undo restores the draft deletion until Save. A table's mark or refusal appears
+under its name in `--wt-color-danger`, regardless of selection. Taking a table off remembers its
+place while the editor stays open on that zone; pressing its square again restores that place.
+A table without a remembered place uses the first free spot. If none exists, placement changes
+nothing and says “No room on the plan.” Saving Add joined table also places the new joined table
+at the first free spot in one draft change. If the plan is full, the dialog keeps your values and
+shows the same message; its Save remains available. Cases: `floor-plan-tables-panel.test.ts`,
+`floor-plan-add-joined-table.test.ts` and the `floor-plan-editor*.test.ts` files beside them in
+`apps/dashboard/src/screens/`.
 
 A department's menu offers Edit, Add a zone, Edit receipt and Delete. A zone's menu offers
 Edit, Add or Edit floor plan, and Delete. Unassigned zones keep their Add to department action.

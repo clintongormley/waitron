@@ -107,12 +107,10 @@ const tableOf = (change: Change | undefined, key: string) =>
 const shapeGroup = (el: FloorPlanTablePanel) =>
   el.shadowRoot!.querySelector<HTMLElement>("[role=group][data-field=shape]");
 const shapeButtons = (el: FloorPlanTablePanel) => [
-  ...shapeGroup(el)!.querySelectorAll<HTMLButtonElement>("button[aria-pressed]"),
+  ...shapeGroup(el)!.querySelectorAll<HTMLButtonElement>("button[data-shape]"),
 ];
 const pressedShape = (el: FloorPlanTablePanel) =>
-  shapeButtons(el)
-    .filter((b) => b.getAttribute("aria-pressed") === "true")
-    .map((b) => b.getAttribute("aria-label"));
+  shapeButtons(el).map((b) => b.getAttribute("aria-label"));
 const shapeCaption = (el: FloorPlanTablePanel) =>
   el.shadowRoot!.getElementById(shapeGroup(el)!.getAttribute("aria-labelledby")!);
 
@@ -124,7 +122,7 @@ it("shows the selected table's values", async () => {
   expect(pressedShape(el)).toEqual(["Rectangle"]);
 });
 
-it("lays out Name, then Seats beside Shape, then Moveable, and nothing more", async () => {
+it("lays out Name, then Seats beside Shape and Moveable, and nothing more", async () => {
   const el = await open();
   const named = [
     ...el.shadowRoot!.querySelectorAll(".fields [name]:not(wt-icon), .fields [role=group]"),
@@ -138,32 +136,33 @@ it("lays out Name, then Seats beside Shape, then Moveable, and nothing more", as
   const seatsRow = field(el, "seats")!.parentElement!;
   expect(seatsRow.contains(shapeGroup(el))).toBe(true);
   expect(seatsRow.contains(field(el, "table-name"))).toBe(false);
-  expect(seatsRow.contains(field(el, "moveable"))).toBe(false);
+  expect(seatsRow.contains(field(el, "moveable"))).toBe(true);
   for (const name of ["width", "height", "rotation", "fixed", "shape"]) {
     expect(field(el, name)).toBeNull();
   }
 });
 
-it("names the shape pair by a visible caption, with no tooltip", async () => {
+it("names the current shape by a visible caption, with no tooltip", async () => {
   const el = await open();
   const caption = shapeCaption(el)!;
   expect(caption.textContent!.trim()).toBe("Shape");
   expect(caption.checkVisibility()).toBe(true);
-  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual(["Rectangle", "Round"]);
+  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual(["Rectangle"]);
   expect(shapeGroup(el)!.querySelector(".icon-tooltip")).toBeNull();
 });
 
-it("puts Shape under Seats only on a panel too narrow for both", async () => {
+it("keeps Seats, Shape and Moveable on one row in a narrow panel", async () => {
   const el = await open();
   el.style.width = "180px";
   await el.updateComplete;
   const seats = field(el, "seats")!.getBoundingClientRect();
   const shape = shapeGroup(el)!.getBoundingClientRect();
-  expect(shape.top).toBeGreaterThanOrEqual(seats.bottom);
+  expect(shapeGroup(el)!.parentElement!.getBoundingClientRect().top).toBeCloseTo(seats.top, 0);
+  expect(shape.right).toBeLessThanOrEqual(el.getBoundingClientRect().right);
 });
 
 for (const locale of ["en-GB", "es-ES"]) {
-  it(`puts Shape beside Seats in the editor's widest side column (${locale})`, async () => {
+  it(`puts Shape beside Seats in a 288 px panel (${locale})`, async () => {
     setLocale(locale);
     const el = await open();
     el.style.width = "288px";
@@ -270,14 +269,12 @@ it("shows a draft value again over text typed into the field", async () => {
 it("Moveable and shape each send their change", async () => {
   const el = await open();
   const { changes } = listen(el);
-  shapeButtons(el)[0]!.click();
-  expect(changes).toHaveLength(0);
   const moveable = field(el, "moveable")!;
   moveable.shadowRoot!.querySelector("input")!.click();
   await el.updateComplete;
   expect(tableOf(changes.at(-1), "m1")!.fixed).toBe(true);
   expect(changes.at(-1)!.mergeKey).toBeUndefined();
-  shapeButtons(el)[1]!.click();
+  shapeButtons(el)[0]!.click();
   await el.updateComplete;
   expect(tableOf(changes.at(-1), "m1")!.placement!.shape).toBe("round");
   expect(changes.at(-1)!.mergeKey).toBeUndefined();
@@ -292,10 +289,7 @@ it("names its fields in Spanish", async () => {
   expect(label("table-name")).toBe("Nombre");
   expect(label("seats")).toBe("Plazas");
   expect(shapeCaption(el)!.textContent!.trim()).toBe("Forma");
-  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual([
-    "Rectángulo",
-    "Redonda",
-  ]);
+  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual(["Rectángulo"]);
   expect(label("moveable")).toBe("Movible");
 });
 
@@ -345,7 +339,7 @@ it("shows a refusal of Moveable under the switch", async () => {
   );
 });
 
-it("shows a refusal of the shape under the shape pair", async () => {
+it("shows a refusal of the shape under the shape button", async () => {
   const el = await open({ fieldErrors: [{ field: "shape", message: "Not allowed" }] });
   const note = el.shadowRoot!.querySelector("[data-error=shape]")!;
   expect(note.textContent!.trim()).toBe("Not allowed");
@@ -362,7 +356,7 @@ it("describes each shape button by the shape refusal only while one shows", asyn
   }
   el.fieldErrors = [];
   await el.updateComplete;
-  expect(shapeButtons(el).map((b) => b.hasAttribute("aria-describedby"))).toEqual([false, false]);
+  expect(shapeButtons(el).map((b) => b.hasAttribute("aria-describedby"))).toEqual([false]);
 });
 
 it("shows nothing for a table the draft does not hold", async () => {
@@ -464,8 +458,8 @@ it("a joined table's form shows Made of with its parts chosen, and the free tabl
     "table-name",
     "seats",
     "shape",
-    "made-of",
     "moveable",
+    "made-of",
   ]);
   const seats = field(el, "seats") as unknown as { required: boolean; clearable: boolean };
   expect([seats.required, seats.clearable]).toEqual([true, false]);
@@ -525,4 +519,58 @@ it("refuses 0 seats for a joined table", async () => {
   expect(invalid.at(-1)).toMatchObject({ key: "long", field: "seats", text: null });
   expect(tableOf(changes.at(-1), "long")!.seats).toBe(12);
   expect(changes.at(-1)!.mergeKey).toBe("seats:long");
+});
+
+it("A671: one shape button toggles the current shape in both directions", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  expect(shapeButtons(el)).toHaveLength(1);
+  expect(pressedShape(el)).toEqual(["Rectangle"]);
+  await userEvent.click(shapeButtons(el)[0]!);
+  await el.updateComplete;
+  expect(tableOf(changes.at(-1), "m1")!.placement).toEqual({ ...m1Placement, shape: "round" });
+  expect(pressedShape(el)).toEqual(["Round"]);
+  await userEvent.click(shapeButtons(el)[0]!);
+  await el.updateComplete;
+  expect(tableOf(changes.at(-1), "m1")!.placement).toEqual(m1Placement);
+  expect(pressedShape(el)).toEqual(["Rectangle"]);
+  expect(changes).toHaveLength(2);
+});
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`A671: Seats, Shape and Moveable have equal-height boxes on one row (${locale})`, async () => {
+    setLocale(locale);
+    const el = await open();
+    el.style.width = "288px";
+    await el.updateComplete;
+    const seats = field(el, "seats")!.getBoundingClientRect();
+    const shape = shapeGroup(el)!.parentElement!.getBoundingClientRect();
+    const moveable = field(el, "moveable")!.parentElement!.getBoundingClientRect();
+    expect(shape.top).toBeCloseTo(seats.top, 0);
+    expect(moveable.top).toBeCloseTo(seats.top, 0);
+    expect(shape.height).toBeCloseTo(seats.height, 0);
+    expect(moveable.height).toBeCloseTo(seats.height, 0);
+    expect(shape.left).toBeGreaterThanOrEqual(seats.right);
+    expect(moveable.left).toBeGreaterThanOrEqual(shape.right);
+    expect(moveable.right).toBeLessThanOrEqual(el.getBoundingClientRect().right + 1);
+  });
+}
+
+it("A671: the shape caption shares the filled field box without an opaque button over it", async () => {
+  const el = await open();
+  const shape = shapeGroup(el)!.parentElement!;
+  expect(getComputedStyle(shapeButtons(el)[0]!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  const seatsBox = field(el, "seats")!.shadowRoot!.querySelector("[part=field]")!;
+  expect(getComputedStyle(shape).backgroundColor).toBe(getComputedStyle(seatsBox).backgroundColor);
+});
+
+it("A671: clicking Moveable's visible caption changes the native switch once", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  const moveable = field(el, "moveable")!;
+  await userEvent.click(moveable.parentElement!, { position: { x: 12, y: 12 } });
+  await el.updateComplete;
+  expect(changes).toHaveLength(1);
+  expect(tableOf(changes[0], "m1")!.fixed).toBe(true);
+  expect(moveable.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
 });

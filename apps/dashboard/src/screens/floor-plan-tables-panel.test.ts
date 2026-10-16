@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-tables-panel.js";
 import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
@@ -116,9 +117,7 @@ it("shows each row's marker, name, seats and a bin, under Name and Seats heads",
     h.textContent!.trim(),
   );
   expect(heads).toEqual(["Name", "Seats", "Made of"]);
-  expect(
-    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("on plan not placed in a joined table");
+  expect(el.shadowRoot!.querySelector("[data-legend]")).toBeNull();
 });
 
 it("starts the Name and Seats heads where each row's name and seats start", async () => {
@@ -147,22 +146,21 @@ it("every row, placed or spare, has a bin", async () => {
   ]);
 });
 
-it("words its legend in Spanish", async () => {
+it("omits the legend in Spanish", async () => {
   setLocale("es-ES");
   const el = await open();
-  expect(
-    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("en el plano sin colocar en una mesa unida");
+  expect(el.shadowRoot!.querySelector("[data-legend]")).toBeNull();
 });
 
-it("draws a placed marker as a filled dot and a spare one as a hollow ring", async () => {
+it("draws a placed marker as a filled square and a spare one as an outlined square", async () => {
   const { el, host } = await mount();
   host.style.setProperty("--wt-color-primary", "rgb(21, 22, 23)");
   host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
   const placed = getComputedStyle(row(el, "Terrace 1").querySelector("[data-marker]")!);
   const spare = getComputedStyle(row(el, "Terrace 2").querySelector("[data-marker]")!);
   expect(placed.backgroundColor).toBe("rgb(21, 22, 23)");
-  expect(placed.borderRadius).toBe("9999px");
+  expect(placed.borderRadius).toBe("0px");
+  expect(spare.borderRadius).toBe("0px");
   expect(spare.backgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(spare.borderTopColor).toBe("rgb(41, 42, 43)");
   expect(spare.borderTopWidth).toBe("2px");
@@ -256,6 +254,12 @@ it("writes a marked table's message under its name in the error colour, as its d
   const mark = markedRow.querySelector<HTMLElement>("[data-mark]")!;
   expect(nameOf(markedRow)).toBe("Terrace 10");
   expect(mark.textContent!.trim()).toBe("Booked 12 Oct, 21:00");
+  const text = document.createRange();
+  text.selectNodeContents(mark);
+  expect(text.getBoundingClientRect().left).toBeCloseTo(
+    markedRow.querySelector("[data-name]")!.getBoundingClientRect().left,
+    0,
+  );
   expect(getComputedStyle(mark).color).toBe("rgb(7, 8, 9)");
   const described = toggle(markedRow).getAttribute("aria-describedby")!;
   expect(el.shadowRoot!.getElementById(described)).toBe(mark);
@@ -279,13 +283,11 @@ it("the bin asks the page to delete the table and changes nothing itself", async
   expect(selects).toEqual([]);
 });
 
-it("ends with Add tables and Add joined table", async () => {
+it("starts with Add tables and Add joined table", async () => {
   const el = await open();
   const elements = [...el.shadowRoot!.children].filter((c) => c.tagName !== "STYLE");
   expect(
-    [...elements.at(-1)!.children].map(
-      (c) => c.matches("wt-button") && c.getAttribute("data-action"),
-    ),
+    [...elements[0]!.children].map((c) => c.matches("wt-button") && c.getAttribute("data-action")),
   ).toEqual(["add-tables", "add-joined-table"]);
 });
 
@@ -333,9 +335,7 @@ it("shows a part greyed with its joined table's name, and a joined table's parts
     h.textContent!.trim(),
   );
   expect(heads).toEqual(["Name", "Seats", "Made of"]);
-  expect(
-    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("on plan not placed in a joined table");
+  expect(el.shadowRoot!.querySelector("[data-legend]")).toBeNull();
 });
 
 it("tells a part's joined table once, in its toggle's name, and describes a marked part by its mark alone", async () => {
@@ -402,9 +402,7 @@ it("shows the list in Spanish", async () => {
   );
   expect(heads).toEqual(["Nombre", "Plazas", "Formada por"]);
   expect(madeOf(row(el, "Counter 4"))).toBe("en Long table");
-  expect(
-    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("en el plano sin colocar en una mesa unida");
+  expect(el.shadowRoot!.querySelector("[data-legend]")).toBeNull();
   expect(
     el.shadowRoot!.querySelector("wt-button[data-action=add-joined-table]")!.textContent!.trim(),
   ).toBe("Añadir mesa unida");
@@ -419,3 +417,47 @@ it("starts the Made of head where each row's Made of starts", async () => {
       0,
     );
 });
+
+it("A671: clicking a placed name selects without taking it off", async () => {
+  const el = await open();
+  const { changes, selects } = listen(el);
+  await userEvent.click(row(el, "Terrace 1").querySelector<HTMLElement>("[data-name]")!);
+  expect(changes).toEqual([]);
+  expect(selects).toEqual(["m1"]);
+});
+
+it("A671: clicking an unplaced name leaves the plan and selection alone", async () => {
+  const el = await open();
+  const { changes, selects } = listen(el);
+  await userEvent.click(row(el, "Terrace 2").querySelector<HTMLElement>("[data-name]")!);
+  expect(changes).toEqual([]);
+  expect(selects).toEqual([]);
+});
+
+it("A671: a short name stays on one line in the desktop panel", async () => {
+  const el = await open({ draft: { tables: [table("c1", "Counter 1", true, 4)] } });
+  el.style.width = "288px";
+  await el.updateComplete;
+  const name = row(el, "Counter 1").querySelector<HTMLElement>("[data-name]")!;
+  const text = document.createRange();
+  text.selectNodeContents(name);
+  expect(text.getClientRects()).toHaveLength(1);
+});
+
+it.each(["Arial", "Verdana"])(
+  "A671: a short name stays on one line with fallback font %s",
+  async (font) => {
+    const el = await open({ draft: { tables: [table("c1", "Counter 1", true, 4)] } });
+    el.style.width = "288px";
+    el.style.setProperty("--wt-font-family", font);
+    await el.updateComplete;
+    const name = row(el, "Counter 1").querySelector<HTMLElement>("[data-name]")!;
+    const text = document.createRange();
+    text.selectNodeContents(name);
+    expect(text.getClientRects()).toHaveLength(1);
+    el.selected = "c1";
+    await el.updateComplete;
+    text.selectNodeContents(row(el, "Counter 1").querySelector("[data-name]")!);
+    expect(text.getClientRects()).toHaveLength(1);
+  },
+);

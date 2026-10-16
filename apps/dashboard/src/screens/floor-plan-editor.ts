@@ -229,16 +229,6 @@ export class FloorPlanEditor extends LitElement {
       header.narrow a.close {
         padding-inline: var(--wt-space-2);
       }
-      .hint {
-        margin: 0 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .note {
-        margin: var(--wt-space-1) 0 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       .load-error {
         margin: var(--wt-space-4) 0;
         color: var(--wt-color-danger);
@@ -267,7 +257,7 @@ export class FloorPlanEditor extends LitElement {
         display: grid;
         grid-template-columns:
           minmax(0, 1fr)
-          minmax(calc(var(--wt-space-6) * 6), calc(var(--wt-space-6) * 9));
+          minmax(calc(var(--wt-space-6) * 8), calc(var(--wt-space-6) * 11));
         grid-template-rows: minmax(0, 1fr);
         gap: var(--wt-space-4);
       }
@@ -278,9 +268,11 @@ export class FloorPlanEditor extends LitElement {
         overflow-y: auto;
         overscroll-behavior: contain;
       }
-      /* Grows so that its Add tables, last, sits at the column's foot (mockup 1). */
-      .side floor-plan-tables-panel {
-        flex: 1 0 auto;
+      .table-slot {
+        /* Keep the list still across plain, joined and empty selections; errors scroll inside. */
+        block-size: calc(3 * var(--wt-field-height) + 4 * var(--wt-space-3));
+        overflow-y: auto;
+        flex: none;
       }
       .layout.narrow {
         display: block;
@@ -329,7 +321,6 @@ export class FloorPlanEditor extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
-  @state() private plan: FloorPlan | null = null;
   @state() private zoneName: string | null = null;
   @state() private draft: FloorPlanDraft | null = null;
   @state() private selected: string | null = null;
@@ -543,7 +534,7 @@ export class FloorPlanEditor extends LitElement {
     this.#request++;
     this.#cancelPending();
     this.#disposeScope();
-    this.plan = null;
+
     this.draft = null;
     this.#opened = null;
     this.#history = null;
@@ -563,7 +554,7 @@ export class FloorPlanEditor extends LitElement {
     const request = ++this.#request;
     this.#cancelPending();
     this.#disposeScope();
-    this.plan = null;
+
     this.zoneName = null;
     this.draft = null;
     this.#opened = null;
@@ -586,7 +577,7 @@ export class FloorPlanEditor extends LitElement {
       ]);
       if (request !== this.#request) return;
       const draft = draftFromPlan(plan);
-      this.plan = plan;
+
       this.revision = plan.revision;
       this.zoneName = zones.find((zone) => zone.id === zoneId)?.name ?? null;
       this.venueTables = tables;
@@ -897,7 +888,7 @@ export class FloorPlanEditor extends LitElement {
     }
     const draft = draftFromPlan(plan);
     this.#liveFrom = null;
-    this.plan = plan;
+
     this.revision = plan.revision;
     this.#opened = draft;
     this.#commit(draft);
@@ -1134,13 +1125,6 @@ export class FloorPlanEditor extends LitElement {
       @wt-table-resize=${this.#onResize}
       @wt-table-select=${this.#onSelect}
     ></wt-floor-plan-canvas>`;
-    const panel = html`<floor-plan-tables-panel
-      .draft=${draft}
-      .selected=${this.selected}
-      .marks=${this.#listMarks()}
-      .places=${this.#places}
-      .inSheet=${this.narrow}
-    ></floor-plan-tables-panel>`;
     const tablePanel =
       this.selected !== null && draft.tables.some((table) => table.key === this.selected)
         ? html`<floor-plan-table-panel
@@ -1148,8 +1132,15 @@ export class FloorPlanEditor extends LitElement {
             .tableKey=${this.selected}
             .fieldErrors=${this.#panelErrors(this.selected)}
           ></floor-plan-table-panel>`
-        : html`<p class="hint" data-hint>${t("floor_plan_editor.hint")}</p>`;
-    const panels = html`${tablePanel}${panel}`;
+        : nothing;
+    const panels = html`<floor-plan-tables-panel
+      .draft=${draft}
+      .selected=${this.selected}
+      .marks=${this.#listMarks()}
+      .places=${this.#places}
+      .inSheet=${this.narrow}
+      ><div slot="editor" class="table-slot">${tablePanel}</div></floor-plan-tables-panel
+    >`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
         ${canvas}${this.narrow ? this.#sheet(draft, panels) : html`<div class="side">${panels}</div>`}
       </div>
@@ -1199,13 +1190,6 @@ export class FloorPlanEditor extends LitElement {
           <header class=${this.narrow ? "narrow" : ""}>
             <div>
               <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
-              ${
-                this.plan === null
-                  ? nothing
-                  : html`<p class="note" data-note>
-                      ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
-                    </p>`
-              }
             </div>
             <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
               ${

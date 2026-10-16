@@ -1188,11 +1188,7 @@ export const en = {
   "floor_plan_editor.undo": "Undo",
   "floor_plan_editor.redo": "Redo",
   "floor_plan_editor.tables": "Tables",
-  "floor_plan_editor.on_plan": "on plan",
-  "floor_plan_editor.not_placed": "not placed",
   "floor_plan_editor.delete_named": "Delete {name}",
-  "floor_plan_editor.hint":
-    "Select a table on the plan to change it. Click a table below to put it on the plan or take it off; it returns to the same spot.",
   "floor_plan_editor.no_room": "No room on the plan.",
   "floor_plan_editor.delete_question": "Delete {name}?",
   "floor_plan_editor.delete_text": "It leaves the tables list and the plan.",
@@ -1207,7 +1203,6 @@ export const en = {
   "floor_plan_editor.add_tables": "Add tables",
   "floor_plan_editor.add_joined_table": "Add joined table",
   "floor_plan_editor.made_of": "Made of",
-  "floor_plan_editor.in_joined_table": "in a joined table",
   "floor_plan_editor.in_named": "in {name}",
   "floor_plan_editor.delete_part_text": "It leaves the tables list and {name}.",
   "floor_plan_editor.joined_seats_invalid": "Enter 1 to 999.",
@@ -1231,10 +1226,6 @@ export const en = {
   "floor_plan_editor.rectangle": "Rectangle",
   "floor_plan_editor.round": "Round",
   "floor_plan_editor.booked": "Booked {date}, {time}",
-  "floor_plan_editor.first_note":
-    "Your first save goes live now; later changes tomorrow, unless you “Reset to saved plan” on the till.",
-  "floor_plan_editor.note":
-    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
   "kitchen.stations_title": "Stations",
   "kitchen.station_name": "Name",
   "kitchen.station_order": "Order",
@@ -4208,11 +4199,7 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.undo": "Deshacer",
   "floor_plan_editor.redo": "Rehacer",
   "floor_plan_editor.tables": "Mesas",
-  "floor_plan_editor.on_plan": "en el plano",
-  "floor_plan_editor.not_placed": "sin colocar",
   "floor_plan_editor.delete_named": "Eliminar {name}",
-  "floor_plan_editor.hint":
-    "Selecciona una mesa en el plano para cambiarla. Pulsa una mesa de abajo para ponerla en el plano o quitarla; vuelve al mismo sitio.",
   "floor_plan_editor.no_room": "No hay sitio en el plano.",
   "floor_plan_editor.delete_question": "¿Eliminar {name}?",
   "floor_plan_editor.delete_text": "Sale de la lista de mesas y del plano.",
@@ -4227,7 +4214,6 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.add_tables": "Añadir mesas",
   "floor_plan_editor.add_joined_table": "Añadir mesa unida",
   "floor_plan_editor.made_of": "Formada por",
-  "floor_plan_editor.in_joined_table": "en una mesa unida",
   "floor_plan_editor.in_named": "en {name}",
   "floor_plan_editor.delete_part_text": "Sale de la lista de mesas y de {name}.",
   "floor_plan_editor.joined_seats_invalid": "Escribe de 1 a 999.",
@@ -4251,10 +4237,6 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.rectangle": "Rectángulo",
   "floor_plan_editor.round": "Redonda",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
-  "floor_plan_editor.first_note":
-    "Tu primer guardado se aplica ya; los cambios posteriores, mañana, salvo que uses «Volver al plano guardado» en el TPV.",
-  "floor_plan_editor.note":
-    "Los cambios se aplicarán mañana, salvo que uses «Volver al plano guardado» en el TPV.",
   "kitchen.stations_title": "Estaciones",
   "kitchen.station_name": "Nombre",
   "kitchen.station_order": "Orden",

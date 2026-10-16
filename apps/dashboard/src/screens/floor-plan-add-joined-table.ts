@@ -25,6 +25,7 @@ import {
   MAX_SEATS,
   addJoinedTable,
   freeTables,
+  placeTable,
   seatCount,
   sendChange,
   tableName,
@@ -80,6 +81,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
   @state() private form: JoinedForm | null = null;
   /** Set by a refused Save; from then on the dialog shows its problems as they are fixed. */
   @state() private checked = false;
+  @state() private noRoom = false;
 
   readonly #id = {};
   #scope?: DraftScope<JoinedForm>;
@@ -112,6 +114,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
   show(): void {
     if (this.form !== null) return;
     this.checked = false;
+    this.noRoom = false;
     this.form = { name: "", seats: "", parts: [] };
   }
 
@@ -120,6 +123,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     this.#scope = undefined;
     this.form = null;
     this.checked = false;
+    this.noRoom = false;
   }
 
   #modal(): WtModal | null {
@@ -136,6 +140,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
 
   #edit(patch: Partial<JoinedForm>): void {
     if (this.form === null) return;
+    this.noRoom = false;
     this.form = { ...this.form, ...patch };
     this.#scope?.changed();
   }
@@ -179,15 +184,21 @@ export class FloorPlanAddJoinedTable extends LitElement {
       });
       return;
     }
-    const draft = addJoinedTable(
+    const key = this.nextKey();
+    const added = addJoinedTable(
       this.draft,
       {
         label: form.name.trim(),
         seats: wholeWithin(form.seats, 1, MAX_SEATS),
         parts: this.#parts(form),
       },
-      this.nextKey,
+      () => key,
     );
+    const draft = placeTable(added, key);
+    if (draft === added) {
+      this.noRoom = true;
+      return;
+    }
     sendChange(this, draft);
     this.#scope?.commit(copyForm(form));
     this.#modal()?.closeAfter("saved");
@@ -264,7 +275,9 @@ export class FloorPlanAddJoinedTable extends LitElement {
               ></wt-combobox>
             </div>`
       }
-      <wt-form-actions slot="footer" .error=${failing ? t("form.fix_fields") : ""}
+      <wt-form-actions
+        slot="footer"
+        .error=${failing ? t("form.fix_fields") : this.noRoom ? t("floor_plan_editor.no_room") : ""}
         ><wt-button
           slot="cancel"
           variant="secondary"

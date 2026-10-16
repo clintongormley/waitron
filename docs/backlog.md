@@ -2505,16 +2505,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Until the next reset; the till hides it. Left open by A503 part 2 (#1601).
   [Detail](backlog/till.md#a568-a-part-placed-on-todays-map-while-its-joined-table-waited-keeps-its-place)
 
-- **A569. The floor plan editor's Made of picker and two wraps (2026-10-13).** A dropdown, not
-  the mockup's inline list; two wraps seen in #1601's look.
+- **A569. The floor plan editor's Made of picker and wrapping (2026-10-13).** The inline picker
+  and how its parts wrap remain open; Add button placement now follows A671.
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
-
-- **A671. The floor plan editor's side panel: less text, nothing jumps (owner, 2026-10-14).** The
-  Add buttons move to the top, the table form always keeps its space, Seats, Shape and Moveable share
-  one row, the subtitle, help sentence and colour key go, the markers become squares that alone put a
-  table on or off the plan, and a new joined table goes straight onto the plan.
-  [Detail](backlog/till.md#a671-the-floor-plan-editors-side-panel-less-text-nothing-jumps),
-  [mockups](backlog/mockups/a671-floor-plan-editor-panel/)
 
 - **A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
   (owner, 2026-10-14).** A table at the plan's top-left limit cannot go up or left although empty

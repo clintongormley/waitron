@@ -296,12 +296,13 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("shows the hint with nothing selected accessibly", async () => {
+  it("keeps the empty form area out of the accessibility tree", async () => {
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(1280, 800);
     onTestFinished(() => page.viewport(...before));
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
-    await expect.poll(() => el.shadowRoot!.querySelector(".side [data-hint]")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector(".side .table-slot")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".table-slot")!.children).toHaveLength(0);
     await expectNoA11yViolations(host);
   });
 
@@ -357,10 +358,13 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
   }
 
   it("shows a placed table's panel accessibly", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(locale));
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
     const panel = await selectTable(el, "m2");
     const round = panel.shadowRoot!.querySelector("[data-field=shape] button[data-shape=round]")!;
-    expect(round.getAttribute("aria-pressed")).toBe("true");
+    expect(round.getAttribute("aria-label")).toBe("Round");
     expect(
       panel.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>("[name=moveable]")!
         .checked,
@@ -368,7 +372,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("shows a refusal of the shape under the shape pair accessibly", async () => {
+  it("shows a refusal of the shape under the shape button accessibly", async () => {
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(1280, 1000);
     onTestFinished(() => page.viewport(...before));
@@ -384,7 +388,7 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     );
     const panel = await selectTable(el, "m1");
     panel
-      .shadowRoot!.querySelector<HTMLElement>("[data-field=shape] button[data-shape=round]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-field=shape] button[data-shape=rect]")!
       .click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
