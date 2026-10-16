@@ -533,6 +533,10 @@ export function mountFirstSetupResolutionApi(
     >["startAgainFirstSetup"];
     requestRestart?: () => void;
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
+    selection?: Pick<
+      ReturnType<typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions>,
+      "inspectWorkspaceSelection" | "resumeWorkspaceSelection"
+    >;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
@@ -547,6 +551,51 @@ export function mountFirstSetupResolutionApi(
       return c.json(await host.resolution.inspectFirstSetupResolution());
     }),
   );
+  if (options.selection !== undefined) {
+    const selection = options.selection;
+    app.get(`${root}/resolution/selection`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        return c.json(await selection.inspectWorkspaceSelection());
+      }),
+    );
+    app.post(`${root}/resolution/resume-selection`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+        if (!(socket instanceof TLSSocket) || !socket.encrypted)
+          throw new AppError("setup.owner_required", {});
+        const body = exact(await readFirstFiscalBody(c), [
+          "inspectionId",
+          "revision",
+          "ownerGeneration",
+          "workspaceId",
+          "selectionGeneration",
+          "password",
+        ]);
+        if (
+          ![body.revision, body.ownerGeneration, body.selectionGeneration].every(
+            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+          )
+        )
+          invalid();
+        const selected = await selection.resumeWorkspaceSelection({
+          inspectionId: text(body.inspectionId),
+          revision: body.revision as number,
+          ownerGeneration: body.ownerGeneration as number,
+          workspaceId: text(body.workspaceId),
+          selectionGeneration: body.selectionGeneration as number,
+          password: text(body.password),
+        });
+        setTimeout(() => options.requestRestart?.(), 0);
+        return c.json({
+          workspaceId: selected.workspaceId,
+          selectionGeneration: selected.selectionGeneration,
+          restarting: true,
+        });
+      }),
+    );
+  }
   app.post(`${root}/resolution/recover`, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);

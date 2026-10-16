@@ -62,6 +62,7 @@ export type {
 } from "./first-setup-resolution.js";
 export {
   firstSetupAnchorFor,
+  inspectFirstSetupWorkspaceSelection,
   readRetiredFirstSetupStates,
   readFirstSetupRetirements,
   selectFirstSetupWorkspace,

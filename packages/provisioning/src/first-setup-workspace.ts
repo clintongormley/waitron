@@ -27,6 +27,79 @@ export interface FirstSetupAnchor {
 export interface FirstSetupBootTarget extends FirstSetupAnchor {
   binding: WorkspaceBinding | null;
 }
+export async function inspectFirstSetupWorkspaceSelection(anchorInput: FirstSetupAnchor): Promise<{
+  inspectionId: string;
+  record: ResolutionRecord;
+  binding: WorkspaceBinding;
+  retired: FirstSetupAnchor;
+} | null> {
+  const anchor = await canonical(anchorInput);
+  try {
+    await resolveFirstSetupWorkspace(anchor);
+    return null;
+  } catch {
+    // Only retained retirement witnesses identify an interrupted operation; never scan orphan workspaces.
+  }
+  const observations: unknown[] = [];
+  const witnesses = new Map<string, Witness>();
+  const inspect = async (path: string) => {
+    const value = await read(path);
+    observations.push([path, value]);
+    if (value === null) return;
+    const witness = checkedWitness(value);
+    if (
+      witness.binding.anchorVenueDir !== anchor.venueDir ||
+      witness.binding.anchorStateDir !== anchor.stateDir
+    )
+      uncertain();
+    const existing = witnesses.get(witness.binding.resolutionId);
+    if (existing !== undefined && !isDeepStrictEqual(existing, witness)) uncertain();
+    witnesses.set(witness.binding.resolutionId, witness);
+  };
+  for (const path of new Set([
+    join(anchor.venueDir, "first-setup-retirement.json"),
+    join(anchor.venueDir, "first-setup-selection.json"),
+    join(anchor.stateDir, "first-setup-selection.json"),
+  ]))
+    await inspect(path);
+  const visited = new Set<string>();
+  for (const [id, witness] of witnesses) {
+    if (witnesses.size > 64 || visited.has(id)) uncertain();
+    visited.add(id);
+    await inspect(join(witness.binding.venueDir, "first-setup-retirement.json"));
+  }
+  if (witnesses.size === 0) uncertain();
+  const ordered = [...witnesses.values()].sort(
+    (left, right) => right.binding.selectionGeneration - left.binding.selectionGeneration,
+  );
+  const witness = ordered[0]!;
+  if (ordered[1]?.binding.selectionGeneration === witness.binding.selectionGeneration) uncertain();
+  const records = await store(anchor).read(witness.binding.resolutionId);
+  const record = records[1];
+  if (
+    record === undefined ||
+    witness.resolutionDigest !== digest(record) ||
+    witness.evidenceDigest !== record.evidenceDigest
+  )
+    uncertain();
+  const { binding, retired, predecessor } = await checkedApplied(anchor, record);
+  if (
+    !isDeepStrictEqual(binding, witness.binding) ||
+    !isDeepStrictEqual(await read(join(retired.venueDir, "first-setup-retirement.json")), witness)
+  )
+    uncertain();
+  const backlink = await read(join(binding.venueDir, "first-setup-workspace.json"));
+  observations.push(["backlink", backlink]);
+  if (backlink !== null && !isDeepStrictEqual(backlink, witness)) uncertain();
+  for (const path of new Set([
+    join(anchor.venueDir, "first-setup-selection.json"),
+    join(anchor.stateDir, "first-setup-selection.json"),
+  ])) {
+    const value = await read(path);
+    if (!isDeepStrictEqual(value, predecessor) && !isDeepStrictEqual(value, witness)) uncertain();
+  }
+  return { inspectionId: digest([observations, records]), record, binding, retired };
+}
 interface Witness {
   version: 1;
   binding: WorkspaceBinding;
@@ -166,11 +239,24 @@ async function checkedApplied(
   seen.add(record.resolutionId);
   const records = await store(anchor).read(record.resolutionId);
   if (
-    records.length !== 2 ||
+    records.length < 2 ||
+    records.length > 4 ||
     !isDeepStrictEqual(records[1], record) ||
     record.phase !== "applied" ||
     record.action !== "retire" ||
     record.nextWorkspace === null
+  )
+    uncertain();
+  if (
+    records[2] !== undefined &&
+    !isDeepStrictEqual(records[2], {
+      ...record,
+      sequence: 3,
+      previousRecordDigest: digest(record),
+      action: "select-workspace",
+      phase: "prepared",
+      recordedAt: records[2].recordedAt,
+    })
   )
     uncertain();
   const binding = record.nextWorkspace;
@@ -202,6 +288,7 @@ async function checkedChain(anchor: FirstSetupAnchor, witness: Witness, seen = n
   const records = await store(anchor).read(witness.binding.resolutionId),
     applied = records[1];
   if (
+    records.length !== 4 ||
     applied === undefined ||
     witness.resolutionDigest !== digest(applied) ||
     witness.evidenceDigest !== applied.evidenceDigest
@@ -253,11 +340,37 @@ export async function selectFirstSetupWorkspace(
       alreadySelected &&= isDeepStrictEqual(value, witness);
       if (!isDeepStrictEqual(value, predecessor) && !isDeepStrictEqual(value, witness)) uncertain();
     }
-    if (alreadySelected) {
+    const archive = store(anchor);
+    const records = await archive.read(record.resolutionId);
+    if (alreadySelected && records.length === 4) {
       await resolveFirstSetupWorkspace(anchor);
       return binding;
     }
     await originalsUnchanged(anchor, record, retired, true);
+    const {
+      resolutionId,
+      attemptId,
+      observedRevision,
+      observedOwnerGeneration,
+      database,
+      authority,
+      register,
+      nextWorkspace,
+    } = record;
+    const selecting = await archive.prepare(
+      {
+        resolutionId,
+        attemptId,
+        observedRevision,
+        observedOwnerGeneration,
+        database,
+        authority,
+        register,
+        nextWorkspace,
+        action: "select-workspace",
+      },
+      await archive.readOriginals(record.resolutionId),
+    );
     if (current === null) {
       for (const path of [binding.venueDir, binding.stateDir]) {
         await firstSetupDirectory(path, true);
@@ -268,6 +381,7 @@ export async function selectFirstSetupWorkspace(
     await writeOnce(retirement, witness);
     await writeOnce(backlink, witness);
     for (const path of selections) await writeDurableHostJson(path, witness, LIMIT);
+    await archive.apply(selecting);
     await resolveFirstSetupWorkspace(anchor);
     return binding;
   } catch {

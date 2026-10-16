@@ -48,8 +48,10 @@ If your first setup is interrupted, direct and supervised startup can serve a re
 API before ordinary database opens or staged restore/reset work. It currently offers inspection,
 original-password recovery, an isolated replacement workspace and publication-only Finish. To finish
 over HTTPS, recover ownership, retrieve the staged publication reference, confirm the current document
-and submit the unchanged publication inputs. The browser interface and ordered resolution audit remain
-tracked under A679.
+and submit the unchanged publication inputs. An interrupted workspace selection can be inspected and
+resumed over HTTPS with the original password. Retirement and selection have separate linked
+prepared/applied records. The browser interface and the ownership-repair and Finish audit records
+remain tracked under A679.
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and

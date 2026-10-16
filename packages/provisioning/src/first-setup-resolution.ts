@@ -1,7 +1,7 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, chmod, realpath, open } from "node:fs/promises";
+import { lstat, mkdir, chmod, realpath, open, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -257,7 +257,7 @@ function validateRecord(value: unknown): asserts value is ResolutionRecord {
   if (
     value.version !== 1 ||
     !integer(value.sequence) ||
-    ![1, 2].includes(value.sequence) ||
+    Number(value.sequence) > 128 ||
     !(value.previousRecordDigest === null || digest(value.previousRecordDigest)) ||
     !digest(value.evidenceDigest) ||
     !Array.isArray(value.evidenceReferences) ||
@@ -344,6 +344,7 @@ export function createFirstSetupResolutionStore(options: {
     await writeDurableHostJson(path, value, LIMIT);
   };
   const originalsAt = async (path: string) => {
+    await firstSetupDirectory(path);
     const manifest = await readDurableHostJson(join(path, "manifest.json"), LIMIT);
     if (
       !exact(manifest, ["version", "originals"]) ||
@@ -397,50 +398,62 @@ export function createFirstSetupResolutionStore(options: {
     if (!isDeepStrictEqual(manifest, checked)) invalid();
     return { originals, manifest: checked };
   };
+  const filename = (sequence: number) => `${String(sequence).padStart(6, "0")}.json`;
+  const evidenceFolder = (path: string, sequence: number) =>
+    sequence === 1 ? path : join(path, `step-${String(sequence).padStart(6, "0")}`);
   const read = async (id: string): Promise<ResolutionRecord[]> => {
     const path = await folder(id);
-    const first = await readDurableHostJson(join(path, "000001.json"), LIMIT);
-    const second = await readDurableHostJson(join(path, "000002.json"), LIMIT);
-    if (first === null) {
+    const names = (await readdir(path)).filter((name) => /^\d+\.json$/.test(name)).sort();
+    if (names.length > 128) invalid();
+    const records: ResolutionRecord[] = [];
+    for (const [index, name] of names.entries()) {
+      const sequence = index + 1;
+      if (name !== filename(sequence)) invalid();
+      const record = await readDurableHostJson(join(path, name), LIMIT);
+      validateRecord(record);
+      const previous = records[index - 1];
       if (
-        second !== null ||
-        (await readDurableHostJson(join(path, "manifest.json"), LIMIT)) !== null
+        record.resolutionId !== id ||
+        record.sequence !== sequence ||
+        record.previousRecordDigest !==
+          (previous === undefined ? null : hash(JSON.stringify(previous)))
       )
         invalid();
-      return [];
-    }
-    validateRecord(first);
-    const { manifest } = await originalsAt(path);
-    if (
-      first.resolutionId !== id ||
-      first.sequence !== 1 ||
-      first.phase !== "prepared" ||
-      first.previousRecordDigest !== null ||
-      first.evidenceDigest !== hash(JSON.stringify(manifest)) ||
-      !isDeepStrictEqual(
-        first.evidenceReferences,
-        manifest.originals.map((original) => original.name),
+      if (sequence % 2 === 1) {
+        const { manifest } = await originalsAt(evidenceFolder(path, sequence));
+        if (
+          record.phase !== "prepared" ||
+          record.evidenceDigest !== hash(JSON.stringify(manifest)) ||
+          !isDeepStrictEqual(
+            record.evidenceReferences,
+            manifest.originals.map((original) => original.name),
+          )
+        )
+          invalid();
+      } else if (
+        !isDeepStrictEqual(record, {
+          ...previous,
+          sequence,
+          previousRecordDigest: hash(JSON.stringify(previous)),
+          phase: "applied",
+          recordedAt: record.recordedAt,
+        })
       )
-    )
-      invalid();
-    if (second === null) return [first];
-    validateRecord(second);
+        invalid();
+      records.push(record);
+    }
     if (
-      !isDeepStrictEqual(second, {
-        ...first,
-        sequence: 2,
-        previousRecordDigest: hash(JSON.stringify(first)),
-        phase: "applied",
-        recordedAt: second.recordedAt,
-      })
+      records.length === 0 &&
+      (await readDurableHostJson(join(path, "manifest.json"), LIMIT)) !== null
     )
       invalid();
-    return [first, second];
+    return records;
   };
   return {
     read,
-    async readOriginals(id: string) {
-      return (await originalsAt(await folder(id))).originals;
+    async readOriginals(id: string, sequence = 1) {
+      if (!integer(sequence) || sequence > 127 || sequence % 2 !== 1) invalid();
+      return (await originalsAt(evidenceFolder(await folder(id), sequence))).originals;
     },
     prepare(input: unknown, originals: readonly FirstSetupOriginal[]): Promise<ResolutionRecord> {
       return options.coordinator.run(async () => {
@@ -455,34 +468,40 @@ export function createFirstSetupResolutionStore(options: {
         )
           invalid();
         const existing = await readDurableHostJson(join(path, "000001.json"), LIMIT);
-        if (existing !== null) {
-          const records = await read(input.resolutionId),
-            prepared = records[0]!;
+        const records = existing === null ? [] : await read(input.resolutionId);
+        const last = records[records.length - 1];
+        if (last !== undefined) {
+          const prepared =
+            records[last.phase === "prepared" ? records.length - 1 : records.length - 2]!;
           if (
-            !isDeepStrictEqual(
+            isDeepStrictEqual(
               Object.fromEntries(
                 INPUT_KEYS.map((key) => [key, prepared[key as keyof ResolutionRecord]]),
               ),
               input,
-            ) ||
-            prepared.evidenceDigest !== hash(JSON.stringify(packed.manifest))
+            ) &&
+            prepared.evidenceDigest === hash(JSON.stringify(packed.manifest))
           )
-            conflict();
-          return prepared;
+            return prepared;
+          if (last.phase === "prepared") conflict();
         }
-        for (const [name, bytes] of packed.chunks) await immutable(join(path, name), bytes);
-        await immutable(join(path, "manifest.json"), packed.manifest);
+        const sequence = records.length + 1;
+        if (sequence > 127) invalid();
+        const evidence = evidenceFolder(path, sequence);
+        await firstSetupDirectory(evidence, true);
+        for (const [name, bytes] of packed.chunks) await immutable(join(evidence, name), bytes);
+        await immutable(join(evidence, "manifest.json"), packed.manifest);
         const record: ResolutionRecord = {
           ...structuredClone(input),
           version: 1,
-          sequence: 1,
-          previousRecordDigest: null,
+          sequence,
+          previousRecordDigest: last === undefined ? null : hash(JSON.stringify(last)),
           evidenceDigest: hash(JSON.stringify(packed.manifest)),
           evidenceReferences: packed.manifest.originals.map((original) => original.name),
           phase: "prepared",
           recordedAt: new Date().toISOString(),
         };
-        await immutable(join(path, "000001.json"), record);
+        await immutable(join(path, filename(sequence)), record);
         return record;
       });
     },
@@ -490,16 +509,24 @@ export function createFirstSetupResolutionStore(options: {
       return options.coordinator.run(async () => {
         validateRecord(prepared);
         const records = await read(prepared.resolutionId);
-        if (!isDeepStrictEqual(records[0], prepared)) conflict();
-        if (records.length === 2) return records[1]!;
+        if (
+          prepared.phase !== "prepared" ||
+          !isDeepStrictEqual(records[prepared.sequence - 1], prepared)
+        )
+          conflict();
+        const existing = records[prepared.sequence];
+        if (existing !== undefined) return existing;
         const record: ResolutionRecord = {
           ...prepared,
-          sequence: 2,
+          sequence: prepared.sequence + 1,
           previousRecordDigest: hash(JSON.stringify(prepared)),
           phase: "applied",
           recordedAt: new Date().toISOString(),
         };
-        await immutable(join(await folder(prepared.resolutionId), "000002.json"), record);
+        await immutable(
+          join(await folder(prepared.resolutionId), filename(record.sequence)),
+          record,
+        );
         return record;
       });
     },

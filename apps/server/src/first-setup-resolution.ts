@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import {
   createFirstSetupCoordinator,
   createFirstSetupResolutionStore,
+  createFirstSetupStore,
+  inspectFirstSetupWorkspaceSelection,
   assertFirstSetupBootTarget,
   firstSetupAnchorFor,
   resolveFirstSetupWorkspace,
@@ -14,6 +16,7 @@ import {
 } from "@waitron/provisioning";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
+import { lockVenueDatabase } from "@waitron/db";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -53,7 +56,73 @@ export function createFirstSetupResolutionActions(
   },
 ) {
   const { host } = options;
+  const inspectSelection = async () => {
+    const inspected = await inspectFirstSetupWorkspaceSelection(options);
+    if (inspected === null) return null;
+    const retained = await createFirstSetupStore({
+      ...inspected.retired,
+      coordinator: createFirstSetupCoordinator(),
+    }).readForRepair();
+    if (
+      retained === null ||
+      retained.state.frozen.attemptId !== inspected.record.attemptId ||
+      retained.state.revision !== inspected.record.observedRevision ||
+      retained.state.ownerGeneration !== inspected.record.observedOwnerGeneration
+    )
+      conflict();
+    return { ...inspected, state: retained.state };
+  };
   return {
+    async inspectWorkspaceSelection() {
+      const inspected = await inspectSelection();
+      if (inspected === null) return null;
+      return {
+        inspectionId: inspected.inspectionId,
+        revision: inspected.state.revision,
+        ownerGeneration: inspected.state.ownerGeneration,
+        workspaceId: inspected.binding.workspaceId,
+        selectionGeneration: inspected.binding.selectionGeneration,
+      };
+    },
+    async resumeWorkspaceSelection(request: {
+      inspectionId: string;
+      revision: number;
+      ownerGeneration: number;
+      workspaceId: string;
+      selectionGeneration: number;
+      password: string;
+    }): Promise<WorkspaceBinding> {
+      const inspected = await inspectSelection();
+      if (inspected === null) conflict();
+      if (
+        request.inspectionId !== inspected.inspectionId ||
+        request.revision !== inspected.state.revision ||
+        request.ownerGeneration !== inspected.state.ownerGeneration ||
+        request.workspaceId !== inspected.binding.workspaceId ||
+        request.selectionGeneration !== inspected.binding.selectionGeneration
+      )
+        conflict();
+      return host.owner.withResolutionPassword(inspected.state, request.password, async () => {
+        const anchor = {
+          venueDir: inspected.binding.anchorVenueDir,
+          stateDir: inspected.binding.anchorStateDir,
+        };
+        const hold = await lockVenueDatabase(anchor.venueDir);
+        let target: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
+        try {
+          if (inspected.retired.venueDir !== anchor.venueDir)
+            target = await lockVenueDatabase(inspected.retired.venueDir);
+          const current = await inspectSelection();
+          if (current === null || current.inspectionId !== inspected.inspectionId) conflict();
+          return await host.coordinator.run(() =>
+            selectFirstSetupWorkspace(anchor, current.record),
+          );
+        } finally {
+          target?.release();
+          hold.release();
+        }
+      });
+    },
     startAgainFirstSetup(request: StartAgainFirstSetupRequest): Promise<WorkspaceBinding> {
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {

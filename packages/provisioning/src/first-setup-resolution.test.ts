@@ -186,3 +186,106 @@ it.each(["original-0-0.json", "manifest.json", "000001.json", "000002.json"] as 
     }
   },
 );
+
+it("links separate actions and retains each action's original evidence across restart", async () => {
+  const f = await fixture();
+  const prepared = await f.store.prepare(f.input, f.originals);
+  const retired = await f.store.apply(prepared);
+  const selection = { ...f.input, action: "select-workspace" as const };
+  const observed = [{ name: "selection-check", bytes: Buffer.from("fresh observation") }];
+  const selecting = await f.store.prepare(selection, observed);
+  expect(selecting).toMatchObject({
+    sequence: 3,
+    action: "select-workspace",
+    phase: "prepared",
+    previousRecordDigest: createHash("sha256").update(JSON.stringify(retired)).digest("hex"),
+  });
+  const selected = await f.store.apply(selecting);
+  const restarted = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: resolution.createFirstSetupCoordinator(),
+  });
+  expect(await restarted.read(f.input.resolutionId)).toEqual([
+    prepared,
+    retired,
+    selecting,
+    selected,
+  ]);
+  expect(await restarted.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+  expect(await restarted.readOriginals(f.input.resolutionId, 3)).toEqual(observed);
+  expect(await restarted.apply(prepared)).toEqual(retired);
+  expect(await restarted.prepare(selection, observed)).toEqual(selecting);
+  expect(await restarted.apply(selecting)).toEqual(selected);
+  expect(selected).toMatchObject({ sequence: 4, phase: "applied" });
+});
+
+it("does not begin a different action while the preceding action remains prepared", async () => {
+  const f = await fixture();
+  await f.store.prepare(f.input, f.originals);
+  await expect(
+    f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect((await f.store.read(f.input.resolutionId)).map((record) => record.phase)).toEqual([
+    "prepared",
+  ]);
+});
+
+it.each(["missing predecessor", "wrong predecessor", "changed original"])(
+  "refuses a later action's %s instead of returning its applied result",
+  async (fault) => {
+    const f = await fixture();
+    await f.store.apply(await f.store.prepare(f.input, f.originals));
+    const next = await f.store.prepare({ ...f.input, action: "select-workspace" }, f.originals);
+    await f.store.apply(next);
+    const folder = join(f.roots.stateDir, "first-setup-resolutions", f.input.resolutionId);
+    if (fault === "missing predecessor") await rm(join(folder, "000002.json"));
+    else if (fault === "wrong predecessor") {
+      const value = JSON.parse(await readFile(join(folder, "000003.json"), "utf8"));
+      value.previousRecordDigest = "a".repeat(64);
+      await writeFile(join(folder, "000003.json"), JSON.stringify(value));
+    } else {
+      await writeFile(join(folder, "step-000003", "original-0-0.json"), '{"bytes":"YWx0ZXJlZA=="}');
+    }
+    await expect(f.store.read(f.input.resolutionId)).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+    await expect(f.store.apply(next)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
+
+it.each(["000003.json", "000004.json"])(
+  "resumes an interrupted later action at %s without duplicating earlier actions",
+  async (point) => {
+    for (const after of [false, true]) {
+      const f = await fixture();
+      const first = await f.store.prepare(f.input, f.originals);
+      const applied = await f.store.apply(first);
+      const input = { ...f.input, action: "select-workspace" as const };
+      const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+        .writeDurableHostJson;
+      const before = point === "000004.json" ? await f.store.prepare(input, f.originals) : null;
+      let failed = false;
+      vi.mocked(durable.writeDurableHostJson).mockImplementation(async (path, ...args) => {
+        if (after) await actual(path, ...args);
+        if (path.endsWith(point) && !failed) {
+          failed = true;
+          throw new Error("later action interruption");
+        }
+        if (!after) await actual(path, ...args);
+      });
+      await expect(
+        before === null ? f.store.prepare(input, f.originals) : f.store.apply(before),
+      ).rejects.toThrow("later action interruption");
+      expect(failed).toBe(true);
+      vi.mocked(durable.writeDurableHostJson).mockImplementation(actual);
+      const prepared = await f.store.prepare(input, f.originals);
+      const selected = await f.store.apply(prepared);
+      expect(await f.store.read(f.input.resolutionId)).toEqual([
+        first,
+        applied,
+        prepared,
+        selected,
+      ]);
+    }
+  },
+);

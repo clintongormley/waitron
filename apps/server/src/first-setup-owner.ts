@@ -301,6 +301,33 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   };
   return {
     authorize,
+    withResolutionPassword<T>(
+      state: FirstSetupState,
+      password: string,
+      body: () => Promise<T>,
+    ): Promise<T> {
+      return inTurn(throttle, "resume", async () => {
+        const finish = passwordThrottle.begin("first-setup");
+        try {
+          if (
+            typeof password !== "string" ||
+            Buffer.byteLength(password) > 1024 ||
+            !(await verifyPassword(password, state.ownerVerifier))
+          )
+            refuse();
+          const result = await body();
+          finish("success");
+          return result;
+        } catch (error) {
+          finish(
+            error instanceof AppError && error.code === "setup.owner_required"
+              ? "invalid"
+              : "error",
+          );
+          throw error;
+        }
+      });
+    },
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
       const state = await store.read();
       if (state !== null) await assertFirstSetupBootTarget(state);

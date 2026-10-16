@@ -136,6 +136,103 @@ it("ordinary roots with no resolution retain their normal target without creatin
   });
   await provision.assertFirstSetupBootTarget(f.anchor);
 });
+it("records selection separately from retirement and replays without adding another action", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const records = await f.store.read(f.binding.resolutionId);
+  expect(records.map(({ sequence, action, phase }) => ({ sequence, action, phase }))).toEqual([
+    { sequence: 1, action: "retire", phase: "prepared" },
+    { sequence: 2, action: "retire", phase: "applied" },
+    { sequence: 3, action: "select-workspace", phase: "prepared" },
+    { sequence: 4, action: "select-workspace", phase: "applied" },
+  ]);
+  expect(records[2]?.nextWorkspace).toEqual(f.binding);
+  expect(await f.store.readOriginals(f.binding.resolutionId, 3)).toEqual(
+    await f.store.readOriginals(f.binding.resolutionId),
+  );
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  expect(await f.store.read(f.binding.resolutionId)).toEqual(records);
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+});
+
+it.each(["first-setup-workspace.json", "first-setup-selection.json", "000004.json"])(
+  "rediscovers the exact pending selection after interruption at %s without selecting it",
+  async (point) => {
+    const f = await fixture();
+    const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+      .writeDurableHostJson;
+    let failed = false;
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(async (path, ...args) => {
+      if (path.endsWith(point) && !failed) {
+        failed = true;
+        throw new Error("pending selection interruption");
+      }
+      await actual(path, ...args);
+    });
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(failed).toBe(true);
+    vi.mocked(durable.writeDurableHostJson).mockImplementation(actual);
+    const inspected = await provision.inspectFirstSetupWorkspaceSelection(f.anchor);
+    expect(inspected).toMatchObject({
+      inspectionId: expect.stringMatching(/^[a-f0-9]{64}$/),
+      record: f.applied,
+      retired: f.anchor,
+      binding: f.binding,
+    });
+    expect(await provision.inspectFirstSetupWorkspaceSelection(f.anchor)).toEqual(inspected);
+    await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    await provision.selectFirstSetupWorkspace(f.anchor, inspected!.record);
+    expect(await provision.inspectFirstSetupWorkspaceSelection(f.anchor)).toBeNull();
+    expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+  },
+);
+
+it.each(["prepared selection", "applied selection"])(
+  "keeps boot closed after interruption writing the %s until the selection operation resumes",
+  async (point) => {
+    for (const after of [false, true]) {
+      const f = await fixture();
+      const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+        .writeDurableHostJson;
+      const filename = point === "prepared selection" ? "000003.json" : "000004.json";
+      let failed = false;
+      vi.mocked(durable.writeDurableHostJson).mockImplementation(async (path, ...args) => {
+        if (after) await actual(path, ...args);
+        if (path.endsWith(filename) && !failed) {
+          failed = true;
+          throw new Error("selection audit interruption");
+        }
+        if (!after) await actual(path, ...args);
+      });
+      await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
+        code: "setup.attempt_uncertain",
+      });
+      expect(failed).toBe(true);
+      vi.mocked(durable.writeDurableHostJson).mockImplementation(actual);
+      if (point === "applied selection" && after) {
+        expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+      } else if (point === "prepared selection") {
+        expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toBeNull();
+      } else {
+        await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+          code: "setup.attempt_uncertain",
+        });
+      }
+      await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+      expect((await f.store.read(f.binding.resolutionId)).map((record) => record.phase)).toEqual([
+        "prepared",
+        "applied",
+        "prepared",
+        "applied",
+      ]);
+      expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+    }
+  },
+);
 it.each(["venue-witness", "state-witness", "backlink", "applied-record"] as const)(
   "losing %s refuses the selected target and never falls back",
   async (which) => {
@@ -356,6 +453,38 @@ async function successor(
   );
   return { binding, applied: await f.store.apply(prepared) };
 }
+it("discovers a later interrupted selection through its predecessor without reviving that retired workspace", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const next = await successor(f, f.binding);
+  const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+    .writeDurableHostJson;
+  let failed = false;
+  vi.mocked(durable.writeDurableHostJson).mockImplementation(async (path, ...args) => {
+    if (path === join(next.binding.venueDir, "first-setup-workspace.json") && !failed) {
+      failed = true;
+      throw new Error("second selection interruption");
+    }
+    await actual(path, ...args);
+  });
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(failed).toBe(true);
+  vi.mocked(durable.writeDurableHostJson).mockImplementation(actual);
+  const pending = await provision.inspectFirstSetupWorkspaceSelection(f.anchor);
+  expect(pending).toMatchObject({
+    record: next.applied,
+    retired: f.binding,
+    binding: next.binding,
+  });
+  await expect(provision.assertFirstSetupBootTarget(f.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await provision.selectFirstSetupWorkspace(f.anchor, pending!.record);
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(next.binding);
+  expect(await provision.inspectFirstSetupWorkspaceSelection(f.anchor)).toBeNull();
+});
 it("repeated retirement keeps the original discovery anchor and refuses every retired generation", async () => {
   const f = await fixture();
   await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
