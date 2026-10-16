@@ -154,6 +154,31 @@ describe("upgrading a venue one migration at a time", () => {
     );
   });
 
+  it("counts a listed one-row table as reached even when it already has two rows", () => {
+    const root = mkdtempSync(join(SCRATCH_PARENT, "wt-upgrade-one-row-"));
+    scratch.push(root);
+    const connection = openRaw(root);
+    try {
+      connection.exec(`
+        create table sale_settlements (id integer primary key);
+        insert into sale_settlements values (1), (2);
+      `);
+    } finally {
+      connection.close();
+    }
+    const wasReached = reached.oneRow.has("sale_settlements");
+    reached.oneRow.delete("sale_settlements");
+    try {
+      expect(carryRows(root, "one-row reach probe", new Map(), new Set())).toEqual(
+        new Map([["sale_settlements", 2]]),
+      );
+      expect(reached.oneRow.has("sale_settlements")).toBe(true);
+    } finally {
+      if (!wasReached) reached.oneRow.delete("sale_settlements");
+      else reached.oneRow.add("sale_settlements");
+    }
+  });
+
   it(
     "applies every shipped migration on top of the change feed the step before installed",
     async () => {

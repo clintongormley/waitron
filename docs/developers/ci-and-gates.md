@@ -1860,13 +1860,40 @@ Measured 2026-10-16 on macOS, Node v26.11.1 and Vitest 4.1.11, from main
 The regression case in `scripts/migration-upgrade.test.ts` initially failed with two schema reads
 where one was required. It now also checks the preserved parent rows and the child's second valid
 row. A separate case removes one of three rows and requires a row-loss refusal even though two
-rows remain. Existing migration, reset, trigger and row-preservation assertions are unchanged.
+rows remain. A third checks `ONE_ROW` reachability when two rows are already present, restoring its
+tracking state afterwards. Existing migration, reset, trigger and row-preservation assertions are
+unchanged.
 
-The older overrun reports show accumulated short phases, not one stalled migration. These probes
-identify and reduce repeated work, but do not establish which host scheduling or storage event
-caused the earlier 165,500/171,000 ms overruns. Their logs and the probes above remain under
-`~/waitron-campaign-f/receipts/a736/`; the original reports remain in
-`receipts/a10-2-ci-fix-push.log` and `receipts/a585-6/push2.log` in that lane.
+The retained failure reports were re-read on 2026-10-16. The table sums only the first contiguous
+`Phases finished before it:` block in each log; GitHub repeats part of the CI report in an error
+annotation. Summing both copies gives 168,686 ms for that CI failure, rather than the first
+report's 160,828 ms.
+
+| Failure | Elapsed / deadline | Finished phases | Sum | Longest finished phase |
+| --- | ---: | ---: | ---: | ---: |
+| CI run 38607502363, job 116002045326 (2026-10-14) | 166,059 / 165,500 ms | 991 | 160,828 ms | 1,983 ms |
+| A10-2 local push (2026-10-14) | 165,546 / 165,500 ms | 1,346 | 162,090 ms | 1,350 ms |
+| A585-6 local push (2026-10-15) | 171,087 / 171,000 ms | 1,452 | 167,826 ms | 2,114 ms |
+
+The CI log was retrieved with `gh run view 38607502363 --job 116002045326 --log` and retained as
+`receipts/a736/historical-ci-root.log` in Lane F. The local reports are
+`receipts/a10-2-ci-fix-push.log` and `receipts/a585-6/push2.log`; their current first-block sums
+above replace the old backlog's figures. A parser retained at
+`receipts/a736/reparse-phase-reports.py` prints the block's count, sum and maximum.
+
+Other retained context: A10-2's report reached `venue-service/0051_wakeful_loa` 386 ms into its
+migrate phase. Its process snapshot and isolated probe are
+`receipts/a10-2-upgrade-ps-before.txt` and `receipts/a10-2-upgrade-deadline-probe.log`; the latter
+passed in 62,597 ms. A585-6's failure reached `core/0157_mature_sir_ram` 419 ms into migration.
+`receipts/a585-6/main-migration-upgrade.log` records an isolated walk passing in 157,630 ms, with
+host load 12.09 before and 13.22 after. The previous backlog recorded load 22.07 after the failed
+hook; that value has not been rechecked here. Neither isolated pass establishes the cause of the
+failure it followed.
+
+These probes identify and reduce repeated work. The reports' longest finished phases and their
+accumulated times do not identify which host scheduling or storage event caused the earlier
+overruns. The new samples and review experiments remain under
+`~/waitron-campaign-f/receipts/a736/`; the developer backlog retains this unresolved variation.
 
 ### The upgrade test keeps its database in memory on Linux
 
