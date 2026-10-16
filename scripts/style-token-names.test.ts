@@ -67,11 +67,8 @@ function isolatedGitEnv(): NodeJS.ProcessEnv {
  * list from growing is a job for review.
  */
 const FALLBACK_READS: ReadonlyArray<{ readonly file: string; readonly name: string }> = [
-  { file: "apps/till/src/screens/till-expo-screen.ts", name: "--wt-color-warning-text" },
-  { file: "apps/till/src/widgets/basket.ts", name: "--wt-color-warning-text" },
   { file: "apps/till/src/widgets/diet-badges.ts", name: "--wt-color-success-text" },
   { file: "apps/till/src/widgets/diet-badges.ts", name: "--wt-color-warning-text" },
-  { file: "apps/till/src/widgets/station-queue.ts", name: "--wt-color-warning-text" },
 ];
 
 interface TokenRead {
