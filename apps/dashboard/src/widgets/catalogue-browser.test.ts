@@ -4856,6 +4856,9 @@ it.each(
     const host = el.parentElement!;
     host.setAttribute("data-theme", theme);
     host.style.background = "var(--wt-color-bg)";
+    const primary = document.createElement("span");
+    primary.style.color = "var(--wt-color-primary-text)";
+    host.append(primary);
     const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
     const table = await tableOf(el);
     const filters = table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
@@ -4872,6 +4875,7 @@ it.each(
       await page.screenshot({
         path: `__screenshots__/a728/products-${width}-${locale}-${theme}-${name}.png`,
       });
+      expect.soft(getComputedStyle(button).color).toBe(getComputedStyle(primary).color);
       expect.soft(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
       if (name === "filters") await userEvent.keyboard("{Escape}");
       else await userEvent.click(button);

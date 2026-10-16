@@ -11510,6 +11510,9 @@ it.each(
     const el = await mountLunch();
     el.parentElement!.setAttribute("data-theme", theme);
     el.parentElement!.style.background = "var(--wt-color-bg)";
+    const primary = document.createElement("span");
+    primary.style.color = "var(--wt-color-primary-text)";
+    el.parentElement!.append(primary);
     const button = modeToggle(el);
     const icon = button.querySelector("wt-icon")!;
     await icon.updateComplete;
@@ -11520,6 +11523,7 @@ it.each(
     await page.screenshot({
       path: `__screenshots__/a728/structure-${width}-${locale}-${theme}.png`,
     });
+    expect(getComputedStyle(button).color).toBe(getComputedStyle(primary).color);
     expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
   },
 );
