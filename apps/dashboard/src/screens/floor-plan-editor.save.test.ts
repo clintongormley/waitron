@@ -328,9 +328,7 @@ it("a first save's re-read gives a new table its live table", async () => {
   // The server's own plan, live table ids included, is now the saved state.
   await fromCanvas(el, "floor-plan-change", { draft: draftFromPlan(after) });
   expectSave(el, "quiet");
-  expect(el.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
-  );
+  expect(el.shadowRoot!.querySelector("[data-note]")).toBeNull();
 });
 
 it("a label sent with spaces is saved trimmed, so trimming it by hand is no change", async () => {

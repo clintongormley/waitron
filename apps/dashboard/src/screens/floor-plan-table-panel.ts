@@ -11,7 +11,6 @@ import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import { wholeWithin } from "../widgets/form-fields.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { PlanPlacement } from "../api/client.js";
 import {
   MAX_SEATS,
   freeTables,
@@ -29,11 +28,6 @@ import type {
   FloorPlanPanelError,
   FloorPlanTypedField,
 } from "./floor-plan-editor.js";
-
-const SHAPES = [
-  { shape: "rect", icon: "table-rect", label: () => t("floor_plan_editor.rectangle") },
-  { shape: "round", icon: "table-round", label: () => t("floor_plan_editor.round") },
-] as const;
 
 function value(event: CustomEvent<{ value: string }>): string {
   event.stopPropagation();
@@ -58,23 +52,52 @@ export class FloorPlanTablePanel extends LitElement {
         gap: var(--wt-space-3);
       }
       .pair {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: minmax(var(--wt-stepper-field-width), 0.9fr) minmax(0, 1fr) minmax(
+            0,
+            1.1fr
+          );
         align-items: flex-start;
-        gap: var(--wt-space-3);
+        gap: var(--wt-space-2);
       }
-      .shape {
+      .shape,
+      .moveable {
+        position: relative;
         display: flex;
         flex-direction: column;
-        gap: var(--wt-space-1);
+        min-height: var(--wt-field-height);
+        background: var(--wt-color-field-fill);
+        border-start-start-radius: var(--wt-radius-md);
+        border-start-end-radius: var(--wt-radius-md);
+        box-shadow: inset 0 calc(-1 * var(--wt-field-line-width)) 0 var(--wt-color-field-line);
+      }
+      .moveable wt-switch {
+        align-self: center;
+        margin-block-start: var(--wt-space-3);
       }
       .caption {
+        position: absolute;
+        inset-inline: var(--wt-space-2);
+        top: var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+        pointer-events: none;
       }
       .shape-buttons {
-        display: flex;
-        gap: var(--wt-space-2);
+        display: grid;
+      }
+      .shape-buttons button {
+        min-height: var(--wt-field-height);
+        padding-block: calc(var(--wt-space-3) + var(--wt-font-size-sm)) var(--wt-space-2);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      .pair wt-number-stepper {
+        min-width: 0;
+      }
+      .pair wt-number-stepper::part(field) {
+        min-width: 0;
       }
       .field-error {
         margin: 0;
@@ -144,32 +167,22 @@ export class FloorPlanTablePanel extends LitElement {
     this.#patch({ seats }, `seats:${this.tableKey}`);
   }
 
-  #shapeTo(table: DraftTable, shape: PlanPlacement["shape"]): void {
-    if (table.placement!.shape === shape) return;
-    this.#patch({ placement: { ...table.placement!, shape } });
-  }
-
   #shape(table: DraftTable) {
     const placement = table.placement!;
     const error = this.#error("shape");
     return html`<div class="shape">
       <span id="shape-caption" class="caption">${t("floor_plan_editor.shape")}</span>
-      <!-- No tooltip: its Escape would also start leaving the editor; the caption names the pair. -->
       <div role="group" aria-labelledby="shape-caption" data-field="shape" class="shape-buttons">
-        ${SHAPES.map(
-          ({ shape, icon, label }) =>
-            html`<button
-              type="button"
-              class="icon-button"
-              data-shape=${shape}
-              aria-label=${label()}
-              aria-pressed=${String(placement.shape === shape)}
-              aria-describedby=${error === "" ? nothing : "shape-error"}
-              @click=${() => this.#shapeTo(table, shape)}
-            >
-              <wt-icon name=${icon}></wt-icon>
-            </button>`,
-        )}
+        <button
+          type="button"
+          class="icon-button"
+          data-shape=${placement.shape}
+          aria-label=${t(placement.shape === "rect" ? "floor_plan_editor.rectangle" : "floor_plan_editor.round")}
+          aria-describedby=${error === "" ? nothing : "shape-error"}
+          @click=${() => this.#patch({ placement: { ...placement, shape: placement.shape === "rect" ? "round" : "rect" } })}
+        >
+          <wt-icon name=${placement.shape === "rect" ? "table-rect" : "table-round"}></wt-icon>
+        </button>
       </div>
       ${error === "" ? nothing : html`<p id="shape-error" class="field-error" data-error="shape">${error}</p>`}
     </div>`;
@@ -231,18 +244,22 @@ export class FloorPlanTablePanel extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#seats(table, value(e))}
         ></wt-number-stepper>
         ${table.placement === null ? nothing : this.#shape(table)}
+        <div class="moveable">
+          <span class="caption">${t("floor_plan_editor.moveable")}</span>
+          <wt-switch
+            name="moveable"
+            hide-label
+            label=${t("floor_plan_editor.moveable")}
+            .checked=${!table.fixed}
+            .description=${fixedError}
+            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+              e.stopPropagation();
+              this.#patch({ fixed: !e.detail.checked });
+            }}
+          ></wt-switch>
+        </div>
       </div>
       ${joined ? this.#madeOf(table) : nothing}
-      <wt-switch
-        name="moveable"
-        label=${t("floor_plan_editor.moveable")}
-        .checked=${!table.fixed}
-        .description=${fixedError}
-        @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-          e.stopPropagation();
-          this.#patch({ fixed: !e.detail.checked });
-        }}
-      ></wt-switch>
       ${
         fixedError === ""
           ? nothing

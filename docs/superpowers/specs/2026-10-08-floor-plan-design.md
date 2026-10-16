@@ -77,6 +77,11 @@ the details one tap away.
 
 ## 4. The saved-plan editor (dashboard)
 
+> 2026-10-16: A671 replaces this section's side-panel arrangement, placement click targets and
+> new joined-table placement. See the current [editor contract](../../developers/design-system.md#departments-and-zones)
+> and the [owner's decisions](../../backlog/till.md#a671-the-floor-plan-editors-side-panel-less-text-nothing-jumps).
+
+
 > Owner override, 2026-10-11 (A502): the selected table's form is Name; Seats beside Shape; and a
 > Moveable switch, which replaces Fixed in place here and in Add tables. Width, height and turn are
 > set on the plan, and Remove from plan and Delete leave the panel; its joins stay until A503. See
