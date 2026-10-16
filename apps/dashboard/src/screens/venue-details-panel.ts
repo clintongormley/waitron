@@ -66,8 +66,14 @@ export class VenueDetailsPanel extends LitElement {
     settingsCardStyles,
     css`
       :host {
-        display: block;
+        display: grid;
+        gap: var(--wt-space-5);
         min-width: 0;
+      }
+      /* Its dialog opens in the top layer; out of the grid's flow it adds no second gap between cards. */
+      dashboard-legal-name-dialog {
+        display: block;
+        position: absolute;
       }
       form {
         display: grid;

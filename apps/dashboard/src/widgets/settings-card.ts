@@ -7,7 +7,7 @@ export const settingsCardStyles = css`
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-lg);
     padding: var(--wt-space-5);
-    margin: 0 0 var(--wt-space-4);
+    margin: 0;
     min-width: 0;
   }
   .settings-card[data-editing] {

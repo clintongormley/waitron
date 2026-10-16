@@ -979,6 +979,25 @@ it("the hosted Defaults card protects sidebar navigation through Keep and Discar
   expect(unload.defaultPrevented).toBe(false);
 });
 
+it("the Venue details tab's four cards are spaced evenly", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getVenueDefaults: async () => defaultsModel,
+  });
+  const panel = await readyDefaults(app);
+  const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  const day = details.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
+  await expect.poll(() => day.shadowRoot?.querySelector(".settings-card")).toBeTruthy();
+  const cards = [
+    ...details.shadowRoot!.querySelectorAll(".settings-card"),
+    day.shadowRoot!.querySelector(".settings-card")!,
+    panel.shadowRoot!.querySelector(".settings-card")!,
+  ].map((card) => card.getBoundingClientRect());
+  expect(cards).toHaveLength(4);
+  const gaps = cards.slice(1).map((card, i) => Math.round(card.top - cards[i]!.bottom));
+  expect(gaps[0]).toBeGreaterThan(0);
+  expect(gaps).toEqual([gaps[0], gaps[0], gaps[0]]);
+});
+
 for (const locale of ["en-GB", "es-ES"]) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
