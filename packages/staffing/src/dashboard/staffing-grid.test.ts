@@ -8,6 +8,14 @@ import type { StaffRole } from "../staffing-types.js";
 import type { StaffingChange, StaffingGrid } from "./staffing-grid.js";
 import "./staffing-grid.js";
 
+const guideIdentity = {
+  periodId: "lunch",
+  periodName: "Lunch",
+  periodColour: "blue" as const,
+  departmentId: "dining",
+  departmentName: "Dining room",
+};
+
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   vi.restoreAllMocks();
@@ -656,8 +664,15 @@ test("guides are drawn faintly behind the blocks, inert, at their times", async 
         [
           "mon",
           [
-            { startsAt: "13:00", endsAt: "16:00" },
-            { startsAt: "20:00", endsAt: "00:00" },
+            { ...guideIdentity, startsAt: "13:00", endsAt: "16:00" },
+            {
+              ...guideIdentity,
+              periodId: "dinner",
+              periodName: "Dinner",
+              periodColour: "green",
+              startsAt: "20:00",
+              endsAt: "00:00",
+            },
           ],
         ],
       ]),

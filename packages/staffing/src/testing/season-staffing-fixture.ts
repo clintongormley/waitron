@@ -1,7 +1,12 @@
 import { vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
-import type { SeasonStaffing, SeasonStaffingEdit, StaffRole } from "../staffing-types.js";
+import type {
+  SeasonStaffing,
+  SeasonStaffingEdit,
+  StaffRole,
+  StaffingGuideRange,
+} from "../staffing-types.js";
 import { StaffingApi } from "../dashboard/client.js";
 import { bar, kitchen, restaurant } from "./staffing-month-fixture.js";
 
@@ -22,6 +27,25 @@ export const sous: StaffingBlock = {
   endsAt: "00:00",
 };
 
+export const LUNCH_GUIDE: StaffingGuideRange = {
+  periodId: "period-lunch",
+  periodName: "Lunch",
+  periodColour: "blue",
+  departmentId: "dep-restaurant",
+  departmentName: "Restaurant",
+  startsAt: "12:00",
+  endsAt: "16:00",
+};
+export const BAR_GUIDE: StaffingGuideRange = {
+  periodId: "period-midday",
+  periodName: "Midday",
+  periodColour: "green",
+  departmentId: "dep-bar",
+  departmentName: "Bar",
+  startsAt: "13:00",
+  endsAt: "18:00",
+};
+
 /** Winter: the Restaurant painted on Tuesdays, the Kitchen on Fridays, the Bar not at all. */
 export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
   const winter = seasonId === "winter";
@@ -38,9 +62,16 @@ export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
       { area: kitchen, name: "Kitchen", weekdays: winter ? { 5: [{ ...sous }] } : {} },
     ],
     guides: {
-      "department:dep-restaurant": { 2: [{ startsAt: "12:00", endsAt: "16:00" }] },
-      "department:dep-bar": {},
-      "station:st-kitchen": {},
+      "department:dep-restaurant": { 2: [{ ...LUNCH_GUIDE }] },
+      "department:dep-bar": { 2: [{ ...BAR_GUIDE }], 3: [{ ...BAR_GUIDE }] },
+      "station:st-kitchen": {
+        1: [{ ...LUNCH_GUIDE, endsAt: "15:30" }],
+        2: [
+          { ...LUNCH_GUIDE, endsAt: "15:30" },
+          { ...BAR_GUIDE, endsAt: "17:30" },
+        ],
+        3: [{ ...BAR_GUIDE, endsAt: "17:30" }],
+      },
     },
   };
 }

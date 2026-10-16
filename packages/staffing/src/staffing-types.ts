@@ -18,8 +18,13 @@ export interface StaffRole {
   holderIds: string[];
 }
 
-/** A stretch of a department's opening hours, drawn behind the paint. */
+/** A period's opening or sending range, drawn behind the staffing paint. */
 export interface StaffingGuideRange {
+  periodId: string;
+  periodName: string;
+  periodColour: CalendarColour;
+  departmentId: string;
+  departmentName: string;
   startsAt: string;
   endsAt: string;
 }
@@ -31,8 +36,7 @@ export interface SeasonStaffing {
   /** Every season at the location, by start. */
   seasons: { id: string; name: string; startsOn: string }[];
   areas: { area: AreaRef; name: string; weekdays: Record<number, StaffingBlock[]> }[];
-  /** areaKey → weekday → a department's opening hours, drawn behind the paint; a station's are
-   *  empty. */
+  /** areaKey → weekday → opening ranges or station sending ranges. */
   guides: Record<string, Record<number, StaffingGuideRange[]>>;
 }
 
@@ -40,8 +44,7 @@ export interface SpecialDayStaffing {
   /** The location's current changeover, `HH:MM`. */
   cutover: string;
   name: string;
-  /** areaKey → dateId → a department's opening hours that date; a station's, and a date closed
-   *  all day, are empty. */
+  /** areaKey → dateId → opening ranges or station sending ranges. */
   guides: Record<string, Record<string, StaffingGuideRange[]>>;
   areas: {
     area: AreaRef;

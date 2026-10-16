@@ -16,6 +16,8 @@ import {
   type SeasonApiOptions,
 } from "../testing/season-staffing-fixture.js";
 
+import { LUNCH_GUIDE, BAR_GUIDE } from "../testing/season-staffing-fixture.js";
+
 registerIcons({ close: "M3 3l10 10M13 3L3 13" });
 
 let painter: StaffingSeasonPainter | undefined;
@@ -207,12 +209,17 @@ it("hands the grid the same hours map until the read, the area or the columns ch
   expect(grid(painter).guides).not.toBe(guides);
 });
 
-it("draws a department's opening hours behind its weekdays, and nothing behind a prep station", async () => {
+it("draws a department's opening hours behind its weekdays, and sending hours behind a prep station", async () => {
   const { painter } = await mount();
-  expect(grid(painter).guides.get("2")).toEqual([{ startsAt: "12:00", endsAt: "16:00" }]);
+  expect(grid(painter).guides.get("2")).toEqual([{ ...LUNCH_GUIDE }]);
   expect(grid(painter).guides.get("3")).toEqual([]);
   await pick(painter, "station:st-kitchen");
-  expect([...grid(painter).guides.values()].flat()).toEqual([]);
+  expect(grid(painter).guides.get("1")).toEqual([{ ...LUNCH_GUIDE, endsAt: "15:30" }]);
+  expect(grid(painter).guides.get("2")).toEqual([
+    { ...LUNCH_GUIDE, endsAt: "15:30" },
+    { ...BAR_GUIDE, endsAt: "17:30" },
+  ]);
+  expect(grid(painter).guides.get("0")).toEqual([]);
 });
 
 it("offers the staff roles as chips, the first chosen, with + New staff role and How many", async () => {

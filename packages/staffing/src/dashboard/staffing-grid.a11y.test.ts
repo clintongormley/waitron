@@ -6,6 +6,14 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { StaffingGrid } from "./staffing-grid.js";
 import "./staffing-grid.js";
 
+const guideIdentity = {
+  periodId: "lunch",
+  periodName: "Lunch",
+  periodColour: "blue" as const,
+  departmentId: "dining",
+  departmentName: "Dining room",
+};
+
 afterEach(() => {
   cleanup();
   setLocale("en");
@@ -61,8 +69,15 @@ describe.each(["light", "dark"] as const)("staffing grid (%s)", (theme) => {
         [
           "tue",
           [
-            { startsAt: "13:00", endsAt: "16:00" },
-            { startsAt: "20:00", endsAt: "00:00" },
+            { ...guideIdentity, startsAt: "13:00", endsAt: "16:00" },
+            {
+              ...guideIdentity,
+              periodId: "dinner",
+              periodName: "Dinner",
+              periodColour: "green",
+              startsAt: "20:00",
+              endsAt: "00:00",
+            },
           ],
         ],
       ]);

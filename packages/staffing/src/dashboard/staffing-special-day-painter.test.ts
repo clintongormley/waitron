@@ -15,6 +15,8 @@ import {
   type SpecialDayApiOptions,
 } from "../testing/special-day-staffing-fixture.js";
 
+import { LUNCH_GUIDE, BAR_GUIDE } from "../testing/season-staffing-fixture.js";
+
 registerIcons({ close: "M3 3l10 10M13 3L3 13" });
 
 let painter: StaffingSpecialDayPainter | undefined;
@@ -176,12 +178,16 @@ it("hands the grid the same hours map until the read, the area or the columns ch
   expect(grid(painter).guides).not.toBe(guides);
 });
 
-it("draws a department's opening hours that date behind it, and nothing behind a prep station", async () => {
+it("draws a department's opening hours that date behind it, and sending hours behind a prep station", async () => {
   const { painter } = await mount();
-  expect(grid(painter).guides.get("eve")).toEqual([{ startsAt: "12:00", endsAt: "16:00" }]);
+  expect(grid(painter).guides.get("eve")).toEqual([{ ...LUNCH_GUIDE }]);
   expect(grid(painter).guides.get("day")).toEqual([]);
   await pick(painter, "station:st-kitchen");
-  expect([...grid(painter).guides.values()].flat()).toEqual([]);
+  expect(grid(painter).guides.get("eve")).toEqual([
+    { ...LUNCH_GUIDE, endsAt: "15:30" },
+    { ...BAR_GUIDE, endsAt: "17:30" },
+  ]);
+  expect(grid(painter).guides.get("day")).toEqual([]);
 });
 
 it("draws no hours behind a date the read gives no guide for", async () => {
