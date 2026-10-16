@@ -661,3 +661,19 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   });
 });
+
+it("retains independently configured public evidence roots for setup resolution", () => {
+  const configured = FISCAL_INITIAL_SETUP.configure!({
+    environment: {
+      WAITRON_FISCAL_CLOUD_TRUST_FILE: "/outside/trust.json",
+      WAITRON_FISCAL_CONFIRMATION_FILE: "/outside/current.json",
+      WAITRON_FISCAL_PAPER_HISTORY_FILE: "/outside/history.json",
+      WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: "/outside/receipts",
+    },
+    readPublicEvidence: async () => undefined,
+  });
+  expect(configured.resolutionEvidence?.()).toEqual({
+    files: ["/outside/trust.json", "/outside/current.json", "/outside/history.json"],
+    directories: ["/outside/receipts"],
+  });
+});

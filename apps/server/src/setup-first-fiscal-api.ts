@@ -25,6 +25,7 @@ const boundary = createErrorBoundary(
   {
     "setup.not_ready": 503,
     "setup.owner_required": 403,
+    "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
@@ -325,6 +326,38 @@ export function mountSetupFirstFiscalApi(
       const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "password"]);
       return c.json(
         await host.owner.resumeFirstSetup(text(body.clientClaimNonce), {
+          password: text(body.password),
+        }),
+      );
+    }),
+  );
+  app.get(`${root}/resolution`, (c) =>
+    boundary(c, log, async () => c.json(await host.resolution.inspectFirstSetupResolution())),
+  );
+  app.post(`${root}/resolution/recover`, (c) =>
+    boundary(c, log, async () => {
+      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+      if (!(socket instanceof TLSSocket) || !socket.encrypted)
+        throw new AppError("setup.owner_required", {});
+      const body = exact(await readFirstFiscalBody(c), [
+        "inspectionId",
+        "revision",
+        "ownerGeneration",
+        "clientClaimNonce",
+        "password",
+      ]);
+      if (
+        ![body.revision, body.ownerGeneration].every(
+          (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+        )
+      )
+        invalid();
+      return c.json(
+        await host.owner.recoverFirstSetupOwner({
+          inspectionId: text(body.inspectionId),
+          revision: body.revision as number,
+          ownerGeneration: body.ownerGeneration as number,
+          clientClaimNonce: text(body.clientClaimNonce),
           password: text(body.password),
         }),
       );

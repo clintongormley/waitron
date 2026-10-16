@@ -20,7 +20,9 @@ import type {
   VenueRequest,
 } from "@waitron/provisioning";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { createPasswordThrottle } from "./password-throttle.js";
 import { inTurn } from "./attempt-turns.js";
+import type { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import "@waitron/provisioning";
 
 export interface FirstSetupClaimPayload {
@@ -55,7 +57,16 @@ export interface PublicFirstSetupState {
   };
   modules: { module: string; version: string }[];
 }
+export interface RecoverFirstSetupOwnerRequest {
+  inspectionId: string;
+  revision: number;
+  ownerGeneration: number;
+  clientClaimNonce: string;
+  password: string;
+}
 interface OwnerOptions {
+  resolution?: ReturnType<typeof createFirstSetupResolutionInspection>;
+  onOwnershipRecovered?(attemptId: string): void;
   stateDir: string;
   store: FirstSetupStore;
   coordinator: FirstSetupCoordinator;
@@ -133,6 +144,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   const { store, coordinator } = options;
   const now = options.now ?? (() => performance.now());
   const throttle = {};
+  const passwordThrottle = createPasswordThrottle(now);
   const grants = new Map<
     string,
     FirstSetupOwnerAttempt & { purpose: ReconfirmationPurpose; bootId: string; expires: number }
@@ -159,65 +171,130 @@ export function createFirstSetupOwner(options: OwnerOptions) {
     clientClaimNonce: string,
     proof: { password: string },
     recovery: boolean,
+    snapshot?: RecoverFirstSetupOwnerRequest,
   ) => {
     return inTurn(throttle, "resume", async () => {
-      const repair = recovery ? await store.readForRepair() : null;
-      const resumable = recovery
-        ? repair === null
-          ? null
-          : { state: repair.state, publicationComplete: repair.marker.status === "complete" }
-        : await store.readResumable();
-      const before = resumable?.state ?? null;
-      if (before?.status === "complete" && resumable?.publicationComplete) refuse();
-      if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024) refuse();
-      const correct = await verifyPassword(proof.password, before?.ownerVerifier ?? dummyVerifier);
-      if (
-        before === null ||
-        !correct ||
-        !validToken(clientClaimNonce) ||
-        (!recovery && !matches(clientClaimNonce, before.claimNonceHash))
-      )
-        refuse();
-      const capability = token();
-      const state = await coordinator.run(async (hold) => {
-        let current;
-        if (recovery) {
-          const retained = await store.readForRepair();
-          if (retained === null || !isDeepStrictEqual(retained, repair)) refuse();
-          if (retained.repairMarker !== null) {
-            if (options.assertRepairAllowed === undefined)
-              throw new AppError("setup.not_ready", {});
-            const assertAllowed = options.assertRepairAllowed;
-            await store.repairMarker(retained, () => assertAllowed(retained.state, hold), hold);
-          }
-          current = retained.state;
-        } else current = (await store.readResumable())?.state ?? null;
+      const finish = passwordThrottle.begin("first-setup");
+      try {
+        const inspected =
+          snapshot === undefined
+            ? undefined
+            : await options.resolution?.inspectFirstSetupResolution();
+        const repair = recovery
+          ? await store.readForRepair().catch((error: unknown) => {
+              if (snapshot !== undefined) return null;
+              throw error;
+            })
+          : null;
+        const resumable = recovery
+          ? repair === null
+            ? null
+            : { state: repair.state, publicationComplete: repair.marker.status === "complete" }
+          : await store.readResumable();
+        const before = resumable?.state ?? null;
+        if (before?.status === "complete" && resumable?.publicationComplete) refuse();
+        if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024)
+          refuse();
+        const correct = await verifyPassword(
+          proof.password,
+          before?.ownerVerifier ?? dummyVerifier,
+        );
         if (
-          current?.revision !== before.revision ||
-          current.frozen.attemptId !== before.frozen.attemptId ||
-          current.ownerGeneration !== before.ownerGeneration
+          before === null ||
+          !correct ||
+          !validToken(clientClaimNonce) ||
+          (!recovery && !matches(clientClaimNonce, before.claimNonceHash))
         )
           refuse();
-        const updated = await store.update(
-          current.frozen.attemptId,
-          current.revision,
-          recovery
-            ? {
-                kind: "recover",
-                capabilityHash: hash(capability),
-                claimNonceHash: hash(clientClaimNonce),
+        if (
+          snapshot !== undefined &&
+          (inspected === undefined ||
+            inspected.password !== "checkable" ||
+            snapshot.inspectionId !== inspected.inspectionId ||
+            snapshot.revision !== inspected.revision ||
+            snapshot.ownerGeneration !== inspected.ownerGeneration)
+        )
+          refuse();
+        const capability = token();
+        const rebind = () =>
+          coordinator.run(async (hold) => {
+            if (
+              snapshot !== undefined &&
+              (await options.resolution!.inspectFirstSetupResolution()).inspectionId !==
+                snapshot.inspectionId
+            )
+              refuse();
+            let current;
+            if (recovery) {
+              const retained = await store.readForRepair();
+              if (retained === null || !isDeepStrictEqual(retained, repair)) refuse();
+              if (retained.repairMarker !== null) {
+                if (snapshot !== undefined) {
+                  if (inspected?.repairEligible !== true) throw new AppError("setup.not_ready", {});
+                  await store.repairMarker(
+                    retained,
+                    async () => {
+                      const currentInspection =
+                        await options.resolution!.inspectFirstSetupResolution();
+                      if (
+                        currentInspection.inspectionId !== snapshot.inspectionId ||
+                        !currentInspection.repairEligible
+                      )
+                        refuse();
+                    },
+                    hold,
+                  );
+                } else {
+                  if (options.assertRepairAllowed === undefined)
+                    throw new AppError("setup.not_ready", {});
+                  const assertAllowed = options.assertRepairAllowed;
+                  await store.repairMarker(
+                    retained,
+                    () => assertAllowed(retained.state, hold),
+                    hold,
+                  );
+                }
               }
-            : { kind: "resume", capabilityHash: hash(capability) },
-          hold,
+              current = retained.state;
+            } else current = (await store.readResumable())?.state ?? null;
+            if (
+              current?.revision !== before.revision ||
+              current.frozen.attemptId !== before.frozen.attemptId ||
+              current.ownerGeneration !== before.ownerGeneration
+            )
+              refuse();
+            const updated = await store.update(
+              current.frozen.attemptId,
+              current.revision,
+              recovery
+                ? {
+                    kind: "recover",
+                    capabilityHash: hash(capability),
+                    claimNonceHash: hash(clientClaimNonce),
+                  }
+                : { kind: "resume", capabilityHash: hash(capability) },
+              hold,
+            );
+            invalidate(current.frozen.attemptId);
+            options.onOwnershipRecovered?.(current.frozen.attemptId);
+            return updated;
+          });
+        const state =
+          snapshot === undefined
+            ? await rebind()
+            : await options.resolution!.withVenueExclusion(rebind);
+        finish?.("success");
+        return {
+          state: publicFirstSetupState(state),
+          capability,
+          ownerGeneration: state.ownerGeneration,
+        };
+      } catch (error) {
+        finish?.(
+          error instanceof AppError && error.code === "setup.owner_required" ? "invalid" : "error",
         );
-        invalidate(current.frozen.attemptId);
-        return updated;
-      });
-      return {
-        state: publicFirstSetupState(state),
-        capability,
-        ownerGeneration: state.ownerGeneration,
-      };
+        throw error;
+      }
     });
   };
   return {
@@ -286,6 +363,14 @@ export function createFirstSetupOwner(options: OwnerOptions) {
         capability,
         ownerGeneration: state.ownerGeneration,
       };
+    },
+    recoverFirstSetupOwner(request: RecoverFirstSetupOwnerRequest) {
+      return restoreOwnership(
+        request.clientClaimNonce,
+        { password: request.password },
+        true,
+        request,
+      );
     },
     resumeFirstSetup(clientClaimNonce: string, proof: { password: string }) {
       return restoreOwnership(clientClaimNonce, proof, false);

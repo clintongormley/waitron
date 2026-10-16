@@ -117,3 +117,69 @@ it("freezes fresh planned identities and selected module versions before any pub
     await f.dispose();
   }
 });
+
+it("binds configured outside evidence and invalidates every live confirmation after snapshot recovery", async () => {
+  const { declaredFirstFiscalFixture, publicDigest } =
+    await import("../test/declared-first-fiscal.js");
+  const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
+  const { writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { randomBytes } = await import("node:crypto");
+  const f = await declaredFirstFiscalFixture();
+  try {
+    const outside = join(f.root, "retained-history.json");
+    await writeFile(outside, '{"retained":42}');
+    const host = createFirstSetupModuleHost({
+      ...f,
+      environment: { WAITRON_FISCAL_PAPER_HISTORY_FILE: outside },
+    });
+    const staged = await host.keys.stageInitialNodeKey(
+      f.ownerAttempt,
+      await host.owner.reconfirm(f.ownerAttempt, f.password, "block-use"),
+    );
+    const input = {
+      module: f.module,
+      stageId: staged.stage.stageId,
+      inputDigest: publicDigest(f.input),
+      historyDigest: f.statement.delivery.historyDigest,
+      documentDigest: f.statement.delivery.documentDigest,
+      statement: f.statement,
+    };
+    await host.delivery.registerFirstFiscalDelivery(f.ownerAttempt, input);
+    const { statement: _statement, ...reference } = input;
+    void _statement;
+    await host.delivery.confirmFirstFiscalDocumentKept(
+      f.ownerAttempt,
+      { ...reference, kept: true },
+      await host.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
+    );
+    const grant = await host.owner.reconfirm(f.ownerAttempt, f.password, "activation");
+    const inspected = await host.resolution.inspectFirstSetupResolution();
+    await writeFile(outside, '{"retained":43}');
+    const fresh = await host.resolution.inspectFirstSetupResolution();
+    expect(fresh.inspectionId).not.toBe(inspected.inspectionId);
+    const recovered = await host.owner.recoverFirstSetupOwner({
+      inspectionId: fresh.inspectionId,
+      revision: fresh.revision!,
+      ownerGeneration: fresh.ownerGeneration!,
+      password: f.password,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+    });
+    const owner = { ...recovered.state, capability: recovered.capability };
+    await expect(
+      host.owner.consumeReconfirmation(owner, grant, "activation"),
+    ).rejects.toMatchObject({ code: "setup.owner_required" });
+    await expect(host.delivery.read(f.context.binding)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    await expect(
+      host.keys.stageInitialNodeKey(
+        owner,
+        await host.owner.reconfirm(owner, f.password, "block-use"),
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  } finally {
+    await f.dispose();
+  }
+});

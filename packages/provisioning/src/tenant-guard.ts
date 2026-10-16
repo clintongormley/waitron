@@ -10,14 +10,18 @@ export interface TenantIdentity {
   taxId: string;
 }
 
-export async function readTenantIdentities(target: Database): Promise<TenantIdentity[]> {
+export async function readTenantIdentities(
+  target: Pick<Database, "execute">,
+): Promise<TenantIdentity[]> {
   const rows = await target.execute<{ country: string; tax_id: string }>(
     sql`select country, tax_id from tenants`,
   );
   return rows.rows.map((row) => ({ country: row.country, taxId: row.tax_id }));
 }
 
-export async function readOperationalVenueIds(target: Database): Promise<string[]> {
+export async function readOperationalVenueIds(
+  target: Pick<Database, "execute">,
+): Promise<string[]> {
   const rows = await target.execute<{ id: string }>(sql`select id from locations order by id`);
   return rows.rows.map((row) => row.id);
 }

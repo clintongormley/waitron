@@ -17,6 +17,7 @@ import {
   planVenue,
   venueFiscalSelection,
 } from "@waitron/provisioning";
+import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
@@ -45,19 +46,36 @@ export function createFirstSetupModuleHost(options: {
   >;
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
 }) {
-  const evidence: { current?: { read: ModuleOperationHost["readPublicEvidence"] } } = {};
+  const evidence: {
+    current?: {
+      read: ModuleOperationHost["readPublicEvidence"];
+      invalidate(attemptId: string): void;
+    };
+  } = {};
   const host = createModuleOperationHost(options.environment, {
     read: async (binding) => evidence.current?.read(binding),
   });
   const modules = configureModuleOperations(options.modules, host);
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...options, coordinator });
+  const retained = modules.flatMap((module) => {
+    const sources = module.provisioning?.initialSetup?.resolutionEvidence?.();
+    return sources === undefined ? [] : [sources];
+  });
+  const resolution = createFirstSetupResolutionInspection({
+    ...options,
+    store,
+    publicEvidencePaths: retained.flatMap((sources) => sources.files),
+    publicEvidenceDirectories: retained.flatMap((sources) => sources.directories),
+  });
   const bootId = randomUUID();
   const owner = createFirstSetupOwner({
     ...options,
     store,
     coordinator,
     bootId,
+    resolution,
+    onOwnershipRecovered: (attemptId) => evidence.current?.invalidate(attemptId),
     freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
         modules,
@@ -122,6 +140,7 @@ export function createFirstSetupModuleHost(options: {
     coordinator,
     store,
     owner,
+    resolution,
     offerings(territory: string) {
       const selected = enabledModules(
         modules,

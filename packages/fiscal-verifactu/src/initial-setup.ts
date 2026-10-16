@@ -262,10 +262,29 @@ function readInput(
   };
 }
 
-function createInitialSetup(receiptTrust: () => ReceiptTrust | null): InitialSetupContribution {
+function createInitialSetup(
+  receiptTrust: () => ReceiptTrust | null,
+  retained?: { files: readonly string[]; directories: readonly string[] },
+): InitialSetupContribution {
   const contribution: InitialSetupContribution = {
+    ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
-      return createInitialSetup(() => configuredCloudTrust(host.environment));
+      const paths = (names: readonly string[]) =>
+        names
+          .map((name) => host.environment[name])
+          .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
+      return createInitialSetup(() => configuredCloudTrust(host.environment), {
+        files: paths([
+          "WAITRON_FISCAL_CUSTODIAN_FILE",
+          "WAITRON_FISCAL_CLOUD_TRUST_FILE",
+          "WAITRON_FISCAL_CONFIRMATION_FILE",
+          "WAITRON_FISCAL_PAPER_HISTORY_FILE",
+        ]),
+        directories: paths([
+          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
+          "WAITRON_FISCAL_EMERGENCY_DIRECTORY",
+        ]),
+      });
     },
     candidates(context, proposal) {
       binding(context);

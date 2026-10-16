@@ -343,9 +343,14 @@ operation and complete bases before the existing activation writer. Local synthe
 C000042 followed by paper P000008 from the retained S42/P7 checkpoint, with unchanged source bytes;
 this is not a live Cloud or PDF-upload acceptance receipt. Production Cloud capabilities, first-local-
 operator admission, namespace discovery and joint service qualification remain separately open.
-No paper import or unsigned paper report is enabled. Remaining A679 tasks connect V2 inspection,
-wizard and recovery delivery, then the whole-branch reviews, CI and owner’s built-PDF/printed-typing
-acceptance. Earlier dated implementation checkpoints below describe superseded work where they differ.
+No paper import or unsigned paper report is enabled. Revised Task 7 adds a separate read-only
+inspection and password recovery bound to the inspected file digests, revision and ownership
+generation. It includes staged key metadata, delivery chunks and independently configured public
+receipt sources. Tenant/location absence alone supplies no repair authority: interrupted-pair
+repair also requires the retained preactivation provenance and absence of contradictory host
+evidence. Ordinary readers and raw boot keep refusing unresolved pairs. Workspace retirement and
+entry selection, wizard and recovery delivery, whole-branch reviews, CI and the owner’s
+built-PDF/printed-typing acceptance remain open. Earlier dated implementation checkpoints below describe superseded work where they differ.
 
 **Replacement-plan Task 1, 2026-10-15, branch milestone:** the signed-history verifier preserves
 original public blocks and consumptions, checks predecessors and occupied names, and distinguishes

@@ -21,6 +21,7 @@ export interface InitialSetupImport {
 }
 
 export interface InitialSetupContribution {
+  resolutionEvidence?(): { files: readonly string[]; directories: readonly string[] };
   configure?(host: ModuleOperationHost): InitialSetupContribution;
   candidates(context: InitialSetupContext, proposal: unknown): unknown;
   request(context: InitialSetupContext, validatedCandidates: unknown): unknown;
