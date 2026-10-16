@@ -943,6 +943,35 @@ describe("the day box", () => {
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
       expect(placement(box, day)).toEqual(kept);
     });
+
+    it("when a new read makes it bigger while it is open", async () => {
+      await useViewport(390, 800);
+      let special = false;
+      const liveData = new LiveData();
+      onTestFinished(() => liveData.clear());
+      const name = "Private dinner for the restaurant's twentieth anniversary with the whole team";
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        const day = read.days.find(({ date }) => date === "2026-12-30")!;
+        if (special) day.specialDay = { id: "sd-party", name };
+        return read;
+      }, liveData);
+      const { el } = await mount({ api, width: "390px", canWrite: true, canOpenRota: true });
+      const day = dayButton(el, "2026-12-30")!;
+      el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
+      const box = await openBox(el, "2026-12-30");
+      expect(placement(box, day)).toEqual(kept);
+      const before = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height;
+      special = true;
+      liveData.invalidate([{ type: "staffing_blocks" }]);
+      await vi.waitFor(() => expect(box.name).toBe(name));
+      await settled(el);
+      expect(
+        box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height,
+      ).toBeGreaterThan(before);
+      expect(box.shown).toBe(true);
+      expect(placement(box, day)).toEqual(kept);
+    });
   });
 
   it("offers no Rota for this week to a person who may not open the rota", async () => {
@@ -951,7 +980,7 @@ describe("the day box", () => {
     expect(boxButtons(el)).toEqual(["Edit Winter's standard week"]);
   });
 
-  it("closes the box when the month changes, and opens it again on the month's return", async () => {
+  it("closes the box when the month changes, and leaves it closed on the month's return", async () => {
     const { el } = await mount();
     await openBox(el, "2026-12-03");
     el.month = "2027-01";
@@ -962,6 +991,84 @@ describe("the day box", () => {
     expect(dayBox(el)).toBeNull();
     const box = await openBox(el, "2026-12-03");
     expect(box.line).toBe("Winter standard staffing");
+  });
+
+  it("a box button closes the box, focus back on its day, before it acts", async () => {
+    const { el, open } = await mount({ canWrite: true });
+    const seen: { focused: Element | null; shown: boolean }[] = [];
+    open.mockImplementation(() => {
+      seen.push({ focused: root(el).activeElement, shown: dayBox(el)!.shown });
+    });
+    await openBox(el, "2026-12-03");
+    await pressBoxButton(el, "Edit Winter's standard week");
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    expect(seen).toEqual([{ focused: dayButton(el, "2026-12-03"), shown: false }]);
+  });
+
+  it("acts on no close a button did not ask for, nor on one pressed before the box was shown", async () => {
+    const { el, open } = await mount({ canWrite: true });
+    await openBox(el, "2026-12-03");
+    await userEvent.keyboard("{Escape}");
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
+    dayButton(el, "2026-12-04")!.click();
+    await el.updateComplete;
+    const box = dayBox(el)!;
+    expect(box.shown).toBe(false);
+    box.querySelector<HTMLElement>("wt-button")!.click();
+    await settled(el);
+    await vi.waitFor(() => expect(box.shown).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not act on a box button pressed as the month changes", async () => {
+    const { el, open } = await mount({ canWrite: true });
+    await openBox(el, "2026-12-03");
+    dayBox(el)!.querySelector<HTMLElement>("wt-button")!.click();
+    el.month = "2027-01";
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not act on a box button pressed as the month is taken off the page", async () => {
+    const { el, open } = await mount({ canWrite: true });
+    await openBox(el, "2026-12-03");
+    dayBox(el)!.querySelector<HTMLElement>("wt-button")!.click();
+    el.remove();
+    await settled(el);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("keeps its close to itself", async () => {
+    const { el } = await mount();
+    const heard = vi.fn();
+    el.parentElement!.addEventListener("calendar-day-box-close", heard);
+    await openBox(el, "2026-12-03");
+    await userEvent.keyboard("{Escape}");
+    await settled(el);
+    expect(dayBox(el)).toBeNull();
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it("names a special day no season holds", async () => {
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      const eve = read.days.findIndex(({ date }) => date === "2026-12-24");
+      read.days[eve] = { ...read.days[eve]!, seasonId: null };
+      return read;
+    });
+    const { el } = await mount({ api });
+    expect((await openBox(el, "2026-12-24")).line).toBe("Special day");
+    await userEvent.keyboard("{Escape}");
+    await settled(el);
+    setLocale("es");
+    el.requestUpdate();
+    await settled(el);
+    expect((await openBox(el, "2026-12-24")).line).toBe("Día especial");
   });
 
   it("moves focus into the box as it opens, and back to its day when it closes", async () => {

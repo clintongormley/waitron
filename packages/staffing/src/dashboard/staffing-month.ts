@@ -266,9 +266,14 @@ export class StaffingMonthView extends LitElement {
     },
   );
   #watching?: string;
+  /** What the pressed box button does once the box has closed. */
+  #afterBox?: () => void;
 
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("month")) this.boxDate = undefined;
+    if (changed.has("month")) {
+      this.boxDate = undefined;
+      this.#afterBox = undefined;
+    }
     if (this.month && this.month !== this.#watching) this.#watch();
   }
 
@@ -313,7 +318,16 @@ export class StaffingMonthView extends LitElement {
   }
 
   override updated(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("boxDate") && this.boxDate) void this.#placeBox(this.boxDate);
+    if (this.boxDate && (changed.has("boxDate") || changed.has("read")))
+      void this.#placeBox(this.boxDate);
+  }
+
+  #boxClosed(event: Event): void {
+    event.stopPropagation();
+    this.boxDate = undefined;
+    const act = this.#afterBox;
+    this.#afterBox = undefined;
+    if (this.isConnected) act?.();
   }
 
   // The box measures itself to choose where it fits, so it is shown after its own and its
@@ -471,7 +485,9 @@ export class StaffingMonthView extends LitElement {
     const special = day.specialDay;
     const line = season
       ? tf(special ? "staffing.day.replaces" : "staffing.day.standard", { season })
-      : "";
+      : special
+        ? t("staffing.day.special")
+        : "";
     const rows = day.closedAllDay
       ? []
       : this.#shown(day, chosen, names).map(({ name, needed, unfilled }) => ({
@@ -482,8 +498,10 @@ export class StaffingMonthView extends LitElement {
               : `${needed}, ${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}`,
         }));
     const act = (run: () => void) => () => {
-      this.renderRoot.querySelector("calendar-day-box")!.hide();
-      run();
+      const box = this.renderRoot.querySelector("calendar-day-box")!;
+      if (!box.shown) return;
+      this.#afterBox = run;
+      box.hide();
     };
     const monday = month.days[index - (index % 7)]!.date;
     return html`<calendar-day-box
@@ -493,9 +511,7 @@ export class StaffingMonthView extends LitElement {
       .line=${line}
       .rows=${rows}
       .message=${day.closedAllDay ? t("staffing.month.closed") : ""}
-      @calendar-day-box-close=${() => {
-        this.boxDate = undefined;
-      }}
+      @calendar-day-box-close=${this.#boxClosed}
     >
       ${
         special
