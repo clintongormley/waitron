@@ -11,7 +11,7 @@ export interface DayRun {
 
 export interface DayPickerOptions {
   /** The button for a date, for focus and for finding the day under a pointer; null when the grid
-   *  does not draw it. */
+   *  does not draw it. The button, or an element around it, carries the date as `data-date`. */
   button(date: LocalDate): HTMLElement | null;
   /** Every drawn date, in order, for hit-testing a pointer's position. */
   dates(): readonly LocalDate[];
@@ -37,6 +37,8 @@ interface Gesture {
   date: LocalDate;
   /** The last day the pointer was over; a point between buttons keeps it. */
   last: LocalDate;
+  /** The drawn days' rectangles, read when the drag or long press began. */
+  boxes: { date: LocalDate; box: DOMRect }[];
   trigger: HTMLElement;
   x: number;
   y: number;
@@ -100,6 +102,12 @@ export class DayPicker implements ReactiveController {
     click: (event: MouseEvent) => this.#click(event),
     dblclick: (event: MouseEvent) => this.#dblclick(event),
     keydown: (event: KeyboardEvent) => this.#keydown(event),
+    focusin: (event: FocusEvent) => {
+      const day = this.#dayOf(event);
+      if (day === null) return;
+      this.#focus = day.date;
+      this.#host.requestUpdate();
+    },
     contextmenu: (event: MouseEvent) => {
       if (this.#lastPointerTouch && this.#options.canPick()) event.preventDefault();
     },
@@ -117,21 +125,30 @@ export class DayPicker implements ReactiveController {
     this.#set(span(anchor, date));
   }
 
-  /** The day whose button holds `target`. */
-  #dayOf(target: EventTarget | null): { date: LocalDate; button: HTMLElement } | null {
-    for (const date of this.#options.dates()) {
-      const button = this.#options.button(date);
-      if (button?.contains(target as Node)) return { date, button };
-    }
-    return null;
+  /** The day an event came from: the nearest element on its path carrying `data-date`. */
+  #dayOf(event: Event): { date: LocalDate; button: HTMLElement } | null {
+    const cell = event
+      .composedPath()
+      .find((node): node is HTMLElement => node instanceof HTMLElement && "date" in node.dataset);
+    const date = cell?.dataset.date;
+    if (date === undefined) return null;
+    const button = this.#options.button(date);
+    return button === null ? null : { date, button };
   }
 
-  #dateAt(x: number, y: number): LocalDate | null {
+  /** Reads every drawn day's rectangle once, when a drag or a long press begins. */
+  #measure(gesture: Gesture): void {
+    gesture.boxes = this.#options.dates().flatMap((date) => {
+      const button = this.#options.button(date);
+      return button === null ? [] : [{ date, box: button.getBoundingClientRect() }];
+    });
+  }
+
+  #dateAt(gesture: Gesture, x: number, y: number): LocalDate | null {
     return (
-      this.#options.dates().find((date) => {
-        const box = this.#options.button(date)?.getBoundingClientRect();
-        return box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
-      }) ?? null
+      gesture.boxes.find(
+        ({ box }) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
+      )?.date ?? null
     );
   }
 
@@ -150,7 +167,7 @@ export class DayPicker implements ReactiveController {
     this.#swallowClick = false;
     this.#lastPointerTouch = event.pointerType === "touch";
     if (event.button !== 0 || this.#gesture !== null || !this.#options.canPick()) return;
-    const day = this.#dayOf(event.target);
+    const day = this.#dayOf(event);
     if (day === null) return;
     const { date, button: trigger } = day;
     const touch = this.#lastPointerTouch && this.#options.dragOnTouch !== true;
@@ -160,6 +177,7 @@ export class DayPicker implements ReactiveController {
       grid: event.currentTarget as HTMLElement,
       date,
       last: date,
+      boxes: [],
       trigger,
       x: event.clientX,
       y: event.clientY,
@@ -182,6 +200,7 @@ export class DayPicker implements ReactiveController {
   #hold(gesture: Gesture): void {
     gesture.held = true;
     gesture.timer = undefined;
+    this.#measure(gesture);
     if (!this.isPicked(gesture.date)) this.#pick(gesture.date, gesture.date);
   }
 
@@ -206,8 +225,9 @@ export class DayPicker implements ReactiveController {
     else if (!gesture.dragging) {
       gesture.dragging = true;
       capturePointer(gesture.grid, gesture.pointerId);
+      this.#measure(gesture);
     }
-    gesture.last = this.#dateAt(event.clientX, event.clientY) ?? gesture.last;
+    gesture.last = this.#dateAt(gesture, event.clientX, event.clientY) ?? gesture.last;
     this.#pick(gesture.date, gesture.last);
   }
 
@@ -249,28 +269,28 @@ export class DayPicker implements ReactiveController {
       event.stopPropagation();
       return;
     }
-    const day = this.#dayOf(event.target);
+    const day = this.#dayOf(event);
     if (day === null || event.detail > 1) return;
     const { date, button: trigger } = day;
     this.#focus = date;
+    this.#runBeforeClick = this.#run;
     if (event.shiftKey && this.#anchor !== null && this.#options.canPick()) {
       this.#pick(this.#anchor, date);
       return;
     }
-    this.#runBeforeClick = this.#run;
     this.#pick(date, date);
     this.#options.choose(date, trigger);
   }
 
   #dblclick(event: MouseEvent): void {
-    const day = this.#dayOf(event.target);
+    const day = this.#dayOf(event);
     if (day === null || !this.#options.canPick()) return;
     this.#open(day.date, this.#runToOpen(day.date, this.#runBeforeClick), day.button);
   }
 
   #keydown(event: KeyboardEvent): void {
     this.#swallowClick = false;
-    const day = this.#dayOf(event.target);
+    const day = this.#dayOf(event);
     if (day === null) return;
     const { date } = day;
     const step = ARROWS[event.key];

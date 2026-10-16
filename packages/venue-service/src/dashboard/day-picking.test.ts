@@ -53,11 +53,15 @@ class DayPickingHost extends LitElement {
       @click=${handlers.click}
       @dblclick=${handlers.dblclick}
       @keydown=${handlers.keydown}
+      @focusin=${handlers.focusin}
       @contextmenu=${(event: Event) => {
         handlers.contextmenu(event as MouseEvent);
         this.contextMenus.push({ prevented: event.defaultPrevented });
       }}
     >
+      <caption>
+        <button type="button" id="month">October 2026</button>
+      </caption>
       <tr>
         ${["M", "T", "W", "T", "F", "S", "S"].map((name) => html`<th>${name}</th>`)}
       </tr>
@@ -210,8 +214,8 @@ describe("DayPicker", () => {
     expect(host.opened).toEqual([[day(15), run(15, 15)]]);
     await expectRun(host, run(15, 15));
     expect(host.chosen).toEqual([]);
-    // Headless Chromium sends no contextmenu for a DevTools touch, even held 1500 ms; a phone does,
-    // so one is dispatched as the phone would, after the real long press.
+    // Headless Chromium sent no contextmenu for this DevTools touch, even held 1500 ms; one is
+    // dispatched after the real long press to check the handler prevents it if one is sent.
     expect(host.contextMenus).toEqual([]);
     button(host, 15).dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, composed: true, cancelable: true }),
@@ -230,6 +234,10 @@ describe("DayPicker", () => {
 
   it("a long press then a drag picks a run without scrolling; a long press inside it opens the run", async () => {
     const host = await mount();
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(1) });
+    expect(window.scrollY).toBe(0);
+    await expectRun(host, run(1, 15));
+
     await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
     await expectRun(host, run(15, 17));
     expect(window.scrollY).toBe(0);
@@ -255,6 +263,16 @@ describe("DayPicker", () => {
       [day(27), run(27, 27)],
     ]);
     await expectRun(host, run(27, 27));
+
+    // A shift-double-click opens against the run as it stood before its first click (20–20), which
+    // 14 is outside of, so it opens 14 alone.
+    await commands.mouseDrag([sel(12), sel(16)]);
+    await userEvent.click(button(host, 20));
+    await expectRun(host, run(20, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.dblClick(button(host, 14));
+    expect(host.opened.at(-1)).toEqual([day(14), run(14, 14)]);
+    await expectRun(host, run(14, 14));
   });
 
   it("keys move focus and pick, Shift extends, Enter opens and Space chooses", async () => {
@@ -285,6 +303,22 @@ describe("DayPicker", () => {
     expect(focusedDate(host)).toBe(day(31));
   });
 
+  it("the Tab stop follows focus however it arrives", async () => {
+    const host = await mount();
+    expect(host.picker.focusDate).toBeNull();
+    button(host, 12).focus();
+    expect(host.picker.focusDate).toBe(day(12));
+    await host.updateComplete;
+    expect(button(host, 12).tabIndex).toBe(0);
+    expect(button(host, 1).tabIndex).toBe(-1);
+    await expectRun(host, null);
+
+    host.renderRoot.querySelector<HTMLButtonElement>("#month")!.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(host.picker.focusDate).toBe(day(12));
+    await expectRun(host, null);
+  });
+
   it("a click no Enter keydown preceded chooses and does not open", async () => {
     const host = await mount();
     button(host, 23).focus();
@@ -302,8 +336,10 @@ describe("DayPicker", () => {
     await expectRun(host, run(23, 23));
 
     await commands.mouseDrag([sel(10), sel(13)]);
+    await expectRun(host, run(23, 23));
+    window.scrollTo(0, 0);
     await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
-    expect(host.picker.run === null || host.picker.run.from === host.picker.run.to).toBe(true);
+    await expectRun(host, run(23, 23));
 
     await userEvent.dblClick(button(host, 22));
     button(host, 22).focus();
@@ -317,6 +353,10 @@ describe("DayPicker", () => {
 
   it("with dragOnTouch, a touch drag with no hold picks a run and does not scroll", async () => {
     const host = await mount({ dragOnTouch: true });
+    await commands.touchGesture({ at: sel(15), moveTo: sel(1) });
+    expect(window.scrollY).toBe(0);
+    await expectRun(host, run(1, 15));
+
     await commands.touchGesture({ at: sel(15), moveTo: sel(17) });
     await expectRun(host, run(15, 17));
     expect(window.scrollY).toBe(0);
