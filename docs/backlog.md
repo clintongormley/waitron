@@ -1902,12 +1902,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
   colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **A756. The Kitchen tab split up (owner, 2026-10-16).** Courses get a page under Products and
-  menus; who sends held courses and the next-course reminder go to a new Service tab in a tabbed
-  department dialog, which also takes the receipt editor (the departments table's Receipt link
-  goes); late flags, bump mode, ticket grouping, held-course printing, MOVED slips and changes
-  after sending go to an "Every station" card on Prep stations, each overridable per station.
-  Migration. After A725. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+- **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
+  get a page under Products and menus, with A773's "Held until fired" column. The next-course
+  reminder goes to a new Service tab in a tabbed department dialog, which also takes the receipt
+  editor (the departments table's Receipt link goes). Late flags, bump mode, ticket grouping,
+  held-course printing, MOVED slips, changes after sending and A773's "Waits for the pass" are set
+  on each station: there is no "Every station" card. "Who fires held courses" is dropped, not
+  moved. Migration. After A725. Check the order against A773's plan. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **Consider consolidating paper for a whole-order kitchen-note change.** The current correction
   path produces one slip and one acknowledged notice for each affected dish at its station.
@@ -2205,7 +2206,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   state, A508's future ones included, and comes back to the owner before building. **Widened
   2026-10-16 (owner):** the same board decides how each state is shown on the floor and in the
   order lists — a mark for items held in the kitchen, a pulse for late orders, and item counts by
-  state in place of the order lists' unlabelled line count.
+  state in place of the order lists' unlabelled line count. A773 adds a Requested state (the waiter
+  fired it; the pass has not yet); the held mark counts it.
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab)
 
 - **A758. Adjustment reasons: review the rules, then a page of their own (owner, 2026-10-16).**
@@ -2256,6 +2258,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
   [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 
+- **A773. Courses, groups and the pass (owner, 2026-10-16; spec written, plan next).** Each
+  course gets "Held until fired". A table's unsent list is laid out as Fire now plus held groups:
+  it is arranged by ticking, Move to… and drag, and sent with Send all or Fire. The four draft
+  buttons and the check window go. Each bill keeps its own unsent list. Only the waiter fires. Each
+  station gets "Waits for the pass": fired food there becomes Requested until the pass fires it.
+  Station Fire and the venue's fire control go. Counter orders have no courses. Changes A756.
+  Migration. [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
+  [mockups](backlog/mockups/a773-courses-and-groups/)
+
+- **Later, after A773: a station waits for another station's part of a group (owner,
+  2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
+  rather than when the waiter fires the group. A773 starts both parts together and marks the bar's
+  part "Goes with kitchen food". Try it once a venue has run with that.
+  [Spec §5](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
+
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
   and Kitchen only under Testing; a status bar for the period and printer; a Filter button (diets
@@ -2266,7 +2283,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   shape. **Added 2026-10-16 (owner):** the same clean-up on the table-order screen; the "last
   added" bar on the counter too, clear of the product buttons, its long press opening the line
   window; tapping an order in Held or Waiting shows its items; no empty "Modifiers" heading. How a
-  later addition to a table is grouped and sent is still being decided. [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+  later addition to a table is grouped and sent is A773's, not A738's. [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,

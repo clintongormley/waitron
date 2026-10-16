@@ -198,6 +198,14 @@ about grouping these corrections.
 
 ## A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
 
+**Changed by A773 (owner, 2026-10-16, the same day).** These replace parts of the mock-ups below:
+
+- "Who fires held courses" is dropped, not moved to departments.
+- There is no "Every station" card: every station setting is set on each station.
+- Stations gain "Waits for the pass", and the Courses page gains "Held until fired".
+
+See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
+
 **A756 (owner, 2026-10-16) — the owner approved the mock-ups.** Mock-ups:
 [where each setting goes](mockups/a756-kitchen-settings/01-where-each-setting-goes.png),
 [Courses page](mockups/a756-kitchen-settings/02-courses-page.png),

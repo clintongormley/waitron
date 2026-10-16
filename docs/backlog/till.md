@@ -1957,10 +1957,10 @@ Board 1 is the target; board 2 the windows.
   tapping again closes it, so staff can check it before Retrieve. Its buttons act at once and do
   not open the row.
 - **No empty "Modifiers" heading** on a line with no modifiers chosen (seen on Bravas de Casa).
-- **Open, for the next owner session:** a later addition to a table offers "Fire now", "Add to
-  held group…" and "Add as new group" as choices drawn like buttons, plus Send to carry the choice
-  out (`#laterAction`); the first order says "Send all" for what "Add as new group" means. The
-  owner is deciding how grouping and sending should work; build nothing on it until then.
+- **How a later addition is grouped and sent moved to A773** (owner, 2026-10-16). That design
+  replaces the later-addition choice and the first order's four buttons on the table-order screen.
+  So A738's table-order clean-up leaves the draft bar to A773.
+  [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 
 ### A739. Paying: Hold · Pay, and one payment window
 
