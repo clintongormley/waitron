@@ -615,6 +615,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 
 export const run = createErrorBoundary(STATUS, "till.failed");
 const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
+const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 
 export type Run = typeof run;
 
@@ -3251,7 +3252,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.put("/api/parties/:id/drafts", (c) =>
-    run(c, log, async () => {
+    runSaveDraft(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);

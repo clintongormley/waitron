@@ -172,6 +172,44 @@ describe("GET /api/parties/:id/drafts", () => {
 });
 
 describe("PUT /api/parties/:id/drafts", () => {
+  describe.each(["joinGroupId", "afterGroupId"] as const)("stored %s target", (field) => {
+    it.each(["foreign", "missing", "fired", "removed"] as const)(
+      "refuses %s without changing any venue row",
+      async (state) => {
+        const party = await seated();
+        const foreign = await seated();
+        const groupId = randomUUID();
+        if (state !== "missing") {
+          await inTx(venue, (tx) =>
+            tx.insert(orderGroups).values({
+              id: groupId,
+              partyId: state === "foreign" ? foreign.partyId : party.partyId,
+              position: 1,
+              state: state === "foreign" ? "held" : state,
+              firedAt: state === "fired" ? "2026-10-17T00:00:00.000Z" : null,
+              submittedBy: venue.operatorId,
+            }),
+          );
+        }
+        const draft = await newDraft(ana, party.partyId, [dish("Pulpo")]);
+        const before = await snapshot();
+        const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+          draftId: draft.id,
+          revision: draft.revision,
+          lines: [{ ...dish("Caña"), slot: field === "afterGroupId" ? 1 : 0, [field]: groupId }],
+        });
+        expect(answer.status).toBe(state === "foreign" || state === "missing" ? 400 : 409);
+        expect(answer.json).toEqual(
+          refusal(
+            state === "foreign" || state === "missing" ? "group.not_found" : "group.not_held",
+            { groupId },
+          ),
+        );
+        expect(await snapshot()).toEqual(before);
+      },
+    );
+  });
+
   it("returns saved placement on every line through PUT, GET, resave and takeover", async () => {
     const party = await seated();
     const groupId = randomUUID();

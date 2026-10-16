@@ -776,6 +776,111 @@ describe("draft placement persistence", () => {
   });
 });
 
+describe("draft placement membership", () => {
+  describe.each(["joinGroupId", "afterGroupId"] as const)("%s", (field) => {
+    it.each(["foreign", "missing", "fired", "removed"] as const)(
+      "refuses a %s target without changing the saved draft or its allergy ticks",
+      async (state) => {
+        const v = await setupVenue();
+        const { partyId } = await seated(v);
+        const other = await seated(v, "Mesa 7");
+        const groupId = randomUUID();
+        if (state !== "missing") {
+          await db.insert(orderGroups).values({
+            id: groupId,
+            partyId: state === "foreign" ? other.partyId : partyId,
+            position: 1,
+            state: state === "foreign" ? "held" : state,
+            firedAt: state === "fired" ? "2026-10-17T00:00:00.000Z" : null,
+            submittedBy: ALEX,
+          });
+        }
+        const draft = await save(v, partyId, ALEX, null, 0, [item(v, "fish")]);
+        const allergy = await inTx((tx) =>
+          savePartyAllergy(
+            tx,
+            partyId,
+            0,
+            {
+              answer: "allergies",
+              guests: [{ who: "Red coat", allergens: { fish: {} } }],
+            },
+            ALEX,
+          ),
+        );
+        await inTx((tx) =>
+          setAllergyLineTicks(tx, partyId, [
+            {
+              guestId: allergy.guests[0]!.id,
+              draftLineId: draft.lines[0]!.id,
+            },
+          ]),
+        );
+        await refusedWritingNothing(
+          () =>
+            save(v, partyId, ALEX, draft.id, draft.revision, [
+              { ...item(v, "beer"), slot: field === "afterGroupId" ? 1 : 0, [field]: groupId },
+            ]),
+          {
+            code: state === "foreign" || state === "missing" ? "group.not_found" : "group.not_held",
+            params: { groupId },
+          },
+        );
+      },
+    );
+
+    it("keeps a saved target when it fires before the next save and read", async () => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const groupId = randomUUID();
+      await db
+        .insert(orderGroups)
+        .values({ id: groupId, partyId, position: 1, state: "held", submittedBy: ALEX });
+      const input = {
+        ...item(v, "fish"),
+        slot: field === "afterGroupId" ? 2 : 0,
+        [field]: groupId,
+      };
+      const draft = await save(v, partyId, ALEX, null, 0, [input]);
+      await db
+        .update(orderGroups)
+        .set({ state: "fired", firedAt: "2026-10-17T00:00:00.000Z" })
+        .where(eq(orderGroups.id, groupId));
+      await refusedWritingNothing(() => save(v, partyId, ALEX, draft.id, draft.revision, [input]), {
+        code: "group.not_held",
+        params: { groupId },
+      });
+      expect(await draftsOf(v, partyId)).toEqual([draft]);
+    });
+  });
+
+  it.each([null, "another held group"])("refuses two anchors for one slot (%s)", async (anchor) => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const first = randomUUID(),
+      second = randomUUID();
+    await db
+      .insert(orderGroups)
+      .values(
+        [first, second].map((id, index) => ({
+          id,
+          partyId,
+          position: index + 1,
+          state: "held" as const,
+          submittedBy: ALEX,
+        })),
+      );
+    await refusedWritingNothing(
+      () =>
+        save(v, partyId, ALEX, null, 0, [
+          item(v, "beer", { slot: 1, afterGroupId: first }),
+          item(v, "fish", { slot: 1, afterGroupId: anchor === null ? null : second }),
+        ]),
+      { code: "management.request_invalid", params: { field: "lines.1.slot" } },
+    );
+  });
+});
+
 describe("draft placement input", () => {
   it.each([null, -1, 0.5, "1", true, [], {}, Number.NaN, Number.POSITIVE_INFINITY])(
     "refuses slot %j before replacing a draft",

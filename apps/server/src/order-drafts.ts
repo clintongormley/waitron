@@ -6,6 +6,7 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
+  orderGroups,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -118,6 +119,7 @@ export async function saveDraft(
     await requireOwnDraftAt(tx, draft, operatorId, input.revision);
     previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
   }
+  await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, lines, previous);
   // The lines replace the draft's, so these are every offer the read at the end needs.
   const offers = await offersFor(
@@ -504,6 +506,36 @@ export async function readUnsentDrafts(
 }
 
 const QUANTITY_PATTERN = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,3})?$/;
+
+async function validateDraftPlaces(
+  tx: Transaction,
+  partyId: string,
+  lines: readonly DraftLineInput[],
+): Promise<void> {
+  const anchors = new Map<number, string | null>();
+  const ids = new Set<string>();
+  for (const [index, line] of lines.entries()) {
+    if (line.slot > 0) {
+      if (anchors.has(line.slot) && anchors.get(line.slot) !== line.afterGroupId) {
+        throw invalid(`lines.${index}.slot`);
+      }
+      anchors.set(line.slot, line.afterGroupId);
+    }
+    if (line.joinGroupId !== null) ids.add(line.joinGroupId);
+    if (line.afterGroupId !== null) ids.add(line.afterGroupId);
+  }
+  if (ids.size === 0) return;
+  const rows = await tx
+    .select({ id: orderGroups.id, state: orderGroups.state })
+    .from(orderGroups)
+    .where(and(eq(orderGroups.partyId, partyId), inArray(orderGroups.id, [...ids])));
+  const states = new Map(rows.map((row) => [row.id, row.state]));
+  for (const groupId of ids) {
+    const state = states.get(groupId);
+    if (state === undefined) throw new AppError("group.not_found", { groupId });
+    if (state !== "held") throw new AppError("group.not_held", { groupId });
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
