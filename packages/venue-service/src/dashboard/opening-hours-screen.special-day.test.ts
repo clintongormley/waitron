@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
+import { commands, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
-import type { HolidayFact } from "../hours-types.js";
+import type { HolidayFact, LocalDate } from "../hours-types.js";
+import { addDays } from "../hours-rules.js";
 import type { OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -30,6 +32,24 @@ const holiday = (date: string, name: string): HolidayFact => ({
   scope: "national",
   sourceId: "official",
 });
+/** Every date of 2026, so a drag over the Year finds each date it crosses; three carry facts. */
+function everyDate2026(
+  day: (
+    date: string,
+    over: Partial<OpeningHoursYear["days"][number]>,
+  ) => OpeningHoursYear["days"][number],
+) {
+  const facts: Record<string, Partial<OpeningHoursYear["days"][number]>> = {
+    "2026-12-14": { specialDay: { id: "sd1", name: "Christmas dinners" }, tone: "special_day" },
+    "2026-05-01": { holidays: [holiday("2026-05-01", "Labour Day")], tone: "public_holiday" },
+    "2026-10-20": { holidays: [holiday("2026-10-20", "Harvest day")], tone: "public_holiday" },
+    "2026-11-04": { holidays: [holiday("2026-11-04", "Town feast")], tone: "public_holiday" },
+  };
+  const days: OpeningHoursYear["days"][number][] = [];
+  for (let date = "2026-01-01"; date <= "2026-12-31"; date = addDays(date, 1))
+    days.push(day(date, facts[date] ?? {}));
+  return days;
+}
 function yearRead(year: number): OpeningHoursYear {
   const day = (date: string, over: Partial<OpeningHoursYear["days"][number]>) => ({
     date,
@@ -49,23 +69,7 @@ function yearRead(year: number): OpeningHoursYear {
     timeZone: "Europe/Madrid",
     today: "2026-12-14",
     seasons: [],
-    days:
-      year === 2026
-        ? [
-            day("2026-12-14", {
-              specialDay: { id: "sd1", name: "Christmas dinners" },
-              tone: "special_day",
-            }),
-            day("2026-05-01", {
-              holidays: [holiday("2026-05-01", "Labour Day")],
-              tone: "public_holiday",
-            }),
-            day("2026-11-04", {
-              holidays: [holiday("2026-11-04", "Town feast")],
-              tone: "public_holiday",
-            }),
-          ]
-        : [],
+    days: year === 2026 ? everyDate2026(day) : [],
     publicHolidaysAvailable: true,
     missingHolidays: [],
     holidayCoverage: [],
@@ -390,6 +394,94 @@ describe("Back and Forward under the app's leave guard", () => {
     } finally {
       guard.dispose();
     }
+  });
+});
+
+describe("a run picked on the Year", () => {
+  const daySel = (date: LocalDate) => `opening-hours-year td[data-date="${date}"] button`;
+  const yearOf = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-year")!;
+  const dayButton = (el: Screen, date: LocalDate) =>
+    yearOf(el).shadowRoot!.querySelector<HTMLButtonElement>(`td[data-date="${date}"] button`)!;
+  async function yearShown(address = "/manage/opening-hours/view/year") {
+    const mounted = await mount(address);
+    await expect.poll(() => yearOf(mounted.el)?.model?.year).toBe(2026);
+    await yearOf(mounted.el).updateComplete;
+    return mounted;
+  }
+  const run = ["2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"];
+  /** The real mouse presses where the dates are drawn, so they are scrolled into view first. */
+  async function drag(el: Screen, dates: LocalDate[]) {
+    dayButton(el, dates[0]!).scrollIntoView({ block: "center" });
+    await commands.mouseDrag(dates.map(daySel));
+  }
+
+  /** Whether a day box was drawn at all, and whether one was still drawn as the painter was. */
+  function watchBox(el: Screen) {
+    const seen = { box: false, boxBesidePainter: false };
+    const observer = new MutationObserver(() => {
+      const root = el.shadowRoot!;
+      if (root.querySelector("calendar-day-box")) seen.box = true;
+      if (root.querySelector("special-day-painter") && root.querySelector("calendar-day-box"))
+        seen.boxBesidePainter = true;
+    });
+    observer.observe(el.shadowRoot!, { childList: true, subtree: true });
+    return { seen, stop: () => observer.disconnect() };
+  }
+
+  it("a double-click on a run in the Year opens a new day holding it", async () => {
+    const { el, writes } = await yearShown();
+    await drag(el, run);
+    const watched = watchBox(el);
+    await userEvent.dblClick(dayButton(el, "2026-10-22"));
+    const painter = await shownPainter(el);
+    watched.stop();
+    expect(watched.seen).toEqual({ box: true, boxBesidePainter: false });
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
+    );
+    expect([painter.specialDayId, painter.date, painter.lastDate]).toEqual([
+      null,
+      "2026-10-20",
+      "2026-10-23",
+    ]);
+    expect(chips(painter)).toEqual(run);
+    expect(nameOf(painter)).toBe("Harvest day");
+    await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("a double-click on a special day's date opens that day, whatever is picked", async () => {
+    const { el, writes } = await yearShown();
+    await drag(el, ["2026-12-12", "2026-12-13", "2026-12-14", "2026-12-15"]);
+    await userEvent.dblClick(dayButton(el, "2026-12-14"));
+    const painter = await shownPainter(el);
+    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd1");
+    expect(painter.specialDayId).toBe("sd1");
+    expect(nameOf(painter)).toBe("Christmas dinners");
+    await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("Back from the painter returns to the Year with the address it had", async () => {
+    const address = "/manage/opening-hours/view/year/year/2026";
+    const { el } = await yearShown(address);
+    await drag(el, run);
+    await userEvent.dblClick(dayButton(el, "2026-10-22"));
+    await shownPainter(el);
+    history.back();
+    await expect.poll(() => location.pathname).toBe(address);
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(checkedView(el)).toBe("year");
+  });
+
+  it("a direct load of a run's address opens it", async () => {
+    const { el } = await mount(
+      "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
+    );
+    const painter = await shownPainter(el);
+    expect([painter.date, painter.lastDate]).toEqual(["2026-10-20", "2026-10-23"]);
+    expect(chips(painter)).toEqual(run);
+    expect(nameOf(painter)).toBe("Harvest day");
   });
 });
 

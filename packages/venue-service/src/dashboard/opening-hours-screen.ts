@@ -24,7 +24,7 @@ import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
 import "./opening-hours-month.js";
-import type { CalendarDayOpen } from "./opening-hours-month.js";
+import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -53,8 +53,13 @@ const SHOWN_VIEWS: readonly View[] = ["year", "month"];
 const VIEW_LABELS = { year: "opening.view.year", month: "opening.view.month" } as const;
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
-/** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`. */
-type SpecialAddress = { specialDayId: string | null; date: LocalDate | null };
+/** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`,
+ *  through `to` when it opens on a run. */
+type SpecialAddress = {
+  specialDayId: string | null;
+  date: LocalDate | null;
+  to?: LocalDate | null;
+};
 const painterEntryKey = "openingHoursPainter";
 /** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
 export type CalendarViews = {
@@ -193,6 +198,7 @@ export class OpeningHoursScreen extends LitElement {
         zone: "zone",
         "special-day": "special-day",
         date: "date",
+        to: "to",
         year: "year",
         month: "month",
         window: "window",
@@ -245,10 +251,13 @@ export class OpeningHoursScreen extends LitElement {
       return;
     }
     if (view === "special-day") {
+      const specialDayId = this.url.read("special-day") || null;
+      const to = this.url.read("to") ?? "";
       this.painter = undefined;
       this.special = {
-        specialDayId: this.url.read("special-day") || null,
+        specialDayId,
         date: isLocalDate(date) ? date : null,
+        to: specialDayId === null && isLocalDate(date) && isLocalDate(to) && to > date ? to : null,
       };
       if (this.baseHref === undefined) this.view = "year";
       return;
@@ -261,6 +270,7 @@ export class OpeningHoursScreen extends LitElement {
             view: "month",
             month: isLocalDate(date) ? date.slice(0, 7) : null,
             date: null,
+            to: null,
           },
           true,
         ),
@@ -686,6 +696,7 @@ export class OpeningHoursScreen extends LitElement {
         year: year.padStart(4, "0"),
         month: null,
         date: null,
+        to: null,
       }),
     ).then(() => this.followUrl());
   }
@@ -757,9 +768,9 @@ export class OpeningHoursScreen extends LitElement {
   private overlaid() {
     return this.painter !== undefined || this.special !== undefined;
   }
-  private specialUrl({ specialDayId, date }: SpecialAddress) {
+  private specialUrl({ specialDayId, date, to }: SpecialAddress) {
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    url.pathname = specialDayPainterPath({ specialDayId, date });
+    url.pathname = specialDayPainterPath({ specialDayId, date, to });
     url.searchParams.delete("station");
     return url;
   }
@@ -897,6 +908,7 @@ export class OpeningHoursScreen extends LitElement {
       .model=${this.model}
       .specialDayId=${specialDayId}
       .date=${specialDayId === null ? date : null}
+      .lastDate=${specialDayId === null ? (address.to ?? null) : null}
       .addDate=${specialDayId === null ? null : date}
       .holidays=${holidays}
       .readOnly=${this.readOnly}
@@ -928,6 +940,29 @@ export class OpeningHoursScreen extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || this.painter) return;
     void this.openPainter(event.detail.seasonId);
+  }
+  /** A date a special day holds opens that day; any other opens a new day on the run. */
+  private openDays(event: CustomEvent<CalendarDaysOpen>) {
+    event.stopPropagation();
+    const { date, from, to } = event.detail;
+    const read = this.view === "year" ? this.yearModel : this.monthModel;
+    const days = read?.days ?? [];
+    const specialDayId = days.find((day) => day.date === date)?.specialDay?.id ?? null;
+    const holidays = days.flatMap((day) => day.holidays);
+    const open = () =>
+      specialDayId
+        ? this.openSpecialPainter({ specialDayId, date: null })
+        : this.openSpecialPainter({ specialDayId: null, date: from, to }, holidays);
+    const box = this.shadowRoot?.querySelector("calendar-day-box");
+    if (this.dayBox && this.dayBoxPlaced === this.dayBox && box?.shown) {
+      this.afterDayBox = open;
+      box.hide();
+      return;
+    }
+    this.dayBox = undefined;
+    this.dayBoxPlaced = undefined;
+    this.afterDayBox = undefined;
+    void open();
   }
   private openDayBox(event: CustomEvent<CalendarDayOpen>) {
     event.stopPropagation();
@@ -1109,9 +1144,10 @@ export class OpeningHoursScreen extends LitElement {
         .departments=${this.model!.departments}
         .readOnly=${this.readOnly}
         @calendar-day-open=${this.openDayBox}
+        @calendar-days-open=${this.openDays}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
-          write({ view: "month", month: event.detail.month, date: null });
+          write({ view: "month", month: event.detail.month, date: null, to: null });
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
@@ -1137,6 +1173,7 @@ export class OpeningHoursScreen extends LitElement {
                   .specialDays=${this.knownSpecialDays}
                   .readOnly=${this.readOnly}
                   @calendar-day-open=${this.openDayBox}
+                  @calendar-days-open=${this.openDays}
                   @season-dialog-open=${() => this.readKnownSpecialDays()}
                   @season-week-open=${this.openSeasonWeek}
                   @season-changed=${(event: Event) => {

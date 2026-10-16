@@ -28,11 +28,14 @@ export function seasonPainterPath(address: {
 export function specialDayPainterPath(address: {
   specialDayId: string | null;
   date?: string | null;
+  /** A new day's last date; left out when it is `date`. */
+  to?: string | null;
 }): string {
   return path([
     ["view", "special-day"],
     ["special-day", address.specialDayId],
     ["date", address.date],
+    ["to", address.to === address.date ? null : address.to],
   ]);
 }
 

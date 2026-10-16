@@ -31,6 +31,15 @@ describe("opening hours paths", () => {
     ]);
   });
 
+  it("writes a new special day's run as its first and last date, and one date alone", () => {
+    expect(
+      specialDayPainterPath({ specialDayId: null, date: "2026-10-20", to: "2026-10-23" }),
+    ).toBe("/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23");
+    expect(
+      specialDayPainterPath({ specialDayId: null, date: "2026-10-20", to: "2026-10-20" }),
+    ).toBe("/manage/opening-hours/view/special-day/date/2026-10-20");
+  });
+
   it("keeps a module view's empty values and leaves its view pair out", () => {
     expect(readBack(calendarViewPath("staffing", { area: "", view: "rota", week: "~" }))).toEqual([
       "view",

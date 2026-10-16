@@ -372,6 +372,8 @@ export class SpecialDayPainter extends LitElement {
   @property({ attribute: false }) specialDayId: string | null = null;
   /** A new special day's first date. */
   @property({ attribute: false }) date: LocalDate | null = null;
+  /** A new special day's last date, when it opens on a run from {@link date}. */
+  @property({ attribute: false }) lastDate: LocalDate | null = null;
   /** A date added to the stored day's draft, as an unsaved change; a change starts again from it. */
   @property({ attribute: false }) addDate: LocalDate | null = null;
   /** The public holidays the host knows of on the dates in view, for the Every year note. */
@@ -488,10 +490,11 @@ export class SpecialDayPainter extends LitElement {
     if (this.open) this.readSeason();
   }
 
-  /** A stored day's id with its date to add, or `new:<date>`; a change starts the draft again. */
+  /** A stored day's id with its date to add, or `new:<date>..<lastDate>`; a change starts the
+   *  draft again. */
   private seedKey(): string {
     return this.specialDayId === null
-      ? `new:${this.date ?? ""}`
+      ? `new:${this.date ?? ""}..${this.lastDate ?? ""}`
       : `${this.specialDayId}+${this.addDate ?? ""}`;
   }
   /** Reads the season of the draft's dates when they, or the model's seasons, change. */
@@ -548,7 +551,11 @@ export class SpecialDayPainter extends LitElement {
       this.loading = false;
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
       const name = date ? holidayDateName(this.holidays, date, "") : "";
-      this.adopt(undefined, date ? [date] : [], name);
+      const dates = date ? [date] : [];
+      const last = this.lastDate && isLocalDate(this.lastDate) ? this.lastDate : undefined;
+      if (date && last)
+        for (let next = addDays(date, 1); next <= last; next = addDays(next, 1)) dates.push(next);
+      this.adopt(undefined, dates, name);
       if (date && name) this.offerExisting(name, date);
       return;
     }
