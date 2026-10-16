@@ -1538,7 +1538,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A753. Calendar colours: more of them, one shared picker, and who holds each staff role (owner,
   2026-10-16).** Periods, staff roles and menus pick from six colours; the palette grows (the
   owner sees a swatch board first), every place picking one uses A725's shared colour popup — the
-  staff role dialog's dropdown included — and the Staff roles list names the people holding each
+  staff role dialog's dropdown included, marking colours other roles use and starting a new role on
+  an unused one — and the Staff roles list names the people holding each
   role, with "plus N more" past 5 or 10, whichever reads better.
   [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
 
@@ -1547,6 +1548,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   "Default receipt language" without its legal paragraph; the VAT class for new products back from
   its own Defaults page, under `venue.configure`. No tabs once A756, A757 and A758 have taken
   theirs. [Detail](backlog/service-periods.md#a755-venue-settings-four-cards-on-one-page), [mockups](backlog/mockups/a755-venue-settings/)
+
+- **A762. Every painter says what it edits in its colour, and the Staffing month marks special days
+  (owner, 2026-10-16).** All four painters get a band in the season's or the special day's colour;
+  the staffing painters take A723's "Winter: standard week" wording; the Staffing month marks a
+  special day's dates as one coloured run. After A721 and A723.
+  [Detail](backlog/service-periods.md#a762-every-painter-says-what-it-edits-in-its-colour-and-the-staffing-month-marks-special-days)
 
 - **A759. The Calendar's Year | Month switch goes; the title moves between views (owner,
   2026-10-16).** A month name in Year opens that month; in "‹ February 2026 ›" the year is a link
@@ -4765,6 +4772,12 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
+
+- **A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
+  (owner, 2026-10-16).** Painting a second role over a day almost always resized the first; now a
+  block must be clicked before its edges resize it. Its editor becomes wide: a role dropdown, How
+  many beside it, and `[Cancel] [Delete] … [Save]`, saving only on Save.
+  [Detail](backlog/workforce.md#a761-the-staffing-grid-a-drag-paints-unless-a-block-is-picked-and-a-wide-block-editor)
 
 - **A724. Staffing: reach special days and standard weeks from the month day box (owner,
   2026-10-15).** After all of A720 lands, use its day box to open the special day's staffing or the

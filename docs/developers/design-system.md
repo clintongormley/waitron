@@ -2401,9 +2401,10 @@ inside the field only while it contains an action.
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
 it stays on the bottom left. The floor plan editor's header is the owner's exception: Undo, Redo,
-then Cancel beside Save (A502). The Routes cell editor is the owner's other exception (A726,
-2026-10-15): Clear setting keeps its danger look and sits in the `cancel` slot after Cancel, the two
-in one wrapping flex group, so Save stands alone on the right. A secondary action that belongs beside the primary action goes in the
+then Cancel beside Save (A502). **A destructive action in the row — Delete, Clear setting — goes in
+the `cancel` slot after Cancel, keeping its danger look, the two in one wrapping flex group, so Save
+stands alone on the right: `[Cancel] [Delete] … [Save]`** (owner, 2026-10-16, making general what
+A726 chose for the Routes cell editor on 2026-10-15). Nothing guards it across screens. A secondary action that belongs beside the primary action goes in the
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, no wider than the form width)

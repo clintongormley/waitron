@@ -206,8 +206,9 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
 4. **No Floor plan column or field until A504.** Remove the disabled field from the period dialog
    and the column from the list, and change A504's entry — which says they are kept for it — to say
    A504 adds them back.
-5. **Delete… moves into the dialog's bottom row**, left of Cancel and Save; today it sits alone in
-   the body.
+5. **Delete… moves into the dialog's bottom row**, after Cancel on the left, with Save alone on the
+   right — `[Cancel] [Delete…] … [Save]`, the house rule since 2026-10-16 (design-system.md → Forms);
+   today it sits alone in the body.
 6. **The colour is chosen in a popup**, the shared chooser A725 point 7 describes, not a row of
    squares. Whichever of A719, A721 and A725 lands first builds it.
 
@@ -318,7 +319,10 @@ special-day write routes.
    already plans one shared colour popup for stations, periods and seasons; staff roles use it too.
    Whichever of A725 and A753 lands first builds it, and the other adopts it. The category and
    product colour field (`apps/dashboard/src/widgets/color-field.ts`, a different set of 24) stays
-   apart.
+   apart. **For staff roles it marks the colours other roles use**, as A725 point 7 does for
+   stations, **and a new role starts on the first colour no role uses**, as A725 point 4 does for a
+   new station (owner, 2026-10-16: Waiter was offered Grey while only blue and red were taken). The
+   painter's "+ New staff role" opens the same dialog.
 3. **The Staff roles list names who holds each role.** The People column says "3 people"; it shows
    the names, then "plus N more" past a cut-off. Owner: try 5 and 10 names on the real screen and
    keep the one that reads better.
@@ -329,7 +333,7 @@ special-day write routes.
 [view](mockups/a755-venue-settings/01-venue-details-view.png),
 [editing the venue card](mockups/a755-venue-settings/02-editing-the-venue-card.png),
 [editing the defaults card](mockups/a755-venue-settings/03-editing-the-defaults-card.png); the
-canvas they were drawn on is https://claude.ai/artifact/6YxjmqL8TnptCV9S9evCnE (owner's account
+canvas they were drawn on is [here](https://claude.ai/artifact/6YxjmqL8TnptCV9S9evCnE) (owner's account
 only). The boards still draw today's tabs; A756, A757 and A758 take the Kitchen, Tables and
 Adjustment reasons tabs away, leaving Venue settings one page with no tabs.
 
@@ -372,6 +376,24 @@ before it is built.
    enough for the longest month-and-year title in every interface language, with digits of equal
    width. The Week view's longer title ("28 September – 4 October 2026") takes its own fixed width.
 4. **The Staffing month follows** (A720 point 7).
+
+## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
+
+**A762 (owner, 2026-10-16).** Owner: "we need to make it more obvious that we're editing a standard
+week vs a special range. maybe through the use of colour. even on the month view the special day is
+not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
+`special-day-painter.ts`, `painter-frame.ts`; `packages/staffing/src/dashboard/staffing-season-painter.ts`,
+`staffing-special-day-painter.ts`, `staffing-month.ts`. After A721 (stored season colours) and A723
+(the opening-hours painters' wording).
+
+1. **All four painters — opening hours and staffing, standard week and special day — carry the
+   colour of what they edit** (owner chose all four, 2026-10-16): a band along the top bar in the
+   season's colour for a standard week, in the special day's own colour for a special day.
+2. **The staffing painters take A723's wording too:** "Winter: standard week" or "Foo: special day,
+   12–15 Feb", with A723's line under the top bar saying which dates it covers. Today the staffing
+   special-day painter shows only "Foo" and a department.
+3. **The Staffing month marks a special day's dates in its colour**, as one run the way the season
+   bar marks a season. Today each date only carries the name in coloured text.
 
 ## Decisions and deliberate limits
 

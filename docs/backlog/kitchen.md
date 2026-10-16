@@ -203,7 +203,7 @@ about grouping these corrections.
 [Courses page](mockups/a756-kitchen-settings/02-courses-page.png),
 [department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
 [Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
-were drawn on is https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT (owner's account only).
+were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 After A725, which changes the same station editor.
 
 Every setting on Venue settings' Kitchen tab is stored once for the venue today: the courses; bump
@@ -254,8 +254,8 @@ confirm the new wording when A756 is picked up.
   Search. The editor calls its fallback Station (Estación) until it holds a period route, then Any
   other time (El resto del tiempo). Its two route fields share the row evenly, and both station
   fields end together. Clear setting stays red and sits at the left of the editor's bottom row,
-  after Cancel; Save is alone on the right — the owner's exception to the `cancel` slot holding
-  only Cancel or Back ([design-system.md](../developers/design-system.md)).
+  after Cancel; Save is alone on the right — since 2026-10-16 the house rule for every destructive
+  action in a form's bottom row ([design-system.md](../developers/design-system.md)).
 
 - **A counter order moved to a table sends its unsent dishes to the kitchen at the move (A660,
   owner 2026-10-15: (C), keep the rule).** A bill entering table service from another service mode
