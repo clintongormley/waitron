@@ -21,3 +21,14 @@ export interface RefundableTender {
   pendingRefundId: string | null;
   manual: boolean;
 }
+
+export interface TenderRefundView {
+  id: string;
+  saleId: string;
+  tenderId: string;
+  state: "pending" | "completed" | "failed";
+  appliedAmount: string;
+  tipAmount: string;
+  createdAt: string;
+  completedAt: string | null;
+}
