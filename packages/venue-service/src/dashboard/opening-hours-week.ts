@@ -106,6 +106,8 @@ export class OpeningHoursWeekView extends LitElement {
       .label {
         position: absolute;
         inset-block-start: 0;
+        translate: -50% 0;
+        font-variant-numeric: tabular-nums;
         white-space: nowrap;
       }
       section {
@@ -309,7 +311,11 @@ export class OpeningHoursWeekView extends LitElement {
         <div class="scale">
           ${labels.map(
             (minute) =>
-              html`<span class="label" style=${styleMap({ left: `${(minute / longest) * 100}%` })}
+              // A label is centred on its tick. "HH:MM" in tabular figures is under 5ch wide, so
+              // holding its centre 2.5ch from the end keeps the last one inside the Week.
+              html`<span
+                class="label"
+                style=${styleMap({ left: `min(${(minute / longest) * 100}%, calc(100% - 2.5ch))` })}
                 >${clockText(days[0]!.dayCutover, minute)}</span
               >`,
           )}

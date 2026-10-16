@@ -160,6 +160,9 @@ describe("Opening hours week", () => {
     await el.updateComplete;
     expect(testId(el, "previous-week")!.hasAttribute("disabled")).toBe(true);
     expect(testId(el, "next-week")!.hasAttribute("disabled")).toBe(false);
+    await userEvent.click(testId(el, "previous-week")!, { force: true });
+    testId(el, "previous-week")!.click();
+    expect(sent).toHaveLength(2);
   });
 
   it("the title links to its months and years", async () => {
@@ -290,13 +293,24 @@ describe("Opening hours week", () => {
     const labels = [...root(el).querySelectorAll<HTMLElement>(".ruler .label")];
     const ten = labels.find((label) => text(label) === "10:00")!;
     const block = track(el, "2026-12-03", "bar").querySelector<HTMLElement>(".block")!;
+    const centre = (box: DOMRect) => box.left + box.width / 2;
     expect(
-      Math.abs(block.getBoundingClientRect().left - ten.getBoundingClientRect().left),
+      Math.abs(block.getBoundingClientRect().left - centre(ten.getBoundingClientRect())),
     ).toBeLessThanOrEqual(2);
 
     const ruler = root(el).querySelector<HTMLElement>(".ruler .scale")!.getBoundingClientRect();
     const last = labels.at(-1)!.getBoundingClientRect();
-    expect(Math.abs(last.left - ruler.left - (ruler.width * 1440) / 1500)).toBeLessThanOrEqual(1);
+    expect(Math.abs(centre(last) - ruler.left - (ruler.width * 1440) / 1500)).toBeLessThanOrEqual(
+      1,
+    );
     expect(root(el).querySelector(".ruler")!.getAttribute("aria-hidden")).toBe("true");
+
+    el.model = monthModel();
+    await el.updateComplete;
+    const atEnd = [...root(el).querySelectorAll<HTMLElement>(".ruler .label")].at(-1)!;
+    expect(text(atEnd)).toBe("06:00");
+    expect(atEnd.getBoundingClientRect().right).toBeLessThanOrEqual(
+      el.getBoundingClientRect().right,
+    );
   });
 });
