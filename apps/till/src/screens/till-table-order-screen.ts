@@ -44,7 +44,12 @@ import {
 } from "../state/working-order.js";
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
-import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
+import {
+  offeredListsOf,
+  toWireLineExtras,
+  toWireModifiers,
+  toWireProductIdentity,
+} from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -2403,7 +2408,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #openChange(line: TabLine): void {
     const live = this.#liveProduct(line)!;
-    const offered = live.offeredModifiers ?? [];
+    const offered = offeredListsOf(live);
     const sendsExtras = offered.some((entry) => entry.kind === "extras");
     const extras: SelectedExtra[] = [];
     for (const child of this.lines.filter((row) => row.parentLineNo === line.lineNo)) {
@@ -2446,13 +2451,14 @@ export class TillTableOrderScreen extends LitElement {
     this.#changeSelection = undefined;
   }
 
-  /** `options` and `extras` go only when the dish offers a list of that kind: either, sent, replaces the
-   * line's whole set, so an absent one keeps what the line holds. `options` goes only when the answers
-   * differ from those the editor opened with: the editor holds no answer to a list the dish no longer
-   * offers, so sending an unchanged set would drop that answer. */
+  /** `options` and `extras` go only when the till offers the dish a list of that kind
+   * (`offeredListsOf`): either, sent, replaces the line's whole set, so an absent one keeps what the
+   * line holds. `options` goes only when the answers differ from those the editor opened with: the
+   * editor holds no answer to a list the dish no longer offers, so sending an unchanged set would
+   * drop that answer. */
   #confirmChange(detail: ModifierConfirmDetail): void {
     const line = this.changeLine!;
-    const offered = this.#changeProduct!.offeredModifiers ?? [];
+    const offered = offeredListsOf(this.#changeProduct!);
     const opened = this.#changeSelection!.options ?? [];
     this.#closeChange();
     const patch: OrderLinePatch = { note: detail.note ?? null };
