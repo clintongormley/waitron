@@ -260,6 +260,7 @@ import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { readFilingModule } from "./till-config.js";
+import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
@@ -1481,7 +1482,9 @@ async function bootServer(
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
-  const operationDescriptionDefault = enabledFiscal.venueFields?.defaults?.operationDescription;
+  const operationDescriptionDefault = offeredOperationDescriptionDefault(
+    enabledFiscal.venueFields?.defaults?.operationDescription,
+  );
   const till: TillConfig = {
     ...config.till,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
