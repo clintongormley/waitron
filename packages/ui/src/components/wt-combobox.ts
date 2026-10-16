@@ -1019,8 +1019,13 @@ export class WtCombobox extends LitElement {
           class="field-control trigger"
           aria-haspopup="listbox"
           aria-expanded=${this.expanded}
-          aria-labelledby=${showLabel ? this.labelId : nothing}
-          aria-label=${triggerName || nothing}
+          aria-labelledby=${
+            showLabel
+              ? `${this.labelId} ${triggerId}`
+              : triggerName
+                ? `${this.labelId}-name ${triggerId}`
+                : nothing
+          }
           aria-invalid=${invalid}
           aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
           popovertarget="panel"
@@ -1028,6 +1033,11 @@ export class WtCombobox extends LitElement {
           @click=${this.onTriggerClick}
           @keydown=${this.onTriggerKeydown}
         >
+          ${
+            !showLabel && triggerName
+              ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
+              : nothing
+          }
           <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
           ${guard([this.reservedTexts], () =>
             this.reservedTexts.map(

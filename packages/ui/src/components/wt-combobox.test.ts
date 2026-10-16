@@ -68,19 +68,23 @@ test("a named combobox uses that semantic name for the trigger's id and name att
 });
 
 test("falls back to a forwarded aria-label when there is no visible label", async () => {
-  const el = await mount('<wt-combobox aria-label="Dietary tags"></wt-combobox>');
+  const el = await mountWith('<wt-combobox aria-label="Dietary tags"></wt-combobox>');
+  el.value = "vegan";
+  await el.updateComplete;
   const trigger = el.shadowRoot!.querySelector(".trigger")!;
-  expect(trigger.getAttribute("aria-label")).toBe("Dietary tags");
-  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  await expect.element(page.elementLocator(trigger)).toHaveAccessibleName("Dietary tags Vegan");
   // The panel's search box takes the same fallback, so it is not left called just "Search".
   expect(el.shadowRoot!.querySelector(".search")!.getAttribute("aria-label")).toBe("Dietary tags");
 });
 
 test("a visible label takes precedence over a forwarded aria-label", async () => {
-  const el = await mount('<wt-combobox label="Dietary tags" aria-label="Ignored"></wt-combobox>');
+  const el = await mountWith(
+    '<wt-combobox label="Dietary tags" aria-label="Ignored"></wt-combobox>',
+  );
+  el.value = "vegan";
+  await el.updateComplete;
   const trigger = el.shadowRoot!.querySelector(".trigger")!;
-  expect(trigger.hasAttribute("aria-label")).toBe(false);
-  expect(trigger.getAttribute("aria-labelledby")).toBe(el.shadowRoot!.querySelector("label")!.id);
+  await expect.element(page.elementLocator(trigger)).toHaveAccessibleName("Dietary tags Vegan");
 });
 
 test("opens the panel on trigger click and reflects aria-expanded", async () => {
@@ -874,6 +878,52 @@ test("labels the search box and the empty list with its default wording", async 
   expect(search.placeholder).toBe("Search");
   await userEvent.type(search, "zzz");
   expect(el.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe("No results");
+});
+
+describe("the closed trigger's accessible name is its label, then its own text", () => {
+  async function triggerNamed(html: string, values: string[] = []) {
+    const el = await mountWith(html);
+    if (el.multiple) el.values = values;
+    else if (values[0]) el.value = values[0];
+    await el.updateComplete;
+    return page.elementLocator(el.shadowRoot!.querySelector(".trigger")!);
+  }
+
+  test("a labelled choice with a value names the label and the value", async () => {
+    const trigger = await triggerNamed('<wt-combobox label="Dietary tags"></wt-combobox>', [
+      "vegan",
+    ]);
+    await expect.element(trigger).toHaveAccessibleName("Dietary tags Vegan");
+  });
+
+  test("with nothing chosen, the placeholder follows the label", async () => {
+    const trigger = await triggerNamed(
+      '<wt-combobox label="Dietary tags" placeholder="Choose one"></wt-combobox>',
+    );
+    await expect.element(trigger).toHaveAccessibleName("Dietary tags Choose one");
+  });
+
+  test("hide-label still names the label first", async () => {
+    const trigger = await triggerNamed('<wt-combobox label="Course" hide-label></wt-combobox>', [
+      "vegan",
+    ]);
+    await expect.element(trigger).toHaveAccessibleName("Course Vegan");
+  });
+
+  test("a forwarded aria-label stands in for the label", async () => {
+    const trigger = await triggerNamed('<wt-combobox aria-label="Dietary tags"></wt-combobox>', [
+      "vegan",
+    ]);
+    await expect.element(trigger).toHaveAccessibleName("Dietary tags Vegan");
+  });
+
+  test("a multiple choice names the label and its count", async () => {
+    const trigger = await triggerNamed(
+      '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+      ["gluten-free", "vegan"],
+    );
+    await expect.element(trigger).toHaveAccessibleName("Dietary tags 2 selected");
+  });
 });
 
 test("counts a multiple selection with its default wording", async () => {
@@ -2202,10 +2252,11 @@ test("a combobox with no hint renders no hint paragraph", async () => {
 test("hide-label draws no label, names the trigger by its label, and makes the field compact", async () => {
   const el = await mountWith('<wt-combobox label="Course" hide-label></wt-combobox>');
   host.style.setProperty("--wt-tap-min", "47px");
+  el.value = "vegan";
+  await el.updateComplete;
   const { field, trigger } = fieldParts(el);
   expect(el.shadowRoot!.querySelector("label")).toBeNull();
-  expect(trigger.getAttribute("aria-label")).toBe("Course");
-  expect(trigger.hasAttribute("aria-labelledby")).toBe(false);
+  await expect.element(page.elementLocator(trigger)).toHaveAccessibleName("Course Vegan");
   expect(field.hasAttribute("data-compact")).toBe(true);
   expect(field.getBoundingClientRect().height).toBe(47);
   expect(trigger.getBoundingClientRect().height).toBe(47);

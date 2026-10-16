@@ -144,6 +144,7 @@ it("explains what current users are in a help tooltip beside the status filter",
   // The tooltip sits outside the label, so the dropdown's label text is just "Status".
   expect(help.closest("label")).toBeNull();
   const trigger = status.shadowRoot!.querySelector("[aria-labelledby]")!;
-  const label = status.shadowRoot!.getElementById(trigger.getAttribute("aria-labelledby")!);
+  const [labelId] = trigger.getAttribute("aria-labelledby")!.split(" ");
+  const label = status.shadowRoot!.getElementById(labelId!);
   expect(label?.textContent?.trim()).toBe("Status");
 });
