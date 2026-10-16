@@ -200,3 +200,10 @@ spec's read-only inherited chips are in its allergen “Same as” paragraph. In
 remain read-only, and a variant's own implied diet labels remain locked. This retains the old
 editor's ability to choose an own dietary list without adding a new choice or changing null's
 meaning. The concrete Vegetarian-under-Vegan case failed before this gate was corrected.
+
+## Owner wording approval, 2026-10-16 09:48
+
+The owner approved all four proposed Spanish phrases: “No contiene ninguno de los 14”,
+“Igual que {parent}”, “· por {label}” and “Dietética”. The implemented strings match that answer.
+This dated answer closes the wording decision recorded above; the campaign's existing finish
+and landing authorization applies.
