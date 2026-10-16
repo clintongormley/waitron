@@ -10,6 +10,7 @@ import { StripeTerminalProvider } from "./provider.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+const otherSuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const now = new Date("2026-10-17T00:00:00Z");
 const manager = { personId: "22222222-2222-4222-8222-222222222222" };
 
@@ -52,6 +53,52 @@ async function audits(ref: string) {
 }
 
 describe("Stripe resolution ownership", () => {
+  it("does not treat the same reference in another venue as this venue's live payment", async () => {
+    const client = new FakeStripe();
+    const p = await params();
+    const entered = barrier();
+    const release = barrier();
+    const create = client.createPaymentIntent.bind(client);
+    vi.spyOn(client, "createPaymentIntent").mockImplementation(async (input) => {
+      const answer = await create(input);
+      entered.resolve();
+      await release.promise;
+      return answer;
+    });
+    const collecting = provider(client)
+      .collect(p)
+      .catch(() => undefined);
+    try {
+      await entered.promise;
+      const { paymentRef } = await stored(p.workingOrderId);
+      const other = await seedWorkingOrder(otherSuite.db);
+      const otherClient = new FakeStripe();
+      otherClient.setIntent("pi_other_venue", { status: "requires_payment_method", amount: 1210 });
+      await withTransaction(otherSuite.db, (tx) =>
+        insertAttempting(tx, {
+          origin: deviceOrigin(other.deviceId),
+          workingOrderId: other.workingOrderId,
+          provider: "stripe",
+          paymentRef,
+          externalRef: "pi_other_venue",
+          amount: decimal("12.10"),
+        }),
+      );
+      const second = new StripeTerminalProvider({ db: otherSuite.db, client: otherClient });
+      expect(await second.resolveAbandonedAttempt(paymentRef, now, manager)).toEqual({
+        outcome: "failed",
+        cancelledAtProvider: true,
+      });
+      expect(otherClient.cancelledIntents).toEqual(["pi_other_venue"]);
+      expect((await stored(p.workingOrderId)).state).toBe("attempting");
+      expect(client.cancelledIntents).toEqual([]);
+    } finally {
+      release.resolve();
+      await collecting;
+    }
+    expect((await collecting)?.state).toBe("captured");
+  });
+
   it.each(["before stamp", "after stamp"] as const)(
     "leaves a live collection alone %s across instances",
     async (phase) => {

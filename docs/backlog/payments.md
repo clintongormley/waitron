@@ -70,41 +70,10 @@ their full text.
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
 - **What M7b2 left open (a manager clearing a stuck card payment, #702).**
-  - Stripe Terminal's automatic `resolvePending` sweep is still a no-op, on purpose. During a LIVE
-    collect the row is `attempting` and its PaymentIntent waits for a card, so a sweep that cancels
-    would cancel a payment a customer is about to tap. Only the manager action, which first checks
-    that no attempt is running in this process, asks Stripe, and cancels the PaymentIntent if Stripe
-    still allows it.
   - SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
     one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
     keeps answering PENDING. The manager action refuses a SumUp payment
     (`payment.resolve_unsupported`).
-  - When the reader poll times out or errors, `collect` cancels the reader action best-effort and
-    fails the row. If that cancel fails and the customer then taps, the money is captured while the
-    local row says `failed`; only reconciliation sees it. Now that a resolver exists, leaving such a
-    row `attempting` would hand it to the manager action instead. That would also lock the order
-    until a manager acts. **Owner decision, 2026-10-16 (A764):** leave uncertain Stripe attempts
-    unknown and check them automatically once collection stops, with the manager action as
-    fallback. First demonstrate that the automatic check cannot cancel a live collection.
-    This remains separate from A739a's outcome panel; nothing has changed the stored states yet.
-
-    **A764 investigation checkpoint (2026-10-16):** On branch
-    `fix/a764-stripe-unknown-outcome`, run
-    `pnpm --filter @waitron/payments-stripe exec vitest run --project=node src/provider-unknown.test.ts`.
-    Three new checks fail: a refused reader cancellation returns `failed` instead of `attempting`,
-    a later capture stays `failed`, and the sweep does not cancel an abandoned PaymentIntent.
-    The live-collection case passes because the current sweep does nothing; that result does not
-    establish that a future automatic resolver protects live payments.
-
-    The cancellation audit also needs an automatic actor. The existing
-    `payment_resolutions.person_id` is required, and cancelled-resolution rows advance the next
-    attempt's provider key (`packages/payments/src/resolutions.ts`). In a temporary real-database
-    probe, inserting an audit row with no person failed on that required column; the same insert
-    with a person committed. A separate probe called the manager resolver during a paused live
-    collection and observed its PaymentIntent cancelled. Do not wire that resolver straight into
-    the sweep. The proposed nullable-person audit needs a payments migration, so implementation
-    waits while this lane's A737 migration branch is parked. No migration or payment behavior has
-    changed in this checkpoint.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
     three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing
@@ -250,6 +219,12 @@ for reconciliation rather than show a receipt).
   connections to the box; W18c #1145 and W48 #1162).
 
 ## Decisions and deliberate limits
+
+- **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
+  Check them automatically after collection ends; keep the order locked until the outcome is known.
+  Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
+  a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
+  [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
   W102 part 0). The QR label and NFC text carry only the equipment kind and id. A general pick-up

@@ -54,11 +54,11 @@ describe("toPayOutcome", () => {
     });
   });
 
-  it("failed → { outcome: 'declined' } (a decline OR a poll-window stall — the provider collapses both)", () => {
+  it("failed → { outcome: 'declined' }", () => {
     expect(toPayOutcome(result("failed"), null)).toEqual({ outcome: "declined" });
   });
 
-  it("maps an attempting result (SumUp poll timeout) to the timeout arm", () => {
+  it("maps an attempting result to the timeout arm", () => {
     expect(toPayOutcome(result("attempting"), null)).toEqual({ outcome: "timeout" });
   });
 });

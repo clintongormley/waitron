@@ -40,6 +40,47 @@ async function row(paymentRef: string) {
 }
 
 describe("Stripe unknown outcomes", () => {
+  it("does not count a stale listed row that a manager resolved while another row was checked", async () => {
+    const client = new FakeStripe();
+    const refs = [randomUUID(), randomUUID()];
+    for (const [index, paymentRef] of refs.entries()) {
+      const p = await params();
+      client.setIntent(`pi_snapshot_${index}`, {
+        status: index === 0 ? "succeeded" : "requires_payment_method",
+        amount: 1210,
+        amountReceived: index === 0 ? 1210 : 0,
+      });
+      await withTransaction(suite.db, (tx) =>
+        insertAttempting(tx, {
+          ...p,
+          provider: "stripe",
+          paymentRef,
+          externalRef: `pi_snapshot_${index}`,
+        }),
+      );
+    }
+    const retrieve = client.retrievePaymentIntent.bind(client);
+    vi.spyOn(client, "retrievePaymentIntent").mockImplementationOnce(async (id) => {
+      expect(
+        await provider(client).resolveAbandonedAttempt(refs[1]!, now, {
+          personId: "22222222-2222-4222-8222-222222222222",
+        }),
+      ).toEqual({ outcome: "failed", cancelledAtProvider: true });
+      return retrieve(id);
+    });
+    expect(await provider(client).resolvePending(now)).toEqual({
+      nextDueAt: null,
+      forwarded: 1,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+    expect((await row(refs[0]!))?.state).toBe("captured");
+    expect((await row(refs[1]!))?.state).toBe("failed");
+    expect(
+      (await suite.db.execute(sql`select count(*) as n from payment_resolutions`)).rows,
+    ).toEqual([{ n: 2 }]);
+  });
+
   it.each(["process", "poll", "connection_error", "successful_reader_cancel"] as const)(
     "keeps %s uncertainty with its processor reference",
     async (failure) => {
