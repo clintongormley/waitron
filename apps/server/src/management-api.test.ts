@@ -3080,6 +3080,40 @@ describe("floor plans", () => {
     expect(await res.json()).toEqual({ zoneId, revision: 0, savedAt: null, tables: [] });
   });
 
+  it("the zones list says which zones' plans have a placed table, and still leaves out an inactive zone", async () => {
+    const noPlan = await createZone(unique("HasPlacedNone"));
+    const unplaced = await createZone(unique("HasPlacedOff"));
+    const placed = await createZone(unique("HasPlacedOn"));
+    const inactive = await createZone(unique("HasPlacedGone"));
+    expect(
+      (
+        await put(unplaced, {
+          revision: 0,
+          tables: [{ ...entry("a", unique("U")), placement: null }],
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await put(placed, {
+          revision: 0,
+          tables: [{ ...entry("a", unique("O")), placement: null }, entry("b", unique("P"))],
+        })
+      ).status,
+    ).toBe(200);
+    expect((await put(inactive, { revision: 0, tables: [entry("a", unique("G"))] })).status).toBe(
+      200,
+    );
+    await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, inactive));
+
+    const response = await req("/zones", { method: "GET" }, managerCookie);
+    expect(response.status).toBe(200);
+    const zones = (await response.json()) as { id: string; hasPlacedTables: boolean }[];
+    const flag = (id: string) => zones.find((zone) => zone.id === id)?.hasPlacedTables;
+    expect([flag(noPlan), flag(unplaced), flag(placed)]).toEqual([false, false, true]);
+    expect(zones.find((zone) => zone.id === inactive)).toBeUndefined();
+  });
+
   it("saves a plan and reads it back; a save from an older copy is refused", async () => {
     const zoneId = await createZone(unique("PlanSave"));
     const label = unique("P");

@@ -90,6 +90,7 @@ export interface NamedRow {
 }
 export interface FloorZone extends NamedRow {
   active?: boolean;
+  hasPlacedTables?: boolean;
 }
 export interface ZoneFloorPlan {
   /** `id` is null only for a live table offered for adoption, which is never placed. */
