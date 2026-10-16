@@ -1541,7 +1541,7 @@ to, `packages/adjustments/src/dashboard/adjustment-report-screen.ts`); the table
 "always shown" and "keep at least one" words included, and a `viewKey` of its own. A table inside a
 dialog or picker does not offer customisation, a list whose only other column is its buttons
 (servers) has nothing to offer, and a list with one column between its name and its buttons shows
-no Customise button, as above.
+no Customise button, as above; the Departments and zones list offers none, by the owner's choice (A718).
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
@@ -4356,7 +4356,7 @@ cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those a
 ### Departments and zones
 
 You open one list, with each department followed by its indented zones. The columns show name,
-how orders start, counter service and receipt printing. Each row opens its Edit dialog. A
+how orders start, counter service, receipt printing and Also edit. Each row opens its Edit dialog. A
 zone's inherited value is muted and italic; an explicit override stays normal even when it
 matches the department. The row menus stay pinned at the end.
 
