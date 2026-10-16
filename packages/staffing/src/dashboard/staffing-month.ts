@@ -7,10 +7,11 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
+import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateFormat, mondayFirst, monthDay, utc } from "./format.js";
+import { dateFormat, mondayFirst, utc } from "./format.js";
 import { t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -39,16 +40,12 @@ export class StaffingMonthView extends LitElement {
         min-width: 0;
         container: staffing-month / inline-size;
       }
-      .head,
-      .sub {
+      .head {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: var(--wt-space-2) var(--wt-space-4);
-        margin-block-end: var(--wt-space-2);
-      }
-      .head {
         gap: var(--wt-space-2);
+        margin-block-end: var(--wt-space-2);
       }
       .head h2 {
         margin: 0;
@@ -56,32 +53,6 @@ export class StaffingMonthView extends LitElement {
       }
       .head h2::first-letter {
         text-transform: uppercase;
-      }
-      .seasons {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .seasons-label,
-      .legend {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
-      .chip {
-        max-width: 100%;
-        padding: var(--wt-space-1) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        overflow-wrap: anywhere;
-      }
-      .chip[data-tint] {
-        background: var(--season-tint);
-        color: var(--season-on-tint);
-        border-color: var(--season-tint-line);
       }
       .alert {
         margin: 0 0 var(--wt-space-2);
@@ -157,20 +128,9 @@ export class StaffingMonthView extends LitElement {
         cursor: pointer;
       }
       button.day:focus-visible,
-      .rota-week:focus-visible,
-      .chip button:focus-visible {
+      .rota-week:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
-      }
-      .chip button {
-        padding: 0;
-        border: 0;
-        background: none;
-        color: inherit;
-        font: inherit;
-        text-align: start;
-        overflow-wrap: anywhere;
-        cursor: pointer;
       }
       td[data-tint] .day {
         border-block-start-color: var(--season-tint-line);
@@ -292,6 +252,8 @@ export class StaffingMonthView extends LitElement {
   @state() private loadError?: string;
   /** The date that holds the month's one Tab stop. */
   @state() private focusDate?: string;
+  /** The date whose day box is open. */
+  @state() private boxDate?: string;
 
   readonly #queries = new QueryController(
     this,
@@ -305,7 +267,8 @@ export class StaffingMonthView extends LitElement {
   );
   #watching?: string;
 
-  override willUpdate(): void {
+  override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("month")) this.boxDate = undefined;
     if (this.month && this.month !== this.#watching) this.#watch();
   }
 
@@ -345,33 +308,27 @@ export class StaffingMonthView extends LitElement {
     });
   }
 
-  #openDay(day: Day): void {
-    this.#openPainter(
-      day.specialDay ? { "special-day": day.specialDay.id } : { season: day.seasonId! },
-    );
-  }
-
   #dayButton(date: string): HTMLElement | null {
-    return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
+    return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button.day`);
   }
 
-  /** Arrow keys move between day buttons, passing over the plain days between them. */
+  override updated(changed: Map<PropertyKey, unknown>): void {
+    if (!changed.has("boxDate") || !this.boxDate) return;
+    const anchor = this.#dayButton(this.boxDate)!;
+    const box = this.renderRoot.querySelector("calendar-day-box")!;
+    void box.updateComplete.then(() => box.show(anchor));
+  }
+
   #keydown(event: KeyboardEvent): void {
     const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
     if (step === undefined) return;
+    const from = (event.composedPath()[0] as HTMLElement).closest("td")!.dataset.date!;
     const dates = this.read!.days.map(({ date }) => date);
-    const from = dates.indexOf(
-      (event.composedPath()[0] as HTMLElement).closest("td")!.dataset.date!,
-    );
+    const to = dates[dates.indexOf(from) + step];
     event.preventDefault();
-    for (let at = from + step; at >= 0 && at < dates.length; at += step) {
-      const target = this.#dayButton(dates[at]!);
-      if (target) {
-        this.focusDate = dates[at];
-        target.focus();
-        return;
-      }
-    }
+    if (to === undefined) return;
+    this.focusDate = to;
+    this.#dayButton(to)!.focus();
   }
 
   #chosen(areas: readonly StaffingArea[]): string {
@@ -457,27 +414,10 @@ export class StaffingMonthView extends LitElement {
     const weeks = Array.from({ length: month.days.length / 7 }, (_, row) =>
       month.days.slice(row * 7, row * 7 + 7),
     );
-    // A reader reaches a season through its chip; a special day has no chip, so its date opens it.
-    const opens = (day: Day) => day.specialDay !== null || (this.canWrite && day.seasonId !== null);
     const stop =
-      [this.focusDate, month.today].find((date) =>
-        month.days.some((day) => day.date === date && opens(day)),
-      ) ?? (month.days.find((day) => day.inMonth && opens(day)) ?? month.days.find(opens))?.date;
-    return html`<div class="sub">
-        <span class="seasons-label">${t("staffing.month.seasons")}</span>
-        <ul class="seasons" data-test="seasons" aria-label=${t("staffing.month.seasons")}>
-          ${month.seasons.map(
-            (season) =>
-              html`<li class="chip" data-test="season" data-tint=${tints.get(season.id)!}>
-                <button type="button" @click=${() => this.#openPainter({ season: season.id })}>
-                  ${this.#seasonLabel(season)}
-                </button>
-              </li>`,
-          )}
-        </ul>
-        <p class="legend">${t("staffing.month.legend")}</p>
-      </div>
-      <table @keydown=${this.#keydown}>
+      [this.focusDate, month.today].find((date) => month.days.some((day) => day.date === date)) ??
+      month.days.find((day) => day.inMonth)!.date;
+    return html`<table @keydown=${this.#keydown}>
         <thead>
           <tr>
             ${Array.from({ length: 7 }, (_, index) => {
@@ -494,14 +434,94 @@ export class StaffingMonthView extends LitElement {
               html`<tr>
                 ${week.map((day) =>
                   this.#cell(day, month.today, chosen, names, largest, tints, cellLabel, {
-                    opens: opens(day),
                     stop: day.date === stop,
                   }),
                 )}
               </tr>`,
           )}
         </tbody>
-      </table>`;
+      </table>
+      ${this.#box(month, chosen, names)}`;
+  }
+
+  #shown(day: Day, chosen: string, names: Map<string, string>) {
+    return day.areas
+      .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
+      .map(({ area, needed, unfilled }) => ({
+        name: names.get(areaKey(area)) ?? "",
+        needed,
+        unfilled,
+      }));
+  }
+
+  #box(month: StaffingMonth, chosen: string, names: Map<string, string>) {
+    const index = month.days.findIndex(({ date }) => date === this.boxDate);
+    const day = month.days[index];
+    if (!day) return nothing;
+    const season = month.seasons.find(({ id }) => id === day.seasonId)?.name;
+    const special = day.specialDay;
+    const line = season
+      ? tf(special ? "staffing.day.replaces" : "staffing.day.standard", { season })
+      : "";
+    const rows = day.closedAllDay
+      ? []
+      : this.#shown(day, chosen, names).map(({ name, needed, unfilled }) => ({
+          name,
+          text:
+            unfilled === null
+              ? String(needed)
+              : `${needed}, ${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}`,
+        }));
+    const act = (run: () => void) => () => {
+      this.renderRoot.querySelector("calendar-day-box")!.hide();
+      run();
+    };
+    const monday = month.days[index - (index % 7)]!.date;
+    return html`<calendar-day-box
+      .heading=${dateFormat({ weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(utc(day.date))}
+      .name=${special?.name ?? ""}
+      .nameKind=${special ? "special" : ""}
+      .line=${line}
+      .rows=${rows}
+      .message=${day.closedAllDay ? t("staffing.month.closed") : ""}
+      @calendar-day-box-close=${() => {
+        this.boxDate = undefined;
+      }}
+    >
+      ${
+        special
+          ? html`<wt-button
+              variant="secondary"
+              @click=${act(() => this.#openPainter({ "special-day": special.id }))}
+              >${tf(this.canWrite ? "staffing.day.edit_special" : "staffing.day.show_special", {
+                name: special.name,
+              })}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        season && (!special || !this.canWrite)
+          ? html`<wt-button
+              variant="secondary"
+              @click=${act(() => this.#openPainter({ season: day.seasonId! }))}
+              >${tf(this.canWrite ? "staffing.day.edit_week" : "staffing.day.show_week", {
+                season,
+              })}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        this.canOpenRota
+          ? html`<wt-button
+              variant="secondary"
+              @click=${act(() =>
+                this.open("rota", { week: monday, ...(chosen !== ALL ? { area: chosen } : {}) }),
+              )}
+              >${t("staffing.rota.week_link")}</wt-button
+            >`
+          : nothing
+      }
+    </calendar-day-box>`;
   }
 
   #cell(
@@ -512,16 +532,10 @@ export class StaffingMonthView extends LitElement {
     largest: number,
     tints: Map<string, string>,
     cellLabel: Intl.DateTimeFormat,
-    { opens, stop }: { opens: boolean; stop: boolean },
+    { stop }: { stop: boolean },
   ) {
     const isToday = day.date === today;
-    const shown = day.areas
-      .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
-      .map(({ area, needed, unfilled }) => ({
-        name: names.get(areaKey(area)) ?? "",
-        needed,
-        unfilled,
-      }));
+    const shown = this.#shown(day, chosen, names);
     const label = [
       cellLabel.format(utc(day.date)),
       day.specialDay?.name ?? "",
@@ -539,41 +553,24 @@ export class StaffingMonthView extends LitElement {
       ?data-closed=${day.closedAllDay}
     >
       <div class="cell">
-        ${
-          opens
-            ? html`<button
-                type="button"
-                class="day"
-                tabindex=${stop ? 0 : -1}
-                aria-label=${label}
-                aria-current=${isToday ? "date" : nothing}
-                @click=${() => this.#openDay(day)}
-                @focus=${() => {
-                  this.focusDate = day.date;
-                }}
-              >
-                ${body}
-              </button>`
-            : html`<div
-                class="day"
-                role="group"
-                aria-label=${label}
-                aria-current=${isToday ? "date" : nothing}
-              >
-                ${body}
-              </div>`
-        }
+        <button
+          type="button"
+          class="day"
+          tabindex=${stop ? 0 : -1}
+          aria-label=${label}
+          aria-current=${isToday ? "date" : nothing}
+          @click=${() => {
+            this.boxDate = day.date;
+          }}
+          @focus=${() => {
+            this.focusDate = day.date;
+          }}
+        >
+          ${body}
+        </button>
         ${this.canOpenRota && utc(day.date).getUTCDay() === 1 ? html`<button type="button" class="rota-week" data-rota-week=${day.date} @click=${() => this.open("rota", { week: day.date, ...(chosen !== ALL ? { area: chosen } : {}) })}>${t("staffing.rota.week_link")}</button>` : nothing}
       </div>
     </td>`;
-  }
-
-  #seasonLabel(season: StaffingMonth["seasons"][number]) {
-    return tf("staffing.month.season", {
-      name: season.name,
-      from: monthDay(season.startsOn),
-      to: monthDay(season.lastDay),
-    });
   }
 
   #dayBody(
