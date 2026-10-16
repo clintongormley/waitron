@@ -3955,7 +3955,7 @@ Opening hours' Year.
   A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
-  resize leaves none of the date inside the window and the scrolling boxes around it.
+  resize leaves none of the date inside the window and every box around it that clips its contents.
   It is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
   them; then each department's hours followed by its zones' (in the Month, with one department
